@@ -80,7 +80,7 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
   }, [])
 
   return (
-    <View className="flex-1 bg-emerald-600">
+    <View className="flex-1 bg-[#F8F9FA]-600">
       <ScrollView
         ref={scrollRef}
         className="flex-1 px-4 pt-2"
@@ -94,7 +94,7 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
       >
         {/* Title Input */}
         <View className="mb-6">
-          <Text className="text-emerald-100 text-base font-semibold mb-2">
+          <Text className="text-black-100 text-base font-semibold mb-2">
             What do you need help with? *
           </Text>
           <TextInput
@@ -102,12 +102,13 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
             onChangeText={handleTitleChange}
             onBlur={handleTitleBlur}
             placeholder="e.g., Help moving furniture, Logo design, Website fixes..."
-            placeholderTextColor="rgba(110, 231, 183, 0.4)"
-            className="bg-emerald-700/50 text-white px-4 py-3 rounded-lg text-base"
+            placeholderTextColor="black"
+            className="bg-[#F8F9FA]
+-700/50 text-white px-4 py-3 rounded-lg text-base"
             accessibilityLabel="Bounty title input"
             maxLength={120}
           />
-          <Text className="text-emerald-200/60 text-xs mt-1">
+          <Text className="text-black-200/60 text-xs mt-1">
             {draft.title.length}/120 characters
           </Text>
           {touched.title && errors.title && (
@@ -117,7 +118,7 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
 
         {/* Category Selection */}
         <View className="mb-6">
-          <Text className="text-emerald-100 text-base font-semibold mb-3">
+          <Text className="text-black-100 text-base font-semibold mb-3">
             Category (optional)
           </Text>
           <View className="flex-row flex-wrap gap-2">
@@ -128,7 +129,7 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
                   key={category.id}
                   onPress={() => handleCategorySelect(category.id)}
                   className={`flex-row items-center px-4 py-2 rounded-full ${
-                    isSelected ? 'bg-emerald-400' : 'bg-emerald-700/50'
+                    isSelected ? 'black' : 'bg-[#F8F9FA]'
                   }`}
                   accessibilityLabel={`Select ${category.label} category`}
                   accessibilityRole="button"
@@ -141,7 +142,7 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
                   />
                   <Text
                     className={`ml-2 font-medium ${
-                      isSelected ? 'text-emerald-900' : 'text-white'
+                      isSelected ? 'text-emerald-900' : 'text-black'
                     }`}
                   >
                     {category.label}
@@ -155,7 +156,7 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
 
       {/* Navigation Buttons */}
       <View
-        className="px-4 pb-4 pt-3 bg-emerald-600 border-t border-emerald-700/50"
+        className="px-4 pb-4 pt-3 bg-[#F8F9FA]-600 border-t border-emerald-700/50"
         style={{ marginBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 8) }}
       >
         <View className="flex-row gap-3">
@@ -190,7 +191,7 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
             <MaterialIcons
               name="arrow-forward"
               size={20}
-              color={isValid ? '#fff' : 'rgba(110, 231, 183, 0.4)'}
+              color={isValid ? '#fff' : 'white'}
             />
           </TouchableOpacity>
         </View>

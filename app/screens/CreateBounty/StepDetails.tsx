@@ -105,7 +105,7 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
   }, [])
 
   return (
-    <View className="flex-1 bg-emerald-600">
+    <View className="flex-1 bg-[#F8F9FA]">
       <ScrollView
         ref={scrollRef}
         className="flex-1 px-4 pt-2"
@@ -119,7 +119,7 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
       >
         {/* Description Input */}
         <View className="mb-6">
-          <Text className="text-emerald-100 text-base font-semibold mb-2">
+          <Text className="text-[#F8F9FA] text-base font-semibold mb-2">
             Describe what you need done *
           </Text>
           <TextInput

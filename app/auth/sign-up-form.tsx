@@ -184,7 +184,7 @@ export function SignUpForm() {
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-        <View className="flex-1 bg-emerald-700/95 px-6 pt-20 pb-8">
+        <View className="flex-1 px-6 pt-20 pb-8">
           <View className="flex-row items-center justify-center mb-10">
             <BrandingLogo size="large" />
           </View>

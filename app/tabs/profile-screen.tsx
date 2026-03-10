@@ -273,12 +273,12 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   }
 
   return (
-    <View className="flex flex-col h-screen bg-emerald-600 text-white">
+    <View className="flex flex-col h-screen bg-white text-black">
       {/* Update Message Banner */}
       {updateMessage && (
         <View style={{ position: 'absolute', top: 60, left: 16, right: 16, zIndex: 50 }}>
-          <View className="bg-emerald-800 rounded-lg px-4 py-3 flex-row items-center justify-between shadow-lg">
-            <Text className="text-white text-sm flex-1">{updateMessage}</Text>
+          <View className="bg-white-800 rounded-lg px-4 py-3 flex-row items-center justify-between shadow-lg">
+            <Text className="text-black text-sm flex-1">{updateMessage}</Text>
             <TouchableOpacity onPress={() => setUpdateMessage(null)}>
               <MaterialIcons name="close" size={18} color="white" />
             </TouchableOpacity>

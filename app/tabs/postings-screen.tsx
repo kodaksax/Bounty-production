@@ -579,7 +579,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
 
   return (
     <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
-      <View className="flex-1 bg-emerald-600">
+      <View className="flex-1 bg-white-600">
         {/* Fixed Header (overlay) - measured height to align content under tabs */}
         <View
           onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
@@ -590,7 +590,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
               left: 0,
               right: 0,
               zIndex: 20,
-              backgroundColor: "#059669", // emerald-600
+              backgroundColor: "white", // emerald-600
               paddingTop: insets.top, // ensure content starts right under the status bar safe area
             },
             showShadow
@@ -712,7 +712,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
             </View>
           )}
 
-          <View className="flex-1 px-4">
+          <View className="flex-1 bg-white #F8F9FA px-4">
             {activeTab === "new" ? (
               <View className="flex-1">
                 <CreateBountyFlow

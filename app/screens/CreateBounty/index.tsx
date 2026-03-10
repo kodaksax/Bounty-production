@@ -181,7 +181,7 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
 
   if (isLoading) {
     return (
-      <View className="flex-1 bg-emerald-600 items-center justify-center">
+      <View className="flex-1 bg-white-600 items-center justify-center">
         <ActivityIndicator size="large" color="#fff" />
         <Text className="text-white mt-4">Loading draft...</Text>
       </View>
@@ -190,7 +190,7 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
 
   return (
     <KeyboardAvoidingView
-      className="flex-1 bg-emerald-600"
+      className="flex-1 bg-#F8F9FA-600"
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={insets.top}
     >

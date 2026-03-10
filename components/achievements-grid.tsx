@@ -13,7 +13,6 @@ interface AchievementsGridProps {
   badgesEarned: number;
 }
 
-// Define real achievement milestones that users can earn
 const ACHIEVEMENT_DEFINITIONS = [
   { name: "First Bounty", icon: "flag" as keyof typeof MaterialIcons.glyphMap },
   { name: "Task Complete", icon: "check-circle" as keyof typeof MaterialIcons.glyphMap },
@@ -23,12 +22,7 @@ const ACHIEVEMENT_DEFINITIONS = [
   { name: "Community Builder", icon: "groups" as keyof typeof MaterialIcons.glyphMap },
 ];
 
-/**
- * Responsive grid display for user achievements/badges
- * Shows a 3-column grid with badge status (earned vs locked)
- */
 export function AchievementsGrid({ badgesEarned }: AchievementsGridProps) {
-  // Build achievements based on definitions and earned count
   const achievements: Achievement[] = ACHIEVEMENT_DEFINITIONS.map((def, i) => ({
     id: `achievement-${i}`,
     name: def.name,
@@ -46,14 +40,16 @@ export function AchievementsGrid({ badgesEarned }: AchievementsGridProps) {
             minWidth: "30%",
             maxWidth: "32%",
             aspectRatio: 1,
-            backgroundColor: "rgba(6, 78, 59, 0.3)",
+            // ↓ CHANGED: rgba(6,78,59,0.3) → #ffffff with light border
+            backgroundColor: "#ffffff",
             borderRadius: 12,
             padding: 12,
             alignItems: "center",
             justifyContent: "center",
             opacity: achievement.isEarned ? 1 : 0.5,
-            borderWidth: achievement.isEarned ? 1 : 0,
-            borderColor: achievement.isEarned ? "#fbbf24" : "transparent",
+            borderWidth: 1,
+            // ↓ CHANGED: earned → #fbbf24 (amber, kept) | unearned → #e5e7eb (gray border)
+            borderColor: achievement.isEarned ? "#fbbf24" : "#e5e7eb",
           }}
         >
           <View
@@ -61,7 +57,8 @@ export function AchievementsGrid({ badgesEarned }: AchievementsGridProps) {
               height: 40,
               width: 40,
               borderRadius: 20,
-              backgroundColor: achievement.isEarned ? "#059669" : "#064e3b",
+              // ↓ CHANGED: earned → #059669 (kept) | unearned → #F8F9FA
+              backgroundColor: achievement.isEarned ? "#059669" : "#F8F9FA",
               alignItems: "center",
               justifyContent: "center",
               marginBottom: 8,
@@ -70,13 +67,15 @@ export function AchievementsGrid({ badgesEarned }: AchievementsGridProps) {
             <MaterialIcons
               name={achievement.icon}
               size={20}
-              color={achievement.isEarned ? "#ffffff" : "#6b7280"}
+              // ↓ CHANGED: unearned icon color #6b7280 → #9ca3af (lighter gray, matches theme)
+              color={achievement.isEarned ? "#ffffff" : "#9ca3af"}
             />
           </View>
           <Text
             style={{
               fontSize: 12,
-              color: "#d1fae5",
+              // ↓ CHANGED: #d1fae5 → #1a1a1a (dark text on white card)
+              color: "#1a1a1a",
               textAlign: "center",
             }}
             numberOfLines={2}

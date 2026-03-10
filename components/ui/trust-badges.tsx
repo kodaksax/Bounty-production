@@ -4,7 +4,6 @@ import React, { useState, useCallback } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useHapticFeedback } from '../../lib/haptic-feedback';
 
-// Type for MaterialIcons icon names
 type MaterialIconName = ComponentProps<typeof MaterialIcons>['name'];
 
 export interface TrustBadge {
@@ -21,59 +20,51 @@ interface TrustBadgesProps {
   compact?: boolean;
 }
 
-// Platform-level trust and security badges
 const PLATFORM_BADGES: TrustBadge[] = [
   {
     id: 'escrow-protected',
     icon: 'lock',
     title: 'Escrow Protected',
     description: 'All payments are held securely in escrow until work is verified and approved. Your funds are never released without your explicit approval.',
-    color: '#10b981', // emerald-500
+    color: '#10b981',
   },
   {
     id: 'secure-payments',
     icon: 'credit-card',
     title: 'Secure Payments',
     description: 'Payments are processed through Stripe, a PCI Level 1 certified payment processor. Your payment information is encrypted and never stored on our servers.',
-    color: '#3b82f6', // blue-500
+    color: '#3b82f6',
   },
   {
     id: 'dispute-resolution',
     icon: 'gavel',
     title: 'Dispute Resolution',
     description: 'Our dedicated support team helps mediate any disputes between posters and hunters. We ensure fair outcomes for both parties.',
-    color: '#8b5cf6', // violet-500
+    color: '#8b5cf6',
   },
   {
     id: 'verified-users',
     icon: 'verified-user',
     title: 'Verified Users',
     description: 'Users can verify their identity through our secure verification process, adding an extra layer of trust to transactions.',
-    color: '#06b6d4', // cyan-500
+    color: '#06b6d4',
   },
   {
     id: 'encrypted-messaging',
     icon: 'security',
     title: 'Encrypted Messaging',
     description: 'All messages between users are secured. Your conversations and shared information remain private and protected.',
-    color: '#14b8a6', // teal-500
+    color: '#14b8a6',
   },
   {
     id: 'refund-guarantee',
     icon: 'replay',
     title: 'Refund Guarantee',
     description: 'If work is not completed satisfactorily, escrowed funds are refunded. We protect both posters and hunters from unfair outcomes.',
-    color: '#f59e0b', // amber-500
+    color: '#f59e0b',
   },
 ];
 
-/**
- * TrustBadges - Displays platform security certifications and trust indicators
- * 
- * @param badges - Custom badges to display
- * @param showPlatformBadges - Whether to show default platform trust badges
- * @param compact - Whether to use compact display (grid vs list)
- */
 export function TrustBadges({
   badges = [],
   showPlatformBadges = true,
@@ -84,9 +75,7 @@ export function TrustBadges({
   
   const allBadges = showPlatformBadges ? [...PLATFORM_BADGES, ...badges] : badges;
 
-  if (allBadges.length === 0) {
-    return null;
-  }
+  if (allBadges.length === 0) return null;
 
   const handleBadgePress = useCallback((badge: TrustBadge) => {
     triggerHaptic('light');
@@ -96,7 +85,8 @@ export function TrustBadges({
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <MaterialIcons name="shield" size={18} color="#6ee7b7" />
+        {/* ↓ CHANGED: icon color #F8F9FA → #059669 */}
+        <MaterialIcons name="shield" size={18} color="#059669" />
         <Text style={styles.title}>Platform Security</Text>
       </View>
       
@@ -126,13 +116,13 @@ export function TrustBadges({
               </View>
             )}
             {!compact && (
-              <MaterialIcons name="chevron-right" size={20} color="#6ee7b7" />
+              // ↓ CHANGED: chevron color #6ee7b7 → #059669
+              <MaterialIcons name="chevron-right" size={20} color="#059669" />
             )}
           </TouchableOpacity>
         ))}
       </View>
 
-      {/* Badge Detail Modal */}
       <Modal
         visible={!!selectedBadge}
         transparent
@@ -150,17 +140,11 @@ export function TrustBadges({
               <>
                 <View style={styles.modalHeader}>
                   <View style={[styles.modalIconCircle, { backgroundColor: `${selectedBadge.color}20` }]}>
-                    <MaterialIcons 
-                      name={selectedBadge.icon} 
-                      size={40} 
-                      color={selectedBadge.color} 
-                    />
+                    <MaterialIcons name={selectedBadge.icon} size={40} color={selectedBadge.color} />
                   </View>
                   <Text style={styles.modalTitle}>{selectedBadge.title}</Text>
                 </View>
-                
                 <Text style={styles.modalDescription}>{selectedBadge.description}</Text>
-
                 <TouchableOpacity 
                   style={[styles.closeButton, { backgroundColor: selectedBadge.color }]}
                   onPress={() => setSelectedBadge(null)}
@@ -178,10 +162,6 @@ export function TrustBadges({
   );
 }
 
-/**
- * TrustBadgesCompact - Compact horizontal scrollable version of trust badges
- * Used in areas with limited vertical space
- */
 export function TrustBadgesCompact() {
   const [selectedBadge, setSelectedBadge] = useState<TrustBadge | null>(null);
   const { triggerHaptic } = useHapticFeedback();
@@ -213,7 +193,6 @@ export function TrustBadgesCompact() {
         ))}
       </ScrollView>
 
-      {/* Detail Modal */}
       <Modal
         visible={!!selectedBadge}
         transparent
@@ -231,17 +210,11 @@ export function TrustBadgesCompact() {
               <>
                 <View style={styles.modalHeader}>
                   <View style={[styles.modalIconCircle, { backgroundColor: `${selectedBadge.color}20` }]}>
-                    <MaterialIcons 
-                      name={selectedBadge.icon} 
-                      size={40} 
-                      color={selectedBadge.color} 
-                    />
+                    <MaterialIcons name={selectedBadge.icon} size={40} color={selectedBadge.color} />
                   </View>
                   <Text style={styles.modalTitle}>{selectedBadge.title}</Text>
                 </View>
-                
                 <Text style={styles.modalDescription}>{selectedBadge.description}</Text>
-
                 <TouchableOpacity 
                   style={[styles.closeButton, { backgroundColor: selectedBadge.color }]}
                   onPress={() => setSelectedBadge(null)}
@@ -261,7 +234,10 @@ export function TrustBadgesCompact() {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: 'rgba(5, 95, 70, 0.3)',
+    // ↓ CHANGED: rgba(5,95,70,0.3) → #F8F9FA with a subtle emerald border
+    backgroundColor: '#F8F9FA',
+    borderWidth: 1,
+    borderColor: '#d1fae5',
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
@@ -275,11 +251,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#fff',
+    // ↓ CHANGED: #fff → #1a1a1a
+    color: '#1a1a1a',
   },
   subtitle: {
     fontSize: 12,
-    color: '#a7f3d0',
+    // ↓ CHANGED: #a7f3d0 → #059669
+    color: '#059669',
     marginBottom: 16,
   },
   gridContainer: {
@@ -294,14 +272,20 @@ const styles = StyleSheet.create({
     width: '30%',
     alignItems: 'center',
     padding: 12,
-    backgroundColor: 'rgba(6, 78, 59, 0.5)',
+    // ↓ CHANGED: rgba(6,78,59,0.5) → #ffffff with border
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
     borderRadius: 12,
   },
   listBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
-    backgroundColor: 'rgba(6, 78, 59, 0.5)',
+    // ↓ CHANGED: rgba(6,78,59,0.5) → #ffffff with border
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
     borderRadius: 12,
     gap: 12,
   },
@@ -318,12 +302,14 @@ const styles = StyleSheet.create({
   badgeTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#fff',
+    // ↓ CHANGED: #fff → #1a1a1a
+    color: '#1a1a1a',
     marginBottom: 2,
   },
   badgePreview: {
     fontSize: 12,
-    color: '#a7f3d0',
+    // ↓ CHANGED: #a7f3d0 → #6b7280
+    color: '#6b7280',
   },
   compactContainer: {
     marginVertical: 8,
@@ -335,7 +321,10 @@ const styles = StyleSheet.create({
   compactBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(5, 95, 70, 0.3)',
+    // ↓ CHANGED: rgba(5,95,70,0.3) → #F8F9FA with border
+    backgroundColor: '#F8F9FA',
+    borderWidth: 1,
+    borderColor: '#d1fae5',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 16,
@@ -344,7 +333,8 @@ const styles = StyleSheet.create({
   compactBadgeText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#d1fae5',
+    // ↓ CHANGED: #d1fae5 → #059669
+    color: '#059669',
   },
   modalOverlay: {
     flex: 1,
@@ -354,11 +344,18 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modalContent: {
-    backgroundColor: '#065f46', // emerald-800
+    // ↓ CHANGED: #065f46 (dark emerald) → #ffffff (white modal on light theme)
+    backgroundColor: '#ffffff',
     borderRadius: 16,
     padding: 24,
     width: '100%',
     maxWidth: 340,
+    // subtle shadow so it lifts off the overlay
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 8,
   },
   modalHeader: {
     alignItems: 'center',
@@ -375,12 +372,14 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#fff',
+    // ↓ CHANGED: #fff → #1a1a1a
+    color: '#1a1a1a',
     textAlign: 'center',
   },
   modalDescription: {
     fontSize: 14,
-    color: '#d1fae5',
+    // ↓ CHANGED: #d1fae5 → #4b5563
+    color: '#4b5563',
     lineHeight: 22,
     textAlign: 'center',
     marginBottom: 20,

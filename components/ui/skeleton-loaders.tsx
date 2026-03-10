@@ -12,7 +12,7 @@ export function PostingCardSkeleton() {
       <View style={styles.postingHeader}>
         <Skeleton className="h-10 w-10 rounded-full bg-emerald-700/40" />
         <View style={styles.postingHeaderText}>
-          <Skeleton className="h-4 w-24 mb-2 bg-emerald-700/40" />
+          <Skeleton className="h-4 w-24 mb-2 bg-white-700/40" />
           <Skeleton className="h-3 w-16 bg-emerald-700/40" />
         </View>
       </View>
@@ -220,7 +220,7 @@ export function UserProfileScreenSkeleton() {
       <View style={styles.userProfileSection}>
         <Skeleton className="h-4 w-20 mb-3 bg-emerald-700/40" />
         <View style={styles.userProfilePortfolioRow}>
-          <Skeleton className="h-32 w-32 rounded-lg mr-3 bg-emerald-700/40" />
+          <Skeleton className="h-32 w-32 rounded-lg mr-3 bg-white-700/40" />
           <Skeleton className="h-32 w-32 rounded-lg mr-3 bg-emerald-700/40" />
           <Skeleton className="h-32 w-32 rounded-lg bg-emerald-700/40" />
         </View>

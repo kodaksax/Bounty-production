@@ -150,7 +150,7 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
   }
 
   return (
-    <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
+    <View className="flex flex-col min-h-screen bg-white-600 text-white">
       {/* Standard Header */}
       <View className="flex-row items-center justify-between p-4 pt-8">
         <View className="flex-row items-center">
