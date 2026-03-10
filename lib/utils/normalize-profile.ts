@@ -35,7 +35,7 @@ export function normalizeAuthProfile(p: AuthProfile | null): NormalizedProfile |
     id: p.id,
     username: p.username,
     name: p.username, // AuthProfile may not have name field
-    avatar: p.avatar,
+    avatar: p.avatar || (p as any).avatar_url || undefined,
     bio: p.about,
     joinDate: p.created_at,
     created_at: p.created_at,
@@ -58,7 +58,7 @@ export function normalizeUserProfile(p: UserProfile | null): NormalizedProfile |
     id: p.id,
     username: p.username?.replace(/^@/, ''),
     name: p.name || p.username,
-    avatar: p.avatar,
+    avatar: p.avatar || (p as any).avatar_url || undefined,
     title: p.title,
     bio: p.bio,
     location: p.location,

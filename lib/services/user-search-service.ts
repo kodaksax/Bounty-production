@@ -1,5 +1,5 @@
-import type { UserProfile, UserSearchFilters, SearchResult } from '../types';
 import { isSupabaseConfigured, supabase } from '../supabase';
+import type { SearchResult, UserProfile, UserSearchFilters } from '../types';
 import { logger } from '../utils/error-logger';
 
 export const userSearchService = {
@@ -79,7 +79,7 @@ export const userSearchService = {
         id: item.id,
         username: item.username || `@user_${item.id.slice(0, 8)}`,
         name: item.email?.split('@')[0],
-        avatar: item.avatar,
+        avatar: item.avatar || item.avatar_url || undefined,
         bio: item.about,
         joinDate: item.created_at,
         skills: [], // Would need to be populated from a skills table
@@ -138,7 +138,7 @@ export const userSearchService = {
         id: data.id,
         username: data.username || `@user_${data.id.slice(0, 8)}`,
         name: data.email?.split('@')[0],
-        avatar: data.avatar,
+        avatar: data.avatar || data.avatar_url || undefined,
         bio: data.about,
         joinDate: data.created_at,
         skills: [],

@@ -189,7 +189,7 @@ export class AuthProfileService {
         id: data.id,
         username: data.username,
         email: data.email || undefined,
-        avatar: data.avatar || undefined,
+        avatar: data.avatar || data.avatar_url || undefined,
         about: data.about || undefined,
         phone: data.phone || undefined,
         title: data.title || undefined,
@@ -374,11 +374,11 @@ export class AuthProfileService {
       }
 
       if (data) {
-        const profile: AuthProfile = {
+          const profile: AuthProfile = {
           id: data.id,
           username: data.username,
           email: data.email,
-          avatar: data.avatar,
+            avatar: data.avatar || data.avatar_url || undefined,
           about: data.about,
           phone: data.phone,
           title: data.title || undefined,
@@ -513,7 +513,7 @@ export class AuthProfileService {
           id: data.id,
           username: data.username,
           email: data.email,
-          avatar: data.avatar,
+          avatar: data.avatar || data.avatar_url || undefined,
           about: data.about,
           phone: data.phone,
           title: data.title || undefined,
@@ -648,7 +648,7 @@ export class AuthProfileService {
           id: data.id,
           username: data.username,
           email: data.email,
-          avatar: data.avatar,
+          avatar: data.avatar || data.avatar_url || undefined,
           about: data.about,
           phone: data.phone,
           title: data.title || undefined,
@@ -744,7 +744,7 @@ export class AuthProfileService {
           id: data.id,
           username: data.username,
           email: data.email,
-          avatar: data.avatar,
+          avatar: data.avatar || data.avatar_url || undefined,
           about: data.about,
           phone: data.phone,
           title: data.title || undefined,
