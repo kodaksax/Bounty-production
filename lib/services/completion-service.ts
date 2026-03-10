@@ -1,8 +1,79 @@
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
 import { getCurrentUserId } from 'lib/utils/data-utils';
+import getApiBaseFallback from 'lib/utils/dev-host';
 import { logger } from 'lib/utils/error-logger';
+import { getReachableApiBaseUrl } from 'lib/utils/network';
 
 import { API_BASE_URL } from 'lib/config/api';
+
+const relayPreferredBase = (process.env.EXPO_PUBLIC_API_BASE_URL as string | undefined)
+  || (process.env.EXPO_PUBLIC_API_URL as string | undefined)
+  || (process.env.API_BASE_URL as string | undefined)
+  || 'http://localhost:3001';
+
+function getRelayApiBaseUrl(): string {
+  const resolved = getReachableApiBaseUrl(relayPreferredBase, 3001);
+
+  try {
+    const isLocal = /^(https?:\/\/)?(localhost|127\.0\.0\.1)[:/]/i.test(resolved);
+    if (isLocal) {
+      const fallback = getApiBaseFallback();
+      if (fallback) return fallback;
+    }
+  } catch {
+    // ignore and use resolved value
+  }
+
+  return resolved.replace(/\/+$/, '');
+}
+
+function isEdgeFunctionsBase(url: string): boolean {
+  return /\/functions\/v1\/?$/i.test(url)
+}
+
+async function postReadyViaEdgeFunction(bountyId: string, hunterId: string): Promise<boolean> {
+  const { data } = await supabase.auth.getSession()
+  const accessToken = data.session?.access_token
+  if (!accessToken) {
+    throw new Error('Missing access token for edge function request')
+  }
+
+  const response = await fetch(`${API_BASE_URL}/completion/ready`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ bounty_id: bountyId, hunter_id: hunterId }),
+  })
+
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(`Edge function failed: ${text}`)
+  }
+
+  return true
+}
+
+async function postReadyViaRelayApi(bountyId: string, hunterId: string): Promise<boolean> {
+  const { data } = await supabase.auth.getSession()
+  const accessToken = data.session?.access_token
+  const response = await fetch(`${getRelayApiBaseUrl()}/bounties/${encodeURIComponent(bountyId)}/ready`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    body: JSON.stringify({ hunter_id: hunterId }),
+  })
+
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(`Fallback API failed: ${text}`)
+  }
+
+  return true
+}
 
 export interface CompletionSubmission {
   id?: string;
@@ -208,29 +279,134 @@ export const completionService = {
       }
 
       if (isSupabaseConfigured) {
-        const payload = {
-          bounty_id: bountyId,
-          hunter_id: hunterId,
-          ready_at: new Date().toISOString(),
-        }
-        const { error } = await supabase
-          .from('completion_ready')
-          .upsert(payload, { onConflict: 'bounty_id,hunter_id' })
+        try {
+          // Some Postgres deployments may not have a unique constraint matching
+          // the provided ON CONFLICT target. To avoid hard failure, perform a
+          // safe read-then-insert/update flow instead of relying on upsert with
+          // an ON CONFLICT clause which requires a matching unique index.
+          const now = new Date().toISOString()
+          const payload = {
+            bounty_id: bountyId,
+            hunter_id: hunterId,
+            ready_at: now,
+          }
 
-        if (error) throw error
-        return true
+          // Try to perform an atomic upsert using Postgres' ON CONFLICT. This
+          // prevents a race where two clients simultaneously try to insert the
+          // same record. If the database doesn't have a unique index for the
+          // conflict target (some deployments may not), fall back to the
+          // existing safe read-then-insert/update flow.
+          try {
+            // Use an array payload for upsert to match supabase client expectations
+            const { error: upsertErr } = await supabase
+              .from('completion_ready')
+              .upsert([payload], { onConflict: 'bounty_id,hunter_id' })
+
+            if (!upsertErr) {
+              return true
+            }
+
+            // If upsert failed, inspect the message. If it's not related to
+            // a missing/invalid ON CONFLICT target, rethrow so outer catch can
+            // handle it. Otherwise fall through to the legacy fallback.
+            const upsertMsg = (upsertErr as any)?.message || String(upsertErr)
+            if (!/unique|on conflict|constraint/i.test(upsertMsg)) {
+              const message = upsertMsg || JSON.stringify(upsertErr)
+              throw new Error(message)
+            }
+            // else: intentionally fall back
+          } catch (e) {
+            const emsg = e instanceof Error ? e.message : String(e)
+            if (!/unique|on conflict|constraint/i.test(emsg)) {
+              // Non-ON CONFLICT related error — rethrow for outer handler
+              throw e
+            }
+            // else: fall back to safe read-then-insert/update below
+          }
+
+          // Fallback: safe read-then-insert/update flow for DBs without the
+          // required unique index. This preserves previous behavior but only
+          // runs when upsert cannot be used.
+          const { data: existing, error: fetchErr } = await supabase
+            .from('completion_ready')
+            .select('*')
+            .eq('bounty_id', bountyId)
+            .eq('hunter_id', hunterId)
+            .limit(1)
+            .maybeSingle()
+
+          if (fetchErr) {
+            const message = (fetchErr as any)?.message || JSON.stringify(fetchErr)
+            throw new Error(message)
+          }
+
+          if (existing) {
+            const { error: updErr } = await supabase
+              .from('completion_ready')
+              .update({ ready_at: now })
+              .eq('bounty_id', bountyId)
+              .eq('hunter_id', hunterId)
+
+            if (updErr) {
+              const message = (updErr as any)?.message || JSON.stringify(updErr)
+              throw new Error(message)
+            }
+            return true
+          }
+
+          // No existing record — insert a new one
+          const { error: insErr } = await supabase
+            .from('completion_ready')
+            .insert(payload)
+
+          if (insErr) {
+            const message = (insErr as any)?.message || JSON.stringify(insErr)
+            throw new Error(message)
+          }
+
+          return true
+        } catch (e) {
+          // If this looks like a row-level security / permission error,
+          // fall back to the server API instead of failing in the client.
+          const emsg = e instanceof Error ? e.message : String(e)
+          if (/row-level security|permission|forbidden|not authorized/i.test(emsg)) {
+            try {
+              if (isEdgeFunctionsBase(API_BASE_URL)) {
+                return await postReadyViaEdgeFunction(bountyId, hunterId)
+              }
+
+              return await postReadyViaRelayApi(bountyId, hunterId)
+            } catch (edgeOrRelayErr) {
+              // If edge routing is configured but the function is missing or unavailable,
+              // try the relay backend as a last resort before failing.
+              if (isEdgeFunctionsBase(API_BASE_URL)) {
+                try {
+                  return await postReadyViaRelayApi(bountyId, hunterId)
+                } catch {
+                  // fall through to throw original error below
+                }
+              }
+
+              const message = edgeOrRelayErr instanceof Error ? edgeOrRelayErr.message : String(edgeOrRelayErr)
+              throw new Error(message)
+            }
+          }
+
+          // rethrow other errors to be handled by the outer catch
+          throw e
+        }
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/completions/${bountyId}/ready`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hunter_id: hunterId }),
-      })
-      if (!response.ok) throw new Error('Failed to mark ready')
-      return true
+      if (isEdgeFunctionsBase(API_BASE_URL)) {
+        return await postReadyViaEdgeFunction(bountyId, hunterId)
+      }
+
+      return await postReadyViaRelayApi(bountyId, hunterId)
     } catch (err) {
-      const error = err instanceof Error ? err : new Error('Unknown error')
-      logger.error('Error marking ready', { bountyId, hunterId, error })
+      // Ensure we log a meaningful error message even when a non-Error
+      // object is thrown by a library (e.g. Supabase's error object).
+      const normalized = err instanceof Error ? err : new Error(typeof err === 'string' ? err : JSON.stringify(err))
+      logger.error('Error marking ready', { bountyId, hunterId, message: normalized.message, stack: normalized.stack })
       return false
     }
   },
