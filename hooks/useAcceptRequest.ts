@@ -267,10 +267,13 @@ export function useAcceptRequest({
       // to avoid duplicate or failed requests.
 
       // Show escrow instructions if it's a paid bounty
+      // Show a confirmation alert with next-step guidance for the poster
+      const nextSteps = `\n\nNext steps:\n• Confirm details with your hunter in the conversation.\n• When the work is done, mark the bounty complete and release escrow (for paid bounties).`
+
       if (request.bounty && !request.bounty.is_for_honor && request.bounty.amount > 0) {
         Alert.alert(
           'Request Accepted',
-          `You've accepted ${request.profile?.username || 'the hunter'} for "${request.bounty.title}".\n\n💰 Escrow: $${request.bounty.amount.toFixed(2)} has been secured and will be held until completion.\n💬 A conversation has been created to coordinate.`,
+          `You've accepted ${request.profile?.username || 'the hunter'} for "${request.bounty.title}".\n\n💰 Escrow: $${request.bounty.amount.toFixed(2)} has been secured and will be held until completion.\n💬 A conversation has been created to coordinate.${nextSteps}`,
           [
             { text: 'View Conversation', onPress: () => setActiveScreen('create') },
             { text: 'OK' }
@@ -279,7 +282,7 @@ export function useAcceptRequest({
       } else {
         Alert.alert(
           'Request Accepted',
-          `You've accepted ${request.profile?.username || 'the hunter'} for "${request.bounty.title}".\n\n💬 A conversation has been created to coordinate.`,
+          `You've accepted ${request.profile?.username || 'the hunter'} for "${request.bounty.title}".\n\n💬 A conversation has been created to coordinate.${nextSteps}`,
           [
             { text: 'View Conversation', onPress: () => setActiveScreen('create') },
             { text: 'OK' }
