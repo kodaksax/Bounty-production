@@ -2,6 +2,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { cn } from 'lib/utils';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, FlatList, KeyboardAvoidingView, Modal, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHapticFeedback } from '../lib/haptic-feedback';
 
 export interface ChatMessage {
@@ -49,6 +50,13 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
   const expandedInputRef = useRef<TextInput | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { triggerHaptic } = useHapticFeedback()
+  const insets = useSafeAreaInsets()
+
+  // Ensure we reserve space for a bottom navigation bar and safe area.
+  // Many parents pass bottomInset=0; choose a sensible minimum so the composer isn't hidden.
+  // Raise the estimate so the composer clears a taller BottomNav (and floating central button).
+  const BOTTOM_NAV_ESTIMATE = 96
+  const effectiveBottomInset = Math.max(bottomInset || 0, insets.bottom || 0, BOTTOM_NAV_ESTIMATE)
 
 
   useEffect(() => {
@@ -125,7 +133,7 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
           data={messages}
           renderItem={renderItem}
           keyExtractor={(m) => m.id}
-          contentContainerStyle={{ paddingTop: topInset + 8, paddingBottom: bottomInset + 110, paddingHorizontal: 12 }}
+          contentContainerStyle={{ paddingTop: topInset + 8, paddingBottom: effectiveBottomInset + 110, paddingHorizontal: 12 }}
           onScroll={handleScroll}
           scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
@@ -133,7 +141,7 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
         />
 
         {/* Sticky composer */}
-        <View className="absolute left-0 right-0" style={{ bottom: 0, paddingBottom: bottomInset }}>
+        <View className="absolute left-0 right-0" style={{ bottom: 0, paddingBottom: effectiveBottomInset }}>
           <View className="px-3 pb-3">
             <View className="flex-row items-end gap-2 bg-emerald-700/30 rounded-2xl px-3 pt-2 pb-2 border border-emerald-500/30">
               <TouchableOpacity className="h-9 w-9 rounded-full bg-emerald-700/60 items-center justify-center mt-auto">
@@ -176,10 +184,10 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
           transparent
           onShow={() => requestAnimationFrame(() => expandedInputRef.current?.focus())}
         >
-          <View style={{ flex:1, backgroundColor:'rgba(0,0,0,0.45)', justifyContent:'flex-end' }}>
+            <View style={{ flex:1, backgroundColor:'rgba(0,0,0,0.45)', justifyContent:'flex-end' }}>
             <Pressable style={{ flex:1 }} onPress={()=> setExpanded(false)} />
             <KeyboardAvoidingView behavior={Platform.select({ ios:'padding', android: undefined })}>
-              <View style={{ backgroundColor:'#065f46', paddingTop:16, paddingHorizontal:12, paddingBottom: bottomInset + 16, borderTopLeftRadius:24, borderTopRightRadius:24 }}>
+              <View style={{ backgroundColor:'#065f46', paddingTop:16, paddingHorizontal:12, paddingBottom: effectiveBottomInset + 16, borderTopLeftRadius:24, borderTopRightRadius:24 }}>
                 <View style={{ alignSelf:'center', width:48, height:4, backgroundColor:'rgba(255,255,255,0.3)', borderRadius:2, marginBottom:12 }} />
                 <View style={{ maxHeight: 220, borderRadius:16, borderWidth:1, borderColor:'rgba(16,185,129,0.4)', backgroundColor:'rgba(6,95,70,0.4)', paddingHorizontal:12, paddingVertical:8 }}>
                   <TextInput

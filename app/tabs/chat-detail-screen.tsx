@@ -49,7 +49,8 @@ export function ChatDetailScreen({
   const listRef = useRef<FlatList<Message>>(null)
   const typingUsersRef = useTypingIndicator(conversation.id)
   const insets = useSafeAreaInsets()
-  const BOTTOM_NAV_OFFSET = 60 // height of BottomNav
+  // Use a slightly larger offset to guarantee composer is above BottomNav
+  const BOTTOM_NAV_OFFSET = Math.max(96, (insets.bottom || 0) + 12) // height of BottomNav (ensure safe area)
   
   // Get the other participant's ID (not the current user) for 1:1 chats
   const otherUserId = !conversation.isGroup && conversation.participantIds
@@ -151,7 +152,7 @@ export function ChatDetailScreen({
   const trimmedInputText = inputText.trim()
 
   return (
-    <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
+    <View className="flex flex-col min-h-screen bg-emerald-600 text-white" style={{ paddingBottom: Math.max(insets.bottom || 0, BOTTOM_NAV_OFFSET + 8) }}>
       {/* Header */}
       <View
         className="p-4 pt-8 pb-2 flex-row items-center justify-between border-b"
@@ -245,7 +246,7 @@ export function ChatDetailScreen({
               }}
             />
             {/* Message Input */}
-            <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+            <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom || 0, BOTTOM_NAV_OFFSET + 8) }]}>
               <View style={styles.inputRow}>
                 <TextInput
                   style={styles.inlineTextInput}
