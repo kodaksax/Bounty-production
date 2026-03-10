@@ -79,6 +79,12 @@ export default function EditProfileScreen() {
   const locationRef = useRef<TextInput>(null);
   const portfolioRef = useRef<TextInput>(null);
   const skillsetsRef = useRef<TextInput>(null);
+  // Track whether the user has made manual edits to the form to avoid
+  // overwriting their changes when the profile object reference changes
+  // (e.g., normalized payloads that merge but produce new references).
+  const userEditedRef = useRef<boolean>(false);
+  // Track last seen user id so we can reset form when switching users
+  const lastUserIdRef = useRef<string | undefined>(currentUserId);
 
   // Avatar upload state
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -157,6 +163,22 @@ export default function EditProfileScreen() {
 
     // Update avatar if changed and user hasn't manually changed it
     const nextAvatar = profile?.avatar || null;
+
+    const userChanged = lastUserIdRef.current !== currentUserId;
+
+    if (userChanged) {
+      // New user: reset edited flag and replace form/initial state with new user's data
+      userEditedRef.current = false;
+      setFormData(nextData);
+      setInitialData(nextData);
+      setAvatarUrl(nextAvatar);
+      lastUserIdRef.current = currentUserId;
+      return;
+    }
+
+    // Same user: only sync from profile if the user hasn't edited locally
+    setFormData((prev) => (userEditedRef.current || isSameFormData(prev, nextData) ? prev : nextData));
+    setInitialData((prev) => (userEditedRef.current || isSameFormData(prev, nextData) ? prev : nextData));
     setAvatarUrl((prev) => (prev === nextAvatar ? prev : nextAvatar));
   }, [profileFormData, profile?.avatar, currentUserId]);
 
@@ -184,6 +206,8 @@ export default function EditProfileScreen() {
               setFormData(initialData);
               setAvatarUrl(profile?.avatar || null);
               setBannerUrl(null);
+                // Mark as not edited after discarding changes
+                userEditedRef.current = false;
               router.back();
             }
           },
@@ -202,7 +226,7 @@ export default function EditProfileScreen() {
         "You have unsaved changes. Are you sure you want to discard them?",
         [
           { text: "Keep Editing", style: "cancel" },
-          { text: "Discard", style: "destructive", onPress: () => router.back() },
+              { text: "Discard", style: "destructive", onPress: () => { userEditedRef.current = false; router.back(); } },
         ]
       );
       return true; // Consume the event
@@ -252,6 +276,8 @@ export default function EditProfileScreen() {
 
       // Update initial data after successful save
       setInitialData(formData);
+      // Clear edited flag after successful save
+      userEditedRef.current = false;
 
       Alert.alert("Success", "Profile updated successfully!", [
         { text: "OK", onPress: () => router.back() },
@@ -405,7 +431,7 @@ export default function EditProfileScreen() {
               <TextInput
                 style={styles.input}
                 value={formData.name}
-                onChangeText={(text) => setFormData({ ...formData, name: text })}
+                onChangeText={(text) => setFormData((prev) => { userEditedRef.current = true; return { ...prev, name: text }; })}
                 onFocus={() => setFocusedField('name')}
                 onBlur={() => setFocusedField(null)}
                 placeholder="Your display name"
@@ -424,7 +450,7 @@ export default function EditProfileScreen() {
                 ref={usernameRef}
                 style={styles.input}
                 value={formData.username}
-                onChangeText={(text) => setFormData({ ...formData, username: text })}
+                onChangeText={(text) => setFormData((prev) => { userEditedRef.current = true; return { ...prev, username: text }; })}
                 onFocus={() => setFocusedField('username')}
                 onBlur={() => setFocusedField(null)}
                 placeholder="@username"
@@ -444,7 +470,7 @@ export default function EditProfileScreen() {
                 ref={bioRef}
                 style={[styles.input, styles.textArea]}
                 value={formData.bio}
-                onChangeText={(text) => setFormData({ ...formData, bio: text.slice(0, maxBioLength) })}
+                onChangeText={(text) => setFormData((prev) => { userEditedRef.current = true; return { ...prev, bio: text.slice(0, maxBioLength) }; })}
                 onFocus={() => setFocusedField('bio')}
                 onBlur={() => setFocusedField(null)}
                 placeholder="Tell others about yourself..."
@@ -474,7 +500,7 @@ export default function EditProfileScreen() {
                 ref={locationRef}
                 style={styles.input}
                 value={formData.location}
-                onChangeText={(text) => setFormData({ ...formData, location: text })}
+                onChangeText={(text) => setFormData((prev) => { userEditedRef.current = true; return { ...prev, location: text }; })}
                 onFocus={() => setFocusedField('location')}
                 onBlur={() => setFocusedField(null)}
                 placeholder="City, Country"
@@ -493,7 +519,7 @@ export default function EditProfileScreen() {
                 ref={portfolioRef}
                 style={styles.input}
                 value={formData.portfolio}
-                onChangeText={(text) => setFormData({ ...formData, portfolio: text })}
+                onChangeText={(text) => setFormData((prev) => { userEditedRef.current = true; return { ...prev, portfolio: text }; })}
                 onFocus={() => setFocusedField('portfolio')}
                 onBlur={() => setFocusedField(null)}
                 placeholder="https://yourwebsite.com"
@@ -518,7 +544,7 @@ export default function EditProfileScreen() {
                 ref={skillsetsRef}
                 style={styles.input}
                 value={formData.skillsets}
-                onChangeText={(text) => setFormData({ ...formData, skillsets: text })}
+                onChangeText={(text) => setFormData((prev) => { userEditedRef.current = true; return { ...prev, skillsets: text }; })}
                 onFocus={() => setFocusedField('skillsets')}
                 onBlur={() => setFocusedField(null)}
                 placeholder="e.g., React, Node.js, Design"
