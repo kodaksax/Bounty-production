@@ -255,16 +255,27 @@ describe('CompletionService', () => {
 
   describe('markReady and getReady', () => {
     it('should mark bounty as ready for submission', async () => {
-      const upsert = jest.fn().mockResolvedValue({ error: null });
-      mockSupabase.from.mockReturnValue({ upsert });
+      const maybeSingle = jest.fn().mockResolvedValue({ data: null, error: null });
+      const insert = jest.fn().mockResolvedValue({ error: null });
+      mockSupabase.from.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              limit: jest.fn().mockReturnValue({
+                maybeSingle,
+              }),
+            }),
+          }),
+        }),
+        insert,
+      });
 
       const result = await completionService.markReady('bounty123', 'hunter123');
 
       expect(result).toBe(true);
       expect(mockSupabase.from).toHaveBeenCalledWith('completion_ready');
-      expect(upsert).toHaveBeenCalledWith(
-        expect.objectContaining({ bounty_id: 'bounty123', hunter_id: 'hunter123' }),
-        { onConflict: 'bounty_id,hunter_id' }
+      expect(insert).toHaveBeenCalledWith(
+        expect.objectContaining({ bounty_id: 'bounty123', hunter_id: 'hunter123' })
       );
     });
 

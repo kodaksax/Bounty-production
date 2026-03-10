@@ -7,17 +7,17 @@ import { AuthProfile } from "lib/services/auth-profile-service";
 import { getCurrentUserId } from "lib/utils/data-utils";
 import React, { useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAttachmentUpload } from "../../hooks/use-attachment-upload";
@@ -145,6 +145,23 @@ export default function EditProfileScreen() {
   // repeatedly setting local state from equivalent profile payloads.
   React.useEffect(() => {
     const nextData = profileFormData ?? EMPTY_FORM_DATA;
+
+    // If the incoming profile equals our recorded initial data, do nothing.
+    if (isSameFormData(initialData, nextData)) {
+      // Update avatar if it changed independently
+      const nextAvatar = profile?.avatar || null;
+      setAvatarUrl((prev) => (prev === nextAvatar ? prev : nextAvatar));
+      return;
+    }
+
+    // If the user hasn't modified the form (formData matches initialData),
+    // adopt the new profile snapshot into both formData and initialData.
+    if (isSameFormData(formData, initialData)) {
+      setFormData(nextData);
+      setInitialData(nextData);
+    }
+
+    // Update avatar if changed and user hasn't manually changed it
     const nextAvatar = profile?.avatar || null;
 
     const userChanged = lastUserIdRef.current !== currentUserId;

@@ -145,6 +145,10 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     hunterName,
     localStageOverride,
   } = uiState
+  
+  // Track profile pictures for poster/hunter
+  const [otherPartyAvatar, setOtherPartyAvatar] = useState<string | null>(null)
+  const [otherPartyName, setOtherPartyName] = useState<string>('')
   // Draft/submission reducer consolidates per-bounty mutable fields to avoid
   // leaking state across reused FlatList rows and to batch resets into one dispatch.
   type ReadyRecord = { bounty_id: string; hunter_id: string; ready_at: string } | null
@@ -242,18 +246,34 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         const match = list.find(c => String(c.bountyId) === String(bounty.id)) || null
         dispatchUi({ type: 'set', key: 'conversation', value: match })
 
-        // Fetch hunter name if available
+        // Fetch hunter profile if available and we're the owner
         const hunterId = bounty.accepted_by || readyRecord?.hunter_id
-        if (hunterId) {
+        if (hunterId && variant === 'owner') {
           try {
             const hunterProfile = await userProfileService.getProfile(hunterId)
             if (!mounted) return
             if (hunterProfile?.username) {
               dispatchUi({ type: 'set', key: 'hunterName', value: hunterProfile.username })
             }
+            // Set hunter avatar and name for card display
+            setOtherPartyAvatar(hunterProfile?.avatar || null)
+            setOtherPartyName(hunterProfile?.username || 'Hunter')
           } catch (error) {
             // Fallback to default "Hunter" if profile fetch fails
             console.error('[MyPosting] Failed to fetch hunter profile:', error)
+          }
+        }
+        
+        // Fetch poster profile if we're the hunter
+        if (bounty.user_id && variant === 'hunter') {
+          try {
+            const posterProfile = await userProfileService.getProfile(String(bounty.user_id))
+            if (!mounted) return
+            // Set poster avatar and name for card display
+            setOtherPartyAvatar(posterProfile?.avatar || null)
+            setOtherPartyName(posterProfile?.username || 'Poster')
+          } catch (error) {
+            console.error('[MyPosting] Failed to fetch poster profile:', error)
           }
         }
 
@@ -675,6 +695,8 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         submittedForReview={awaitingPosterAction}
         hasCancellationRequest={hasCancellationRequest}
         hasDispute={hasDispute}
+        otherPartyAvatar={otherPartyAvatar}
+        otherPartyName={otherPartyName}
       />
       {expanded && (
         <View style={styles.panel} onLayout={() => { if (typeof onExpandedLayout === 'function') onExpandedLayout() }}>
@@ -797,7 +819,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                   <View style={styles.infoBox}>
                     <MaterialIcons name="info-outline" size={18} color="#6ee7b7" />
                     <Text style={styles.infoText}>
-                      Begin work on the bounty; once complete press the next button.
+                      Congrats on being selected! Begin work on the bounty, money is in escrow; once complete press the next button.
                     </Text>
                   </View>
                   

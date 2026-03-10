@@ -29,8 +29,9 @@ export function useRejectRequest({
       // Update local state - remove the rejected request from the list
       setBountyRequests((prev) => prev.filter((req) => String(req.id) !== String(requestId)))
 
-      // Show confirmation toast
-      Alert.alert('Request Rejected', 'The request has been rejected and removed.', [{ text: 'OK' }])
+      // Show confirmation with next-step guidance
+      const nextSteps = `\n\nNext steps:\n• Review other applicants in Requests or go to My Postings to edit the posting.`
+      Alert.alert('Request Rejected', `The request has been rejected and removed.${nextSteps}`, [{ text: 'OK' }])
     } catch (err: any) {
       console.error("Error rejecting request:", err)
       setError(err.message || "Failed to reject request")

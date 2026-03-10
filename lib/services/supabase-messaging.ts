@@ -468,16 +468,38 @@ export async function createConversation(
     }
 
     // Add participants
-    const participantRecords = ensureCreatorIncluded.map(userId => ({
+    // Ensure creator is added first (they pass RLS check with user_id = auth.uid())
+    // This helps ensure the conversation's created_by field is properly set for RLS checks
+    const creatorRecord = {
       conversation_id: conversation.id,
-      user_id: userId,
-    }));
+      user_id: resolvedCreatorId,
+    };
+    
+    const otherParticipantRecords = ensureCreatorIncluded
+      .filter(userId => userId !== resolvedCreatorId)
+      .map(userId => ({
+        conversation_id: conversation.id,
+        user_id: userId,
+      }));
+
+    // Insert creator first, then others
+    // Creator always passes RLS (user_id = auth.uid())
+    // Others now pass RLS because can_manage_conversation() returns true (created_by = auth.uid())
+    const allParticipantRecords = [creatorRecord, ...otherParticipantRecords];
 
     const { error: participantsError } = await supabase
       .from('conversation_participants')
-      .insert(participantRecords);
+      .insert(allParticipantRecords);
 
-    if (participantsError) throw participantsError;
+    if (participantsError) {
+      logClientError('Failed to add participants to conversation', { 
+        err: participantsError, 
+        conversationId: conversation.id,
+        creatorId: resolvedCreatorId,
+        participantCount: allParticipantRecords.length 
+      });
+      throw participantsError;
+    }
 
     // For 1:1 chats, get the other user's info
     let name = 'New Conversation';

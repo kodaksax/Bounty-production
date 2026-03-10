@@ -7,10 +7,14 @@ const PENDING_CONV_KEY = '@bountyexpo:pending_open_conversation'
 let _pendingConversationId: string | null = null
 
 export const navigationIntent = {
-  setPendingConversationId: async (id: string) => {
+  setPendingConversationId: async (id: string | null) => {
     try {
       _pendingConversationId = id
-      await AsyncStorage.setItem(PENDING_CONV_KEY, id)
+      if (id === null) {
+        try { await AsyncStorage.removeItem(PENDING_CONV_KEY) } catch {}
+      } else {
+        await AsyncStorage.setItem(PENDING_CONV_KEY, id)
+      }
     } catch (e) {
       // best-effort
       console.error('navigationIntent: failed to persist pending conversation id', e)
