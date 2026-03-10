@@ -298,23 +298,23 @@ export const completionService = {
           // existing safe read-then-insert/update flow.
           try {
             // Use an array payload for upsert to match supabase client expectations
-            const { error: upsertErr } = await supabase
-              .from('completion_ready')
-              .upsert([payload], { onConflict: 'bounty_id,hunter_id' })
+            const qb = supabase.from('completion_ready') as any
 
-            if (!upsertErr) {
-              return true
-            }
+            if (qb && typeof qb.upsert === 'function') {
+              const { error: upsertErr } = await qb.upsert([payload], { onConflict: 'bounty_id,hunter_id' })
+              if (!upsertErr) return true
 
-            // If upsert failed, inspect the message. If it's not related to
-            // a missing/invalid ON CONFLICT target, rethrow so outer catch can
-            // handle it. Otherwise fall through to the legacy fallback.
-            const upsertMsg = (upsertErr as any)?.message || String(upsertErr)
-            if (!/unique|on conflict|constraint/i.test(upsertMsg)) {
-              const message = upsertMsg || JSON.stringify(upsertErr)
-              throw new Error(message)
+              const upsertMsg = (upsertErr as any)?.message || String(upsertErr)
+              if (!/unique|on conflict|constraint/i.test(upsertMsg)) {
+                const message = upsertMsg || JSON.stringify(upsertErr)
+                throw new Error(message)
+              }
+              // else: fall through to fallback
+            } else {
+              // Supabase client or its mock doesn't support upsert; use fallback
+              // read-then-insert/update flow instead of throwing.
+              /* intentionally fall through */
             }
-            // else: intentionally fall back
           } catch (e) {
             const emsg = e instanceof Error ? e.message : String(e)
             if (!/unique|on conflict|constraint/i.test(emsg)) {
