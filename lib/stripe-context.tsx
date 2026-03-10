@@ -141,8 +141,8 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
         throw new Error('No payment method available. Please add a payment method first.');
       }
 
-      // Confirm payment
-      const confirmedIntent = await stripeService.confirmPayment(paymentIntent.client_secret, pmId);
+      // Confirm payment - pass auth token so the backend /payments/confirm call is authenticated
+      const confirmedIntent = await stripeService.confirmPayment(paymentIntent.client_secret, pmId, session.access_token);
       
       if (confirmedIntent.status === 'succeeded') {
         return { success: true };

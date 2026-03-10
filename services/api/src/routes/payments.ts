@@ -10,6 +10,7 @@ import {
 } from '../services/idempotency-service';
 import { logger } from '../services/logger';
 import { stripeConnectService } from '../services/stripe-connect-service';
+import * as ConsolidatedWalletService from '../services/consolidated-wallet-service';
 import { walletService } from '../services/wallet-service';
 
 const createPaymentIntentSchema = z.object({
@@ -350,17 +351,20 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
       }
 
       // Record the deposit in wallet (if not already recorded via webhook)
+      // createDeposit is idempotent (checks stripe_payment_intent_id) and also
+      // updates the user's balance atomically, so this is safe to call even if
+      // the Stripe webhook has already processed the event.
       const purpose = paymentIntent.metadata.purpose;
       if (purpose === 'wallet_deposit') {
         try {
-          await walletService.createTransaction({
-            user_id: request.userId,
-            type: 'deposit',
-            amount: paymentIntent.amount / 100,
-          });
+          await ConsolidatedWalletService.createDeposit(
+            request.userId,
+            paymentIntent.amount / 100,
+            paymentIntentId,
+          );
         } catch (txError: any) {
-          // Transaction might already exist from webhook, log but don't fail
-          logger.warn({ err: txError }, '[payments] Transaction may already exist');
+          // Idempotency: duplicate transaction is not a failure
+          logger.warn({ err: txError }, '[payments] Deposit record skipped (may already exist)');
         }
       }
 

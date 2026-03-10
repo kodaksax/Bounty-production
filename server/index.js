@@ -614,8 +614,84 @@ app.post('/payments/confirm', paymentLimiter, authenticateUser, async (req, res)
       return res.status(403).json({ error: 'Not authorized to confirm this payment' });
     }
 
-    // If already succeeded or processing, return current status
-    if (paymentIntent.status === 'succeeded' || paymentIntent.status === 'processing') {
+    // Helper: record deposit and update balance for a succeeded payment intent.
+    // Idempotent – checks for an existing wallet_transaction by stripe_payment_intent_id
+    // before inserting, so duplicate calls (webhook + this endpoint) are safe.
+    // PostgreSQL unique constraint violation error code
+    const PG_UNIQUE_VIOLATION = '23505';
+
+    const recordDepositIfNeeded = async (intent) => {
+      // Skip if not a wallet deposit
+      if (intent.metadata?.purpose !== 'wallet_deposit') return;
+
+      const amountDollars = intent.amount / 100;
+
+      // Check if transaction already recorded (webhook may have beaten us)
+      const { data: existing } = await supabase
+        .from('wallet_transactions')
+        .select('id')
+        .eq('stripe_payment_intent_id', intent.id)
+        .maybeSingle();
+
+      if (existing) {
+        console.log(`[PaymentConfirm] Transaction already exists for ${intent.id}, skipping insert`);
+        return;
+      }
+
+      // Insert wallet transaction
+      const { error: txError } = await supabase
+        .from('wallet_transactions')
+        .insert({
+          user_id: userId,
+          type: 'deposit',
+          amount: amountDollars,
+          description: 'Wallet deposit via Stripe',
+          status: 'completed',
+          stripe_payment_intent_id: intent.id,
+          metadata: intent.metadata,
+        });
+
+      if (txError) {
+        // A unique constraint violation means the webhook already inserted it – safe to ignore
+        if (txError.code !== PG_UNIQUE_VIOLATION) {
+          console.error('[PaymentConfirm] Error creating transaction:', txError);
+        }
+        return;
+      }
+
+      // Update balance atomically via RPC
+      const { error: balanceError } = await supabase.rpc('increment_balance', {
+        p_user_id: userId,
+        p_amount: amountDollars,
+      });
+
+      if (balanceError) {
+        console.error('[PaymentConfirm] Error updating balance via RPC:', balanceError);
+        // Retry once on transient failure
+        const { error: retryError } = await supabase.rpc('increment_balance', {
+          p_user_id: userId,
+          p_amount: amountDollars,
+        });
+        if (retryError) {
+          console.error('[PaymentConfirm] Balance update retry failed:', retryError);
+        }
+      } else {
+        console.log(`[PaymentConfirm] Balance updated for user ${userId}, amount +${amountDollars}`);
+      }
+    };
+
+    // If already succeeded, record deposit (if not already done) and return
+    if (paymentIntent.status === 'succeeded') {
+      await recordDepositIfNeeded(paymentIntent);
+      return res.json({
+        success: true,
+        status: paymentIntent.status,
+        paymentIntentId: paymentIntent.id,
+      });
+    }
+
+    // If processing, just return current status
+    if (paymentIntent.status === 'processing') {
       return res.json({
         success: true,
         status: paymentIntent.status,
@@ -647,6 +723,10 @@ app.post('/payments/confirm', paymentLimiter, authenticateUser, async (req, res)
 
     const success = confirmedIntent.status === 'succeeded';
     console.log(`[PaymentConfirm] Payment ${paymentIntentId} status: ${confirmedIntent.status}`);
+
+    if (success) {
+      await recordDepositIfNeeded(confirmedIntent);
+    }
 
     res.json({
       success,

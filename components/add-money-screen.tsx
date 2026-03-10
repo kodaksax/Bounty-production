@@ -24,7 +24,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
   const [showPaymentMethodsModal, setShowPaymentMethodsModal] = useState(false)
   const [isApplePayAvailable, setIsApplePayAvailable] = useState(false)
   const [error, setError] = useState<any>(null)
-  const { deposit } = useWallet()
+  const { deposit, refreshFromApi } = useWallet()
   const { processPayment, paymentMethods, isLoading: stripeLoading, error: stripeError, loadPaymentMethods } = useStripe()
   const { session } = useAuthContext()
 
@@ -91,12 +91,22 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
         const result = await processPayment(numAmount, paymentMethods[0]?.id)
 
         if (result.success) {
-          // Add to local wallet balance
+          // Optimistically update local wallet balance
           await deposit(numAmount, {
             method: 'Credit Card',
             title: 'Added Money via Stripe',
             status: 'completed'
           })
+
+          // Sync balance from server so Supabase is the source of truth
+          try {
+            if (session?.access_token) {
+              await refreshFromApi(session.access_token)
+            }
+          } catch (syncErr) {
+            // Non-critical: local state already updated above
+            console.warn('[AddMoney] Failed to sync balance from server after deposit:', syncErr)
+          }
 
           // Show success message
           Alert.alert(
@@ -171,6 +181,16 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
           title: 'Added Money via Apple Pay',
           status: 'completed',
         })
+
+        // Sync balance from server so Supabase is the source of truth
+        try {
+          if (session?.access_token) {
+            await refreshFromApi(session.access_token)
+          }
+        } catch (syncErr) {
+          // Non-critical: local state already updated above
+          console.warn('[AddMoney] Failed to sync balance from server after Apple Pay deposit:', syncErr)
+        }
 
         Alert.alert(
           'Success!',
