@@ -10,19 +10,20 @@ import { userProfileService } from 'lib/services/userProfile'
 import type { Attachment, Conversation } from 'lib/types'
 import { useEffect, useMemo, useReducer, useState } from 'react'
 import {
-  ActivityIndicator,
-  Alert,
-  LayoutAnimation,
-  Platform,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  UIManager,
-  View
+    ActivityIndicator,
+    Alert,
+    LayoutAnimation,
+    Platform,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    UIManager,
+    View
 } from 'react-native'
 import { useAttachmentUpload } from '../hooks/use-attachment-upload'
 import { logClientError } from '../lib/services/monitoring'
+import { navigationIntent } from '../lib/services/navigation-intent'
 import { useWallet } from '../lib/wallet-context'
 import { BountyCard } from './bounty-card'
 import { PosterReviewModal } from './poster-review-modal'
@@ -88,6 +89,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     timeElapsed: number
     hunterName: string
     localStageOverride: null | 'apply_work' | 'working_progress' | 'review_verify' | 'payout'
+    hunterToolsExpanded: boolean
   }
 
   const initialUIState = (name = 'Hunter'): UIState => ({
@@ -105,6 +107,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     timeElapsed: 0,
     hunterName: name,
     localStageOverride: null,
+    hunterToolsExpanded: false,
   })
 
   type UIAction =
@@ -144,6 +147,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     timeElapsed,
     hunterName,
     localStageOverride,
+    hunterToolsExpanded,
   } = uiState
 
   // Track profile pictures for poster/hunter
@@ -649,6 +653,20 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     router.push(`/bounty/${bounty.id}/dispute`)
   }
 
+  const handleMessagePoster = async () => {
+    if (!conversation) {
+      Alert.alert('No Conversation', 'No active conversation found for this bounty yet.')
+      return
+    }
+
+    try {
+      await navigationIntent.setPendingConversationId(conversation.id)
+      router.push('/tabs/bounty-app?screen=create' as '/tabs/bounty-app')
+    } catch {
+      Alert.alert('Unable to Open Chat', 'Please try again in a moment.')
+    }
+  }
+
   const handleCancelStaleBounty = async (bountyId: number | string) => {
     try {
       const result = await staleBountyService.cancelStaleBounty(bountyId)
@@ -863,6 +881,49 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                     <Text style={styles.primaryText}>Ready to Submit</Text>
                     <MaterialIcons name={(readyToSubmitPressed || !!readyRecord) ? 'lock' : 'arrow-forward'} size={18} color="#fff" />
                   </TouchableOpacity>
+
+                  <View style={styles.hunterToolsSection}>
+                    <TouchableOpacity
+                      style={styles.hunterToolsToggle}
+                      onPress={() => dispatchUi({ type: 'set', key: 'hunterToolsExpanded', value: !hunterToolsExpanded })}
+                      accessibilityRole="button"
+                      accessibilityLabel="Hunter flow tools"
+                      accessibilityHint="Opens quick tools including dispute and message actions"
+                    >
+                      <View style={styles.hunterToolsToggleLeft}>
+                        <MaterialIcons name="build-circle" size={18} color="#a7f3d0" />
+                        <Text style={styles.hunterToolsToggleText}>Hunter Flow Tools</Text>
+                      </View>
+                      <MaterialIcons name={hunterToolsExpanded ? 'expand-less' : 'expand-more'} size={20} color="#a7f3d0" />
+                    </TouchableOpacity>
+
+                    {hunterToolsExpanded && (
+                      <View style={styles.hunterToolsMenu}>
+                        <TouchableOpacity style={styles.hunterToolBtn} onPress={handleMessagePoster}>
+                          <MaterialIcons name="chat" size={18} color="#6ee7b7" />
+                          <Text style={styles.hunterToolText}>Message Poster</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={styles.hunterToolBtnDanger} onPress={handleViewDispute}>
+                          <MaterialIcons name="report-problem" size={18} color="#fca5a5" />
+                          <Text style={styles.hunterToolTextDanger}>Open Dispute</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.hunterToolBtn}
+                          onPress={() => {
+                            dispatchUi({ type: 'set', key: 'hunterToolsExpanded', value: false })
+                            dispatchUi({ type: 'set', key: 'wipExpanded', value: false })
+                            dispatchUi({ type: 'set', key: 'reviewExpanded', value: true })
+                            dispatchUi({ type: 'set', key: 'localStageOverride', value: 'review_verify' })
+                          }}
+                        >
+                          <MaterialIcons name="fact-check" size={18} color="#6ee7b7" />
+                          <Text style={styles.hunterToolText}>Go To Submission</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
                 </View>
               )}
             </AnimatedSection>
@@ -1416,5 +1477,66 @@ const styles = StyleSheet.create({
   tapHintText: {
     color: 'rgba(110, 231, 183, 0.5)',
     fontSize: 11,
+  },
+  hunterToolsSection: {
+    marginTop: 2,
+    gap: 8,
+  },
+  hunterToolsToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(5, 46, 27, 0.5)',
+    borderWidth: 1,
+    borderColor: 'rgba(110, 231, 183, 0.35)',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  hunterToolsToggleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  hunterToolsToggleText: {
+    color: '#a7f3d0',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  hunterToolsMenu: {
+    backgroundColor: 'rgba(5, 46, 27, 0.45)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(110, 231, 183, 0.25)',
+    padding: 10,
+    gap: 8,
+  },
+  hunterToolBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: 'rgba(5, 150, 105, 0.25)',
+  },
+  hunterToolBtnDanger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: 'rgba(239, 68, 68, 0.2)',
+  },
+  hunterToolText: {
+    color: '#d1fae5',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  hunterToolTextDanger: {
+    color: '#fecaca',
+    fontSize: 13,
+    fontWeight: '700',
   },
 })
