@@ -2,17 +2,18 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NotFoundScreen } from '../../../components/not-found-screen';
+import WorkInProgressBanner from '../../../components/work-in-progress-banner';
 import { useBackgroundColor } from '../../../lib/context/BackgroundColorContext';
 import { bountyService } from '../../../lib/services/bounty-service';
 import type { Bounty } from '../../../lib/services/database.types';
@@ -296,6 +297,11 @@ export default function BountyDashboard() {
             )}
           </View>
         </View>
+
+        {/* Work in progress banner for posters */}
+        {bounty.status === 'in_progress' && (
+          <WorkInProgressBanner message="Your hunter is actively working on this. You’ll be notified when it’s ready for review." />
+        )}
 
         {/* Timeline */}
         {bounty.status === 'open' && (
