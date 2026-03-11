@@ -52,7 +52,7 @@ export async function isUsernameUnique(username: string, currentUserId?: string)
   try {
     const profilesJson = await AsyncStorage.getItem(PROFILES_KEY);
     const profiles: { [key: string]: ProfileData } = profilesJson ? JSON.parse(profilesJson) : {};
-    
+
     // Check if username exists for a different user
     for (const [userId, profile] of Object.entries(profiles)) {
       if (profile.username === username && userId !== currentUserId) {
@@ -72,7 +72,7 @@ export async function isUsernameUnique(username: string, currentUserId?: string)
 export function formatPhone(phone: string): string {
   // Remove all non-digit characters
   const digits = phone.replace(/\D/g, '');
-  
+
   // If starts with country code, keep it; otherwise assume US
   if (digits.length === 10) {
     return `+1${digits}`;
@@ -159,11 +159,11 @@ export const userProfileService = {
 
       const key = this.storageKey(resolvedUserId);
       const profileJson = await AsyncStorage.getItem(key);
-  if (!profileJson) {
+      if (!profileJson) {
         // No per-user profile found.
         // If we have a resolved user id, try legacy single-key storage and migrate it for this user.
         const legacy = await AsyncStorage.getItem(STORAGE_KEY);
-  if (legacy && resolvedUserId) {
+        if (legacy && resolvedUserId) {
           try {
             const legacyProfile = JSON.parse(legacy);
             // Persist a copy under the new per-user key so future loads

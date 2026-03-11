@@ -132,6 +132,7 @@ export function useAcceptRequest({
         try {
           const updated = await (bountyService as any).update(bountyId, {
             status: 'in_progress',
+            accepted_by: hunterIdForConv,
           })
           if (!updated) {
             console.error('bountyService.update returned null for', bountyId, 'updates:', { status: 'in_progress' })
@@ -191,7 +192,7 @@ export function useAcceptRequest({
               logClientError('Failed to send initial message via supabase messaging', { err: msgErr, convId, bountyId })
             }
 
-            try { await navigationIntent.setPendingConversationId(String(convId)) } catch {}
+            try { await navigationIntent.setPendingConversationId(String(convId)) } catch { }
             logClientInfo('Supabase RPC conversation created', { convId, bountyId })
           }
         } catch (rpcErr: any) {
