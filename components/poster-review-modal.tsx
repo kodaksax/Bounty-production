@@ -2,18 +2,18 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  FlatList,
-  Modal,
-  PanResponder,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Animated,
+    FlatList,
+    Modal,
+    PanResponder,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHapticFeedback } from '../lib/haptic-feedback';
@@ -395,7 +395,10 @@ export function PosterReviewModal({
   };
 
   const handleAttachmentPress = (item: ProofItem) => {
-    const remoteUri = item.url && item.url.length > 0 ? item.url : undefined;
+    // Accept either `url` (legacy) or `remoteUri` (common across app) when resolving attachment URIs
+    const remoteUri = (item as any).url && (item as any).url.length > 0
+      ? (item as any).url
+      : ((item as any).remoteUri && (item as any).remoteUri.length > 0 ? (item as any).remoteUri : undefined);
     const primaryUri = item.uri || remoteUri;
 
     if (!primaryUri) {
@@ -407,10 +410,11 @@ export function PosterReviewModal({
       id: item.id,
       name: item.name || 'Attachment',
       uri: primaryUri,
-      remoteUri,
+      remoteUri: remoteUri,
       mimeType: item.mimeType,
       mime: item.mimeType,
       size: item.size,
+      status: 'uploaded',
     };
 
     setSelectedAttachment(attachment);
