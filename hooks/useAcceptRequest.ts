@@ -46,6 +46,9 @@ export function useAcceptRequest({
   setActiveScreen,
 }: UseAcceptRequestParams) {
   const handleAcceptRequest = useCallback(async (requestId: string | number) => {
+    // Track the conversation id created during this accept flow so
+    // the alert action can re-assert the intent when the user taps "View Conversation".
+    let pendingConvId: string | null = null
     try {
       // Show quick-refresh UI for list transitions
       setIsLoading((prev) => ({ ...prev, requests: true, myBounties: true, inProgress: true }))
@@ -191,8 +194,8 @@ export function useAcceptRequest({
             } catch (msgErr) {
               logClientError('Failed to send initial message via supabase messaging', { err: msgErr, convId, bountyId })
             }
-
-            try { await navigationIntent.setPendingConversationId(String(convId)) } catch { }
+            pendingConvId = String(convId)
+            try { await navigationIntent.setPendingConversationId(pendingConvId) } catch { }
             logClientInfo('Supabase RPC conversation created', { convId, bountyId })
           }
         } catch (rpcErr: any) {
@@ -222,7 +225,8 @@ export function useAcceptRequest({
             logClientError('Failed to send initial local message', { err: localMsgErr, localConvId: localConv.id })
           }
 
-          try { await navigationIntent.setPendingConversationId(localConv.id) } catch { /* best-effort */ }
+          pendingConvId = localConv.id
+          try { await navigationIntent.setPendingConversationId(pendingConvId) } catch { /* best-effort */ }
         } catch (fallbackErr) {
           console.error('Fallback to local conversation also failed:', fallbackErr)
           logClientError('Fallback to local conversation failed', { err: fallbackErr })
@@ -271,23 +275,29 @@ export function useAcceptRequest({
       // Show a confirmation alert with next-step guidance for the poster
       const nextSteps = `\n\nNext steps:\n• Confirm details with your hunter in the conversation.\n• When the work is done, mark the bounty complete and release escrow (for paid bounties).`
 
+      const viewAction = {
+        text: 'View Conversation',
+        onPress: () => {
+          // Re-assert the pending conversation id just before navigating so the
+          // MessengerScreen can reliably pick it up on mount.
+          ;(async () => {
+            try { await navigationIntent.setPendingConversationId(pendingConvId) } catch {}
+            try { setActiveScreen('create') } catch {}
+          })()
+        }
+      }
+
       if (request.bounty && !request.bounty.is_for_honor && request.bounty.amount > 0) {
         Alert.alert(
           'Request Accepted',
           `You've accepted ${request.profile?.username || 'the hunter'} for "${request.bounty.title}".\n\n💰 Escrow: $${request.bounty.amount.toFixed(2)} has been secured and will be held until completion.\n💬 A conversation has been created to coordinate.${nextSteps}`,
-          [
-            { text: 'View Conversation', onPress: () => setActiveScreen('create') },
-            { text: 'OK' }
-          ]
+          [viewAction, { text: 'OK' }]
         )
       } else {
         Alert.alert(
           'Request Accepted',
           `You've accepted ${request.profile?.username || 'the hunter'} for "${request.bounty.title}".\n\n💬 A conversation has been created to coordinate.${nextSteps}`,
-          [
-            { text: 'View Conversation', onPress: () => setActiveScreen('create') },
-            { text: 'OK' }
-          ]
+          [viewAction, { text: 'OK' }]
         )
       }
     } catch (err: any) {
