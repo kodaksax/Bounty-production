@@ -324,6 +324,13 @@ app.post('/payments/create-payment-intent', paymentLimiter, authenticateUser, as
     if (metadata.description) {
       sanitizedMetadata.description = sanitizeText(metadata.description);
     }
+    // Allow purpose for wallet deposits (only accept known values)
+    if (metadata.purpose) {
+      const cleanedPurpose = sanitizeText(metadata.purpose);
+      if (cleanedPurpose === 'wallet_deposit') {
+        sanitizedMetadata.purpose = 'wallet_deposit';
+      }
+    }
 
     // Create PaymentIntent
     const paymentIntent = await stripe.paymentIntents.create({
