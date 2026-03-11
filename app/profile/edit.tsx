@@ -7,17 +7,17 @@ import { AuthProfile } from "lib/services/auth-profile-service";
 import { getCurrentUserId } from "lib/utils/data-utils";
 import React, { useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAttachmentUpload } from "../../hooks/use-attachment-upload";
@@ -69,6 +69,8 @@ export default function EditProfileScreen() {
   const [formData, setFormData] = useState<EditProfileFormData>(EMPTY_FORM_DATA);
 
   const [initialData, setInitialData] = useState<EditProfileFormData>(EMPTY_FORM_DATA);
+  // Keep a ref of the last applied initial data so we can detect local edits
+  const initialRef = React.useRef<EditProfileFormData>(EMPTY_FORM_DATA);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [dismissedError, setDismissedError] = useState(false);
@@ -139,8 +141,21 @@ export default function EditProfileScreen() {
   // repeatedly setting local state from equivalent profile payloads.
   React.useEffect(() => {
     const nextData = profileFormData ?? EMPTY_FORM_DATA;
-    setFormData((prev) => (isSameFormData(prev, nextData) ? prev : nextData));
-    setInitialData((prev) => (isSameFormData(prev, nextData) ? prev : nextData));
+
+    // Use a functional update so we don't read `formData` from outer scope,
+    // which can cause a circular update when the effect also writes state.
+    setFormData((prev) => {
+      const hasLocalEdits = !isSameFormData(prev, initialRef.current);
+      if (hasLocalEdits) return prev;
+      return isSameFormData(prev, nextData) ? prev : nextData;
+    });
+
+    // Update the recorded initial snapshot only when the incoming profile
+    // snapshot actually differs from what we had before.
+    if (!isSameFormData(initialRef.current, nextData)) {
+      initialRef.current = nextData;
+      setInitialData(nextData);
+    }
 
     const nextAvatar = profile?.avatar || null;
     setAvatarUrl((prev) => (prev === nextAvatar ? prev : nextAvatar));
