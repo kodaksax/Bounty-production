@@ -252,10 +252,10 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
     try {
       setIsLoading((prev) => ({ ...prev, inProgress: true }))
       setError(null) // Clear previous error
-      // Show bounties that the current user has applied for (pending/accepted/etc.)
+      // Show bounties that the current user has applied for (pending/accepted/rejected/etc.)
+      // Include rejected requests so we can surface a 'Rejected' badge and provide a discard action.
       const requests = await bountyRequestService.getAllWithDetails({ userId: currentUserId })
-      // Only include bounties where the user's request isn't rejected
-      const relevant = requests.filter(r => r.status !== 'rejected')
+      const relevant = requests // keep all statuses (pending, accepted, rejected)
       // Map to unique bounties
       const map = new Map<string, Bounty>()
       for (const r of relevant) {
@@ -557,7 +557,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
         currentUserId={currentUserId}
         expanded={!!expandedMap[String(bounty.id)]}
         onToggle={() => handleToggleAndScroll('inProgress', bounty.id)}
-        onWithdrawApplication={bounty.status === 'open' ? () => handleWithdrawApplication(bounty.id) : undefined}
+        onWithdrawApplication={() => handleWithdrawApplication(bounty.id)}
         onGoToReview={(id: string) => router.push({ pathname: '/in-progress/[bountyId]/hunter/review-and-verify', params: { bountyId: id } })}
         onGoToPayout={(id: string) => router.push({ pathname: '/in-progress/[bountyId]/hunter/payout', params: { bountyId: id } })}
         variant={'hunter'}

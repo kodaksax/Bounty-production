@@ -1,5 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
+import { bountyRequestService } from 'lib/services/bounty-request-service'
 import { cancellationService } from 'lib/services/cancellation-service'
 import { completionService } from 'lib/services/completion-service'
 import type { Bounty } from 'lib/services/database.types'
@@ -153,6 +154,9 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   // Track profile pictures for poster/hunter
   const [otherPartyAvatar, setOtherPartyAvatar] = useState<string | null>(null)
   const [otherPartyName, setOtherPartyName] = useState<string>('')
+    // Track the current user's request for this bounty (if any)
+    const [requestStatus, setRequestStatus] = useState<string | null>(null)
+    const [requestId, setRequestId] = useState<string | null>(null)
   // Draft/submission reducer consolidates per-bounty mutable fields to avoid
   // leaking state across reused FlatList rows and to batch resets into one dispatch.
   type ReadyRecord = { bounty_id: string; hunter_id: string; ready_at: string } | null
@@ -271,6 +275,24 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         // Fetch poster profile if we're the hunter
         const posterId = bounty.poster_id || bounty.user_id
         if (posterId && variant === 'hunter') {
+
+                  // Load the current user's request status for this bounty (if hunter)
+                  try {
+                    if (currentUserId) {
+                      const reqs = await bountyRequestService.getAll({ bountyId: String(bounty.id), userId: String(currentUserId) })
+                      if (Array.isArray(reqs) && reqs.length > 0) {
+                        setRequestStatus(reqs[0].status)
+                        setRequestId(String(reqs[0].id))
+                      } else {
+                        setRequestStatus(null)
+                        setRequestId(null)
+                      }
+                    }
+                  } catch (err) {
+                    // ignore request load errors
+                    setRequestStatus(null)
+                    setRequestId(null)
+                  }
           try {
             const posterProfile = await userProfileService.getProfile(String(posterId))
             if (!mounted) return
@@ -716,6 +738,8 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         hasDispute={hasDispute}
         otherPartyAvatar={otherPartyAvatar}
         otherPartyName={otherPartyName}
+        requestStatus={requestStatus}
+        onWithdrawApplication={onWithdrawApplication}
       />
       {/* Tap-to-expand hint — shown only when collapsed */}
       {!expanded && (

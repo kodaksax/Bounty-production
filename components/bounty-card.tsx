@@ -27,6 +27,10 @@ interface BountyCardProps {
   // Profile picture of the other party (poster for hunters, hunter for posters)
   otherPartyAvatar?: string | null;
   otherPartyName?: string;
+  // If the current user has a request for this bounty (pending/accepted/rejected)
+  requestStatus?: string | null;
+  // For hunters: withdraw or discard application handler
+  onWithdrawApplication?: (() => void) | undefined;
 }
 
 export function BountyCard({
@@ -46,6 +50,8 @@ export function BountyCard({
   hasDispute,
   otherPartyAvatar,
   otherPartyName,
+  requestStatus,
+  onWithdrawApplication,
 }: BountyCardProps) {
   const isOwner = currentUserId === bounty.user_id;
 
@@ -61,6 +67,9 @@ export function BountyCard({
   const getStatusColor = () => {
     if (reviewNeeded) return '#fbbf24'
     if (submittedForReview) return '#38bdf8'
+    // If the bounty is open but the current user has applied, show 'applied' color
+    if (bounty.status === 'open' && requestStatus === 'pending') return '#3b82f6' // blue for applied
+    if (requestStatus === 'rejected') return '#ef4444' // red for rejected
     switch (bounty.status) {
       case "open":
         return "#10b981"; // emerald-500
@@ -82,6 +91,8 @@ export function BountyCard({
   const getStatusLabel = () => {
     if (reviewNeeded) return 'REVIEW NEEDED'
     if (submittedForReview) return 'SUBMITTED FOR REVIEW'
+    if (bounty.status === 'open' && requestStatus === 'pending') return 'APPLIED'
+    if (requestStatus === 'rejected') return 'REJECTED'
     switch (bounty.status) {
       case "open":
         return "OPEN";
@@ -290,6 +301,18 @@ export function BountyCard({
               <Text style={styles.actionButtonText}>Share</Text>
             </TouchableOpacity>
           </View>
+        </View>
+      )}
+      {/* Hunter actions: withdraw or discard application */}
+      {!isOwner && onWithdrawApplication && (requestStatus === 'pending' || requestStatus === 'rejected') && (
+        <View style={{ marginTop: 12 }}>
+          <TouchableOpacity
+            style={[styles.actionButton, requestStatus === 'rejected' ? styles.discardButton : styles.withdrawButton]}
+            onPress={(e) => { e.stopPropagation(); onWithdrawApplication && onWithdrawApplication(); }}
+          >
+            <MaterialIcons name={requestStatus === 'rejected' ? 'delete' : 'cancel'} size={16} color={requestStatus === 'rejected' ? '#ef4444' : '#f59e0b'} />
+            <Text style={[styles.actionButtonText, requestStatus === 'rejected' ? styles.discardText : styles.withdrawText]}>{requestStatus === 'rejected' ? 'Discard' : 'Withdraw'}</Text>
+          </TouchableOpacity>
         </View>
       )}
     </TouchableOpacity>
@@ -528,5 +551,18 @@ const styles = StyleSheet.create({
   },
   disputeButtonText: {
     color: "#f87171",
+  },
+  // Hunter action styles
+  discardButton: {
+    backgroundColor: 'rgba(239, 68, 68, 0.08)'
+  },
+  discardText: {
+    color: '#ef4444'
+  },
+  withdrawButton: {
+    backgroundColor: 'rgba(245, 158, 11, 0.08)'
+  },
+  withdrawText: {
+    color: '#f59e0b'
   },
 });
