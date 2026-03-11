@@ -15,11 +15,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@supabase/supabase-js';
 import { config } from '../config';
 import {
-  ConflictError,
-  ExternalServiceError,
-  handleStripeError,
-  NotFoundError,
-  ValidationError,
+    ConflictError,
+    ExternalServiceError,
+    handleStripeError,
+    NotFoundError,
+    ValidationError,
 } from '../middleware/error-handler';
 import { stripe } from './consolidated-payment-service';
 import { logger } from './logger';
@@ -323,6 +323,35 @@ export async function createDeposit(
 
   // Update user balance atomically
   await updateBalance(userId, amount);
+
+  return toWalletTransaction(transaction);
+}
+
+/**
+ * Find a wallet transaction by Stripe payment intent ID
+ * Returns the transaction record or null if not found
+ */
+export async function getTransactionByPaymentIntent(paymentIntentId: string) {
+  const admin = getSupabaseAdmin();
+
+  const { data: transaction, error } = await admin
+    .from('wallet_transactions')
+    .select('*')
+    .eq('stripe_payment_intent_id', paymentIntentId)
+    .maybeSingle();
+
+  if (error) {
+    // If Supabase returns a not-found style error, treat as no transaction
+    // Otherwise surface as ExternalServiceError
+    if ((error as any).code === 'PGRST116') {
+      return null;
+    }
+    throw new ExternalServiceError('Supabase', 'Failed to query transaction by payment intent', {
+      error: error.message,
+    });
+  }
+
+  if (!transaction) return null;
 
   return toWalletTransaction(transaction);
 }
@@ -868,4 +897,5 @@ export const consolidatedWalletService = {
   releaseEscrow,
   refundEscrow,
   updateBalance,
+  getTransactionByPaymentIntent,
 };

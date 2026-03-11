@@ -638,45 +638,27 @@ app.post('/payments/confirm', paymentLimiter, authenticateUser, async (req, res)
         return;
       }
 
-      // Insert wallet transaction
-      const { error: txError } = await supabase
-        .from('wallet_transactions')
-        .insert({
-          user_id: userId,
-          type: 'deposit',
-          amount: amountDollars,
-          description: 'Wallet deposit via Stripe',
-          status: 'completed',
-          stripe_payment_intent_id: intent.id,
-          metadata: intent.metadata,
-        });
-
-      if (txError) {
-        // A unique constraint violation means the webhook already inserted it – safe to ignore
-        if (txError.code !== PG_UNIQUE_VIOLATION) {
-          console.error('[PaymentConfirm] Error creating transaction:', txError);
-        }
-        return;
-      }
-
-      // Update balance atomically via RPC
-      const { error: balanceError } = await supabase.rpc('increment_balance', {
+      // Use an atomic DB-side RPC that inserts the wallet transaction and
+      // updates the profile balance only when a new transaction row was created.
+      // This RPC is idempotent by `stripe_payment_intent_id` and prevents
+      // double-crediting in retry scenarios.
+      const { data: applyRes, error: applyErr } = await supabase.rpc('apply_deposit', {
         p_user_id: userId,
         p_amount: amountDollars,
+        p_payment_intent_id: intent.id,
+        p_metadata: intent.metadata || {}
       });
 
-      if (balanceError) {
-        console.error('[PaymentConfirm] Error updating balance via RPC:', balanceError);
-        // Retry once on transient failure
-        const { error: retryError } = await supabase.rpc('increment_balance', {
-          p_user_id: userId,
-          p_amount: amountDollars,
-        });
-        if (retryError) {
-          console.error('[PaymentConfirm] Balance update retry failed:', retryError);
-        }
+      if (applyErr) {
+        console.error('[PaymentConfirm] apply_deposit RPC failed:', applyErr);
+        throw applyErr;
+      }
+
+      const appliedRow = Array.isArray(applyRes) ? applyRes[0] : applyRes;
+      if (appliedRow && appliedRow.applied) {
+        console.log(`[PaymentConfirm] Deposit applied, tx_id=${appliedRow.tx_id} for user ${userId}, amount +${amountDollars}`);
       } else {
-        console.log(`[PaymentConfirm] Balance updated for user ${userId}, amount +${amountDollars}`);
+        console.log(`[PaymentConfirm] Deposit already applied for ${intent.id}, no balance change`);
       }
     };
 

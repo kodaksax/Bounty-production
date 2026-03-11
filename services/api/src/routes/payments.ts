@@ -3,6 +3,7 @@ import Stripe from 'stripe';
 import { z } from 'zod';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
 import { getRequestContext, logErrorWithContext } from '../middleware/request-context';
+import * as ConsolidatedWalletService from '../services/consolidated-wallet-service';
 import {
   checkIdempotencyKey,
   removeIdempotencyKey,
@@ -10,7 +11,6 @@ import {
 } from '../services/idempotency-service';
 import { logger } from '../services/logger';
 import { stripeConnectService } from '../services/stripe-connect-service';
-import * as ConsolidatedWalletService from '../services/consolidated-wallet-service';
 import { walletService } from '../services/wallet-service';
 
 const createPaymentIntentSchema = z.object({
@@ -363,8 +363,30 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
             paymentIntentId,
           );
         } catch (txError: any) {
-          // Idempotency: duplicate transaction is not a failure
-          logger.warn({ err: txError }, '[payments] Deposit record skipped (may already exist)');
+          const msg = String(txError?.message || txError || '');
+
+          // If the error message clearly indicates a unique-constraint / duplicate
+          // (race condition), swallow it. Otherwise re-check the ledger for an
+          // existing transaction with this payment intent. If none found, treat
+          // as a real failure and return 500.
+          const looksLikeDuplicate = /duplicate|unique|already exists|duplicate key/i.test(msg);
+
+          if (looksLikeDuplicate) {
+            logger.info({ err: txError }, '[payments] Duplicate deposit detected, ignoring');
+          } else {
+            try {
+              const existing = await ConsolidatedWalletService.getTransactionByPaymentIntent(paymentIntentId);
+              if (existing) {
+                logger.info({ existingId: existing.id }, '[payments] Deposit already recorded by webhook');
+              } else {
+                logger.error({ err: txError }, '[payments] Failed to record deposit (not duplicate)');
+                return reply.code(500).send({ error: 'Failed to record deposit' });
+              }
+            } catch (checkErr: any) {
+              logger.error({ err: checkErr }, '[payments] Error checking existing deposit after createDeposit failure');
+              return reply.code(500).send({ error: 'Failed to confirm payment' });
+            }
+          }
         }
       }
 
@@ -667,13 +689,34 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
           // Record deposit if wallet_deposit purpose
           if (paymentIntent.metadata.purpose === 'wallet_deposit') {
             try {
-              await walletService.createTransaction({
-                user_id: paymentIntent.metadata.user_id,
-                type: 'deposit',
-                amount: paymentIntent.amount / 100,
-              });
+              // Use consolidated service to ensure ledger + balance are updated
+              await ConsolidatedWalletService.createDeposit(
+                paymentIntent.metadata.user_id,
+                paymentIntent.amount / 100,
+                paymentIntent.id,
+              );
             } catch (txError: any) {
-              logger.warn({ err: txError }, '[payments] Transaction may already exist');
+              const msg = String(txError?.message || txError || '');
+              const looksLikeDuplicate = /duplicate|unique|already exists|duplicate key/i.test(msg);
+
+              if (looksLikeDuplicate) {
+                logger.info({ err: txError }, '[payments] Duplicate deposit detected in webhook, ignoring');
+              } else {
+                // As a fallback, try to see if a transaction already exists
+                try {
+                  const existing = await ConsolidatedWalletService.getTransactionByPaymentIntent(paymentIntent.id);
+                  if (existing) {
+                    logger.info({ existingId: existing.id }, '[payments] Deposit already recorded');
+                  } else {
+                    // Unknown error: surface so the webhook can be retried
+                    logger.error({ err: txError }, '[payments] Failed to record deposit in webhook');
+                    throw txError;
+                  }
+                } catch (checkErr: any) {
+                  logger.error({ err: checkErr }, '[payments] Error checking existing deposit in webhook');
+                  throw txError;
+                }
+              }
             }
           }
           break;
