@@ -796,66 +796,26 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
 
         console.log(`[Webhook] PaymentIntent succeeded: ${paymentIntent.id} for user ${userId}`);
 
-        // Create wallet transaction
-        const { data: transaction, error: txError } = await supabase
-          .from('wallet_transactions')
-          .insert({
-            user_id: userId,
-            type: 'deposit',
-            amount: paymentIntent.amount / 100, // Convert cents to dollars
-            description: 'Wallet deposit via Stripe',
-            status: 'completed',
-            stripe_payment_intent_id: paymentIntent.id,
-            metadata: paymentIntent.metadata
-          })
-          .select()
-          .single();
-
-        if (txError) {
-          console.error('[Webhook] Error creating transaction:', txError);
-          throw txError;
-        }
-
-        // Update user balance using RPC for atomic operation
-        const { error: balanceError } = await supabase.rpc('increment_balance', {
+        // Record deposit and update balance using idempotent RPC to avoid race
+        // conditions with the confirm endpoint which may call the same RPC.
+        const { data: applyRes, error: applyErr } = await supabase.rpc('apply_deposit', {
           p_user_id: userId,
-          p_amount: paymentIntent.amount / 100
+          p_amount: paymentIntent.amount / 100,
+          p_payment_intent_id: paymentIntent.id,
+          p_metadata: paymentIntent.metadata || {}
         });
 
-        if (balanceError) {
-          console.error('[Webhook] Error updating balance via RPC:', balanceError);
-          // Fallback: Retry the RPC once more in case of transient error
-          try {
-            const { error: retryError } = await supabase.rpc('increment_balance', {
-              p_user_id: userId,
-              p_amount: paymentIntent.amount / 100
-            });
-
-            if (retryError) {
-              // Last resort: direct update (log error about potential race condition)
-              console.error('[Webhook] Atomic balance update failed after retry - using non-atomic update. Please add increment_balance RPC function to prevent race conditions.', {
-                user_id: userId,
-                amount: paymentIntent.amount / 100,
-                originalError: balanceError,
-                retryError: retryError
-              });
-              const { data: profile } = await supabase
-                .from('profiles')
-                .select('balance')
-                .eq('id', userId)
-                .single();
-
-              const currentBalance = profile?.balance || 0;
-              await supabase.from('profiles')
-                .update({ balance: currentBalance + (paymentIntent.amount / 100) })
-                .eq('id', userId);
-            }
-          } catch (fallbackErr) {
-            console.error('[Webhook] Fallback balance update error:', fallbackErr);
-          }
+        if (applyErr) {
+          console.error('[Webhook] apply_deposit RPC failed:', applyErr);
+          throw applyErr;
         }
 
-        console.log(`[Webhook] Transaction created: ${transaction.id}, balance updated for user ${userId}`);
+        const appliedRow = Array.isArray(applyRes) ? applyRes[0] : applyRes;
+        if (appliedRow && appliedRow.applied) {
+          console.log(`[Webhook] Deposit applied, tx_id=${appliedRow.tx_id} for user ${userId}, amount +${paymentIntent.amount / 100}`);
+        } else {
+          console.log(`[Webhook] Deposit already applied for ${paymentIntent.id}, no balance change`);
+        }
 
         // Note: User notification should be implemented via a notification service
         // when available (push notifications, email, etc.)
