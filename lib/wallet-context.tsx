@@ -236,6 +236,27 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     init();
   }, []); // Only run once on mount, not on every refresh change
 
+  // Clear wallet data when the user signs out to prevent data leaks between users
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event) => {
+      if (event === 'SIGNED_OUT') {
+        // Persist the cleared state first so that if a new user signs in before
+        // the component re-initialises, SecureStore reflects the blank slate.
+        try {
+          await Promise.all([
+            setSecureJSON(SecureKeys.WALLET_BALANCE, INITIAL_BALANCE),
+            setSecureJSON(SecureKeys.WALLET_TRANSACTIONS, []),
+          ]);
+        } catch (err) {
+          console.error('[wallet] Error clearing data on sign-out:', err);
+        }
+        setBalance(INITIAL_BALANCE);
+        setTransactions([]);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
   const logTransaction = useCallback(async (tx: Omit<WalletTransactionRecord, 'id' | 'date'> & { date?: Date }) => {
     const record: WalletTransactionRecord = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,

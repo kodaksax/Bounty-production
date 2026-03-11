@@ -34,6 +34,7 @@ All endpoints from this server are now available as Supabase Edge Functions:
 | `DELETE /auth/delete-account` | `supabase/functions/auth` |
 | `POST /apple-pay/payment-intent` | `supabase/functions/apple-pay` |
 | `POST /apple-pay/confirm` | `supabase/functions/apple-pay` |
+| `POST /bounties/:bountyId/ready` | `supabase/functions/completion` |
 
 ### Deployment steps
 
@@ -65,6 +66,7 @@ All endpoints from this server are now available as Supabase Edge Functions:
    supabase functions deploy wallet
    supabase functions deploy auth
    supabase functions deploy apple-pay
+   supabase functions deploy completion
    ```
 
 5. **Update the mobile app** — set `EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL` in your

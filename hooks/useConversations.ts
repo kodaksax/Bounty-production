@@ -15,6 +15,7 @@ interface UseConversationsResult {
   refresh: () => Promise<void>;
   markAsRead: (conversationId: string) => Promise<void>;
   deleteConversation: (conversationId: string) => Promise<void>;
+  totalUnreadCount: number;
 }
 
 export function useConversations(): UseConversationsResult {
@@ -130,6 +131,11 @@ export function useConversations(): UseConversationsResult {
     };
   }, [currentUserId, refetch]); // Only depend on currentUserId and refetch
 
+  const totalUnreadCount = useMemo(
+    () => conversations.reduce((sum, conv) => sum + (conv.unread ?? 0), 0),
+    [conversations]
+  );
+
   return {
     conversations,
     loading,
@@ -138,5 +144,6 @@ export function useConversations(): UseConversationsResult {
     refresh,
     markAsRead,
     deleteConversation,
+    totalUnreadCount,
   };
 }
