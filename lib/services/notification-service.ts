@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 import { API_BASE_URL } from 'lib/config/api';
 import { ERROR_LOG_THROTTLE } from 'lib/config/network';
 import { LOG_KEYS, shouldLog } from 'lib/utils/log-throttle';
@@ -175,8 +176,9 @@ export class NotificationService {
         return null;
       }
 
-      // Get the Expo push token
-      const token = Notifications ? (await Notifications.getExpoPushTokenAsync()).data : null;
+      // Get the Expo push token (projectId is required for Expo SDK 48+)
+      const projectId = Constants.expoConfig?.extra?.eas?.projectId as string | undefined;
+      const token = Notifications ? (await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined)).data : null;
       
       // Register token with backend
       await this.registerPushToken(token);
@@ -617,7 +619,8 @@ export class NotificationService {
 
       let token: string | null = null;
       try {
-        token = (await Notifications.getExpoPushTokenAsync()).data;
+        const projectId = Constants.expoConfig?.extra?.eas?.projectId as string | undefined;
+        token = (await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined)).data;
       } catch {
         return;
       }

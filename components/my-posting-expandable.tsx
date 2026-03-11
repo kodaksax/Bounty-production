@@ -6,7 +6,7 @@ import type { Bounty } from 'lib/services/database.types'
 import { disputeService } from 'lib/services/dispute-service'
 import { messageService } from 'lib/services/message-service'
 import { staleBountyService } from 'lib/services/stale-bounty-service'
-import { userProfileService } from 'lib/services/user-profile-service'
+import { userProfileService } from 'lib/services/userProfile'
 import type { Attachment, Conversation } from 'lib/types'
 import { useEffect, useMemo, useReducer, useState } from 'react'
 import {
@@ -110,12 +110,12 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   type UIAction =
     | { type: 'reset' }
     | {
-        [K in keyof UIState]: {
-          type: 'set'
-          key: K
-          value: UIState[K]
-        }
-      }[keyof UIState]
+      [K in keyof UIState]: {
+        type: 'set'
+        key: K
+        value: UIState[K]
+      }
+    }[keyof UIState]
 
   function uiReducer(state: UIState, action: UIAction): UIState {
     switch (action.type) {
@@ -145,7 +145,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     hunterName,
     localStageOverride,
   } = uiState
-  
+
   // Track profile pictures for poster/hunter
   const [otherPartyAvatar, setOtherPartyAvatar] = useState<string | null>(null)
   const [otherPartyName, setOtherPartyName] = useState<string>('')
@@ -211,7 +211,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
 
   const [draft, dispatchDraft] = useReducer(draftReducer, initialDraft())
   const { completionMessage, proofItems, isSubmitting, submissionPending, readyRecord, revisionFeedback, hasRevisionRequested } = draft
-  
+
   // Hunter completion submission state
   const [startTime] = useState(Date.now())
   const { transactions } = useWallet()
@@ -238,7 +238,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
 
   useEffect(() => {
     let mounted = true
-    
+
     async function load() {
       try {
         const list = await messageService.getConversations()
@@ -263,11 +263,12 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
             console.error('[MyPosting] Failed to fetch hunter profile:', error)
           }
         }
-        
+
         // Fetch poster profile if we're the hunter
-        if (bounty.user_id && variant === 'hunter') {
+        const posterId = bounty.poster_id || bounty.user_id
+        if (posterId && variant === 'hunter') {
           try {
-            const posterProfile = await userProfileService.getProfile(String(bounty.user_id))
+            const posterProfile = await userProfileService.getProfile(String(posterId))
             if (!mounted) return
             // Set poster avatar and name for card display
             setOtherPartyAvatar(posterProfile?.avatar || null)
@@ -330,15 +331,15 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                 dispatchDraft({ type: 'setRevisionFeedback', text: null })
               }
             }
-          } catch {}
+          } catch { }
         }
         // Also check ready flag (hunter clicked Ready to Submit)
         try {
           const ready = await completionService.getReady(String(bounty.id))
           if (!mounted) return
           dispatchDraft({ type: 'setReadyRecord', record: ready })
-        } catch {}
-        
+        } catch { }
+
         // Check for cancellation request
         try {
           const cancellation = await cancellationService.getCancellationByBountyId(String(bounty.id))
@@ -346,8 +347,8 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           if (cancellation && cancellation.status === 'pending') {
             dispatchUi({ type: 'set', key: 'hasCancellationRequest', value: true })
           }
-        } catch {}
-        
+        } catch { }
+
         // Check for active dispute
         try {
           const dispute = await disputeService.getDisputeByCancellationId(String(bounty.id))
@@ -355,18 +356,18 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           if (dispute && (dispute.status === 'open' || dispute.status === 'under_review')) {
             dispatchUi({ type: 'set', key: 'hasDispute', value: true })
           }
-        } catch {}
-      } catch {}
+        } catch { }
+      } catch { }
     }
-  // Load owner-related state (submission / ready flag) earlier so posters see pending work in list view.
-  // Also load for hunters even when the card is not expanded so revision-requested state
-  // is available in the compact card (shows badge) without needing to open the card first.
-  if (expanded || variant === 'owner' || variant === 'hunter') load()
-    return () => { 
+    // Load owner-related state (submission / ready flag) earlier so posters see pending work in list view.
+    // Also load for hunters even when the card is not expanded so revision-requested state
+    // is available in the compact card (shows badge) without needing to open the card first.
+    if (expanded || variant === 'owner' || variant === 'hunter') load()
+    return () => {
       mounted = false
     }
   }, [expanded, bounty.id, bounty.status, variant])
-  
+
   // owner detection
   const isOwner = useMemo(() => {
     if (variant === 'owner') return true
@@ -399,7 +400,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     } catch (e) {
       // ignore
     }
-    return () => { try { unsub && unsub() } catch {} }
+    return () => { try { unsub && unsub() } catch { } }
   }, [bounty.id, variant])
 
   // Subscribe to submission updates so hunter gets pushed back to WIP if poster requests revision
@@ -419,7 +420,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         dispatchUi({ type: 'set', key: 'hasSubmission', value: isPending })
         dispatchDraft({ type: 'setProofs', proofs: Array.isArray(submission.proof_items) ? submission.proof_items as ProofDraftItem[] : [] })
         dispatchDraft({ type: 'setMessage', message: submission.message || '' })
-        
+
         // If poster gets a new submission, auto-expand Review & Verify section
         if (isOwner && isPending) {
           dispatchUi({ type: 'set', key: 'reviewExpanded', value: true })
@@ -427,7 +428,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           // Show the stepper on the Review & Verify bubble for owner
           dispatchUi({ type: 'set', key: 'localStageOverride', value: 'review_verify' })
         }
-        
+
         // If the poster requested a revision, and we're the hunter, move back to Work in Progress
         if (!isOwner && submission.status === 'revision_requested') {
           // Store feedback and show banner instead of alert
@@ -443,7 +444,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     } catch (e) {
       // ignore
     }
-    return () => { try { unsub && unsub() } catch {} }
+    return () => { try { unsub && unsub() } catch { } }
   }, [bounty.id, isOwner])
 
   const currentStage: 'apply_work' | 'working_progress' | 'review_verify' | 'payout' = useMemo(() => {
@@ -479,7 +480,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     if (!conversation) throw new Error('No conversation')
     await messageService.sendMessage(conversation.id, text, currentUserId)
   }
-  
+
   const formatTime = (seconds: number): string => {
     if (seconds < 60) return `${seconds}s`
     const minutes = Math.floor(seconds / 60)
@@ -504,7 +505,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
       Alert.alert('Sign In Required', 'You need to be signed in to submit your work. Please sign in and try again.')
     }
   }
-  
+
   const handleSubmitCompletion = async () => {
     if (!currentUserId) {
       Alert.alert('Sign In Required', 'Your session is missing. Please sign in again and retry.')
@@ -515,11 +516,11 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
       Alert.alert('Completion Message Required', 'Please add a message describing your completed work.')
       return
     }
-    
+
     // Helper for pluralization
     const proofCount = proofItems.length
     const proofLabel = proofCount === 1 ? '1 proof item' : `${proofCount} proof items`
-    
+
     // Define the actual submission logic
     const performSubmission = async () => {
       try {
@@ -558,7 +559,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         console.error('Error submitting completion:', err)
         Alert.alert('Error', 'Failed to submit completion. Please try again.')
       } finally {
-          dispatchDraft({ type: 'setSubmitting', value: false })
+        dispatchDraft({ type: 'setSubmitting', value: false })
       }
     }
 
@@ -585,7 +586,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
       )
     }
   }
-  
+
   // Attachment upload hook for real attachments
   const { pickAttachment, isUploading: isAttUploading, progress: attProgress } = useAttachmentUpload({
     bucket: 'bounty-attachments',
@@ -617,7 +618,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
       Alert.alert('Upload failed', 'Could not add proof. Please try again.')
     }
   }
-  
+
   const handleRemoveProof = (id: string) => {
     dispatchDraft({ type: 'removeProof', id })
   }
@@ -698,6 +699,13 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         otherPartyAvatar={otherPartyAvatar}
         otherPartyName={otherPartyName}
       />
+      {/* Tap-to-expand hint — shown only when collapsed */}
+      {!expanded && (
+        <View style={styles.tapHint}>
+          <MaterialIcons name="expand-more" size={14} color="rgba(110, 231, 183, 0.6)" />
+          <Text style={styles.tapHintText}>Tap card to see progress & actions</Text>
+        </View>
+      )}
       {expanded && (
         <View style={styles.panel} onLayout={() => { if (typeof onExpandedLayout === 'function') onExpandedLayout() }}>
           {/* Show stale bounty alert if bounty is stale and user is the owner */}
@@ -708,7 +716,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
               onRepost={handleRepostStaleBounty}
             />
           )}
-          
+
           {/* Compact header row mirroring detail card */}
           <View style={styles.panelHeader}>
             <Text style={styles.panelTitle}>Progress</Text>
@@ -772,7 +780,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
               {isOwner ? (
                 <View style={{ gap: 16 }}>
                   {/* Poster view: Message bar, attachments, rating */}
-                  
+
                   {/* Show review button if submission is pending */}
                   {hasSubmission && (
                     <TouchableOpacity
@@ -794,9 +802,9 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                       placeholder="Send a quick message to the hunter..."
                     />
                   )}
-                  
+
                   <AttachmentsList attachments={attachments} />
-                  
+
                   <RatingStars
                     rating={ratingDraft}
                     onRatingChange={(v) => dispatchUi({ type: 'set', key: 'ratingDraft', value: v })}
@@ -806,7 +814,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
               ) : (
                 <View style={{ gap: 16 }}>
                   {/* Hunter view: Instructions, attachments, next button */}
-                  
+
                   {/* Show revision feedback banner if present */}
                   {showRevisionBanner && revisionFeedback && (
                     <RevisionFeedbackBanner
@@ -815,16 +823,16 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                       showDismiss={true}
                     />
                   )}
-                  
+
                   <View style={styles.infoBox}>
                     <MaterialIcons name="info-outline" size={18} color="#6ee7b7" />
                     <Text style={styles.infoText}>
-                      Begin work on the bounty; once complete press the next button.
+                      Congrats on being selected! Begin work on the bounty, money is in escrow; once complete press the next button.
                     </Text>
                   </View>
-                  
+
                   <AttachmentsList attachments={attachments} />
-                  
+
                   <TouchableOpacity
                     style={[styles.primaryBtn, (readyToSubmitPressed || !!readyRecord) && styles.buttonDisabled]}
                     onPress={async () => {
@@ -1000,11 +1008,11 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                   <MaterialIcons name="check-circle" size={48} color="#10b981" />
                   <Text style={styles.successTitle}>Payout Released!</Text>
                   <Text style={styles.successText}>
-                    {isOwner 
-                      ? 'You have approved the work and released payment.' 
+                    {isOwner
+                      ? 'You have approved the work and released payment.'
                       : 'Congratulations! The poster has approved your work and released the payment.'}
                   </Text>
-                  
+
                   {!bounty.is_for_honor && (
                     <View style={styles.payoutAmountCard}>
                       <Text style={styles.payoutLabel}>Payout Amount</Text>
@@ -1014,7 +1022,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                       </Text>
                     </View>
                   )}
-                  
+
                   {bounty.is_for_honor && (
                     <View style={styles.honorCard}>
                       <MaterialIcons name="favorite" size={32} color="#ec4899" />
@@ -1395,5 +1403,18 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     fontSize: 12,
     fontWeight: '600',
+  },
+  tapHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    // Sits in the gap below the card, above the next item
+    paddingTop: 2,
+    paddingBottom: 6,
+  },
+  tapHintText: {
+    color: 'rgba(110, 231, 183, 0.5)',
+    fontSize: 11,
   },
 })

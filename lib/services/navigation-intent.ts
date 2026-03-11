@@ -11,7 +11,14 @@ export const navigationIntent = {
     try {
       _pendingConversationId = id
       if (id === null) {
-        try { await AsyncStorage.removeItem(PENDING_CONV_KEY) } catch {}
+        // Clear stored value when intent cleared
+        try {
+          await AsyncStorage.removeItem(PENDING_CONV_KEY)
+        } catch (e) {
+          // Non-critical: removal failed (e.g., storage not available).
+          // Log at warn level to aid debugging while treating this as best-effort.
+          console.warn('navigationIntent: failed to remove pending conversation key (non-critical)', e)
+        }
       } else {
         await AsyncStorage.setItem(PENDING_CONV_KEY, id)
       }
@@ -26,13 +33,23 @@ export const navigationIntent = {
       if (_pendingConversationId) {
         const v = _pendingConversationId
         _pendingConversationId = null
-        try { await AsyncStorage.removeItem(PENDING_CONV_KEY) } catch {}
+        try {
+          await AsyncStorage.removeItem(PENDING_CONV_KEY)
+        } catch (e) {
+          // Non-critical: log removal errors for visibility/debugging
+          console.warn('navigationIntent: failed to remove pending conversation key during getAndClear (non-critical)', e)
+        }
         return v
       }
 
       const stored = await AsyncStorage.getItem(PENDING_CONV_KEY)
       if (stored) {
-        await AsyncStorage.removeItem(PENDING_CONV_KEY)
+        try {
+          await AsyncStorage.removeItem(PENDING_CONV_KEY)
+        } catch (e) {
+          // Non-critical: log removal errors for visibility/debugging
+          console.warn('navigationIntent: failed to remove pending conversation key after read (non-critical)', e)
+        }
         return stored
       }
       return null

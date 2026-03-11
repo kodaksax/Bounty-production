@@ -1,7 +1,9 @@
 import type { Session } from '@supabase/supabase-js'
 import { AuthContext } from 'hooks/use-auth-context'
+import { cachedDataService } from 'lib/services/cached-data-service'
 import { supabase } from 'lib/supabase'
 import { PropsWithChildren, useContext, useEffect, useRef, useState } from 'react'
+import { clearBountyDraftForUser } from '../app/hooks/useBountyDraft'
 import { analyticsService } from '../lib/services/analytics-service'
 import { authProfileService } from '../lib/services/auth-profile-service'
 import { getSentry } from '../lib/services/sentry-init'
@@ -62,6 +64,8 @@ export default function AuthProvider({ children }: PropsWithChildren) {
   const profileFetchCompletedRef = useRef<boolean>(false)
   const sessionIdRef = useRef<string | null>(null)
   const lastProfileLogRef = useRef<string | null>(null)
+  // Track previous user ID so we can clear their data when they sign out or switch
+  const previousUserIdRef = useRef<string | null>(null)
 
   /**
    * Manually refresh the session token with promise-based queueing
@@ -245,6 +249,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           devLog('[AuthProvider] Session loaded: authenticated')
           setSession(session)
           sessionIdRef.current = session.user.id
+          previousUserIdRef.current = session.user.id
           
           // Sync session with auth profile service
           try {
@@ -328,8 +333,36 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       
       if (!isMountedRef.current) return
       
+      // Determine incoming/outgoing user IDs first. If this is a sign-in
+      // that switches users, ensure we clear the previous user's persisted
+      // data before we update the app auth state (which could cause UI to
+      // read from AsyncStorage). This prevents cross-user leaks.
+      const incomingUserId = session?.user?.id || null
+      const outgoingUserId = sessionIdRef.current
+
+      // If a different user is signing in, clear previous user's persisted data
+      if (_event === 'SIGNED_IN' && incomingUserId) {
+        const prevUser = previousUserIdRef.current ?? outgoingUserId
+        if (prevUser && prevUser !== incomingUserId) {
+          try {
+            // Await cleanup to ensure AsyncStorage entries are removed
+            // before the new session is applied and components read cache.
+            await Promise.all([
+              clearBountyDraftForUser(prevUser),
+              cachedDataService.clearAll(),
+            ])
+          } catch (e) {
+            // Non-critical: log but continue with sign-in flow
+            reportError(e, '[AuthProvider] Data cleanup on user switch failed (non-critical)')
+          }
+        }
+        // Record the new user after cleanup
+        previousUserIdRef.current = incomingUserId
+      }
+
+      // Now update the session in state (after cleanup if applicable)
       setSession(session)
-      sessionIdRef.current = session?.user?.id || null
+      sessionIdRef.current = incomingUserId
       
       // Reset profile fetch flag for events that trigger profile fetch
       profileFetchCompletedRef.current = false
@@ -368,6 +401,21 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         if (isMountedRef.current) {
           scheduleTokenRefresh(session)
         }
+        // Track user switches: if a different user signs in, clear the previous user's data.
+        // Note: outgoingUserId is used as fallback in case previousUserIdRef was cleared
+        // by a prior SIGNED_OUT event (which already ran its own cleanup).
+        if (_event === 'SIGNED_IN' && incomingUserId) {
+          const prevUser = previousUserIdRef.current ?? outgoingUserId;
+          if (prevUser && prevUser !== incomingUserId) {
+            void Promise.all([
+              clearBountyDraftForUser(prevUser),
+              cachedDataService.clearAll(),
+            ]).catch(e => {
+              reportError(e, '[AuthProvider] Data cleanup on user switch failed (non-critical)')
+            })
+          }
+          previousUserIdRef.current = incomingUserId
+        }
       } else if (_event === 'PASSWORD_RECOVERY') {
         // User clicked a password reset link — flag recovery mode so the
         // app routes them to the update-password screen instead of the main app
@@ -383,6 +431,14 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         if (isMountedRef.current) {
           setIsPasswordRecovery(false)
         }
+        // Clear user-specific persisted data to prevent data leaks between users
+        void Promise.all([
+          clearBountyDraftForUser(outgoingUserId ?? undefined),
+          cachedDataService.clearAll(),
+        ]).catch(e => {
+          reportError(e, '[AuthProvider] Data cleanup on sign-out failed (non-critical)')
+        })
+        previousUserIdRef.current = null
       }
       
       // Track authentication events
