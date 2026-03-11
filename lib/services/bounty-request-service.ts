@@ -267,19 +267,20 @@ export const bountyRequestService = {
         // Ensure poster_id is present to satisfy DB constraints. Fetch from bounties table if missing.
         if (!normalizedRequest.poster_id && normalizedRequest.bounty_id) {
           try {
-            // Only request poster_id; some DBs do not have legacy user_id column.
+            // Request both poster_id and legacy user_id to support older bounties
             const { data: bountyRow, error: bountyErr } = await supabase
               .from('bounties')
-              .select('poster_id')
+              .select('poster_id, user_id')
               .eq('id', String(normalizedRequest.bounty_id))
               .single()
 
             if (bountyErr) {
-              logger.error('Supabase error fetching bounty for poster_id', { bountyId: normalizedRequest.bounty_id, error: (bountyErr as any)?.message || bountyErr })
+              logger.error('Supabase error fetching bounty for poster_id/user_id', { bountyId: normalizedRequest.bounty_id, error: (bountyErr as any)?.message || bountyErr })
               throw bountyErr
             }
 
-            normalizedRequest.poster_id = (bountyRow as any)?.poster_id || null
+            // Prefer canonical poster_id, fall back to legacy user_id when present
+            normalizedRequest.poster_id = (bountyRow as any)?.poster_id || (bountyRow as any)?.user_id || null
           } catch (fetchErr) {
             const msg = `Failed to resolve poster_id for bounty ${normalizedRequest.bounty_id}`
             logger.error(msg, { bountyId: normalizedRequest.bounty_id, error: (fetchErr as any)?.message || fetchErr })
