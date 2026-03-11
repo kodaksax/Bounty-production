@@ -316,9 +316,60 @@ export async function createDeposit(
     });
   }
 
-  // Fetch the transaction inserted (or existing) by payment intent id
-  const tx = await getTransactionByPaymentIntent(paymentIntentId);
-  if (tx) return tx;
+  // Try to resolve the transaction inserted (or existing) by payment intent id.
+  // This read is best-effort: if the RPC succeeded but a subsequent transient
+  // database read fails, we should not treat the whole operation as failed
+  // because the user's balance may already have been updated. In that case
+  // log a warning and return a minimal transaction object so callers see
+  // success instead of a 500.
+  const applyRow = Array.isArray(applyRes) && applyRes.length ? applyRes[0] : applyRes;
+  const applied = !!(applyRow && (applyRow as any).applied);
+  const appliedTxId: string | null = applyRow && (applyRow as any).tx_id ? String((applyRow as any).tx_id) : null;
+
+  try {
+    const tx = await getTransactionByPaymentIntent(paymentIntentId);
+    if (tx) return tx;
+
+    // If not found by payment intent, try fetching by the tx id returned from RPC
+    if (appliedTxId) {
+      const { data: txById, error: txByIdErr } = await admin
+        .from('wallet_transactions')
+        .select('*')
+        .eq('id', appliedTxId)
+        .maybeSingle();
+
+      if (txById) return toWalletTransaction(txById);
+      if (txByIdErr) {
+        logger.warn({ appliedTxId, paymentIntentId, userId, error: txByIdErr }, '[WalletService] Failed to fetch transaction by id after apply_deposit');
+      }
+    }
+  } catch (e: any) {
+    logger.warn({ paymentIntentId, userId, error: e instanceof Error ? e.message : String(e) }, '[WalletService] Non-fatal: failed to fetch transaction after apply_deposit');
+  }
+
+  // If RPC indicated the deposit was applied (or returned a tx id), return a
+  // minimal constructed transaction so callers observe success instead of an error.
+  if (applied || appliedTxId) {
+    const now = new Date().toISOString();
+    return toWalletTransaction({
+      id: appliedTxId || '',
+      user_id: userId,
+      type: 'deposit',
+      amount,
+      description: `Deposit via Stripe`,
+      status: 'completed',
+      bounty_id: null,
+      stripe_payment_intent_id: paymentIntentId,
+      stripe_transfer_id: null,
+      stripe_connect_account_id: null,
+      metadata: {
+        payment_intent_id: paymentIntentId,
+        created_via: 'service',
+      },
+      created_at: now,
+      updated_at: now,
+    });
+  }
 
   // RPC did not return or transaction not found. Fallback to legacy insert
   // for environments where the RPC is not available (e.g., older test mocks).
