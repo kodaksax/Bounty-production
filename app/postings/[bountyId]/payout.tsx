@@ -1,7 +1,7 @@
 // app/postings/[bountyId]/payout.tsx - Payout Screen
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -13,7 +13,7 @@ import {
     View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { SuccessAnimation, ConfettiAnimation } from '../../../components/ui/success-animation';
+import { ConfettiAnimation, SuccessAnimation } from '../../../components/ui/success-animation';
 import { bountyService } from '../../../lib/services/bounty-service';
 import type { Bounty } from '../../../lib/services/database.types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
@@ -210,6 +210,44 @@ export default function PayoutScreen() {
 
     Alert.alert(
       'Delete Bounty',
+      'Permanently delete this bounty from your postings? It will only be visible in your history. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsProcessing(true);
+
+              // Update bounty status to deleted
+              const updated = await bountyService.update(Number(bountyId), {
+                status: 'deleted',
+              });
+
+              if (!updated) {
+                throw new Error('Failed to delete bounty');
+              }
+
+              Alert.alert('Deleted', 'Bounty has been removed from your postings. You can still view it in your history.', [
+                {
+                  text: 'OK',
+                  onPress: () => {
+                    router.replace('/tabs/bounty-app');
+                  },
+                },
+              ]);
+            } catch (err) {
+              console.error('Error deleting bounty:', err);
+              Alert.alert('Error', 'Failed to delete bounty. Please try again.');
+            } finally {
+              setIsProcessing(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const handleArchiveBounty = async () => {
     if (!bounty) return;
@@ -245,44 +283,6 @@ export default function PayoutScreen() {
             } catch (err) {
               console.error('Error archiving bounty:', err);
               Alert.alert('Error', 'Failed to archive bounty. Please try again.');
-            } finally {
-              setIsProcessing(false);
-            }
-          },
-        },
-      ]
-    );
-  };
-      'Permanently delete this bounty from your postings? It will only be visible in your history. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setIsProcessing(true);
-
-              // Update bounty status to deleted
-              const updated = await bountyService.update(Number(bountyId), {
-                status: 'deleted',
-              });
-
-              if (!updated) {
-                throw new Error('Failed to delete bounty');
-              }
-
-              Alert.alert('Deleted', 'Bounty has been removed from your postings. You can still view it in your history.', [
-                {
-                  text: 'OK',
-                  onPress: () => {
-                    router.replace('/tabs/bounty-app');
-                  },
-                },
-              ]);
-            } catch (err) {
-              console.error('Error deleting bounty:', err);
-              Alert.alert('Error', 'Failed to delete bounty. Please try again.');
             } finally {
               setIsProcessing(false);
             }

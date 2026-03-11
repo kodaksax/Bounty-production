@@ -11,14 +11,14 @@ import { getCurrentUserId } from "lib/utils/data-utils";
 import { shareProfile } from "lib/utils/share-utils";
 import { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AchievementsGrid } from "../../components/achievements-grid";
@@ -117,11 +117,10 @@ export default function UserProfileScreen() {
         const postedBounties = await bountyService.getByUserId(userId);
         const requests = await bountyRequestService.getByUserId(userId);
         const acceptedJobs = requests.filter((req) => req.status === 'accepted');
-        const completedJobs = requests.filter((req) => req.status === 'completed');
         const badgesCount = Math.min(postedBounties.length, 3);
         setStats({
           jobsAccepted: acceptedJobs.length,
-          jobsCompleted: completedJobs.length,
+          jobsCompleted: 0,
           bountiesPosted: postedBounties.length,
           badgesEarned: badgesCount,
           isLoading: false,
