@@ -298,13 +298,13 @@ export function BountyCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "rgba(5, 150, 105, 0.3)", // emerald-600/30
+    backgroundColor: "rgba(5, 150, 105, 0.85)", // more opaque for stronger contrast
     borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
+    padding: 18,
+    marginBottom: 18, // increased spacing between cards
     borderWidth: 1,
-    borderColor: "rgba(16, 185, 129, 0.2)", // emerald-500/20
-    ...theme.shadows.md,
+    borderColor: "rgba(16, 185, 129, 0.35)", // stronger border for separation
+    ...theme.shadows.lg,
   },
   header: {
     flexDirection: "row",
@@ -392,9 +392,9 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: "row",
     alignItems: "center",
-    paddingTop: 12,
+    paddingTop: 14,
     borderTopWidth: 1,
-    borderTopColor: "rgba(16, 185, 129, 0.2)",
+    borderTopColor: "rgba(16, 185, 129, 0.35)",
   },
   ratingChip: {
     flexDirection: "row",
@@ -500,9 +500,9 @@ const styles = StyleSheet.create({
   actionButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(5, 95, 70, 0.5)",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    backgroundColor: "rgba(5, 95, 70, 0.85)",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderRadius: 8,
     gap: 6,
   },
