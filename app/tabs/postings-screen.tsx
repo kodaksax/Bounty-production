@@ -24,6 +24,7 @@ import { useValidUserId } from '../../hooks/useValidUserId'
 // Render In Progress tab using the same expandable card as My Postings
 import { MyPostingExpandable } from "../../components/my-posting-expandable"
 import { OfflineStatusBadge } from '../../components/offline-status-badge'
+import { BountyWorkflowGuide } from '../../components/ui/bounty-workflow-guide'
 import { EmptyState } from '../../components/ui/empty-state'
 import { ApplicantCardSkeleton, PostingsListSkeleton } from '../../components/ui/skeleton-loaders'
 import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
@@ -744,24 +745,27 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                   keyExtractor={keyExtractorBounty}
                   extraData={{ inProgressBounties, expandedMap }}
                   ListHeaderComponent={(
-                    <View className="flex-row gap-2 mb-1">
-                      {(['all', 'online', 'in_person'] as const).map(f => {
-                        const label = f === 'all' ? 'All' : f === 'online' ? 'Online' : 'In Person'
-                        const selected = workTypeFilter === f
-                        return (
-                          <TouchableOpacity
-                            key={f}
-                            onPress={() => setWorkTypeFilter(f)}
-                            className={cn('px-3 py-1.5 rounded-full border', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}
-                            accessibilityRole="button"
-                            accessibilityLabel={`Filter by ${label} work in progress`}
-                            accessibilityState={{ selected }}
-                            accessibilityHint={selected ? 'Currently active filter' : `Tap to show only ${label} work`}
-                          >
-                            <Text className={cn('text-xs', selected ? 'text-white font-medium' : 'text-emerald-200')}>{label}</Text>
-                          </TouchableOpacity>
-                        )
-                      })}
+                    <View>
+                      <BountyWorkflowGuide variant="hunter-inprogress" />
+                      <View className="flex-row gap-2 mb-1">
+                        {(['all', 'online', 'in_person'] as const).map(f => {
+                          const label = f === 'all' ? 'All' : f === 'online' ? 'Online' : 'In Person'
+                          const selected = workTypeFilter === f
+                          return (
+                            <TouchableOpacity
+                              key={f}
+                              onPress={() => setWorkTypeFilter(f)}
+                              className={cn('px-3 py-1.5 rounded-full border', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}
+                              accessibilityRole="button"
+                              accessibilityLabel={`Filter by ${label} work in progress`}
+                              accessibilityState={{ selected }}
+                              accessibilityHint={selected ? 'Currently active filter' : `Tap to show only ${label} work`}
+                            >
+                              <Text className={cn('text-xs', selected ? 'text-white font-medium' : 'text-emerald-200')}>{label}</Text>
+                            </TouchableOpacity>
+                          )
+                        })}
+                      </View>
                     </View>
                   )}
                   renderItem={renderInProgressItem}
@@ -819,6 +823,7 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                   keyExtractor={keyExtractorRequest}
                   getItemLayout={getItemLayoutRequest}
                   renderItem={renderRequestItem}
+                  ListHeaderComponent={<BountyWorkflowGuide variant="poster-requests" />}
                   ListEmptyComponent={
                     isLoading.requests ? (
                       <View className="px-4 py-6">
@@ -873,24 +878,27 @@ export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBounty
                   keyExtractor={keyExtractorBounty}
                   extraData={{ myBounties, expandedMap }}
                   ListHeaderComponent={(
-                    <View className="flex-row gap-2 mb-1">
-                      {(['all', 'online', 'in_person'] as const).map(f => {
-                        const label = f === 'all' ? 'All' : f === 'online' ? 'Online' : 'In Person'
-                        const selected = workTypeFilter === f
-                        return (
-                          <TouchableOpacity
-                            key={f}
-                            onPress={() => setWorkTypeFilter(f)}
-                            className={cn('px-3 py-1.5 rounded-full border', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}
-                            accessibilityRole="button"
-                            accessibilityLabel={`Filter by ${label} postings`}
-                            accessibilityState={{ selected }}
-                            accessibilityHint={selected ? 'Currently active filter' : `Tap to show only ${label} bounties`}
-                          >
-                            <Text className={cn('text-xs', selected ? 'text-white font-medium' : 'text-emerald-200')}>{label}</Text>
-                          </TouchableOpacity>
-                        )
-                      })}
+                    <View>
+                      <BountyWorkflowGuide variant="poster-postings" />
+                      <View className="flex-row gap-2 mb-1">
+                        {(['all', 'online', 'in_person'] as const).map(f => {
+                          const label = f === 'all' ? 'All' : f === 'online' ? 'Online' : 'In Person'
+                          const selected = workTypeFilter === f
+                          return (
+                            <TouchableOpacity
+                              key={f}
+                              onPress={() => setWorkTypeFilter(f)}
+                              className={cn('px-3 py-1.5 rounded-full border', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}
+                              accessibilityRole="button"
+                              accessibilityLabel={`Filter by ${label} postings`}
+                              accessibilityState={{ selected }}
+                              accessibilityHint={selected ? 'Currently active filter' : `Tap to show only ${label} bounties`}
+                            >
+                              <Text className={cn('text-xs', selected ? 'text-white font-medium' : 'text-emerald-200')}>{label}</Text>
+                            </TouchableOpacity>
+                          )
+                        })}
+                      </View>
                     </View>
                   )}
                   renderItem={renderMyPostingItem}

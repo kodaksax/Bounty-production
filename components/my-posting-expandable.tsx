@@ -699,6 +699,13 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         otherPartyAvatar={otherPartyAvatar}
         otherPartyName={otherPartyName}
       />
+      {/* Tap-to-expand hint — shown only when collapsed */}
+      {!expanded && (
+        <View style={styles.tapHint}>
+          <MaterialIcons name="expand-more" size={14} color="rgba(110, 231, 183, 0.6)" />
+          <Text style={styles.tapHintText}>Tap card to see progress & actions</Text>
+        </View>
+      )}
       {expanded && (
         <View style={styles.panel} onLayout={() => { if (typeof onExpandedLayout === 'function') onExpandedLayout() }}>
           {/* Show stale bounty alert if bounty is stale and user is the owner */}
@@ -1396,5 +1403,18 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     fontSize: 12,
     fontWeight: '600',
+  },
+  tapHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    // Sits in the gap below the card, above the next item
+    paddingTop: 2,
+    paddingBottom: 6,
+  },
+  tapHintText: {
+    color: 'rgba(110, 231, 183, 0.5)',
+    fontSize: 11,
   },
 })
