@@ -1,5 +1,6 @@
 // components/poster-review-modal.tsx - Modal for poster to review hunter's submission
 import { MaterialIcons } from '@expo/vector-icons';
+import { userProfileService } from 'lib/services/userProfile';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
@@ -24,6 +25,7 @@ import { theme } from '../lib/theme';
 import type { Attachment } from '../lib/types';
 import { useWallet } from '../lib/wallet-context';
 import { AttachmentViewerModal } from './attachment-viewer-modal';
+import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { RatingStars } from './ui/rating-stars';
 
 
@@ -183,6 +185,7 @@ export function PosterReviewModal({
   const { triggerHaptic } = useHapticFeedback();
 
   const [submission, setSubmission] = useState<CompletionSubmission | null>(null);
+  const [hunterProfile, setHunterProfile] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showRatingForm, setShowRatingForm] = useState(false);
@@ -206,6 +209,22 @@ export function PosterReviewModal({
       loadSubmission();
     }
   }, [visible, bountyId]);
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadHunter() {
+      if (!visible || !hunterId) return;
+      try {
+        const p = await userProfileService.getProfile(hunterId);
+        if (!mounted) return;
+        setHunterProfile(p);
+      } catch (e) {
+        console.error('Error loading hunter profile:', e);
+      }
+    }
+    loadHunter();
+    return () => { mounted = false; };
+  }, [visible, hunterId]);
 
   useEffect(() => {
     if (!visible) {
@@ -632,11 +651,14 @@ export function PosterReviewModal({
               contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 20 }]}
             >
               <View style={styles.hunterInfo}>
-                <View style={styles.hunterAvatar}>
-                  <MaterialIcons name="person" size={32} color="#6ee7b7" />
-                </View>
+                <Avatar style={styles.hunterAvatar}>
+                  <AvatarImage src={hunterProfile?.avatar || undefined} alt={hunterProfile?.username || hunterName} />
+                  <AvatarFallback>
+                    <Text style={styles.avatarFallbackText}>{(hunterProfile?.username || hunterName)?.charAt(0)?.toUpperCase() || '?'}</Text>
+                  </AvatarFallback>
+                </Avatar>
                 <View style={styles.hunterDetails}>
-                  <Text style={styles.hunterName}>{hunterName}</Text>
+                  <Text style={styles.hunterName}>{hunterProfile?.username || hunterName}</Text>
                   <Text style={styles.submittedText}>
                     Submitted {new Date(submission.submitted_at!).toLocaleDateString()}
                   </Text>
@@ -784,6 +806,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(5, 150, 105, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  avatarFallbackText: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#10b981',
   },
   hunterDetails: {
     flex: 1,
