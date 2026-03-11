@@ -676,9 +676,6 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
       return { received: true, duplicate: true };
     }
 
-    // Mark event as processed before handling (prevents concurrent duplicate processing)
-    await storeIdempotencyKey(webhookKey);
-
     // Handle the event
     try {
       switch (event.type) {
@@ -870,10 +867,16 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
           logger.info(`[payments] Unhandled webhook event: ${event.type}`);
       }
     } catch (handlerError: any) {
-      // Log error but still return 200 to prevent Stripe from retrying
-      // (we've already recorded the event as processed)
+      // Log error and re-throw so the HTTP response is a 5xx
+      // allowing Stripe to retry the webhook. We must not
+      // mark the event as processed on failure.
       logger.error({ err: handlerError }, `[payments] Error handling webhook event ${event.id}`);
+      throw handlerError;
     }
+
+    // Mark event as processed only after successful handling
+    // This ensures transient failures don't permanently suppress retries
+    await storeIdempotencyKey(webhookKey);
 
     return { received: true };
   });
