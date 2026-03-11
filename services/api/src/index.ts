@@ -62,6 +62,7 @@ import type { AuthenticatedRequest } from './middleware/auth';
 
 const { eq } = require('drizzle-orm');
 const Fastify = require('fastify');
+const { createClient } = require('@supabase/supabase-js');
 const { db, pool, closeDbPools } = require('./db/connection');
 // Detect Supabase mode (used to skip direct Postgres ping at startup)
 const STARTUP_SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -131,6 +132,27 @@ initializeIdempotencyService().catch((error: Error) => {
 const fastify = Fastify({
   logger: logger
 });
+
+let supabaseAdmin: any = null;
+function getSupabaseAdmin() {
+  if (!supabaseAdmin) {
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      throw new Error('Supabase admin credentials are not configured');
+    }
+
+    supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+  }
+
+  return supabaseAdmin;
+}
 
 // Register WebSocket plugin and all routes
 const startServer = async () => {
@@ -456,6 +478,89 @@ fastify.post('/bounties/:bountyId/complete', {
     console.error('Error in /bounties/:bountyId/complete endpoint:', error);
     return reply.code(500).send({
       error: 'Failed to complete bounty'
+    });
+  }
+});
+
+// Mark bounty as ready for review endpoint
+fastify.post('/bounties/:bountyId/ready', {
+  preHandler: authMiddleware
+}, async (request: AuthenticatedRequest, reply: FastifyReply) => {
+  try {
+    const { bountyId } = request.params as { bountyId: string };
+
+    if (!request.userId) {
+      return reply.code(401).send({ error: 'User ID not found in token' });
+    }
+
+    const bounty = await bountyService.getById(bountyId);
+    if (!bounty) {
+      return reply.code(404).send({ error: 'Bounty not found' });
+    }
+
+    if (bounty.status !== 'in_progress') {
+      return reply.code(400).send({ error: 'Bounty must be in progress before marking ready' });
+    }
+
+    if (bounty.accepted_by && bounty.accepted_by !== request.userId) {
+      return reply.code(403).send({ error: 'Only the accepted hunter can mark this bounty as ready' });
+    }
+
+    const admin = getSupabaseAdmin();
+    const readyAt = new Date().toISOString();
+
+    const { data: existing, error: fetchError } = await admin
+      .from('completion_ready')
+      .select('*')
+      .eq('bounty_id', bountyId)
+      .eq('hunter_id', request.userId)
+      .limit(1)
+      .maybeSingle();
+
+    if (fetchError) {
+      logger.error('Failed to fetch existing ready record', { bountyId, userId: request.userId, error: fetchError.message || fetchError });
+      return reply.code(500).send({ error: 'Failed to check ready state' });
+    }
+
+    if (existing) {
+      const { error: updateError } = await admin
+        .from('completion_ready')
+        .update({ ready_at: readyAt })
+        .eq('bounty_id', bountyId)
+        .eq('hunter_id', request.userId);
+
+      if (updateError) {
+        logger.error('Failed to update ready record', { bountyId, userId: request.userId, error: updateError.message || updateError });
+        return reply.code(500).send({ error: 'Failed to update ready state' });
+      }
+    } else {
+      const { error: insertError } = await admin
+        .from('completion_ready')
+        .insert({
+          bounty_id: bountyId,
+          hunter_id: request.userId,
+          ready_at: readyAt,
+        });
+
+      if (insertError) {
+        logger.error('Failed to insert ready record', { bountyId, userId: request.userId, error: insertError.message || insertError });
+        return reply.code(500).send({ error: 'Failed to save ready state' });
+      }
+    }
+
+    logger.info('Bounty marked ready for review', { bountyId, userId: request.userId });
+    return {
+      message: 'Bounty marked ready successfully',
+      data: {
+        bounty_id: bountyId,
+        hunter_id: request.userId,
+        ready_at: readyAt,
+      },
+    };
+  } catch (error) {
+    console.error('Error in /bounties/:bountyId/ready endpoint:', error);
+    return reply.code(500).send({
+      error: 'Failed to mark bounty as ready'
     });
   }
 });

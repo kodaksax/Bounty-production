@@ -1,5 +1,6 @@
 import { StepperHeader } from 'app/components/StepperHeader';
 import { useBountyDraft } from 'app/hooks/useBountyDraft';
+import { useAuthContext } from 'hooks/use-auth-context';
 import { StepCompensation } from 'app/screens/CreateBounty/StepCompensation';
 import { StepDetails } from 'app/screens/CreateBounty/StepDetails';
 import { StepLocation } from 'app/screens/CreateBounty/StepLocation';
@@ -35,7 +36,8 @@ const STEP_TITLES = [
 
 export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateBountyFlowProps) {
   const [currentStep, setCurrentStep] = useState(1);
-  const { draft, saveDraft, clearDraft, isLoading } = useBountyDraft();
+  const { session } = useAuthContext();
+  const { draft, saveDraft, clearDraft, isLoading } = useBountyDraft(session?.user?.id);
   const insets = useSafeAreaInsets();
   const { withdraw, balance } = useWallet();
   const { isEmailVerified, canPostBounties, userEmail } = useEmailVerification();

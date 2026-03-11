@@ -826,7 +826,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                   <View style={styles.infoBox}>
                     <MaterialIcons name="info-outline" size={18} color="#6ee7b7" />
                     <Text style={styles.infoText}>
-                      Begin work on the bounty; once complete press the next button.
+                      Congrats on being selected! Begin work on the bounty, money is in escrow; once complete press the next button.
                     </Text>
                   </View>
                   

@@ -3,10 +3,7 @@
  * Tests session restoration, token refresh, and graceful expiration
  */
 
-import { render, waitFor, act } from '@testing-library/react-native';
-import React from 'react';
-import AuthProvider from '../../providers/auth-provider';
-import { supabase } from '../../lib/supabase';
+import { act, render, waitFor } from '@testing-library/react-native';
 
 // Mock Supabase client
 jest.mock('../../lib/supabase', () => ({
@@ -48,6 +45,40 @@ jest.mock('@sentry/react-native', () => ({
   setUser: jest.fn(),
   addBreadcrumb: jest.fn(),
 }));
+
+// Mock draft clearing and cached data service used by AuthProvider
+jest.mock('../../app/hooks/useBountyDraft', () => ({
+  clearBountyDraftForUser: jest.fn(() => Promise.resolve()),
+}));
+
+// Also mock the aliased path used by imports in the app code
+try {
+  jest.mock('app/hooks/useBountyDraft', () => ({
+    clearBountyDraftForUser: jest.fn(() => Promise.resolve()),
+  }));
+} catch (e) {
+  // Some environments may not allow mocking alias paths; ignore if so
+}
+
+jest.mock('../../lib/services/cached-data-service', () => ({
+  cachedDataService: {
+    clearAll: jest.fn(() => Promise.resolve()),
+  },
+}));
+
+try {
+  jest.mock('lib/services/cached-data-service', () => ({
+    cachedDataService: {
+      clearAll: jest.fn(() => Promise.resolve()),
+    },
+  }));
+} catch (e) {
+  // Ignore if alias mocking isn't supported in this environment
+}
+
+// Require modules after mocks so imports inside modules pick up jest mocks
+const { supabase } = require('../../lib/supabase');
+const AuthProvider = require('../../providers/auth-provider').default;
 
 describe('Authentication State Persistence', () => {
   beforeEach(() => {
@@ -499,6 +530,110 @@ describe('Authentication State Persistence', () => {
   });
 
   describe('Auth State Change Events', () => {
+    describe('Leak prevention on sign-out and user-switch', () => {
+      it('should clear draft and cache on SIGNED_OUT', async () => {
+        let authStateCallback: any;
+
+        (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((callback) => {
+          authStateCallback = callback;
+          return {
+            data: {
+              subscription: {
+                unsubscribe: jest.fn(),
+              },
+            },
+          };
+        });
+
+        const mockSession = {
+          access_token: 'token',
+          refresh_token: 'refresh',
+          expires_at: Math.floor(Date.now() / 1000) + 3600,
+          user: { id: 'prevUser', email: 'prev@example.com' },
+        };
+
+        // Initial session present so provider records sessionId
+        (supabase.auth.getSession as jest.Mock).mockResolvedValue({ data: { session: mockSession }, error: null });
+
+        const { clearBountyDraftForUser } = require('../../app/hooks/useBountyDraft');
+        const { cachedDataService } = require('../../lib/services/cached-data-service');
+
+        const TestComponent = () => <></>;
+        render(
+          <AuthProvider>
+            <TestComponent />
+          </AuthProvider>
+        );
+
+        await waitFor(() => expect(supabase.auth.getSession).toHaveBeenCalled());
+
+        // Simulate sign out
+        if (authStateCallback) {
+          await act(async () => {
+            await authStateCallback('SIGNED_OUT', null);
+          });
+        }
+
+        // Ensure cleanup functions were invoked for the previous user
+        expect(clearBountyDraftForUser).toHaveBeenCalledWith('prevUser');
+        expect(cachedDataService.clearAll).toHaveBeenCalled();
+      });
+
+      it('should clear previous user data when a different user signs in', async () => {
+        let authStateCallback: any;
+
+        (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((callback) => {
+          authStateCallback = callback;
+          return {
+            data: {
+              subscription: {
+                unsubscribe: jest.fn(),
+              },
+            },
+          };
+        });
+
+        const initialSession = {
+          access_token: 'token',
+          refresh_token: 'refresh',
+          expires_at: Math.floor(Date.now() / 1000) + 3600,
+          user: { id: 'alice', email: 'alice@example.com' },
+        };
+
+        (supabase.auth.getSession as jest.Mock).mockResolvedValue({ data: { session: initialSession }, error: null });
+
+        const { clearBountyDraftForUser } = require('../../app/hooks/useBountyDraft');
+        const { cachedDataService } = require('../../lib/services/cached-data-service');
+
+        const TestComponent = () => <></>;
+        render(
+          <AuthProvider>
+            <TestComponent />
+          </AuthProvider>
+        );
+
+        await waitFor(() => expect(supabase.auth.getSession).toHaveBeenCalled());
+
+        const newSession = {
+          access_token: 'newtoken',
+          refresh_token: 'newrefresh',
+          expires_at: Math.floor(Date.now() / 1000) + 3600,
+          user: { id: 'bob', email: 'bob@example.com' },
+        };
+
+        // Simulate sign in for a different user
+        if (authStateCallback) {
+          await act(async () => {
+            await authStateCallback('SIGNED_IN', newSession);
+          });
+        }
+
+        // The provider should clear alice's persisted data before applying bob's session
+        expect(clearBountyDraftForUser).toHaveBeenCalledWith('alice');
+        expect(cachedDataService.clearAll).toHaveBeenCalled();
+      });
+    });
+
     it('should handle SIGNED_IN event', async () => {
       let authStateCallback: any;
 
