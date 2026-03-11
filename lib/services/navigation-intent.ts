@@ -12,8 +12,8 @@ export const navigationIntent = {
       _pendingConversationId = id
       if (id === null) {
         try { await AsyncStorage.removeItem(PENDING_CONV_KEY) } catch {}
-      } else {
-        await AsyncStorage.setItem(PENDING_CONV_KEY, id)
+        } else {
+          await AsyncStorage.setItem(PENDING_CONV_KEY, id)
       }
     } catch (e) {
       // best-effort
