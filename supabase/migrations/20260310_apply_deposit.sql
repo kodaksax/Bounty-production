@@ -18,7 +18,7 @@ BEGIN
     user_id, type, amount, description, status, stripe_payment_intent_id, metadata, created_at, updated_at
   ) VALUES (
     p_user_id, 'deposit', p_amount, 'Wallet deposit via Stripe', 'completed', p_payment_intent_id, p_metadata, NOW(), NOW()
-  ) ON CONFLICT (stripe_payment_intent_id) DO NOTHING
+  ) ON CONFLICT (stripe_payment_intent_id) WHERE (stripe_payment_intent_id IS NOT NULL) DO NOTHING
   RETURNING id INTO v_tx_id;
 
   IF v_tx_id IS NOT NULL THEN
