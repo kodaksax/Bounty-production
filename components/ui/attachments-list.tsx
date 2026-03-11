@@ -1,6 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import type { Attachment } from 'lib/types';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AttachmentViewerModal } from '../attachment-viewer-modal';
 
@@ -33,13 +33,9 @@ export function AttachmentsList({ attachments, onAttachmentPress }: AttachmentsL
     setViewerVisible(false);
     setSelectedAttachment(null);
   };
+  // If there are no attachments, render nothing (hide the section).
   if (!attachments || attachments.length === 0) {
-    return (
-      <View style={styles.emptyContainer}>
-        <MaterialIcons name="attach-file" size={24} color="rgba(110,231,183,0.4)" />
-        <Text style={styles.emptyText}>No attachments</Text>
-      </View>
-    );
+    return null;
   }
 
   const getFileIcon = (mimeType?: string): string => {
