@@ -7,6 +7,7 @@ import { useRef, useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { BrandingLogo } from '../../components/ui/branding-logo'
 import { ValidationPatterns } from '../../hooks/use-form-validation'
+import { API_BASE_URL } from '../../lib/config/api'
 import useScreenBackground from '../../lib/hooks/useScreenBackground'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
 import { generateCorrelationId, parseAuthError } from '../../lib/utils/auth-errors'
@@ -84,91 +85,90 @@ export function SignUpForm() {
 
     try {
       setIsLoading(true)
-      console.log('[sign-up] Starting sign-up process', { correlationId })
+      console.log('[sign-up] Starting sign-up process (via backend)', { correlationId })
 
-      // SIMPLIFIED: Let Supabase handle its own timeout logic
-      // See SIGN_IN_SIMPLIFICATION_SUMMARY.md for rationale
-      // Pass age verification into user_metadata so backend can persist it
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim().toLowerCase(), // Normalize email
-        password,
-        options: {
-          data: { age_verified: ageVerified }
-        }
+      // Register via backend to ensure duplicate-email checks use admin API
+      const normalizedEmail = email.trim().toLowerCase()
+      const registerRes = await fetch(`${API_BASE_URL}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: normalizedEmail, password }),
       })
 
-      if (error) {
-        console.error('[sign-up] Error:', error, { correlationId })
+      if (!registerRes.ok) {
+        // Map known backend responses to user-friendly messages
+        if (registerRes.status === 409) {
+          setAuthError('This email is already registered. Please sign in instead or use password reset.')
+          return
+        }
 
-        // Parse error using centralized handler
-        const authError = parseAuthError(error, correlationId);
-        setAuthError(authError.userMessage)
+        const text = await registerRes.text().catch(() => '')
+        const errMsg = text || registerRes.statusText || 'Failed to create account'
+        setAuthError(errMsg)
         return
       }
 
-      console.log('[sign-up] Sign-up successful', { correlationId, hasSession: !!data.session })
+      // Registration succeeded. Now sign in the user to create a session.
+      try {
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email: normalizedEmail,
+          password,
+        })
 
-      // Clear form data for security (especially password)
-      setEmail('')
-      setPassword('')
-      setConfirmPassword('')
-      setAgeVerified(false)
-      setTermsAccepted(false)
+        if (signInError) {
+          console.error('[sign-up] Sign-in after register failed', signInError, { correlationId })
+          const authErr = parseAuthError(signInError, correlationId)
+          setAuthError(authErr.userMessage)
+          return
+        }
 
-      // Keep user signed in after account creation (auto sign-in)
-      // The user will be redirected to onboarding or app based on their profile status
-      // Email verification gates will prevent posting/applying until verified
-      if (data.session) {
-        console.log('[sign-up] User automatically signed in, checking profile', { correlationId })
+        const session = signInData.session
 
-        try {
-          const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('username, onboarding_completed')
-            .eq('id', data.session.user.id)
-            .single()
+        // Clear form data for security
+        setEmail('')
+        setPassword('')
+        setConfirmPassword('')
+        setAgeVerified(false)
+        setTermsAccepted(false)
 
-          // Handle profile errors
-          if (profileError) {
-            if (profileError.code === 'PGRST116') {
-              // Profile doesn't exist yet (expected for new users) - proceed to onboarding
-              console.log('[sign-up] No profile found, redirecting to onboarding', { correlationId })
+        if (session) {
+          // Proceed to profile check / onboarding as before
+          try {
+            const { data: profile, error: profileError } = await supabase
+              .from('profiles')
+              .select('username, onboarding_completed')
+              .eq('id', session.user.id)
+              .single()
+
+            if (profileError) {
+              if (profileError.code === 'PGRST116') {
+                router.replace('/onboarding' as Href)
+                try { markInitialNavigationDone(); } catch { }
+                return
+              }
+              throw profileError
+            }
+
+            if (!profile.username || profile.onboarding_completed !== true) {
               router.replace('/onboarding' as Href)
               try { markInitialNavigationDone(); } catch { }
-              return
+            } else {
+              router.replace('/tabs/bounty-app' as Href)
+              try { markInitialNavigationDone(); } catch { }
             }
-            // For other errors, throw to be caught by catch block
-            throw profileError
-          }
-
-          // Profile exists - check if onboarding is complete
-          // User needs onboarding if username is missing or onboarding_completed is not true
-          // Note: onboarding_completed could be false or null for new users
-          if (!profile.username || profile.onboarding_completed !== true) {
-            console.log('[sign-up] Profile incomplete or onboarding not completed, redirecting to onboarding', {
-              correlationId,
-              hasUsername: !!profile.username,
-              onboardingCompleted: profile.onboarding_completed
-            })
+          } catch (err) {
+            console.error('[sign-up] Profile check error after register', { correlationId, error: err })
             router.replace('/onboarding' as Href)
             try { markInitialNavigationDone(); } catch { }
-          } else {
-            // User has completed onboarding (edge case) - go to app
-            console.log('[sign-up] Profile complete, redirecting to app', { correlationId })
-            router.replace('/tabs/bounty-app' as Href)
-            try { markInitialNavigationDone(); } catch { }
           }
-        } catch (err) {
-          // On error, proceed to onboarding to be safe
-          console.error('[sign-up] Profile check error, proceeding to onboarding', { correlationId, error: err })
-          router.replace('/onboarding' as Href)
+        } else {
+          router.replace('/auth/email-confirmation' as Href)
           try { markInitialNavigationDone(); } catch { }
         }
-      } else {
-        // No session was created (shouldn't happen, but handle gracefully)
-        console.warn('[sign-up] No session created after sign-up, showing email confirmation', { correlationId })
-        router.replace('/auth/email-confirmation' as Href)
-        try { markInitialNavigationDone(); } catch { }
+      } catch (err: any) {
+        const authErr = parseAuthError(err, correlationId)
+        setAuthError(authErr.userMessage)
+        return
       }
     } catch (e: any) {
       console.error('[sign-up] Unexpected error:', e, { correlationId })
