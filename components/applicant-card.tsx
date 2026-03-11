@@ -1,8 +1,8 @@
-// components/applicant-card.tsx - Single-screen applicant card with one-tap accept/reject
+// components/applicant-card.tsx - Applicant card with explicit confirmation for accept/reject
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { BountyRequestWithDetails } from '../lib/services/bounty-request-service';
 import { getAvatarInitials, getValidAvatarUrl } from '../lib/utils/avatar-utils';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
@@ -46,7 +46,7 @@ export function ApplicantCard({
     };
   }, []);
 
-  const handleAccept = async () => {
+  const runAccept = async () => {
     setIsProcessing(true);
     setActionType('accept');
     try {
@@ -59,7 +59,7 @@ export function ApplicantCard({
     }
   };
 
-  const handleReject = async () => {
+  const runReject = async () => {
     setIsProcessing(true);
     setActionType('reject');
     try {
@@ -70,6 +70,30 @@ export function ApplicantCard({
       setIsProcessing(false);
       setActionType(null);
     }
+  };
+
+  const handleAccept = () => {
+    Alert.alert(
+      'Accept Request?',
+      'Accepting this applicant starts the bounty and removes competing requests. Are you sure you want to continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Accept', style: 'default', onPress: runAccept },
+      ],
+      { cancelable: true }
+    );
+  };
+
+  const handleReject = () => {
+    Alert.alert(
+      'Reject Request?',
+      'Rejecting will remove this application from your requests list. Are you sure you want to continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Reject', style: 'destructive', onPress: runReject },
+      ],
+      { cancelable: true }
+    );
   };
 
   const handleRequestInfo = () => {
