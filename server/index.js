@@ -796,6 +796,14 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
 
         console.log(`[Webhook] PaymentIntent succeeded: ${paymentIntent.id} for user ${userId}`);
 
+        // Only treat PaymentIntents with purpose 'wallet_deposit' as wallet deposits
+        // This mirrors the check in /payments/confirm and prevents crediting wallet
+        // for unrelated payments (e.g., bounty purchases).
+        if (paymentIntent.metadata?.purpose !== 'wallet_deposit') {
+          console.log(`[Webhook] PaymentIntent ${paymentIntent.id} purpose=${paymentIntent.metadata?.purpose} - not a wallet_deposit, skipping`);
+          break;
+        }
+
         // Record deposit and update balance using idempotent RPC to avoid race
         // conditions with the confirm endpoint which may call the same RPC.
         const { data: applyRes, error: applyErr } = await supabase.rpc('apply_deposit', {

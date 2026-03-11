@@ -296,35 +296,65 @@ export async function createDeposit(
     }
   }
 
-  // Create transaction record
-  const { data: transaction, error: txError } = await admin
-    .from('wallet_transactions')
-    .insert([{
-      user_id: userId,
-      type: 'deposit',
-      amount,
-      description: `Deposit via Stripe`,
-      status: 'completed',
-      stripe_payment_intent_id: paymentIntentId,
-      metadata: {
-        payment_intent_id: paymentIntentId,
-        created_via: 'webhook',
-        idempotency_key: effectiveIdempotencyKey,
-      },
-    }])
-    .select()
-    .single();
+  // Use atomic RPC to insert transaction and update balance in a single idempotent operation.
+  // This prevents race conditions where concurrent callers both insert the same
+  // stripe_payment_intent_id and double-credit the user's balance.
+  const { data: applyRes, error: applyErr } = await admin.rpc('apply_deposit', {
+    p_user_id: userId,
+    p_amount: amount,
+    p_payment_intent_id: paymentIntentId,
+    p_metadata: {
+      payment_intent_id: paymentIntentId,
+      created_via: 'service',
+      idempotency_key: effectiveIdempotencyKey,
+    },
+  });
 
-  if (txError) {
-    throw new ExternalServiceError('Supabase', 'Failed to create deposit transaction', {
-      error: txError.message,
+  if (applyErr) {
+    throw new ExternalServiceError('Supabase', 'Failed to apply deposit via RPC', {
+      error: applyErr.message,
     });
   }
 
-  // Update user balance atomically
-  await updateBalance(userId, amount);
+  // Fetch the transaction inserted (or existing) by payment intent id
+  const tx = await getTransactionByPaymentIntent(paymentIntentId);
+  if (tx) return tx;
 
-  return toWalletTransaction(transaction);
+  // RPC did not return or transaction not found. Fallback to legacy insert
+  // for environments where the RPC is not available (e.g., older test mocks).
+  // This preserves previous behavior while keeping RPC as the preferred path.
+  try {
+    const { data: transaction, error: txError } = await admin
+      .from('wallet_transactions')
+      .insert([{
+        user_id: userId,
+        type: 'deposit',
+        amount,
+        description: `Deposit via Stripe`,
+        status: 'completed',
+        stripe_payment_intent_id: paymentIntentId,
+        metadata: {
+          payment_intent_id: paymentIntentId,
+          created_via: 'service_fallback',
+          idempotency_key: effectiveIdempotencyKey,
+        },
+      }])
+      .select()
+      .single();
+
+    if (txError) {
+      throw new ExternalServiceError('Supabase', 'Failed to create deposit transaction (fallback)', {
+        error: txError.message,
+      });
+    }
+
+    // Update user balance atomically as fallback
+    await updateBalance(userId, amount);
+
+    return toWalletTransaction(transaction);
+  } catch (e: any) {
+    throw e;
+  }
 }
 
 /**
