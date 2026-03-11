@@ -15,11 +15,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@supabase/supabase-js';
 import { config } from '../config';
 import {
-  ConflictError,
-  ExternalServiceError,
-  handleStripeError,
-  NotFoundError,
-  ValidationError,
+    ConflictError,
+    ExternalServiceError,
+    handleStripeError,
+    NotFoundError,
+    ValidationError,
 } from '../middleware/error-handler';
 import { stripe } from './consolidated-payment-service';
 import { logger } from './logger';
@@ -296,33 +296,143 @@ export async function createDeposit(
     }
   }
 
-  // Create transaction record
-  const { data: transaction, error: txError } = await admin
-    .from('wallet_transactions')
-    .insert([{
+  // Use atomic RPC to insert transaction and update balance in a single idempotent operation.
+  // This prevents race conditions where concurrent callers both insert the same
+  // stripe_payment_intent_id and double-credit the user's balance.
+  const { data: applyRes, error: applyErr } = await admin.rpc('apply_deposit', {
+    p_user_id: userId,
+    p_amount: amount,
+    p_payment_intent_id: paymentIntentId,
+    p_metadata: {
+      payment_intent_id: paymentIntentId,
+      created_via: 'service',
+      idempotency_key: effectiveIdempotencyKey,
+    },
+  });
+
+  if (applyErr) {
+    throw new ExternalServiceError('Supabase', 'Failed to apply deposit via RPC', {
+      error: applyErr.message,
+    });
+  }
+
+  // Try to resolve the transaction inserted (or existing) by payment intent id.
+  // This read is best-effort: if the RPC succeeded but a subsequent transient
+  // database read fails, we should not treat the whole operation as failed
+  // because the user's balance may already have been updated. In that case
+  // log a warning and return a minimal transaction object so callers see
+  // success instead of a 500.
+  const applyRow = Array.isArray(applyRes) && applyRes.length ? applyRes[0] : applyRes;
+  const applied = !!(applyRow && (applyRow as any).applied);
+  const appliedTxId: string | null = applyRow && (applyRow as any).tx_id ? String((applyRow as any).tx_id) : null;
+
+  try {
+    const tx = await getTransactionByPaymentIntent(paymentIntentId);
+    if (tx) return tx;
+
+    // If not found by payment intent, try fetching by the tx id returned from RPC
+    if (appliedTxId) {
+      const { data: txById, error: txByIdErr } = await admin
+        .from('wallet_transactions')
+        .select('*')
+        .eq('id', appliedTxId)
+        .maybeSingle();
+
+      if (txById) return toWalletTransaction(txById);
+      if (txByIdErr) {
+        logger.warn({ appliedTxId, paymentIntentId, userId, error: txByIdErr }, '[WalletService] Failed to fetch transaction by id after apply_deposit');
+      }
+    }
+  } catch (e: any) {
+    logger.warn({ paymentIntentId, userId, error: e instanceof Error ? e.message : String(e) }, '[WalletService] Non-fatal: failed to fetch transaction after apply_deposit');
+  }
+
+  // If RPC indicated the deposit was applied (or returned a tx id), return a
+  // minimal constructed transaction so callers observe success instead of an error.
+  if (applied || appliedTxId) {
+    const now = new Date().toISOString();
+    return toWalletTransaction({
+      id: appliedTxId || '',
       user_id: userId,
       type: 'deposit',
       amount,
       description: `Deposit via Stripe`,
       status: 'completed',
+      bounty_id: null,
       stripe_payment_intent_id: paymentIntentId,
+      stripe_transfer_id: null,
+      stripe_connect_account_id: null,
       metadata: {
         payment_intent_id: paymentIntentId,
-        created_via: 'webhook',
-        idempotency_key: effectiveIdempotencyKey,
+        created_via: 'service',
       },
-    }])
-    .select()
-    .single();
-
-  if (txError) {
-    throw new ExternalServiceError('Supabase', 'Failed to create deposit transaction', {
-      error: txError.message,
+      created_at: now,
+      updated_at: now,
     });
   }
 
-  // Update user balance atomically
-  await updateBalance(userId, amount);
+  // RPC did not return or transaction not found. Fallback to legacy insert
+  // for environments where the RPC is not available (e.g., older test mocks).
+  // This preserves previous behavior while keeping RPC as the preferred path.
+  try {
+    const { data: transaction, error: txError } = await admin
+      .from('wallet_transactions')
+      .insert([{
+        user_id: userId,
+        type: 'deposit',
+        amount,
+        description: `Deposit via Stripe`,
+        status: 'completed',
+        stripe_payment_intent_id: paymentIntentId,
+        metadata: {
+          payment_intent_id: paymentIntentId,
+          created_via: 'service_fallback',
+          idempotency_key: effectiveIdempotencyKey,
+        },
+      }])
+      .select()
+      .single();
+
+    if (txError) {
+      throw new ExternalServiceError('Supabase', 'Failed to create deposit transaction (fallback)', {
+        error: txError.message,
+      });
+    }
+
+    // Update user balance atomically as fallback
+    await updateBalance(userId, amount);
+
+    return toWalletTransaction(transaction);
+  } catch (e: any) {
+    throw e;
+  }
+}
+
+/**
+ * Find a wallet transaction by Stripe payment intent ID
+ * Returns the transaction record or null if not found
+ */
+export async function getTransactionByPaymentIntent(paymentIntentId: string) {
+  const admin = getSupabaseAdmin();
+
+  const { data: transaction, error } = await admin
+    .from('wallet_transactions')
+    .select('*')
+    .eq('stripe_payment_intent_id', paymentIntentId)
+    .maybeSingle();
+
+  if (error) {
+    // If Supabase returns a not-found style error, treat as no transaction
+    // Otherwise surface as ExternalServiceError
+    if ((error as any).code === 'PGRST116') {
+      return null;
+    }
+    throw new ExternalServiceError('Supabase', 'Failed to query transaction by payment intent', {
+      error: error.message,
+    });
+  }
+
+  if (!transaction) return null;
 
   return toWalletTransaction(transaction);
 }
@@ -868,4 +978,5 @@ export const consolidatedWalletService = {
   releaseEscrow,
   refundEscrow,
   updateBalance,
+  getTransactionByPaymentIntent,
 };

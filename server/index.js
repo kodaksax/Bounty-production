@@ -324,6 +324,13 @@ app.post('/payments/create-payment-intent', paymentLimiter, authenticateUser, as
     if (metadata.description) {
       sanitizedMetadata.description = sanitizeText(metadata.description);
     }
+    // Allow purpose for wallet deposits (only accept known values)
+    if (metadata.purpose) {
+      const cleanedPurpose = sanitizeText(metadata.purpose);
+      if (cleanedPurpose === 'wallet_deposit') {
+        sanitizedMetadata.purpose = 'wallet_deposit';
+      }
+    }
 
     // Create PaymentIntent
     const paymentIntent = await stripe.paymentIntents.create({
@@ -614,8 +621,66 @@ app.post('/payments/confirm', paymentLimiter, authenticateUser, async (req, res)
       return res.status(403).json({ error: 'Not authorized to confirm this payment' });
     }
 
-    // If already succeeded or processing, return current status
-    if (paymentIntent.status === 'succeeded' || paymentIntent.status === 'processing') {
+    // Helper: record deposit and update balance for a succeeded payment intent.
+    // Idempotent – checks for an existing wallet_transaction by stripe_payment_intent_id
+    // before inserting, so duplicate calls (webhook + this endpoint) are safe.
+    // PostgreSQL unique constraint violation error code
+    const PG_UNIQUE_VIOLATION = '23505';
+
+    const recordDepositIfNeeded = async (intent) => {
+      // Skip if not a wallet deposit
+      if (intent.metadata?.purpose !== 'wallet_deposit') return;
+
+      const amountDollars = intent.amount / 100;
+
+      // Check if transaction already recorded (webhook may have beaten us)
+      const { data: existing } = await supabase
+        .from('wallet_transactions')
+        .select('id')
+        .eq('stripe_payment_intent_id', intent.id)
+        .maybeSingle();
+
+      if (existing) {
+        console.log(`[PaymentConfirm] Transaction already exists for ${intent.id}, skipping insert`);
+        return;
+      }
+
+      // Use an atomic DB-side RPC that inserts the wallet transaction and
+      // updates the profile balance only when a new transaction row was created.
+      // This RPC is idempotent by `stripe_payment_intent_id` and prevents
+      // double-crediting in retry scenarios.
+      const { data: applyRes, error: applyErr } = await supabase.rpc('apply_deposit', {
+        p_user_id: userId,
+        p_amount: amountDollars,
+        p_payment_intent_id: intent.id,
+        p_metadata: intent.metadata || {}
+      });
+
+      if (applyErr) {
+        console.error('[PaymentConfirm] apply_deposit RPC failed:', applyErr);
+        throw applyErr;
+      }
+
+      const appliedRow = Array.isArray(applyRes) ? applyRes[0] : applyRes;
+      if (appliedRow && appliedRow.applied) {
+        console.log(`[PaymentConfirm] Deposit applied, tx_id=${appliedRow.tx_id} for user ${userId}, amount +${amountDollars}`);
+      } else {
+        console.log(`[PaymentConfirm] Deposit already applied for ${intent.id}, no balance change`);
+      }
+    };
+
+    // If already succeeded, record deposit (if not already done) and return
+    if (paymentIntent.status === 'succeeded') {
+      await recordDepositIfNeeded(paymentIntent);
+      return res.json({
+        success: true,
+        status: paymentIntent.status,
+        paymentIntentId: paymentIntent.id,
+      });
+    }
+
+    // If processing, just return current status
+    if (paymentIntent.status === 'processing') {
       return res.json({
         success: true,
         status: paymentIntent.status,
@@ -647,6 +712,10 @@ app.post('/payments/confirm', paymentLimiter, authenticateUser, async (req, res)
 
     const success = confirmedIntent.status === 'succeeded';
     console.log(`[PaymentConfirm] Payment ${paymentIntentId} status: ${confirmedIntent.status}`);
+
+    if (success) {
+      await recordDepositIfNeeded(confirmedIntent);
+    }
 
     res.json({
       success,
@@ -727,66 +796,34 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
 
         console.log(`[Webhook] PaymentIntent succeeded: ${paymentIntent.id} for user ${userId}`);
 
-        // Create wallet transaction
-        const { data: transaction, error: txError } = await supabase
-          .from('wallet_transactions')
-          .insert({
-            user_id: userId,
-            type: 'deposit',
-            amount: paymentIntent.amount / 100, // Convert cents to dollars
-            description: 'Wallet deposit via Stripe',
-            status: 'completed',
-            stripe_payment_intent_id: paymentIntent.id,
-            metadata: paymentIntent.metadata
-          })
-          .select()
-          .single();
-
-        if (txError) {
-          console.error('[Webhook] Error creating transaction:', txError);
-          throw txError;
+        // Only treat PaymentIntents with purpose 'wallet_deposit' as wallet deposits
+        // This mirrors the check in /payments/confirm and prevents crediting wallet
+        // for unrelated payments (e.g., bounty purchases).
+        if (paymentIntent.metadata?.purpose !== 'wallet_deposit') {
+          console.log(`[Webhook] PaymentIntent ${paymentIntent.id} purpose=${paymentIntent.metadata?.purpose} - not a wallet_deposit, skipping`);
+          break;
         }
 
-        // Update user balance using RPC for atomic operation
-        const { error: balanceError } = await supabase.rpc('increment_balance', {
+        // Record deposit and update balance using idempotent RPC to avoid race
+        // conditions with the confirm endpoint which may call the same RPC.
+        const { data: applyRes, error: applyErr } = await supabase.rpc('apply_deposit', {
           p_user_id: userId,
-          p_amount: paymentIntent.amount / 100
+          p_amount: paymentIntent.amount / 100,
+          p_payment_intent_id: paymentIntent.id,
+          p_metadata: paymentIntent.metadata || {}
         });
 
-        if (balanceError) {
-          console.error('[Webhook] Error updating balance via RPC:', balanceError);
-          // Fallback: Retry the RPC once more in case of transient error
-          try {
-            const { error: retryError } = await supabase.rpc('increment_balance', {
-              p_user_id: userId,
-              p_amount: paymentIntent.amount / 100
-            });
-
-            if (retryError) {
-              // Last resort: direct update (log error about potential race condition)
-              console.error('[Webhook] Atomic balance update failed after retry - using non-atomic update. Please add increment_balance RPC function to prevent race conditions.', {
-                user_id: userId,
-                amount: paymentIntent.amount / 100,
-                originalError: balanceError,
-                retryError: retryError
-              });
-              const { data: profile } = await supabase
-                .from('profiles')
-                .select('balance')
-                .eq('id', userId)
-                .single();
-
-              const currentBalance = profile?.balance || 0;
-              await supabase.from('profiles')
-                .update({ balance: currentBalance + (paymentIntent.amount / 100) })
-                .eq('id', userId);
-            }
-          } catch (fallbackErr) {
-            console.error('[Webhook] Fallback balance update error:', fallbackErr);
-          }
+        if (applyErr) {
+          console.error('[Webhook] apply_deposit RPC failed:', applyErr);
+          throw applyErr;
         }
 
-        console.log(`[Webhook] Transaction created: ${transaction.id}, balance updated for user ${userId}`);
+        const appliedRow = Array.isArray(applyRes) ? applyRes[0] : applyRes;
+        if (appliedRow && appliedRow.applied) {
+          console.log(`[Webhook] Deposit applied, tx_id=${appliedRow.tx_id} for user ${userId}, amount +${paymentIntent.amount / 100}`);
+        } else {
+          console.log(`[Webhook] Deposit already applied for ${paymentIntent.id}, no balance change`);
+        }
 
         // Note: User notification should be implemented via a notification service
         // when available (push notifications, email, etc.)
