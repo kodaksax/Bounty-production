@@ -153,13 +153,60 @@ export const bountyRequestService = {
         if (bErr) throw bErr
         if (pErr) throw pErr
 
+        const ratingStatsMap = new Map<string, { averageRating: number; ratingCount: number }>()
+        if (userIds.length > 0) {
+          try {
+            const { data: ratingRows, error: ratingsErr } = await supabase
+              .from('ratings')
+              .select('to_user_id, rating')
+              .in('to_user_id', userIds)
+
+            if (ratingsErr) throw ratingsErr
+
+            for (const row of (ratingRows || []) as any[]) {
+              const userId = String(row.to_user_id)
+              const current = ratingStatsMap.get(userId) || { averageRating: 0, ratingCount: 0 }
+              const nextCount = current.ratingCount + 1
+              const nextAvg = ((current.averageRating * current.ratingCount) + Number(row.rating || 0)) / nextCount
+              ratingStatsMap.set(userId, { averageRating: nextAvg, ratingCount: nextCount })
+            }
+          } catch (ratingsErr) {
+            logger.warning(
+              'Primary ratings query failed; falling back to legacy user_ratings table for bounty requests',
+              { error: ratingsErr, userIds }
+            )
+            // Backward compatibility for environments still using legacy `user_ratings`.
+            try {
+              const { data: ratingRowsLegacy, error: legacyErr } = await supabase
+                .from('user_ratings')
+                .select('user_id, score')
+                .in('user_id', userIds)
+
+              if (legacyErr) throw legacyErr
+
+              for (const row of (ratingRowsLegacy || []) as any[]) {
+                const userId = String(row.user_id)
+                const current = ratingStatsMap.get(userId) || { averageRating: 0, ratingCount: 0 }
+                const nextCount = current.ratingCount + 1
+                const nextAvg = ((current.averageRating * current.ratingCount) + Number(row.score || 0)) / nextCount
+                ratingStatsMap.set(userId, { averageRating: nextAvg, ratingCount: nextCount })
+              }
+            } catch (legacyRatingErr) {
+              logger.warning('Failed to load rating aggregates for bounty requests', { error: legacyRatingErr })
+            }
+          }
+        }
+
         const bountyMap = new Map<string, Bounty>((bounties as any[]).map((b: any) => [b.id, b as Bounty]))
         const profileMap = new Map<string, Profile>((profiles as any[]).map((p: any) => [p.id, p as Profile]))
 
         const result: BountyRequestWithDetails[] = requests.map(r => ({
           ...(r as any),
           bounty: bountyMap.get(String((r as any).bounty_id)) as Bounty,
-          profile: profileMap.get(String((r as any).hunter_id)) as Profile,
+          profile: {
+            ...(profileMap.get(String((r as any).hunter_id)) as Profile),
+            ...(ratingStatsMap.get(String((r as any).hunter_id)) || {}),
+          } as Profile,
         }))
         return result
       }

@@ -3,15 +3,15 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AttachmentViewerModal } from '../../../components/attachment-viewer-modal';
@@ -23,6 +23,7 @@ import { approveAndRelease } from '../../../lib/services/completion-approval';
 import { completionService } from '../../../lib/services/completion-service';
 import type { Bounty, Profile } from '../../../lib/services/database.types';
 import { profileService } from '../../../lib/services/profile-service';
+import { ratingsService } from '../../../lib/services/ratings';
 import { supabase } from '../../../lib/supabase';
 import type { Attachment } from '../../../lib/types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
@@ -146,7 +147,21 @@ export default function ReviewAndVerifyScreen() {
 
       if (hunterId) {
         const profile = await profileService.getById(hunterId);
-        setHunterProfile(profile);
+        if (!profile) {
+          setHunterProfile(null);
+          return;
+        }
+
+        try {
+          const stats = await ratingsService.getAggregatedStats(hunterId);
+          setHunterProfile({
+            ...profile,
+            averageRating: stats.averageRating,
+            ratingCount: stats.ratingCount,
+          });
+        } catch {
+          setHunterProfile(profile);
+        }
       }
     } catch (err) {
       console.error('Error loading hunter profile:', err);
@@ -271,10 +286,15 @@ export default function ReviewAndVerifyScreen() {
       }
 
       // Submit rating
+      const targetHunterId = hunterProfile?.id || bounty.accepted_by;
+      if (!targetHunterId) {
+        throw new Error('Could not resolve hunter for rating submission');
+      }
+
       await completionService.submitRating({
         bounty_id: String(bounty.id),
         from_user_id: currentUserId,
-        to_user_id: hunterProfile.id,
+        to_user_id: targetHunterId,
         rating,
         comment: ratingComment.trim() || undefined,
       });

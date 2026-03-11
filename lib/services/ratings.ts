@@ -36,6 +36,29 @@ export const ratingsService = {
     try {
       if (isSupabaseConfigured) {
         const { data, error } = await supabase
+          .from('ratings')
+          .insert({
+            to_user_id: rating.user_id,
+            from_user_id: rating.rater_id,
+            bounty_id: rating.bountyId,
+            rating: rating.score,
+            comment: rating.comment,
+          })
+          .select('*')
+          .single()
+
+        if (!error) return this.mapFromRatingsDb(data)
+
+        const primaryError = String(error?.message || JSON.stringify(error)).toLowerCase()
+        const canFallback =
+          primaryError.includes('relation') ||
+          primaryError.includes('does not exist') ||
+          primaryError.includes('column') ||
+          primaryError.includes('schema cache')
+
+        if (!canFallback) throw error
+
+        const { data: fallbackData, error: fallbackError } = await supabase
           .from('user_ratings')
           .insert({
             user_id: rating.user_id,
@@ -47,8 +70,8 @@ export const ratingsService = {
           .select('*')
           .single()
 
-        if (error) throw error
-        return this.mapFromDb(data)
+        if (fallbackError) throw fallbackError
+        return this.mapFromDb(fallbackData)
       }
 
       const API_URL = `${getApiBaseUrl()}/api/ratings`
@@ -79,19 +102,38 @@ export const ratingsService = {
   async getByUserId(userId: string, options?: { limit?: number; offset?: number }): Promise<UserRating[]> {
     try {
       if (isSupabaseConfigured) {
+        const limit = options?.limit ?? 20
+        const offset = options?.offset ?? 0
+
         let query = supabase
+          .from('ratings')
+          .select('*')
+          .eq('to_user_id', userId)
+          .order('created_at', { ascending: false })
+          .range(offset, offset + limit - 1)
+
+        const { data, error } = await query
+        if (!error) return (data || []).map(this.mapFromRatingsDb)
+
+        const primaryError = String(error?.message || JSON.stringify(error)).toLowerCase()
+        const canFallback =
+          primaryError.includes('relation') ||
+          primaryError.includes('does not exist') ||
+          primaryError.includes('column') ||
+          primaryError.includes('schema cache')
+
+        if (!canFallback) throw error
+
+        let fallbackQuery = supabase
           .from('user_ratings')
           .select('*')
           .eq('user_id', userId)
           .order('created_at', { ascending: false })
+          .range(offset, offset + limit - 1)
 
-        const limit = options?.limit ?? 20
-        const offset = options?.offset ?? 0
-        query = query.range(offset, offset + limit - 1)
-
-        const { data, error } = await query
-        if (error) throw error
-        return (data || []).map(this.mapFromDb)
+        const { data: fallbackData, error: fallbackError } = await fallbackQuery
+        if (fallbackError) throw fallbackError
+        return (fallbackData || []).map(this.mapFromDb)
       }
 
       const API_URL = `${getApiBaseUrl()}/api/ratings`
@@ -120,13 +162,39 @@ export const ratingsService = {
     try {
       if (isSupabaseConfigured) {
         const { data, error } = await supabase
+          .from('ratings')
+          .select('rating')
+          .eq('to_user_id', userId)
+
+        if (!error) {
+          const rows = data || []
+          if (rows.length === 0) {
+            return { averageRating: 0, ratingCount: 0 }
+          }
+          const total = rows.reduce((sum: number, row: any) => sum + Number(row.rating || 0), 0)
+          return {
+            averageRating: total / rows.length,
+            ratingCount: rows.length,
+          }
+        }
+
+        const primaryError = String(error?.message || JSON.stringify(error)).toLowerCase()
+        const canFallback =
+          primaryError.includes('relation') ||
+          primaryError.includes('does not exist') ||
+          primaryError.includes('column') ||
+          primaryError.includes('schema cache')
+
+        if (!canFallback) throw error
+
+        const { data: legacyData, error: legacyError } = await supabase
           .rpc('get_user_rating_stats', { target_user_id: userId })
 
-        if (error) throw error
-        if (data && typeof data === 'object' && 'average_rating' in data && 'rating_count' in data) {
+        if (legacyError) throw legacyError
+        if (legacyData && typeof legacyData === 'object' && 'average_rating' in legacyData && 'rating_count' in legacyData) {
           return {
-            averageRating: Number(data.average_rating) || 0,
-            ratingCount: Number(data.rating_count) || 0,
+            averageRating: Number((legacyData as any).average_rating) || 0,
+            ratingCount: Number((legacyData as any).rating_count) || 0,
           }
         }
       }
@@ -194,6 +262,18 @@ export const ratingsService = {
       rater_id: record.rater_id,
       bountyId: record.bounty_id,
       score: record.score,
+      comment: record.comment,
+      createdAt: record.created_at,
+    }
+  },
+
+  mapFromRatingsDb(record: any): UserRating {
+    return {
+      id: record.id,
+      user_id: record.to_user_id,
+      rater_id: record.from_user_id,
+      bountyId: record.bounty_id,
+      score: record.rating,
       comment: record.comment,
       createdAt: record.created_at,
     }

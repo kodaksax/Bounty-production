@@ -360,14 +360,20 @@ export function PosterReviewModal({
       return;
     }
 
+    const targetHunterId = hunterId || submission?.hunter_id || '';
+    if (!targetHunterId) {
+      Alert.alert('Missing Hunter', 'Could not determine who to rate. Please try again.');
+      return;
+    }
+
     try {
       setIsProcessing(true);
 
       // Submit rating
       await completionService.submitRating({
         bounty_id: bountyId,
-        from_user_id: '',  // Will be set by service from session
-        to_user_id: hunterId,
+        from_user_id: '',  // CompletionService resolves this from the authenticated session.
+        to_user_id: targetHunterId,
         rating,
         comment: ratingComment.trim() || undefined,
       });
