@@ -61,6 +61,7 @@ export default function UserProfileScreen() {
   const [skills, setSkills] = useState<{ id: string; icon: string; text: string; credentialUrl?: string }[]>([]);
   const [stats, setStats] = useState({
     jobsAccepted: 0,
+    jobsCompleted: 0,
     bountiesPosted: 0,
     badgesEarned: 0,
     isLoading: true,
@@ -114,11 +115,13 @@ export default function UserProfileScreen() {
       if (!userId) return;
       try {
         const postedBounties = await bountyService.getByUserId(userId);
-        const acceptedRequests = await bountyRequestService.getByUserId(userId);
-        const acceptedJobs = acceptedRequests.filter((req) => req.status === 'accepted');
+        const requests = await bountyRequestService.getByUserId(userId);
+        const acceptedJobs = requests.filter((req) => req.status === 'accepted');
+        const completedJobs = requests.filter((req) => req.status === 'completed');
         const badgesCount = Math.min(postedBounties.length, 3);
         setStats({
           jobsAccepted: acceptedJobs.length,
+          jobsCompleted: completedJobs.length,
           bountiesPosted: postedBounties.length,
           badgesEarned: badgesCount,
           isLoading: false,
@@ -422,7 +425,7 @@ export default function UserProfileScreen() {
           showPortfolio={false}
           hideActions={true}
           activityStats={{
-            jobsAccepted: stats.jobsAccepted,
+            jobsCompleted: stats.jobsCompleted,
             bountiesPosted: stats.bountiesPosted,
             badgesEarned: stats.badgesEarned,
           }}

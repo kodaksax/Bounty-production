@@ -69,7 +69,8 @@ interface EnhancedProfileSectionProps {
   userId?: string;
   isOwnProfile?: boolean;
   showPortfolio?: boolean; // control whether to render the portfolio list here
-  activityStats?: { jobsAccepted: number; bountiesPosted: number; badgesEarned: number };
+  // Note: `jobsCompleted` is preferred for credibility; legacy `jobsAccepted` may still be provided
+  activityStats?: { jobsCompleted?: number; jobsAccepted?: number; bountiesPosted?: number; badgesEarned?: number };
   hideActions?: boolean; // when true, do not render the internal more-actions button/modal (useful when actions are handled by the parent component)
 }
 
@@ -433,19 +434,19 @@ export function EnhancedProfileSection({
           </View>
         )}
 
-        {/* Stats Row (Jobs Accepted, Bounties Posted, Badges Earned) */}
+        {/* Stats Row (Jobs Completed, Bounties Posted, Followers) */}
         <View className="flex-row justify-around mt-4 pt-3 border-t border-emerald-500/30">
           <View className="items-center">
-            <Text className="text-2xl font-bold">{activityStats?.jobsAccepted ?? 0}</Text>
-            <Text className="text-xs text-emerald-200 mt-1">Jobs Accepted</Text>
+            <Text className="text-2xl font-bold">{activityStats?.jobsCompleted ?? activityStats?.jobsAccepted ?? 0}</Text>
+            <Text className="text-xs text-emerald-200 mt-1">Jobs Completed</Text>
           </View>
           <View className="items-center">
             <Text className="text-2xl font-bold">{activityStats?.bountiesPosted ?? 0}</Text>
             <Text className="text-xs text-emerald-200 mt-1">Bounties Posted</Text>
           </View>
           <View className="items-center">
-            <Text className="text-2xl font-bold">{activityStats?.badgesEarned ?? 0}</Text>
-            <Text className="text-xs text-emerald-200 mt-1">Badges Earned</Text>
+            <Text className="text-2xl font-bold">{followerCount ?? 0}</Text>
+            <Text className="text-xs text-emerald-200 mt-1">Followers</Text>
           </View>
         </View>
 
