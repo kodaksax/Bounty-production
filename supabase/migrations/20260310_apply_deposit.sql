@@ -28,6 +28,12 @@ BEGIN
         updated_at = NOW()
     WHERE id = p_user_id;
 
+    -- Ensure the update actually affected a row. If not, abort so the
+    -- inserted wallet transaction is not left orphaned (keeps operation atomic).
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Profile not found for user %', p_user_id;
+    END IF;
+
     RETURN QUERY SELECT true, v_tx_id;
   ELSE
     -- Transaction already existed; do not change balance
