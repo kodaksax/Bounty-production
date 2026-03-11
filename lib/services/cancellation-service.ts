@@ -1,8 +1,17 @@
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
 import { logger } from 'lib/utils/error-logger';
 import type { BountyCancellation } from '../types';
-import type { Bounty } from './database.types';
+import { analyticsService } from './analytics-service';
 import { bountyService } from './bounty-service';
+import type { Bounty } from './database.types';
+
+export type CancellationReasonCategory =
+  | 'changed_mind'
+  | 'posted_by_mistake'
+  | 'no_longer_needed'
+  | 'timeline_issue'
+  | 'communication_issue'
+  | 'other';
 
 /**
  * Service for handling bounty cancellation requests and responses
@@ -16,16 +25,27 @@ export const cancellationService = {
     requesterId: string,
     requesterType: 'poster' | 'hunter',
     reason: string,
-    refundPercentage?: number
+    refundPercentage?: number,
+    reasonCategory: CancellationReasonCategory = 'other'
   ): Promise<BountyCancellation | null> {
     try {
       if (!isSupabaseConfigured) {
         throw new Error('Supabase not configured');
       }
 
-      // First, update the bounty status to 'cancellation_requested'
+      const bounty = await bountyService.getById(bountyId);
+      if (!bounty) {
+        throw new Error('Bounty not found');
+      }
+
+      const isForHonor = Boolean(bounty.is_for_honor);
+      const normalizedReason = this.composeReasonWithCategory(reason, reasonCategory);
+      const nowIso = new Date().toISOString();
+
+      // For honor bounties bypass manual dispute flow and auto-cancel.
+      const targetStatus = isForHonor ? 'cancelled' : 'cancellation_requested';
       const bountyUpdateResult = await bountyService.update(bountyId, {
-        status: 'cancellation_requested',
+        status: targetStatus,
       });
 
       if (!bountyUpdateResult) {
@@ -37,9 +57,14 @@ export const cancellationService = {
         bounty_id: bountyId,
         requester_id: requesterId,
         requester_type: requesterType,
-        reason,
-        status: 'pending',
-        refund_percentage: refundPercentage,
+        reason: normalizedReason,
+        status: isForHonor ? 'accepted' : 'pending',
+        refund_percentage: isForHonor ? 0 : refundPercentage,
+        refund_amount: isForHonor ? 0 : null,
+        response_message: isForHonor
+          ? 'Auto-accepted: for honor bounties do not require manual dispute resolution.'
+          : null,
+        resolved_at: isForHonor ? nowIso : null,
       };
 
       const { data, error } = await supabase
@@ -70,6 +95,21 @@ export const cancellationService = {
         resolvedAt: data.resolved_at,
       };
 
+      await this.trackCancellationMetrics({
+        requesterId,
+        bounty,
+        requesterType,
+        reasonCategory,
+        wasAutoCancelled: isForHonor,
+      });
+
+      if (isForHonor) {
+        await this.updateUserStats(
+          requesterId,
+          requesterType === 'hunter' ? 'withdrawal' : 'cancellation'
+        );
+      }
+
       return cancellation;
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error');
@@ -80,6 +120,33 @@ export const cancellationService = {
         error: { message: error.message } 
       });
       return null;
+    }
+  },
+
+  composeReasonWithCategory(reason: string, reasonCategory: CancellationReasonCategory): string {
+    const cleanReason = reason.trim();
+    return `[category:${reasonCategory}] ${cleanReason}`;
+  },
+
+  async trackCancellationMetrics(params: {
+    requesterId: string;
+    bounty: Bounty;
+    requesterType: 'poster' | 'hunter';
+    reasonCategory: CancellationReasonCategory;
+    wasAutoCancelled: boolean;
+  }): Promise<void> {
+    try {
+      await analyticsService.trackEvent('bounty_cancelled', {
+        user_id: params.requesterId,
+        bounty_id: String(params.bounty.id),
+        requester_type: params.requesterType,
+        reason_category: params.reasonCategory,
+        is_for_honor: params.bounty.is_for_honor,
+        was_auto_cancelled: params.wasAutoCancelled,
+        bounty_status_at_cancellation: params.bounty.status,
+      });
+    } catch {
+      // Cancellation should succeed even if analytics tracking fails.
     }
   },
 
