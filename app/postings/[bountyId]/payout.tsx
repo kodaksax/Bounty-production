@@ -210,6 +210,49 @@ export default function PayoutScreen() {
 
     Alert.alert(
       'Delete Bounty',
+
+  const handleArchiveBounty = async () => {
+    if (!bounty) return;
+
+    Alert.alert(
+      'Archive Bounty',
+      'Archive this bounty so it is hidden from active listings but retained in history?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Archive',
+          style: 'default',
+          onPress: async () => {
+            try {
+              setIsProcessing(true);
+
+              const updated = await bountyService.update(Number(bountyId), {
+                status: 'archived',
+              });
+
+              if (!updated) {
+                throw new Error('Failed to archive bounty');
+              }
+
+              Alert.alert('Archived', 'Bounty archived successfully.', [
+                {
+                  text: 'OK',
+                  onPress: () => {
+                    router.replace('/tabs/bounty-app');
+                  },
+                },
+              ]);
+            } catch (err) {
+              console.error('Error archiving bounty:', err);
+              Alert.alert('Error', 'Failed to archive bounty. Please try again.');
+            } finally {
+              setIsProcessing(false);
+            }
+          },
+        },
+      ]
+    );
+  };
       'Permanently delete this bounty from your postings? It will only be visible in your history. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
@@ -373,6 +416,41 @@ export default function PayoutScreen() {
               <MaterialIcons name="receipt" size={20} color="#10b981" />
               <Text style={styles.receiptButtonText}>Download Receipt</Text>
             </TouchableOpacity>
+
+            {/* Completed actions: allow archive or delete after completion */}
+            {bounty.status === 'completed' && (
+              <View style={styles.actionButtons}>
+                <TouchableOpacity
+                  style={[styles.completeButton, isProcessing && styles.buttonDisabled]}
+                  onPress={handleArchiveBounty}
+                  disabled={isProcessing}
+                >
+                  {isProcessing ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <MaterialIcons name="archive" size={20} color="#fff" />
+                      <Text style={styles.completeButtonText}>Archive</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.deleteButton, isProcessing && styles.buttonDisabled]}
+                  onPress={handleDeleteBounty}
+                  disabled={isProcessing}
+                >
+                  {isProcessing ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <MaterialIcons name="delete" size={20} color="#fff" />
+                      <Text style={styles.deleteButtonText}>Delete</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
           </>
         )}
 
