@@ -1,5 +1,7 @@
 // components/ui/bounty-workflow-guide.tsx
-// Dismissible step-by-step workflow guide for poster and hunter bounty card interactions.
+// DEPRECATED — replaced by the contextual onboarding system in components/onboarding/.
+// This file is kept for reference only. Do not use BountyWorkflowGuide in new code.
+// Use OnboardingChecklist, TooltipCoachmark, and Hotspot from components/onboarding/ instead.
 import { MaterialIcons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';

@@ -24,7 +24,8 @@ import { useValidUserId } from '../../hooks/useValidUserId'
 // Render In Progress tab using the same expandable card as My Postings
 import { MyPostingExpandable } from "../../components/my-posting-expandable"
 import { OfflineStatusBadge } from '../../components/offline-status-badge'
-import { BountyWorkflowGuide } from '../../components/ui/bounty-workflow-guide'
+import { OnboardingChecklist } from '../../components/onboarding/OnboardingChecklist'
+import { onboardingManager } from '../../components/onboarding/OnboardingManager'
 import { EmptyState } from '../../components/ui/empty-state'
 import { ApplicantCardSkeleton, PostingsListSkeleton } from '../../components/ui/skeleton-loaders'
 import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
@@ -179,6 +180,8 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
     const willExpand = !expandedMap[key]
 
     if (!willExpand) return
+    // Mark progress: user has expanded a bounty card
+    void onboardingManager.completeStep('expand_bounty')
     // Mark pending scroll — we'll measure and scroll when the expanded content calls back
     pendingScrollRef.current = { list, key }
   }
@@ -538,8 +541,14 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
         onToggle={() => handleToggleAndScroll('myPostings', bounty.id)}
         onEdit={bounty.status === 'open' ? () => handleEditBounty(bounty) : undefined}
         onDelete={bounty.status === 'open' ? () => handleDeleteBounty(bounty) : undefined}
-        onGoToReview={(id: string) => router.push({ pathname: '/postings/[bountyId]/review-and-verify', params: { bountyId: id } })}
-        onGoToPayout={(id: string) => router.push({ pathname: '/postings/[bountyId]/payout', params: { bountyId: id } })}
+        onGoToReview={(id: string) => {
+          void onboardingManager.completeStep('review_submission')
+          router.push({ pathname: '/postings/[bountyId]/review-and-verify', params: { bountyId: id } })
+        }}
+        onGoToPayout={(id: string) => {
+          void onboardingManager.completeStep('release_payment')
+          router.push({ pathname: '/postings/[bountyId]/payout', params: { bountyId: id } })
+        }}
         variant={'owner'}
         isListScrolling={isListScrolling}
         onRefresh={refreshAll}
@@ -558,8 +567,14 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
         expanded={!!expandedMap[String(bounty.id)]}
         onToggle={() => handleToggleAndScroll('inProgress', bounty.id)}
         onWithdrawApplication={bounty.status === 'open' ? () => handleWithdrawApplication(bounty.id) : undefined}
-        onGoToReview={(id: string) => router.push({ pathname: '/in-progress/[bountyId]/hunter/review-and-verify', params: { bountyId: id } })}
-        onGoToPayout={(id: string) => router.push({ pathname: '/in-progress/[bountyId]/hunter/payout', params: { bountyId: id } })}
+        onGoToReview={(id: string) => {
+          void onboardingManager.completeStep('review_submission')
+          router.push({ pathname: '/in-progress/[bountyId]/hunter/review-and-verify', params: { bountyId: id } })
+        }}
+        onGoToPayout={(id: string) => {
+          void onboardingManager.completeStep('release_payment')
+          router.push({ pathname: '/in-progress/[bountyId]/hunter/payout', params: { bountyId: id } })
+        }}
         variant={'hunter'}
         isListScrolling={isListScrolling}
         onRefresh={refreshAll}
@@ -570,7 +585,10 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   const renderRequestItem = React.useCallback(({ item: request }: { item: BountyRequestWithDetails }) => (
     <ApplicantCard
       request={request}
-      onAccept={handleAcceptRequest}
+      onAccept={async (id) => {
+        await handleAcceptRequest(id)
+        void onboardingManager.completeStep('accept_hunter')
+      }}
       onReject={handleRejectRequest}
     />
   ), [handleAcceptRequest, handleRejectRequest]);
@@ -661,7 +679,10 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                 return (
                   <TouchableOpacity
                     key={tab.id}
-                    onPress={() => setActiveTab(tab.id)}
+                    onPress={() => {
+                      if (tab.id === 'requests') void onboardingManager.completeStep('view_requests')
+                      setActiveTab(tab.id)
+                    }}
                     activeOpacity={0.85}
                     className={cn(
                       "flex-1 py-2 mx-0.5 rounded-full items-center justify-center touch-target-min",
@@ -747,7 +768,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                   extraData={{ inProgressBounties, expandedMap }}
                   ListHeaderComponent={(
                     <View>
-                      <BountyWorkflowGuide variant="hunter-inprogress" />
+                      <OnboardingChecklist />
                       <View className="flex-row gap-2 mb-1">
                         {(['all', 'online', 'in_person'] as const).map(f => {
                           const label = f === 'all' ? 'All' : f === 'online' ? 'Online' : 'In Person'
@@ -824,7 +845,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                   keyExtractor={keyExtractorRequest}
                   getItemLayout={getItemLayoutRequest}
                   renderItem={renderRequestItem}
-                  ListHeaderComponent={<BountyWorkflowGuide variant="poster-requests" />}
+                  ListHeaderComponent={<OnboardingChecklist />}
                   ListEmptyComponent={
                     isLoading.requests ? (
                       <View className="px-4 py-6">
@@ -880,7 +901,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                   extraData={{ myBounties, expandedMap }}
                   ListHeaderComponent={(
                     <View>
-                      <BountyWorkflowGuide variant="poster-postings" />
+                      <OnboardingChecklist />
                       <View className="flex-row gap-2 mb-1">
                         {(['all', 'online', 'in_person'] as const).map(f => {
                           const label = f === 'all' ? 'All' : f === 'online' ? 'Online' : 'In Person'
