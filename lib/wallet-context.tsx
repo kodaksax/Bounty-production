@@ -61,6 +61,7 @@ const INITIAL_BALANCE = 0;
 
 export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [balance, setBalance] = useState<number>(INITIAL_BALANCE);
+  const balanceRef = useRef<number>(INITIAL_BALANCE);
   const [isLoading, setIsLoading] = useState(true);
   const [transactions, setTransactions] = useState<WalletTransactionRecord[]>([]);
   const lastOptimisticDepositRef = useRef<number | null>(null);
@@ -72,6 +73,14 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       console.error('[wallet] Error persisting balance:', error);
     }
   }, []);
+
+  // Keep a ref in sync with the latest balance so callbacks can read the
+  // current value without capturing a stale closure. This lets refreshFromApi
+  // run immediately after optimistic updates (setBalance) and observe the
+  // most recent value.
+  useEffect(() => {
+    balanceRef.current = balance;
+  }, [balance]);
 
   const persistTransactions = useCallback(async (list: WalletTransactionRecord[]) => {
     try { 
@@ -124,11 +133,13 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           lastOptimisticDepositRef.current !== null &&
           now - lastOptimisticDepositRef.current < 60_000;
 
-        const resolvedBalance = hasRecentOptimisticDeposit && balance > apiBalance
-          ? balance
+        const currentBalance = balanceRef.current;
+
+        const resolvedBalance = hasRecentOptimisticDeposit && currentBalance > apiBalance
+          ? currentBalance
           : apiBalance;
 
-        if (!hasRecentOptimisticDeposit || balance <= apiBalance) {
+        if (!hasRecentOptimisticDeposit || currentBalance <= apiBalance) {
           lastOptimisticDepositRef.current = null;
         }
 
@@ -195,7 +206,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } finally {
       setIsLoading(false);
     }
-  }, [persist, persistTransactions, balance]);
+  }, [persist, persistTransactions]);
 
   const refresh = useCallback(async () => {
     setIsLoading(true);
@@ -273,6 +284,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const deposit = useCallback(async (amount: number, meta?: Partial<WalletTransactionRecord['details']>) => {
     if (amount <= 0 || Number.isNaN(amount)) return;
+    // Update the ref immediately so callers that run refreshFromApi right
+    // after this optimistic update read the latest value instead of a stale
+    // closure. Persist will be called inside the state updater as well.
+    balanceRef.current = balanceRef.current + amount;
     setBalance(prev => {
       const next = prev + amount;
       persist(next);
