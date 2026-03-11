@@ -6,6 +6,7 @@ import type { BountyFeedHandle } from 'components/bounty-feed'
 import { BountyFeed } from 'components/bounty-feed'
 import { ConnectionStatus } from 'components/connection-status'
 // Search moved to its own route (app/tabs/search.tsx) so we no longer render it inline.
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { BottomNav } from 'components/ui/bottom-nav'
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -15,11 +16,10 @@ import { useConversations } from '../../hooks/useConversations'
 import { useAdmin } from '../../lib/admin-context'
 import { authProfileService } from '../../lib/services/auth-profile-service'
 import { getOnboardingCompleteKey } from '../../lib/storage/onboarding'
-import AsyncStorage from '@react-native-async-storage/async-storage'
 
 function BountyAppInner() {
   const router = useRouter()
-  const { screen } = useLocalSearchParams<{ screen?: string }>()
+  const { screen, initialTab } = useLocalSearchParams<{ screen?: string, initialTab?: string }>()
   const { isAdmin, isAdminTabEnabled } = useAdmin()
   // Get current user ID from auth context (reactive to auth state changes)
   const { session, isLoading, profile } = useAuthContext()
@@ -72,6 +72,8 @@ function BountyAppInner() {
   const showAdminTab = isAdmin && isAdminTabEnabled
   const allowedScreens = new Set(['bounty', 'wallet', 'postings', 'profile', 'create', 'admin'])
   const paramScreen = typeof screen === 'string' && screen.length > 0 && allowedScreens.has(screen) ? screen : 'bounty'
+  const allowedInitialTabs = new Set(['new', 'inProgress', 'myPostings', 'requests'])
+  const paramInitialTab = typeof initialTab === 'string' && initialTab.length > 0 && allowedInitialTabs.has(initialTab) ? initialTab : undefined
   const [activeScreen, setActiveScreen] = useState(paramScreen)
   const [showBottomNav, setShowBottomNav] = useState(true)
 
@@ -157,6 +159,7 @@ function BountyAppInner() {
       )}
       {activeScreen === "postings" && (
         <PostingsScreen
+          initialTab={paramInitialTab}
           onBack={() => setActiveScreen("bounty")}
           activeScreen={activeScreen}
           setActiveScreen={setActiveScreen}

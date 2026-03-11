@@ -38,6 +38,7 @@ import { useWallet } from '../../lib/wallet-context'
 
 interface PostingsScreenProps {
   onBack?: () => void
+  initialTab?: string
   activeScreen: string
   setActiveScreen: (screen: string) => void
   onBountyPosted?: () => void // Callback when a bounty is successfully posted
@@ -82,13 +83,13 @@ export const MyPostingRow: React.FC<MyPostingRowProps> = React.memo(function MyP
   )
 })
 
-export function PostingsScreen({ onBack, activeScreen, setActiveScreen, onBountyPosted, onBountyAccepted, setShowBottomNav }: PostingsScreenProps) {
+export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScreen, onBountyPosted, onBountyAccepted, setShowBottomNav }: PostingsScreenProps) {
   const { isEmailVerified } = useAuthContext()
   const rawUserId = useValidUserId()
   const currentUserId = rawUserId ?? undefined
   const router = useRouter()
 
-  const [activeTab, setActiveTab] = useState("new")
+  const [activeTab, setActiveTab] = useState(initialTab ?? "new")
   const [showArchivedBounties, setShowArchivedBounties] = useState(false)
   // Always use guided multi-step flow on New tab
   const [showMultiStepFlow, setShowMultiStepFlow] = useState(true)
