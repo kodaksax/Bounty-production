@@ -218,11 +218,18 @@ export default function UserProfileScreen() {
         throw new Error('Conversation created but no ID returned');
       }
 
-      // Set intent to open this conversation
+      // Set intent to open this conversation (Messenger will pick this up)
       await navigationIntent.setPendingConversationId(conversation.id);
 
-      // Navigate to messenger - only after conversation is successfully created
-      router.push(ROUTES.TABS.MESSENGER as any);
+      // Navigate into the BountyApp container and request the messenger view so
+      // the BottomNav (tab bar) is preserved. Navigating directly to the
+      // messenger route renders the screen outside the tabs and hides the nav.
+      type BountyAppScreen = "create";
+      const targetScreen: BountyAppScreen = "create";
+      const bountyAppRoute = `${ROUTES.TABS.BOUNTY_APP}?screen=${encodeURIComponent(
+        targetScreen
+      )}` as const;
+      router.push(bountyAppRoute as any);
     } catch (error) {
       console.error('Error creating conversation:', error);
       // Ensure we don't navigate on error
