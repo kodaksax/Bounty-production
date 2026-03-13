@@ -3,8 +3,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 const PENDING_CONV_KEY = '@bountyexpo:pending_open_conversation'
+const PENDING_NAV_KEY = '@bountyexpo:pending_navigation'
 
 let _pendingConversationId: string | null = null
+let _pendingNavigation: string | null = null
 
 export const navigationIntent = {
   setPendingConversationId: async (id: string | null) => {
@@ -55,6 +57,44 @@ export const navigationIntent = {
       return null
     } catch (e) {
       console.error('navigationIntent: failed to read/clear pending conversation id', e)
+      return null
+    }
+  },
+
+  // Pending navigation path (string). Use when one screen needs to request
+  // that the root layout or tab container navigate to a specific route after
+  // a redirect/pop. Stored in-memory and persisted to AsyncStorage as a
+  // best-effort fallback for reloads.
+  setPendingNavigation: async (path: string | null) => {
+    try {
+      if (path === null) {
+        try { await AsyncStorage.removeItem(PENDING_NAV_KEY) } catch {}
+        _pendingNavigation = null
+      } else {
+        _pendingNavigation = path
+        await AsyncStorage.setItem(PENDING_NAV_KEY, path)
+      }
+    } catch (e) {
+      console.error('navigationIntent: failed to persist pending navigation', e)
+    }
+  },
+
+  getAndClearPendingNavigation: async (): Promise<string | null> => {
+    try {
+      if (_pendingNavigation) {
+        const v = _pendingNavigation
+        _pendingNavigation = null
+        try { await AsyncStorage.removeItem(PENDING_NAV_KEY) } catch {}
+        return v
+      }
+      const stored = await AsyncStorage.getItem(PENDING_NAV_KEY)
+      if (stored) {
+        try { await AsyncStorage.removeItem(PENDING_NAV_KEY) } catch {}
+        return stored
+      }
+      return null
+    } catch (e) {
+      console.error('navigationIntent: failed to read/clear pending navigation', e)
       return null
     }
   },

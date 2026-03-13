@@ -36,7 +36,7 @@ import { navigationIntent } from "../../lib/services/navigation-intent";
 ;
 
 export default function UserProfileScreen() {
-  const { userId } = useLocalSearchParams<{ userId: string }>();
+  const { userId, referrer } = useLocalSearchParams<{ userId: string; referrer?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const currentUserId = getCurrentUserId();
@@ -319,7 +319,22 @@ export default function UserProfileScreen() {
     setShowMoreMenu(false);
   };
 
-  const handleBack = () => {
+  const handleBack = async () => {
+    // If a referrer was provided when opening this profile, try to route
+    // back to it. Use navigationIntent to hand the referrer to the BountyApp
+    // root which will apply it even if the BountyApp is already mounted.
+    if (referrer) {
+      try {
+        const decoded = decodeURIComponent(referrer as string);
+        await navigationIntent.setPendingNavigation(decoded as string);
+        // Replace to the BountyApp root so it can consume the pending nav.
+        router.replace(ROUTES.TABS.BOUNTY_APP as any);
+        return;
+      } catch (err) {
+        // fall through to default behavior
+      }
+    }
+
     if (router.canGoBack()) {
       router.back();
     } else {

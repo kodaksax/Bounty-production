@@ -21,6 +21,7 @@ import { ArchivedBountiesScreen } from "../../components/archived-bounties-scree
 import { BountyConfirmationCard } from "../../components/bounty-confirmation-card"
 import { EditPostingModal } from "../../components/edit-posting-modal"
 import { useValidUserId } from '../../hooks/useValidUserId'
+import { ROUTES } from '../../lib/routes'
 // Render In Progress tab using the same expandable card as My Postings
 import { MyPostingExpandable } from "../../components/my-posting-expandable"
 import { OfflineStatusBadge } from '../../components/offline-status-badge'
@@ -572,6 +573,9 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
       request={request}
       onAccept={handleAcceptRequest}
       onReject={handleRejectRequest}
+      // Ensure returning from profile restores the Postings screen to the
+      // Requests tab reliably by directing BountyApp to open postings + requests.
+      referrerOverride={`${ROUTES.TABS.BOUNTY_APP}?screen=postings&initialTab=requests`}
     />
   ), [handleAcceptRequest, handleRejectRequest]);
 
