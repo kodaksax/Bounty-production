@@ -39,6 +39,7 @@ export interface WalletTransactionRecord {
 interface WalletContextValue {
   balance: number;
   isLoading: boolean;
+  secureStoreAvailable: boolean;
   deposit: (amount: number, meta?: Partial<WalletTransactionRecord['details']>) => Promise<void>;
   withdraw: (amount: number, meta?: Partial<WalletTransactionRecord['details']>) => Promise<boolean>; // false if insufficient
   setBalance: (amount: number) => void;
@@ -61,15 +62,24 @@ const INITIAL_BALANCE = 0;
 
 export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [balance, setBalance] = useState<number>(INITIAL_BALANCE);
+  const [secureStoreAvailable, setSecureStoreAvailable] = useState<boolean>(true);
   const balanceRef = useRef<number>(INITIAL_BALANCE);
   const [isLoading, setIsLoading] = useState(true);
   const [transactions, setTransactions] = useState<WalletTransactionRecord[]>([]);
   const lastOptimisticDepositRef = useRef<number | null>(null);
 
   const persist = useCallback(async (value: number) => {
-    try { 
-      await setSecureJSON(SecureKeys.WALLET_BALANCE, value); 
-    } catch (error) {
+    try {
+      await setSecureJSON(SecureKeys.WALLET_BALANCE, value);
+    } catch (error: any) {
+      // If secure store is unavailable for sensitive keys, set a flag so
+      // the UI can surface a clear, user-facing warning (do not silently
+      // continue degrading security).
+      if (error?.message === 'SecureStoreUnavailable') {
+        console.error('[wallet] SecureStore is unavailable for sensitive keys:', error);
+        setSecureStoreAvailable(false);
+        return;
+      }
       console.error('[wallet] Error persisting balance:', error);
     }
   }, []);
@@ -586,6 +596,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const value: WalletContextValue = {
     balance,
     isLoading,
+    secureStoreAvailable,
     deposit,
     withdraw,
     setBalance: (amt: number) => { setBalance(amt); persist(amt); },

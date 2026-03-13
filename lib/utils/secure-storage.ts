@@ -18,6 +18,16 @@ const SECURE_OPTS: SecureStore.SecureStoreOptions | undefined =
     ? { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK } 
     : undefined;
 
+// Explicit list of keys that are considered sensitive. For these keys we
+// MUST NOT silently degrade to AsyncStorage because that would remove
+// encryption-at-rest guarantees. If SecureStore is unavailable for these
+// keys we throw a specific error so callers can surface a warning to users.
+const SENSITIVE_KEYS = new Set([
+  '@bountyexpo:secure:wallet_balance',
+  '@bountyexpo:secure:wallet_transactions',
+  '@bountyexpo:secure:payment_token',
+]);
+
 /**
  * Sanitize keys for Expo SecureStore.
  * SecureStore only accepts alphanumeric characters, '.', '-', and '_'.
@@ -45,7 +55,16 @@ export async function setSecureItem(key: string, value: string): Promise<void> {
     await SecureStore.setItemAsync(secureKey, value, SECURE_OPTS);
     return;
   } catch (error) {
-    // If SecureStore is unavailable (e.g. Expo Go limitations) fall back to AsyncStorage
+    // If the key is classified as sensitive, do NOT fall back — throw so
+    // callers can surface an explicit warning and avoid silently degrading
+    // security. For non-sensitive keys, fall back to AsyncStorage.
+    if (SENSITIVE_KEYS.has(key)) {
+      const err = new Error('SecureStoreUnavailable');
+      // preserve original error on console for diagnostics
+      console.error(`[SecureStorage] SecureStore.setItemAsync failed for sensitive key ${key}:`, error);
+      throw err;
+    }
+
     console.warn(`[SecureStorage] SecureStore unavailable for ${key}, falling back to AsyncStorage:`, error);
     try {
       await AsyncStorage.setItem(fallbackKey, value);
@@ -65,11 +84,19 @@ export async function getSecureItem(key: string): Promise<string | null> {
   const fallbackKey = `secure:${secureKey}`;
   try {
     const result = await SecureStore.getItemAsync(secureKey);
+    // If SecureStore returned successfully (even null), treat that as
+    // authoritative: only attempt AsyncStorage fallback when SecureStore
+    // throws (unavailable). This avoids double storage calls for missing
+    // keys.
     if (result !== null && result !== undefined) return result;
+    return null;
   } catch (error) {
+    if (SENSITIVE_KEYS.has(key)) {
+      console.error(`[SecureStorage] SecureStore.getItemAsync failed for sensitive key ${key}:`, error);
+      throw new Error('SecureStoreUnavailable');
+    }
     console.warn(`[SecureStorage] SecureStore.getItemAsync failed for ${key}, trying fallback AsyncStorage:`, error);
   }
-
   try {
     const fallback = await AsyncStorage.getItem(fallbackKey);
     return fallback;
@@ -85,17 +112,56 @@ export async function getSecureItem(key: string): Promise<string | null> {
 export async function deleteSecureItem(key: string): Promise<void> {
   const secureKey = sanitizeSecureKey(key);
   const fallbackKey = `secure:${secureKey}`;
+  // Determine where the key actually exists before deleting so we don't
+  // blindly erase both stores. If SecureStore is unavailable for sensitive
+  // keys, throw and do not touch fallback storage.
+  let securePresent = false;
+  let fallbackPresent = false;
+
   try {
-    await SecureStore.deleteItemAsync(secureKey);
+    const val = await SecureStore.getItemAsync(secureKey);
+    securePresent = val !== null && val !== undefined;
   } catch (error) {
-    console.warn(`[SecureStorage] SecureStore.deleteItemAsync failed for ${key}, attempting fallback delete:`, error);
+    if (SENSITIVE_KEYS.has(key)) {
+      console.error(`[SecureStorage] SecureStore.getItemAsync failed for sensitive key ${key}:`, error);
+      throw new Error('SecureStoreUnavailable');
+    }
+    console.warn(`[SecureStorage] SecureStore.getItemAsync failed for ${key}, will check fallback storage:`, error);
+    securePresent = false;
   }
 
   try {
-    await AsyncStorage.removeItem(fallbackKey);
+    const fb = await AsyncStorage.getItem(fallbackKey);
+    fallbackPresent = fb !== null && fb !== undefined;
   } catch (err) {
-    console.error(`[SecureStorage] Error deleting secure item ${key} from fallback storage:`, err);
-    throw new Error(`Failed to delete secure data: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    console.error(`[SecureStorage] Error checking fallback storage for ${key}:`, err);
+    // Continue - we may still delete SecureStore if present
+    fallbackPresent = false;
+  }
+
+  // If secure store has the item, delete it. If deletion fails and the key is
+  // sensitive, rethrow to avoid leaving data in fallback while secure deletion
+  // failed.
+  if (securePresent) {
+    try {
+      await SecureStore.deleteItemAsync(secureKey);
+    } catch (error) {
+      if (SENSITIVE_KEYS.has(key)) {
+        console.error(`[SecureStorage] SecureStore.deleteItemAsync failed for sensitive key ${key}:`, error);
+        throw new Error('SecureStoreUnavailable');
+      }
+      console.warn(`[SecureStorage] SecureStore.deleteItemAsync failed for ${key}, continuing to fallback if present:`, error);
+    }
+  }
+
+  // Only remove from AsyncStorage if the fallback key actually exists.
+  if (fallbackPresent) {
+    try {
+      await AsyncStorage.removeItem(fallbackKey);
+    } catch (err) {
+      console.error(`[SecureStorage] Error deleting secure item ${key} from fallback storage:`, err);
+      throw new Error(`Failed to delete secure data: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
   }
 }
 
