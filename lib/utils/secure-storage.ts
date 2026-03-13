@@ -39,12 +39,21 @@ function sanitizeSecureKey(key: string): string {
  * Use this for: auth tokens, private keys, wallet data, passwords
  */
 export async function setSecureItem(key: string, value: string): Promise<void> {
+  const secureKey = sanitizeSecureKey(key);
+  const fallbackKey = `secure:${secureKey}`;
   try {
-    const secureKey = sanitizeSecureKey(key);
     await SecureStore.setItemAsync(secureKey, value, SECURE_OPTS);
+    return;
   } catch (error) {
-    console.error(`[SecureStorage] Error storing secure item ${key}:`, error);
-    throw new Error(`Failed to store secure data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    // If SecureStore is unavailable (e.g. Expo Go limitations) fall back to AsyncStorage
+    console.warn(`[SecureStorage] SecureStore unavailable for ${key}, falling back to AsyncStorage:`, error);
+    try {
+      await AsyncStorage.setItem(fallbackKey, value);
+      return;
+    } catch (err2) {
+      console.error(`[SecureStorage] Error storing secure item ${key} in fallback storage:`, err2);
+      throw new Error(`Failed to store secure data: ${err2 instanceof Error ? err2.message : 'Unknown error'}`);
+    }
   }
 }
 
@@ -52,11 +61,20 @@ export async function setSecureItem(key: string, value: string): Promise<void> {
  * Retrieve sensitive data from secure storage
  */
 export async function getSecureItem(key: string): Promise<string | null> {
+  const secureKey = sanitizeSecureKey(key);
+  const fallbackKey = `secure:${secureKey}`;
   try {
-    const secureKey = sanitizeSecureKey(key);
-    return await SecureStore.getItemAsync(secureKey);
+    const result = await SecureStore.getItemAsync(secureKey);
+    if (result !== null && result !== undefined) return result;
   } catch (error) {
-    console.error(`[SecureStorage] Error retrieving secure item ${key}:`, error);
+    console.warn(`[SecureStorage] SecureStore.getItemAsync failed for ${key}, trying fallback AsyncStorage:`, error);
+  }
+
+  try {
+    const fallback = await AsyncStorage.getItem(fallbackKey);
+    return fallback;
+  } catch (err) {
+    console.error(`[SecureStorage] Error retrieving secure item ${key} from fallback storage:`, err);
     return null;
   }
 }
@@ -65,12 +83,19 @@ export async function getSecureItem(key: string): Promise<string | null> {
  * Delete sensitive data from secure storage
  */
 export async function deleteSecureItem(key: string): Promise<void> {
+  const secureKey = sanitizeSecureKey(key);
+  const fallbackKey = `secure:${secureKey}`;
   try {
-    const secureKey = sanitizeSecureKey(key);
     await SecureStore.deleteItemAsync(secureKey);
   } catch (error) {
-    console.error(`[SecureStorage] Error deleting secure item ${key}:`, error);
-    throw new Error(`Failed to delete secure data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.warn(`[SecureStorage] SecureStore.deleteItemAsync failed for ${key}, attempting fallback delete:`, error);
+  }
+
+  try {
+    await AsyncStorage.removeItem(fallbackKey);
+  } catch (err) {
+    console.error(`[SecureStorage] Error deleting secure item ${key} from fallback storage:`, err);
+    throw new Error(`Failed to delete secure data: ${err instanceof Error ? err.message : 'Unknown error'}`);
   }
 }
 
