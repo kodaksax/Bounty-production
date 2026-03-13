@@ -620,6 +620,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     bucket: 'bounty-attachments',
     folder: `bounties/${bounty.id}/proofs`,
     maxSizeMB: 20,
+    allowsMultiple: true,
   })
 
   const handleAddProof = async () => {

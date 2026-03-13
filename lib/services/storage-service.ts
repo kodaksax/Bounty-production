@@ -429,4 +429,78 @@ export const storageService = {
       return null
     }
   },
+
+  /**
+   * Upload multiple files with a concurrency limit and aggregated progress.
+   * - `fileUris` is an array of local URIs
+   * - `options.path` is treated as a directory prefix; each file's basename is appended
+   */
+  async uploadFiles(
+    fileUris: string[],
+    options: UploadOptions & {
+      concurrency?: number
+      onFileProgress?: (index: number, progress: number) => void
+      onAggregateProgress?: (progress: number) => void
+    }
+  ): Promise<UploadResult[]> {
+    const { concurrency = 3, onFileProgress, onAggregateProgress, bucket } = options as any
+
+    if (!Array.isArray(fileUris) || fileUris.length === 0) return []
+
+    const results: UploadResult[] = new Array(fileUris.length)
+    const progressByIndex: number[] = new Array(fileUris.length).fill(0)
+
+    const updateAggregate = () => {
+      const sum = progressByIndex.reduce((s, p) => s + (p || 0), 0)
+      const agg = sum / fileUris.length
+      onAggregateProgress?.(agg)
+    }
+
+    // Simple concurrency worker pool
+    let nextIndex = 0
+
+    const worker = async () => {
+      while (true) {
+        const i = nextIndex
+        nextIndex += 1
+        if (i >= fileUris.length) return
+
+        const uri = fileUris[i]
+        const filename = uri.split('/').pop() || `file-${i}`
+        const basePath = (options.path || '').replace(/\/$/, '')
+        const filePath = basePath ? `${basePath}/${filename}` : filename
+
+        try {
+          const res = await this.uploadFile(uri, {
+            bucket,
+            path: filePath,
+            onProgress: p => {
+              progressByIndex[i] = p
+              onFileProgress?.(i, p)
+              updateAggregate()
+            },
+          })
+
+          results[i] = res
+        } catch (err) {
+          results[i] = {
+            success: false,
+            error: err instanceof Error ? err.message : String(err),
+          }
+        }
+      }
+    }
+
+    // Launch workers
+    const workers: Promise<void>[] = []
+    const actualConcurrency = Math.max(1, Math.min(concurrency, fileUris.length))
+    for (let w = 0; w < actualConcurrency; w++) workers.push(worker())
+
+    await Promise.all(workers)
+
+    // Ensure final aggregate = 1.0 if all succeeded
+    updateAggregate()
+
+    return results
+  },
 }

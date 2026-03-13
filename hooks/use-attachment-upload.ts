@@ -121,16 +121,62 @@ export function useAttachmentUpload(options: AttachmentUploadOptions = {}) {
 
       if (isMounted.current) setState((s) => ({ ...s, isPicking: false }))
 
-      // Upload the attachments one by one
-      const uploadedAttachments: Attachment[] = []
-      for (const result of results) {
-        const uploaded = await uploadAttachment(result)
-        if (uploaded) {
-          uploadedAttachments.push(uploaded)
-        }
-      }
+      // Upload the attachments using the batch helper for concurrency
+      if (isMounted.current) setState((s) => ({ ...s, isUploading: true, progress: 0 }))
 
-      return uploadedAttachments.length > 0 ? uploadedAttachments : null
+      try {
+        const fileMetas = results.map((r) => r)
+        const fileUris = fileMetas.map((m) => m.uri)
+
+        const uploadResults = await storageService.uploadFiles(fileUris, {
+          bucket,
+          path: folder,
+          concurrency: allowsMultiple ? 3 : 1,
+          onFileProgress: (index, p) => {
+            // noop per-file hook for now; could be wired up to individual UI
+          },
+          onAggregateProgress: (agg) => {
+            if (isMounted.current) setState((s) => ({ ...s, progress: agg }))
+          },
+        })
+
+        const uploadedAttachments: Attachment[] = []
+
+        for (let i = 0; i < uploadResults.length; i++) {
+          const res = uploadResults[i]
+          const meta = fileMetas[i]
+          if (res && res.success && res.url) {
+            const timestamp = Date.now()
+            const attachment: Attachment = {
+              id: `att-${timestamp}-${i}`,
+              name: meta.name || `file-${timestamp}`,
+              uri: meta.uri,
+              remoteUri: res.url,
+              mimeType: meta.mimeType,
+              size: meta.size,
+              status: 'uploaded',
+              progress: 1,
+            }
+            uploadedAttachments.push(attachment)
+            onUploaded?.(attachment)
+            if (isMounted.current) setState((s) => ({ ...s, lastUploaded: attachment }))
+          } else {
+            const errMsg = res?.error || 'Upload failed'
+            const err = new Error(errMsg)
+            onError?.(err)
+          }
+        }
+
+        if (isMounted.current) setState((s) => ({ ...s, isUploading: false, progress: 1 }))
+
+        return uploadedAttachments.length > 0 ? uploadedAttachments : null
+      } catch (err) {
+        const errorObj = err instanceof Error ? err : new Error('Batch upload failed')
+        if (isMounted.current) setState((s) => ({ ...s, isUploading: false, progress: 0, error: errorObj.message }))
+        onError?.(errorObj)
+        Alert.alert('Upload Failed', `${errorObj.message}\n\nPlease check your connection and try again.`)
+        return null
+      }
     } catch (error) {
       const err = error instanceof Error ? error : new Error('Failed to pick attachment')
       if (isMounted.current) setState((s) => ({ ...s, isPicking: false, isUploading: false, error: err.message }))

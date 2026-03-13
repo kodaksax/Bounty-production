@@ -15,7 +15,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HunterDashboardSkeleton } from '../../../../components/ui/skeleton-loaders';
 import { useAttachmentUpload } from '../../../../hooks/use-attachment-upload';
-import { useAuthContext } from '../../../../hooks/use-auth-context';
 import { bountyRequestService } from '../../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../../lib/services/bounty-service';
 import { completionService, type ProofItem } from '../../../../lib/services/completion-service';
@@ -64,6 +63,7 @@ export default function HunterReviewAndVerifyScreen() {
     bucket: 'bounty-attachments',
     folder: 'proofs',
     maxSizeMB: 10,
+    allowsMultiple: true,
     onUploaded: (attachment) => {
       const proofItem: ProofItem = {
         id: attachment.id,
