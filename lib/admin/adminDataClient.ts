@@ -151,12 +151,17 @@ export const adminDataClient = {
 
   // Remove a bounty for community guidelines violation (archives the bounty)
   async removeBountyForViolation(id: string): Promise<void> {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('bounties')
       .update({ status: 'archived', updated_at: new Date().toISOString() })
-      .eq('id', id);
+      .eq('id', id)
+      .select()
+      .single();
 
     if (error) throw new Error(error.message);
+
+    // If no row was returned, the update did not match any bounty id — treat as failure
+    if (!data) throw new Error('No bounty found to remove');
   },
 
   // Fetch users with optional status/verification filter
