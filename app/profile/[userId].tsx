@@ -445,44 +445,28 @@ export default function UserProfileScreen() {
               <Text style={styles.primaryButtonText}>Edit Profile</Text>
             </TouchableOpacity>
           ) : (
-            <>
+            FOLLOW_FEATURE_ENABLED ? (
               <TouchableOpacity
-                style={[styles.primaryButton, isCreatingChat && styles.primaryButtonDisabled]}
-                onPress={handleMessage}
-                disabled={isCreatingChat}
+                style={[styles.secondaryButton, isFollowing && styles.followingButton]}
+                onPress={toggleFollow}
+                disabled={followLoading}
               >
-                {isCreatingChat ? (
-                  <ActivityIndicator size="small" color="#065f46" />
+                {followLoading ? (
+                  <ActivityIndicator size="small" color={isFollowing ? "#10b981" : "#ffffff"} />
                 ) : (
                   <>
-                    <MaterialIcons name="message" size={18} color="#065f46" />
-                    <Text style={styles.primaryButtonText}>Send Message</Text>
+                    <MaterialIcons
+                      name={isFollowing ? "person-remove" : "person-add"}
+                      size={18}
+                      color={isFollowing ? "#10b981" : "#ffffff"}
+                    />
+                    <Text style={[styles.secondaryButtonText, isFollowing && styles.followingButtonText]}>
+                      {isFollowing ? "Following" : "Follow"}
+                    </Text>
                   </>
                 )}
               </TouchableOpacity>
-              {FOLLOW_FEATURE_ENABLED && (
-                <TouchableOpacity
-                  style={[styles.secondaryButton, isFollowing && styles.followingButton]}
-                  onPress={toggleFollow}
-                  disabled={followLoading}
-                >
-                  {followLoading ? (
-                    <ActivityIndicator size="small" color={isFollowing ? "#10b981" : "#ffffff"} />
-                  ) : (
-                    <>
-                      <MaterialIcons
-                        name={isFollowing ? "person-remove" : "person-add"}
-                        size={18}
-                        color={isFollowing ? "#10b981" : "#ffffff"}
-                      />
-                      <Text style={[styles.secondaryButtonText, isFollowing && styles.followingButtonText]}>
-                        {isFollowing ? "Following" : "Follow"}
-                      </Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              )}
-            </>
+            ) : null
           )}
         </View>
 
