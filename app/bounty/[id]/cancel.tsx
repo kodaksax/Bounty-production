@@ -8,14 +8,14 @@ import type { Bounty } from 'lib/services/database.types';
 import { AlertCircle, ArrowLeft, HelpCircle, Mail, Phone } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Linking,
-    ScrollView,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Linking,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 const CANCELLATION_REASON_OPTIONS: { label: string; value: CancellationReasonCategory }[] = [
@@ -97,10 +97,19 @@ export default function CancellationRequestScreen() {
       
       if (result) {
         const isForHonorAutoCancel = !!bounty.is_for_honor;
+        if (isForHonorAutoCancel) {
+          // For honor bounties are auto-removed after cancellation — delete locally/server-side so lists update
+          try {
+            await bountyService.delete(bounty.id);
+          } catch (e) {
+            console.error('Error auto-deleting for-honor bounty after cancellation:', e);
+          }
+        }
+
         Alert.alert(
           'Success',
           isForHonorAutoCancel
-            ? 'For honor bounty cancelled successfully. No manual dispute review is required.'
+            ? 'For honor bounty cancelled and removed from your postings. No manual dispute review is required.'
             : 'Cancellation request submitted successfully',
           [
             {
