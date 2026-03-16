@@ -18,6 +18,21 @@ const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const path = require('path');
 
+// Notification message helpers
+const { createMessages: createExpoMessages } = require('./lib/notificationMessage');
+
+// Determine a single fetch implementation for the module.
+// Prefer global.fetch (Node 18+), otherwise try node-fetch if installed.
+let fetchImpl = null;
+try {
+  fetchImpl = global.fetch || require('node-fetch');
+} catch (e) {
+  fetchImpl = global.fetch || null;
+  if (!fetchImpl) {
+    console.warn('[server] No fetch implementation available. Install node-fetch or use Node 18+ to enable global.fetch. Push notifications and edge invocations may be disabled.');
+  }
+}
+
 // Initialize Express BEFORE any app.use(...)
 const app = express();
 
@@ -184,6 +199,141 @@ const handleError = (res, error, customMessage = 'Internal server error') => {
     details: process.env.NODE_ENV === 'development' ? error.message : undefined
   });
 };
+
+// Helper: send push notifications to a list of profile IDs via Supabase-stored tokens
+async function sendPushToProfiles(profileIds = [], title = '', body = '', data = {}) {
+  try {
+    if (!supabaseAdmin) {
+      console.warn('[sendPushToProfiles] supabaseAdmin not configured; skipping push');
+      return { ok: false, reason: 'supabase not configured' };
+    }
+
+    if (!Array.isArray(profileIds) || profileIds.length === 0) return { ok: true, sent: 0 };
+
+    const { data: rows, error } = await supabaseAdmin.from('push_tokens').select('token').in('profile_id', profileIds).eq('enabled', true);
+    if (error) {
+      console.warn('[sendPushToProfiles] failed to fetch tokens', error.message || error);
+      return { ok: false, error };
+    }
+
+    const tokens = (rows || []).map(r => r.token).filter(Boolean);
+    if (tokens.length === 0) return { ok: true, sent: 0 };
+
+    const messages = createExpoMessages(tokens, { title: title || '', body: body || '', data: data || {}, sound: 'default' });
+    const chunkSize = 100;
+    if (!fetchImpl) {
+      console.warn('[sendPushToProfiles] fetch implementation not available; cannot send push notifications');
+      return { ok: false, reason: 'fetch unavailable' };
+    }
+    let sent = 0;
+
+    for (let i = 0; i < messages.length; i += chunkSize) {
+      const chunk = messages.slice(i, i + chunkSize);
+      try {
+        const resp = await fetchImpl('https://exp.host/--/api/v2/push/send', {
+          method: 'POST',
+          headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+          body: JSON.stringify(chunk)
+        });
+
+        if (!resp.ok) {
+          const text = await resp.text();
+          console.warn('[sendPushToProfiles] expo non-OK', resp.status, text);
+          continue;
+        }
+
+        sent += chunk.length;
+      } catch (e) {
+        console.warn('[sendPushToProfiles] send chunk error', e && e.message ? e.message : e);
+      }
+    }
+
+    return { ok: true, sent };
+  } catch (e) {
+    console.error('[sendPushToProfiles] unexpected error', e);
+    return { ok: false, error: e };
+  }
+}
+
+// Helper: notify poster + all hunters who requested a bounty (best-effort)
+async function notifyBountyParticipants(bountyId, title, bodyMsg, transition) {
+  // Prefer queuing notifications into Supabase outbox; fallback to in-process send
+  let connLocal;
+  try {
+    connLocal = await connect();
+    const [rows] = await connLocal.execute('SELECT * FROM bounties WHERE id = ?', [bountyId]);
+    if (!rows || rows.length === 0) return;
+    const updated = rows[0];
+
+    const posterId = updated.poster_id || updated.user_id || null;
+
+    const [reqs] = await connLocal.execute('SELECT DISTINCT hunter_id FROM bounty_requests WHERE bounty_id = ?', [bountyId]);
+    const hunterRows = (reqs && reqs[0] && Array.isArray(reqs[0])) ? reqs[0] : (Array.isArray(reqs) ? reqs : []);
+    const hunterIds = hunterRows.map(r => r.hunter_id).filter(Boolean);
+
+    const recipients = [];
+    if (posterId) recipients.push(posterId);
+    hunterIds.forEach(id => { if (!recipients.includes(id)) recipients.push(id); });
+
+    if (recipients.length === 0) return;
+
+    // If Supabase admin is available, enqueue into notifications_outbox
+    if (supabaseAdmin) {
+      const payload = {
+        bounty_id: String(bountyId),
+        recipients: recipients,
+        title: title,
+        body: bodyMsg,
+        data: { bountyId: String(bountyId), transition }
+      };
+
+      try {
+        // Request the DB to return the inserted id so we can trigger processing
+        const { data: inserted, error: insertErr } = await supabaseAdmin.from('notifications_outbox').insert([payload]).select('id').single();
+        if (insertErr || !inserted || !inserted.id) {
+          console.warn('[notify] failed to enqueue notification, falling back to direct send:', insertErr && (insertErr.message || insertErr));
+          await sendPushToProfiles(recipients, title, bodyMsg, { bountyId, transition });
+        } else {
+          // If configured, invoke the Edge Function to process this outbox row immediately
+          const EDGE_BASE = process.env.SUPABASE_EDGE_URL ? String(process.env.SUPABASE_EDGE_URL).replace(/\/$/, '') : null;
+          const EDGE_KEY = process.env.SUPABASE_EDGE_KEY || process.env.SUPABASE_EDGE_SERVICE_KEY || null;
+          if (EDGE_BASE) {
+            if (!fetchImpl) {
+              console.warn('[notify] fetch implementation not available; skipping edge invocation');
+            } else {
+              try {
+                const url = `${EDGE_BASE}/process-notification`;
+                const headers = { 'Content-Type': 'application/json' };
+                if (EDGE_KEY) headers['Authorization'] = `Bearer ${EDGE_KEY}`;
+                const resp = await fetchImpl(url, {
+                  method: 'POST',
+                  headers,
+                  body: JSON.stringify({ id: inserted.id })
+                });
+                if (!resp.ok) {
+                  const text = await resp.text().catch(() => '');
+                  console.warn('[notify] Edge function invocation non-ok', resp.status, text);
+                }
+              } catch (e) {
+                console.warn('[notify] failed to invoke edge function', e && e.message ? e.message : e);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[notify] enqueue exception, falling back to direct send', e && e.message ? e.message : e);
+        await sendPushToProfiles(recipients, title, bodyMsg, { bountyId, transition });
+      }
+    } else {
+      // No Supabase admin client available; send immediately
+      await sendPushToProfiles(recipients, title, bodyMsg, { bountyId, transition });
+    }
+  } catch (e) {
+    console.warn('[notify] push notification error', e && e.message ? e.message : e);
+  } finally {
+    if (connLocal) try { await connLocal.end(); } catch {}
+  }
+}
 
 // Rate limiting configuration for auth endpoints
 // Protects against brute force attacks on sign-in/sign-up
@@ -844,6 +994,16 @@ app.post('/api/bounties/:id/accept', async (req, res) => {
     
     // Fetch and return updated bounty
     const [updatedRows] = await conn.execute('SELECT * FROM bounties WHERE id = ?', [req.params.id]);
+    // Fire push notifications (best-effort)
+    try {
+      const updated = updatedRows[0];
+      const title = `Bounty accepted`;
+      const bodyMsg = `Bounty '${String(updated.title || '').slice(0,80)}' moved to in-progress`;
+      await notifyBountyParticipants(req.params.id, title, bodyMsg, 'accept');
+    } catch (notifyErr) {
+      console.warn('[accept] push notification error', notifyErr && notifyErr.message ? notifyErr.message : notifyErr);
+    }
+
     res.json({
       success: true,
       bounty: updatedRows[0],
@@ -895,6 +1055,16 @@ app.post('/api/bounties/:id/complete', async (req, res) => {
     
     // Fetch and return updated bounty
     const [updatedRows] = await conn.execute('SELECT * FROM bounties WHERE id = ?', [req.params.id]);
+    // Fire push notifications (best-effort)
+    try {
+      const updated = updatedRows[0];
+      const title = `Bounty completed`;
+      const bodyMsg = `Bounty '${String(updated.title || '').slice(0,80)}' has been completed`;
+      await notifyBountyParticipants(req.params.id, title, bodyMsg, 'complete');
+    } catch (notifyErr) {
+      console.warn('[complete] push notification error', notifyErr && notifyErr.message ? notifyErr.message : notifyErr);
+    }
+
     res.json({
       success: true,
       bounty: updatedRows[0],
@@ -1646,6 +1816,132 @@ app.patch('/api/reports/:id', async (req, res) => {
     handleError(res, error, 'Failed to update report');
   } finally {
     if (conn) try { await conn.end(); } catch {}
+  }
+});
+
+// ==================== PUSH NOTIFICATIONS (EXPO) ====================
+// Lightweight endpoint to relay Expo push notifications.
+// Accepts { tokens: string[], title, body, data } and forwards to Expo push API.
+// Register a push token for the authenticated user in Supabase
+app.post('/api/push/register', authRequired, async (req, res) => {
+  try {
+    if (!supabaseAdmin) return res.status(500).json({ error: 'Supabase admin not configured' });
+    const { token, platform } = req.body || {};
+    if (!token || typeof token !== 'string') return res.status(400).json({ error: 'token is required' });
+
+    const profileId = req.user.id;
+
+    // Upsert token tied to profile_id. Rely on Supabase to create the table if you add it.
+    const payload = {
+      token: token.trim(),
+      profile_id: profileId,
+      platform: platform || null,
+      enabled: true
+    };
+
+    const { error } = await supabaseAdmin.from('push_tokens').upsert(payload, { onConflict: 'token' });
+    if (error) {
+      console.error('[push/register] supabase upsert error', error.message || error);
+      return res.status(500).json({ error: 'Failed to register token', details: error.message });
+    }
+
+    res.json({ success: true, token: payload.token });
+  } catch (e) {
+    console.error('[push/register] error', e);
+    res.status(500).json({ error: 'Failed to register push token', details: e?.message });
+  }
+});
+
+// Unregister a push token for the authenticated user
+app.post('/api/push/unregister', authRequired, async (req, res) => {
+  try {
+    if (!supabaseAdmin) return res.status(500).json({ error: 'Supabase admin not configured' });
+    const { token } = req.body || {};
+    if (!token) return res.status(400).json({ error: 'token is required' });
+
+    const { error } = await supabaseAdmin.from('push_tokens').delete().match({ token: String(token).trim(), profile_id: req.user.id });
+    if (error) {
+      console.error('[push/unregister] supabase delete error', error.message || error);
+      return res.status(500).json({ error: 'Failed to unregister token', details: error.message });
+    }
+
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[push/unregister] error', e);
+    res.status(500).json({ error: 'Failed to unregister push token', details: e?.message });
+  }
+});
+
+// Send push notifications. Requires authentication.
+// Body may include `tokens: string[]` or `profileIds: string[]`.
+app.post('/api/push/send', authRequired, async (req, res) => {
+  try {
+    if (!supabaseAdmin) return res.status(500).json({ error: 'Supabase admin not configured' });
+
+    let { tokens, profileIds, title, body, data, sendToAll } = req.body || {};
+
+    // Allow privileged sendToAll only if configured or user is admin in metadata
+    const allowBroadcast = process.env.ALLOW_PUSH_BROADCAST === 'true' || (req.user && req.user.user_metadata && req.user.user_metadata.is_admin);
+    if (sendToAll && !allowBroadcast) return res.status(403).json({ error: 'Not authorized to broadcast to all users' });
+
+    // If profileIds provided, fetch tokens from Supabase
+    if ((!tokens || tokens.length === 0) && Array.isArray(profileIds) && profileIds.length > 0) {
+      const { data: rows, error } = await supabaseAdmin.from('push_tokens').select('token').in('profile_id', profileIds).eq('enabled', true);
+      if (error) {
+        console.error('[push/send] supabase fetch tokens error', error.message || error);
+        return res.status(500).json({ error: 'Failed to fetch tokens', details: error.message });
+      }
+      tokens = (rows || []).map(r => r.token).filter(Boolean);
+    }
+
+    // If sendToAll is requested, fetch all enabled tokens (requires allowBroadcast)
+    if (sendToAll) {
+      const { data: rows, error } = await supabaseAdmin.from('push_tokens').select('token').eq('enabled', true);
+      if (error) {
+        console.error('[push/send] supabase fetch all tokens error', error.message || error);
+        return res.status(500).json({ error: 'Failed to fetch tokens', details: error.message });
+      }
+      tokens = (rows || []).map(r => r.token).filter(Boolean);
+    }
+
+    if (!tokens || !Array.isArray(tokens) || tokens.length === 0) {
+      return res.status(400).json({ error: 'No tokens to send to' });
+    }
+
+    // Simple payload validation
+    const messages = createExpoMessages(tokens, { title: title || '', body: body || '', data: data || {}, sound: 'default' });
+
+    // Batch into chunks of 100 per Expo recommendation
+    const chunkSize = 100;
+    if (!fetchImpl) {
+      console.error('[push/send] fetch implementation not available; cannot send push notifications');
+      return res.status(500).json({ error: 'Fetch implementation not available' });
+    }
+    const results = [];
+
+    for (let i = 0; i < messages.length; i += chunkSize) {
+      const chunk = messages.slice(i, i + chunkSize);
+      const resp = await fetchImpl('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify(chunk)
+      });
+
+      if (!resp.ok) {
+        const text = await resp.text();
+        console.warn('[push/send] expo responded with non-OK', resp.status, text);
+        results.push({ ok: false, status: resp.status, text });
+        continue;
+      }
+
+      const json = await resp.json();
+      results.push({ ok: true, json });
+    }
+
+    res.json({ success: true, batches: results.length, results });
+  } catch (e) {
+    console.error('[push/send] error', e);
+    res.status(500).json({ error: 'Failed to send push messages', details: e?.message });
   }
 });
 
