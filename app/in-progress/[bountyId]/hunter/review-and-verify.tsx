@@ -2,15 +2,15 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HunterDashboardSkeleton } from '../../../../components/ui/skeleton-loaders';
@@ -444,11 +444,20 @@ export default function HunterReviewAndVerifyScreen() {
                 style={[styles.addProofButton, { alignSelf: 'flex-start' }]}
                 onPress={() => {
                   // Navigate to conversation view (route param used if available)
-                  try {
-                    (router as any).push(`/messages/${conversation.id}`);
-                  } catch (e) {
-                    console.warn('Unable to open conversation route', e);
-                  }
+                    try {
+                      // NOTE: The Expo Router generated route types don't currently include
+                      // our messaging/detail and messaging/compose routes. At runtime
+                      // these paths exist, but the typed union rejects them. We cast
+                      // `router` to `any` here to perform the navigation by path while
+                      // keeping the cast narrow and documented.
+                      (router as any).push(`/messages/${conversation.id}`);
+                    } catch (e) {
+                      console.warn('Unable to open conversation route', e);
+                      Alert.alert(
+                        'Unable to Open Conversation',
+                        'We could not open the conversation. Please try again.'
+                      );
+                    }
                 }}
               >
                 <MaterialIcons name="chat" size={18} color="#fff" />
@@ -457,13 +466,32 @@ export default function HunterReviewAndVerifyScreen() {
             ) : (
               <TouchableOpacity
                 style={[styles.addProofButton, { alignSelf: 'flex-start' }]}
-                onPress={() => {
-                  // No conversation found yet — navigate to create/new messages with bounty context
-                  try {
-                    if (routeBountyId) (router as any).push(`/messages/new?bountyId=${routeBountyId}`);
-                  } catch (e) {
-                    console.warn('Unable to open new message route', e);
-                  }
+                onPress={async () => {
+                  // No conversation found yet — attempt to getOrCreate then navigate to conversation
+                    try {
+                      if (!routeBountyId || !bounty?.user_id) return;
+                      const conv = await messageService.getOrCreateConversation([String(bounty.user_id)], '', routeBountyId || undefined);
+                      if (conv) {
+                        // See note above about route typing vs runtime routes.
+                        (router as any).push(`/messages/${conv.id}`);
+                      }
+                    } catch (e) {
+                      console.warn('Unable to open or create conversation route', e);
+                      Alert.alert(
+                        'Message Failed',
+                        'We could not open or create a conversation. You can try again or compose a new message manually.'
+                      );
+                      try {
+                        // See note above about route typing vs runtime routes.
+                        if (routeBountyId) (router as any).push(`/messages/new?bountyId=${routeBountyId}`);
+                      } catch (err) {
+                        console.warn('Fallback to new message route failed', err);
+                        Alert.alert(
+                          'Unable to Open Composer',
+                          'Opening the message composer failed. Please try again later.'
+                        );
+                      }
+                    }
                 }}
               >
                 <MaterialIcons name="chat-bubble-outline" size={18} color="#fff" />
