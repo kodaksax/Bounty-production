@@ -204,6 +204,8 @@ export function PosterReviewModal({
     }
   }, [bountyAmount]);
 
+  const displayHunterName = hunterProfile?.username || hunterName || submission?.hunter_id || 'Hunter';
+
   useEffect(() => {
     if (visible) {
       loadSubmission();
@@ -213,9 +215,13 @@ export function PosterReviewModal({
   useEffect(() => {
     let mounted = true;
     async function loadHunter() {
-      if (!visible || !hunterId) return;
+      // Try to load hunter profile. Prefer explicit hunterId prop but
+      // fall back to the submission.hunter_id if the prop was not provided
+      // (some callers open the modal before owner-side profile loads).
+      const lookupId = hunterId || submission?.hunter_id;
+      if (!visible || !lookupId) return;
       try {
-        const p = await userProfileService.getProfile(hunterId);
+        const p = await userProfileService.getProfile(String(lookupId));
         if (!mounted) return;
         setHunterProfile(p);
       } catch (e) {
@@ -380,7 +386,7 @@ export function PosterReviewModal({
 
       Alert.alert(
         'Bounty Complete!',
-        `${hunterName} has been rated ${rating} stars. ${!isForHonor ? 'Payment has been released.' : 'Thank you for your feedback!'}`,
+        `${displayHunterName} has been rated ${rating} stars. ${!isForHonor ? 'Payment has been released.' : 'Thank you for your feedback!'}`,
         [
           {
             text: 'OK',
@@ -442,8 +448,16 @@ export function PosterReviewModal({
       status: 'uploaded',
     };
 
+    // Normalize protocol-lacking URIs that start with '//' (e.g. //host/...),
+    // prefix with https: so the WebView/Image components can load them.
+    if (attachment.uri && /^\/\//.test(attachment.uri)) {
+      attachment.uri = `https:${attachment.uri}`;
+    }
+
+    // Ensure the viewer receives the attachment object before opening to
+    // avoid a race where the viewer mounts with a null attachment.
     setSelectedAttachment(attachment);
-    setViewerVisible(true);
+    setTimeout(() => setViewerVisible(true), 30);
   };
 
   const renderProofItem = ({ item }: { item: ProofItem }) => {
@@ -510,7 +524,7 @@ export function PosterReviewModal({
               <MaterialIcons name="inbox" size={64} color="#6ee7b7" />
               <Text style={styles.emptyText}>No submission yet</Text>
               <Text style={styles.emptySubtext}>
-                Waiting for {hunterName} to submit their work.
+                Waiting for {displayHunterName} to submit their work.
               </Text>
             </View>
           ) : showPayoutWarning ? (
@@ -526,7 +540,7 @@ export function PosterReviewModal({
                 <Text style={styles.warningDescription}>
                   {isForHonor
                     ? 'Completing this bounty will mark the work as finished for honor and alert the hunter.'
-                    : `This will mark the bounty as completed and release ${formattedPayoutAmount} to ${hunterName}.`}
+                    : `This will mark the bounty as completed and release ${formattedPayoutAmount} to ${displayHunterName}.`}
                 </Text>
                 {!isForHonor && bountyAmount > 0 && (
                   <View style={styles.warningAmountChip}>
@@ -658,13 +672,13 @@ export function PosterReviewModal({
             >
               <View style={styles.hunterInfo}>
                 <Avatar style={styles.hunterAvatar}>
-                  <AvatarImage src={hunterProfile?.avatar || undefined} alt={hunterProfile?.username || hunterName} />
+                  <AvatarImage src={hunterProfile?.avatar || undefined} alt={hunterProfile?.username || displayHunterName} />
                   <AvatarFallback>
-                    <Text style={styles.avatarFallbackText}>{(hunterProfile?.username || hunterName)?.charAt(0)?.toUpperCase() || '?'}</Text>
+                    <Text style={styles.avatarFallbackText}>{(hunterProfile?.username || displayHunterName)?.charAt(0)?.toUpperCase() || '?'}</Text>
                   </AvatarFallback>
                 </Avatar>
                 <View style={styles.hunterDetails}>
-                  <Text style={styles.hunterName}>{hunterProfile?.username || hunterName}</Text>
+                  <Text style={styles.hunterName}>{hunterProfile?.username || displayHunterName}</Text>
                   <Text style={styles.submittedText}>
                     Submitted {new Date(submission.submitted_at!).toLocaleDateString()}
                   </Text>
