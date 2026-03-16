@@ -181,9 +181,9 @@ export default function BountyDashboard() {
     
     if (currentIndex === STAGES.length - 2) {
       // Moving from review_verify to payout
-      if (routeBountyId) {
-        router.push({ pathname: '/postings/[bountyId]/review-and-verify', params: { bountyId: routeBountyId } })
-      }
+      // Legacy full-screen review route removed — keep modal-only flow.
+      // Previously: router.push('/postings/[bountyId]/review-and-verify')
+      // No-op to prevent navigation to deprecated screen.
     } else if (currentIndex < STAGES.length - 1) {
       const nextStage = STAGES[currentIndex + 1];
       setCurrentStage(nextStage.id);

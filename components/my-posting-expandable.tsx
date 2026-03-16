@@ -12,16 +12,16 @@ import { userProfileService } from 'lib/services/userProfile'
 import type { Attachment, Conversation } from 'lib/types'
 import { useEffect, useMemo, useReducer, useState } from 'react'
 import {
-    ActivityIndicator,
-    Alert,
-    LayoutAnimation,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    UIManager,
-    View
+  ActivityIndicator,
+  Alert,
+  LayoutAnimation,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  UIManager,
+  View
 } from 'react-native'
 import { useAttachmentUpload } from '../hooks/use-attachment-upload'
 import { logClientError } from '../lib/services/monitoring'
@@ -838,9 +838,6 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                     >
                       <MaterialIcons name="rate-review" size={20} color="#fff" />
                       <Text style={styles.reviewSubmissionText}>Review Submission</Text>
-                      <View style={styles.newBadge}>
-                        <Text style={styles.newBadgeText}>NEW</Text>
-                      </View>
                     </TouchableOpacity>
                   )}
 
@@ -981,21 +978,8 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                 >
                   <MaterialIcons name="rate-review" size={20} color="#fff" />
                   <Text style={styles.reviewSubmissionText}>Review Submission</Text>
-                  <View style={styles.newBadge}>
-                    <Text style={styles.newBadgeText}>NEW</Text>
-                  </View>
                 </TouchableOpacity>
-
-                {/* Navigate to full review screen option */}
-                {onGoToReview && (
-                  <TouchableOpacity
-                    style={[styles.primaryBtn, { backgroundColor: 'rgba(16, 185, 129, 0.3)' }]}
-                    onPress={() => onGoToReview(String(bounty.id))}
-                  >
-                    <Text style={styles.primaryText}>Open Review Screen</Text>
-                    <MaterialIcons name="arrow-forward" size={18} color="#fff" />
-                  </TouchableOpacity>
-                )}
+                {/* Full review screen removed (legacy) - keep modal only */}
               </View>
             </AnimatedSection>
           )}
@@ -1370,17 +1354,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontSize: 15,
-  },
-  newBadge: {
-    backgroundColor: '#ef4444',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 999,
-  },
-  newBadgeText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '800',
   },
   timerContainer: {
     alignItems: 'center',

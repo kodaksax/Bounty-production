@@ -544,7 +544,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
         onToggle={() => handleToggleAndScroll('myPostings', bounty.id)}
         onEdit={bounty.status === 'open' ? () => handleEditBounty(bounty) : undefined}
         onDelete={bounty.status === 'open' ? () => handleDeleteBounty(bounty) : undefined}
-        onGoToReview={(id: string) => router.push({ pathname: '/postings/[bountyId]/review-and-verify', params: { bountyId: id } })}
+        onGoToReview={(id: string) => { /* legacy route removed - modal only */ }}
         onGoToPayout={(id: string) => router.push({ pathname: '/postings/[bountyId]/payout', params: { bountyId: id } })}
         variant={'owner'}
         isListScrolling={isListScrolling}
@@ -564,7 +564,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
         expanded={!!expandedMap[String(bounty.id)]}
         onToggle={() => handleToggleAndScroll('inProgress', bounty.id)}
         onWithdrawApplication={() => handleWithdrawApplication(bounty.id)}
-        onGoToReview={(id: string) => router.push({ pathname: '/in-progress/[bountyId]/hunter/review-and-verify', params: { bountyId: id } })}
+        onGoToReview={(id: string) => { /* legacy route removed - modal only */ }}
         onGoToPayout={(id: string) => router.push({ pathname: '/in-progress/[bountyId]/hunter/payout', params: { bountyId: id } })}
         variant={'hunter'}
         isListScrolling={isListScrolling}
