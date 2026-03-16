@@ -1,7 +1,7 @@
 // Lightweight module-level initial-navigation gate.
 // Use this to mark when the app's initial navigation (on cold start/sign-in) has completed.
 let done = false;
-const listeners: Array<() => void> = [];
+const listeners: (() => void)[] = [];
 
 const now = () => new Date().toISOString();
 

@@ -1725,7 +1725,7 @@ class StripeService {
   async presentApplePay(
     amount: number,
     description: string = 'Add Money to Wallet',
-    cartItems?: Array<{ label: string; amount: string; type?: 'final' | 'pending' }>
+    cartItems?: { label: string; amount: string; type?: 'final' | 'pending' }[]
   ): Promise<{
     success: boolean;
     error?: string;
