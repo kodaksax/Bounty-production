@@ -17,6 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { EventEmitter } from 'events';
 import { supabase } from '../supabase';
+import { storageService } from './storage-service';
 import type { Conversation, Message } from '../types';
 import { logClientError } from './monitoring';
 
@@ -295,17 +296,33 @@ export async function fetchMessages(conversationId: string): Promise<Message[]> 
 
     if (error) throw error;
 
-    const formattedMessages: Message[] = (messages || []).map(msg => ({
-      id: msg.id,
-      conversationId: msg.conversation_id,
-      senderId: msg.sender_id,
-      text: msg.text,
-      createdAt: msg.created_at,
-      status: 'sent',
-      mediaUrl: msg.media_url,
-      replyTo: msg.reply_to,
-      isPinned: msg.is_pinned,
-    }));
+    const formattedMessages: Message[] = (messages || []).map(msg => {
+      // media_url can be stored as JSON array or string in older schemas
+      let media: string | string[] | undefined = undefined
+      try {
+        if (msg.media_url) {
+          if (typeof msg.media_url === 'string' && msg.media_url.startsWith('[')) {
+            media = JSON.parse(msg.media_url)
+          } else {
+            media = msg.media_url
+          }
+        }
+      } catch (e) {
+        media = msg.media_url
+      }
+
+      return {
+        id: msg.id,
+        conversationId: msg.conversation_id,
+        senderId: msg.sender_id,
+        text: msg.text,
+        createdAt: msg.created_at,
+        status: 'sent',
+        mediaUrl: media as any,
+        replyTo: msg.reply_to,
+        isPinned: msg.is_pinned,
+      }
+    });
 
     // Cache the messages
     await cacheMessages(conversationId, formattedMessages);
@@ -324,9 +341,27 @@ export async function fetchMessages(conversationId: string): Promise<Message[]> 
 export async function sendMessage(
   conversationId: string,
   text: string,
-  senderId: string
+  senderId: string,
+  attachments?: { uri: string; name?: string | null; mimeType?: string | null }[]
 ): Promise<Message> {
   try {
+    let mediaUrlValue: string | undefined = undefined
+
+    // If attachments supplied, upload them to Supabase storage and collect public URLs
+    if (attachments && attachments.length > 0) {
+      const fileUris = attachments.map(a => a.uri)
+      const basePath = `conversations/${conversationId}`
+      const uploadResults = await storageService.uploadFiles(fileUris, { bucket: 'MessageMedia', path: basePath, concurrency: 3 })
+
+      const urls = uploadResults
+        .filter(r => r && r.success && r.url)
+        .map(r => r.url!)
+
+      if (urls.length > 0) {
+        // If multiple urls, store JSON array; otherwise store single url string
+        mediaUrlValue = urls.length === 1 ? urls[0] : JSON.stringify(urls)
+      }
+    }
     // First, try the canonical column name 'text'
     let attemptFields: Record<string, any>[] = [
       { conversation_id: conversationId, sender_id: senderId, text },
@@ -341,6 +376,11 @@ export async function sendMessage(
 
     for (const fields of attemptFields) {
       try {
+        // attach media_url field if available
+        if (mediaUrlValue) {
+          (fields as any).media_url = mediaUrlValue
+        }
+
         const { data, error } = await supabase
           .from('messages')
           .insert(fields)

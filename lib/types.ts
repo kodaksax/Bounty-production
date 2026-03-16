@@ -183,7 +183,7 @@ export interface Message {
   text: string;
   createdAt: string;
   replyTo?: string;
-  mediaUrl?: string;
+  mediaUrl?: string | string[];
   status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
   isPinned?: boolean;
   /** True when the text field contains a JSON-encoded EncryptedMessage payload */

@@ -13,6 +13,7 @@ import { useAuthContext } from '../hooks/use-auth-context'
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
 import { useWallet } from '../lib/wallet-context'
 import { ChatMessage, StickyMessageInterface } from "./sticky-message-interface"
+import { sendMessage as sendMessageToSupabase } from '../lib/services/supabase-messaging'
 
 interface Message extends ChatMessage {
   time: string
@@ -100,53 +101,36 @@ export function ChatDetailScreen({
     ? otherUserProfile.avatar 
     : conversation.avatar
 
-  const handleSendMessage = (text: string) => {
+  const handleSendMessage = async (text: string, attachments?: ChatMessage['attachments']) => {
+    // optimistic UI
+    const tempId = `${conversation.id}-${Date.now()}`
     const newMsg: Message = {
-      id: `${conversation.id}-${Date.now()}`,
+      id: tempId,
       text,
       createdAt: Date.now(),
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isUser: true,
       status: 'sending', // Start with sending status
+      attachments,
     }
     setMessages(prev => [...prev, newMsg])
-    
-    // Simulate status updates: sending -> sent -> delivered
-    setTimeout(() => {
-      setMessages(prev => prev.map(m => 
-        m.id === newMsg.id ? { ...m, status: 'sent' as const } : m
-      ))
-    }, 500)
-    
-    setTimeout(() => {
-      setMessages(prev => prev.map(m => 
-        m.id === newMsg.id ? { ...m, status: 'delivered' as const } : m
-      ))
-    }, 1000)
-    
-    // Simulated bot reply with typing indicator
-    setIsOtherUserTyping(true)
-    setTimeout(() => {
-      setIsOtherUserTyping(false)
-      let responseText = ''
-      const lower = text.toLowerCase()
-      if (/[?]/.test(lower)) responseText = 'Let me check on that and circle back.'
-      else if (lower.includes('hello') || lower.includes('hi')) responseText = 'Hey! Need help with a bounty?'
-      else responseText = 'Acknowledged.'
-      const response: Message = {
-        id: `${conversation.id}-${Date.now()+1}`,
-        text: responseText,
-        createdAt: Date.now()+1,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        isUser: false,
-      }
-      setMessages(prev => [...prev, response])
-      
-      // Mark user's message as read when they reply
-      setMessages(prev => prev.map(m => 
-        m.id === newMsg.id ? { ...m, status: 'read' as const } : m
-      ))
-    }, 1500) // Show typing for 1.5 seconds
+
+    try {
+      // Map UI attachment shape to uploader shape
+      const mapped = attachments?.map(a => ({ uri: a.uri, name: a.name ?? undefined, mimeType: a.mimeType ?? undefined }))
+      const sent = await sendMessageToSupabase(conversation.id, text, currentUserId || (session?.user?.id ?? ''), mapped)
+
+      // Replace temp message with server message
+      setMessages(prev => prev.map(m => m.id === tempId ? ({
+        ...m,
+        id: sent.id,
+        createdAt: sent.createdAt as any,
+        status: 'sent',
+      }) : m))
+    } catch (err) {
+      // mark as failed
+      setMessages(prev => prev.map(m => m.id === tempId ? ({ ...m, status: 'failed' }) : m))
+    }
   }
 
   const handleTypingChange = React.useCallback((isTyping: boolean) => {
@@ -224,7 +208,8 @@ export function ChatDetailScreen({
             text: m.text, 
             isUser: m.isUser, 
             createdAt: m.createdAt,
-            status: m.status 
+            status: m.status,
+            attachments: m.attachments
           }))}
           onSend={handleSendMessage}
           topInset={120} // offset for combined header + chat header so first message isn't hidden

@@ -1,9 +1,19 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
+import * as Sharing from 'expo-sharing';
 import { cn } from 'lib/utils';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, FlatList, KeyboardAvoidingView, Modal, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Animated, FlatList, Image, KeyboardAvoidingView, Modal, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHapticFeedback } from '../lib/haptic-feedback';
+
+export interface Attachment {
+  uri: string;
+  mimeType?: string | null;
+  name?: string | null;
+  size?: number | null;
+}
 
 export interface ChatMessage {
   id: string;
@@ -11,11 +21,12 @@ export interface ChatMessage {
   isUser: boolean;
   createdAt: number; // epoch ms
   status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+  attachments?: Attachment[];
 }
 
 interface StickyMessageInterfaceProps {
   messages: ChatMessage[];
-  onSend: (text: string) => void;
+  onSend: (text: string, attachments?: Attachment[]) => void;
   isSending?: boolean;
   placeholder?: string;
   topInset?: number;
@@ -44,6 +55,7 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
   typingTimeout = 2000,
 }) => {
   const [text, setText] = useState('');
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const [atBottom, setAtBottom] = useState(true);
   const [expanded, setExpanded] = useState(false); // controls typing modal
@@ -67,10 +79,11 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
 
   const handleSend = () => {
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed && attachments.length === 0) return;
     triggerHaptic('medium'); // Medium haptic for sending message
-    onSend(trimmed);
+    onSend(trimmed, attachments.length ? attachments : undefined);
     setText('');
+    setAttachments([]);
     if (expanded) setExpanded(false);
     // Stop typing when message is sent
     if (onTypingChange) {
@@ -79,6 +92,42 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = null;
+    }
+  };
+
+  const handlePickImage = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) return;
+      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.All, quality: 0.8, allowsEditing: false });
+      const picked = (res as any).assets?.[0] ?? res;
+      if ((res as any).cancelled) return;
+      const attachment: Attachment = { uri: picked.uri, mimeType: (picked as any).type ?? null, name: (picked as any).fileName ?? null, size: (picked as any).fileSize ?? null };
+      setAttachments(prev => [...prev, attachment]);
+    } catch (e) {
+      // ignore permission or picker errors
+    }
+  };
+
+  const handlePickDocument = async () => {
+    try {
+      const res: any = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: false });
+      if (res.type === 'cancel') return;
+      const attachment: Attachment = { uri: res.uri, name: res.name ?? null, size: res.size ?? null, mimeType: res.mimeType ?? null };
+      setAttachments(prev => [...prev, attachment]);
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  const handleShareAttachment = async (att: Attachment) => {
+    if (!att.uri) return;
+    try {
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(att.uri);
+      }
+    } catch (e) {
+      // ignore
     }
   };
 
@@ -144,9 +193,9 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
         <View className="absolute left-0 right-0" style={{ bottom: 0, paddingBottom: effectiveBottomInset }}>
           <View className="px-3 pb-3">
             <View className="flex-row items-end gap-2 bg-emerald-700/30 rounded-2xl px-3 pt-2 pb-2 border border-emerald-500/30">
-              <TouchableOpacity className="h-9 w-9 rounded-full bg-emerald-700/60 items-center justify-center mt-auto">
-                <MaterialIcons name="add" size={22} color="#ffffff" />
-              </TouchableOpacity>
+              <TouchableOpacity className="h-9 w-9 rounded-full bg-emerald-700/60 items-center justify-center mt-auto" onPress={handlePickImage}>
+                  <MaterialIcons name="add" size={22} color="#ffffff" />
+                </TouchableOpacity>
               <TouchableOpacity style={{ flex: 1 }} activeOpacity={0.9} onPress={() => setExpanded(true)}>
                 <View pointerEvents="none">
                   <Text numberOfLines={2} style={{ color: text ? '#ffffff' : '#c7f9d7', minHeight: 24 }}>
@@ -298,6 +347,21 @@ const AnimatedMessage: React.FC<{ message: ChatMessage; isNewMessage: boolean }>
     >
       <View className={cn('px-3 py-2 rounded-2xl', message.isUser ? 'bg-white rounded-br-none' : 'bg-emerald-700/60 rounded-bl-none')}> 
         <Text className={cn('text-sm', message.isUser ? 'text-gray-900' : 'text-white')}>{message.text}</Text>
+        {message.attachments && message.attachments.length > 0 && (
+          <View className="mt-2">
+            {message.attachments.map((att, i) => (
+              <View key={att.uri + i} className="mt-2">
+                {att.mimeType && att.mimeType.startsWith?.('image') ? (
+                  <Image source={{ uri: att.uri }} style={{ width: 220, height: 140, borderRadius: 10 }} />
+                ) : (
+                  <View className="bg-emerald-700/30 rounded-md px-3 py-2">
+                    <Text className={cn('text-sm', message.isUser ? 'text-gray-900' : 'text-white')}>{att.name ?? 'attachment'}</Text>
+                  </View>
+                )}
+              </View>
+            ))}
+          </View>
+        )}
       </View>
       {renderReadReceipt()}
     </Animated.View>

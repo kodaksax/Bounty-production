@@ -13,6 +13,10 @@ const validator = require('validator');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// File upload support (for upload-attachment route)
+const fileUpload = require('express-fileupload');
+app.use(fileUpload({ limits: { fileSize: 25 * 1024 * 1024 } })); // 25MB limit
+
 // Initialize Supabase client with service role key (bypasses RLS)
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -153,6 +157,9 @@ app.use(cors({
 
 // Body parser middleware - JSON for most endpoints
 app.use(bodyParser.json());
+
+// Mount upload route
+app.use('/upload-attachment', require('./routes/upload-attachment'))
 
 // Authentication middleware - validates Supabase auth token
 async function authenticateUser(req, res, next) {
