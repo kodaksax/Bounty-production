@@ -1,9 +1,10 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
+    Animated,
     ScrollView,
     StyleSheet,
     Text,
@@ -51,6 +52,7 @@ export default function BountyDashboard() {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const glowAnim = useRef(new Animated.Value(0)).current;
 
   // Normalize route param to a string (supports UUIDs)
   const routeBountyId = React.useMemo(() => {
@@ -72,6 +74,20 @@ export default function BountyDashboard() {
       popColor('#1a3d2e');
     }
   }, [routeBountyId]);
+
+  // Start pulsing glow when a bounty is in progress
+  useEffect(() => {
+    if (bounty?.status === 'in_progress') {
+      const anim = Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
+          Animated.timing(glowAnim, { toValue: 0, duration: 900, useNativeDriver: true }),
+        ])
+      );
+      anim.start();
+      return () => anim.stop();
+    }
+  }, [bounty?.status, glowAnim]);
 
   const loadBounty = async (id: string) => {
     try {
@@ -341,18 +357,36 @@ export default function BountyDashboard() {
                   onPress={() => handleStagePress(stage.id)}
                   disabled={!isAccessible}
                 >
-                  <View
-                    style={[
-                      styles.stageIcon,
-                      isActive && styles.stageIconActive,
-                      isCompleted && styles.stageIconCompleted,
-                    ]}
-                  >
-                    <MaterialIcons
-                      name={stage.icon as any}
-                      size={24}
-                      color={isActive || isCompleted ? '#fff' : '#6ee7b7'}
-                    />
+                  <View style={{ position: 'relative', width: 48, height: 48, marginBottom: 8 }}>
+                    {bounty?.status === 'in_progress' && stage.id === 'working_progress' && isActive && (
+                      <Animated.View
+                        style={[
+                          styles.stageIconGlow,
+                          {
+                            transform: [
+                              {
+                                scale: glowAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.25] }),
+                              },
+                            ],
+                            opacity: glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0.12] }),
+                          },
+                        ]}
+                      />
+                    )}
+
+                    <View
+                      style={[
+                        styles.stageIcon,
+                        isActive && styles.stageIconActive,
+                        isCompleted && styles.stageIconCompleted,
+                      ]}
+                    >
+                      <MaterialIcons
+                        name={stage.icon as any}
+                        size={24}
+                        color={isActive || isCompleted ? '#fff' : '#6ee7b7'}
+                      />
+                    </View>
                   </View>
                   <Text
                     style={[
@@ -667,6 +701,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
+  },
+  stageIconGlow: {
+    position: 'absolute',
+    top: -8,
+    left: -8,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#10b981',
+    opacity: 0.25,
+    shadowColor: '#10b981',
+    shadowOpacity: 0.9,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 10,
   },
   stageIconActive: {
     backgroundColor: '#10b981',
