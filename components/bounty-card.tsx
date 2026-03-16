@@ -1,4 +1,5 @@
 import { MaterialIcons } from "@expo/vector-icons";
+import { useRouter } from 'expo-router';
 import type { Bounty } from "lib/services/database.types";
 import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 // 1. Update imports
@@ -27,6 +28,7 @@ interface BountyCardProps {
   // Profile picture of the other party (poster for hunters, hunter for posters)
   otherPartyAvatar?: string | null;
   otherPartyName?: string;
+  otherPartyId?: string | null;
   // If the current user has a request for this bounty (pending/accepted/rejected)
   requestStatus?: string | null;
   // For hunters: withdraw or discard application handler
@@ -50,10 +52,12 @@ export function BountyCard({
   hasDispute,
   otherPartyAvatar,
   otherPartyName,
+  otherPartyId,
   requestStatus,
   onWithdrawApplication,
 }: BountyCardProps) {
   const isOwner = currentUserId === bounty.user_id;
+  const router = useRouter()
 
   const handleShare = async () => {
     await shareBounty({
@@ -121,13 +125,17 @@ export function BountyCard({
       <View style={styles.header}>
         {/* Profile Avatar */}
         {otherPartyAvatar && (
-          <View style={styles.avatarContainer}>
+          <TouchableOpacity
+            style={styles.avatarContainer}
+            onPress={(e) => { e.stopPropagation(); otherPartyId && router.push(`/profile/${otherPartyId}`) }}
+            accessibilityRole="button"
+          >
             <Image
               source={{ uri: otherPartyAvatar }}
               style={styles.avatar}
               accessibilityLabel={`${otherPartyName || 'User'} profile picture`}
             />
-          </View>
+          </TouchableOpacity>
         )}
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor() }]}>
           <Text style={styles.statusText}>{getStatusLabel()}</Text>

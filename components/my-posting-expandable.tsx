@@ -12,16 +12,16 @@ import { userProfileService } from 'lib/services/userProfile'
 import type { Attachment, Conversation } from 'lib/types'
 import { useEffect, useMemo, useReducer, useState } from 'react'
 import {
-  ActivityIndicator,
-  Alert,
-  LayoutAnimation,
-  Platform,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  UIManager,
-  View
+    ActivityIndicator,
+    Alert,
+    LayoutAnimation,
+    Platform,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    UIManager,
+    View
 } from 'react-native'
 import { useAttachmentUpload } from '../hooks/use-attachment-upload'
 import { logClientError } from '../lib/services/monitoring'
@@ -744,6 +744,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         hasDispute={hasDispute}
         otherPartyAvatar={otherPartyAvatar}
         otherPartyName={otherPartyName}
+        otherPartyId={variant === 'owner' ? (bounty.accepted_by || readyRecord?.hunter_id) : (bounty.poster_id || bounty.user_id)}
         requestStatus={requestStatus}
         onWithdrawApplication={onWithdrawApplication}
       />
