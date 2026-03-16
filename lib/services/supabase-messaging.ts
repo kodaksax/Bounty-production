@@ -17,9 +17,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { EventEmitter } from 'events';
 import { supabase } from '../supabase';
-import { storageService } from './storage-service';
 import type { Conversation, Message } from '../types';
 import { logClientError } from './monitoring';
+import { storageService } from './storage-service';
 
 // Storage keys for local cache
 const CONVERSATIONS_CACHE_KEY = '@bountyexpo:conversations_cache';

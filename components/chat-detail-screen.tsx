@@ -11,9 +11,9 @@ import type { Conversation } from "lib/types"
 import { getCurrentUserId } from "lib/utils/data-utils"
 import { useAuthContext } from '../hooks/use-auth-context'
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
+import { sendMessage as sendMessageToSupabase } from '../lib/services/supabase-messaging'
 import { useWallet } from '../lib/wallet-context'
 import { ChatMessage, StickyMessageInterface } from "./sticky-message-interface"
-import { sendMessage as sendMessageToSupabase } from '../lib/services/supabase-messaging'
 
 interface Message extends ChatMessage {
   time: string
