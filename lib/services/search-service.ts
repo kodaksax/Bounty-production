@@ -1,15 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { Bounty } from './database.types';
-import type {
-  AutocompleteSuggestion,
-  BountySearchFilters,
-  SavedSearch,
-  TrendingBounty,
-} from '../types';
-import { bountyService } from './bounty-service';
-import { userSearchService } from './user-search-service';
 import { isSupabaseConfigured, supabase } from '../supabase';
+import type {
+    AutocompleteSuggestion,
+    BountySearchFilters,
+    SavedSearch,
+    TrendingBounty,
+} from '../types';
 import { logger } from '../utils/error-logger';
+import { bountyService } from './bounty-service';
+import type { Bounty } from './database.types';
+import { userSearchService } from './user-search-service';
 
 const SAVED_SEARCHES_KEY = '@bountyexpo:saved_searches';
 const SEARCH_FILTERS_KEY = '@bountyexpo:last_search_filters';
@@ -124,7 +124,43 @@ export const searchService = {
           throw noJoinError;
         }
 
+        // Exclude any bounties that already have an accepted request (in-progress)
+        try {
+          const bountyIds = (bountiesNoJoin || []).map((b: any) => String(b.id));
+          if (bountyIds.length > 0) {
+            const { data: acceptedReqs } = await supabase
+              .from('bounty_requests')
+              .select('bounty_id')
+              .in('bounty_id', bountyIds)
+              .eq('status', 'accepted');
+
+            const acceptedIds = new Set((acceptedReqs || []).map((r: any) => String(r.bounty_id)));
+            const filtered = (bountiesNoJoin || []).filter((b: any) => !acceptedIds.has(String(b.id)));
+            return this.calculateTrendingScores(filtered, limit);
+          }
+        } catch (innerErr) {
+          logger.warning('Failed to filter trending bounties by accepted requests (fallback branch)', { error: innerErr });
+        }
+
         return this.calculateTrendingScores(bountiesNoJoin || [], limit);
+      }
+
+      // Exclude any bounties that already have an accepted request (in-progress)
+      try {
+        const bountyIds = (bounties || []).map((b: any) => String(b.id));
+        if (bountyIds.length > 0) {
+          const { data: acceptedReqs } = await supabase
+            .from('bounty_requests')
+            .select('bounty_id')
+            .in('bounty_id', bountyIds)
+            .eq('status', 'accepted');
+
+          const acceptedIds = new Set((acceptedReqs || []).map((r: any) => String(r.bounty_id)));
+          const filtered = (bounties || []).filter((b: any) => !acceptedIds.has(String(b.id)));
+          return this.calculateTrendingScores(filtered, limit);
+        }
+      } catch (innerErr) {
+        logger.warning('Failed to filter trending bounties by accepted requests', { error: innerErr });
       }
 
       return this.calculateTrendingScores(bounties || [], limit);
