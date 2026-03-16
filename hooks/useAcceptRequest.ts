@@ -278,10 +278,12 @@ export function useAcceptRequest({
       const viewAction = {
         text: 'View Conversation',
         onPress: () => {
-          // Re-assert the pending conversation id just before navigating so the
-          // MessengerScreen can reliably pick it up on mount.
+          // Re-assert the pending conversation id and a pending navigation
+          // target just before navigating so the root app and MessengerScreen
+          // can reliably pick them up on mount.
           ;(async () => {
             try { await navigationIntent.setPendingConversationId(pendingConvId) } catch {}
+            try { await navigationIntent.setPendingNavigation('?screen=create') } catch {}
             try { setActiveScreen('create') } catch {}
           })()
         }
