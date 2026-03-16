@@ -2,15 +2,15 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Animated,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NotFoundScreen } from '../../../components/not-found-screen';
@@ -270,6 +270,16 @@ export default function BountyDashboard() {
     ? bounty.description.substring(0, 150) + '...' 
     : bounty.description;
 
+  const formatCategoryLabel = (cat?: string | null) => {
+    if (!cat) return null;
+    // Turn 'web-development' or 'design' into 'Web Development' or 'Design'
+    return String(cat)
+      .replace(/[-_]/g, ' ')
+      .split(' ')
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ')
+  }
+
   return (
     <SafeAreaView style={[styles.container, { width: '100%', alignSelf: 'stretch' }]} edges={["top"]}>
       {/* Header */}
@@ -295,7 +305,12 @@ export default function BountyDashboard() {
               <Text style={styles.bountyTitle} numberOfLines={2}>
                 {bounty.title}
               </Text>
-              <Text style={styles.bountyAge}>{formatTimeAgo(bounty.created_at)}</Text>
+                  <Text style={styles.bountyAge}>{formatTimeAgo(bounty.created_at)}</Text>
+                  {((bounty as any)?.category) && (
+                    <View style={styles.categoryPill}>
+                      <Text style={styles.categoryPillText}>{formatCategoryLabel((bounty as any).category)}</Text>
+                    </View>
+                  )}
             </View>
           </View>
 
@@ -656,6 +671,20 @@ const styles = StyleSheet.create({
   },
   honorText: {
     color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  categoryPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginTop: 6,
+  },
+  categoryPillText: {
+    color: '#a7f3d0',
     fontSize: 12,
     fontWeight: '600',
   },
