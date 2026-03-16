@@ -116,7 +116,9 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   const BOTTOM_NAV_OFFSET = 60// height of BottomNav + gap so sticky actions sit fully above it
   const { balance, deposit, createEscrow, refundEscrow } = useWallet()
   // Filter by status or request state (applied, in_progress, completed, rejected, open, etc.)
-  const [statusFilter, setStatusFilter] = useState<'all' | 'applied' | 'in_progress' | 'completed' | 'rejected' | 'open' | 'archived'>('all')
+  // Use separate filters per-tab so toggling one doesn't unexpectedly affect the other.
+  const [statusFilterInProgress, setStatusFilterInProgress] = useState<'all' | 'applied' | 'in_progress' | 'completed' | 'rejected'>('all')
+  const [statusFilterMyPostings, setStatusFilterMyPostings] = useState<'all' | 'open' | 'in_progress' | 'completed' | 'archived'>('all')
   // Keep the hunter's requests so we can filter In Progress by request status (applied/accepted/rejected)
   const [hunterRequests, setHunterRequests] = useState<BountyRequestWithDetails[]>([])
   // Edit/Delete state
@@ -585,14 +587,14 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
 
   // Derived list for In Progress tab considering the selected status filter
   const displayedInProgress = React.useMemo(() => {
-    if (statusFilter === 'all') return inProgressBounties
-    if (statusFilter === 'applied') return inProgressBounties.filter(b => requestStatusMap.get(String(b.id)) === 'pending')
-    if (statusFilter === 'rejected') return inProgressBounties.filter(b => requestStatusMap.get(String(b.id)) === 'rejected')
-    if (statusFilter === 'in_progress') return inProgressBounties.filter(b => b.status === 'in_progress')
-    if (statusFilter === 'completed') return inProgressBounties.filter(b => b.status === 'completed')
+    if (statusFilterInProgress === 'all') return inProgressBounties
+    if (statusFilterInProgress === 'applied') return inProgressBounties.filter(b => requestStatusMap.get(String(b.id)) === 'pending')
+    if (statusFilterInProgress === 'rejected') return inProgressBounties.filter(b => requestStatusMap.get(String(b.id)) === 'rejected')
+    if (statusFilterInProgress === 'in_progress') return inProgressBounties.filter(b => b.status === 'in_progress')
+    if (statusFilterInProgress === 'completed') return inProgressBounties.filter(b => b.status === 'completed')
     // fallback
     return inProgressBounties
-  }, [inProgressBounties, statusFilter, requestStatusMap])
+  }, [inProgressBounties, statusFilterInProgress, requestStatusMap])
 
   const renderRequestItem = React.useCallback(({ item: request }: { item: BountyRequestWithDetails }) => (
     <ApplicantCard
@@ -781,11 +783,11 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                       <View className="flex-row gap-2 mb-1">
                         {(['all', 'applied', 'in_progress', 'completed', 'rejected'] as const).map((f) => {
                           const label = f === 'all' ? 'All' : f === 'applied' ? 'Applied' : f === 'in_progress' ? 'In Progress' : f === 'completed' ? 'Completed' : 'Rejected'
-                          const selected = statusFilter === f
-                          return (
+                          const selected = statusFilterInProgress === f
+                            return (
                             <TouchableOpacity
                               key={f}
-                              onPress={() => setStatusFilter(f)}
+                              onPress={() => setStatusFilterInProgress(f)}
                               className={cn('px-3 py-1.5 rounded-full border', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}
                               accessibilityRole="button"
                               accessibilityLabel={`Filter by ${label} work in progress`}
@@ -905,7 +907,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
               ) : activeTab === "myPostings" ? (
                 <FlatList
                   ref={myPostingsListRef}
-                  data={myBounties.filter(b => statusFilter === 'all' || b.status === statusFilter)}
+                  data={myBounties.filter(b => statusFilterMyPostings === 'all' || b.status === statusFilterMyPostings)}
                   keyExtractor={keyExtractorBounty}
                   extraData={{ myBounties, expandedMap }}
                   ListHeaderComponent={(
@@ -914,11 +916,11 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                       <View className="flex-row gap-2 mb-1">
                         {(['all', 'open', 'in_progress', 'completed', 'archived'] as const).map((f) => {
                           const label = f === 'all' ? 'All' : f === 'open' ? 'Open' : f === 'in_progress' ? 'In Progress' : f === 'completed' ? 'Completed' : 'Archived'
-                          const selected = statusFilter === f
-                          return (
+                          const selected = statusFilterMyPostings === f
+                            return (
                             <TouchableOpacity
                               key={f}
-                              onPress={() => setStatusFilter(f)}
+                              onPress={() => setStatusFilterMyPostings(f)}
                               className={cn('px-3 py-1.5 rounded-full border', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}
                               accessibilityRole="button"
                               accessibilityLabel={`Filter by ${label} postings`}
