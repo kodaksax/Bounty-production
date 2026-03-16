@@ -61,7 +61,7 @@ export async function authMiddleware(
     }
 
     const authHeader = request.headers.authorization;
-    
+    console.log("AUTH HEADER:", request.headers.authorization);
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return reply.code(401).send({ 
         error: 'Missing or invalid authorization header',

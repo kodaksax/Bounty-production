@@ -90,11 +90,11 @@ export async function authMiddleware(
 ): Promise<void> {
   try {
     const authHeader = request.headers.authorization;
-    
+    console.log("Authorization header:", request.headers.authorization);
     if (!authHeader) {
       reply.code(401).send({
         error: 'Unauthorized',
-        message: 'Missing authorization header',
+        message: 'Missing authorization headerA',
         code: 'AUTH_HEADER_MISSING',
       });
       return;
