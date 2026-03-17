@@ -2,15 +2,15 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Animated,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NotFoundScreen } from '../../../components/not-found-screen';
@@ -20,7 +20,7 @@ import { bountyService } from '../../../lib/services/bounty-service';
 import type { Bounty } from '../../../lib/services/database.types';
 import { messageService } from '../../../lib/services/message-service';
 import type { Conversation } from '../../../lib/types';
-import { getCurrentUserId } from '../../../lib/utils/data-utils';
+import { formatCategoryLabel, getCurrentUserId } from '../../../lib/utils/data-utils';
 
 type BountyStage = 'apply_work' | 'working_progress' | 'review_verify' | 'payout';
 
@@ -277,15 +277,7 @@ export default function BountyDashboard() {
     ? bounty.description.substring(0, 150) + '...' 
     : bounty.description;
 
-  const formatCategoryLabel = (cat?: string | null) => {
-    if (!cat) return null;
-    // Turn 'web-development' or 'design' into 'Web Development' or 'Design'
-    return String(cat)
-      .replace(/[-_]/g, ' ')
-      .split(' ')
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(' ')
-  }
+  
 
   return (
     <SafeAreaView style={[styles.container, { width: '100%', alignSelf: 'stretch' }]} edges={["top"]}>

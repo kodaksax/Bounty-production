@@ -1,5 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
+import { formatCategoryLabel } from 'lib/utils/data-utils';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -54,14 +55,7 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
 
   const listRef = useRef<FlatList<any> | null>(null)
 
-  const formatCategoryLabel = (cat?: string | null) => {
-    if (!cat) return null
-    return String(cat)
-      .replace(/[-_]/g, ' ')
-      .split(' ')
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(' ')
-  }
+  
 
   // When this screen mounts, ensure list is scrolled to top so the header is visible
   useEffect(() => {

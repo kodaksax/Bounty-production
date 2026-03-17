@@ -4,21 +4,22 @@ import { BrandingLogo } from "components/ui/branding-logo"
 import * as Linking from 'expo-linking'
 import { useRouter } from "expo-router"
 import { theme } from "lib/theme"
+import { formatCategoryLabel } from 'lib/utils/data-utils'
 import { shareBounty } from "lib/utils/share-utils"
 import { useEffect, useRef, useState } from "react"
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    Image,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Image,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native"
 import { useAuthContext } from "../hooks/use-auth-context"
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
@@ -216,14 +217,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
     bounty.description ||
     "I need someone to mow my lawn. The yard is approximately 1/4 acre with some slopes. I have a lawn mower you can use, or you can bring your own equipment. The grass is about 3 inches tall now. Please trim around the edges and clean up afterward. This should take about 2 hours to complete. I need this done by this weekend."
 
-  const formatCategoryLabel = (cat?: string | null) => {
-    if (!cat) return null
-    return String(cat)
-      .replace(/[-_]/g, ' ')
-      .split(' ')
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(' ')
-  }
+  
 
   // Handle Share button
   const handleShare = async () => {

@@ -1,11 +1,11 @@
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
+import { analyticsService } from 'lib/services/analytics-service';
 import { bountyService as baseBountyService } from 'lib/services/bounty-service';
 import type { Bounty } from 'lib/services/database.types';
+import { performanceService } from 'lib/services/performance-service';
 import { isSupabaseConfigured, supabaseEnv } from 'lib/supabase';
 import { validateTitle } from 'lib/utils/bounty-validation';
 import { getCurrentUserId } from 'lib/utils/data-utils';
-import { analyticsService } from 'lib/services/analytics-service';
-import { performanceService } from 'lib/services/performance-service';
 
 export interface CreateBountyPayload {
   title: string;
@@ -14,6 +14,7 @@ export interface CreateBountyPayload {
   is_for_honor: boolean;
   location: string;
   work_type: 'online' | 'in_person';
+  category?: string;
   timeline?: string;
   skills_required?: string;
   poster_id: string;
@@ -66,13 +67,14 @@ export const bountyService = {
         )
       }
 
-      const payload: Omit<Bounty, 'id' | 'created_at'> & { attachments?: any[] } = {
+      const payload: Omit<Bounty, 'id' | 'created_at'> & { attachments?: any[]; category?: string } = {
         title: draft.title,
         description: draft.description,
         amount: draft.isForHonor ? 0 : draft.amount,
         is_for_honor: draft.isForHonor,
         location: draft.workType === 'in_person' ? draft.location : '',
         work_type: draft.workType,
+        category: draft.category || undefined,
         timeline: draft.timeline || '',
         skills_required: draft.skills || '',
         poster_id: getCurrentUserId(),

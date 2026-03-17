@@ -72,6 +72,19 @@ export const formatTimeAgo = (timestamp: string): string => {
   return `${Math.floor(diffHrs / 24)}d AGO`
 }
 
+/**
+ * Format a machine-style category (e.g. "web-development" or "design")
+ * into a human-friendly label like "Web Development".
+ */
+export const formatCategoryLabel = (cat?: string | null): string | null => {
+  if (!cat) return null
+  return String(cat)
+    .replace(/[-_]/g, ' ')
+    .split(' ')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+}
+
 // Get the current user profile
 export const getCurrentUserProfile = async (): Promise<Profile | null> => {
   try {
