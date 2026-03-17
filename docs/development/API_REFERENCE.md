@@ -419,7 +419,7 @@ Create a new bounty.
 
 ---
 
-#### GET /bounties
+#### bounties
 
 List bounties with filters and pagination.
 
@@ -692,7 +692,7 @@ Create a request to work on a bounty.
 
 ---
 
-#### GET /bounty-requests
+#### bounty-requests
 
 List bounty requests.
 

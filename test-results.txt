@@ -2534,7 +2534,7 @@ PASS __tests__/integration/api/payment-flows.test.ts
     GET /api/wallet/balance
       ΓêÜ should return wallet balance (13 ms)
       ΓêÜ should require authentication (13 ms)
-    GET /api/payment-methods
+    api/payment-methods
       ΓêÜ should list payment methods (15 ms)
     Error handling scenarios
       ΓêÜ should handle rate limit errors (14 ms)

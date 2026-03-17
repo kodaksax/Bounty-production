@@ -120,7 +120,7 @@ export function UpdatePasswordScreen() {
         setError(result.message)
       }
     } catch (e) {
-      setError('An unexpected error occurred. Please try again.')
+      setError('An unexpected error occurred. Please tr again.')
       console.error(e)
     } finally {
       setLoading(false)

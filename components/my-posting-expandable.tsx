@@ -937,18 +937,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                           <Text style={styles.hunterToolTextDanger}>Open Dispute</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity
-                          style={styles.hunterToolBtn}
-                          onPress={() => {
-                            dispatchUi({ type: 'set', key: 'hunterToolsExpanded', value: false })
-                            dispatchUi({ type: 'set', key: 'wipExpanded', value: false })
-                            dispatchUi({ type: 'set', key: 'reviewExpanded', value: true })
-                            dispatchUi({ type: 'set', key: 'localStageOverride', value: 'review_verify' })
-                          }}
-                        >
-                          <MaterialIcons name="fact-check" size={18} color="#6ee7b7" />
-                          <Text style={styles.hunterToolText}>Go To Submission</Text>
-                        </TouchableOpacity>
+                        
                       </View>
                     )}
                   </View>

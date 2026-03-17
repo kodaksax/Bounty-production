@@ -46,7 +46,7 @@ export function SignInForm() {
   const [lockoutUntil, setLockoutUntil] = useState<number | null>(null)
   const [captchaVerified, setCaptchaVerified] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
-
+  console.log('[sign-in] Component rendered', { loginAttempts, lockoutUntil, captchaVerified })
   const passwordRef = useRef<TextInput>(null)
 
   // Derive active lockout and CAPTCHA requirement each render so expired
@@ -471,8 +471,10 @@ export function SignInForm() {
               />
             </View>
             <View className="gap-5">
+              
               {authError && (() => {
                 const friendlyError = getUserFriendlyError(authError);
+                console.error('[sign-in] Authentication error:', authError, { friendlyMessage: friendlyError });
                 return (
                   <ErrorBanner
                     error={friendlyError}
