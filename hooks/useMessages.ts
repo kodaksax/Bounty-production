@@ -10,7 +10,7 @@ interface UseMessagesResult {
   loading: boolean;
   error: string | null;
   pinnedMessage: Message | null;
-  sendMessage: (text: string) => Promise<void>;
+  sendMessage: (text: string, mediaUrl?: string | null) => Promise<void>;
   retryMessage: (messageId: string) => Promise<void>;
   pinMessage: (messageId: string) => Promise<void>;
   unpinMessage: (messageId: string) => Promise<void>;
@@ -43,7 +43,7 @@ export function useMessages(conversationId: string): UseMessagesResult {
     }
   };
 
-  const sendMessage = async (text: string) => {
+  const sendMessage = async (text: string, mediaUrl?: string | null) => {
     try {
       setError(null);
       
@@ -53,6 +53,7 @@ export function useMessages(conversationId: string): UseMessagesResult {
         conversationId,
         senderId: currentUserId,
         text,
+        mediaUrl: mediaUrl ?? undefined,
         createdAt: new Date().toISOString(),
         status: 'sending',
       };
@@ -60,7 +61,7 @@ export function useMessages(conversationId: string): UseMessagesResult {
       setMessages(prev => [...prev, tempMessage]);
 
       // Send to Supabase
-      const message = await supabaseMessaging.sendMessage(conversationId, text, currentUserId);
+      const message = await supabaseMessaging.sendMessage(conversationId, text, currentUserId, mediaUrl ?? null);
       
       // Replace temp message with real one
       setMessages(prev => 

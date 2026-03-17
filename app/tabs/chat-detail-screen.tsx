@@ -11,6 +11,7 @@ import { MessageBubble } from "../../components/MessageBubble"
 import { PinnedMessageHeader } from "../../components/PinnedMessageHeader"
 import { ReportModal } from "../../components/ReportModal"
 import { TypingIndicator } from "../../components/TypingIndicator"
+import { useAttachmentUpload } from '../../hooks/use-attachment-upload'
 import { useMessages } from "../../hooks/useMessages"
 import { useNormalizedProfile } from "../../hooks/useNormalizedProfile"
 import { useTypingIndicator } from "../../hooks/useSocketStub"
@@ -74,12 +75,40 @@ export function ChatDetailScreen({
     otherUserProfile?.name
   );
 
-  const handleSendMessage = async (text: string) => {
-    await sendMessage(text)
+  const handleSendMessage = async (text: string, mediaUrl?: string | null) => {
+    await sendMessage(text, mediaUrl)
     // Scroll to bottom after sending
     setTimeout(() => {
       listRef.current?.scrollToEnd({ animated: true })
     }, 100)
+  }
+
+  // Attachment upload hook
+  const { pickAttachment, isPicking, isUploading } = useAttachmentUpload({
+    bucket: 'bounty-attachments',
+    allowsMultiple: false,
+  })
+
+  const handlePickAndSendAttachment = async () => {
+    try {
+      const uploaded = await pickAttachment()
+      if (!uploaded || uploaded.length === 0) return
+      const att = uploaded[0]
+      // Preserve the raw input so we can restore it on failure
+      const previousInput = inputText
+      const textToSend = previousInput.trim()
+      try {
+        await handleSendMessage(textToSend, att.remoteUri || att.uri)
+        // Clear the input only after successful send
+        setInputText('')
+      } catch (err) {
+        // Restore the previous input if send failed
+        setInputText(previousInput)
+        throw err
+      }
+    } catch (e) {
+      // ignore; the hook shows alerts on failure
+    }
   }
 
   const handleRetry = async (messageId: string) => {
@@ -248,6 +277,17 @@ export function ChatDetailScreen({
             {/* Message Input */}
             <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom || 0, BOTTOM_NAV_OFFSET + 8) }]}>
               <View style={styles.inputRow}>
+                <TouchableOpacity
+                  style={{ marginRight: 8, alignSelf: 'flex-end' }}
+                  onPress={handlePickAndSendAttachment}
+                  accessibilityLabel="Add attachment"
+                >
+                  {isPicking || isUploading ? (
+                    <ActivityIndicator size="small" color="#d1fae5" />
+                  ) : (
+                    <MaterialIcons name="attach-file" size={20} color="#d1fae5" />
+                  )}
+                </TouchableOpacity>
                 <TextInput
                   style={styles.inlineTextInput}
                   value={inputText}
@@ -262,8 +302,16 @@ export function ChatDetailScreen({
                   style={[styles.sendButton, !trimmedInputText && styles.sendButtonDisabled]}
                   onPress={async () => {
                     if (trimmedInputText.length === 0) return
-                    setInputText('')
-                    await handleSendMessage(trimmedInputText)
+                    const previousInput = inputText
+                    const textToSend = previousInput.trim()
+                    try {
+                      await handleSendMessage(textToSend)
+                      // Clear input only after successful send
+                      setInputText('')
+                    } catch (err) {
+                      // Restore input on failure
+                      setInputText(previousInput)
+                    }
                   }}
                   disabled={!trimmedInputText}
                 >
