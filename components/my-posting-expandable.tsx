@@ -10,18 +10,19 @@ import { messageService } from 'lib/services/message-service'
 import { staleBountyService } from 'lib/services/stale-bounty-service'
 import { userProfileService } from 'lib/services/userProfile'
 import type { Attachment, Conversation } from 'lib/types'
+import { getCurrentUserId } from 'lib/utils/data-utils'
 import { useEffect, useMemo, useReducer, useState } from 'react'
 import {
-    ActivityIndicator,
-    Alert,
-    LayoutAnimation,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    UIManager,
-    View
+  ActivityIndicator,
+  Alert,
+  LayoutAnimation,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  UIManager,
+  View
 } from 'react-native'
 import { useAttachmentUpload } from '../hooks/use-attachment-upload'
 import { logClientError } from '../lib/services/monitoring'
@@ -253,7 +254,45 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
       try {
         const list = await messageService.getConversations()
         if (!mounted) return
-        const match = list.find(c => String(c.bountyId) === String(bounty.id)) || null
+        const effectiveUserId = currentUserId || getCurrentUserId()
+
+        // First try: match by bountyId (preferred)
+        let match = list.find(c => String(c.bountyId) === String(bounty.id)) || null
+
+        // Second try: find a 1:1 conversation between current user and poster
+        if (!match && effectiveUserId) {
+          const posterId = bounty.poster_id || bounty.user_id
+          if (posterId) {
+            match = list.find(c => {
+              if (c.isGroup) return false
+              const parts = c.participantIds || []
+              return parts.includes(String(effectiveUserId)) && parts.includes(String(posterId))
+            }) || null
+          }
+        }
+
+        // Third try: query supabase-backed cache if still not found (covers cases
+        // where conversation exists in Supabase but local AsyncStorage cache is stale)
+        if (!match) {
+          try {
+            // Importing supabase-fetch directly is safe here for fallback only
+            const supabaseMessaging = await import('../lib/services/supabase-messaging')
+            const supList = await supabaseMessaging.fetchConversations(String(effectiveUserId || ''))
+            if (supList && supList.length > 0) {
+              match = supList.find(c => String(c.bountyId) === String(bounty.id)) || match
+              if (!match && effectiveUserId) {
+                const posterId = bounty.poster_id || bounty.user_id
+                if (posterId) {
+                  match = supList.find(c => !c.isGroup && (c.participantIds || []).includes(String(effectiveUserId)) && (c.participantIds || []).includes(String(posterId))) || match
+                }
+              }
+            }
+          } catch (e) {
+            // best-effort; if supabase fetch fails, continue silently
+            console.warn('Failed to fetch supabase conversations for fallback lookup', e)
+          }
+        }
+
         dispatchUi({ type: 'set', key: 'conversation', value: match })
 
         // Fetch hunter profile if available and we're the owner
@@ -687,15 +726,59 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   }
 
   const handleMessagePoster = async () => {
-    if (!conversation) {
-      Alert.alert('No Conversation', 'No active conversation found for this bounty yet.')
-      return
+    // Ensure we have a valid conversation id (string) before calling navigationIntent
+    const convId = conversation && conversation.id ? String(conversation.id) : null
+
+    // If no conversation exists yet, attempt to create one with the poster
+    if (!convId) {
+      try {
+        const posterId = bounty.poster_id || bounty.user_id
+        if (!posterId) {
+          Alert.alert('No Conversation', 'No active conversation found for this bounty yet.')
+          return
+        }
+
+        const created = await messageService.getOrCreateConversation([String(posterId)], '', String(bounty.id))
+        const createdId = created?.id ? String(created.id) : null
+        if (!createdId) {
+          Alert.alert('Message Failed', 'We could not open or create a conversation. You can try again or compose a new message manually.')
+          return
+        }
+
+        // Prefer navigationIntent so root UI opens the correct tab, fallback to direct route
+        try {
+          await navigationIntent.setPendingConversationId(createdId)
+          router.push('/tabs/bounty-app?screen=create' as '/tabs/bounty-app')
+          return
+        } catch (err) {
+          console.error('Failed to open new conversation via navigation intent', err)
+          try {
+            ;(router as any).push(`/messages/${encodeURIComponent(String(createdId))}`)
+            return
+          } catch (err2) {
+            console.error('Fallback direct conversation route failed for created conv', err2)
+          }
+        }
+      } catch (err) {
+        console.error('Unable to open or create conversation', err)
+        Alert.alert('Message Failed', 'We could not open or create a conversation. You can try again or compose a new message manually.')
+        return
+      }
     }
 
+    // If we have an existing conversation id, navigate to it
     try {
-      await navigationIntent.setPendingConversationId(conversation.id)
+      await navigationIntent.setPendingConversationId(convId)
       router.push('/tabs/bounty-app?screen=create' as '/tabs/bounty-app')
-    } catch {
+    } catch (err) {
+      console.error('Failed to open conversation via navigation intent', err)
+      // Fallback: try to open the conversation route directly
+      try {
+        ;(router as any).push(`/messages/${encodeURIComponent(String(convId))}`)
+        return
+      } catch (err2) {
+        console.error('Fallback direct conversation route failed', err2)
+      }
       Alert.alert('Unable to Open Chat', 'Please try again in a moment.')
     }
   }
@@ -894,22 +977,33 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                         return
                       }
 
-                      // Persist ready state and advance UI
-                      const ok = await completionService.markReady(String(bounty.id), currentUserId)
-                      if (ok) {
-                        dispatchUi({ type: 'set', key: 'readyToSubmitPressed', value: true })
-                        dispatchUi({ type: 'set', key: 'wipExpanded', value: false })
-                        dispatchUi({ type: 'set', key: 'reviewExpanded', value: true })
-                        dispatchUi({ type: 'set', key: 'localStageOverride', value: 'review_verify' })
-                        // update local readyRecord optimistically
-                        const now = new Date().toISOString()
-                        const rec = { bounty_id: String(bounty.id), hunter_id: currentUserId, ready_at: now }
-                        dispatchDraft({ type: 'setReadyRecord', record: rec })
-                        // Trigger parent refresh to update list
-                        if (onRefresh) onRefresh()
-                      } else {
-                        Alert.alert('Error', 'Failed to mark Ready. Please try again.')
+                      const confirmAndMarkReady = async () => {
+                        // Persist ready state and advance UI
+                        const ok = await completionService.markReady(String(bounty.id), currentUserId)
+                        if (ok) {
+                          dispatchUi({ type: 'set', key: 'readyToSubmitPressed', value: true })
+                          dispatchUi({ type: 'set', key: 'wipExpanded', value: false })
+                          dispatchUi({ type: 'set', key: 'reviewExpanded', value: true })
+                          dispatchUi({ type: 'set', key: 'localStageOverride', value: 'review_verify' })
+                          // update local readyRecord optimistically
+                          const now = new Date().toISOString()
+                          const rec = { bounty_id: String(bounty.id), hunter_id: currentUserId, ready_at: now }
+                          dispatchDraft({ type: 'setReadyRecord', record: rec })
+                          // Trigger parent refresh to update list
+                          if (onRefresh) onRefresh()
+                        } else {
+                          Alert.alert('Error', 'Failed to mark Ready. Please try again.')
+                        }
                       }
+
+                      Alert.alert(
+                        'Confirm Ready',
+                        'Are you sure you are ready to submit your work for review? This will lock the Work in Progress section.',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Ready', onPress: confirmAndMarkReady }
+                        ]
+                      )
                     }}
                     disabled={readyToSubmitPressed || !!readyRecord}
                   >
