@@ -66,7 +66,22 @@ if (process.env.USE_SQLITE === 'true') {
   connect = require('../lib/db').connect;
 }
 
-const { v4: uuidv4 } = require('uuid');
+// Prefer Node's built-in `crypto.randomUUID()` when available to avoid loading
+// the external `uuid` package at module evaluation time (which can cause
+// Jest to attempt to parse ESM-only `uuid` builds). Fall back to a simple
+// pseudo-unique generator when `crypto.randomUUID` isn't present.
+let uuidv4;
+try {
+  const { randomUUID } = require('crypto');
+  if (typeof randomUUID === 'function') {
+    uuidv4 = () => randomUUID();
+  }
+} catch (e) {
+  // ignore
+}
+if (!uuidv4) {
+  uuidv4 = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
+}
 
 console.log('[env] platform:', process.platform, 'pid:', process.pid, 'node:', process.version);
 // Quick check whether another process already bound intended port using a raw net attempt (we'll close immediately)
@@ -1185,6 +1200,47 @@ app.get('/api/bounty-requests', async (req, res) => {
     
     const [rows] = await conn.execute(query, params);
     
+    // Aggregate rating stats for hunters to match Supabase path
+    const ratingStatsMap = new Map();
+    try {
+      const hunterIds = Array.from(new Set((rows || []).map(r => r.hunter_id).filter(Boolean).map(String)));
+      if (hunterIds.length > 0) {
+        const placeholders = hunterIds.map(() => '?').join(', ');
+        try {
+          const [ratingRows] = await conn.execute(
+            `SELECT to_user_id, rating FROM ratings WHERE to_user_id IN (${placeholders})`,
+            hunterIds
+          );
+          for (const rr of (ratingRows || [])) {
+            const userId = String(rr.to_user_id || rr.to_user_id);
+            const current = ratingStatsMap.get(userId) || { averageRating: 0, ratingCount: 0 };
+            const nextCount = current.ratingCount + 1;
+            const nextAvg = ((current.averageRating * current.ratingCount) + Number(rr.rating || 0)) / nextCount;
+            ratingStatsMap.set(userId, { averageRating: nextAvg, ratingCount: nextCount });
+          }
+        } catch (ratingsErr) {
+          // Fallback to legacy user_ratings table if present
+          try {
+            const [legacyRows] = await conn.execute(
+              `SELECT user_id, score FROM user_ratings WHERE user_id IN (${placeholders})`,
+              hunterIds
+            );
+            for (const lr of (legacyRows || [])) {
+              const userId = String(lr.user_id);
+              const current = ratingStatsMap.get(userId) || { averageRating: 0, ratingCount: 0 };
+              const nextCount = current.ratingCount + 1;
+              const nextAvg = ((current.averageRating * current.ratingCount) + Number(lr.score || 0)) / nextCount;
+              ratingStatsMap.set(userId, { averageRating: nextAvg, ratingCount: nextCount });
+            }
+          } catch (legacyErr) {
+            console.warn('[bounty-requests] failed to aggregate ratings', legacyErr && legacyErr.message ? legacyErr.message : legacyErr);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[bounty-requests] rating aggregation error', e && e.message ? e.message : e);
+    }
+
     // Transform the flat results into nested structure expected by frontend
     const transformedRows = rows.map(row => ({
       id: row.id,
@@ -1206,12 +1262,147 @@ app.get('/api/bounty-requests', async (req, res) => {
         id: row.hunter_id,
         username: row.profile_username,
         avatar_url: row.profile_avatar_url
+      ,
+        ...(ratingStatsMap.get(String(row.hunter_id)) || {})
       }
     }));
     
     res.json(transformedRows);
   } catch (error) {
     handleError(res, error, 'Failed to fetch bounty requests');
+  } finally {
+    if (conn) try { await conn.end(); } catch {}
+  }
+});
+
+// Batch fetch bounty requests for multiple bounty IDs in one call
+app.post('/api/bounty-requests/batch', async (req, res) => {
+  let conn;
+  try {
+    conn = await connect();
+
+    const { bounty_ids, status, page, page_size } = req.body || {}
+    if (!Array.isArray(bounty_ids) || bounty_ids.length === 0) {
+      return res.status(400).json({ error: 'bounty_ids (array) is required' });
+    }
+
+    // Build base query with joins
+    let query = `
+      SELECT 
+        br.*,
+        b.title as bounty_title,
+        b.amount as bounty_amount,
+        b.location as bounty_location,
+        b.work_type as bounty_work_type,
+        b.deadline as bounty_deadline,
+        b.is_for_honor as bounty_is_for_honor,
+        p.username as profile_username,
+        p.avatar_url as profile_avatar_url
+  FROM bounty_requests br
+  LEFT JOIN bounties b ON br.bounty_id = b.id
+  LEFT JOIN profiles p ON br.hunter_id = p.id
+    `;
+
+    const conditions = [];
+    const params = [];
+
+    // bounty_ids IN (...) clause - create placeholders
+    const placeholders = bounty_ids.map(() => '?').join(', ');
+    conditions.push(`br.bounty_id IN (${placeholders})`);
+    for (const id of bounty_ids) params.push(id);
+
+    if (status) {
+      conditions.push('br.status = ?');
+      params.push(status);
+    }
+
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    }
+
+    query += ' ORDER BY br.created_at DESC';
+
+    // Pagination
+    const pageNum = Math.max(1, Number(page) || 1);
+    // Align default page size with client-side callers which use 200
+    // (e.g. app/tabs/postings-screen.tsx passes `pageSize: 200`).
+    // Keep the Math.max guard to ensure a minimum of 1.
+    const pageSizeNum = Math.max(1, Number(page_size) || 200);
+    const offset = (pageNum - 1) * pageSizeNum;
+    query += ' LIMIT ? OFFSET ?';
+    params.push(pageSizeNum, offset);
+
+    const [rows] = await conn.execute(query, params);
+
+    // Aggregate rating stats for hunters to match Supabase path
+    const ratingStatsMap = new Map();
+    try {
+      const hunterIds = Array.from(new Set((rows || []).map(r => r.hunter_id).filter(Boolean).map(String)));
+      if (hunterIds.length > 0) {
+        const placeholders = hunterIds.map(() => '?').join(', ');
+        try {
+          const [ratingRows] = await conn.execute(
+            `SELECT to_user_id, rating FROM ratings WHERE to_user_id IN (${placeholders})`,
+            hunterIds
+          );
+          for (const rr of (ratingRows || [])) {
+            const userId = String(rr.to_user_id || rr.to_user_id);
+            const current = ratingStatsMap.get(userId) || { averageRating: 0, ratingCount: 0 };
+            const nextCount = current.ratingCount + 1;
+            const nextAvg = ((current.averageRating * current.ratingCount) + Number(rr.rating || 0)) / nextCount;
+            ratingStatsMap.set(userId, { averageRating: nextAvg, ratingCount: nextCount });
+          }
+        } catch (ratingsErr) {
+          // Fallback to legacy user_ratings table if present
+          try {
+            const [legacyRows] = await conn.execute(
+              `SELECT user_id, score FROM user_ratings WHERE user_id IN (${placeholders})`,
+              hunterIds
+            );
+            for (const lr of (legacyRows || [])) {
+              const userId = String(lr.user_id);
+              const current = ratingStatsMap.get(userId) || { averageRating: 0, ratingCount: 0 };
+              const nextCount = current.ratingCount + 1;
+              const nextAvg = ((current.averageRating * current.ratingCount) + Number(lr.score || 0)) / nextCount;
+              ratingStatsMap.set(userId, { averageRating: nextAvg, ratingCount: nextCount });
+            }
+          } catch (legacyErr) {
+            console.warn('[bounty-requests/batch] failed to aggregate ratings', legacyErr && legacyErr.message ? legacyErr.message : legacyErr);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[bounty-requests/batch] rating aggregation error', e && e.message ? e.message : e);
+    }
+
+    const transformedRows = rows.map(row => ({
+      id: row.id,
+      bounty_id: row.bounty_id,
+      hunter_id: row.hunter_id,
+      status: row.status,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      bounty: {
+        id: row.bounty_id,
+        title: row.bounty_title,
+        amount: row.bounty_amount,
+        location: row.bounty_location,
+        work_type: row.bounty_work_type,
+        deadline: row.bounty_deadline,
+        is_for_honor: row.bounty_is_for_honor
+      },
+      profile: {
+        id: row.hunter_id,
+        username: row.profile_username,
+        avatar_url: row.profile_avatar_url
+        ,
+        ...(ratingStatsMap.get(String(row.hunter_id)) || {})
+      }
+    }));
+
+    res.json(transformedRows);
+  } catch (error) {
+    handleError(res, error, 'Failed to fetch batched bounty requests');
   } finally {
     if (conn) try { await conn.end(); } catch {}
   }
@@ -1951,26 +2142,33 @@ const RAW_PORT = process.env.API_PORT || process.env.PORT || 3001;
 const PORT = Number(String(RAW_PORT).trim().replace(/^"|"$/g,'').replace(/^'|'$/g,'')) || 3001;
 console.log('[startup] PORT raw value:', JSON.stringify(RAW_PORT), 'normalized:', PORT);
 
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 API server listening on http://127.0.0.1:${PORT}`);
-  console.log(`📋 Health check: http://127.0.0.1:${PORT}/health`);
-  try {
-    console.log('[startup] server.address():', server.address());
-  } catch (e) {
-    console.error('[startup] error reading server.address', e);
-  }
-});
+let server;
+if (process.env.NODE_ENV !== 'test') {
+  server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 API server listening on http://127.0.0.1:${PORT}`);
+    console.log(`📋 Health check: http://127.0.0.1:${PORT}/health`);
+    try {
+      console.log('[startup] server.address():', server.address());
+    } catch (e) {
+      console.error('[startup] error reading server.address', e);
+    }
+  });
 
-setInterval(() => {
-  if (server.listening) {
-    process.stdout.write('.');
-  } else {
-    console.warn('\n[heartbeat] server.listening is FALSE');
-  }
-}, 5000);
+  setInterval(() => {
+    if (server.listening) {
+      process.stdout.write('.');
+    } else {
+      console.warn('\n[heartbeat] server.listening is FALSE');
+    }
+  }, 5000);
 
-server.on('error', (e) => {
-  console.error('[server error]', e);
-});
+  server.on('error', (e) => {
+    console.error('[server error]', e);
+  });
+} else {
+  // In test mode we export the app without starting the HTTP server so
+  // tests can import the Express app directly and use supertest.
+  console.log('[startup] Running in test mode: skipping app.listen()');
+}
 
 module.exports = app;

@@ -242,6 +242,118 @@ export const bountyRequestService = {
   },
 
   /**
+   * Fetch requests for multiple bounty IDs in a single call (batch)
+   * Useful to avoid N+1 client calls when rendering a list of bounties.
+   */
+  async getAllWithDetailsBatch(bountyIds: (string | number)[], options?: { status?: string; page?: number; pageSize?: number }): Promise<BountyRequestWithDetails[]> {
+    try {
+      if (!Array.isArray(bountyIds) || bountyIds.length === 0) return []
+
+      // Supabase path: fetch all requests for the provided bounty IDs in one query
+      if (isSupabaseConfigured) {
+        const ids = Array.from(new Set(bountyIds.map((i) => String(i))))
+        let rq: any = supabase
+          .from('bounty_requests')
+          .select('*')
+          .in('bounty_id', ids)
+        if (typeof rq.order === 'function') rq = rq.order('created_at', { ascending: false })
+
+        if (options?.status) rq = rq.eq('status', options.status)
+        if (options?.page && options?.pageSize) {
+          const page = Math.max(1, options.page)
+          const pageSize = Math.max(1, options.pageSize)
+          const from = (page - 1) * pageSize
+          const to = (page * pageSize) - 1
+          if (typeof rq.range === 'function') rq = rq.range(from, to)
+        }
+
+        const { data: reqs, error } = await rq
+        if (error) throw error
+        const requests = (reqs as unknown as BountyRequest[]) ?? []
+        if (requests.length === 0) return []
+
+        const bountyIdsSet = Array.from(new Set(requests.map(r => (r as any).bounty_id).filter(Boolean).map(String)))
+        const userIds = Array.from(new Set(requests.map(r => (r as any).hunter_id).filter(Boolean).map(String)))
+
+        const [{ data: bounties, error: bErr }, { data: profiles, error: pErr }] = await Promise.all([
+          bountyIdsSet.length ? supabase.from('bounties').select('*').in('id', bountyIdsSet) : Promise.resolve({ data: [], error: null } as any),
+          userIds.length ? supabase.from('profiles').select('*').in('id', userIds) : Promise.resolve({ data: [], error: null } as any),
+        ])
+        if (bErr) throw bErr
+        if (pErr) throw pErr
+
+        const ratingStatsMap = new Map<string, { averageRating: number; ratingCount: number }>()
+        if (userIds.length > 0) {
+          try {
+            const { data: ratingRows, error: ratingsErr } = await supabase
+              .from('ratings')
+              .select('to_user_id, rating')
+              .in('to_user_id', userIds)
+
+            if (ratingsErr) throw ratingsErr
+
+            for (const row of (ratingRows || []) as any[]) {
+              const userId = String(row.to_user_id)
+              const current = ratingStatsMap.get(userId) || { averageRating: 0, ratingCount: 0 }
+              const nextCount = current.ratingCount + 1
+              const nextAvg = ((current.averageRating * current.ratingCount) + Number(row.rating || 0)) / nextCount
+              ratingStatsMap.set(userId, { averageRating: nextAvg, ratingCount: nextCount })
+            }
+          } catch (ratingsErr) {
+            logger.warning('Failed to load rating aggregates for batch requests', { error: ratingsErr })
+          }
+        }
+
+        const bountyMap = new Map<string, Bounty>((bounties as any[]).map((b: any) => [b.id, b as Bounty]))
+        const profileMap = new Map<string, Profile>((profiles as any[]).map((p: any) => [p.id, p as Profile]))
+
+        const result: BountyRequestWithDetails[] = requests.map(r => ({
+          ...(r as any),
+          bounty: bountyMap.get(String((r as any).bounty_id)) as Bounty,
+          profile: {
+            ...(profileMap.get(String((r as any).hunter_id)) as Profile),
+            ...(ratingStatsMap.get(String((r as any).hunter_id)) || {}),
+          } as Profile,
+        }))
+        return result
+      }
+
+      // Fallback to API: POST to batch endpoint with bounty_ids
+      const body: any = { bounty_ids: Array.from(new Set(bountyIds.map(i => String(i)))) }
+      if (options?.status) body.status = options.status
+      if (options?.page) body.page = options.page
+      if (options?.pageSize) body.page_size = options.pageSize
+
+      const response = await fetch(`${API_BASE_URL}/api/bounty-requests/batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+
+      if (!response.ok) {
+        const text = await response.text().catch(() => '<no-body>')
+        throw new Error(`Failed to fetch batched bounty requests: ${response.status} ${response.statusText} — ${text}`)
+      }
+
+      return await response.json()
+    } catch (err) {
+      let error: Record<string, any>
+      if (err instanceof Error) {
+        error = { name: err.name, message: err.message, stack: err.stack }
+      } else if (err && typeof err === 'object') {
+        const message = (err as any).message || (err as any).error?.message || (() => {
+          try { return JSON.stringify(err) } catch { return String(err) }
+        })()
+        error = { ...(err as Record<string, any>), message }
+      } else {
+        error = { message: String(err) }
+      }
+      logger.error('Error fetching batched bounty requests', { bountyIds, options, error })
+      return []
+    }
+  },
+
+  /**
    * Create a new bounty request
    */
   async create(request: Omit<BountyRequest, "id" | "created_at">): Promise<BountyRequest | null> {

@@ -208,9 +208,10 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
         return
       }
       setIsLoading((prev) => ({ ...prev, requests: true }))
-      const requestsPromises = openBounties.map((b) => bountyRequestService.getAllWithDetails({ bountyId: b.id }))
-      const requestsArrays = await Promise.all(requestsPromises)
-      setBountyRequests(requestsArrays.flat())
+      // Batch fetch requests for all open bounties to avoid N+1 network calls
+      const ids = openBounties.map(b => String(b.id))
+      const requests = await bountyRequestService.getAllWithDetailsBatch(ids, { page: 1, pageSize: 200 })
+      setBountyRequests(requests)
     } catch (e: any) {
       console.error('Error loading bounty requests:', e)
       setError('Failed to load bounty requests')
