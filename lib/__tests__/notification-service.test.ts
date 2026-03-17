@@ -1,14 +1,14 @@
 /* eslint-env jest */
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as notifModule from '../services/notification-service';
+import { supabase } from '../supabase';
+import { makeThrowingFrom } from './supabase-mock';
+
 jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: jest.fn(),
   setItem: jest.fn(),
   removeItem: jest.fn(),
 }));
-
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as notifModule from '../services/notification-service';
-import { supabase } from '../supabase';
-import { makeThrowingFrom } from './supabase-mock';
 // Mock the imported supabase instance used by the service
 jest.mock('../supabase', () => ({
   supabase: {

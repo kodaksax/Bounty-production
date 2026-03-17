@@ -1,24 +1,26 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Animated,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NotFoundScreen } from '../../../components/not-found-screen';
+import WorkInProgressBanner from '../../../components/work-in-progress-banner';
 import { useBackgroundColor } from '../../../lib/context/BackgroundColorContext';
 import { bountyService } from '../../../lib/services/bounty-service';
 import type { Bounty } from '../../../lib/services/database.types';
 import { messageService } from '../../../lib/services/message-service';
 import type { Conversation } from '../../../lib/types';
-import { getCurrentUserId } from '../../../lib/utils/data-utils';
+import { formatCategoryLabel, getCurrentUserId } from '../../../lib/utils/data-utils';
 
 type BountyStage = 'apply_work' | 'working_progress' | 'review_verify' | 'payout';
 
@@ -50,6 +52,7 @@ export default function BountyDashboard() {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const glowAnim = useRef(new Animated.Value(0)).current;
 
   // Normalize route param to a string (supports UUIDs)
   const routeBountyId = React.useMemo(() => {
@@ -71,6 +74,20 @@ export default function BountyDashboard() {
       popColor('#1a3d2e');
     }
   }, [routeBountyId]);
+
+  // Start pulsing glow when a bounty is in progress
+  useEffect(() => {
+    if (bounty?.status === 'in_progress') {
+      const anim = Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
+          Animated.timing(glowAnim, { toValue: 0, duration: 900, useNativeDriver: true }),
+        ])
+      );
+      anim.start();
+      return () => anim.stop();
+    }
+  }, [bounty?.status, glowAnim]);
 
   const loadBounty = async (id: string) => {
     try {
@@ -119,16 +136,23 @@ export default function BountyDashboard() {
   };
 
   const handleSendMessage = async () => {
-    if (!messageText.trim() || !conversation) {
-      if (!conversation) {
-        Alert.alert('No Conversation', 'No active conversation found for this bounty.');
-      }
-      return;
-    }
+    if (!messageText.trim()) return;
 
+    let conv = conversation;
     try {
       setIsSendingMessage(true);
-      await messageService.sendMessage(conversation.id, messageText.trim());
+
+      if (!conv) {
+        if (!bounty || !bounty.user_id) {
+          Alert.alert('No Conversation', 'No active conversation found for this bounty.');
+          return;
+        }
+
+        conv = await messageService.getOrCreateConversation([String(bounty.user_id)], '', routeBountyId || undefined);
+        setConversation(conv);
+      }
+
+      await messageService.sendMessage(conv.id, messageText.trim());
       setMessageText('');
       Alert.alert('Success', 'Message sent successfully!');
     } catch (err) {
@@ -157,9 +181,9 @@ export default function BountyDashboard() {
     
     if (currentIndex === STAGES.length - 2) {
       // Moving from review_verify to payout
-      if (routeBountyId) {
-        router.push({ pathname: '/postings/[bountyId]/review-and-verify', params: { bountyId: routeBountyId } })
-      }
+      // Legacy full-screen review route removed — keep modal-only flow.
+      // Previously: router.push('/postings/[bountyId]/review-and-verify')
+      // No-op to prevent navigation to deprecated screen.
     } else if (currentIndex < STAGES.length - 1) {
       const nextStage = STAGES[currentIndex + 1];
       setCurrentStage(nextStage.id);
@@ -253,6 +277,8 @@ export default function BountyDashboard() {
     ? bounty.description.substring(0, 150) + '...' 
     : bounty.description;
 
+  
+
   return (
     <SafeAreaView style={[styles.container, { width: '100%', alignSelf: 'stretch' }]} edges={["top"]}>
       {/* Header */}
@@ -278,7 +304,12 @@ export default function BountyDashboard() {
               <Text style={styles.bountyTitle} numberOfLines={2}>
                 {bounty.title}
               </Text>
-              <Text style={styles.bountyAge}>{formatTimeAgo(bounty.created_at)}</Text>
+                  <Text style={styles.bountyAge}>{formatTimeAgo(bounty.created_at)}</Text>
+                  {((bounty as any)?.category) && (
+                    <View style={styles.categoryPill}>
+                      <Text style={styles.categoryPillText}>{formatCategoryLabel((bounty as any).category)}</Text>
+                    </View>
+                  )}
             </View>
           </View>
 
@@ -296,6 +327,11 @@ export default function BountyDashboard() {
             )}
           </View>
         </View>
+
+        {/* Work in progress banner for posters */}
+        {bounty.status === 'in_progress' && (
+          <WorkInProgressBanner message="Your hunter is actively working on this. You’ll be notified when it’s ready for review." />
+        )}
 
         {/* Timeline */}
         {bounty.status === 'open' && (
@@ -335,18 +371,36 @@ export default function BountyDashboard() {
                   onPress={() => handleStagePress(stage.id)}
                   disabled={!isAccessible}
                 >
-                  <View
-                    style={[
-                      styles.stageIcon,
-                      isActive && styles.stageIconActive,
-                      isCompleted && styles.stageIconCompleted,
-                    ]}
-                  >
-                    <MaterialIcons
-                      name={stage.icon as any}
-                      size={24}
-                      color={isActive || isCompleted ? '#fff' : '#6ee7b7'}
-                    />
+                  <View style={{ position: 'relative', width: 48, height: 48, marginBottom: 8 }}>
+                    {bounty?.status === 'in_progress' && stage.id === 'working_progress' && isActive && (
+                      <Animated.View
+                        style={[
+                          styles.stageIconGlow,
+                          {
+                            transform: [
+                              {
+                                scale: glowAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.25] }),
+                              },
+                            ],
+                            opacity: glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0.12] }),
+                          },
+                        ]}
+                      />
+                    )}
+
+                    <View
+                      style={[
+                        styles.stageIcon,
+                        isActive && styles.stageIconActive,
+                        isCompleted && styles.stageIconCompleted,
+                      ]}
+                    >
+                      <MaterialIcons
+                        name={stage.icon as any}
+                        size={24}
+                        color={isActive || isCompleted ? '#fff' : '#6ee7b7'}
+                      />
+                    </View>
                   </View>
                   <Text
                     style={[
@@ -619,6 +673,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  categoryPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginTop: 6,
+  },
+  categoryPillText: {
+    color: '#a7f3d0',
+    fontSize: 12,
+    fontWeight: '600',
+  },
   timelineContainer: {
     marginBottom: 16,
   },
@@ -661,6 +729,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
+  },
+  stageIconGlow: {
+    position: 'absolute',
+    top: -8,
+    left: -8,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#10b981',
+    opacity: 0.25,
+    shadowColor: '#10b981',
+    shadowOpacity: 0.9,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 10,
   },
   stageIconActive: {
     backgroundColor: '#10b981',

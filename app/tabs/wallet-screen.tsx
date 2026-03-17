@@ -28,7 +28,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   const [showAddMoney, setShowAddMoney] = useState(false)
   const [showPaymentMethods, setShowPaymentMethods] = useState(false)
   const [showTransactionHistory, setShowTransactionHistory] = useState(false)
-  const { balance, transactions, refreshFromApi } = useWallet();
+  const { balance, transactions, refreshFromApi, secureStoreAvailable } = useWallet();
   const { paymentMethods, isLoading: stripeLoading, error: stripeError, loadPaymentMethods } = useStripe();
   const { triggerHaptic } = useHapticFeedback();
   const { session } = useAuthContext();
@@ -111,6 +111,15 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
 
         {/* Balance Card */}
         <View style={styles.sectionPad}>
+          {/* Warning if secure storage for sensitive keys is unavailable */}
+          {!secureStoreAvailable && (
+            <View style={{ backgroundColor: '#FEF3C7', padding: 10, borderRadius: 8, marginBottom: 10 }}>
+              <Text style={{ color: '#92400E', fontWeight: '600' }}>Security Notice</Text>
+              <Text style={{ color: '#92400E' }}>
+                Your device does not support secure storage. Sensitive wallet data is not being stored encrypted. Please use a managed build or sign out and back in on a supported device.
+              </Text>
+            </View>
+          )}
           <View style={styles.balanceCard}>
             <View style={styles.balanceCardHeader}>
               <Text style={styles.balanceLabel}>BALANCE</Text>

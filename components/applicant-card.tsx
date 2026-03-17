@@ -1,8 +1,8 @@
-// components/applicant-card.tsx - Single-screen applicant card with one-tap accept/reject
+// components/applicant-card.tsx - Applicant card with explicit confirmation for accept/reject
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { useRouter } from 'expo-router';
+import { useGlobalSearchParams, usePathname, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { BountyRequestWithDetails } from '../lib/services/bounty-request-service';
 import { getAvatarInitials, getValidAvatarUrl } from '../lib/utils/avatar-utils';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
@@ -15,6 +15,7 @@ interface ApplicantCardProps {
   onAccept: (requestId: string | number) => Promise<void>;
   onReject: (requestId: string | number) => Promise<void>;
   onRequestMoreInfo?: (requestId: string | number) => void;
+  referrerOverride?: string;
 }
 
 export function ApplicantCard({
@@ -22,11 +23,18 @@ export function ApplicantCard({
   onAccept,
   onReject,
   onRequestMoreInfo,
+  referrerOverride,
 }: ApplicantCardProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [actionType, setActionType] = useState<'accept' | 'reject' | null>(null);
   const [isNavigatingToProfile, setIsNavigatingToProfile] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
+  const globalSearchParams = useGlobalSearchParams();
+  const searchString = Object.keys(globalSearchParams || {}).length
+    ? `?${new URLSearchParams(globalSearchParams as any).toString()}`
+    : '';
+  const referrerValue = `${pathname || ''}${searchString}`;
 
   // Track component mounted state to prevent state updates after unmount
   const isMountedRef = useRef(true);
@@ -46,7 +54,7 @@ export function ApplicantCard({
     };
   }, []);
 
-  const handleAccept = async () => {
+  const runAccept = async () => {
     setIsProcessing(true);
     setActionType('accept');
     try {
@@ -59,7 +67,7 @@ export function ApplicantCard({
     }
   };
 
-  const handleReject = async () => {
+  const runReject = async () => {
     setIsProcessing(true);
     setActionType('reject');
     try {
@@ -72,6 +80,30 @@ export function ApplicantCard({
     }
   };
 
+  const handleAccept = () => {
+    Alert.alert(
+      'Accept Request?',
+      'Accepting this applicant starts the bounty and removes competing requests. Are you sure you want to continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Accept', style: 'default', onPress: runAccept },
+      ],
+      { cancelable: true }
+    );
+  };
+
+  const handleReject = () => {
+    Alert.alert(
+      'Reject Request?',
+      'Rejecting will remove this application from your requests list. Are you sure you want to continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Reject', style: 'destructive', onPress: runReject },
+      ],
+      { cancelable: true }
+    );
+  };
+
   const handleRequestInfo = () => {
     if (onRequestMoreInfo) {
       onRequestMoreInfo(request.id);
@@ -82,7 +114,11 @@ export function ApplicantCard({
     const id = (request as any).hunter_id || (request as any).user_id;
     if (id) {
       setIsNavigatingToProfile(true);
-      router.push(`/profile/${id}`);
+      // Prefer an explicit override when provided by the caller (e.g., Postings
+      // screen wants to ensure the Requests tab is restored). Otherwise fall
+      // back to the computed pathname+search value.
+      const finalRef = referrerOverride ?? referrerValue;
+      router.push(`/profile/${id}?referrer=${encodeURIComponent(finalRef)}`);
       // Clear any existing timeout before setting a new one
       if (navigationTimeoutRef.current) {
         clearTimeout(navigationTimeoutRef.current);

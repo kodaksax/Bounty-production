@@ -1,8 +1,8 @@
-import * as React from "react"
-import { View, Text, ViewProps, TextProps } from "react-native"
-import { OptimizedImage } from "lib/components/OptimizedImage"
+import { OptimizedImage } from "lib/components/OptimizedImage";
+import * as React from "react";
+import { Text, View, ViewProps } from "react-native";
 
-import { cn } from "lib/utils"
+import { cn } from "lib/utils";
 
 interface AvatarProps extends ViewProps {
   className?: string;
@@ -52,10 +52,14 @@ const AvatarImage = React.forwardRef<View, AvatarImageProps>(
         height={40}
         useThumbnail={true}
         priority="low"
-        style={{
-          width: '100%',
-          height: '100%',
-        }}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            zIndex: 1,
+          }}
         {...props}
       />
     );
@@ -77,11 +81,15 @@ const AvatarFallback = React.forwardRef<View, AvatarFallbackProps>(
         className
       )}
       style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
         width: '100%',
         height: '100%',
         backgroundColor: '#f5f5f5',
         alignItems: 'center',
         justifyContent: 'center',
+        zIndex: 0,
       }}
       {...props}
     >
@@ -98,4 +106,5 @@ const AvatarFallback = React.forwardRef<View, AvatarFallbackProps>(
 AvatarFallback.displayName = "AvatarFallback";
 
 
-export { Avatar, AvatarImage, AvatarFallback }
+export { Avatar, AvatarFallback, AvatarImage };
+

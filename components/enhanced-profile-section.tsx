@@ -116,7 +116,8 @@ export function EnhancedProfileSection({
   hideActions = false,
 }: EnhancedProfileSectionProps) {
   const { profile: normalizedFromHookOrLocal, loading: profileLoading } = useNormalizedProfile(userId);
-  const resolvedUserId = userId || 'current-user'
+  const { profile: authProfileFromHook } = useAuthProfile();
+  const resolvedUserId = userId || authProfileFromHook?.id || 'current-user'
   const { items, loading: portfolioLoading, deleteItem, addItem, refresh } = usePortfolio(resolvedUserId);
   const {
     pickAndUpload,
@@ -150,7 +151,6 @@ export function EnhancedProfileSection({
   const [selectedPortfolioItem, setSelectedPortfolioItem] = useState<PortfolioItem | null>(null);
   const [isReordering, setIsReordering] = useState(false);
   const { player: selectedVideoPlayer, hasVideo: hasSelectedVideo } = usePortfolioVideoPlayer(selectedPortfolioItem);
-  const { profile: authProfileFromHook } = useAuthProfile();
   
   // Block user state
   const [isBlocked, setIsBlocked] = useState(false);
@@ -683,7 +683,8 @@ export function EnhancedProfileSection({
 
 // Standalone Portfolio section to render after Skillsets
 export function PortfolioSection({ userId, isOwnProfile = true }: { userId?: string; isOwnProfile?: boolean }) {
-  const resolvedUserId = userId || 'current-user'
+  const { profile: authProfileFromHook } = useAuthProfile();
+  const resolvedUserId = userId || authProfileFromHook?.id || 'current-user'
   const { items, loading: portfolioLoading, deleteItem, addItem, refresh } = usePortfolio(resolvedUserId);
   const { pickAndUpload, isPicking, isUploading, progress, message: uploadMessage, lastPicked: lastPickedStandalone } = usePortfolioUpload({
     userId: resolvedUserId,

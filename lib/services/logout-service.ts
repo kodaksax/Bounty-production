@@ -87,7 +87,7 @@ export async function performLogout(deps: LogoutDeps = {}) {
   }
 
   // Fire-and-forget background cleanup. Only attempt a redundant signOut when prior attempts failed.
-  const backgroundTasks: Array<Promise<unknown>> = [
+  const backgroundTasks: Promise<unknown>[] = [
     (clearRemember?.() as Promise<unknown>)?.catch?.(() => undefined),
     Promise.all([
       Secure.deleteItemAsync('sb-access-token').catch(() => undefined),

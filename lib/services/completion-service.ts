@@ -1,5 +1,5 @@
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
-import { getCurrentUserId } from 'lib/utils/data-utils';
+import { CURRENT_USER_ID, getCurrentUserId } from 'lib/utils/data-utils';
 import getApiBaseFallback from 'lib/utils/dev-host';
 import { logger } from 'lib/utils/error-logger';
 import { getReachableApiBaseUrl } from 'lib/utils/network';
@@ -674,6 +674,22 @@ export const completionService = {
         created_at: new Date().toISOString(),
       };
 
+      let sessionUserId: string | null = null;
+      if (isSupabaseConfigured) {
+        try {
+          const { data } = await supabase.auth.getSession();
+          sessionUserId = data?.session?.user?.id ?? null;
+        } catch {
+          sessionUserId = null;
+        }
+      }
+
+      if (!payload.from_user_id || String(payload.from_user_id).trim() === '' || payload.from_user_id === CURRENT_USER_ID) {
+        if (sessionUserId) {
+          payload.from_user_id = sessionUserId;
+        }
+      }
+
       if (!payload.from_user_id || String(payload.from_user_id).trim() === '') {
         const uid = getCurrentUserId();
         if (uid) payload.from_user_id = uid;
@@ -683,6 +699,10 @@ export const completionService = {
         throw new Error('Missing required rating fields: from_user_id and to_user_id must be provided');
       }
 
+      if (payload.rating < 1 || payload.rating > 5) {
+        throw new Error('Rating must be between 1 and 5');
+      }
+
       if (isSupabaseConfigured) {
         const { data, error } = await supabase
           .from('ratings')
@@ -690,8 +710,44 @@ export const completionService = {
           .select('*')
           .single();
 
-        if (error) throw new Error(error?.message ?? JSON.stringify(error));
-        return data as Rating;
+        if (!error) {
+          return data as Rating;
+        }
+
+        const primaryError = String(error?.message || JSON.stringify(error)).toLowerCase();
+        const canFallback =
+          primaryError.includes('relation') ||
+          primaryError.includes('does not exist') ||
+          primaryError.includes('column') ||
+          primaryError.includes('schema cache');
+
+        if (!canFallback) {
+          throw new Error(error?.message ?? JSON.stringify(error));
+        }
+
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('user_ratings')
+          .insert({
+            user_id: payload.to_user_id,
+            rater_id: payload.from_user_id,
+            bounty_id: payload.bounty_id,
+            score: payload.rating,
+            comment: payload.comment,
+          })
+          .select('*')
+          .single();
+
+        if (fallbackError) throw new Error(fallbackError?.message ?? JSON.stringify(fallbackError));
+
+        return {
+          id: fallbackData.id,
+          bounty_id: fallbackData.bounty_id,
+          from_user_id: fallbackData.rater_id,
+          to_user_id: fallbackData.user_id,
+          rating: fallbackData.score,
+          comment: fallbackData.comment,
+          created_at: fallbackData.created_at,
+        } as Rating;
       }
 
       const response = await fetch(`${API_BASE_URL}/api/ratings`, {
@@ -725,8 +781,36 @@ export const completionService = {
           .eq('to_user_id', userId)
           .order('created_at', { ascending: false });
 
-        if (error) throw error;
-        return (data as Rating[]) || [];
+        if (!error) {
+          return (data as Rating[]) || [];
+        }
+
+        const primaryError = String(error?.message || JSON.stringify(error)).toLowerCase();
+        const canFallback =
+          primaryError.includes('relation') ||
+          primaryError.includes('does not exist') ||
+          primaryError.includes('column') ||
+          primaryError.includes('schema cache');
+
+        if (!canFallback) throw error;
+
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('user_ratings')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false });
+
+        if (fallbackError) throw fallbackError;
+
+        return ((fallbackData || []).map((row: any) => ({
+          id: row.id,
+          bounty_id: row.bounty_id,
+          from_user_id: row.rater_id,
+          to_user_id: row.user_id,
+          rating: row.score,
+          comment: row.comment,
+          created_at: row.created_at,
+        })) as Rating[]);
       }
 
       const response = await fetch(`${API_BASE_URL}/api/ratings/user/${userId}`);

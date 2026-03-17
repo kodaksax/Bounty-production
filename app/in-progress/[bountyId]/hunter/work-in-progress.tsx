@@ -126,16 +126,27 @@ export default function HunterWorkInProgressScreen() {
   };
 
   const handleSendMessage = async () => {
-    if (!messageText.trim() || !conversation) {
-      if (!conversation) {
-        Alert.alert('No Conversation', 'No active conversation found for this bounty.');
-      }
-      return;
-    }
+    if (!messageText.trim()) return;
 
+    let conv = conversation;
     try {
       setIsSendingMessage(true);
-      await messageService.sendMessage(conversation.id, messageText.trim());
+
+      // If no existing conversation, create or get one for this bounty and participants
+      if (!conv) {
+        if (!bounty || !bounty.user_id) {
+          Alert.alert('No Conversation', 'No active conversation found for this bounty.');
+          setIsSendingMessage(false);
+          return;
+        }
+
+        conv = await messageService.getOrCreateConversation([String(bounty.user_id)], '', routeBountyId || undefined);
+        setConversation(conv);
+      }
+
+      // conv will be set by getOrCreateConversation above; no further null-check required
+
+      await messageService.sendMessage(conv.id, messageText.trim());
       setMessageText('');
       Alert.alert('Success', 'Message sent successfully!');
     } catch (err) {

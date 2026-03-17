@@ -36,7 +36,7 @@ import { navigationIntent } from "../../lib/services/navigation-intent";
 ;
 
 export default function UserProfileScreen() {
-  const { userId } = useLocalSearchParams<{ userId: string }>();
+  const { userId, referrer } = useLocalSearchParams<{ userId: string; referrer?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const currentUserId = getCurrentUserId();
@@ -218,11 +218,18 @@ export default function UserProfileScreen() {
         throw new Error('Conversation created but no ID returned');
       }
 
-      // Set intent to open this conversation
+      // Set intent to open this conversation (Messenger will pick this up)
       await navigationIntent.setPendingConversationId(conversation.id);
 
-      // Navigate to messenger - only after conversation is successfully created
-      router.push(ROUTES.TABS.MESSENGER as any);
+      // Navigate into the BountyApp container and request the messenger view so
+      // the BottomNav (tab bar) is preserved. Navigating directly to the
+      // messenger route renders the screen outside the tabs and hides the nav.
+      type BountyAppScreen = "create";
+      const targetScreen: BountyAppScreen = "create";
+      const bountyAppRoute = `${ROUTES.TABS.BOUNTY_APP}?screen=${encodeURIComponent(
+        targetScreen
+      )}` as const;
+      router.push(bountyAppRoute as any);
     } catch (error) {
       console.error('Error creating conversation:', error);
       // Ensure we don't navigate on error
@@ -312,7 +319,22 @@ export default function UserProfileScreen() {
     setShowMoreMenu(false);
   };
 
-  const handleBack = () => {
+  const handleBack = async () => {
+    // If a referrer was provided when opening this profile, try to route
+    // back to it. Use navigationIntent to hand the referrer to the BountyApp
+    // root which will apply it even if the BountyApp is already mounted.
+    if (referrer) {
+      try {
+        const decoded = decodeURIComponent(referrer as string);
+        await navigationIntent.setPendingNavigation(decoded as string);
+        // Replace to the BountyApp root so it can consume the pending nav.
+        router.replace(ROUTES.TABS.BOUNTY_APP as any);
+        return;
+      } catch (err) {
+        // fall through to default behavior
+      }
+    }
+
     if (router.canGoBack()) {
       router.back();
     } else {
@@ -438,44 +460,28 @@ export default function UserProfileScreen() {
               <Text style={styles.primaryButtonText}>Edit Profile</Text>
             </TouchableOpacity>
           ) : (
-            <>
+            FOLLOW_FEATURE_ENABLED ? (
               <TouchableOpacity
-                style={[styles.primaryButton, isCreatingChat && styles.primaryButtonDisabled]}
-                onPress={handleMessage}
-                disabled={isCreatingChat}
+                style={[styles.secondaryButton, isFollowing && styles.followingButton]}
+                onPress={toggleFollow}
+                disabled={followLoading}
               >
-                {isCreatingChat ? (
-                  <ActivityIndicator size="small" color="#065f46" />
+                {followLoading ? (
+                  <ActivityIndicator size="small" color={isFollowing ? "#10b981" : "#ffffff"} />
                 ) : (
                   <>
-                    <MaterialIcons name="message" size={18} color="#065f46" />
-                    <Text style={styles.primaryButtonText}>Send Message</Text>
+                    <MaterialIcons
+                      name={isFollowing ? "person-remove" : "person-add"}
+                      size={18}
+                      color={isFollowing ? "#10b981" : "#ffffff"}
+                    />
+                    <Text style={[styles.secondaryButtonText, isFollowing && styles.followingButtonText]}>
+                      {isFollowing ? "Following" : "Follow"}
+                    </Text>
                   </>
                 )}
               </TouchableOpacity>
-              {FOLLOW_FEATURE_ENABLED && (
-                <TouchableOpacity
-                  style={[styles.secondaryButton, isFollowing && styles.followingButton]}
-                  onPress={toggleFollow}
-                  disabled={followLoading}
-                >
-                  {followLoading ? (
-                    <ActivityIndicator size="small" color={isFollowing ? "#10b981" : "#ffffff"} />
-                  ) : (
-                    <>
-                      <MaterialIcons
-                        name={isFollowing ? "person-remove" : "person-add"}
-                        size={18}
-                        color={isFollowing ? "#10b981" : "#ffffff"}
-                      />
-                      <Text style={[styles.secondaryButtonText, isFollowing && styles.followingButtonText]}>
-                        {isFollowing ? "Following" : "Follow"}
-                      </Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              )}
-            </>
+            ) : null
           )}
         </View>
 

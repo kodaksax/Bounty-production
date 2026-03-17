@@ -1,7 +1,7 @@
 import { and, desc, eq, ne } from 'drizzle-orm';
 import { Expo, ExpoPushMessage } from 'expo-server-sdk';
 import { db } from '../db/connection';
-import { notificationPreferences, notifications, pushTokens, users } from '../db/schema';
+import { conversations, messages, notificationPreferences, notifications, pushTokens, users } from '../db/schema';
 import { sendPushViaEdge } from './supabase-edge-client';
 
 // Initialize Expo SDK
@@ -430,13 +430,27 @@ export class NotificationService {
   }
 
   async notifyBountyAcceptance(hunterId: string, bountyId: string, bountyTitle: string) {
-    return this.createNotification({
+    const notif = await this.createNotification({
       userId: hunterId,
       type: 'acceptance',
       title: 'Bounty Accepted!',
       body: `Your application for "${bountyTitle}" was accepted`,
       data: { bountyId },
     });
+
+    // Try to also insert a short in-thread message in the bounty conversation (best-effort)
+    try {
+      const conv = await db.select().from(conversations).where(eq(conversations.bounty_id, bountyId)).limit(1);
+      if (conv.length > 0) {
+        const conversationId = conv[0].id;
+        const text = `Your application for "${bountyTitle}" was accepted.`;
+        await db.insert(messages).values({ conversation_id: conversationId, sender_id: hunterId, text }).returning();
+      }
+    } catch (err) {
+      console.error('Failed to insert acceptance message into conversation:', err);
+    }
+
+    return notif;
   }
 
   async notifyBountyRejection(hunterId: string, bountyId: string, bountyTitle: string) {
@@ -459,14 +473,29 @@ export class NotificationService {
     });
   }
 
-  async notifyBountyCompletion(posterId: string, bountyId: string, bountyTitle: string) {
-    return this.createNotification({
+  async notifyBountyCompletion(posterId: string, bountyId: string, bountyTitle: string, completedBy?: string) {
+    const notif = await this.createNotification({
       userId: posterId,
       type: 'completion',
       title: 'Bounty Completed',
       body: `"${bountyTitle}" has been marked as complete`,
       data: { bountyId },
     });
+
+    // Also try to create an in-conversation completion message
+    try {
+      const conv = await db.select().from(conversations).where(eq(conversations.bounty_id, bountyId)).limit(1);
+      if (conv.length > 0) {
+        const conversationId = conv[0].id;
+        const senderId = completedBy || posterId;
+        const text = `Work marked as complete for "${bountyTitle}".`;
+        await db.insert(messages).values({ conversation_id: conversationId, sender_id: senderId, text }).returning();
+      }
+    } catch (err) {
+      console.error('Failed to insert completion message into conversation:', err);
+    }
+
+    return notif;
   }
 
   async notifyPayment(userId: string, amount: number, bountyId: string, bountyTitle: string) {

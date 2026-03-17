@@ -15,6 +15,7 @@ import { useAuthContext } from '../../hooks/use-auth-context'
 import { useConversations } from '../../hooks/useConversations'
 import { useAdmin } from '../../lib/admin-context'
 import { authProfileService } from '../../lib/services/auth-profile-service'
+import { navigationIntent } from '../../lib/services/navigation-intent'
 import { getOnboardingCompleteKey } from '../../lib/storage/onboarding'
 
 function BountyAppInner() {
@@ -76,6 +77,7 @@ function BountyAppInner() {
   const paramInitialTab = typeof initialTab === 'string' && initialTab.length > 0 && allowedInitialTabs.has(initialTab) ? initialTab : undefined
   const [activeScreen, setActiveScreen] = useState(paramScreen)
   const [showBottomNav, setShowBottomNav] = useState(true)
+  const [pendingInitialTab, setPendingInitialTab] = useState<string | undefined>(paramInitialTab)
 
   // Track total unread message count for the bottom nav badge
   const { totalUnreadCount: unreadMessageCount } = useConversations()
@@ -86,6 +88,30 @@ function BountyAppInner() {
   // Handler for when bounty tab is pressed while already active - scroll to top and refresh
   const handleBountyTabRepress = useCallback(() => {
     bountyFeedRef.current?.handleTabRepress()
+  }, [])
+
+  // Consume any pending navigation intent and apply active screen / initialTab.
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const pending = await navigationIntent.getAndClearPendingNavigation()
+        if (!pending || !mounted) return
+        // Parse the pending URL for `screen` and `initialTab` params.
+        try {
+          const u = new URL(pending, 'http://example.com') // base for parsing
+          const screen = u.searchParams.get('screen')
+          const initialTab = u.searchParams.get('initialTab')
+          if (screen) setActiveScreen(screen)
+          if (initialTab) setPendingInitialTab(initialTab)
+        } catch (err) {
+          // ignore parsing errors
+        }
+      } catch (err) {
+        // ignore
+      }
+    })()
+    return () => { mounted = false }
   }, [])
 
   // If the admin tab is selected, navigate to the admin route from an effect
@@ -159,7 +185,7 @@ function BountyAppInner() {
       )}
       {activeScreen === "postings" && (
         <PostingsScreen
-          initialTab={paramInitialTab}
+          initialTab={pendingInitialTab ?? paramInitialTab}
           onBack={() => setActiveScreen("bounty")}
           activeScreen={activeScreen}
           setActiveScreen={setActiveScreen}

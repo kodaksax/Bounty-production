@@ -33,13 +33,21 @@ export interface UsePortfolioUploadOptions {
  */
 export function usePortfolioUpload(options: UsePortfolioUploadOptions) {
   const { userId, onUploaded, onError } = options
+  // Use the `userId` prop directly in async flows. We avoid a ref here
+  // because using a ref can lead to stale/cross-user attribution in
+  // long-running async operations. Capture the `userId` at the start
+  // of the upload flow instead.
   const [state, setState] = useState<PortfolioUploadState>({ isPicking: false, isUploading: false, progress: 0, message: null })
   const [lastPicked, setLastPicked] = useState<LastPickedAsset | null>(null)
 
   const pickAndUpload = async () => {
     try {
+      // Capture the userId at the start of this operation so the
+      // entire flow attributes uploads to the same user even if the
+      // `userId` prop changes during the async work.
+      const currentUserId = userId
       // Check if user can add more items before picking
-      const canAdd = await portfolioService.canAddItem(userId)
+      const canAdd = await portfolioService.canAddItem(currentUserId)
       if (!canAdd) {
         setState(s => ({ ...s, message: `Maximum of ${MAX_PORTFOLIO_ITEMS} portfolio items allowed` }))
         setTimeout(() => setState(s => ({ ...s, message: null })), 3000)
@@ -267,7 +275,7 @@ export function usePortfolioUpload(options: UsePortfolioUploadOptions) {
       // but keep the preview thumbnail (data URI or local file) if available so the UI can show it immediately.
       const item: PortfolioItem = {
         id: `p${Date.now()}`,
-        userId,
+        userId: currentUserId,
         type,
         // use remoteUri for canonical URL when available, but keep local uri for thumbnail/preview
         url: uploaded.remoteUri || uploaded.uri,

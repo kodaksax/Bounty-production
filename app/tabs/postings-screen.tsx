@@ -21,6 +21,7 @@ import { ArchivedBountiesScreen } from "../../components/archived-bounties-scree
 import { BountyConfirmationCard } from "../../components/bounty-confirmation-card"
 import { EditPostingModal } from "../../components/edit-posting-modal"
 import { useValidUserId } from '../../hooks/useValidUserId'
+import { ROUTES } from '../../lib/routes'
 // Render In Progress tab using the same expandable card as My Postings
 import { MyPostingExpandable } from "../../components/my-posting-expandable"
 import { OfflineStatusBadge } from '../../components/offline-status-badge'
@@ -115,7 +116,12 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   const STICKY_BOTTOM_EXTRA = 44 // extra height used by chips/title in sticky bar
   const BOTTOM_NAV_OFFSET = 60// height of BottomNav + gap so sticky actions sit fully above it
   const { balance, deposit, createEscrow, refundEscrow } = useWallet()
-  const [workTypeFilter, setWorkTypeFilter] = useState<'all' | 'online' | 'in_person'>('all')
+  // Filter by status or request state (applied, in_progress, completed, rejected, open, etc.)
+  // Use separate filters per-tab so toggling one doesn't unexpectedly affect the other.
+  const [statusFilterInProgress, setStatusFilterInProgress] = useState<'all' | 'applied' | 'in_progress' | 'completed' | 'rejected'>('all')
+  const [statusFilterMyPostings, setStatusFilterMyPostings] = useState<'all' | 'open' | 'in_progress' | 'completed' | 'archived'>('all')
+  // Keep the hunter's requests so we can filter In Progress by request status (applied/accepted/rejected)
+  const [hunterRequests, setHunterRequests] = useState<BountyRequestWithDetails[]>([])
   // Edit/Delete state
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingBounty, setEditingBounty] = useState<Bounty | null>(null)
@@ -255,10 +261,12 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
     try {
       setIsLoading((prev) => ({ ...prev, inProgress: true }))
       setError(null) // Clear previous error
-      // Show bounties that the current user has applied for (pending/accepted/etc.)
+      // Show bounties that the current user has applied for (pending/accepted/rejected/etc.)
+      // Include rejected requests so we can surface a 'Rejected' badge and provide a discard action.
       const requests = await bountyRequestService.getAllWithDetails({ userId: currentUserId })
-      // Only include bounties where the user's request isn't rejected
-      const relevant = requests.filter(r => r.status !== 'rejected')
+      const relevant = requests // keep all statuses (pending, accepted, rejected)
+      // Keep requests so we can filter by request.status in the UI
+      setHunterRequests(relevant)
       // Map to unique bounties
       const map = new Map<string, Bounty>()
       for (const r of relevant) {
@@ -541,14 +549,8 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
         onToggle={() => handleToggleAndScroll('myPostings', bounty.id)}
         onEdit={bounty.status === 'open' ? () => handleEditBounty(bounty) : undefined}
         onDelete={bounty.status === 'open' ? () => handleDeleteBounty(bounty) : undefined}
-        onGoToReview={(id: string) => {
-          void onboardingManager.completeStep('review_submission')
-          router.push({ pathname: '/postings/[bountyId]/review-and-verify', params: { bountyId: id } })
-        }}
-        onGoToPayout={(id: string) => {
-          void onboardingManager.completeStep('release_payment')
-          router.push({ pathname: '/postings/[bountyId]/payout', params: { bountyId: id } })
-        }}
+        onGoToReview={(id: string) => { /* legacy route removed - modal only */ }}
+        onGoToPayout={(id: string) => router.push({ pathname: '/postings/[bountyId]/payout', params: { bountyId: id } })}
         variant={'owner'}
         isListScrolling={isListScrolling}
         onRefresh={refreshAll}
@@ -566,21 +568,36 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
         currentUserId={currentUserId}
         expanded={!!expandedMap[String(bounty.id)]}
         onToggle={() => handleToggleAndScroll('inProgress', bounty.id)}
-        onWithdrawApplication={bounty.status === 'open' ? () => handleWithdrawApplication(bounty.id) : undefined}
-        onGoToReview={(id: string) => {
-          void onboardingManager.completeStep('review_submission')
-          router.push({ pathname: '/in-progress/[bountyId]/hunter/review-and-verify', params: { bountyId: id } })
-        }}
-        onGoToPayout={(id: string) => {
-          void onboardingManager.completeStep('release_payment')
-          router.push({ pathname: '/in-progress/[bountyId]/hunter/payout', params: { bountyId: id } })
-        }}
+        onWithdrawApplication={() => handleWithdrawApplication(bounty.id)}
+        onGoToReview={(id: string) => { /* legacy route removed - modal only */ }}
+        onGoToPayout={(id: string) => router.push({ pathname: '/in-progress/[bountyId]/hunter/payout', params: { bountyId: id } })}
         variant={'hunter'}
         isListScrolling={isListScrolling}
         onRefresh={refreshAll}
       />
     </View>
   ), [currentUserId, expandedMap, isListScrolling, router, refreshAll]);
+
+  // Map of bountyId -> request.status for the current user
+  const requestStatusMap = React.useMemo(() => {
+    const m = new Map<string, string>()
+    hunterRequests.forEach((r) => {
+      const bId = r?.bounty?.id
+      if (bId !== undefined && bId !== null) m.set(String(bId), r.status)
+    })
+    return m
+  }, [hunterRequests])
+
+  // Derived list for In Progress tab considering the selected status filter
+  const displayedInProgress = React.useMemo(() => {
+    if (statusFilterInProgress === 'all') return inProgressBounties
+    if (statusFilterInProgress === 'applied') return inProgressBounties.filter(b => requestStatusMap.get(String(b.id)) === 'pending')
+    if (statusFilterInProgress === 'rejected') return inProgressBounties.filter(b => requestStatusMap.get(String(b.id)) === 'rejected')
+    if (statusFilterInProgress === 'in_progress') return inProgressBounties.filter(b => b.status === 'in_progress')
+    if (statusFilterInProgress === 'completed') return inProgressBounties.filter(b => b.status === 'completed')
+    // fallback
+    return inProgressBounties
+  }, [inProgressBounties, statusFilterInProgress, requestStatusMap])
 
   const renderRequestItem = React.useCallback(({ item: request }: { item: BountyRequestWithDetails }) => (
     <ApplicantCard
@@ -590,6 +607,9 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
         void onboardingManager.completeStep('accept_hunter')
       }}
       onReject={handleRejectRequest}
+      // Ensure returning from profile restores the Postings screen to the
+      // Requests tab reliably by directing BountyApp to open postings + requests.
+      referrerOverride={`${ROUTES.TABS.BOUNTY_APP}?screen=postings&initialTab=requests`}
     />
   ), [handleAcceptRequest, handleRejectRequest]);
 
@@ -763,20 +783,20 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
               activeTab === "inProgress" ? (
                 <FlatList
                   ref={inProgressListRef}
-                  data={inProgressBounties.filter(b => workTypeFilter === 'all' || b.work_type === workTypeFilter)}
+                  data={displayedInProgress}
                   keyExtractor={keyExtractorBounty}
                   extraData={{ inProgressBounties, expandedMap }}
                   ListHeaderComponent={(
                     <View>
                       <OnboardingChecklist />
                       <View className="flex-row gap-2 mb-1">
-                        {(['all', 'online', 'in_person'] as const).map(f => {
-                          const label = f === 'all' ? 'All' : f === 'online' ? 'Online' : 'In Person'
-                          const selected = workTypeFilter === f
-                          return (
+                        {(['all', 'applied', 'in_progress', 'completed', 'rejected'] as const).map((f) => {
+                          const label = f === 'all' ? 'All' : f === 'applied' ? 'Applied' : f === 'in_progress' ? 'In Progress' : f === 'completed' ? 'Completed' : 'Rejected'
+                          const selected = statusFilterInProgress === f
+                            return (
                             <TouchableOpacity
                               key={f}
-                              onPress={() => setWorkTypeFilter(f)}
+                              onPress={() => setStatusFilterInProgress(f)}
                               className={cn('px-3 py-1.5 rounded-full border', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}
                               accessibilityRole="button"
                               accessibilityLabel={`Filter by ${label} work in progress`}
@@ -896,20 +916,20 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
               ) : activeTab === "myPostings" ? (
                 <FlatList
                   ref={myPostingsListRef}
-                  data={myBounties.filter(b => workTypeFilter === 'all' || b.work_type === workTypeFilter)}
+                  data={myBounties.filter(b => statusFilterMyPostings === 'all' || b.status === statusFilterMyPostings)}
                   keyExtractor={keyExtractorBounty}
                   extraData={{ myBounties, expandedMap }}
                   ListHeaderComponent={(
                     <View>
                       <OnboardingChecklist />
                       <View className="flex-row gap-2 mb-1">
-                        {(['all', 'online', 'in_person'] as const).map(f => {
-                          const label = f === 'all' ? 'All' : f === 'online' ? 'Online' : 'In Person'
-                          const selected = workTypeFilter === f
-                          return (
+                        {(['all', 'open', 'in_progress', 'completed', 'archived'] as const).map((f) => {
+                          const label = f === 'all' ? 'All' : f === 'open' ? 'Open' : f === 'in_progress' ? 'In Progress' : f === 'completed' ? 'Completed' : 'Archived'
+                          const selected = statusFilterMyPostings === f
+                            return (
                             <TouchableOpacity
                               key={f}
-                              onPress={() => setWorkTypeFilter(f)}
+                              onPress={() => setStatusFilterMyPostings(f)}
                               className={cn('px-3 py-1.5 rounded-full border', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}
                               accessibilityRole="button"
                               accessibilityLabel={`Filter by ${label} postings`}

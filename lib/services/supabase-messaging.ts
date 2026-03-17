@@ -324,16 +324,20 @@ export async function fetchMessages(conversationId: string): Promise<Message[]> 
 export async function sendMessage(
   conversationId: string,
   text: string,
-  senderId: string
+  senderId: string,
+  mediaUrl?: string | null
 ): Promise<Message> {
   try {
     // First, try the canonical column name 'text'
+    // Include media_url when provided. Try several candidate field names for text and media.
+    const base = { conversation_id: conversationId, sender_id: senderId };
     let attemptFields: Record<string, any>[] = [
-      { conversation_id: conversationId, sender_id: senderId, text },
-      // fallback alternatives in case DB schema uses a different column name
-      { conversation_id: conversationId, sender_id: senderId, body: text },
-      { conversation_id: conversationId, sender_id: senderId, message: text },
-      { conversation_id: conversationId, sender_id: senderId, content: text },
+      { ...base, text, media_url: mediaUrl ?? null },
+      { ...base, text, media: mediaUrl ?? null },
+      // fallback alternatives for text column naming
+      { ...base, body: text, media_url: mediaUrl ?? null },
+      { ...base, message: text, media_url: mediaUrl ?? null },
+      { ...base, content: text, media_url: mediaUrl ?? null },
     ];
 
     let inserted: any = null;

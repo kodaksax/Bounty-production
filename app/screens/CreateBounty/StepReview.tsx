@@ -1,12 +1,13 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { formatCategoryLabel } from 'lib/utils/data-utils';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAuthContext } from '../../../hooks/use-auth-context';
 import { AttachmentViewerModal } from '../../../components/attachment-viewer-modal';
 import { EscrowExplainer } from '../../../components/ui/escrow-explainer';
 import { TrustBadgesCompact } from '../../../components/ui/trust-badges';
+import { useAuthContext } from '../../../hooks/use-auth-context';
 import type { Attachment } from '../../../lib/types';
 
 interface StepReviewProps {
@@ -53,6 +54,8 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
   };
 
   const listRef = useRef<FlatList<any> | null>(null)
+
+  
 
   // When this screen mounts, ensure list is scrolled to top so the header is visible
   useEffect(() => {
@@ -111,7 +114,7 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
                     <Text className="text-emerald-200/70 text-xs uppercase tracking-wide">Title & Category</Text>
                   </View>
                   <Text className="text-white text-lg font-semibold mb-1">{draft.title}</Text>
-                  {draft.category && <Text className="text-emerald-300 text-sm capitalize">{draft.category}</Text>}
+                  {draft.category && <Text className="text-emerald-300 text-sm">{formatCategoryLabel(draft.category)}</Text>}
                 </View>
               );
             case 'description':

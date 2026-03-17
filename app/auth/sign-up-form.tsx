@@ -1,12 +1,14 @@
 "use client"
 import { MaterialIcons } from '@expo/vector-icons'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { ValidationMessage } from 'app/components/ValidationMessage'
 import type { Href } from 'expo-router'
 import { useRouter } from 'expo-router'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { BrandingLogo } from '../../components/ui/branding-logo'
 import { ValidationPatterns } from '../../hooks/use-form-validation'
+import { API_BASE_URL } from '../../lib/config/api'
 import useScreenBackground from '../../lib/hooks/useScreenBackground'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
 import { generateCorrelationId, parseAuthError } from '../../lib/utils/auth-errors'
@@ -22,6 +24,7 @@ export function SignUpForm() {
   useScreenBackground('#097959ff') // EMERALD_800 / dark
   const router = useRouter()
   const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [authError, setAuthError] = useState<string | null>(null)
@@ -38,6 +41,13 @@ export function SignUpForm() {
 
   const validateForm = () => {
     const errors: Record<string, string> = {}
+
+    // Validate username
+    if (!username || username.trim().length === 0) {
+      errors.username = 'Username is required'
+    } else if (!/^[a-zA-Z0-9_]{3,24}$/.test(username.trim())) {
+      errors.username = 'Username must be 3-24 characters (letters, numbers, underscore)'
+    }
 
     // Validate email
     const emailError = validateEmail(email)
@@ -69,6 +79,23 @@ export function SignUpForm() {
     return Object.keys(errors).length === 0
   }
 
+  // Prefill username from onboarding state if available to avoid duplicate entry
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const stored = await AsyncStorage.getItem('@bounty_onboarding_state')
+        if (!stored) return
+        const parsed = JSON.parse(stored)
+        const maybeUsername = parsed && parsed.username ? String(parsed.username) : ''
+        if (mounted && maybeUsername) setUsername(maybeUsername)
+      } catch (e) {
+        // ignore
+      }
+    })()
+    return () => { mounted = false }
+  }, [])
+
   const handleSubmit = async () => {
     setAuthError(null)
     setFieldErrors({})
@@ -84,91 +111,104 @@ export function SignUpForm() {
 
     try {
       setIsLoading(true)
-      console.log('[sign-up] Starting sign-up process', { correlationId })
+      console.log('[sign-up] Starting sign-up process (via backend)', { correlationId })
 
-      // SIMPLIFIED: Let Supabase handle its own timeout logic
-      // See SIGN_IN_SIMPLIFICATION_SUMMARY.md for rationale
-      // Pass age verification into user_metadata so backend can persist it
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim().toLowerCase(), // Normalize email
-        password,
-        options: {
-          data: { age_verified: ageVerified }
-        }
+      // Register via backend to ensure duplicate-email checks use admin API
+      const normalizedEmail = email.trim().toLowerCase()
+      const normalizedUsername = username.trim()
+      const registerRes = await fetch(`${API_BASE_URL}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: normalizedEmail, username: normalizedUsername, password }),
       })
 
-      if (error) {
-        console.error('[sign-up] Error:', error, { correlationId })
+      if (!registerRes.ok) {
+        // Attempt to parse structured error body for clearer messaging
+        const text = await registerRes.text().catch(() => '')
+        let parsed: any = null
+        try { parsed = text ? JSON.parse(text) : null } catch {}
+        const backendMessage = parsed?.error || parsed?.message || text || registerRes.statusText || 'Failed to create account'
 
-        // Parse error using centralized handler
-        const authError = parseAuthError(error, correlationId);
-        setAuthError(authError.userMessage)
+        if (registerRes.status === 409) {
+          const errLower = String(backendMessage).toLowerCase()
+          if (errLower.includes('email')) {
+            setAuthError('This email is already registered. Please sign in instead or use password reset.')
+            return
+          }
+          if (errLower.includes('username')) {
+            setAuthError('This username is already taken. Please choose another.')
+            return
+          }
+          setAuthError('Account already exists. Please sign in or choose different credentials.')
+          return
+        }
+
+        setAuthError(backendMessage)
         return
       }
 
-      console.log('[sign-up] Sign-up successful', { correlationId, hasSession: !!data.session })
+      // Registration succeeded. Now sign in the user to create a session.
+      try {
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email: normalizedEmail,
+          password,
+        })
 
-      // Clear form data for security (especially password)
-      setEmail('')
-      setPassword('')
-      setConfirmPassword('')
-      setAgeVerified(false)
-      setTermsAccepted(false)
+        if (signInError) {
+          console.error('[sign-up] Sign-in after register failed', signInError, { correlationId })
+          const authErr = parseAuthError(signInError, correlationId)
+          setAuthError(authErr.userMessage)
+          return
+        }
 
-      // Keep user signed in after account creation (auto sign-in)
-      // The user will be redirected to onboarding or app based on their profile status
-      // Email verification gates will prevent posting/applying until verified
-      if (data.session) {
-        console.log('[sign-up] User automatically signed in, checking profile', { correlationId })
+        const session = signInData.session
 
-        try {
-          const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('username, onboarding_completed')
-            .eq('id', data.session.user.id)
-            .single()
+        // Clear form data for security
+        setUsername('')
+        setEmail('')
+        setPassword('')
+        setConfirmPassword('')
+        setAgeVerified(false)
+        setTermsAccepted(false)
 
-          // Handle profile errors
-          if (profileError) {
-            if (profileError.code === 'PGRST116') {
-              // Profile doesn't exist yet (expected for new users) - proceed to onboarding
-              console.log('[sign-up] No profile found, redirecting to onboarding', { correlationId })
+        if (session) {
+          // Proceed to profile check / onboarding as before
+          try {
+            const { data: profile, error: profileError } = await supabase
+              .from('profiles')
+              .select('username, onboarding_completed')
+              .eq('id', session.user.id)
+              .single()
+
+            if (profileError) {
+              if (profileError.code === 'PGRST116') {
+                router.replace('/onboarding' as Href)
+                try { markInitialNavigationDone(); } catch { }
+                return
+              }
+              throw profileError
+            }
+
+            if (!profile.username || profile.onboarding_completed !== true) {
               router.replace('/onboarding' as Href)
               try { markInitialNavigationDone(); } catch { }
-              return
+            } else {
+              router.replace('/tabs/bounty-app' as Href)
+              try { markInitialNavigationDone(); } catch { }
             }
-            // For other errors, throw to be caught by catch block
-            throw profileError
-          }
-
-          // Profile exists - check if onboarding is complete
-          // User needs onboarding if username is missing or onboarding_completed is not true
-          // Note: onboarding_completed could be false or null for new users
-          if (!profile.username || profile.onboarding_completed !== true) {
-            console.log('[sign-up] Profile incomplete or onboarding not completed, redirecting to onboarding', {
-              correlationId,
-              hasUsername: !!profile.username,
-              onboardingCompleted: profile.onboarding_completed
-            })
+          } catch (err) {
+            console.error('[sign-up] Profile check error after register', { correlationId, error: err })
             router.replace('/onboarding' as Href)
             try { markInitialNavigationDone(); } catch { }
-          } else {
-            // User has completed onboarding (edge case) - go to app
-            console.log('[sign-up] Profile complete, redirecting to app', { correlationId })
-            router.replace('/tabs/bounty-app' as Href)
-            try { markInitialNavigationDone(); } catch { }
           }
-        } catch (err) {
-          // On error, proceed to onboarding to be safe
-          console.error('[sign-up] Profile check error, proceeding to onboarding', { correlationId, error: err })
-          router.replace('/onboarding' as Href)
+        } else {
+          router.replace('/auth/email-confirmation' as Href)
           try { markInitialNavigationDone(); } catch { }
         }
-      } else {
-        // No session was created (shouldn't happen, but handle gracefully)
-        console.warn('[sign-up] No session created after sign-up, showing email confirmation', { correlationId })
-        router.replace('/auth/email-confirmation' as Href)
-        try { markInitialNavigationDone(); } catch { }
+      } catch (err: any) {
+        const authErr = parseAuthError(err, correlationId)
+        setAuthError(authErr.userMessage)
+        return
       }
     } catch (e: any) {
       console.error('[sign-up] Unexpected error:', e, { correlationId })
@@ -194,6 +234,26 @@ export function SignUpForm() {
                 <Text className="text-red-200 text-sm">{authError}</Text>
               </View>
             ) : null}
+
+            <View>
+              <Text className="text-sm text-white/80 mb-1">Username</Text>
+              <TextInput
+                value={username}
+                onChangeText={(text) => {
+                  setUsername(text)
+                  if (fieldErrors.username) setFieldErrors(prev => ({ ...prev, username: '' }))
+                }}
+                placeholder="Choose a username (3-24 chars)"
+                autoCapitalize="none"
+                editable={!isLoading}
+                className={`w-full bg-white/10 rounded px-3 py-3 text-white ${fieldErrors.username ? 'border border-red-400' : ''}`}
+                placeholderTextColor="rgba(255,255,255,0.4)"
+                returnKeyType="next"
+                blurOnSubmit={false}
+                onSubmitEditing={() => { /* focus next field (email) */ }}
+              />
+              {fieldErrors.username ? <ValidationMessage message={fieldErrors.username} /> : null}
+            </View>
 
             <View>
               <Text className="text-sm text-white/80 mb-1">Email</Text>

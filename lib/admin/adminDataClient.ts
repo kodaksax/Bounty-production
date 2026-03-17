@@ -1,4 +1,5 @@
-// lib/admin/adminDataClient.ts - Mock data client for admin operations
+// lib/admin/adminDataClient.ts - Admin data client (Supabase-backed)
+import { supabase } from '../supabase';
 import type {
   AdminBounty,
   AdminBountyFilters,
@@ -9,280 +10,273 @@ import type {
   AdminUserSummary,
 } from '../types-admin';
 
-// Debug flag to simulate failures for testing error states
-const DEBUG_SIMULATE_FAILURES = false;
+// Violation types for guideline enforcement
+export type ViolationType =
+  | 'spam'
+  | 'harassment'
+  | 'inappropriate_content'
+  | 'fraud'
+  | 'guideline_violation'
+  | 'other';
 
-// Simulate network delay
-function simulateNetwork<T>(data: T, delayMs = 500): Promise<T> {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      if (DEBUG_SIMULATE_FAILURES && Math.random() > 0.8) {
-        reject(new Error('Simulated network error'));
-      } else {
-        resolve(data);
-      }
-    }, delayMs);
-  });
+export interface SendWarningParams {
+  userId: string;
+  bountyId?: string;
+  violationType: ViolationType;
+  message: string;
 }
 
-// In-memory mock data stores
-const mockBounties: AdminBounty[] = [
-  {
-    id: '1',
-    user_id: 'user-001',
-    title: 'Build React Native Component',
-    description: 'Need a custom carousel component for mobile app',
-    amount: 250,
-    location: 'Remote',
-    createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-    status: 'open',
-    flaggedCount: 0,
-  },
-  {
-    id: '2',
-    user_id: 'user-002',
-    title: 'Fix Backend API Bug',
-    description: 'Authentication endpoint returning 500 errors',
-    amount: 150,
-    location: 'New York, NY',
-    createdAt: new Date(Date.now() - 86400000 * 5).toISOString(),
-    status: 'in_progress',
-    acceptedBy: 'user-003',
-    flaggedCount: 0,
-  },
-  {
-    id: '3',
-    user_id: 'user-004',
-    title: 'Design Mobile Onboarding Flow',
-    isForHonor: true,
-    description: 'Create wireframes and mockups for new user experience',
-    location: 'San Francisco, CA',
-    createdAt: new Date(Date.now() - 86400000 * 10).toISOString(),
-    status: 'completed',
-    acceptedBy: 'user-005',
-    flaggedCount: 0,
-  },
-  {
-    id: '4',
-    user_id: 'user-001',
-    title: 'Help move furniture',
-    description: 'Need help moving a couch up three flights of stairs',
-    amount: 50,
-    location: 'Austin, TX',
-    createdAt: new Date(Date.now() - 86400000 * 30).toISOString(),
-    status: 'archived',
-    acceptedBy: 'user-006',
-    flaggedCount: 0,
-  },
-  {
-    id: '5',
-    user_id: 'user-007',
-    title: 'Review my resume',
-    isForHonor: true,
-    description: 'Looking for feedback on tech resume',
-    location: 'Remote',
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-    status: 'open',
-    flaggedCount: 2,
-  },
-];
+// Map DB row -> AdminBounty
+function mapBounty(row: any): AdminBounty {
+  return {
+    id: row.id,
+    user_id: row.creator_id ?? row.user_id ?? '',
+    title: row.title ?? '',
+    description: row.description ?? '',
+    amount: row.amount ?? undefined,
+    isForHonor: row.is_for_honor ?? row.isForHonor ?? false,
+    location: row.location ?? undefined,
+    createdAt: row.created_at ?? row.createdAt ?? new Date().toISOString(),
+    status: row.status ?? 'open',
+    acceptedBy: row.hunter_id ?? undefined,
+    flaggedCount: row.flagged_count ?? 0,
+    lastModified: row.updated_at ?? undefined,
+  };
+}
 
-const mockUsers: AdminUserSummary[] = [
-  {
-    id: 'user-001',
-    username: '@techguru',
-    email: 'tech@example.com',
-    avatar: '/placeholder.svg?height=40&width=40',
-    joinDate: new Date(Date.now() - 86400000 * 365).toISOString(),
-    verificationStatus: 'verified',
-    bountiesPosted: 5,
-    bountiesAccepted: 12,
-    bountiesCompleted: 10,
-    totalSpent: 1200,
-    totalEarned: 3400,
-    balance: 450,
-    status: 'active',
-  },
-  {
-    id: 'user-002',
-    username: '@designpro',
-    email: 'design@example.com',
-    joinDate: new Date(Date.now() - 86400000 * 200).toISOString(),
-    verificationStatus: 'verified',
-    bountiesPosted: 8,
-    bountiesAccepted: 15,
-    bountiesCompleted: 14,
-    totalSpent: 2100,
-    totalEarned: 4200,
-    balance: 890,
-    status: 'active',
-  },
-  {
-    id: 'user-003',
-    username: '@newbie',
-    email: 'new@example.com',
-    joinDate: new Date(Date.now() - 86400000 * 30).toISOString(),
-    verificationStatus: 'pending',
-    bountiesPosted: 1,
-    bountiesAccepted: 2,
-    bountiesCompleted: 1,
-    totalSpent: 100,
-    totalEarned: 150,
-    balance: 50,
-    status: 'active',
-  },
-  {
-    id: 'user-004',
-    username: '@spammer',
-    email: 'spam@example.com',
-    joinDate: new Date(Date.now() - 86400000 * 60).toISOString(),
-    verificationStatus: 'unverified',
-    bountiesPosted: 0,
-    bountiesAccepted: 0,
-    bountiesCompleted: 0,
-    totalSpent: 0,
-    totalEarned: 0,
-    balance: 0,
-    status: 'suspended',
-  },
-];
+// Map DB row -> AdminUserSummary
+function mapUser(row: any): AdminUserSummary {
+  return {
+    id: row.id,
+    username: row.username ?? row.full_name ?? 'Unknown',
+    email: row.email ?? undefined,
+    avatar: row.avatar_url ?? row.avatar ?? undefined,
+    joinDate: row.created_at ?? new Date().toISOString(),
+    verificationStatus: row.verification_status ?? 'unverified',
+    bountiesPosted: row.bounties_posted ?? 0,
+    bountiesAccepted: row.bounties_accepted ?? 0,
+    bountiesCompleted: row.bounties_completed ?? 0,
+    totalSpent: row.total_spent ?? 0,
+    totalEarned: row.total_earned ?? 0,
+    balance: row.balance ?? 0,
+    status: row.status ?? 'active',
+  };
+}
 
-const mockTransactions: AdminTransaction[] = [
-  {
-    id: 'tx-001',
-    type: 'escrow',
-    amount: 250,
-    bountyId: '1',
-    fromUserId: 'user-001',
-    status: 'completed',
-    createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-    description: 'Escrow for bounty: Build React Native Component',
-  },
-  {
-    id: 'tx-002',
-    type: 'escrow',
-    amount: 150,
-    bountyId: '2',
-    fromUserId: 'user-002',
-    status: 'completed',
-    createdAt: new Date(Date.now() - 86400000 * 5).toISOString(),
-    description: 'Escrow for bounty: Fix Backend API Bug',
-  },
-  {
-    id: 'tx-003',
-    type: 'release',
-    amount: 200,
-    bountyId: '3',
-    fromUserId: 'user-004',
-    toUserId: 'user-005',
-    status: 'completed',
-    createdAt: new Date(Date.now() - 86400000 * 9).toISOString(),
-    description: 'Release for bounty completion: Design Mobile Onboarding Flow',
-  },
-  {
-    id: 'tx-004',
-    type: 'deposit',
-    amount: 500,
-    fromUserId: 'user-001',
-    status: 'completed',
-    createdAt: new Date(Date.now() - 86400000 * 15).toISOString(),
-    description: 'Wallet deposit',
-  },
-];
 
-// Admin data client methods
+// Admin data client – all methods require an active admin session (enforced by Supabase RLS)
 export const adminDataClient = {
   // Fetch admin dashboard metrics
   async fetchAdminMetrics(): Promise<AdminMetrics> {
-    const metrics: AdminMetrics = {
-      totalBounties: mockBounties.length,
-      openBounties: mockBounties.filter((b) => b.status === 'open').length,
-      inProgressBounties: mockBounties.filter((b) => b.status === 'in_progress').length,
-      completedBounties: mockBounties.filter((b) => b.status === 'completed').length,
-      archivedBounties: mockBounties.filter((b) => b.status === 'archived').length,
-      totalUsers: mockUsers.length,
-      totalEscrowVolume: mockTransactions
-        .filter((t) => t.type === 'escrow' && t.status === 'completed')
-        .reduce((sum, t) => sum + t.amount, 0),
-      totalTransactions: mockTransactions.length,
+    const { data: bountyStats, error: bErr } = await supabase
+      .from('bounties')
+      .select('status');
+
+    if (bErr) throw new Error(bErr.message);
+
+    const bList = bountyStats ?? [];
+    const totalBounties = bList.length;
+    const openBounties = bList.filter((b: any) => b.status === 'open').length;
+    const inProgressBounties = bList.filter((b: any) => b.status === 'in_progress').length;
+    const completedBounties = bList.filter((b: any) => b.status === 'completed').length;
+    const archivedBounties = bList.filter((b: any) => b.status === 'archived').length;
+
+    const { count: totalUsers } = await supabase
+      .from('profiles')
+      .select('id', { count: 'exact', head: true });
+
+    const { count: totalTransactions } = await supabase
+      .from('wallet_transactions')
+      .select('id', { count: 'exact', head: true });
+
+    return {
+      totalBounties,
+      openBounties,
+      inProgressBounties,
+      completedBounties,
+      archivedBounties,
+      totalUsers: totalUsers ?? 0,
+      totalEscrowVolume: 0,
+      totalTransactions: totalTransactions ?? 0,
     };
-    return simulateNetwork(metrics);
   },
 
-  // Fetch bounties with filters
+  // Fetch bounties with optional status filter
   async fetchAdminBounties(filters?: AdminBountyFilters): Promise<AdminBounty[]> {
-    let filtered = [...mockBounties];
+    let query = supabase
+      .from('bounties')
+      .select('*')
+      .order('created_at', { ascending: false });
 
     if (filters?.status && filters.status !== 'all') {
-      filtered = filtered.filter((b) => b.status === filters.status);
+      query = query.eq('status', filters.status);
     }
 
     if (filters?.flaggedOnly) {
-      filtered = filtered.filter((b) => (b.flaggedCount || 0) > 0);
+      query = query.gt('flagged_count', 0);
     }
 
-    // Sort by createdAt desc
-    filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-    return simulateNetwork(filtered);
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+    return (data ?? []).map(mapBounty);
   },
 
   // Fetch single bounty by ID
   async fetchAdminBountyById(id: string): Promise<AdminBounty | null> {
-    const bounty = mockBounties.find((b) => b.id === id);
-    return simulateNetwork(bounty || null);
-  },
+    const { data, error } = await supabase
+      .from('bounties')
+      .select('*')
+      .eq('id', id)
+      .single();
 
-  // Update bounty status
-  async updateBountyStatus(id: string, status: AdminBounty['status']): Promise<AdminBounty> {
-    const bounty = mockBounties.find((b) => b.id === id);
-    if (!bounty) {
-      throw new Error('Bounty not found');
+    if (error) {
+      if (error.code === 'PGRST116') return null;
+      throw new Error(error.message);
     }
-    bounty.status = status;
-    bounty.lastModified = new Date().toISOString();
-    return simulateNetwork({ ...bounty });
+    return data ? mapBounty(data) : null;
   },
 
-  // Fetch users with filters
+  // Update bounty status (admin override)
+  async updateBountyStatus(id: string, status: AdminBounty['status']): Promise<AdminBounty> {
+    const { data, error } = await supabase
+      .from('bounties')
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw new Error(error.message);
+    return mapBounty(data);
+  },
+
+  // Remove a bounty for community guidelines violation (archives the bounty)
+  async removeBountyForViolation(id: string): Promise<void> {
+    const { data, error } = await supabase
+      .from('bounties')
+      .update({ status: 'archived', updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw new Error(error.message);
+
+    // If no row was returned, the update did not match any bounty id — treat as failure
+    if (!data) throw new Error('No bounty found to remove');
+  },
+
+  // Fetch users with optional status/verification filter
   async fetchAdminUsers(filters?: AdminUserFilters): Promise<AdminUserSummary[]> {
-    let filtered = [...mockUsers];
+    let query = supabase
+      .from('profiles')
+      .select('*')
+      .order('created_at', { ascending: false });
 
     if (filters?.status && filters.status !== 'all') {
-      filtered = filtered.filter((u) => u.status === filters.status);
+      query = query.eq('status', filters.status);
     }
 
     if (filters?.verificationStatus && filters.verificationStatus !== 'all') {
-      filtered = filtered.filter((u) => u.verificationStatus === filters.verificationStatus);
+      query = query.eq('verification_status', filters.verificationStatus);
     }
 
-    // Sort by joinDate desc
-    filtered.sort((a, b) => new Date(b.joinDate).getTime() - new Date(a.joinDate).getTime());
-
-    return simulateNetwork(filtered);
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+    return (data ?? []).map(mapUser);
   },
 
   // Fetch single user by ID
   async fetchAdminUserById(id: string): Promise<AdminUserSummary | null> {
-    const user = mockUsers.find((u) => u.id === id);
-    return simulateNetwork(user || null);
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') return null;
+      throw new Error(error.message);
+    }
+    return data ? mapUser(data) : null;
   },
 
-  // Fetch transactions with filters
+  // Update user account status (suspend/ban/restore)
+  async updateUserStatus(id: string, status: AdminUserSummary['status']): Promise<void> {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ status })
+      .eq('id', id);
+
+    if (error) throw new Error(error.message);
+  },
+
+  // Send a guideline warning to a user
+  async sendWarning(params: SendWarningParams): Promise<void> {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const adminId = sessionData?.session?.user?.id;
+    if (!adminId) throw new Error('Not authenticated');
+
+    // Explicitly verify that the authenticated user has admin privileges
+    const { data: adminProfile, error: adminProfileError } = await supabase
+      .from('profiles')
+      .select('id, role, is_admin')
+      .eq('id', adminId)
+      .single();
+
+    if (adminProfileError) {
+      throw new Error(adminProfileError.message);
+    }
+
+    const isAdmin =
+      (adminProfile as any)?.role === 'admin' ||
+      (adminProfile as any)?.is_admin === true;
+
+    if (!isAdmin) {
+      throw new Error('Insufficient privileges: admin access required');
+    }
+    const { error: insertError } = await supabase
+      .from('admin_warnings')
+      .insert({
+        admin_id: adminId,
+        user_id: params.userId,
+        bounty_id: params.bountyId ?? null,
+        violation_type: params.violationType,
+        message: params.message,
+      })
+      .select()
+      .single();
+
+    if (insertError) throw new Error(insertError.message);
+  },
+
+  // Fetch transactions (read-only)
   async fetchAdminTransactions(filters?: AdminTransactionFilters): Promise<AdminTransaction[]> {
-    let filtered = [...mockTransactions];
+    let query = supabase
+      .from('wallet_transactions')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100);
 
     if (filters?.type && filters.type !== 'all') {
-      filtered = filtered.filter((t) => t.type === filters.type);
+      query = query.eq('type', filters.type);
     }
 
     if (filters?.status && filters.status !== 'all') {
-      filtered = filtered.filter((t) => t.status === filters.status);
+      query = query.eq('status', filters.status);
     }
 
-    // Sort by createdAt desc
-    filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
 
-    return simulateNetwork(filtered);
+    return (data ?? []).map((row: any): AdminTransaction => ({
+      id: row.id,
+      type: row.type,
+      amount: row.amount ?? 0,
+      bountyId: row.bounty_id ?? undefined,
+      fromUserId: row.user_id ?? undefined,
+      toUserId: row.to_user_id ?? undefined,
+      status: row.status ?? 'completed',
+      createdAt: row.created_at ?? new Date().toISOString(),
+      description: row.description ?? undefined,
+    }));
   },
 };

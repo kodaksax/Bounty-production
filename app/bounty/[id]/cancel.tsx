@@ -1,21 +1,31 @@
-import React, { useState, useEffect } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useAuthContext } from 'hooks/use-auth-context';
+import { EMAIL_SUBJECTS, SUPPORT_EMAIL, createSupportTel } from 'lib/constants/support';
+import { bountyService } from 'lib/services/bounty-service';
+import type { CancellationReasonCategory } from 'lib/services/cancellation-service';
+import { cancellationService } from 'lib/services/cancellation-service';
+import type { Bounty } from 'lib/services/database.types';
+import { AlertCircle, ArrowLeft, HelpCircle, Mail, Phone } from 'lucide-react-native';
+import { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
   ActivityIndicator,
   Alert,
   Linking,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, AlertCircle, Phone, Mail, HelpCircle } from 'lucide-react-native';
-import { cancellationService } from 'lib/services/cancellation-service';
-import { bountyService } from 'lib/services/bounty-service';
-import { useAuthContext } from 'hooks/use-auth-context';
-import type { Bounty } from 'lib/services/database.types';
-import { SUPPORT_EMAIL, EMAIL_SUBJECTS, createSupportTel } from 'lib/constants/support';
+
+const CANCELLATION_REASON_OPTIONS: { label: string; value: CancellationReasonCategory }[] = [
+  { label: 'Changed my mind', value: 'changed_mind' },
+  { label: 'Posted by mistake', value: 'posted_by_mistake' },
+  { label: 'No longer needed', value: 'no_longer_needed' },
+  { label: 'Timeline issue', value: 'timeline_issue' },
+  { label: 'Communication issue', value: 'communication_issue' },
+  { label: 'Other', value: 'other' },
+];
 
 export default function CancellationRequestScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -27,6 +37,7 @@ export default function CancellationRequestScreen() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [reason, setReason] = useState('');
+  const [reasonCategory, setReasonCategory] = useState<CancellationReasonCategory>('other');
   const [requesterType, setRequesterType] = useState<'poster' | 'hunter'>('poster');
   
   useEffect(() => {
@@ -80,13 +91,26 @@ export default function CancellationRequestScreen() {
         userId,
         requesterType,
         reason,
-        recommendedRefund
+        recommendedRefund,
+        reasonCategory
       );
       
       if (result) {
+        const isForHonorAutoCancel = !!bounty.is_for_honor;
+        if (isForHonorAutoCancel) {
+          // For honor bounties are auto-removed after cancellation — delete locally/server-side so lists update
+          try {
+            await bountyService.delete(bounty.id);
+          } catch (e) {
+            console.error('Error auto-deleting for-honor bounty after cancellation:', e);
+          }
+        }
+
         Alert.alert(
           'Success',
-          'Cancellation request submitted successfully',
+          isForHonorAutoCancel
+            ? 'For honor bounty cancelled and removed from your postings. No manual dispute review is required.'
+            : 'Cancellation request submitted successfully',
           [
             {
               text: 'OK',
@@ -255,7 +279,9 @@ export default function CancellationRequestScreen() {
                   Cancellation Policy
                 </Text>
                 <Text className="text-amber-800 text-sm">
-                  {bounty.status === 'open'
+                  {bounty.is_for_honor
+                    ? 'For honor bounties are automatically cancelled after submission. We still collect your reason to improve matching and quality metrics.'
+                    : bounty.status === 'open'
                     ? 'Full refund available as no hunter has accepted this bounty yet.'
                     : hasAcceptedHunter
                     ? `Estimated refund: ${recommendedRefund}% of bounty amount ($${(bounty.amount * recommendedRefund / 100).toFixed(2)}). The other party can accept or dispute this request.`
@@ -280,8 +306,29 @@ export default function CancellationRequestScreen() {
           {/* Reason Input */}
           <View className="mb-6">
             <Text className="text-base font-semibold text-gray-900 mb-2">
-              Reason for Cancellation *
+              Why are you cancelling? *
             </Text>
+            <View className="flex-row flex-wrap gap-2 mb-3">
+              {CANCELLATION_REASON_OPTIONS.map((option) => (
+                <TouchableOpacity
+                  key={option.value}
+                  onPress={() => setReasonCategory(option.value)}
+                  className={`px-3 py-2 rounded-full border ${
+                    reasonCategory === option.value
+                      ? 'bg-emerald-600 border-emerald-600'
+                      : 'bg-white border-gray-300'
+                  }`}
+                >
+                  <Text
+                    className={`text-sm ${
+                      reasonCategory === option.value ? 'text-white font-semibold' : 'text-gray-700'
+                    }`}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
             <Text className="text-sm text-gray-600 mb-3">
               Please explain why you want to cancel this bounty. This will be shared with the other party.
             </Text>
@@ -311,7 +358,7 @@ export default function CancellationRequestScreen() {
               <ActivityIndicator color="white" />
             ) : (
               <Text className="text-white text-center font-semibold text-base">
-                Submit Cancellation Request
+                {bounty.is_for_honor ? 'Cancel For Honor Bounty' : 'Submit Cancellation Request'}
               </Text>
             )}
           </TouchableOpacity>

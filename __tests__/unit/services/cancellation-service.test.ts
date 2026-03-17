@@ -1,6 +1,21 @@
 import { cancellationService } from '../../../lib/services/cancellation-service';
 
 describe('CancellationService', () => {
+  describe('composeReasonWithCategory', () => {
+    it('should include the selected category in a machine-readable prefix', () => {
+      const result = cancellationService.composeReasonWithCategory(
+        'I no longer need this bounty',
+        'no_longer_needed'
+      );
+      expect(result).toBe('[category:no_longer_needed] I no longer need this bounty');
+    });
+
+    it('should trim reason text before composing', () => {
+      const result = cancellationService.composeReasonWithCategory('  posted by mistake  ', 'posted_by_mistake');
+      expect(result).toBe('[category:posted_by_mistake] posted by mistake');
+    });
+  });
+
   describe('calculateRecommendedRefund', () => {
     it('should return 100% refund for open bounties', () => {
       const refund = cancellationService.calculateRecommendedRefund('open', false);

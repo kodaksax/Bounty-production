@@ -3,15 +3,15 @@
 /**
  * Validation result type
  */
-export interface ValidationResult {
-  isValid: boolean;
-  errors: Record<string, string>;
-}
-
 /**
  * Validate email format
  */
 import { isValidEmail } from './password-validation';
+
+export interface ValidationResult {
+  isValid: boolean;
+  errors: Record<string, string>;
+}
 
 /** Common email providers used for typo suggestions */
 const COMMON_EMAIL_DOMAINS = [

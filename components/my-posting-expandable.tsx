@@ -1,5 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
+import { bountyRequestService } from 'lib/services/bounty-request-service'
+import { bountyService } from 'lib/services/bounty-service'
 import { cancellationService } from 'lib/services/cancellation-service'
 import { completionService } from 'lib/services/completion-service'
 import type { Bounty } from 'lib/services/database.types'
@@ -10,16 +12,16 @@ import { userProfileService } from 'lib/services/userProfile'
 import type { Attachment, Conversation } from 'lib/types'
 import { useEffect, useMemo, useReducer, useState } from 'react'
 import {
-    ActivityIndicator,
-    Alert,
-    LayoutAnimation,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    UIManager,
-    View
+  ActivityIndicator,
+  Alert,
+  LayoutAnimation,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  UIManager,
+  View
 } from 'react-native'
 import { useAttachmentUpload } from '../hooks/use-attachment-upload'
 import { logClientError } from '../lib/services/monitoring'
@@ -153,6 +155,10 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   // Track profile pictures for poster/hunter
   const [otherPartyAvatar, setOtherPartyAvatar] = useState<string | null>(null)
   const [otherPartyName, setOtherPartyName] = useState<string>('')
+  const [hiddenByUser, setHiddenByUser] = useState(false)
+    // Track the current user's request for this bounty (if any)
+    const [requestStatus, setRequestStatus] = useState<string | null>(null)
+    const [requestId, setRequestId] = useState<string | null>(null)
   // Draft/submission reducer consolidates per-bounty mutable fields to avoid
   // leaking state across reused FlatList rows and to batch resets into one dispatch.
   type ReadyRecord = { bounty_id: string; hunter_id: string; ready_at: string } | null
@@ -271,6 +277,24 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         // Fetch poster profile if we're the hunter
         const posterId = bounty.poster_id || bounty.user_id
         if (posterId && variant === 'hunter') {
+
+                  // Load the current user's request status for this bounty (if hunter)
+                  try {
+                    if (currentUserId) {
+                      const reqs = await bountyRequestService.getAll({ bountyId: String(bounty.id), userId: String(currentUserId) })
+                      if (Array.isArray(reqs) && reqs.length > 0) {
+                        setRequestStatus(reqs[0].status)
+                        setRequestId(String(reqs[0].id))
+                      } else {
+                        setRequestStatus(null)
+                        setRequestId(null)
+                      }
+                    }
+                  } catch (err) {
+                    // ignore request load errors
+                    setRequestStatus(null)
+                    setRequestId(null)
+                  }
           try {
             const posterProfile = await userProfileService.getProfile(String(posterId))
             if (!mounted) return
@@ -596,6 +620,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     bucket: 'bounty-attachments',
     folder: `bounties/${bounty.id}/proofs`,
     maxSizeMB: 20,
+    allowsMultiple: true,
   })
 
   const handleAddProof = async () => {
@@ -640,6 +665,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   }, [currentStage, localStageOverride])
 
   const awaitingPosterAction = !isOwner && bounty.status === 'in_progress' && (submissionPending || hasSubmission)
+  const [isProcessing, setIsProcessing] = useState(false)
 
   const handleCancelBounty = () => {
     router.push(`/bounty/${bounty.id}/cancel`)
@@ -697,6 +723,8 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     }
   }
 
+  if (hiddenByUser) return null
+
   return (
     <View>
       <BountyCard
@@ -716,6 +744,9 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         hasDispute={hasDispute}
         otherPartyAvatar={otherPartyAvatar}
         otherPartyName={otherPartyName}
+        otherPartyId={variant === 'owner' ? (bounty.accepted_by || readyRecord?.hunter_id) : (bounty.poster_id || bounty.user_id)}
+        requestStatus={requestStatus}
+        onWithdrawApplication={onWithdrawApplication}
       />
       {/* Tap-to-expand hint — shown only when collapsed */}
       {!expanded && (
@@ -807,9 +838,6 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                     >
                       <MaterialIcons name="rate-review" size={20} color="#fff" />
                       <Text style={styles.reviewSubmissionText}>Review Submission</Text>
-                      <View style={styles.newBadge}>
-                        <Text style={styles.newBadgeText}>NEW</Text>
-                      </View>
                     </TouchableOpacity>
                   )}
 
@@ -950,21 +978,8 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                 >
                   <MaterialIcons name="rate-review" size={20} color="#fff" />
                   <Text style={styles.reviewSubmissionText}>Review Submission</Text>
-                  <View style={styles.newBadge}>
-                    <Text style={styles.newBadgeText}>NEW</Text>
-                  </View>
                 </TouchableOpacity>
-
-                {/* Navigate to full review screen option */}
-                {onGoToReview && (
-                  <TouchableOpacity
-                    style={[styles.primaryBtn, { backgroundColor: 'rgba(16, 185, 129, 0.3)' }]}
-                    onPress={() => onGoToReview(String(bounty.id))}
-                  >
-                    <Text style={styles.primaryText}>Open Review Screen</Text>
-                    <MaterialIcons name="arrow-forward" size={18} color="#fff" />
-                  </TouchableOpacity>
-                )}
+                {/* Full review screen removed (legacy) - keep modal only */}
               </View>
             </AnimatedSection>
           )}
@@ -1124,6 +1139,133 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                     </View>
                   </View>
                 )}
+
+                  {/* Archive / Delete actions for completed bounties */}
+                  <View style={styles.actionsContainer}>
+                    {isOwner ? (
+                      <>
+                        <TouchableOpacity
+                          style={[styles.actionButton, styles.archiveButton]}
+                          onPress={async () => {
+                            if (!bounty) return
+                            Alert.alert(
+                              'Archive Bounty',
+                              'Archive this bounty so it is hidden from active listings but retained in your history?',
+                              [
+                                { text: 'Cancel', style: 'cancel' },
+                                {
+                                  text: 'Archive',
+                                  onPress: async () => {
+                                    try {
+                                      setIsProcessing(true)
+                                      const updated = await bountyService.update(String(bounty.id), { status: 'archived' })
+                                      if (!updated) throw new Error('Failed to archive bounty')
+                                      Alert.alert('Archived', 'Bounty archived successfully.')
+                                      onRefresh?.()
+                                    } catch (err) {
+                                      console.error('Error archiving bounty:', err)
+                                      Alert.alert('Error', 'Failed to archive bounty. Please try again.')
+                                    } finally {
+                                      setIsProcessing(false)
+                                    }
+                                  }
+                                }
+                              ]
+                            )
+                          }}
+                          disabled={isProcessing}
+                        >
+                          <MaterialIcons name="archive" size={20} color="#fff" />
+                          <Text style={styles.actionButtonText}>Archive</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[styles.actionButton, styles.deleteButton]}
+                          onPress={async () => {
+                            if (!bounty) return
+                            Alert.alert(
+                              'Delete Bounty',
+                              'Permanently delete this bounty from active lists? It will remain in your history. This cannot be undone.',
+                              [
+                                { text: 'Cancel', style: 'cancel' },
+                                {
+                                  text: 'Delete',
+                                  style: 'destructive',
+                                  onPress: async () => {
+                                    try {
+                                      setIsProcessing(true)
+                                      const updated = await bountyService.update(String(bounty.id), { status: 'deleted' })
+                                      if (!updated) throw new Error('Failed to delete bounty')
+                                      Alert.alert('Deleted', 'Bounty deleted and removed from active lists.')
+                                      onRefresh?.()
+                                    } catch (err) {
+                                      console.error('Error deleting bounty:', err)
+                                      Alert.alert('Error', 'Failed to delete bounty. Please try again.')
+                                    } finally {
+                                      setIsProcessing(false)
+                                    }
+                                  }
+                                }
+                              ]
+                            )
+                          }}
+                          disabled={isProcessing}
+                        >
+                          <MaterialIcons name="delete" size={20} color="#fff" />
+                          <Text style={styles.actionButtonText}>Delete</Text>
+                        </TouchableOpacity>
+                      </>
+                    ) : (
+                      <>
+                        <TouchableOpacity
+                          style={[styles.actionButton, styles.archiveButton]}
+                          onPress={() => {
+                            Alert.alert(
+                              'Hide Bounty',
+                              'Hide this bounty from your view? This will not affect the poster or other users.',
+                              [
+                                { text: 'Cancel', style: 'cancel' },
+                                {
+                                  text: 'Hide',
+                                  onPress: () => {
+                                    setHiddenByUser(true)
+                                    onRefresh?.()
+                                  }
+                                }
+                              ]
+                            )
+                          }}
+                        >
+                          <MaterialIcons name="bookmark-remove" size={20} color="#fff" />
+                          <Text style={styles.actionButtonText}>Hide</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[styles.actionButton, styles.deleteButton]}
+                          onPress={() => {
+                            Alert.alert(
+                              'Remove from List',
+                              'Remove this bounty from your local list? This does not delete the bounty for the owner.',
+                              [
+                                { text: 'Cancel', style: 'cancel' },
+                                {
+                                  text: 'Remove',
+                                  style: 'destructive',
+                                  onPress: () => {
+                                    setHiddenByUser(true)
+                                    onRefresh?.()
+                                  }
+                                }
+                              ]
+                            )
+                          }}
+                        >
+                          <MaterialIcons name="close" size={20} color="#fff" />
+                          <Text style={styles.actionButtonText}>Remove</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
+                  </View>
               </View>
             </AnimatedSection>
           )}
@@ -1212,17 +1354,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontSize: 15,
-  },
-  newBadge: {
-    backgroundColor: '#ef4444',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 999,
-  },
-  newBadgeText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '800',
   },
   timerContainer: {
     alignItems: 'center',
@@ -1537,6 +1668,32 @@ const styles = StyleSheet.create({
   hunterToolTextDanger: {
     color: '#fecaca',
     fontSize: 13,
+    fontWeight: '700',
+  },
+  actionsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 12,
+    justifyContent: 'space-between',
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  archiveButton: {
+    backgroundColor: '#059669',
+  },
+  deleteButton: {
+    backgroundColor: '#ef4444',
+  },
+  actionButtonText: {
+    color: '#fff',
+    fontSize: 14,
     fontWeight: '700',
   },
 })

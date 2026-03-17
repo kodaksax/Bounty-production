@@ -1,12 +1,13 @@
 // app/(admin)/user/[id].tsx - Admin User Detail
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AdminCard } from '../../../components/admin/AdminCard';
 import { AdminHeader } from '../../../components/admin/AdminHeader';
 import { AdminStatRow } from '../../../components/admin/AdminStatRow';
 import { AdminStatusBadge } from '../../../components/admin/AdminStatusBadge';
+import type { ViolationType } from '../../../lib/admin/adminDataClient';
 import { adminDataClient } from '../../../lib/admin/adminDataClient';
 import type { AdminUserSummary } from '../../../lib/types-admin';
 
@@ -16,6 +17,8 @@ export default function AdminUserDetailScreen() {
   const [user, setUser] = useState<AdminUserSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [isActing, setIsActing] = useState(false);
 
   const loadUser = async () => {
     if (!id) return;
@@ -35,6 +38,126 @@ export default function AdminUserDetailScreen() {
   useEffect(() => {
     loadUser();
   }, [id]);
+
+    const handleSendWarning = () => {
+      if (!user) return;
+      const violationOptions: { label: string; value: ViolationType }[] = [
+        { label: 'Spam', value: 'spam' },
+        { label: 'Harassment', value: 'harassment' },
+        { label: 'Inappropriate Content', value: 'inappropriate_content' },
+        { label: 'Fraud / Scam', value: 'fraud' },
+        { label: 'Guideline Violation', value: 'guideline_violation' },
+        { label: 'Other', value: 'other' },
+      ];
+      Alert.alert(
+        'Send Warning',
+        `Select reason to warn @${user.username}:`,
+        [
+          ...violationOptions.map(({ label, value }) => ({
+            text: label,
+            onPress: () => submitWarning(value, label),
+          })),
+          { text: 'Cancel', style: 'cancel' as const },
+        ]
+      );
+    };
+
+    const submitWarning = async (violationType: ViolationType, reasonLabel: string) => {
+      if (!user) return;
+      setIsActing(true);
+      try {
+        await adminDataClient.sendWarning({
+          userId: user.id,
+          violationType,
+          message: `Your account has received a warning for: ${reasonLabel}. Please review our community guidelines to avoid further action.`,
+        });
+        Alert.alert('Warning Sent', `A warning has been sent to @${user.username}.`);
+      } catch (err) {
+        Alert.alert('Error', err instanceof Error ? err.message : 'Failed to send warning');
+      } finally {
+        setIsActing(false);
+      }
+    };
+
+    const handleSuspendUser = () => {
+      if (!user) return;
+      Alert.alert(
+        'Suspend User',
+        `Suspend @${user.username}? They will lose access until restored.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Suspend',
+            style: 'destructive',
+            onPress: async () => {
+              setIsActing(true);
+              try {
+                await adminDataClient.updateUserStatus(user.id, 'suspended');
+                setUser({ ...user, status: 'suspended' });
+                Alert.alert('User Suspended', `@${user.username} has been suspended.`);
+              } catch (err) {
+                Alert.alert('Error', err instanceof Error ? err.message : 'Failed to suspend user');
+              } finally {
+                setIsActing(false);
+              }
+            },
+          },
+        ]
+      );
+    };
+
+    const handleBanUser = () => {
+      if (!user) return;
+      Alert.alert(
+        'Ban User',
+        `Permanently ban @${user.username}? This is a severe action.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Ban',
+            style: 'destructive',
+            onPress: async () => {
+              setIsActing(true);
+              try {
+                await adminDataClient.updateUserStatus(user.id, 'banned');
+                setUser({ ...user, status: 'banned' });
+                Alert.alert('User Banned', `@${user.username} has been banned.`);
+              } catch (err) {
+                Alert.alert('Error', err instanceof Error ? err.message : 'Failed to ban user');
+              } finally {
+                setIsActing(false);
+              }
+            },
+          },
+        ]
+      );
+    };
+
+    const handleRestoreUser = () => {
+      if (!user) return;
+      Alert.alert(
+        'Restore User',
+        `Restore @${user.username} to active status?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Restore',
+            onPress: async () => {
+              setIsActing(true);
+              try {
+                await adminDataClient.updateUserStatus(user.id, 'active');
+                setUser({ ...user, status: 'active' });
+                Alert.alert('User Restored', `@${user.username} has been restored to active status.`);
+              } catch (err) {
+                Alert.alert('Error', err instanceof Error ? err.message : 'Failed to restore user');
+              } finally {
+                setIsActing(false);
+              }
+            },
+          },
+        ]
+      );
+    };
 
   if (isLoading) {
     return (
@@ -130,6 +253,64 @@ export default function AdminUserDetailScreen() {
           </AdminCard>
         </View>
 
+          {/* Moderation Actions */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Moderation Actions</Text>
+            <View style={styles.moderationGrid}>
+              {/* Send Warning — always available */}
+              <TouchableOpacity
+                style={[styles.modButton, styles.warnButton]}
+                onPress={handleSendWarning}
+                disabled={isActing}
+              >
+                {isActing ? (
+                  <ActivityIndicator size="small" color="#fffef5" />
+                ) : (
+                  <>
+                    <MaterialIcons name="warning" size={22} color="#fffef5" />
+                    <Text style={styles.modButtonText}>Send Warning</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              {/* Suspend — only if active */}
+              {user.status === 'active' && (
+                <TouchableOpacity
+                  style={[styles.modButton, styles.suspendButton]}
+                  onPress={handleSuspendUser}
+                  disabled={isActing}
+                >
+                  <MaterialIcons name="pause-circle-filled" size={22} color="#fffef5" />
+                  <Text style={styles.modButtonText}>Suspend User</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Ban — if not already banned */}
+              {user.status !== 'banned' && (
+                <TouchableOpacity
+                  style={[styles.modButton, styles.banButton]}
+                  onPress={handleBanUser}
+                  disabled={isActing}
+                >
+                  <MaterialIcons name="block" size={22} color="#fffef5" />
+                  <Text style={styles.modButtonText}>Ban User</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Restore — if suspended or banned */}
+              {(user.status === 'suspended' || user.status === 'banned') && (
+                <TouchableOpacity
+                  style={[styles.modButton, styles.restoreButton]}
+                  onPress={handleRestoreUser}
+                  disabled={isActing}
+                >
+                  <MaterialIcons name="restore" size={22} color="#fffef5" />
+                  <Text style={styles.modButtonText}>Restore User</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
         {/* Bottom padding */}
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -141,6 +322,7 @@ function formatDate(dateString: string): string {
   const date = new Date(dateString);
   return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 }
+
 
 const styles = StyleSheet.create({
   container: {
@@ -254,4 +436,39 @@ const styles = StyleSheet.create({
     color: 'rgba(255,254,245,0.6)',
     textTransform: 'uppercase',
   },
+    moderationGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 12,
+    },
+    modButton: {
+      flex: 1,
+      minWidth: '45%',
+      borderRadius: 12,
+      padding: 16,
+      alignItems: 'center',
+      gap: 8,
+      borderWidth: 1,
+    },
+    modButtonText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: '#fffef5',
+    },
+    warnButton: {
+      backgroundColor: '#e67e22',
+      borderColor: 'rgba(230,126,34,0.4)',
+    },
+    suspendButton: {
+      backgroundColor: '#8e44ad',
+      borderColor: 'rgba(142,68,173,0.4)',
+    },
+    banButton: {
+      backgroundColor: '#c0392b',
+      borderColor: 'rgba(192,57,43,0.4)',
+    },
+    restoreButton: {
+      backgroundColor: '#00912C',
+      borderColor: 'rgba(0,145,44,0.4)',
+    },
 });

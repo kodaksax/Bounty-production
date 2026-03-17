@@ -153,13 +153,60 @@ export const bountyRequestService = {
         if (bErr) throw bErr
         if (pErr) throw pErr
 
+        const ratingStatsMap = new Map<string, { averageRating: number; ratingCount: number }>()
+        if (userIds.length > 0) {
+          try {
+            const { data: ratingRows, error: ratingsErr } = await supabase
+              .from('ratings')
+              .select('to_user_id, rating')
+              .in('to_user_id', userIds)
+
+            if (ratingsErr) throw ratingsErr
+
+            for (const row of (ratingRows || []) as any[]) {
+              const userId = String(row.to_user_id)
+              const current = ratingStatsMap.get(userId) || { averageRating: 0, ratingCount: 0 }
+              const nextCount = current.ratingCount + 1
+              const nextAvg = ((current.averageRating * current.ratingCount) + Number(row.rating || 0)) / nextCount
+              ratingStatsMap.set(userId, { averageRating: nextAvg, ratingCount: nextCount })
+            }
+          } catch (ratingsErr) {
+            logger.warning(
+              'Primary ratings query failed; falling back to legacy user_ratings table for bounty requests',
+              { error: ratingsErr, userIds }
+            )
+            // Backward compatibility for environments still using legacy `user_ratings`.
+            try {
+              const { data: ratingRowsLegacy, error: legacyErr } = await supabase
+                .from('user_ratings')
+                .select('user_id, score')
+                .in('user_id', userIds)
+
+              if (legacyErr) throw legacyErr
+
+              for (const row of (ratingRowsLegacy || []) as any[]) {
+                const userId = String(row.user_id)
+                const current = ratingStatsMap.get(userId) || { averageRating: 0, ratingCount: 0 }
+                const nextCount = current.ratingCount + 1
+                const nextAvg = ((current.averageRating * current.ratingCount) + Number(row.score || 0)) / nextCount
+                ratingStatsMap.set(userId, { averageRating: nextAvg, ratingCount: nextCount })
+              }
+            } catch (legacyRatingErr) {
+              logger.warning('Failed to load rating aggregates for bounty requests', { error: legacyRatingErr })
+            }
+          }
+        }
+
         const bountyMap = new Map<string, Bounty>((bounties as any[]).map((b: any) => [b.id, b as Bounty]))
         const profileMap = new Map<string, Profile>((profiles as any[]).map((p: any) => [p.id, p as Profile]))
 
         const result: BountyRequestWithDetails[] = requests.map(r => ({
           ...(r as any),
           bounty: bountyMap.get(String((r as any).bounty_id)) as Bounty,
-          profile: profileMap.get(String((r as any).hunter_id)) as Profile,
+          profile: {
+            ...(profileMap.get(String((r as any).hunter_id)) as Profile),
+            ...(ratingStatsMap.get(String((r as any).hunter_id)) || {}),
+          } as Profile,
         }))
         return result
       }
@@ -220,19 +267,20 @@ export const bountyRequestService = {
         // Ensure poster_id is present to satisfy DB constraints. Fetch from bounties table if missing.
         if (!normalizedRequest.poster_id && normalizedRequest.bounty_id) {
           try {
-            // Only request poster_id; some DBs do not have legacy user_id column.
+            // Request both poster_id and legacy user_id to support older bounties
             const { data: bountyRow, error: bountyErr } = await supabase
               .from('bounties')
-              .select('poster_id')
+              .select('poster_id, user_id')
               .eq('id', String(normalizedRequest.bounty_id))
               .single()
 
             if (bountyErr) {
-              logger.error('Supabase error fetching bounty for poster_id', { bountyId: normalizedRequest.bounty_id, error: (bountyErr as any)?.message || bountyErr })
+              logger.error('Supabase error fetching bounty for poster_id/user_id', { bountyId: normalizedRequest.bounty_id, error: (bountyErr as any)?.message || bountyErr })
               throw bountyErr
             }
 
-            normalizedRequest.poster_id = (bountyRow as any)?.poster_id || null
+            // Prefer canonical poster_id, fall back to legacy user_id when present
+            normalizedRequest.poster_id = (bountyRow as any)?.poster_id || (bountyRow as any)?.user_id || null
           } catch (fetchErr) {
             const msg = `Failed to resolve poster_id for bounty ${normalizedRequest.bounty_id}`
             logger.error(msg, { bountyId: normalizedRequest.bounty_id, error: (fetchErr as any)?.message || fetchErr })
