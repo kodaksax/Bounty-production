@@ -2,8 +2,9 @@
 
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useEffect, useState } from "react";
+import { FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AddMoneyScreen } from "../../components/add-money-screen";
 import { PaymentMethodsModal } from "../../components/payment-methods-modal";
 import { TransactionHistoryScreen } from "../../components/transaction-history-screen";
@@ -14,7 +15,7 @@ import { WithdrawWithBankScreen } from "../../components/withdraw-with-bank-scre
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility';
 import { useHapticFeedback } from '../../lib/haptic-feedback';
-import { stripeService } from '../../lib/services/stripe-service';
+import { StripePaymentMethod, stripeService } from '../../lib/services/stripe-service';
 import { useStripe } from '../../lib/stripe-context';
 import { useWallet, type WalletTransactionRecord } from '../../lib/wallet-context';
 
@@ -56,10 +57,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
     }
   };
 
-  // Get recent transactions for preview (show all types, not just bounty-related)
-  const recentTransactions = useMemo(() => transactions
-    .slice(0, 5) // show most recent 5 transactions as preview
-    , [transactions]);
+  const insets = useSafeAreaInsets();
 
   // Helper function to get transaction label
   const getTransactionLabel = (tx: WalletTransactionRecord): string => {
@@ -97,162 +95,164 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
 
 
 
+
   return (
     <>
-      <ScrollView
+      <FlatList<WalletTransactionRecord>
         style={styles.container}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerTitleRow}>
-            <BrandingLogo size="medium" />
-          </View>
-        </View>
-
-        {/* Balance Card */}
-        <View style={styles.sectionPad}>
-          {/* Warning if secure storage for sensitive keys is unavailable */}
-          {!secureStoreAvailable && (
-            <View style={{ backgroundColor: '#FEF3C7', padding: 10, borderRadius: 8, marginBottom: 10 }}>
-              <Text style={{ color: '#92400E', fontWeight: '600' }}>Security Notice</Text>
-              <Text style={{ color: '#92400E' }}>
-                Your device does not support secure storage. Sensitive wallet data is not being stored encrypted. Please use a managed build or sign out and back in on a supported device.
-              </Text>
-            </View>
-          )}
-          <View style={styles.balanceCard}>
-            <View style={styles.balanceCardHeader}>
-              <Text style={styles.balanceLabel}>BALANCE</Text>
-              <Text style={styles.balanceAmount}>${balance.toFixed(2)}</Text>
-            </View>
-            <View style={styles.balanceActionsRow}>
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => {
-                  triggerHaptic('medium');
-                  setShowAddMoney(true);
-                }}
-                accessibilityRole="button"
-                accessibilityLabel="Add money to wallet"
-                accessibilityHint="Add funds to your wallet using a payment method"
-              >
-                <MaterialIcons name="add" size={20} color="#fff" accessibilityElementsHidden={true} />
-                <Text style={styles.actionButtonText}>Add Money</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => {
-                  triggerHaptic('medium');
-                  setShowWithdraw(true);
-                }}
-                accessibilityRole="button"
-                accessibilityLabel="Withdraw money from wallet"
-                accessibilityHint="Transfer funds from your wallet to your bank account"
-              >
-                <MaterialIcons name="keyboard-arrow-down" size={20} color="#fff" accessibilityElementsHidden={true} />
-                <Text style={styles.actionButtonText}>Withdraw</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-
-
-        {/* Linked Accounts Section */}
-        <View style={styles.sectionPad}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Linked Accounts</Text>
-            <TouchableOpacity
-              onPress={() => setShowPaymentMethods(true)}
-              accessibilityRole="button"
-              accessibilityLabel="Manage payment methods"
-              accessibilityHint="Add, remove, or update payment methods"
-            >
-              <Text style={styles.sectionManage}>Manage</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Only the account cards scroll; header remains fixed */}
-          <ScrollView
-            style={{ maxHeight: 180 }}
-            contentContainerStyle={{ paddingBottom: SPACING.COMPACT_GAP }}
-            showsVerticalScrollIndicator={false}
-          >
-            {stripeLoading ? (
-              <View style={{ paddingVertical: SPACING.COMPACT_GAP }}>
-                <PaymentMethodSkeleton />
-                <PaymentMethodSkeleton />
+        data={transactions}
+        keyExtractor={(tx: WalletTransactionRecord) => tx.id}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 18 }}
+        ListHeaderComponent={() => (
+          <>
+            {/* Header */}
+            <View style={styles.header}>
+              <View style={styles.headerTitleRow}>
+                <BrandingLogo size="medium" />
               </View>
-            ) : stripeError ? (
-              <View
-                style={styles.accountCard}
-                accessible={true}
-                accessibilityRole="alert"
-                accessibilityLabel="Unable to load payment methods. Check your connection."
-              >
-                <View style={[styles.accountIcon, { backgroundColor: '#ef4444' }]}>
-                  <MaterialIcons name="cloud-off" size={24} color="#fff" accessibilityElementsHidden={true} />
+            </View>
+
+            {/* Balance Card */}
+            <View style={styles.sectionPad}>
+              {/* Warning if secure storage for sensitive keys is unavailable */}
+              {!secureStoreAvailable && (
+                <View style={{ backgroundColor: '#FEF3C7', padding: 10, borderRadius: 8, marginBottom: 10 }}>
+                  <Text style={{ color: '#92400E', fontWeight: '600' }}>Security Notice</Text>
+                  <Text style={{ color: '#92400E' }}>
+                    Your device does not support secure storage. Sensitive wallet data is not being stored encrypted. Please use a managed build or sign out and back in on a supported device.
+                  </Text>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.accountName}>Unable to Load Payment Methods</Text>
-                  <Text style={styles.accountSub}>Check your connection</Text>
+              )}
+              <View style={styles.balanceCard}>
+                <View style={styles.balanceCardHeader}>
+                  <Text style={styles.balanceLabel}>BALANCE</Text>
+                  <Text style={styles.balanceAmount}>${balance.toFixed(2)}</Text>
                 </View>
+                <View style={styles.balanceActionsRow}>
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={() => {
+                      triggerHaptic('medium');
+                      setShowAddMoney(true);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Add money to wallet"
+                    accessibilityHint="Add funds to your wallet using a payment method"
+                  >
+                    <MaterialIcons name="add" size={20} color="#fff" accessibilityElementsHidden={true} />
+                    <Text style={styles.actionButtonText}>Add Money</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={() => {
+                      triggerHaptic('medium');
+                      setShowWithdraw(true);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Withdraw money from wallet"
+                    accessibilityHint="Transfer funds from your wallet to your bank account"
+                  >
+                    <MaterialIcons name="keyboard-arrow-down" size={20} color="#fff" accessibilityElementsHidden={true} />
+                    <Text style={styles.actionButtonText}>Withdraw</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+
+
+            {/* Linked Accounts Section */}
+            <View style={styles.sectionPad}>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>Linked Accounts</Text>
                 <TouchableOpacity
-                  onPress={loadPaymentMethods}
-                  style={{ paddingHorizontal: 12, paddingVertical: 6 }}
+                  onPress={() => setShowPaymentMethods(true)}
                   accessibilityRole="button"
-                  accessibilityLabel="Retry loading payment methods"
-                  accessibilityHint="Double tap to reload payment methods"
+                  accessibilityLabel="Manage payment methods"
+                  accessibilityHint="Add, remove, or update payment methods"
                 >
-                  <MaterialIcons name="refresh" size={20} color="#fff" accessibilityElementsHidden={true} />
+                  <Text style={styles.sectionManage}>Manage</Text>
                 </TouchableOpacity>
               </View>
-            ) : paymentMethods.length === 0 ? (
-              <TouchableOpacity
-                style={styles.accountCard}
-                onPress={() => setShowPaymentMethods(true)}
-              >
-                <View style={styles.accountIcon}>
-                  <MaterialIcons name="add" size={24} color="#fff" />
+
+              {/* Render payment methods without a nested VirtualizedList to avoid scrolling conflicts */}
+              {stripeLoading ? (
+                <View style={{ paddingVertical: SPACING.COMPACT_GAP }}>
+                  <PaymentMethodSkeleton />
+                  <PaymentMethodSkeleton />
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.accountName}>Add Payment Method</Text>
-                  <Text style={styles.accountSub}>No payment methods added yet</Text>
-                </View>
-              </TouchableOpacity>
-            ) : (
-              paymentMethods.map((method, index) => (
-                <View key={method.id} style={styles.accountCard}>
-                  <View style={styles.accountIcon}>
-                    <MaterialIcons name="credit-card" size={24} color="#fff" />
+              ) : stripeError ? (
+                <View
+                  style={styles.accountCard}
+                  accessible={true}
+                  accessibilityRole="alert"
+                  accessibilityLabel="Unable to load payment methods. Check your connection."
+                >
+                  <View style={[styles.accountIcon, { backgroundColor: '#ef4444' }]}>
+                    <MaterialIcons name="cloud-off" size={24} color="#fff" accessibilityElementsHidden={true} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.accountName}>
-                      {stripeService.formatCardDisplay(method)}
-                    </Text>
-                    <Text style={styles.accountSub}>
-                      {index === 0 ? 'Default Payment Method' : `Added ${new Date(method.created * 1000).toLocaleDateString()}`}
-                    </Text>
+                    <Text style={styles.accountName}>Unable to Load Payment Methods</Text>
+                    <Text style={styles.accountSub}>Check your connection</Text>
                   </View>
+                  <TouchableOpacity
+                    onPress={loadPaymentMethods}
+                    style={{ paddingHorizontal: 12, paddingVertical: 6 }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Retry loading payment methods"
+                    accessibilityHint="Double tap to reload payment methods"
+                  >
+                    <MaterialIcons name="refresh" size={20} color="#fff" accessibilityElementsHidden={true} />
+                  </TouchableOpacity>
                 </View>
-              ))
-            )}
-          </ScrollView>
-        </View>
+              ) : paymentMethods.length === 0 ? (
+                <TouchableOpacity
+                  style={styles.accountCard}
+                  onPress={() => setShowPaymentMethods(true)}
+                >
+                  <View style={styles.accountIcon}>
+                    <MaterialIcons name="add" size={24} color="#fff" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.accountName}>Add Payment Method</Text>
+                    <Text style={styles.accountSub}>No payment methods added yet</Text>
+                  </View>
+                </TouchableOpacity>
+              ) : (
+                <View style={{ paddingBottom: SPACING.COMPACT_GAP }}>
+                  {paymentMethods.map((method: StripePaymentMethod, index: number) => (
+                    <View key={method.id} style={styles.accountCard}>
+                      <View style={styles.accountIcon}>
+                        <MaterialIcons name="credit-card" size={24} color="#fff" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.accountName}>
+                          {stripeService.formatCardDisplay(method)}
+                        </Text>
+                        <Text style={styles.accountSub}>
+                          {index === 0 ? 'Default Payment Method' : `Added ${new Date(method.created * 1000).toLocaleDateString()}`}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
 
-
-
-        {/* Transaction History Section */}
-
-        <View style={[styles.sectionPad, { flex: 1, marginTop: 8 }]}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Transaction History</Text>
-            <TouchableOpacity onPress={() => setShowTransactionHistory(true)}>
-              <Text style={styles.sectionManage}>View All</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={{ minHeight: 200 }}>
-            {transactions.length === 0 ? (
+            {/* Transaction History header (moved into header so it renders once) */}
+            <View style={[styles.sectionPad, { marginTop: 8 }]}> 
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>Transaction History</Text>
+                <TouchableOpacity onPress={() => setShowTransactionHistory(true)}>
+                  <Text style={styles.sectionManage}>View All</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </>
+        )}
+        ListEmptyComponent={() => (
+          <View style={[styles.sectionPad, { flex: 1 }]}> 
+            <View style={{ minHeight: 200 }}>
               <EmptyState
                 icon="receipt-long"
                 title="No Transactions Yet"
@@ -261,21 +261,20 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
                 onAction={() => { }}
                 style={{ paddingVertical: 40 }}
               />
-            ) : (
-              <>
-                {recentTransactions.map(tx => (
-                  <View key={tx.id} style={styles.bountyCard}>
-                    <Text style={styles.bountyName}>{getTransactionLabel(tx)}</Text>
-                    <Text style={[styles.bountyAmount, { color: tx.amount > 0 ? '#6ee7b7' : '#fca5a5' }]}>{tx.amount > 0 ? '+' : ''}${Math.abs(tx.amount).toFixed(2)}</Text>
-                  </View>
-                ))}
-              </>
-            )}
+            </View>
           </View>
-        </View>
-
-        {/* Bottom navigation is now provided at app level; bottom padding ensures content isn't obscured */}
-      </ScrollView>
+        )}
+        renderItem={({ item: tx }: { item: WalletTransactionRecord }) => (
+          <View style={[styles.sectionPad, { marginTop: 8 }]}> 
+            <View style={{ minHeight: 64 }}>
+              <View style={styles.bountyCard}>
+                <Text style={styles.bountyName}>{getTransactionLabel(tx)}</Text>
+                <Text style={[styles.bountyAmount, { color: tx.amount > 0 ? '#6ee7b7' : '#fca5a5' }]}>{tx.amount > 0 ? '+' : ''}${Math.abs(tx.amount).toFixed(2)}</Text>
+              </View>
+            </View>
+          </View>
+        )}
+      />
 
       {/* Modals should be rendered outside the main ScrollView to avoid nesting VirtualizedLists */}
       <PaymentMethodsModal isOpen={showPaymentMethods} onClose={() => setShowPaymentMethods(false)} />

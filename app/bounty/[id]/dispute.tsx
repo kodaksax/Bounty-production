@@ -1,29 +1,30 @@
-import React, { useState, useEffect } from 'react';
+import { DisputeSubmissionForm } from 'components/dispute-submission-form';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useAuthContext } from 'hooks/use-auth-context';
+import { EMAIL_SUBJECTS, SUPPORT_EMAIL, SUPPORT_PHONE, SUPPORT_RESPONSE_TIMES, createSupportTel } from 'lib/constants/support';
+import { bountyService } from 'lib/services/bounty-service';
+import { cancellationService } from 'lib/services/cancellation-service';
+import type { Bounty } from 'lib/services/database.types';
+import { disputeService } from 'lib/services/dispute-service';
+import type { BountyCancellation, BountyDispute, LocalDisputeEvidence } from 'lib/types';
+import { AlertCircle, ArrowLeft, HelpCircle, Mail, Phone } from 'lucide-react-native';
+import { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
   ActivityIndicator,
   Alert,
   Linking,
-  StyleSheet,
   Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
   TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, AlertCircle, Phone, Mail, HelpCircle } from 'lucide-react-native';
-import { disputeService } from 'lib/services/dispute-service';
-import { cancellationService } from 'lib/services/cancellation-service';
-import { bountyService } from 'lib/services/bounty-service';
-import { useAuthContext } from 'hooks/use-auth-context';
-import { DisputeSubmissionForm } from 'components/dispute-submission-form';
-import type { BountyDispute, LocalDisputeEvidence, BountyCancellation } from 'lib/types';
-import type { Bounty } from 'lib/services/database.types';
-import { SUPPORT_EMAIL, SUPPORT_PHONE, SUPPORT_RESPONSE_TIMES, EMAIL_SUBJECTS, createSupportTel } from 'lib/constants/support';
+import { ROUTES } from '../../../lib/routes';
 
 export default function DisputeScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
   const router = useRouter();
   const { session } = useAuthContext();
   const userId = session?.user?.id;
@@ -164,6 +165,25 @@ export default function DisputeScreen() {
     );
   }
   
+  const handleGoBack = () => {
+    // If the dispute screen was opened from the hunter in-progress flow,
+    // return to the Postings tab's In Progress view so the hunter tools
+    // context is visible. Otherwise fall back to history back.
+    try {
+        if (from === 'in-progress') {
+          // Use a full href with query string and replace to ensure the tab
+          // wrapper (`/tabs/bounty-app`) mounts and receives the `screen`
+          // and `initialTab` params so BottomNav is shown.
+          router.replace(`${ROUTES.TABS.BOUNTY_APP}?screen=postings&initialTab=inProgress`)
+        return;
+      }
+    } catch (e) {
+      // ignore and fallback to back
+    }
+
+    router.back();
+  };
+
   if (!bounty || !cancellation) {
     return (
       <View className="flex-1 bg-white items-center justify-center p-6">
@@ -183,7 +203,7 @@ export default function DisputeScreen() {
             <Text className="text-white font-semibold ml-2">Contact Support</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={handleGoBack}
             className="px-6 py-3 rounded-lg mt-3"
           >
             <Text className="text-gray-600 font-medium text-center">Go Back</Text>
@@ -199,7 +219,7 @@ export default function DisputeScreen() {
         {/* Header */}
         <View className="bg-emerald-600 px-4 py-6 pt-12">
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={handleGoBack}
             className="mb-4"
           >
             <ArrowLeft size={24} color="white" />
@@ -340,7 +360,7 @@ export default function DisputeScreen() {
           </View>
           
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={handleGoBack}
             disabled={submitting}
             className="mt-4 py-4"
           >

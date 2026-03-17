@@ -2,8 +2,8 @@
 
 import { MaterialIcons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
-import React, { useEffect, useMemo, useState } from 'react'
-import { ActivityIndicator, FlatList, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { useEffect, useMemo, useState } from 'react'
+import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar'
 import { COLORS } from '../../lib/constants/accessibility'
@@ -153,11 +153,16 @@ export default function ChoosePeopleScreen() {
       {selectedIds.length > 0 && (
         <View style={{ paddingHorizontal: 16 }}>
           <Text style={styles.sectionTitle}>People you selected</Text>
-          <ScrollView horizontal style={{ marginVertical: 8 }}>
-            {selectedIds.map(id => {
-              const p = mutuals.find(m => m.id === id) || { id }
+          <FlatList
+            horizontal
+            data={selectedIds}
+            keyExtractor={(id) => String(id)}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ marginVertical: 8 }}
+            renderItem={({ item: id }) => {
+              const p = mutuals.find(m => m.id === id) || { id };
               return (
-                <View key={id} style={{ alignItems: 'center', marginRight: 12 }}>
+                <View style={{ alignItems: 'center', marginRight: 12 }}>
                   <View>
                     <Avatar className="h-14 w-14">
                       <AvatarImage src={p.avatar || '/placeholder.svg?height=56&width=56'} alt={p.name || p.username} />
@@ -167,11 +172,11 @@ export default function ChoosePeopleScreen() {
                       <MaterialIcons name="close" size={14} color="#052e1b" />
                     </TouchableOpacity>
                   </View>
-                    <Text style={{ width: 80, textAlign: 'center', marginTop: 6, color: '#fff' }}>{p.name?.split(' ')[0] || p.username}</Text>
+                  <Text style={{ width: 80, textAlign: 'center', marginTop: 6, color: '#fff' }}>{p.name?.split(' ')[0] || p.username}</Text>
                 </View>
               )
-            })}
-          </ScrollView>
+            }}
+          />
         </View>
       )}
 

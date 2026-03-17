@@ -12,16 +12,16 @@ import { userProfileService } from 'lib/services/userProfile'
 import type { Attachment, Conversation } from 'lib/types'
 import { useEffect, useMemo, useReducer, useState } from 'react'
 import {
-  ActivityIndicator,
-  Alert,
-  LayoutAnimation,
-  Platform,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  UIManager,
-  View
+    ActivityIndicator,
+    Alert,
+    LayoutAnimation,
+    Platform,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    UIManager,
+    View
 } from 'react-native'
 import { useAttachmentUpload } from '../hooks/use-attachment-upload'
 import { logClientError } from '../lib/services/monitoring'
@@ -676,6 +676,13 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   }
 
   const handleViewDispute = () => {
+    // When opened from hunter tools inside the in-progress flow, include
+    // a `from` query so the dispute screen can route back correctly.
+    if (variant === 'hunter') {
+      router.push(`/bounty/${bounty.id}/dispute?from=in-progress`) 
+      return
+    }
+
     router.push(`/bounty/${bounty.id}/dispute`)
   }
 

@@ -352,194 +352,177 @@ export default function HunterReviewAndVerifyScreen() {
         <Text style={styles.headerTitle}>Review & Verify</Text>
       </View>
 
-      <ScrollView
+      <FlatList
         style={styles.scrollView}
+        data={proofItems}
+        keyExtractor={(item) => item.id}
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 80 }]}
         showsVerticalScrollIndicator={false}
-      >
-        {/* Bounty Info Card with Timer */}
-        <View style={styles.bountyInfoCard}>
-          <Text style={styles.bountyTitle} numberOfLines={2}>
-            {bounty.title}
-          </Text>
-          <View style={styles.timerContainer}>
-            <Text style={styles.timerLabel}>Time Spent in Review</Text>
-            <Text style={styles.timerValue}>{formatTime(timeElapsed)}</Text>
-            <Text style={styles.timerHint}>Track your time on this task</Text>
-          </View>
-          <View style={styles.amountRow}>
-            <Text style={styles.bountyAmount}>
-              {bounty.is_for_honor ? 'For Honor' : `$${bounty.amount}`}
-            </Text>
-            <View style={styles.distanceInfo}>
-              <MaterialIcons name="near-me" size={16} color="#6ee7b7" />
-              <Text style={styles.distanceText}>0 mi</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Timeline */}
-        <View style={styles.timelineContainer}>
-          <Text style={styles.sectionTitle}>Progress Timeline</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.timeline}
-          >
-            {HUNTER_STAGES.map((stage, index) => {
-              const isActive = stage.id === currentStage;
-              const stageIndex = HUNTER_STAGES.findIndex((s) => s.id === stage.id);
-              const currentIndex = HUNTER_STAGES.findIndex((s) => s.id === currentStage);
-              const isCompleted = stageIndex < currentIndex;
-              const isAccessible = stageIndex <= currentIndex;
-
-              return (
-                <View
-                  key={stage.id}
-                  style={[
-                    styles.stageItem,
-                    isActive && styles.stageItemActive,
-                    isCompleted && styles.stageItemCompleted,
-                    !isAccessible && styles.stageItemLocked,
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.stageIcon,
-                      isActive && styles.stageIconActive,
-                      isCompleted && styles.stageIconCompleted,
-                    ]}
-                  >
-                    <MaterialIcons
-                      name={stage.icon as any}
-                      size={24}
-                      color={isActive || isCompleted ? '#fff' : '#6ee7b7'}
-                    />
-                  </View>
-                  <Text style={styles.stageLabel}>{stage.label}</Text>
+        ListHeaderComponent={() => (
+          <>
+            {/* Bounty Info Card with Timer */}
+            <View style={styles.bountyInfoCard}>
+              <Text style={styles.bountyTitle} numberOfLines={2}>
+                {bounty.title}
+              </Text>
+              <View style={styles.timerContainer}>
+                <Text style={styles.timerLabel}>Time Spent in Review</Text>
+                <Text style={styles.timerValue}>{formatTime(timeElapsed)}</Text>
+                <Text style={styles.timerHint}>Track your time on this task</Text>
+              </View>
+              <View style={styles.amountRow}>
+                <Text style={styles.bountyAmount}>
+                  {bounty.is_for_honor ? 'For Honor' : `$${bounty.amount}`}
+                </Text>
+                <View style={styles.distanceInfo}>
+                  <MaterialIcons name="near-me" size={16} color="#6ee7b7" />
+                  <Text style={styles.distanceText}>0 mi</Text>
                 </View>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        {/* Message Input */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Message (cont):</Text>
-          <TextInput
-            style={styles.messageTextArea}
-            placeholder="Describe your completed work..."
-            placeholderTextColor="rgba(255,254,245,0.4)"
-            value={messageText}
-            onChangeText={setMessageText}
-            multiline
-            numberOfLines={4}
-            maxLength={1000}
-            textAlignVertical="top"
-          />
-          {/* Conversation quick action: use loaded conversation if present */}
-          <View style={{ marginTop: 12 }}>
-            {conversation ? (
-              <TouchableOpacity
-                style={[styles.addProofButton, { alignSelf: 'flex-start' }]}
-                onPress={() => {
-                  // Navigate to conversation view (route param used if available)
-                    try {
-                      // NOTE: The Expo Router generated route types don't currently include
-                      // our messaging/detail and messaging/compose routes. At runtime
-                      // these paths exist, but the typed union rejects them. We cast
-                      // `router` to `any` here to perform the navigation by path while
-                      // keeping the cast narrow and documented.
-                      (router as any).push(`/messages/${conversation.id}`);
-                    } catch (e) {
-                      console.warn('Unable to open conversation route', e);
-                      Alert.alert(
-                        'Unable to Open Conversation',
-                        'We could not open the conversation. Please try again.'
-                      );
-                    }
-                }}
-              >
-                <MaterialIcons name="chat" size={18} color="#fff" />
-                <Text style={styles.addProofText}>Open Conversation</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={[styles.addProofButton, { alignSelf: 'flex-start' }]}
-                onPress={async () => {
-                  // No conversation found yet — attempt to getOrCreate then navigate to conversation
-                    try {
-                      if (!routeBountyId || !bounty?.user_id) return;
-                      const conv = await messageService.getOrCreateConversation([String(bounty.user_id)], '', routeBountyId || undefined);
-                      if (conv) {
-                        // See note above about route typing vs runtime routes.
-                        (router as any).push(`/messages/${conv.id}`);
-                      }
-                    } catch (e) {
-                      console.warn('Unable to open or create conversation route', e);
-                      Alert.alert(
-                        'Message Failed',
-                        'We could not open or create a conversation. You can try again or compose a new message manually.'
-                      );
-                      try {
-                        // See note above about route typing vs runtime routes.
-                        if (routeBountyId) (router as any).push(`/messages/new?bountyId=${routeBountyId}`);
-                      } catch (err) {
-                        console.warn('Fallback to new message route failed', err);
-                        Alert.alert(
-                          'Unable to Open Composer',
-                          'Opening the message composer failed. Please try again later.'
-                        );
-                      }
-                    }
-                }}
-              >
-                <MaterialIcons name="chat-bubble-outline" size={18} color="#fff" />
-                <Text style={styles.addProofText}>Message Poster</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-
-        {/* Proof of Completion */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Proof of Completion</Text>
-          <Text style={styles.sectionSubtitle}>
-            Attach images or files showing your completed work
-          </Text>
-          {proofItems.length > 0 ? (
-            <FlatList
-              data={proofItems}
-              renderItem={renderProofItem}
-              keyExtractor={(item) => item.id}
-              scrollEnabled={false}
-              contentContainerStyle={styles.proofList}
-            />
-          ) : (
-            <View style={styles.emptyProof}>
-              <MaterialIcons name="attachment" size={48} color="#6ee7b7" />
-              <Text style={styles.emptyProofText}>No proof attached yet</Text>
+              </View>
             </View>
-          )}
-          <TouchableOpacity style={styles.addProofButton} onPress={handleAddProof}>
-            <MaterialIcons name="add" size={20} color="#fff" />
-            <Text style={styles.addProofText}>Add Proof</Text>
-          </TouchableOpacity>
-        </View>
 
-        {/* Submit Button */}
-        <TouchableOpacity
-          style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
-          onPress={handleRequestReview}
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Text style={styles.submitButtonText}>Submit</Text>
-          )}
-        </TouchableOpacity>
-      </ScrollView>
+            {/* Timeline */}
+            <View style={styles.timelineContainer}>
+              <Text style={styles.sectionTitle}>Progress Timeline</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.timeline}
+              >
+                {HUNTER_STAGES.map((stage) => {
+                  const isActive = stage.id === currentStage;
+                  const stageIndex = HUNTER_STAGES.findIndex((s) => s.id === stage.id);
+                  const currentIndex = HUNTER_STAGES.findIndex((s) => s.id === currentStage);
+                  const isCompleted = stageIndex < currentIndex;
+                  const isAccessible = stageIndex <= currentIndex;
+
+                  return (
+                    <View
+                      key={stage.id}
+                      style={[
+                        styles.stageItem,
+                        isActive && styles.stageItemActive,
+                        isCompleted && styles.stageItemCompleted,
+                        !isAccessible && styles.stageItemLocked,
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.stageIcon,
+                          isActive && styles.stageIconActive,
+                          isCompleted && styles.stageIconCompleted,
+                        ]}
+                      >
+                        <MaterialIcons
+                          name={stage.icon as any}
+                          size={24}
+                          color={isActive || isCompleted ? '#fff' : '#6ee7b7'}
+                        />
+                      </View>
+                      <Text style={styles.stageLabel}>{stage.label}</Text>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
+            {/* Message Input */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Message (cont):</Text>
+              <TextInput
+                style={styles.messageTextArea}
+                placeholder="Describe your completed work..."
+                placeholderTextColor="rgba(255,254,245,0.4)"
+                value={messageText}
+                onChangeText={setMessageText}
+                multiline
+                numberOfLines={4}
+                maxLength={1000}
+                textAlignVertical="top"
+              />
+              {/* Conversation quick action: use loaded conversation if present */}
+              <View style={{ marginTop: 12 }}>
+                {conversation ? (
+                  <TouchableOpacity
+                    style={[styles.addProofButton, { alignSelf: 'flex-start' }]}
+                    onPress={() => {
+                      try {
+                        (router as any).push(`/messages/${conversation.id}`);
+                      } catch (e) {
+                        console.warn('Unable to open conversation route', e);
+                        Alert.alert('Unable to Open Conversation', 'We could not open the conversation. Please try again.');
+                      }
+                    }}
+                  >
+                    <MaterialIcons name="chat" size={18} color="#fff" />
+                    <Text style={styles.addProofText}>Open Conversation</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.addProofButton, { alignSelf: 'flex-start' }]}
+                    onPress={async () => {
+                      try {
+                        if (!routeBountyId || !bounty?.user_id) return;
+                        const conv = await messageService.getOrCreateConversation([String(bounty.user_id)], '', routeBountyId || undefined);
+                        if (conv) {
+                          (router as any).push(`/messages/${conv.id}`);
+                        }
+                      } catch (e) {
+                        console.warn('Unable to open or create conversation route', e);
+                        Alert.alert('Message Failed', 'We could not open or create a conversation. You can try again or compose a new message manually.');
+                        try {
+                          if (routeBountyId) (router as any).push(`/messages/new?bountyId=${routeBountyId}`);
+                        } catch (err) {
+                          console.warn('Fallback to new message route failed', err);
+                          Alert.alert('Unable to Open Composer', 'Opening the message composer failed. Please try again later.');
+                        }
+                      }
+                    }}
+                  >
+                    <MaterialIcons name="chat-bubble-outline" size={18} color="#fff" />
+                    <Text style={styles.addProofText}>Message Poster</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          </>
+        )}
+        ListEmptyComponent={() => (
+          <>
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Proof of Completion</Text>
+              <Text style={styles.sectionSubtitle}>
+                Attach images or files showing your completed work
+              </Text>
+              <View style={styles.emptyProof}>
+                <MaterialIcons name="attachment" size={48} color="#6ee7b7" />
+                <Text style={styles.emptyProofText}>No proof attached yet</Text>
+              </View>
+            </View>
+          </>
+        )}
+        renderItem={renderProofItem}
+        ListFooterComponent={() => (
+          <>
+            <TouchableOpacity style={styles.addProofButton} onPress={handleAddProof}>
+              <MaterialIcons name="add" size={20} color="#fff" />
+              <Text style={styles.addProofText}>Add Proof</Text>
+            </TouchableOpacity>
+            <View style={{ height: 12 }} />
+            <TouchableOpacity
+              style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+              onPress={handleRequestReview}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.submitButtonText}>Submit</Text>
+              )}
+            </TouchableOpacity>
+          </>
+        )}
+      />
     </View>
   );
 }
