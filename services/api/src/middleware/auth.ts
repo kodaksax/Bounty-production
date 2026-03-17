@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
-import { Database } from '../types/database.types';
 import { FastifyReply, FastifyRequest, type RouteGenericInterface } from 'fastify';
+import { Database } from '../types/database.types';
 import { addUserContext } from './request-context';
 
 // Initialize Supabase client for JWT verification - only if credentials are available
@@ -54,14 +54,15 @@ export async function authMiddleware(
   try {
     // If no Supabase client, skip auth for testing
     if (!supabase) {
-      console.log('⚠️  Auth middleware disabled - no Supabase credentials');
+      request.log?.warn('Auth middleware disabled - no Supabase credentials');
       request.userId = 'test-user-id';
       request.user = { id: 'test-user-id', email: 'test@example.com' };
       return;
     }
 
     const authHeader = request.headers.authorization;
-    console.log("AUTH HEADER:", request.headers.authorization);
+    // Avoid logging the full auth header (contains bearer token). Log presence only.
+    request.log.debug({ hasAuthHeader: !!authHeader }, 'Authorization header present');
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return reply.code(401).send({ 
         error: 'Missing or invalid authorization header',
@@ -116,7 +117,7 @@ export async function authMiddleware(
                       data.user.app_metadata?.role === 'admin';
     
   } catch (error) {
-    console.error('Auth middleware error:', error);
+    request.log.error({ error }, 'Auth middleware error');
     return reply.code(500).send({ 
       error: 'Authentication service error',
       message: 'Unable to verify authentication. Please try again.'
@@ -152,8 +153,8 @@ export async function optionalAuthMiddleware(
       }
     }
   } catch (error) {
-    // Silently fail for optional auth
-    console.log('Optional auth failed:', error instanceof Error ? error.message : 'Unknown error');
+    // Silently fail for optional auth, but log debug message without sensitive data
+    request.log.debug({ error: error instanceof Error ? error.message : String(error) }, 'Optional auth failed');
   }
 }
 

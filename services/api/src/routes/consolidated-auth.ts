@@ -5,7 +5,6 @@
  * - api/server.js (lines 202-282, 1184-1363)
  * - server/index.js (lines 152-202)
  */
-console.log("LOADING CONSOLIDATED AUTH ROUTES");
 import { createClient } from '@supabase/supabase-js';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -273,7 +272,12 @@ export async function registerConsolidatedAuthRoutes(
     },
     asyncHandler(async (request: FastifyRequest, reply: FastifyReply) => {
       const body = registerSchema.parse(request.body);
-      console.log("REGISTER HIT", body)
+
+      // Avoid logging sensitive fields (password). Log only non-sensitive metadata.
+      request.log.info(
+        { email: body.email, hasUsername: !!body.username },
+        'Register endpoint hit'
+      );
 
       await handleUserRegistration(request, reply, body, 'User registration');
     })

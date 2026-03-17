@@ -4,10 +4,10 @@
  * Provides consistent Supabase JWT validation across all endpoints
  */
 
-import { FastifyRequest, FastifyReply } from 'fastify';
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
-import { Database } from '../types/database.types';
+import { FastifyReply, FastifyRequest } from 'fastify';
 import { config } from '../config';
+import { Database } from '../types/database.types';
 
 // Extend FastifyRequest to include authenticated user
 export interface AuthenticatedRequest extends FastifyRequest {
@@ -90,7 +90,8 @@ export async function authMiddleware(
 ): Promise<void> {
   try {
     const authHeader = request.headers.authorization;
-    console.log("Authorization header:", request.headers.authorization);
+    // Do not log raw Authorization header (contains bearer token). Log presence only.
+    request.log.debug({ hasAuthHeader: !!authHeader }, 'Authorization header present');
     if (!authHeader) {
       reply.code(401).send({
         error: 'Unauthorized',
