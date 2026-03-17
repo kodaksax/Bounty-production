@@ -18,7 +18,7 @@ export function initGlobalErrorHandlers() {
         console.log('ERROR_HANDLING_CAPTURE', message);
         if (isFatal) {
           // Show minimal alert in release to avoid silent crash (optional)
-          try { Alert.alert('An error occurred', message); } catch (e) {}
+          try { Alert.alert('An error occurred', message); } catch { }
         }
       } catch (e) {
         originalConsoleError('Error in global handler', e);
@@ -37,11 +37,11 @@ export function initGlobalErrorHandlers() {
           const reason = event.reason || event;
           console.log('UNHANDLED_PROMISE_REJECTION', reason);
           originalConsoleError('Unhandled promise rejection', reason);
-        } catch (e) {
-          originalConsoleError('Error handling unhandledrejection', e);
-        }
+        } catch {
+            originalConsoleError('Error handling unhandledrejection');
+          }
       });
-    } catch (e) {
+    } catch {
       // Fallback: patch Promise
       const origThen = Promise.prototype.then;
       (Promise.prototype as any).then = function (onFulfilled: any, onRejected: any) {
@@ -58,7 +58,7 @@ export function initGlobalErrorHandlers() {
   console.error = (...args: any[]) => {
     try {
       console.log('CONSOLE_ERROR_CAPTURE', ...args);
-    } catch (e) {
+    } catch {
       // swallow
     }
     originalConsoleError.apply(console, args as any);
