@@ -740,16 +740,17 @@ export function PosterReviewModal({
             </ScrollView>
           )}
         </View>
-      </Modal>
 
-      <AttachmentViewerModal
-        visible={viewerVisible}
-        attachment={selectedAttachment}
-        onClose={() => {
-          setViewerVisible(false);
-          setSelectedAttachment(null);
-        }}
-      />
+        {/* Nest the child modal inside the parent modal so React Native iOS correctly presents it over this modal rather than failing to present a sibling modal over a pageSheet */}
+        <AttachmentViewerModal
+          visible={viewerVisible}
+          attachment={selectedAttachment}
+          onClose={() => {
+            setViewerVisible(false);
+            setSelectedAttachment(null);
+          }}
+        />
+      </Modal>
     </>
   );
 }

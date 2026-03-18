@@ -32,6 +32,7 @@ import { BountyCard } from './bounty-card'
 import { PosterReviewModal } from './poster-review-modal'
 import { StaleBountyAlert } from './stale-bounty-alert'
 import { WorkflowDisputeModal } from './workflow-dispute-modal'
+import { AttachmentViewerModal } from './attachment-viewer-modal'
 import { AnimatedSection } from './ui/animated-section'
 import { AttachmentsList } from './ui/attachments-list'
 import { MessageBar } from './ui/message-bar'
@@ -164,6 +165,11 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   const [otherPartyAvatar, setOtherPartyAvatar] = useState<string | null>(null)
   const [otherPartyName, setOtherPartyName] = useState<string>('')
   const [hiddenByUser, setHiddenByUser] = useState(false)
+  
+  // Viewer state for proof attachments
+  const [selectedProofItem, setSelectedProofItem] = useState<Attachment | null>(null)
+  const [proofViewerVisible, setProofViewerVisible] = useState(false)
+
     // Track the current user's request for this bounty (if any)
     const [requestStatus, setRequestStatus] = useState<string | null>(null)
     const [requestId, setRequestId] = useState<string | null>(null)
@@ -708,6 +714,32 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     dispatchDraft({ type: 'removeProof', id })
   }
 
+  const handleProofPress = (item: ProofDraftItem) => {
+    const primaryUri = item.uri || item.remoteUri;
+    if (!primaryUri) {
+      Alert.alert('Unavailable', 'This attachment is missing a file reference.');
+      return;
+    }
+
+    const attachment: Attachment = {
+      id: item.id,
+      name: item.name || 'Attachment',
+      uri: primaryUri,
+      remoteUri: item.remoteUri,
+      mimeType: item.mimeType || (item.type === 'image' ? 'image/jpeg' : undefined),
+      mime: item.mimeType || (item.type === 'image' ? 'image/jpeg' : undefined),
+      size: item.size,
+      status: 'uploaded',
+    };
+
+    if (attachment.uri && /^\/\//.test(attachment.uri)) {
+      attachment.uri = `https:${attachment.uri}`;
+    }
+
+    setSelectedProofItem(attachment);
+    setProofViewerVisible(true);
+  };
+
   const formatFileSize = (bytes?: number) => {
     if (!bytes) return '0 KB'
     if (bytes < 1024) return `${bytes} B`
@@ -1167,7 +1199,13 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                     <View>
                       <Text style={styles.sectionTitle}>Proof:</Text>
                       {proofItems.map((item) => (
-                        <View key={item.id} style={styles.proofItem}>
+                        <TouchableOpacity
+                          key={item.id}
+                          style={styles.proofItem}
+                          onPress={() => handleProofPress(item)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`View attachment ${item.name}`}
+                        >
                           <View style={styles.proofIcon}>
                             <MaterialIcons
                               name={item.type === 'image' ? 'image' : 'insert-drive-file'}
@@ -1182,7 +1220,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                           <TouchableOpacity onPress={() => handleRemoveProof(item.id)}>
                             <MaterialIcons name="close" size={20} color="#ef4444" />
                           </TouchableOpacity>
-                        </View>
+                        </TouchableOpacity>
                       ))}
                       <TouchableOpacity
                         style={[styles.addFileBtn, !(readyToSubmitPressed || !!readyRecord) && styles.buttonDisabled]}
@@ -1439,6 +1477,16 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           }}
         />
       )}
+
+      {/* Proof Viewer Modal */}
+      <AttachmentViewerModal
+        visible={proofViewerVisible}
+        attachment={selectedProofItem}
+        onClose={() => {
+          setProofViewerVisible(false)
+          setSelectedProofItem(null)
+        }}
+      />
     </View>
   )
 }

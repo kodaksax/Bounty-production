@@ -50,7 +50,12 @@ export function AttachmentViewerModal({
   const [videoError, setVideoError] = useState<string | null>(null);
   const hasAttachment = Boolean(attachment);
   const mimeType = attachment?.mime || attachment?.mimeType || '';
-  const uri = attachment?.remoteUri || attachment?.uri || '';
+  let uri = attachment?.remoteUri || attachment?.uri || '';
+  
+  if (uri && /^\/\//.test(uri)) {
+    uri = `https:${uri}`;
+  }
+  
   const displayName = attachment?.name || 'Attachment';
 
   // Security validation
@@ -72,6 +77,14 @@ export function AttachmentViewerModal({
     ) {
       return 'document';
     }
+
+    // Fallback: deduce from filename or uri extension
+    const lowerName = (displayName || uri || '').toLowerCase();
+    if (lowerName.match(/\.(jpg|jpeg|png|gif|webp|heic)$/i)) return 'image';
+    if (lowerName.match(/\.(mp4|mov|avi|webm|mkv)$/i)) return 'video';
+    if (lowerName.match(/\.pdf$/i)) return 'pdf';
+    if (lowerName.match(/\.(doc|docx|txt|rtf)$/i)) return 'document';
+
     return 'other';
   };
 
