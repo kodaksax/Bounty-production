@@ -47,7 +47,7 @@ export const portfolioService = {
     await loadFromStorage();
     const map = portfolioStore || {};
     const items = map[userId] || [];
-    return items.slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return items.slice();
   },
 
   /**

@@ -97,7 +97,7 @@ describe('portfolio-service', () => {
       expect(items).toEqual([]);
     });
 
-    it('should return items sorted by createdAt descending', async () => {
+    it('should return items in stored order', async () => {
       const mockData = {
         'test-user': [
           { id: '1', userId: 'test-user', type: 'image', url: 'url1', createdAt: '2024-01-01T00:00:00Z' },
@@ -109,9 +109,9 @@ describe('portfolio-service', () => {
 
       const items = await portfolioService.getItems('test-user');
       
-      expect(items[0].id).toBe('2'); // Most recent
-      expect(items[1].id).toBe('3');
-      expect(items[2].id).toBe('1'); // Oldest
+      expect(items[0].id).toBe('1');
+      expect(items[1].id).toBe('2');
+      expect(items[2].id).toBe('3');
     });
   });
 
