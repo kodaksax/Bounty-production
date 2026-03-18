@@ -15,14 +15,14 @@ import type { PortfolioItem } from "lib/types";
 import { normalizeAuthProfile, type NormalizedProfile } from "lib/utils/normalize-profile";
 import React, { useEffect, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Modal,
-    Pressable,
-    ScrollView,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { showReportAlert } from "./ReportModal";
 import { ReputationScoreCompact } from "./ui/reputation-score";
@@ -117,7 +117,27 @@ export function EnhancedProfileSection({
 }: EnhancedProfileSectionProps) {
   const { profile: normalizedFromHookOrLocal, loading: profileLoading } = useNormalizedProfile(userId);
   const { profile: authProfileFromHook } = useAuthProfile();
-  const resolvedUserId = userId || authProfileFromHook?.id || 'current-user'
+  // Resolve the user id for portfolio/follow/rating hooks.
+  // Resolution sequence (intent / reasoning):
+  // 1) Use `normalizedFromHookOrLocal?.id` when available — this is the canonical
+  //    id produced by `useNormalizedProfile(userId)` and may include merged data
+  //    from Supabase or local caches.
+  // 2) Fall back to an explicit `userId` prop when the parent requested a specific
+  //    profile view (e.g., viewing someone else's profile).
+  // 3) If no `userId` was provided and the normalized profile is still loading,
+  //    prefer the `authProfileFromHook?.id` (the currently-authenticated user id)
+  //    so we don't prematurely use the sentinel 'current-user' which can
+  //    recreate the race the previous comment warned about.
+  // 4) Only use the 'current-user' sentinel as a last resort when no other
+  //    identifier is available.
+  // Note: `usePortfolio` requires a string id, so we always produce a string.
+  const resolvedUserId = (() => {
+    if (normalizedFromHookOrLocal?.id) return normalizedFromHookOrLocal.id;
+    if (userId) return userId;
+    // If normalized profile is still loading, prefer the auth profile id when present
+    if (profileLoading && authProfileFromHook?.id) return authProfileFromHook.id;
+    return authProfileFromHook?.id ?? 'current-user';
+  })();
   const { items, loading: portfolioLoading, deleteItem, addItem, refresh } = usePortfolio(resolvedUserId);
   const {
     pickAndUpload,
@@ -683,8 +703,11 @@ export function EnhancedProfileSection({
 
 // Standalone Portfolio section to render after Skillsets
 export function PortfolioSection({ userId, isOwnProfile = true }: { userId?: string; isOwnProfile?: boolean }) {
+  const { profile: normalizedFromHookOrLocal } = useNormalizedProfile(userId);
   const { profile: authProfileFromHook } = useAuthProfile();
-  const resolvedUserId = userId || authProfileFromHook?.id || 'current-user'
+  // Prefer normalized profile id when available to avoid storing items under
+  // the fallback sentinel when the auth hook hasn't populated yet.
+  const resolvedUserId = normalizedFromHookOrLocal?.id || userId || authProfileFromHook?.id || 'current-user'
   const { items, loading: portfolioLoading, deleteItem, addItem, refresh } = usePortfolio(resolvedUserId);
   const { pickAndUpload, isPicking, isUploading, progress, message: uploadMessage, lastPicked: lastPickedStandalone } = usePortfolioUpload({
     userId: resolvedUserId,
