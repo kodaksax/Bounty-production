@@ -3,7 +3,7 @@ import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
 import { Slot } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -78,16 +78,19 @@ const RootFrame = ({ children, bgColor = COLORS.EMERALD_500 }: { children: React
   const insets = useSafeAreaInsets();
   const barStyle = getBarStyleForHex(bgColor);
 
+  const topInsetStyle = useMemo(() => ({ height: insets.top, backgroundColor: bgColor }), [insets.top, bgColor]);
+  const bottomInsetStyle = useMemo(() => ({ height: insets.bottom || 0, backgroundColor: bgColor }), [insets.bottom, bgColor]);
+
   return (
     <View style={[styles.container, { backgroundColor: bgColor }]}>
       {/* top safe area behind status icons (time, battery, network) */}
-      <View style={{ height: insets.top, backgroundColor: bgColor }} />
+      <View style={topInsetStyle} />
 
       {/* app content */}
       <View style={styles.content}>{children}</View>
 
       {/* bottom safe area behind home indicator */}
-      <View style={{ height: insets.bottom || 0, backgroundColor: bgColor }} />
+      <View style={bottomInsetStyle} />
 
       {/* status bar; expo-status-bar maps to appropriate platform APIs */}
       <StatusBar style={barStyle} backgroundColor={bgColor} />
@@ -251,7 +254,7 @@ function RootLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <SafeAreaProvider>
-      <GestureHandlerRootView style={{ flex: 1 }}>
+      <GestureHandlerRootView style={styles.gestureRoot}>
         <BackgroundColorProvider>
           <LayoutContent />
         </BackgroundColorProvider>
@@ -285,6 +288,7 @@ const styles = StyleSheet.create({
     // Add any additional styling needed for "iphone-container"
   },
   content: { flex: 1 },
+  gestureRoot: { flex: 1 },
 });
 
 let WrappedRoot = RootLayout;

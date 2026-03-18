@@ -428,7 +428,7 @@ export default function EnhancedSearchScreen() {
 
       {/* Search bar */}
       <View style={styles.searchRow}>
-        <MaterialIcons name="search" size={20} color="#6ee7b7" style={{ marginHorizontal: 8 }} accessibilityElementsHidden={true} />
+        <MaterialIcons name="search" size={20} color="#6ee7b7" style={styles.iconMarginHorizontal8} accessibilityElementsHidden={true} />
         <TextInput
           value={query}
           placeholder={activeTab === 'bounties' ? 'Search bounties...' : 'Search users...'}
@@ -452,16 +452,16 @@ export default function EnhancedSearchScreen() {
         />
         {!!query && !isSearching && (
           <TouchableOpacity
-            onPress={() => { setQuery(''); setShowSuggestions(false); }}
-            style={{ padding: 4 }}
-            accessibilityRole="button"
-            accessibilityLabel="Clear search"
-            accessibilityHint="Clears the search text"
-          >
+              onPress={() => { setQuery(''); setShowSuggestions(false); }}
+              style={styles.smallPadding}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+              accessibilityHint="Clears the search text"
+            >
             <MaterialIcons name="close" size={18} color="#6ee7b7" accessibilityElementsHidden={true} />
           </TouchableOpacity>
         )}
-        {(isSearching || isLoadingSuggestions) && <ActivityIndicator color="#6ee7b7" size="small" style={{ marginRight: 8 }} accessibilityLabel="Loading search results" />}
+        {(isSearching || isLoadingSuggestions) && <ActivityIndicator color="#6ee7b7" size="small" style={styles.activityMarginRight} accessibilityLabel="Loading search results" />}
         {activeTab === 'bounties' && (
           <>
             <TouchableOpacity
@@ -503,9 +503,9 @@ export default function EnhancedSearchScreen() {
                 name={suggestion.icon as any || 'search'}
                 size={18}
                 color="#6ee7b7"
-                style={{ marginRight: 10 }}
+                style={styles.iconMarginRight10}
               />
-              <View style={{ flex: 1 }}>
+              <View style={styles.flex1}>
                 <Text style={styles.suggestionText}>{suggestion.text}</Text>
                 {suggestion.subtitle && (
                   <Text style={styles.suggestionSubtext}>{suggestion.subtitle}</Text>
@@ -563,16 +563,16 @@ export default function EnhancedSearchScreen() {
 
       {/* Results */}
       {activeTab === 'bounties' ? (
-        <FlatList
+          <FlatList
           data={bountyResults}
           keyExtractor={keyExtractorBounty}
           renderItem={renderBountyItem}
-          contentContainerStyle={{ padding: 12, paddingBottom: 100 }}
+          contentContainerStyle={styles.resultsContainer}
           keyboardDismissMode="on-drag"
           ListEmptyComponent={
             query && !isSearching && !error ? (
-              <View style={{ padding: 24, alignItems: 'center' }}>
-                <Text style={{ color: '#ecfdf5' }}>
+              <View style={styles.emptyCenter}>
+                <Text style={styles.emptyText}>
                   No bounties found for {"\""}
                   {query}
                   {"\""}
@@ -590,12 +590,12 @@ export default function EnhancedSearchScreen() {
           data={userResults}
           keyExtractor={keyExtractorUser}
           renderItem={renderUserItem}
-          contentContainerStyle={{ padding: 12, paddingBottom: 100 }}
+          contentContainerStyle={styles.resultsContainer}
           keyboardDismissMode="on-drag"
           ListEmptyComponent={
             query && !isSearching && !error ? (
-              <View style={{ padding: 24, alignItems: 'center' }}>
-                <Text style={{ color: '#ecfdf5' }}>
+              <View style={styles.emptyCenter}>
+                <Text style={styles.emptyText}>
                   No users found for {"\""}
                   {query}
                   {"\""}
@@ -808,6 +808,14 @@ const styles = {
     marginBottom: 4,
   },
   input: { flex: 1, color: 'white', paddingVertical: 4, fontSize: 15 },
+  iconMarginHorizontal8: { marginHorizontal: 8 },
+  smallPadding: { padding: 4 },
+  activityMarginRight: { marginRight: 8 },
+  iconMarginRight10: { marginRight: 10 },
+  flex1: { flex: 1 },
+  resultsContainer: { padding: 12, paddingBottom: 100 },
+  emptyCenter: { padding: 24, alignItems: 'center' },
+  emptyText: { color: '#ecfdf5' },
   filterBtn: { padding: SPACING.COMPACT_GAP, position: 'relative' },
   filterDot: {
     position: 'absolute',

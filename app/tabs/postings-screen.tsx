@@ -11,8 +11,8 @@ import { bountyService } from "lib/services/bounty-service"
 import type { Bounty } from "lib/services/database.types"
 import { cn } from "lib/utils"
 import * as React from "react"
-import { useEffect, useRef, useState } from "react"
-import { ActivityIndicator, Alert, Animated, FlatList, Keyboard, RefreshControl, ScrollView, Text, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native"
+import { useEffect, useRef, useState, useMemo } from "react"
+import { ActivityIndicator, Alert, Animated, FlatList, Keyboard, RefreshControl, ScrollView, Text, TouchableOpacity, TouchableWithoutFeedback, View, StyleSheet } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { AddBountyAmountScreen } from "../../components/add-bounty-amount-screen"
 import { AddMoneyScreen } from "../../components/add-money-screen"
@@ -586,6 +586,10 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
     return m
   }, [hunterRequests])
 
+  // Memoized styles that must be called unconditionally (before any early returns)
+  const containerPaddingTop = useMemo(() => ({ paddingTop: Math.max(0, headerHeight - (HEADER_TOP_OFFSET - 12)) }), [headerHeight])
+  const listContentPadding = useMemo(() => ({ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }), [insets.bottom])
+
   // Derived list for In Progress tab considering the selected status filter
   const displayedInProgress = React.useMemo(() => {
     if (statusFilterInProgress === 'all') return inProgressBounties
@@ -642,12 +646,12 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
           {/* Header */}
           <View className="flex-row justify-between items-center px-4">
             {/* Left: logo aligned like messenger (no back icon) */}
-            <View className="flex-row items-center" style={{ transform: [{ translateY: 2 }] }}>
+            <View className="flex-row items-center" style={styles.translateY2}>
               <BrandingLogo size="medium" />
             </View>
 
             {/* Right: Wallet balance pill and bookmark (inline) */}
-            <View className="flex-row items-center" style={{ transform: [{ translateY: 2 }] }}>
+            <View className="flex-row items-center" style={styles.translateY2}>
               {/* Balance pill sits to the left, bookmark to the right */}
               <WalletBalanceButton onPress={() => setActiveScreen('wallet')} />
               <TouchableOpacity
@@ -674,7 +678,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
 
           {/* Title (centered below header) */}
           <View className="px-4">
-            <Text style={{ fontSize: 20 }} className="text-white font-bold tracking-wide uppercase text-center w-full">
+            <Text style={styles.titleText} className="text-white font-bold tracking-wide uppercase text-center w-full">
               {activeTab === "inProgress"
                 ? "In Progress"
                 : activeTab === "requests"
@@ -729,15 +733,15 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
         </View>
 
         {/* Scrollable Content Area - starts under visible bottom of header */}
-        <View className="flex-1" style={{ paddingTop: Math.max(0, headerHeight - (HEADER_TOP_OFFSET - 12)) }}>
+        <View className="flex-1" style={containerPaddingTop}>
           {/* Error message */}
           {error && (
-            <View className="mx-4 mb-4 p-3 bg-red-500/70 rounded-lg">
-              <Text style={{ color: 'white', fontSize: 14 }}>{error}</Text>
-              <TouchableOpacity style={{ position: 'absolute', right: 8, top: 8, padding: 8 }} onPress={() => setError(null)}>
-                <Text style={{ color: 'white', fontSize: 16 }}>✕</Text>
-              </TouchableOpacity>
-            </View>
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>{error}</Text>
+                <TouchableOpacity style={styles.errorCloseButton} onPress={() => setError(null)}>
+                  <Text style={styles.errorCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
           )}
 
           {/* Success message */}
@@ -834,7 +838,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                       colors={['#10b981']}
                     />
                   }
-                  contentContainerStyle={{ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
+                  contentContainerStyle={listContentPadding}
                   showsVerticalScrollIndicator={false}
                   onScroll={(e) => {
                     const y = e.nativeEvent.contentOffset.y || 0
@@ -1011,7 +1015,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
             </View>
 
             {/* Preset amount chips + dynamic Other chip (horizontal scroll to keep fixed height) */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 8 }} style={{ height: 48 }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.amountScrollContent} style={styles.scrollHeight48}>
               <View className="flex-row items-center gap-3 mb-0">
                 {AMOUNT_PRESETS.map((amt) => {
                   const selected = formData.amount === amt && !formData.isForHonor;
@@ -1179,3 +1183,29 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
 }
 
 export default PostingsScreen;
+
+const styles = StyleSheet.create({
+  headerBase: {
+    position: 'absolute',
+    top: -55,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+    backgroundColor: '#059669',
+  },
+  headerShadow: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  translateY2: { transform: [{ translateY: 2 }] },
+  titleText: { fontSize: 20, color: 'white' },
+  errorBox: { marginHorizontal: 16, marginBottom: 16, padding: 12, backgroundColor: 'rgba(239,68,68,0.45)', borderRadius: 8 },
+  errorText: { color: 'white', fontSize: 14 },
+  errorCloseButton: { position: 'absolute', right: 8, top: 8, padding: 8 },
+  errorCloseText: { color: 'white', fontSize: 16 },
+  amountScrollContent: { paddingHorizontal: 8 },
+  scrollHeight48: { height: 48 },
+});
