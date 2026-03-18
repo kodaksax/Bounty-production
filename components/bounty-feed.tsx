@@ -479,7 +479,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
               <TouchableOpacity
                 key={item.id}
                 style={styles.trendingCard}
-                onPress={() => router.push(`/postings/${item.id}`)}
+                onPress={() => router.push(`/bounty/${item.id}/public`)}
                 accessibilityRole="button"
                 accessibilityLabel={`Trending bounty: ${item.title}, ${item.isForHonor ? 'for honor' : '$' + item.amount}${ageBadge ? ', ' + ageBadge : ''}`}
               >
