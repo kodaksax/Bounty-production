@@ -237,6 +237,16 @@ export function PosterReviewModal({
       setViewerVisible(false);
       setSelectedAttachment(null);
       setShowPayoutWarning(false);
+      // Reset UI step state so the modal always starts on the main review view
+      setShowRatingForm(false);
+      setShowRevisionForm(false);
+      setRating(0);
+      setRatingComment('');
+      setRevisionFeedback('');
+      setIsProcessing(false);
+      // Note: submission will be reloaded when `visible` becomes true
+      setSubmission(null);
+      setHunterProfile(null);
     }
   }, [visible]);
 
