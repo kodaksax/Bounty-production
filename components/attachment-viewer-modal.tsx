@@ -1,20 +1,21 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
+import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import { VideoView, useVideoPlayer } from 'expo-video';
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    Image,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Image,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import type { Attachment } from '../lib/types';
@@ -145,43 +146,130 @@ export function AttachmentViewerModal({
 
     setIsDownloading(true);
     try {
-      // For images, we can save to gallery
-      if (fileType === 'image' && Platform.OS !== 'web') {
-        // Check if sharing is available
-        const isAvailable = await Sharing.isAvailableAsync();
-        if (!isAvailable) {
-          Alert.alert('Error', 'Sharing is not available on this device');
+      // For images and videos on device, save to photos/gallery when possible
+      if ((fileType === 'image' || fileType === 'video') && Platform.OS !== 'web') {
+        // Request media library permissions
+        const { status } = await MediaLibrary.requestPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission required', 'Please grant photo permissions to save media to your device.');
           return;
         }
 
-        // Download to cache directory first
-        const filename = attachment.name || `image-${Date.now()}`;
-        const cacheDir = (FileSystem as any).cacheDirectory || '';
-        const localUri = `${cacheDir}${filename}`;
+        // Determine filename with extension (prefer name/uri, then common mime-type map)
+        const suggestedName = attachment.name || `file-${Date.now()}`;
+        const extMatch = (suggestedName || uri || '').match(/(\.[a-z0-9]+)(?:\?.*)?$/i);
 
-        // If uri is already local, just share it
+        const extension = extMatch
+          ? extMatch[1]
+          : (() => {
+              if (!mimeType) return '';
+              const cleaned = mimeType.split(';')[0].trim().toLowerCase();
+              const mimeMap: Record<string, string> = {
+                'image/jpeg': '.jpg',
+                'image/jpg': '.jpg',
+                'image/png': '.png',
+                'image/gif': '.gif',
+                'image/webp': '.webp',
+                'image/heic': '.heic',
+                'video/mp4': '.mp4',
+                'video/quicktime': '.mov',
+                'video/x-msvideo': '.avi',
+                'application/pdf': '.pdf',
+                'application/msword': '.doc',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+                'text/plain': '.txt',
+                'application/rtf': '.rtf',
+              };
+
+              if (mimeMap[cleaned]) return mimeMap[cleaned];
+
+              const parts = cleaned.split('/');
+              if (parts.length === 2 && parts[1]) {
+                // take subtype (without +suffix) if it looks safe
+                const subtype = parts[1].split('+')[0];
+                if (/^[a-z0-9.-]+$/.test(subtype)) return `.${subtype}`;
+              }
+
+              return '';
+            })();
+
+        const filename = extension && !suggestedName.toLowerCase().endsWith(extension.toLowerCase())
+          ? `${suggestedName}${extension}`
+          : suggestedName;
+
+        const cacheDir = (FileSystem as any).cacheDirectory || '';
+        const localCandidate = `${cacheDir}${filename}`;
+
+        // Normalize local files: if the source is a local file URI but lacks an extension,
+        // copy it into cache with the computed filename (which includes the normalized extension).
+        let finalLocalUri = uri;
         if (uri.startsWith('file://')) {
-          await Sharing.shareAsync(uri, {
-            mimeType: mimeType,
-            dialogTitle: 'Save Image',
-            UTI: mimeType,
-          });
+          const uriPath = uri.split('?')[0];
+          const hasExtOnUri = /(\.[a-z0-9]+)$/i.test(uriPath);
+          if (!hasExtOnUri && filename) {
+            try {
+              await FileSystem.copyAsync({ from: uri, to: localCandidate });
+              finalLocalUri = localCandidate;
+            } catch (copyErr) {
+              console.error('[AttachmentViewer] copy local file error:', copyErr);
+              // Fall back to original uri if copy fails
+              finalLocalUri = uri;
+            }
+          } else {
+            finalLocalUri = uri;
+          }
         } else {
-          // Download from remote
-          const downloadResult = await FileSystem.downloadAsync(uri, localUri);
-          
-          if (downloadResult.status !== 200) {
+          // Remote URL: download into cache with the computed filename
+          const downloadResult = await FileSystem.downloadAsync(uri, localCandidate);
+          if (downloadResult.status && downloadResult.status !== 200) {
             throw new Error('Download failed');
           }
-
-          await Sharing.shareAsync(downloadResult.uri, {
-            mimeType: mimeType,
-            dialogTitle: 'Save Image',
-            UTI: mimeType,
-          });
+          finalLocalUri = downloadResult.uri;
         }
 
-        Alert.alert('Success', 'Image saved successfully!');
+        // Save to library
+        try {
+          await MediaLibrary.saveToLibraryAsync(finalLocalUri);
+          Alert.alert('Saved', 'Media saved to your device gallery.');
+        } catch (err) {
+          const e = err as any;
+          console.error('[AttachmentViewer] MediaLibrary save error:', e);
+
+          // Map common low-level errors to friendly messages for users
+          const rawMsg = (e && (e.message || e.toString())) || 'Unknown error';
+          const userMessage = (() => {
+            const m = String(rawMsg).toLowerCase();
+            if (/insufficient|no space|enospc|disk full/.test(m)) {
+              return 'Unable to save media: insufficient storage on device.';
+            }
+            if (/permission|denied|not authorized|not allowed/.test(m)) {
+              return 'Unable to save media: permission denied. Please enable photo/storage permissions in your device settings.';
+            }
+            if (/format|unsupported|not supported|invalid file/.test(m)) {
+              return 'Unable to save media: file format not supported by your device.';
+            }
+            return `Unable to save media: ${rawMsg}`;
+          })();
+
+          // Fallback to sharing if media library save fails
+          const isAvailable = await Sharing.isAvailableAsync();
+          if (isAvailable) {
+            try {
+              await Sharing.shareAsync(finalLocalUri, {
+                mimeType: mimeType,
+                dialogTitle: 'Share File',
+                UTI: mimeType,
+              });
+              Alert.alert('Could not save', `${userMessage}\nOpened share sheet as a fallback.`);
+            } catch (shareErr) {
+              console.error('[AttachmentViewer] Sharing fallback error:', shareErr);
+              Alert.alert('Error', userMessage);
+            }
+          } else {
+            Alert.alert('Error', userMessage);
+            throw e;
+          }
+        }
       } else if (fileType === 'pdf' || fileType === 'document' || fileType === 'other') {
         // For documents and other files, use sharing
         const isAvailable = await Sharing.isAvailableAsync();
