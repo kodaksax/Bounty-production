@@ -28,17 +28,17 @@ import { useAttachmentUpload } from '../hooks/use-attachment-upload'
 import { logClientError } from '../lib/services/monitoring'
 import { navigationIntent } from '../lib/services/navigation-intent'
 import { useWallet } from '../lib/wallet-context'
+import { AttachmentViewerModal } from './attachment-viewer-modal'
 import { BountyCard } from './bounty-card'
 import { PosterReviewModal } from './poster-review-modal'
 import { StaleBountyAlert } from './stale-bounty-alert'
-import { WorkflowDisputeModal } from './workflow-dispute-modal'
-import { AttachmentViewerModal } from './attachment-viewer-modal'
 import { AnimatedSection } from './ui/animated-section'
 import { AttachmentsList } from './ui/attachments-list'
 import { MessageBar } from './ui/message-bar'
 import { RatingStars } from './ui/rating-stars'
 import { RevisionFeedbackBanner } from './ui/revision-feedback-banner'
 import { Stepper } from './ui/stepper'
+import { WorkflowDisputeModal } from './workflow-dispute-modal'
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true)
@@ -95,6 +95,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     hunterName: string
     localStageOverride: null | 'apply_work' | 'working_progress' | 'review_verify' | 'payout'
     hunterToolsExpanded: boolean
+    posterToolsExpanded: boolean
     showDisputeModal: boolean
     activeDisputeId: string | null
   }
@@ -115,6 +116,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     hunterName: name,
     localStageOverride: null,
     hunterToolsExpanded: false,
+    posterToolsExpanded: false,
     showDisputeModal: false,
     activeDisputeId: null as string | null,
   })
@@ -157,9 +159,10 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     hunterName,
     localStageOverride,
     hunterToolsExpanded,
+    posterToolsExpanded,
+    showDisputeModal,
+    activeDisputeId,
   } = uiState
-  const showDisputeModal = uiState.showDisputeModal as boolean
-  const activeDisputeId = uiState.activeDisputeId as string | null
 
   // Track profile pictures for poster/hunter
   const [otherPartyAvatar, setOtherPartyAvatar] = useState<string | null>(null)
@@ -170,11 +173,10 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   const [selectedProofItem, setSelectedProofItem] = useState<Attachment | null>(null)
   const [proofViewerVisible, setProofViewerVisible] = useState(false)
 
-    // Track the current user's request for this bounty (if any)
-    const [requestStatus, setRequestStatus] = useState<string | null>(null)
-    const [requestId, setRequestId] = useState<string | null>(null)
-  // Draft/submission reducer consolidates per-bounty mutable fields to avoid
-  // leaking state across reused FlatList rows and to batch resets into one dispatch.
+  // Track the current user's request for this bounty (if any)
+  const [requestStatus, setRequestStatus] = useState<string | null>(null)
+  const [requestId, setRequestId] = useState<string | null>(null)
+
   type ReadyRecord = { bounty_id: string; hunter_id: string; ready_at: string } | null
 
   type DraftState = {
@@ -838,6 +840,8 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     }
   }
 
+  
+
   const handleCancelStaleBounty = async (bountyId: number | string) => {
     try {
       const result = await staleBountyService.cancelStaleBounty(bountyId)
@@ -1001,6 +1005,55 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                     onRatingChange={(v) => dispatchUi({ type: 'set', key: 'ratingDraft', value: v })}
                     label="Rate This Bounty:"
                   />
+                  {/* Poster Flow Tools - message hunter, raise/view dispute */}
+                  <View style={styles.posterToolsSection}>
+                    <TouchableOpacity
+                      style={styles.posterToolsToggle}
+                      onPress={() => dispatchUi({ type: 'set', key: 'posterToolsExpanded', value: !posterToolsExpanded })}
+                      accessibilityRole="button"
+                      accessibilityLabel="Poster flow tools"
+                      accessibilityHint="Opens quick tools including dispute and message actions"
+                    >
+                      <View style={styles.posterToolsToggleLeft}>
+                        <MaterialIcons name="gavel" size={18} color="#a7f3d0" />
+                        <Text style={styles.posterToolsToggleText}>Poster Flow Tools</Text>
+                      </View>
+                      <MaterialIcons name={posterToolsExpanded ? 'expand-less' : 'expand-more'} size={20} color="#a7f3d0" />
+                    </TouchableOpacity>
+
+                    {posterToolsExpanded && (
+                      <View style={styles.posterToolsMenu}>
+                        <TouchableOpacity style={styles.hunterToolBtnDanger} onPress={
+                          hasDispute ? handleViewDispute : () => dispatchUi({ type: 'set', key: 'showDisputeModal', value: true })
+                        }>
+                          <MaterialIcons name={hasDispute ? 'gavel' : 'report-problem'} size={18} color={hasDispute ? '#f59e0b' : '#fca5a5'} />
+                          <Text style={hasDispute ? styles.hunterToolTextWarning : styles.hunterToolTextDanger}>
+                            {hasDispute ? 'View Dispute' : 'Raise Dispute'}
+                          </Text>
+                        </TouchableOpacity>
+
+                        {/* Workflow Dispute Modal for poster */}
+                        <WorkflowDisputeModal
+                          visible={showDisputeModal}
+                          bountyId={String(bounty.id)}
+                          bountyTitle={bounty.title}
+                          initiatorId={currentUserId || ''}
+                          respondentId={String(bounty.accepted_by || (readyRecord ? readyRecord.hunter_id : ''))}
+                          stage={bounty.status === 'in_progress' ? 'in_progress' : 'review_verify'}
+                          onClose={() => dispatchUi({ type: 'set', key: 'showDisputeModal', value: false })}
+                          onDisputeCreated={(disputeId) => {
+                            dispatchUi({ type: 'set', key: 'showDisputeModal', value: false })
+                            dispatchUi({ type: 'set', key: 'hasDispute', value: true })
+                            dispatchUi({ type: 'set', key: 'activeDisputeId', value: disputeId })
+                            Alert.alert('Dispute Filed', 'Your dispute has been submitted.', [
+                              { text: 'View', onPress: () => (router as any).push(`/dispute/${disputeId}`) },
+                              { text: 'OK' },
+                            ])
+                          }}
+                        />
+                      </View>
+                    )}
+                  </View>
                 </View>
               ) : (
                 <View style={{ gap: 16 }}>
@@ -1863,6 +1916,39 @@ const styles = StyleSheet.create({
     color: '#f59e0b',
     fontSize: 14,
     fontWeight: '500',
+  },
+  posterToolsSection: {
+    marginTop: 2,
+    gap: 8,
+  },
+  posterToolsToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(5, 46, 27, 0.5)',
+    borderWidth: 1,
+    borderColor: 'rgba(110, 231, 183, 0.35)',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  posterToolsToggleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  posterToolsToggleText: {
+    color: '#a7f3d0',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  posterToolsMenu: {
+    backgroundColor: 'rgba(5, 46, 27, 0.45)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(110, 231, 183, 0.25)',
+    padding: 10,
+    gap: 8,
   },
   actionsContainer: {
     flexDirection: 'row',
