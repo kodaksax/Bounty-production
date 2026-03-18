@@ -1,7 +1,7 @@
 // components/ui/bounty-workflow-guide.tsx
 // Dismissible step-by-step workflow guide for poster and hunter bounty card interactions.
 import { MaterialIcons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 type WorkflowVariant = 'poster-postings' | 'poster-requests' | 'hunter-inprogress';
@@ -131,7 +131,8 @@ interface BountyWorkflowGuideProps {
  */
 export function BountyWorkflowGuide({ variant }: BountyWorkflowGuideProps) {
   const [dismissed, setDismissed] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  // Start collapsed by default so the guide is rolled up on first view
+  const [collapsed, setCollapsed] = useState(true);
 
   if (dismissed) return null;
 
