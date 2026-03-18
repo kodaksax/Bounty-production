@@ -1,7 +1,6 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { BrandingLogo } from "components/ui/branding-logo"
-import * as Linking from 'expo-linking'
 import { useRouter } from "expo-router"
 import { theme } from "lib/theme"
 import { formatCategoryLabel } from 'lib/utils/data-utils'
@@ -29,6 +28,7 @@ import { bountyService } from '../lib/services/bounty-service'
 import type { AttachmentMeta } from '../lib/services/database.types'
 import { storageService } from '../lib/services/storage-service'
 import type { Message } from '../lib/types'
+import { AttachmentViewerModal } from './attachment-viewer-modal'
 import { ReportModal } from "./ReportModal"
 
 // Alert defer delay to allow React to process state updates before showing alert
@@ -95,6 +95,8 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   const { profile: normalizedPoster, loading: profileLoading } = useNormalizedProfile(posterId ? String(posterId) : undefined)
   const [actualAttachments, setActualAttachments] = useState<AttachmentMeta[]>([])
   const [isLoadingAttachments, setIsLoadingAttachments] = useState(false)
+  const [viewerAttachment, setViewerAttachment] = useState<AttachmentMeta | null>(null)
+  const [viewerVisible, setViewerVisible] = useState(false)
 
   // Track mounted state to prevent showing alerts after unmount
   const isMountedRef = useRef(true)
@@ -234,7 +236,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
     setShowReportModal(true);
   };
 
-  // Handle attachment open
+  // Handle attachment open — show in-app AttachmentViewerModal
   const handleAttachmentOpen = async (attachment: AttachmentMeta) => {
     triggerHaptic('light') // Light haptic for attachment tap
     try {
@@ -255,15 +257,13 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
         console.error('Failed to resolve cached attachment uri', e)
       }
 
-      const canOpen = await Linking.canOpenURL(uri);
-      if (canOpen) {
-        await Linking.openURL(uri);
-      } else {
-        Alert.alert('Error', 'Cannot open this attachment');
-      }
+      // Prepare an AttachmentMeta with resolved uri and open viewer
+      const prepared: AttachmentMeta = { ...attachment, uri: uri }
+      setViewerAttachment(prepared)
+      setViewerVisible(true)
     } catch (error) {
-      console.error('Error opening attachment:', error);
-      Alert.alert('Error', 'Failed to open attachment');
+      console.error('Error preparing attachment for viewer:', error)
+      Alert.alert('Error', 'Failed to open attachment')
     }
   };
 
@@ -328,7 +328,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
 
     setIsApplying(true)
     try {
-      const request = await bountyRequestService.create({
+      const result = await bountyRequestService.create({
         bounty_id: bounty.id,
         hunter_id: currentUserId,
         status: 'pending',
@@ -336,22 +336,17 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
         message: applicationMessage.trim() || null,
       } as any)
 
-      if (request) {
+      // Handle structured result from service
+      if (result && (result as any).success) {
         setHasApplied(true)
-
-        // Set loading state to false after all async operations complete
         setIsApplying(false)
 
-        // Defer Alert to allow React to process state updates and re-render
-        // Only show alert if component is still mounted
         if (Platform.OS === 'web') {
-          // Alert.alert is a no-op on web — navigate directly
           router.push(`/in-progress/${bounty.id}/hunter`)
           setTimeout(() => handleClose(), 50)
         } else {
           alertTimeoutRef.current = setTimeout(() => {
             if (!isMountedRef.current) return
-
             Alert.alert(
               'Application Submitted',
               'Your application has been submitted. The bounty poster will review it soon.',
@@ -368,22 +363,82 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
             )
           }, ALERT_DEFER_DELAY)
         }
-      } else {
-        setIsApplying(false)
-        // Defer Alert to allow React to process state updates
-        alertTimeoutRef.current = setTimeout(() => {
-          if (!isMountedRef.current) return
-          Alert.alert('Error', 'Failed to submit application. Please try again.')
-        }, ALERT_DEFER_DELAY)
+        return
       }
+
+      // If we reach here, the create returned a failure result or null
+      setIsApplying(false)
+      const errorMsg = (result && (result as any).error) || 'Failed to submit application. Please try again.'
+
+      // Show network-style message offering to check if the request exists
+      Alert.alert(
+        'Network issue',
+        'Network issue — request may have been received; checking...',
+        [
+          {
+            text: 'Check',
+            onPress: async () => {
+              try {
+                setIsApplying(true)
+                const requests = await bountyRequestService.getAll({ bountyId: bounty.id, userId: currentUserId })
+                setIsApplying(false)
+                if (requests.length > 0) {
+                  setHasApplied(true)
+                  Alert.alert('Application Found', 'We found your application. Navigating to in-progress view.', [
+                    { text: 'OK', onPress: () => { router.push(`/in-progress/${bounty.id}/hunter`); setTimeout(() => handleClose(), 50) } }
+                  ])
+                } else {
+                  Alert.alert('Not Found', 'No application found for your account. Would you like to retry?', [
+                    { text: 'Retry', onPress: () => handleApplyForBounty() },
+                    { text: 'Cancel' },
+                  ])
+                }
+              } catch (checkErr) {
+                setIsApplying(false)
+                console.error('Error checking application existence:', checkErr)
+                Alert.alert('Error', 'Unable to verify application status. Please try again.')
+              }
+            }
+          },
+          { text: 'Retry', onPress: () => handleApplyForBounty() },
+          { text: 'OK', style: 'cancel' }
+        ],
+        { cancelable: true }
+      )
     } catch (error) {
       console.error('Error applying for bounty:', error)
       setIsApplying(false)
-      // Defer Alert to allow React to process state updates
-      alertTimeoutRef.current = setTimeout(() => {
-        if (!isMountedRef.current) return
-        Alert.alert('Error', 'An error occurred while submitting your application.')
-      }, ALERT_DEFER_DELAY)
+      Alert.alert(
+        'Network issue',
+        'Network issue — request may have been received; checking...',
+        [
+          { text: 'Check', onPress: async () => {
+            try {
+              setIsApplying(true)
+              const requests = await bountyRequestService.getAll({ bountyId: bounty.id, userId: currentUserId })
+              setIsApplying(false)
+              if (requests.length > 0) {
+                setHasApplied(true)
+                Alert.alert('Application Found', 'We found your application. Navigating to in-progress view.', [
+                  { text: 'OK', onPress: () => { router.push(`/in-progress/${bounty.id}/hunter`); setTimeout(() => handleClose(), 50) } }
+                ])
+              } else {
+                Alert.alert('Not Found', 'No application found for your account. Would you like to retry?', [
+                  { text: 'Retry', onPress: () => handleApplyForBounty() },
+                  { text: 'Cancel' },
+                ])
+              }
+            } catch (checkErr) {
+              setIsApplying(false)
+              console.error('Error checking application existence:', checkErr)
+              Alert.alert('Error', 'Unable to verify application status. Please try again.')
+            }
+          } },
+          { text: 'Retry', onPress: () => handleApplyForBounty() },
+          { text: 'OK', style: 'cancel' }
+        ],
+        { cancelable: true }
+      )
     }
   }
 
@@ -642,6 +697,24 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
           </View>
         </View>
       </View>
+
+      {/* Attachment viewer (in-app) */}
+      <AttachmentViewerModal
+        visible={viewerVisible}
+        attachment={viewerAttachment ? {
+          id: viewerAttachment.id,
+          name: viewerAttachment.name,
+          uri: viewerAttachment.uri,
+          // `AttachmentMeta` includes an optional `mimeType`, so no cast is necessary
+          mimeType: viewerAttachment.mimeType,
+          size: viewerAttachment.size,
+          remoteUri: viewerAttachment.remoteUri,
+        } : null}
+        onClose={() => {
+          setViewerVisible(false)
+          setViewerAttachment(null)
+        }}
+      />
 
       {/* Report Modal */}
       <ReportModal

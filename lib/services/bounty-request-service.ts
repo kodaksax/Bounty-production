@@ -356,7 +356,7 @@ export const bountyRequestService = {
   /**
    * Create a new bounty request
    */
-  async create(request: Omit<BountyRequest, "id" | "created_at">): Promise<BountyRequest | null> {
+  async create(request: Omit<BountyRequest, "id" | "created_at">): Promise<{ success: true; request: BountyRequest } | { success: false; error: string }> {
     try {
       // Normalize payload: ensure the canonical column `hunter_id` is present.
       // The DB table uses `hunter_id` (and poster_id), so don't add a `user_id`
@@ -428,7 +428,7 @@ export const bountyRequestService = {
               logger.error('Failed to fetch existing bounty request after duplicate key error', { bountyId: normalizedRequest.bounty_id, hunterId: normalizedRequest.hunter_id, error: fetchErr?.message || fetchErr })
             } else if (existing) {
               // Supabase returns rows as `Record<string, unknown>`; BountyRequest has the same shape
-              return existing as unknown as BountyRequest
+              return { success: true, request: existing as unknown as BountyRequest }
             }
           }
           // Log Supabase error details for better diagnostics
@@ -437,8 +437,16 @@ export const bountyRequestService = {
         }
 
         // Return inserted data (insert may return an array or a single object)
-        if (Array.isArray(insData)) return (insData[0] as unknown as BountyRequest) ?? null
-        return (insData as unknown as BountyRequest) ?? null
+        const created = Array.isArray(insData) ? (insData[0] as unknown as BountyRequest) : (insData as unknown as BountyRequest)
+        if (created) {
+          return { success: true, request: created }
+        }
+
+        // If insert succeeded but returned no data, treat as failure to satisfy
+        // the function's return contract (must return either success with a
+        // `BountyRequest` or a failure with an error string).
+        logger.error('No data returned after creating bounty request', { request: normalizedRequest, insData })
+        return { success: false, error: 'Failed to create bounty request' }
       }
 
       const response = await fetch(`${API_BASE_URL}/api/bounty-requests`, {
@@ -456,10 +464,25 @@ export const bountyRequestService = {
           statusText: response.statusText,
           body: errorText,
         })
-        throw new Error(`Failed to create bounty request: ${response.status} ${response.statusText} — ${errorText}`)
+        return { success: false, error: `Failed to create bounty request: ${response.status} ${response.statusText} — ${errorText}` }
       }
 
-      return await response.json()
+      // Read body as text first so we can safely handle invalid JSON
+      const text = await response.text().catch(() => null)
+      if (!text) {
+        logger.error('Empty response body when creating bounty request', { request: normalizedRequest, status: response.status, statusText: response.statusText })
+        return { success: false, error: 'Failed to parse response' }
+      }
+
+      let parsed: any
+      try {
+        parsed = JSON.parse(text)
+      } catch (parseErr) {
+        logger.error('Failed to parse JSON response creating bounty request', { request: normalizedRequest, body: text, error: (parseErr as any)?.message || parseErr })
+        return { success: false, error: 'Failed to parse response' }
+      }
+
+      return { success: true, request: parsed as unknown as BountyRequest }
     } catch (err) {
       // Preserve useful error information even when upstream libraries throw plain objects
       let errorMessage = 'Unknown error'
@@ -481,7 +504,7 @@ export const bountyRequestService = {
       }
 
       logger.error('Error creating bounty request', { request: (request as any), error: errorMessage })
-      return null
+      return { success: false, error: errorMessage }
     }
   },
 
