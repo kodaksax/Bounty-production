@@ -1015,4 +1015,126 @@ describe('DisputeService', () => {
       expect(result).toBe(false);
     });
   });
+
+  describe('Workflow Disputes', () => {
+    it('should create a workflow dispute with disputeStage = in_progress and null cancellation', async () => {
+      const mockInsert = jest.fn().mockResolvedValue({
+        data: {
+          id: 'wd-123',
+          bounty_id: 'bounty-123',
+          initiator_id: 'user-1',
+          respondent_id: 'user-2',
+          reason: 'Test reason',
+          dispute_stage: 'in_progress',
+          status: 'open',
+          cancellation_id: null,
+          evidence_json: null,
+          created_at: '2026-03-17T00:00:00Z',
+        },
+        error: null,
+      });
+
+      mockFrom.mockImplementation((table) => {
+        if (table === 'bounty_disputes') {
+          return {
+            insert: jest.fn().mockReturnValue({
+              select: jest.fn().mockReturnValue({
+                single: mockInsert,
+              }),
+            }),
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                in: jest.fn().mockReturnValue({
+                  order: jest.fn().mockReturnValue({
+                    limit: jest.fn().mockReturnValue({
+                      maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
+                    }),
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === 'dispute_audit_log') {
+          return { insert: jest.fn().mockResolvedValue({ error: null }) };
+        }
+      });
+
+      const { bountyService: mockBountyService } = require('../../lib/services/bounty-service');
+      (mockBountyService.getById as jest.Mock).mockResolvedValue({ id: 'bounty-123', title: 'Test' });
+
+      const dispute = await disputeService.createWorkflowDispute(
+        'bounty-123',
+        'user-1',
+        'user-2',
+        'in_progress',
+        'Test reason'
+      );
+
+      expect(dispute).toBeDefined();
+      expect(dispute?.id).toBe('wd-123');
+      expect(dispute?.disputeStage).toBe('in_progress');
+      expect(dispute?.cancellationId).toBeUndefined();
+      expect(dispute?.respondentId).toBe('user-2');
+    });
+
+    it('should block creating a workflow dispute if one is already active', async () => {
+      // Mock getDisputeByBountyId returning an active dispute
+      mockFrom.mockImplementation((table) => {
+        if (table === 'bounty_disputes') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                in: jest.fn().mockReturnValue({
+                  order: jest.fn().mockReturnValue({
+                    limit: jest.fn().mockReturnValue({
+                      maybeSingle: jest.fn().mockResolvedValue({
+                        data: { id: 'existing-dispute', status: 'open' },
+                        error: null,
+                      }),
+                    }),
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+      });
+
+      const dispute = await disputeService.createWorkflowDispute(
+        'bounty-123',
+        'user-1',
+        'user-2',
+        'in_progress',
+        'Test reason'
+      );
+
+      expect(dispute).toBeNull();
+    });
+
+    it('should return disputes where user is either initiator or respondent', async () => {
+      mockFrom.mockImplementation((table) => {
+        if (table === 'bounty_disputes') {
+          return {
+            select: jest.fn().mockReturnValue({
+              or: jest.fn().mockReturnValue({
+                order: jest.fn().mockResolvedValue({
+                  data: [
+                    { id: 'd1', initiator_id: 'user-1', respondent_id: 'user-2' },
+                    { id: 'd2', initiator_id: 'user-3', respondent_id: 'user-1' },
+                  ],
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        }
+      });
+
+      const disputes = await disputeService.getDisputesForUser('user-1');
+      expect(disputes).toHaveLength(2);
+      expect(disputes[0].id).toBe('d1');
+      expect(disputes[1].id).toBe('d2');
+    });
+  });
 });

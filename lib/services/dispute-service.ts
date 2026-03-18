@@ -470,7 +470,7 @@ export const disputeService = {
           }
 
           // Get cancellation to notify other party if exists
-          const cancellation = await cancellationService.getCancellationById(dispute.cancellationId);
+          const cancellation = dispute.cancellationId ? await cancellationService.getCancellationById(dispute.cancellationId) : null;
           if (cancellation && 
               cancellation.requesterId && 
               cancellation.requesterId !== dispute.initiatorId && 
@@ -1117,11 +1117,21 @@ export const disputeService = {
         typeof (bounty as any)?.user_id === 'string';
       const hasPosterId = (bounty: unknown): bounty is { poster_id: string } =>
         typeof (bounty as any)?.poster_id === 'string';
+      const hasHunterId = (bounty: unknown): bounty is { hunter_id: string } =>
+        typeof (bounty as any)?.hunter_id === 'string';
+      const hasAcceptedBy = (bounty: unknown): bounty is { accepted_by: string } =>
+        typeof (bounty as any)?.accepted_by === 'string';
 
       const bounty = await bountyService.getById(dispute.bountyId);
       // Resolve cancellation to identify the hunter who requested it
-      const cancellation = await cancellationService.getCancellationById(dispute.cancellationId);
-      const hunterId = cancellation?.requesterId;
+      const cancellation = dispute.cancellationId ? await cancellationService.getCancellationById(dispute.cancellationId) : null;
+      
+      const hunterId =
+        cancellation?.requesterId ||
+        (hasHunterId(bounty) ? bounty.hunter_id :
+        hasAcceptedBy(bounty) ? bounty.accepted_by :
+        undefined);
+
       const posterId =
         hasUserId(bounty) ? bounty.user_id :
         hasPosterId(bounty) ? bounty.poster_id :
@@ -1239,6 +1249,223 @@ export const disputeService = {
     } catch (err) {
       // Don't throw errors from audit logging
       logger.error('Error logging audit event', { error: err });
+    }
+  },
+
+  /**
+   * Create a workflow-stage dispute (no cancellation required).
+   * Can be initiated by either poster or hunter during 'in_progress' or 'review_verify' stages.
+   */
+  async createWorkflowDispute(
+    bountyId: string,
+    initiatorId: string,
+    respondentId: string,
+    stage: 'in_progress' | 'review_verify',
+    reason: string,
+    evidence?: LocalDisputeEvidence[]
+  ): Promise<BountyDispute | null> {
+    try {
+      if (!isSupabaseConfigured) {
+        throw new Error('Supabase not configured');
+      }
+
+      // Check for existing active dispute on this bounty
+      const existing = await this.getDisputeByBountyId(bountyId);
+      if (existing) {
+        logger.error('Active dispute already exists for this bounty', { bountyId, existingId: existing.id });
+        throw new Error('A dispute is already active for this bounty');
+      }
+
+      const disputeData = {
+        bounty_id: bountyId,
+        initiator_id: initiatorId,
+        respondent_id: respondentId,
+        reason,
+        dispute_stage: stage,
+        // cancellation_id is null for workflow disputes
+        evidence_json: null,
+        status: 'open',
+      };
+
+      const { data, error } = await supabase
+        .from('bounty_disputes')
+        .insert(disputeData)
+        .select('*')
+        .single();
+
+      if (error || !data) {
+        logger.error('Error creating workflow dispute', { error, disputeData });
+        return null;
+      }
+
+      const dispute: BountyDispute = {
+        id: data.id,
+        cancellationId: data.cancellation_id || undefined,
+        bountyId: String(data.bounty_id),
+        initiatorId: data.initiator_id,
+        respondentId: data.respondent_id || undefined,
+        reason: data.reason,
+        evidence: [],
+        status: data.status,
+        disputeStage: data.dispute_stage || 'cancellation',
+        resolution: data.resolution,
+        winner: data.winner || null,
+        resolvedBy: data.resolved_by,
+        resolvedAt: data.resolved_at,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+      };
+
+      // Upload evidence items if provided
+      if (evidence && evidence.length > 0) {
+        for (const ev of evidence) {
+          await this.uploadEvidence(dispute.id, initiatorId, {
+            type: ev.type,
+            content: ev.content,
+            description: ev.description,
+          });
+        }
+      }
+
+      // Send notifications to the respondent
+      try {
+        const bounty = await bountyService.getById(bountyId);
+        if (bounty) {
+          await sendNotification(
+            respondentId,
+            'workflow_dispute_created',
+            'Dispute Raised',
+            `A dispute has been raised for bounty: ${bounty.title}`,
+            {
+              bountyId,
+              disputeId: data.id,
+              stage,
+            }
+          );
+        }
+      } catch (notifError) {
+        logger.error('Error sending workflow dispute notification', { error: notifError });
+      }
+
+      // Log audit event
+      await this.logAuditEvent(dispute.id, 'workflow_dispute_created', initiatorId, 'user', {
+        stage,
+        bountyId,
+        respondentId,
+      });
+
+      return dispute;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Unknown error');
+      logger.error('Error in createWorkflowDispute', {
+        bountyId,
+        initiatorId,
+        error: { message: error.message },
+      });
+      return null;
+    }
+  },
+
+  /**
+   * Get any active dispute for a bounty, optionally filtered by stage.
+   */
+  async getDisputeByBountyId(
+    bountyId: string,
+    stage?: 'in_progress' | 'review_verify' | 'cancellation'
+  ): Promise<BountyDispute | null> {
+    try {
+      if (!isSupabaseConfigured) {
+        throw new Error('Supabase not configured');
+      }
+
+      let query = supabase
+        .from('bounty_disputes')
+        .select('*')
+        .eq('bounty_id', bountyId)
+        .in('status', ['open', 'under_review'])
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (stage) {
+        query = query.eq('dispute_stage', stage);
+      }
+
+      const { data, error } = await query.maybeSingle();
+
+      if (error) {
+        logger.error('Error fetching dispute by bounty', { error, bountyId, stage });
+        return null;
+      }
+
+      if (!data) {
+        return null;
+      }
+
+      return {
+        id: data.id,
+        cancellationId: data.cancellation_id || undefined,
+        bountyId: String(data.bounty_id),
+        initiatorId: data.initiator_id,
+        respondentId: data.respondent_id || undefined,
+        reason: data.reason,
+        evidence: data.evidence_json ? JSON.parse(data.evidence_json) : [],
+        status: data.status,
+        disputeStage: data.dispute_stage || 'cancellation',
+        resolution: data.resolution,
+        winner: data.winner || null,
+        resolvedBy: data.resolved_by,
+        resolvedAt: data.resolved_at,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+      };
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Unknown error');
+      logger.error('Error in getDisputeByBountyId', { bountyId, error: { message: error.message } });
+      return null;
+    }
+  },
+
+  /**
+   * Get all disputes for a user (as initiator OR respondent).
+   */
+  async getDisputesForUser(userId: string): Promise<BountyDispute[]> {
+    try {
+      if (!isSupabaseConfigured) {
+        throw new Error('Supabase not configured');
+      }
+
+      const { data, error } = await supabase
+        .from('bounty_disputes')
+        .select('*')
+        .or(`initiator_id.eq.${userId},respondent_id.eq.${userId}`)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        logger.error('Error fetching disputes for user', { error, userId });
+        return [];
+      }
+
+      return (data || []).map((item: any) => ({
+        id: item.id,
+        cancellationId: item.cancellation_id || undefined,
+        bountyId: String(item.bounty_id),
+        initiatorId: item.initiator_id,
+        respondentId: item.respondent_id || undefined,
+        reason: item.reason,
+        evidence: item.evidence_json ? JSON.parse(item.evidence_json) : undefined,
+        status: item.status,
+        disputeStage: item.dispute_stage || 'cancellation',
+        resolution: item.resolution,
+        winner: item.winner || null,
+        resolvedBy: item.resolved_by,
+        resolvedAt: item.resolved_at,
+        createdAt: item.created_at,
+        updatedAt: item.updated_at,
+      }));
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Unknown error');
+      logger.error('Error in getDisputesForUser', { userId, error: { message: error.message } });
+      return [];
     }
   },
 };

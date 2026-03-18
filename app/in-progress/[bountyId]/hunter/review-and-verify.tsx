@@ -14,11 +14,13 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HunterDashboardSkeleton } from '../../../../components/ui/skeleton-loaders';
+import { WorkflowDisputeModal } from '../../../../components/workflow-dispute-modal';
 import { useAttachmentUpload } from '../../../../hooks/use-attachment-upload';
 import { bountyRequestService } from '../../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../../lib/services/bounty-service';
 import { completionService, type ProofItem } from '../../../../lib/services/completion-service';
 import type { Bounty, BountyRequest } from '../../../../lib/services/database.types';
+import { disputeService } from '../../../../lib/services/dispute-service';
 import { messageService } from '../../../../lib/services/message-service';
 import type { Conversation } from '../../../../lib/types';
 import { getCurrentUserId } from '../../../../lib/utils/data-utils';
@@ -55,6 +57,9 @@ export default function HunterReviewAndVerifyScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [timeElapsed, setTimeElapsed] = useState(0); // in seconds
   const [startTime] = useState(Date.now());
+  const [showDisputeModal, setShowDisputeModal] = useState(false);
+  const [hasActiveDispute, setHasActiveDispute] = useState(false);
+  const [activeDisputeId, setActiveDisputeId] = useState<string | null>(null);
 
   // Attachment upload hook
   const {
@@ -520,6 +525,47 @@ export default function HunterReviewAndVerifyScreen() {
                 <Text style={styles.submitButtonText}>Submit</Text>
               )}
             </TouchableOpacity>
+            <View style={{ height: 12 }} />
+            {/* Raise Dispute / View Dispute Button */}
+            {hasActiveDispute ? (
+              <TouchableOpacity
+                style={styles.disputeButton}
+                onPress={() => (router as any).push(`/dispute/${activeDisputeId}`)}
+              >
+                <MaterialIcons name="gavel" size={18} color="#f59e0b" />
+                <Text style={styles.disputeButtonText}>View Active Dispute</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.disputeButton}
+                onPress={() => setShowDisputeModal(true)}
+              >
+                <MaterialIcons name="gavel" size={18} color="#f59e0b" />
+                <Text style={styles.disputeButtonText}>Raise Dispute</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Workflow Dispute Modal */}
+            {bounty && routeBountyId && (
+              <WorkflowDisputeModal
+                visible={showDisputeModal}
+                bountyId={routeBountyId}
+                bountyTitle={bounty.title}
+                initiatorId={currentUserId}
+                respondentId={String(bounty.poster_id || bounty.user_id)}
+                stage="review_verify"
+                onClose={() => setShowDisputeModal(false)}
+                onDisputeCreated={(disputeId) => {
+                  setShowDisputeModal(false);
+                  setHasActiveDispute(true);
+                  setActiveDisputeId(disputeId);
+                  Alert.alert('Dispute Filed', 'Your dispute has been submitted.', [
+                    { text: 'View Dispute', onPress: () => (router as any).push(`/dispute/${disputeId}`) },
+                    { text: 'OK' },
+                  ]);
+                }}
+              />
+            )}
           </>
         )}
       />
@@ -830,6 +876,22 @@ const styles = StyleSheet.create({
   submitButtonText: {
     color: '#fff',
     fontSize: 16,
+    fontWeight: '600',
+  },
+  disputeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+  },
+  disputeButtonText: {
+    color: '#f59e0b',
+    fontSize: 14,
     fontWeight: '600',
   },
 });

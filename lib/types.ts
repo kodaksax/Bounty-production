@@ -405,12 +405,14 @@ export interface BountyCancellation {
 // Bounty Dispute
 export interface BountyDispute {
   id: string;
-  cancellationId: string;
+  cancellationId?: string; // Optional — null for workflow-stage disputes
   bountyId: string;
   initiatorId: string;
+  respondentId?: string; // The other party in the dispute
   reason: string;
   evidence?: DisputeEvidence[];
   status: 'open' | 'under_review' | 'resolved' | 'closed';
+  disputeStage?: 'in_progress' | 'review_verify' | 'cancellation';
   resolution?: string;
   winner?: 'hunter' | 'poster' | null;
   resolvedBy?: string;
@@ -539,7 +541,7 @@ export interface Attachment {
  * - **stale_bounty_cancelled**: Stale bounty was cancelled
  * - **stale_bounty_reposted**: Stale bounty was reposted
  */
-export type NotificationType = 'application' | 'acceptance' | 'completion' | 'payment' | 'message' | 'follow' | 'cancellation_request' | 'cancellation_accepted' | 'cancellation_rejected' | 'dispute_created' | 'dispute_resolved' | 'stale_bounty' | 'stale_bounty_cancelled' | 'stale_bounty_reposted';
+export type NotificationType = 'application' | 'acceptance' | 'completion' | 'payment' | 'message' | 'follow' | 'cancellation_request' | 'cancellation_accepted' | 'cancellation_rejected' | 'dispute_created' | 'dispute_resolved' | 'workflow_dispute_created' | 'stale_bounty' | 'stale_bounty_cancelled' | 'stale_bounty_reposted';
 
 /**
  * User notification

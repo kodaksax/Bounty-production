@@ -31,6 +31,7 @@ import { useWallet } from '../lib/wallet-context'
 import { BountyCard } from './bounty-card'
 import { PosterReviewModal } from './poster-review-modal'
 import { StaleBountyAlert } from './stale-bounty-alert'
+import { WorkflowDisputeModal } from './workflow-dispute-modal'
 import { AnimatedSection } from './ui/animated-section'
 import { AttachmentsList } from './ui/attachments-list'
 import { MessageBar } from './ui/message-bar'
@@ -93,6 +94,8 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     hunterName: string
     localStageOverride: null | 'apply_work' | 'working_progress' | 'review_verify' | 'payout'
     hunterToolsExpanded: boolean
+    showDisputeModal: boolean
+    activeDisputeId: string | null
   }
 
   const initialUIState = (name = 'Hunter'): UIState => ({
@@ -111,6 +114,8 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     hunterName: name,
     localStageOverride: null,
     hunterToolsExpanded: false,
+    showDisputeModal: false,
+    activeDisputeId: null as string | null,
   })
 
   type UIAction =
@@ -152,6 +157,8 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     localStageOverride,
     hunterToolsExpanded,
   } = uiState
+  const showDisputeModal = uiState.showDisputeModal as boolean
+  const activeDisputeId = uiState.activeDisputeId as string | null
 
   // Track profile pictures for poster/hunter
   const [otherPartyAvatar, setOtherPartyAvatar] = useState<string | null>(null)
@@ -416,12 +423,22 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           }
         } catch { }
 
-        // Check for active dispute
+        // Check for active dispute (both cancellation-based and workflow-stage)
         try {
-          const dispute = await disputeService.getDisputeByCancellationId(String(bounty.id))
+          // First check for workflow-stage disputes
+          const workflowDispute = await disputeService.getDisputeByBountyId(String(bounty.id))
           if (!mounted) return
-          if (dispute && (dispute.status === 'open' || dispute.status === 'under_review')) {
+          if (workflowDispute && (workflowDispute.status === 'open' || workflowDispute.status === 'under_review')) {
             dispatchUi({ type: 'set', key: 'hasDispute', value: true })
+            dispatchUi({ type: 'set', key: 'activeDisputeId', value: workflowDispute.id })
+          } else {
+            // Fallback: check cancellation-based disputes
+            const dispute = await disputeService.getDisputeByCancellationId(String(bounty.id))
+            if (!mounted) return
+            if (dispute && (dispute.status === 'open' || dispute.status === 'under_review')) {
+              dispatchUi({ type: 'set', key: 'hasDispute', value: true })
+              dispatchUi({ type: 'set', key: 'activeDisputeId', value: dispute.id })
+            }
           }
         } catch { }
       } catch { }
@@ -715,6 +732,12 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   }
 
   const handleViewDispute = () => {
+    // If we have a known active dispute, navigate to detail screen
+    if (activeDisputeId) {
+      ;(router as any).push(`/dispute/${activeDisputeId}`)
+      return
+    }
+
     // When opened from hunter tools inside the in-progress flow, include
     // a `from` query so the dispute screen can route back correctly.
     if (variant === 'hunter') {
@@ -1033,10 +1056,38 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                           <Text style={styles.hunterToolText}>Message Poster</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.hunterToolBtnDanger} onPress={handleViewDispute}>
-                          <MaterialIcons name="report-problem" size={18} color="#fca5a5" />
-                          <Text style={styles.hunterToolTextDanger}>Open Dispute</Text>
+                        <TouchableOpacity style={styles.hunterToolBtnDanger} onPress={
+                          hasDispute ? handleViewDispute : () => dispatchUi({ type: 'set', key: 'showDisputeModal', value: true })
+                        }>
+                          <MaterialIcons name={hasDispute ? 'gavel' : 'report-problem'} size={18} color={hasDispute ? '#f59e0b' : '#fca5a5'} />
+                          <Text style={hasDispute ? styles.hunterToolTextWarning : styles.hunterToolTextDanger}>
+                            {hasDispute ? 'View Dispute' : 'Raise Dispute'}
+                          </Text>
                         </TouchableOpacity>
+
+                        {/* Workflow Dispute Modal */}
+                        <WorkflowDisputeModal
+                          visible={showDisputeModal}
+                          bountyId={String(bounty.id)}
+                          bountyTitle={bounty.title}
+                          initiatorId={currentUserId || ''}
+                          respondentId={String(
+                            variant === 'hunter'
+                              ? (bounty.poster_id || bounty.user_id)
+                              : bounty.accepted_by || ''
+                          )}
+                          stage={bounty.status === 'in_progress' ? 'in_progress' : 'review_verify'}
+                          onClose={() => dispatchUi({ type: 'set', key: 'showDisputeModal', value: false })}
+                          onDisputeCreated={(disputeId) => {
+                            dispatchUi({ type: 'set', key: 'showDisputeModal', value: false })
+                            dispatchUi({ type: 'set', key: 'hasDispute', value: true })
+                            dispatchUi({ type: 'set', key: 'activeDisputeId', value: disputeId })
+                            Alert.alert('Dispute Filed', 'Your dispute has been submitted.', [
+                              { text: 'View', onPress: () => (router as any).push(`/dispute/${disputeId}`) },
+                              { text: 'OK' },
+                            ])
+                          }}
+                        />
 
                         
                       </View>
@@ -1756,9 +1807,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   hunterToolTextDanger: {
-    color: '#fecaca',
-    fontSize: 13,
-    fontWeight: '700',
+    color: '#ef4444',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  hunterToolTextWarning: {
+    color: '#f59e0b',
+    fontSize: 14,
+    fontWeight: '500',
   },
   actionsContainer: {
     flexDirection: 'row',
