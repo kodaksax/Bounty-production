@@ -25,7 +25,8 @@ import { ROUTES } from '../../lib/routes'
 // Render In Progress tab using the same expandable card as My Postings
 import { MyPostingExpandable } from "../../components/my-posting-expandable"
 import { OfflineStatusBadge } from '../../components/offline-status-badge'
-import { BountyWorkflowGuide } from '../../components/ui/bounty-workflow-guide'
+import { OnboardingChecklist } from '../../components/onboarding/OnboardingChecklist'
+import { onboardingManager } from '../../components/onboarding/OnboardingManager'
 import { EmptyState } from '../../components/ui/empty-state'
 import { ApplicantCardSkeleton, PostingsListSkeleton } from '../../components/ui/skeleton-loaders'
 import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
@@ -185,6 +186,8 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
     const willExpand = !expandedMap[key]
 
     if (!willExpand) return
+    // Mark progress: user has expanded a bounty card
+    void onboardingManager.completeStep('expand_bounty')
     // Mark pending scroll — we'll measure and scroll when the expanded content calls back
     pendingScrollRef.current = { list, key }
   }
@@ -604,7 +607,10 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   const renderRequestItem = React.useCallback(({ item: request }: { item: BountyRequestWithDetails }) => (
     <ApplicantCard
       request={request}
-      onAccept={handleAcceptRequest}
+      onAccept={async (id) => {
+        await handleAcceptRequest(id)
+        void onboardingManager.completeStep('accept_hunter')
+      }}
       onReject={handleRejectRequest}
       // Ensure returning from profile restores the Postings screen to the
       // Requests tab reliably by directing BountyApp to open postings + requests.
@@ -698,7 +704,10 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                 return (
                   <TouchableOpacity
                     key={tab.id}
-                    onPress={() => setActiveTab(tab.id)}
+                    onPress={() => {
+                      if (tab.id === 'requests') void onboardingManager.completeStep('view_requests')
+                      setActiveTab(tab.id)
+                    }}
                     activeOpacity={0.85}
                     className={cn(
                       "flex-1 py-2 mx-0.5 rounded-full items-center justify-center touch-target-min",
@@ -784,7 +793,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                   extraData={{ inProgressBounties, expandedMap }}
                   ListHeaderComponent={(
                     <View>
-                      <BountyWorkflowGuide variant="hunter-inprogress" />
+                      <OnboardingChecklist />
                       <View className="flex-row gap-2 mb-1">
                         {(['all', 'applied', 'in_progress', 'completed', 'rejected'] as const).map((f) => {
                           const label = f === 'all' ? 'All' : f === 'applied' ? 'Applied' : f === 'in_progress' ? 'In Progress' : f === 'completed' ? 'Completed' : 'Rejected'
@@ -861,7 +870,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                   keyExtractor={keyExtractorRequest}
                   getItemLayout={getItemLayoutRequest}
                   renderItem={renderRequestItem}
-                  ListHeaderComponent={<BountyWorkflowGuide variant="poster-requests" />}
+                  ListHeaderComponent={<OnboardingChecklist />}
                   ListEmptyComponent={
                     isLoading.requests ? (
                       <View className="px-4 py-6">
@@ -917,7 +926,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                   extraData={{ myBounties, expandedMap }}
                   ListHeaderComponent={(
                     <View>
-                      <BountyWorkflowGuide variant="poster-postings" />
+                      <OnboardingChecklist />
                       <View className="flex-row gap-2 mb-1">
                         {(['all', 'open', 'in_progress', 'completed', 'archived'] as const).map((f) => {
                           const label = f === 'all' ? 'All' : f === 'open' ? 'Open' : f === 'in_progress' ? 'In Progress' : f === 'completed' ? 'Completed' : 'Archived'
