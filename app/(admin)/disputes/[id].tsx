@@ -1,26 +1,26 @@
 // app/(admin)/disputes/[id].tsx - Admin dispute detail and resolution screen
-import React, { useEffect, useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  ActivityIndicator,
-  StyleSheet,
-  Alert,
-} from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
-import { AdminHeader } from '../../../components/admin/AdminHeader';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { AdminCard } from '../../../components/admin/AdminCard';
-import { disputeService } from '../../../lib/services/dispute-service';
+import { AdminHeader } from '../../../components/admin/AdminHeader';
+import { useAdmin } from '../../../lib/admin-context';
 import { bountyService } from '../../../lib/services/bounty-service';
 import { cancellationService } from '../../../lib/services/cancellation-service';
-import { useAdmin } from '../../../lib/admin-context';
-import { getDisputeStatusColor, getDisputeStatusIcon } from '../../../lib/utils/dispute-helpers';
-import type { BountyDispute, BountyCancellation } from '../../../lib/types';
 import type { Bounty } from '../../../lib/services/database.types';
+import { disputeService } from '../../../lib/services/dispute-service';
+import type { BountyCancellation, BountyDispute } from '../../../lib/types';
+import { getDisputeStatusColor, getDisputeStatusIcon } from '../../../lib/utils/dispute-helpers';
 
 interface DisputeDetailData {
   dispute: BountyDispute;
@@ -58,7 +58,9 @@ export default function AdminDisputeDetailScreen() {
 
       const [bounty, cancellation] = await Promise.all([
         bountyService.getById(dispute.bountyId),
-        cancellationService.getCancellationById(dispute.cancellationId),
+        dispute.cancellationId
+          ? cancellationService.getCancellationById(dispute.cancellationId)
+          : Promise.resolve(null) as Promise<BountyCancellation | null>,
       ]);
 
       setData({ dispute, bounty, cancellation });

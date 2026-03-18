@@ -7,16 +7,16 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
@@ -214,6 +214,11 @@ export default function VerifyPhoneScreen() {
               value={digit}
               onChangeText={(value) => handleOtpChange(value, index)}
               onKeyPress={(e) => handleKeyPress(e, index)}
+              // React Native Web has inconsistent onKeyPress behavior with touchpads;
+              // add a web-specific onKeyDown bridge that normalizes the event to our handler.
+              {...(Platform.OS === 'web'
+                ? ({ onKeyDown: (e: any) => handleKeyPress({ nativeEvent: { key: e.key } }, index) } as any)
+                : {})}
               keyboardType="number-pad"
               maxLength={1}
               selectTextOnFocus
