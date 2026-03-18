@@ -261,17 +261,7 @@ export function MessengerScreen({
             <MaterialIcons name="refresh" size={20} color="white" />
           </TouchableOpacity>
 
-          {/* New Group icon button styled as rounded square with plus */}
-          <TouchableOpacity
-            onPress={() => router.push('/tabs/choose-people-screen' as any)}
-            className="rounded-lg"
-            accessibilityLabel="Create new group"
-          >
-            {/* Removed white border so icon has no encircling stroke */}
-            <View className="h-8 w-8 rounded-lg flex items-center justify-center">
-              <MaterialIcons name="add-box" size={20} color="white" />
-            </View>
-          </TouchableOpacity>
+          {/* New group creation not implemented; icon removed */}
 
           <OfflineStatusBadge />
         </View>

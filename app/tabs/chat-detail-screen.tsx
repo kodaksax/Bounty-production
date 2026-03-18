@@ -216,14 +216,7 @@ export function ChatDetailScreen({
             </View>
           </TouchableOpacity>
         </View>
-        <View className="flex-row gap-3">
-          <TouchableOpacity className="text-white">
-            <MaterialIcons name="phone" size={24} color="#fffef5" />
-          </TouchableOpacity>
-          <TouchableOpacity className="text-white">
-            <MaterialIcons name="videocam" size={24} color="#fffef5" />
-          </TouchableOpacity>
-        </View>
+        {/* Call and video icons removed — functionality not implemented */}
       </View>
 
       {/* Pinned Message Header */}
