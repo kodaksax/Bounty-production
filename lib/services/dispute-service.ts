@@ -1,9 +1,9 @@
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
 import { logger } from 'lib/utils/error-logger';
-import type { BountyDispute, DisputeEvidence, LocalDisputeEvidence } from '../types';
-import type { Bounty } from './database.types';
+import type { BountyDispute, LocalDisputeEvidence } from '../types';
 import { bountyService } from './bounty-service';
 import { cancellationService } from './cancellation-service';
+import type { Bounty } from './database.types';
 import { paymentService } from './payment-service';
 
 /**
@@ -52,6 +52,36 @@ async function sendNotification(
     }
   } catch (error) {
     logger.error('Error sending notification', { error });
+  }
+}
+
+/**
+ * Helper to create an admin notification for disputes
+ */
+async function notifyAdminsOfDispute(disputeId: string, bountyId: string, reason: string): Promise<void> {
+  try {
+    if (!isSupabaseConfigured) {
+      logger.error('Supabase not configured for admin notifications');
+      return;
+    }
+
+    const { error } = await supabase.from('admin_notifications').insert({
+      type: 'dispute_escalated',
+      title: `Dispute escalated: ${disputeId.substring(0, 8)}`,
+      message: `Dispute ${disputeId} for bounty ${bountyId} was escalated: ${reason}`,
+      content_type: 'dispute',
+      content_id: disputeId,
+      reporter_id: null,
+      priority: 'high',
+      read: false,
+      created_at: new Date().toISOString(),
+    });
+
+    if (error) {
+      logger.error('Could not create admin notification for dispute', { error, disputeId });
+    }
+  } catch (err) {
+    logger.error('Error notifying admins of dispute', { error: err });
   }
 }
 
@@ -219,6 +249,8 @@ export const disputeService = {
         winner: data.winner || null,
         resolvedBy: data.resolved_by,
         resolvedAt: data.resolved_at,
+        escalated: data.escalated || false,
+        escalatedAt: data.escalated_at,
         createdAt: data.created_at,
         updatedAt: data.updated_at,
       };
@@ -318,6 +350,49 @@ export const disputeService = {
         status, 
         error: { message: error.message } 
       });
+      return false;
+    }
+  },
+
+  /**
+   * Manually escalate a dispute (admin action)
+   */
+  async escalateDispute(disputeId: string, reason?: string): Promise<boolean> {
+    try {
+      if (!isSupabaseConfigured) throw new Error('Supabase not configured');
+
+      // Only admins may mark the official escalation flag
+      if (!(await verifyAdminRole())) {
+        logger.error('Non-admin attempted to escalate dispute', { disputeId });
+        throw new Error('Unauthorized: admin role required');
+      }
+
+      const { error } = await supabase
+        .from('bounty_disputes')
+        .update({ escalated: true, escalated_at: new Date().toISOString() })
+        .eq('id', disputeId);
+
+      if (error) {
+        logger.error('Error setting dispute escalated flag', { error, disputeId });
+        throw error;
+      }
+
+      // Log audit event
+      await this.logAuditEvent(disputeId, 'escalated', null, 'admin', { reason: reason || 'manual' });
+
+      // Notify admins
+      try {
+        // Attempt to fetch dispute to include bounty id
+        const d = await this.getDisputeById(disputeId);
+        await notifyAdminsOfDispute(disputeId, d?.bountyId || '', reason || 'Manually escalated by admin');
+      } catch (notifyErr) {
+        logger.error('Failed to notify admins after manual escalation', { error: notifyErr, disputeId });
+      }
+
+      return true;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Unknown error');
+      logger.error('Error in escalateDispute', { disputeId, error: { message: error.message } });
       return false;
     }
   },
@@ -537,6 +612,8 @@ export const disputeService = {
         winner: item.winner || null,
         resolvedBy: item.resolved_by,
         resolvedAt: item.resolved_at,
+        escalated: item.escalated || false,
+        escalatedAt: item.escalated_at,
         createdAt: item.created_at,
         updatedAt: item.updated_at,
       }));
@@ -1071,6 +1148,13 @@ export const disputeService = {
         await this.logAuditEvent(dispute.id, 'escalated', null, 'system', {
           reason: 'Unresolved for 14 days',
         });
+
+        // Notify admins about escalation
+        try {
+          await notifyAdminsOfDispute(String(dispute.id), String(dispute.bounty_id), 'Unresolved for 14 days');
+        } catch (notifyErr) {
+          logger.error('Error notifying admins about escalated dispute', { error: notifyErr, disputeId: dispute.id });
+        }
 
         escalatedCount++;
       }

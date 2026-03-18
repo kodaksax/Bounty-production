@@ -1,24 +1,24 @@
 // app/(admin)/disputes/index.tsx - Admin dispute list and review screen
-import React, { useEffect, useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
-  StyleSheet,
-  Alert,
-} from 'react-native';
-import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
-import { AdminHeader } from '../../../components/admin/AdminHeader';
+import { useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import { AdminCard } from '../../../components/admin/AdminCard';
-import { disputeService } from '../../../lib/services/dispute-service';
-import { bountyService } from '../../../lib/services/bounty-service';
-import { getDisputeStatusColor, getDisputeStatusIcon } from '../../../lib/utils/dispute-helpers';
-import type { BountyDispute } from '../../../lib/types';
+import { AdminHeader } from '../../../components/admin/AdminHeader';
 import { ROUTES } from '../../../lib/routes';
+import { bountyService } from '../../../lib/services/bounty-service';
+import { disputeService } from '../../../lib/services/dispute-service';
+import type { BountyDispute } from '../../../lib/types';
+import { getDisputeStatusColor, getDisputeStatusIcon } from '../../../lib/utils/dispute-helpers';
 
 interface DisputeWithBounty extends BountyDispute {
   bountyTitle?: string;
@@ -31,7 +31,7 @@ export default function AdminDisputesScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'all' | 'open' | 'under_review' | 'resolved'>('all');
+  const [filter, setFilter] = useState<'all' | 'open' | 'under_review' | 'resolved' | 'escalated'>('all');
 
   const loadDisputes = useCallback(async () => {
     try {
@@ -95,6 +95,7 @@ export default function AdminDisputesScreen() {
 
   const filteredDisputes = disputes.filter((dispute) => {
     if (filter === 'all') return true;
+    if (filter === 'escalated') return !!(dispute as any).escalated;
     return dispute.status === filter;
   });
 
@@ -103,6 +104,7 @@ export default function AdminDisputesScreen() {
     open: disputes.filter(d => d.status === 'open').length,
     underReview: disputes.filter(d => d.status === 'under_review').length,
     resolved: disputes.filter(d => d.status === 'resolved').length,
+    escalated: disputes.filter((d: any) => !!d.escalated).length,
   };
 
   if (loading && !refreshing) {
@@ -165,7 +167,7 @@ export default function AdminDisputesScreen() {
         {/* Filter Tabs */}
         <View style={styles.filterContainer}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {(['all', 'open', 'under_review', 'resolved'] as const).map((status) => (
+            {(['all', 'open', 'under_review', 'resolved', 'escalated'] as const).map((status) => (
               <TouchableOpacity
                 key={status}
                 onPress={() => setFilter(status)}
@@ -184,6 +186,8 @@ export default function AdminDisputesScreen() {
                     ? 'All'
                     : status === 'under_review'
                     ? 'Under Review'
+                    : status === 'escalated'
+                    ? 'Escalated'
                     : status.charAt(0).toUpperCase() + status.slice(1)}
                 </Text>
               </TouchableOpacity>

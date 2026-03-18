@@ -3,14 +3,14 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { AdminCard } from '../../../components/admin/AdminCard';
 import { AdminHeader } from '../../../components/admin/AdminHeader';
@@ -89,6 +89,22 @@ export default function AdminDisputeDetailScreen() {
       }
     } catch (error) {
       console.error('Error updating status:', error);
+      Alert.alert('Error', 'An unexpected error occurred');
+    }
+  };
+
+  const handleManualEscalate = async () => {
+    if (!data) return;
+    try {
+      const success = await disputeService.escalateDispute(data.dispute.id, 'Escalated by admin via UI');
+      if (success) {
+        Alert.alert('Success', 'Dispute marked as escalated and admins notified');
+        loadDisputeDetails();
+      } else {
+        Alert.alert('Error', 'Failed to escalate dispute');
+      }
+    } catch (err) {
+      console.error('Error escalating dispute:', err);
       Alert.alert('Error', 'An unexpected error occurred');
     }
   };
@@ -541,6 +557,21 @@ export default function AdminDisputeDetailScreen() {
               <MaterialIcons name="cancel" size={18} color="#fff" />
               <Text style={styles.actionButtonText}>Close Without Resolution</Text>
             </TouchableOpacity>
+            {/* Escalation (manual) */}
+            {(dispute as any).escalated ? (
+              <TouchableOpacity style={[styles.actionButton, styles.actionButtonDisabled]} disabled>
+                <MaterialIcons name="priority-high" size={18} color="#fff" />
+                <Text style={styles.actionButtonText}>Already Escalated</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                onPress={handleManualEscalate}
+                style={[styles.actionButton, { backgroundColor: '#f59e0b' }]}
+              >
+                <MaterialIcons name="priority-high" size={18} color="#fff" />
+                <Text style={styles.actionButtonText}>Escalate & Notify Admins</Text>
+              </TouchableOpacity>
+            )}
           </AdminCard>
         )}
 
