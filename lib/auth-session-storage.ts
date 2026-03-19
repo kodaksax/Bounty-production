@@ -210,6 +210,17 @@ export async function clearAllSessionData(): Promise<void> {
  * - Session persists across restarts when remember me is true
  */
 export const createAuthSessionStorageAdapter = () => {
+  console.log('[AuthSessionStorage] createAuthSessionStorageAdapter called')
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+    const Sentry = require('@sentry/react-native');
+    if (Sentry && typeof Sentry.addBreadcrumb === 'function') {
+      Sentry.addBreadcrumb({ category: 'auth', message: 'createAuthSessionStorageAdapter called', level: 'info', data: { platform: Platform.OS } });
+    }
+  } catch (e) {
+    // Sentry not available in this runtime (e.g., Expo Go) - ignore
+  }
+
   return {
     getItem: async (key: string): Promise<string | null> => {
       try {

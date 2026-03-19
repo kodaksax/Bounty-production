@@ -7,18 +7,19 @@ import { useNormalizedProfile } from "hooks/useNormalizedProfile";
 import { FOLLOW_FEATURE_ENABLED } from "lib/feature-flags";
 import { ROUTES } from 'lib/routes';
 import { resendVerification } from "lib/services/auth-service";
+import { supabase } from "lib/supabase";
 import { getCurrentUserId } from "lib/utils/data-utils";
 import { shareProfile } from "lib/utils/share-utils";
 import { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AchievementsGrid } from "../../components/achievements-grid";
@@ -28,6 +29,7 @@ import { SkillsetChips } from "../../components/skillset-chips";
 import { BrandingLogo } from "../../components/ui/branding-logo";
 import { ScreenHeader } from "../../components/ui/screen-header";
 import { UserProfileScreenSkeleton } from "../../components/ui/skeleton-loaders";
+import { authProfileService } from "../../lib/services/auth-profile-service";
 import { blockingService } from "../../lib/services/blocking-service";
 import { bountyRequestService } from "../../lib/services/bounty-request-service";
 import { bountyService } from "../../lib/services/bounty-service";
@@ -375,9 +377,44 @@ export default function UserProfileScreen() {
           <Text style={styles.errorText}>
             {error || "This user profile could not be loaded."}
           </Text>
-          <TouchableOpacity style={styles.retryButton} onPress={handleBack}>
-            <Text style={styles.retryButtonText}>Go Back</Text>
-          </TouchableOpacity>
+          {session ? (
+            <>
+              <TouchableOpacity
+                style={[styles.retryButton, { backgroundColor: '#2563eb' }]}
+                onPress={async () => {
+                  try {
+                    // attempt to refresh the authenticated profile
+                    await authProfileService.refreshProfile();
+                  } catch (err) {
+                    console.error('[UserProfileScreen] Retry refresh failed:', err);
+                  }
+                }}
+              >
+                <Text style={[styles.retryButtonText, { color: '#fff' }]}>Retry Profile</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.retryButton, { marginTop: 12, backgroundColor: '#ef4444' }]}
+                onPress={async () => {
+                  try {
+                    await supabase.auth.signOut();
+                  } catch (err) {
+                    console.error('[UserProfileScreen] Sign out failed:', err);
+                    Alert.alert(
+                      "Sign out failed",
+                      "We couldn't sign you out. Please check your connection and try again."
+                    );
+                  }
+                }}
+              >
+                <Text style={[styles.retryButtonText, { color: '#fff' }]}>Sign Out</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity style={styles.retryButton} onPress={handleBack}>
+              <Text style={styles.retryButtonText}>Go Back</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     );

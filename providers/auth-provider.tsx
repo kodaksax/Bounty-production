@@ -1,12 +1,12 @@
 import type { Session } from '@supabase/supabase-js'
 import { AuthContext } from 'hooks/use-auth-context'
 import { cachedDataService } from 'lib/services/cached-data-service'
-import { supabase } from 'lib/supabase'
 import { PropsWithChildren, useContext, useEffect, useRef, useState } from 'react'
 import { clearBountyDraftForUser } from '../app/hooks/useBountyDraft'
 import { analyticsService } from '../lib/services/analytics-service'
 import { authProfileService } from '../lib/services/auth-profile-service'
 import { getSentry } from '../lib/services/sentry-init'
+import { supabase } from '../lib/supabase'
 
 type AuthData = {
   session: Session | null | undefined
@@ -226,6 +226,17 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       let sessionFound = false
 
       try {
+        devLog('[AuthProvider] fetchSession START')
+        try {
+          // Add breadcrumb for Sentry to capture device occurrences of session fetch
+          // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+          const Sentry = require('@sentry/react-native');
+          if (Sentry && typeof Sentry.addBreadcrumb === 'function') {
+            Sentry.addBreadcrumb({ category: 'auth', message: 'fetchSession start', level: 'info' });
+          }
+        } catch (e) {
+          // ignore if Sentry not available
+        }
         const {
           data: { session },
           error,
@@ -244,6 +255,13 @@ export default function AuthProvider({ children }: PropsWithChildren) {
             reportWarning('[AuthProvider] Profile service unavailable during session clear:', e)
           }
         } else if (session) {
+          devLog('[AuthProvider] fetchSession: session exists, syncing profile')
+          try {
+            const Sentry = getSentry?.();
+            if (Sentry && typeof Sentry.addBreadcrumb === 'function') {
+              Sentry.addBreadcrumb({ category: 'auth', message: 'session found on startup', level: 'info', data: { userId: session.user.id } });
+            }
+          } catch (_) {}
           // Valid session found
           sessionFound = true
           devLog('[AuthProvider] Session loaded: authenticated')
@@ -324,7 +342,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (_event: string, session: Session | null) => {
       // Process auth state changes even during initialization to avoid missing SIGNED_IN
       // events that occur while the initial session fetch is in progress.
       // We rely on the subsequent logic (profile sync + timers) to be idempotent.
