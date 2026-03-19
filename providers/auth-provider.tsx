@@ -340,9 +340,9 @@ export default function AuthProvider({ children }: PropsWithChildren) {
 
     fetchSession()
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event: string, session: Session | null) => {
+    let subscription: { unsubscribe?: () => void } | undefined
+    try {
+      const maybeSub = supabase.auth.onAuthStateChange(async (_event: string, session: Session | null) => {
       // Process auth state changes even during initialization to avoid missing SIGNED_IN
       // events that occur while the initial session fetch is in progress.
       // We rely on the subsequent logic (profile sync + timers) to be idempotent.
@@ -515,12 +515,21 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         devLog('[AuthProvider] Token refreshed by Supabase')
       }
     })
+      // Attempt to extract subscription from known sync shape
+      subscription = (maybeSub && (maybeSub as any).data && (maybeSub as any).data.subscription) || (maybeSub as any).subscription || undefined
+    } catch (e) {
+      reportError(e, '[AuthProvider] onAuthStateChange registration failed:')
+    }
     devLog('[AuthProvider] mounted')
     
     // Cleanup subscription and timer on unmount
     return () => {
       isMountedRef.current = false
-      subscription.unsubscribe()
+      try {
+        subscription?.unsubscribe?.()
+      } catch (e) {
+        // swallow unsubscribe errors
+      }
       if (refreshTimerRef.current) {
         clearTimeout(refreshTimerRef.current)
         refreshTimerRef.current = null

@@ -32,7 +32,8 @@ function validateSupabaseShape(obj: any): obj is SupabaseClient {
     const hasFrom = typeof obj.from === 'function';
     const hasRpc = typeof obj.rpc === 'function';
     const hasAuth = obj.auth && typeof obj.auth.onAuthStateChange === 'function';
-    return !!(hasFrom && hasRpc && hasAuth);
+    const hasChannel = typeof (obj as any).channel === 'function' || typeof (obj as any).removeChannel === 'function';
+    return !!(hasFrom && hasRpc && hasAuth && hasChannel);
   } catch {
     return false;
   }
@@ -117,15 +118,40 @@ const stubAuth = {
 
 function makeStubClient(): any {
   const terminal = {
-    from: () => ({ select: async () => noopResult, insert: async () => noopResult, update: async () => noopResult, delete: async () => noopResult, on: () => ({ subscribe: () => ({ unsubscribe() {} }) }) }),
+    from: (_table?: string) => {
+      const builder: any = {}
+      const terminalMethods = ['select','insert','update','delete','eq','match','limit','order','single','maybeSingle','throwOnError','range','on']
+      terminalMethods.forEach((m) => {
+        builder[m] = (..._args: any[]) => builder
+      })
+      builder.subscribe = () => ({ unsubscribe() {} })
+      builder.send = () => Promise.resolve({})
+      // Promise-like behavior so callers can `await` the builder
+      builder.then = (resolve: any) => Promise.resolve(noopResult).then(resolve)
+      return builder
+    },
     rpc: async () => noopResult,
+    channel: (..._args: any[]) => {
+      // chainable stub channel
+      const channelObj: any = {
+        on: (_event: any, _filter?: any, cb?: any) => {
+          return channelObj;
+        },
+        subscribe: (cb?: any) => ({ unsubscribe() {} }),
+        send: (_payload: any) => Promise.resolve({}),
+      };
+      return channelObj;
+    },
     auth: stubAuth,
+    removeChannel: async (_ch: any) => {},
     __unsafe__: {},
   };
 
   // Chainable proxy for stub (so calls like supabase.from(...).select() work)
   const handler: ProxyHandler<any> = {
     get(_t, prop) {
+      if (prop === Symbol.toPrimitive) return () => 'stub-supabase';
+      if (prop === 'toString' || prop === 'valueOf') return () => 'stub-supabase';
       if (prop in terminal) return (terminal as any)[prop];
       return () => makeStubClient();
     },
@@ -189,6 +215,34 @@ function makeDeferredProxy(getReal: () => Promise<any>): any {
   const proxy = new Proxy(fn, {
     get(_t, prop) {
       if (prop === 'then') return undefined;
+      // Ensure primitive coercions work synchronously (avoid Symbol.toPrimitive
+      // throwing when consumers coerce the proxy to string/number). If the
+      // real object isn't available synchronously we'll return a stable
+      // primitive placeholder so coercion doesn't throw.
+      if (prop === Symbol.toPrimitive) return (_hint: any) => '[deferred-supabase]';
+      if (prop === 'toString' || prop === 'valueOf') return () => '[deferred-supabase]';
+
+      // Provide some commonly-used methods synchronously so callers that
+      // expect a function can call them immediately without awaiting the
+      // deferred client. These return safe stubs until the real client is
+      // available.
+      if (prop === 'channel') {
+        return (...args: any[]) => {
+          try {
+            return makeStubClient().channel(...args);
+          } catch {
+            return makeStubClient().channel(...args);
+          }
+        };
+      }
+
+      if (prop === 'removeChannel') {
+        return async (_ch: any) => {
+          // no-op until real client is ready
+          return;
+        };
+      }
+
       return makeDeferredProxy(() => getReal().then((r) => r[prop]));
     },
     apply(_t, thisArg, args) {
