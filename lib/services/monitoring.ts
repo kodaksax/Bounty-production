@@ -59,7 +59,7 @@ export async function logClientInfo(message: string, metadata?: Record<string, a
     await supabase.from('client_logs').insert([{ level: 'info', message, metadata: safeMeta, created_at: new Date().toISOString() }])
   } catch (e) {}
   // Also log to console in development for debugging
-  if (__DEV__) {
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
     console.log('[client_log]', message, Object.keys(safeMeta).length ? JSON.stringify(safeMeta) : undefined)
   }
 }
