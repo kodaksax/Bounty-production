@@ -1,6 +1,9 @@
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { Session } from '@supabase/supabase-js'
 import { AuthContext } from 'hooks/use-auth-context'
+import { DEFERRED_PUSH_REGISTRATION_KEY } from 'lib/constants'
 import { cachedDataService } from 'lib/services/cached-data-service'
+import { notificationService } from 'lib/services/notification-service'
 import { PropsWithChildren, useContext, useEffect, useRef, useState } from 'react'
 import { clearBountyDraftForUser } from '../app/hooks/useBountyDraft'
 import { analyticsService } from '../lib/services/analytics-service'
@@ -513,6 +516,22 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         }
       } else if (_event === 'TOKEN_REFRESHED') {
         devLog('[AuthProvider] Token refreshed by Supabase')
+      }
+      // If a deferred push registration was requested during onboarding, run it now.
+      if (_event === 'SIGNED_IN') {
+        try {
+          const deferred = await AsyncStorage.getItem(DEFERRED_PUSH_REGISTRATION_KEY)
+          if (deferred && session?.user) {
+            // Clear the flag and attempt registration (best-effort, fire-and-forget)
+            await AsyncStorage.removeItem(DEFERRED_PUSH_REGISTRATION_KEY)
+            void notificationService.requestPermissionsAndRegisterToken().catch((e) => {
+              reportWarning('[AuthProvider] Deferred push registration failed:', e)
+            })
+          }
+        } catch (e) {
+          // Non-fatal
+          reportWarning('[AuthProvider] Error checking deferred push registration flag:', e)
+        }
       }
     })
       // Attempt to extract subscription from known sync shape

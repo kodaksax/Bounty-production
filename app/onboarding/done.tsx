@@ -22,6 +22,7 @@ import { useAuthContext } from '../../hooks/use-auth-context';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
+import { DEFERRED_PUSH_REGISTRATION_KEY } from '../../lib/constants';
 import { useOnboarding } from '../../lib/context/onboarding-context';
 import { authProfileService } from '../../lib/services/auth-profile-service';
 import { Profile } from '../../lib/services/database.types';
@@ -201,13 +202,26 @@ export default function DoneScreen() {
       console.error('[Onboarding] AsyncStorage write failed:', err);
     }
 
-    // Step 2: Request notification permissions (best effort, non-blocking)
+    // Step 2: Request notification permissions (best effort, non-blocking).
+    // Only do this if an active session exists; for brand-new users who
+    // are not yet signed in, set a flag so AuthProvider will register
+    // the token after the user signs in (avoids calling auth-required
+    // endpoints with no Authorization header).
     try {
-      await withTimeout(
-        notificationService.requestPermissionsAndRegisterToken(),
-        PRE_NAV_TIMEOUT_MS,
-        'notification permission/token registration'
-      );
+      if (session?.access_token) {
+        await withTimeout(
+          notificationService.requestPermissionsAndRegisterToken(),
+          PRE_NAV_TIMEOUT_MS,
+          'notification permission/token registration'
+        );
+      } else {
+        try {
+          await AsyncStorage.setItem(DEFERRED_PUSH_REGISTRATION_KEY, 'true');
+          if (__DEV__) console.log('[Onboarding] Deferred push registration until sign-in');
+        } catch (e) {
+          console.warn('[Onboarding] Failed to persist deferred push registration flag', e);
+        }
+      }
     } catch (e) {
       console.error('[Onboarding] Notification permission error:', e);
     }

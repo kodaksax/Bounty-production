@@ -188,7 +188,8 @@ const authRequired = async (req, res, next) => {
   try {
     const auth = req.headers.authorization;
     if (!auth || !auth.toLowerCase().startsWith('bearer ')) {
-      return res.status(401).json({ error: 'Missing bearer token' });
+      console.warn('[authRequired] missing Authorization header');
+      return res.status(401).json({ error: 'Authentication required. Please sign in to continue.' });
     }
     const token = auth.substring(7).trim();
     if (!supabaseAdmin) {
@@ -196,7 +197,8 @@ const authRequired = async (req, res, next) => {
     }
     const { data, error } = await supabaseAdmin.auth.getUser(token);
     if (error || !data?.user) {
-      return res.status(401).json({ error: 'Invalid or expired token' });
+      console.warn('[authRequired] invalid or expired token', error || 'no user');
+      return res.status(401).json({ error: 'Authentication required. Please sign in to continue.' });
     }
     req.user = data.user;
     next();

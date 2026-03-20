@@ -1,14 +1,14 @@
-import type { 
-  Bounty, 
-  BountyRequest, 
-  CreateBountyRequest, 
-  GetBountiesOptions, 
-  AcceptBountyRequest, 
-  CompleteBountyRequest,
-  ApiResponse, 
-  PaginatedResponse, 
+import type {
+  AcceptBountyRequest,
   ApiClientConfig,
-  AuthTokens 
+  ApiResponse,
+  AuthTokens,
+  Bounty,
+  BountyRequest,
+  CompleteBountyRequest,
+  CreateBountyRequest,
+  GetBountiesOptions,
+  PaginatedResponse
 } from './types';
 
 export class ApiClient {
@@ -65,7 +65,7 @@ export class ApiClient {
         }
         return {
           success: false,
-          error: 'Authentication failed',
+          error: 'Authentication required. Please sign in to continue.',
         };
       }
 
@@ -102,8 +102,15 @@ export class ApiClient {
   private async parseResponse<T>(response: Response): Promise<ApiResponse<T>> {
     try {
       const data = await response.json();
-      
+
       if (!response.ok) {
+        if (response.status === 401) {
+          return {
+            success: false,
+            error: 'Authentication required. Please sign in to continue.',
+          };
+        }
+
         return {
           success: false,
           error: data.message || data.error || `HTTP ${response.status}`,

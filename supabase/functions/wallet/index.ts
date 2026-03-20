@@ -42,12 +42,14 @@ Deno.serve(async (req: Request) => {
   // Authenticate user
   const authHeader = req.headers.get('Authorization')
   if (!authHeader?.startsWith('Bearer ')) {
-    return jsonResponse({ error: 'Missing or invalid authorization header' }, 401)
+    console.warn('[wallet edge fn] missing Authorization header')
+    return jsonResponse({ error: 'Authentication required. Please sign in to continue.' }, 401)
   }
   const token = authHeader.substring(7)
   const { data: { user }, error: authError } = await supabase.auth.getUser(token)
   if (authError || !user) {
-    return jsonResponse({ error: 'Invalid or expired token' }, 401)
+    console.warn('[wallet edge fn] invalid or expired token', authError || 'no user')
+    return jsonResponse({ error: 'Authentication required. Please sign in to continue.' }, 401)
   }
   const userId = user.id
 
