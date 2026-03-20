@@ -2,8 +2,8 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { API_BASE_URL } from './config/api';
 import { API_TIMEOUTS } from './config/network';
 import { bountyService } from './services/bounty-service';
-import { paymentService } from './services/payment-service';
 import { offlineQueueService } from './services/offline-queue-service';
+import { paymentService } from './services/payment-service';
 import { supabase } from './supabase';
 import { fetchWithTimeout } from './utils/fetch-with-timeout';
 import { getNetworkErrorMessage } from './utils/network-connectivity';
