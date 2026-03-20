@@ -125,7 +125,7 @@ class OfflineQueueService {
   /**
    * Add an item to the queue
    */
-  async enqueue(type: QueueItemType, data: BountyQueueData | MessageQueueData): Promise<QueueItem> {
+  async enqueue(type: QueueItemType, data: BountyQueueData | MessageQueueData | OperationQueueData): Promise<QueueItem> {
     const item: QueueItem = {
       id: `${type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       type,
