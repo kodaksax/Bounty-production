@@ -1548,6 +1548,90 @@ app.patch('/api/bounty-requests/:id', async (req, res) => {
   }
 });
 
+// Accept a bounty request (atomic): mark request accepted, set bounty in_progress, reject competing requests
+app.post('/api/bounty-requests/:id/accept', async (req, res) => {
+  let conn;
+  try {
+    conn = await connect();
+
+    // Start transaction to prevent races when multiple posters accept concurrently
+    await conn.beginTransaction();
+
+    const requestId = req.params.id;
+
+    // Lock the request row
+    const [reqRows] = await conn.execute('SELECT * FROM bounty_requests WHERE id = ? FOR UPDATE', [requestId]);
+    if (!reqRows || reqRows.length === 0) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'Bounty request not found' });
+    }
+    const requestRow = reqRows[0];
+
+    // Only pending requests may be accepted
+    if (requestRow.status !== 'pending') {
+      await conn.rollback();
+      return res.status(409).json({ error: 'Request not in pending state', currentStatus: requestRow.status });
+    }
+
+    // Lock the bounty row referenced by this request
+    const [bountyRows] = await conn.execute('SELECT * FROM bounties WHERE id = ? FOR UPDATE', [requestRow.bounty_id]);
+    if (!bountyRows || bountyRows.length === 0) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'Bounty not found' });
+    }
+    const bountyRow = bountyRows[0];
+
+    // Ensure bounty is open before accepting
+    if (String(bountyRow.status) !== 'open') {
+      await conn.rollback();
+      return res.status(409).json({ error: 'Bounty is not open for acceptance', currentStatus: bountyRow.status });
+    }
+
+    // Transition bounty -> in_progress and set accepted_by
+    const [updateBounty] = await conn.execute(
+      'UPDATE bounties SET status = ?, accepted_by = ? WHERE id = ?',
+      ['in_progress', requestRow.hunter_id, requestRow.bounty_id]
+    );
+    if (!updateBounty || updateBounty.affectedRows === 0) {
+      await conn.rollback();
+      return res.status(500).json({ error: 'Failed to update bounty status' });
+    }
+
+    // Mark this request accepted
+    const [acceptReq] = await conn.execute('UPDATE bounty_requests SET status = ? WHERE id = ?', ['accepted', requestId]);
+    if (!acceptReq || acceptReq.affectedRows === 0) {
+      await conn.rollback();
+      return res.status(500).json({ error: 'Failed to accept request' });
+    }
+
+    // Reject other competing requests for the same bounty
+    await conn.execute('UPDATE bounty_requests SET status = ? WHERE bounty_id = ? AND id != ?', ['rejected', requestRow.bounty_id, requestId]);
+
+    // Commit transaction
+    await conn.commit();
+
+    // Fetch updated bounty to return
+    const [updatedRows] = await conn.execute('SELECT * FROM bounties WHERE id = ?', [requestRow.bounty_id]);
+
+    // Fire notifications (best-effort) outside the transaction
+    try {
+      const title = `Bounty accepted`;
+      const bodyMsg = `Bounty '${String(updatedRows[0].title || '').slice(0,80)}' moved to in-progress`;
+      await notifyBountyParticipants(requestRow.bounty_id, title, bodyMsg, 'accept');
+    } catch (notifyErr) {
+      console.warn('[bounty-requests/accept] notification error', notifyErr && notifyErr.message ? notifyErr.message : notifyErr);
+    }
+
+    // Return minimal accepted response
+    return res.json({ success: true, bounty: updatedRows[0], acceptedRequestId: requestId });
+  } catch (error) {
+    if (conn) try { await conn.rollback(); } catch {}
+    handleError(res, error, 'Failed to accept bounty request');
+  } finally {
+    if (conn) try { await conn.end(); } catch {}
+  }
+});
+
 // Delete bounty request
 app.delete('/api/bounty-requests/:id', async (req, res) => {
   let conn;

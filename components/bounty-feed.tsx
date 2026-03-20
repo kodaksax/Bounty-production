@@ -33,7 +33,7 @@ interface BountyFeedProps {
   currentUserId?: string
 }
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 10
 
 export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function BountyFeed(
   { activeScreen, setActiveScreen, currentUserId },
@@ -205,6 +205,33 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       setApplicationsLoaded(true)
     }
   }, [currentUserId])
+
+  // Debounced setter to avoid rapid re-render/update cycles when users tap filters quickly
+  const activeCategoryTimerRef = useRef<number | null>(null)
+  const handleSetActiveCategory = useCallback((val: string | 'all') => {
+    if (activeCategoryTimerRef.current) {
+      clearTimeout(activeCategoryTimerRef.current)
+    }
+    // small debounce to batch rapid taps
+    // store timer id as number for React Native
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    activeCategoryTimerRef.current = setTimeout(() => {
+      setActiveCategory(val)
+    }, 250) as unknown as number
+  }, [])
+
+  // Cleanup any pending debounce timers on unmount to avoid stray setState
+  useEffect(() => {
+    return () => {
+      if (activeCategoryTimerRef.current) {
+        clearTimeout(activeCategoryTimerRef.current)
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        activeCategoryTimerRef.current = null
+      }
+    }
+  }, [])
 
   // Load bounties from backend
   const loadBounties = useCallback(async ({ reset = false }: { reset?: boolean } = {}) => {
@@ -404,7 +431,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       return (
         <View style={{ width: '100%', alignItems: 'center' }}>
           <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>No bounties match this filter.</Text>
-          <TouchableOpacity onPress={() => setActiveCategory('all')} style={{ backgroundColor: '#a7f3d0', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 }}>
+          <TouchableOpacity onPress={() => handleSetActiveCategory('all')} style={{ backgroundColor: '#a7f3d0', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 }}>
             <Text style={{ color: '#052e1b', fontWeight: '700' }}>Clear filter</Text>
           </TouchableOpacity>
         </View>
@@ -600,7 +627,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                 }
                 return (
                   <TouchableOpacity
-                    onPress={() => setActiveCategory(isActive ? 'all' : (item.id as any))}
+                    onPress={() => handleSetActiveCategory(isActive ? 'all' : (item.id as any))}
                     style={[styles.chip, isActive && styles.chipActive]}
                     accessibilityRole="button"
                     accessibilityLabel={`Filter by ${item.label}${isActive ? ', currently active' : ''}`}

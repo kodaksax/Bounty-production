@@ -1,11 +1,11 @@
+import { and, eq } from 'drizzle-orm';
 import { db } from '../db/connection';
 import { bounties } from '../db/schema';
-import { eq } from 'drizzle-orm';
-import { outboxService } from './outbox-service';
-import { walletService } from './wallet-service';
-import { realtimeService } from './realtime-service';
 import { emailService } from './email-service';
 import { notificationService } from './notification-service';
+import { outboxService } from './outbox-service';
+import { realtimeService } from './realtime-service';
+import { walletService } from './wallet-service';
 
 export class BountyService {
   /**
@@ -16,32 +16,32 @@ export class BountyService {
     try {
       // Start a transaction
       return await db.transaction(async (tx) => {
-        // Get the bounty
-        const bountyResult = await tx
-          .select()
-          .from(bounties)
-          .where(eq(bounties.id, bountyId))
-          .limit(1);
+          // Atomically transition bounty from 'open' -> 'in_progress'.
+          // Use a conditional UPDATE so concurrent accepts cannot both succeed.
+          const updated = await tx
+            .update(bounties)
+            .set({
+              status: 'in_progress',
+              hunter_id: hunterId,
+              updated_at: new Date(),
+            })
+            .where(and(eq(bounties.id, bountyId), eq(bounties.status, 'open')))
+            .returning();
 
-        if (bountyResult.length === 0) {
-          return { success: false, error: 'Bounty not found' };
-        }
+          // If no rows were returned, either the bounty doesn't exist or it's no longer open.
+          if (!updated || updated.length === 0) {
+            const found = await tx
+              .select()
+              .from(bounties)
+              .where(eq(bounties.id, bountyId))
+              .limit(1);
+            if (found.length === 0) {
+              return { success: false, error: 'Bounty not found' };
+            }
+            return { success: false, error: `Cannot accept bounty with status: ${found[0].status}` };
+          }
 
-        const bounty = bountyResult[0];
-
-        if (bounty.status !== 'open') {
-          return { success: false, error: `Cannot accept bounty with status: ${bounty.status}` };
-        }
-
-        // Update bounty status to in_progress and set hunter
-        await tx
-          .update(bounties)
-          .set({ 
-            status: 'in_progress',
-            hunter_id: hunterId,
-            updated_at: new Date(),
-          })
-          .where(eq(bounties.id, bountyId));
+          const bounty = updated[0];
 
         // Create escrow transaction if bounty has amount
         if (bounty.amount_cents > 0 && !bounty.is_for_honor) {
