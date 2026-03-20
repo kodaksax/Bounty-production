@@ -10,8 +10,8 @@ import { createClient } from '@supabase/supabase-js';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { config } from '../config';
 import {
-  ExternalServiceError,
-  ValidationError,
+    ExternalServiceError,
+    ValidationError,
 } from '../middleware/error-handler';
 import { stripe } from '../services/consolidated-payment-service';
 import * as WalletService from '../services/consolidated-wallet-service';
