@@ -150,8 +150,8 @@ function makeStubClient(): any {
   // Chainable proxy for stub (so calls like supabase.from(...).select() work)
   const handler: ProxyHandler<any> = {
     get(_t, prop) {
-      if (prop === Symbol.toPrimitive) return () => 'stub-supabase';
-      if (prop === 'toString' || prop === 'valueOf') return () => 'stub-supabase';
+      if (prop === Symbol.toPrimitive) return () => 'http://localhost';
+      if (prop === 'toString' || prop === 'valueOf') return () => 'http://localhost';
       if (prop in terminal) return (terminal as any)[prop];
       return () => makeStubClient();
     },
@@ -219,8 +219,8 @@ function makeDeferredProxy(getReal: () => Promise<any>): any {
       // throwing when consumers coerce the proxy to string/number). If the
       // real object isn't available synchronously we'll return a stable
       // primitive placeholder so coercion doesn't throw.
-      if (prop === Symbol.toPrimitive) return (_hint: any) => '[deferred-supabase]';
-      if (prop === 'toString' || prop === 'valueOf') return () => '[deferred-supabase]';
+      if (prop === Symbol.toPrimitive) return (_hint: any) => 'http://localhost';
+      if (prop === 'toString' || prop === 'valueOf') return () => 'http://localhost';
 
       // Provide some commonly-used methods synchronously so callers that
       // expect a function can call them immediately without awaiting the
