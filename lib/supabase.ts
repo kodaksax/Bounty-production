@@ -222,6 +222,11 @@ function makeDeferredProxy(getReal: () => Promise<any>): any {
       if (prop === Symbol.toPrimitive) return (_hint: any) => 'http://localhost';
       if (prop === 'toString' || prop === 'valueOf') return () => 'http://localhost';
 
+      // Provide a safe, plain-object `headers` synchronously so callers like
+      // `new Headers(headers)` receive a valid HeadersInit instead of a
+      // proxy object which some runtimes (undici) reject.
+      if (prop === 'headers') return {};
+
       // Provide some commonly-used methods synchronously so callers that
       // expect a function can call them immediately without awaiting the
       // deferred client. These return safe stubs until the real client is
