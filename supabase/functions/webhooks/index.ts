@@ -128,16 +128,54 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    // Log event for tracking — upsert on stripe_event_id to safely handle retries
-    await supabase.from('stripe_events').upsert(
-      {
-        stripe_event_id: event.id,
-        event_type: event.type,
-        event_data: event.data.object,
-        processed: false,
-      },
-      { onConflict: 'stripe_event_id' },
-    )
+    // Check if the event was already processed to ensure strict idempotency.
+    // Avoid using a blind upsert that could overwrite an existing `processed: true` flag
+    // if Stripe retries delivery after we've already handled the event.
+    try {
+      const { data: existingEvent } = await supabase
+        .from('stripe_events')
+        .select('processed')
+        .eq('stripe_event_id', event.id)
+        .maybeSingle();
+
+      if (existingEvent?.processed) {
+        console.log(`[webhooks] Event ${event.id} already processed, skipping`);
+        return jsonResponse({ received: true, alreadyProcessed: true });
+      }
+
+      if (!existingEvent) {
+        // Insert a tracking row for this event (processed = false). If a concurrent
+        // process inserts the same ID first, Supabase will return a conflict error
+        // which we intentionally ignore here because the processed check above
+        // protects us from double-processing.
+        const { error: insertErr } = await supabase.from('stripe_events').insert({
+          stripe_event_id: event.id,
+          event_type: event.type,
+          event_data: event.data.object,
+          processed: false,
+          created_at: new Date().toISOString(),
+        });
+
+        if (insertErr) {
+          // Log and continue — the later processed check will prevent duplicates
+          console.error('[webhooks] Failed to insert stripe_events row:', insertErr);
+        }
+      } else {
+        // Existing row found but not yet processed — update event_data to keep it current
+        const { error: updateErr } = await supabase
+          .from('stripe_events')
+          .update({ event_data: event.data.object })
+          .eq('stripe_event_id', event.id);
+
+        if (updateErr) {
+          console.error('[webhooks] Failed to update stripe_events row:', updateErr);
+        }
+      }
+    } catch (err) {
+      console.error('[webhooks] Error while checking/logging stripe_events:', err);
+      // Proceed to processing — we'll rely on RPCs and transaction-level idempotency
+      // to avoid double-crediting in failure scenarios.
+    }
 
     switch (event.type) {
       case 'payment_intent.succeeded': {

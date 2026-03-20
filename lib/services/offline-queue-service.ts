@@ -4,14 +4,14 @@ import { logger } from 'lib/utils/error-logger';
 import type { Bounty } from './database.types';
 
 // Queue item types
-export type QueueItemType = 'bounty' | 'message';
+export type QueueItemType = 'bounty' | 'message' | 'operation';
 
 export interface QueueItem {
   id: string;
   type: QueueItemType;
   timestamp: number;
   retryCount: number;
-  data: BountyQueueData | MessageQueueData;
+  data: BountyQueueData | MessageQueueData | OperationQueueData;
   status: 'pending' | 'processing' | 'failed';
   error?: string;
 }
@@ -27,6 +27,12 @@ export interface MessageQueueData {
   senderId: string;
   tempId?: string; // Temporary ID for optimistic UI
   isEncrypted?: boolean; // optional flag indicating queued payload is encrypted
+}
+
+export interface OperationQueueData {
+  opType: string; // e.g. 'release_escrow', 'refund_escrow'
+  payload: Record<string, any>;
+  idempotencyKey?: string;
 }
 
 const QUEUE_KEY = 'offline-queue-v1';
@@ -201,6 +207,8 @@ class OfflineQueueService {
             await this.processBountyItem(item);
           } else if (item.type === 'message') {
             await this.processMessageItem(item);
+          } else if (item.type === 'operation') {
+            await this.processOperationItem(item);
           }
 
           // Remove from queue on success
@@ -248,6 +256,15 @@ class OfflineQueueService {
     // Import message service dynamically to avoid circular dependency
     const { messageService } = await import('./message-service');
     await messageService.processQueuedMessage(data.conversationId, data.text, data.senderId);
+  }
+
+  /**
+   * Process an operation queue item (release, refund, etc.)
+   */
+  private async processOperationItem(item: QueueItem) {
+    const data = item.data as OperationQueueData;
+    const { queuedOperationsService } = await import('./queued-operations-service');
+    await queuedOperationsService.processQueuedOperation(data);
   }
 
   /**

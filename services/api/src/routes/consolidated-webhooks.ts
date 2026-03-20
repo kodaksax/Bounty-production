@@ -88,7 +88,9 @@ async function logWebhookEvent(event: Stripe.Event): Promise<void> {
       created_at: new Date(event.created * 1000).toISOString(),
     }, {
       onConflict: 'stripe_event_id',
-      ignoreDuplicates: false,
+      // When a retry arrives and a processed=true row already exists,
+      // ignore duplicates to avoid accidentally resetting processed -> false.
+      ignoreDuplicates: true,
     });
 
   if (error) {
