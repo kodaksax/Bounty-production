@@ -58,6 +58,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
   const [profile, setProfile] = useState<any>()
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [isEmailVerified, setIsEmailVerified] = useState<boolean>(false)
+  const [isAuthStale, setIsAuthStale] = useState<boolean>(false)
   const [isPasswordRecovery, setIsPasswordRecovery] = useState<boolean>(false)
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isRefreshingRef = useRef<boolean>(false)
@@ -106,7 +107,15 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           
           if (isNetworkError) {
             devLog('[AuthProvider] Network error during refresh, will retry')
-            // Don't clear session on network errors, let it be retried
+            // If the token is already expired, mark the auth as stale so UIs can show offline fallback
+            try {
+              const currentSession = session
+              const now = Date.now()
+              if (!currentSession || (currentSession.expires_at && currentSession.expires_at * 1000 <= now)) {
+                setIsAuthStale(true)
+              }
+            } catch {}
+            // Don't clear session on transient network errors, let it be retried
             return
           }
           
@@ -126,6 +135,8 @@ export default function AuthProvider({ children }: PropsWithChildren) {
 
         if (data.session) {
           devLog('[AuthProvider] Token refreshed successfully')
+          // Clear stale flag on success
+          setIsAuthStale(false)
           if (isMountedRef.current) {
             setSession(data.session)
             try {
@@ -143,6 +154,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           reportWarning('[AuthProvider] Token refresh returned no session')
           if (isMountedRef.current) {
             setSession(null)
+            setIsAuthStale(false)
             try {
               await authProfileService.setSession(null)
             } catch (e) {
@@ -156,6 +168,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         reportError(error, '[AuthProvider] Unexpected error refreshing token:')
         if (isMountedRef.current) {
           setSession(null)
+          setIsAuthStale(false)
           try {
             await authProfileService.setSession(null)
           } catch (e) {
@@ -627,6 +640,14 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         isLoggedIn: Boolean(session),
         isEmailVerified,
         isPasswordRecovery,
+        isAuthStale,
+        attemptRefresh: async () => {
+          try {
+            await refreshTokenNow()
+          } catch (e) {
+            reportWarning('[AuthProvider] attemptRefresh failed', e)
+          }
+        },
       }}
     >
       {children}

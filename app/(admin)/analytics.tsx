@@ -4,11 +4,14 @@ import { useRouter } from 'expo-router';
 import React from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AdminHeader } from '../../components/admin/AdminHeader';
-import { AnalyticsMetricsCard, AnalyticsMetrics } from '../../components/admin/AnalyticsMetricsCard';
+import { AnalyticsMetrics, AnalyticsMetricsCard } from '../../components/admin/AnalyticsMetricsCard';
+import { useAuthContext } from '../../hooks/use-auth-context';
+import { ErrorBoundary } from '../../lib/error-boundary';
 import { supabase } from '../../lib/supabase';
 
 export default function AnalyticsDashboard() {
   const router = useRouter();
+  const { isAuthStale, attemptRefresh } = useAuthContext();
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [metrics, setMetrics] = React.useState<AnalyticsMetrics | null>(null);
@@ -65,8 +68,20 @@ export default function AnalyticsDashboard() {
   }, [fetchAnalytics]);
 
   return (
-    <View style={styles.container}>
+    <ErrorBoundary>
+      <View style={styles.container}>
       <AdminHeader title="Analytics Dashboard" onBack={() => router.back()} />
+
+      {/* Offline / stale-auth banner */}
+      {isAuthStale && (
+        <View style={styles.offlineBanner}>
+          <Text style={styles.offlineText}>You appear offline or your session may have expired.</Text>
+          <TouchableOpacity style={styles.offlineRetry} onPress={() => attemptRefresh?.()}>
+            <MaterialIcons name="refresh" size={18} color="#fff" />
+            <Text style={styles.offlineRetryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <ScrollView
         style={styles.scrollView}
@@ -108,6 +123,7 @@ export default function AnalyticsDashboard() {
         <View style={{ height: 40 }} />
       </ScrollView>
     </View>
+    </ErrorBoundary>
   );
 }
 
@@ -141,6 +157,33 @@ const styles = StyleSheet.create({
   errorContainer: {
     alignItems: 'center',
     marginTop: 16,
+  },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(220,38,38,0.12)',
+    padding: 10,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 8,
+  },
+  offlineText: {
+    color: '#fffef5',
+    flex: 1,
+    marginRight: 8,
+  },
+  offlineRetry: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#b91c1c',
+    borderRadius: 8,
+  },
+  offlineRetryText: {
+    color: '#fff',
+    marginLeft: 8,
   },
   retryButton: {
     flexDirection: 'row',

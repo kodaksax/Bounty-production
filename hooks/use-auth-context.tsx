@@ -8,6 +8,10 @@ export type AuthData = {
   isLoggedIn: boolean
   isEmailVerified: boolean
   isPasswordRecovery: boolean
+  // Indicates that the local session may be stale due to network/token refresh failures
+  isAuthStale?: boolean
+  // Allows callers to request an immediate token refresh attempt
+  attemptRefresh?: () => Promise<void> | void
 }
 
 export const AuthContext = createContext<AuthData>({

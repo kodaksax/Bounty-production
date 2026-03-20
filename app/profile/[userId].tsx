@@ -359,8 +359,8 @@ export default function UserProfileScreen() {
         >
           <UserProfileScreenSkeleton />
         </ScrollView>
-      </View>
-    );
+        </View>
+      );
   }
 
   if (error || !profile) {
@@ -423,7 +423,7 @@ export default function UserProfileScreen() {
   const displayError = !dismissedError && (error || followError);
 
   return (
-    <View style={styles.container}>
+      <View style={styles.container}>
       {/* Header */}
       <ScreenHeader
         showBack
@@ -440,6 +440,8 @@ export default function UserProfileScreen() {
           </TouchableOpacity>
         ) : null}
       />
+
+      {/* (offline banner removed) */}
 
       {/* More Menu Dropdown with backdrop to dismiss when tapping outside */}
       {showMoreMenu && !isOwnProfile && (
@@ -717,6 +719,33 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 8,
     borderRadius: 8,
+  },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(220,38,38,0.12)',
+    padding: 10,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 8,
+  },
+  offlineText: {
+    color: '#fffef5',
+    flex: 1,
+    marginRight: 8,
+  },
+  offlineRetry: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#b91c1c',
+    borderRadius: 8,
+  },
+  offlineRetryText: {
+    color: '#fff',
+    marginLeft: 8,
   },
   errorBannerText: {
     flex: 1,
