@@ -579,7 +579,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         await logTransaction({
           type: 'refund',
-          amount: -refundAmount,
+          amount: refundAmount,
           details: { title, bounty_id: bountyIdStr, status: 'pending' },
         });
 
@@ -592,6 +592,16 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         return false;
       }
 
+      // Use server-provided refund amount when available to keep amounts authoritative
+      const actualRefundAmount = typeof result.refundAmount === 'number' ? result.refundAmount : refundAmount;
+
+      // Update local balance to reflect refunded amount (credit to poster's wallet)
+      setBalance(prev => {
+        const next = Math.round((prev + actualRefundAmount) * 100) / 100;
+        persist(next);
+        return next;
+      });
+
       setTransactions((prev: WalletTransactionRecord[]) => {
         const next = prev.map(tx =>
           tx.id === escrowTx.id ? ({ ...tx, escrowStatus: 'released', details: { ...tx.details, status: 'completed' } } as WalletTransactionRecord) : tx
@@ -602,7 +612,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       await logTransaction({
         type: 'refund',
-        amount: -refundAmount,
+        amount: actualRefundAmount,
         details: { title, bounty_id: bountyIdStr, status: 'completed' },
       });
 

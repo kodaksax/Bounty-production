@@ -53,6 +53,55 @@ export const queuedOperationsService = {
         }
       }
 
+      case 'refund_escrow': {
+        // Payload should include either `escrowId` (payment_intent_id) or { bountyId, refundPercentage }
+        const { escrowId, bountyId, refundPercentage } = op.payload || {};
+
+        // Validate payload: require either escrowId OR (bountyId and refundPercentage)
+        const hasEscrowId = !!escrowId;
+        const hasBountyAndRefund =
+          !!bountyId && typeof refundPercentage === 'number' && Number.isFinite(refundPercentage);
+
+        if (!hasEscrowId && !hasBountyAndRefund) {
+          throw new Error(
+            'Invalid refund_escrow payload: must include escrowId or bountyId and refundPercentage'
+          );
+        }
+
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const token = sessionData.session?.access_token ?? undefined;
+
+          if (escrowId) {
+            const res = await paymentService.refundEscrow(escrowId, token);
+            if (!res || !res.success) throw new Error(res?.error?.message || 'Refund failed');
+            return true;
+          }
+
+          // Fallback: call server refund endpoint by bounty
+          const body = { bountyId, refundPercentage, idempotencyKey: op.idempotencyKey };
+          const resp = await fetch(`${API_BASE_URL}/wallet/refund`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify(body),
+          });
+
+          if (!resp.ok) {
+            const text = await resp.text().catch(() => '');
+            throw new Error(`Refund API failed: ${resp.status} ${text}`);
+          }
+
+          return true;
+        } catch (err: any) {
+          const baseMessage = err instanceof Error ? err.message : String(err);
+          const contextId = escrowId || bountyId || 'unknown';
+          throw new Error(`Refund operation failed for ${contextId}: ${baseMessage}`);
+        }
+      }
+
       default:
         throw new Error(`Unsupported queued operation: ${op.opType}`);
     }
