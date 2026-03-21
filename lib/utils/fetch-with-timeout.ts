@@ -194,6 +194,16 @@ export async function fetchWithTimeout(
 
       // If cancellation was triggered externally, do not retry — short-circuit
       if (abortedByExternalSignal) {
+        // Report to Sentry if available (best-effort)
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+          const Sentry = require('@sentry/react-native');
+          if (Sentry && typeof Sentry.captureException === 'function') {
+            Sentry.captureException(lastError);
+          }
+        } catch {
+          // ignore when Sentry is not available
+        }
         throw lastError;
       }
       if (!isLastAttempt && retryOn(null, lastError)) {
@@ -208,13 +218,41 @@ export async function fetchWithTimeout(
         continue;
       }
 
-      // No more retries, throw the error
+      // No more retries, report and throw the error
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+        const Sentry = require('@sentry/react-native');
+        if (Sentry && typeof Sentry.captureException === 'function') {
+          Sentry.captureException(lastError);
+        }
+      } catch {
+        // ignore when Sentry is not available
+      }
       throw lastError;
     }
   }
 
-  // Should not reach here, but handle edge case
-  throw lastError || new Error('Request failed after all retries');
+  // Should not reach here, but handle edge case — report if available
+  const fallbackError =
+    lastError ||
+    new Error(
+      `Request to ${url} failed after ${totalAttempts} attempts. ` +
+        `Retry configuration: maxRetries=${retryConfig.maxRetries}, ` +
+        `baseDelay=${retryConfig.baseDelay}ms, maxDelay=${retryConfig.maxDelay}ms, ` +
+        `backoffMultiplier=${retryConfig.backoffMultiplier}.` +
+        (abortedByExternalSignal ? ' Request was aborted by an external signal.' : '')
+    );
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+    // Dynamically require Sentry so this utility can be used without it in non-production environments
+    const Sentry = require('@sentry/react-native');
+    if (Sentry && typeof Sentry.captureException === 'function') {
+      Sentry.captureException(fallbackError);
+    }
+  } catch {
+    // ignore when Sentry not available
+  }
+  throw fallbackError;
 }
 
 /**
@@ -242,13 +280,24 @@ export async function fetchWithTimeoutOnly(
   } catch (error: any) {
     clearTimeout(timeoutId);
     
+    // Report to Sentry if available (best-effort)
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+      const Sentry = require('@sentry/react-native');
+      if (Sentry && typeof Sentry.captureException === 'function') {
+        Sentry.captureException(error);
+      }
+    } catch {
+      // ignore when Sentry not available
+    }
+
     // Convert AbortError to timeout error for clarity
     if (error.name === 'AbortError') {
       const timeoutError = new Error(`Network request timed out after ${timeout}ms`);
       timeoutError.name = 'TimeoutError';
       throw timeoutError;
     }
-    
+
     throw error;
   }
 }
