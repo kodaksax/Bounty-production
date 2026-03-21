@@ -619,56 +619,92 @@ app.get('/api/bounties', async (req, res) => {
   let conn;
   try {
     conn = await connect();
-    
+
     // Validate query parameters using Zod schema
     const validation = bountyFilterSchema.safeParse(req.query);
     if (!validation.success) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Invalid query parameters',
         details: validation.error.errors
       });
     }
-    
-    let query = 'SELECT * FROM bounties';
+
+    // Pagination params: cursor-based (created_at + id) and limit
+    const limitParam = parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 100) : 20;
+
+    const querySelect = `SELECT id, title, description, amount, category, poster_id, status, work_type, is_time_sensitive, deadline, created_at, username, avatar, location, average_rating, rating_count FROM bounties`;
     const conditions = [];
     const params = [];
-    
-    // Add filters
+
+    // Filters (index-friendly)
     if (validation.data.status) {
       conditions.push('status = ?');
       params.push(validation.data.status);
     }
-    
+
     // Accept either poster_id (preferred) or legacy user_id query param
     if (validation.data.poster_id) {
       conditions.push('poster_id = ?');
       params.push(validation.data.poster_id);
     } else if (validation.data.user_id) {
-      // Backwards compatibility: treat user_id as poster_id filter
       conditions.push('poster_id = ?');
       params.push(validation.data.user_id);
     }
-    
+
     if (validation.data.work_type) {
       conditions.push('work_type = ?');
       params.push(validation.data.work_type);
     }
-    
+
+    if (validation.data.category) {
+      conditions.push('category = ?');
+      params.push(validation.data.category);
+    }
+
+    // Simple text search (fallback, use full-text index in DB for better perf)
+    if (validation.data.q) {
+      const q = String(validation.data.q).toLowerCase();
+      conditions.push('(LOWER(title) LIKE ? OR LOWER(description) LIKE ?)');
+      params.push(`%${q}%`, `%${q}%`);
+    }
+
+    // Cursor pagination: expect cursor_created_at and cursor_id
+    if (validation.data.cursor_created_at && validation.data.cursor_id) {
+      conditions.push('(created_at < ? OR (created_at = ? AND id < ?))');
+      params.push(validation.data.cursor_created_at, validation.data.cursor_created_at, validation.data.cursor_id);
+    }
+
+    let query = querySelect;
     if (conditions.length > 0) {
       query += ' WHERE ' + conditions.join(' AND ');
     }
-    
-    query += ' ORDER BY created_at DESC';
-    
+
+    query += ' ORDER BY created_at DESC, id DESC LIMIT ?';
+    params.push(limit);
+
     const [rows] = await conn.execute(query, params);
-    
-    // Add mock distance for location-based bounties
-    const bountiesWithDistance = rows.map(bounty => ({
-      ...bounty,
-      distance: bounty.location ? Math.floor(Math.random() * 20) + 1 : undefined
+
+    // Minimal post-processing (keep payload small)
+    const bounties = rows.map(b => ({
+      id: b.id,
+      title: b.title,
+      description: b.description,
+      amount: b.amount,
+      category: b.category,
+      poster_id: b.poster_id,
+      status: b.status,
+      created_at: b.created_at,
+      username: b.username,
+      avatar: b.avatar,
+      location: b.location,
+      average_rating: b.average_rating,
+      rating_count: b.rating_count,
+      // keep legacy distance behavior if location exists
+      distance: b.location ? Math.floor(Math.random() * 20) + 1 : undefined
     }));
-    
-    res.json(bountiesWithDistance);
+
+    res.json({ data: bounties, meta: { limit, count: bounties.length } });
   } catch (error) {
     handleError(res, error, 'Failed to fetch bounties');
   } finally {
