@@ -258,6 +258,33 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     init();
   }, []); // Only run once on mount, not on every refresh change
 
+  // Reconcile wallet state when the offline queue changes (e.g., queued
+  // release/refund operations finished processing). The offline queue
+  // notifies listeners when items are added/removed or processing state
+  // changes. When the client is online, refresh from the API so local
+  // `transactions` and `balance` are authoritative and optimistic
+  // 'pending' statuses are updated.
+  useEffect(() => {
+    const unsubscribe = offlineQueueService.addListener(async () => {
+      if (!offlineQueueService.getOnlineStatus()) return;
+      try {
+        const token = await getAccessToken();
+        if (token) {
+          await refreshFromApi(token);
+        } else {
+          // Fallback to refreshing from local storage if no session
+          await refresh();
+        }
+      } catch (err) {
+        console.error('[wallet] Error reconciling after offline queue processed:', err);
+      }
+    });
+
+    return () => {
+      try { unsubscribe(); } catch (_) {}
+    };
+  }, [getAccessToken, refreshFromApi, refresh]);
+
   // Clear wallet data when the user signs out to prevent data leaks between users
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event) => {

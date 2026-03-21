@@ -299,6 +299,8 @@ class PaymentService {
         success: true,
         transferId: res.transferId,
         paymentIntentId: res.paymentIntentId,
+        platformFee: typeof res.platformFee === 'number' ? res.platformFee : undefined,
+        hunterAmount: typeof res.hunterAmount === 'number' ? res.hunterAmount : undefined,
       };
     } catch (error: any) {
       console.error('[PaymentService] Error releasing escrow:', error);

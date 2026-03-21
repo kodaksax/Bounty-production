@@ -1138,9 +1138,9 @@ class StripeService {
       const transferId = data.transferId || data.transfer?.id;
       const paymentIntentId = data.paymentIntentId || data.paymentIntent?.id;
 
-      await performanceService.endMeasurement('escrow_release', { success: true, transferId, paymentIntentId });
+      await performanceService.endMeasurement('escrow_release', { success: true, transferId, paymentIntentId, platformFee: data.platformFee, hunterAmount: data.hunterAmount });
 
-      return { transferId, paymentIntentId, status: data.status };
+      return { transferId, paymentIntentId, status: data.status, platformFee: data.platformFee, hunterAmount: data.hunterAmount };
     } catch (error) {
       console.error('[StripeService] Error releasing escrow:', error);
       await performanceService.endMeasurement('escrow_release', { success: false, error: String(error) });
