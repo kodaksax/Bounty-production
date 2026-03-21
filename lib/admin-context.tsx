@@ -102,7 +102,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!isSupabaseConfigured) return;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const ret = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT') {
         await setIsAdmin(false);
         // Reset admin tab visibility preference on sign out for all users.
@@ -116,8 +116,16 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
+    // Support different return shapes from Supabase SDK across versions
+    const maybeSub = ret as any;
+    const subscription = (maybeSub && maybeSub.data && maybeSub.data.subscription) || maybeSub.subscription || undefined;
+
     return () => {
-      subscription.unsubscribe();
+      try {
+        subscription?.unsubscribe?.();
+      } catch (e) {
+        // Swallow unsubscribe errors - best effort cleanup
+      }
     };
   }, []);
 

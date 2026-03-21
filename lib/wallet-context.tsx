@@ -259,7 +259,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Clear wallet data when the user signs out to prevent data leaks between users
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event) => {
+    const ret = supabase.auth.onAuthStateChange(async (event) => {
       if (event === 'SIGNED_OUT') {
         // Persist the cleared state first so that if a new user signs in before
         // the component re-initialises, SecureStore reflects the blank slate.
@@ -275,7 +275,18 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setTransactions([]);
       }
     });
-    return () => subscription.unsubscribe();
+
+    // Support different return shapes from Supabase SDK across versions
+    const maybeSub = ret as any;
+    const subscription = (maybeSub && maybeSub.data && maybeSub.data.subscription) || maybeSub.subscription || undefined;
+
+    return () => {
+      try {
+        subscription?.unsubscribe?.();
+      } catch (e) {
+        // Swallow unsubscribe errors - best effort cleanup
+      }
+    };
   }, []);
 
   const logTransaction = useCallback(async (tx: Omit<WalletTransactionRecord, 'id' | 'date'> & { date?: Date }) => {

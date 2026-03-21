@@ -188,10 +188,10 @@ export function startSessionMonitoring(): () => void {
  * Listen to Supabase auth state changes
  */
 export function setupAuthStateListener(): () => void {
-  const { data: { subscription } } = supabase.auth.onAuthStateChange(
+  const ret = supabase.auth.onAuthStateChange(
     async (event, session) => {
       logger.info('Auth state changed', { event });
-      
+
       if (event === 'SIGNED_OUT') {
         // Only trigger session expiration callback if this was NOT an intentional sign-out
         // Intentional sign-outs (user clicking "Log Out") handle their own notification
@@ -201,14 +201,21 @@ export function setupAuthStateListener(): () => void {
         // Clear the flag after processing
         clearIntentionalSignOut();
       }
-      
+
       if (event === 'TOKEN_REFRESHED' && session) {
         logger.info('Token refreshed automatically');
       }
     }
   );
-  
+
+  const maybeSub = ret as any;
+  const subscription = (maybeSub && maybeSub.data && maybeSub.data.subscription) || maybeSub.subscription || undefined;
+
   return () => {
-    subscription.unsubscribe();
+    try {
+      subscription?.unsubscribe?.();
+    } catch (e) {
+      // Swallow unsubscribe errors
+    }
   };
 }

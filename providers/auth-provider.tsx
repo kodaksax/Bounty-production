@@ -9,7 +9,7 @@ import { clearBountyDraftForUser } from '../app/hooks/useBountyDraft'
 import { analyticsService } from '../lib/services/analytics-service'
 import { authProfileService } from '../lib/services/auth-profile-service'
 import { getSentry } from '../lib/services/sentry-init'
-import { supabase } from '../lib/supabase'
+import { isSupabaseConfigured, supabase } from '../lib/supabase'
 
 type AuthData = {
   session: Session | null | undefined
@@ -240,6 +240,21 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     const fetchSession = async () => {
       setIsLoading(true)
       let sessionFound = false
+
+      // If Supabase isn't configured (e.g. running in a test or local dev without envs),
+      // avoid calling the client which may resolve to a stub/proxy and produce
+      // confusing errors like a primitive 'http://localhost' being reported.
+      if (!isSupabaseConfigured) {
+        reportWarning('[AuthProvider] Supabase not configured - skipping session fetch')
+        setSession(null)
+        try {
+          await authProfileService.setSession(null)
+        } catch (e) {
+          reportWarning('[AuthProvider] Profile service unavailable during session clear:', e)
+        }
+        setIsLoading(false)
+        return
+      }
 
       try {
         devLog('[AuthProvider] fetchSession START')
