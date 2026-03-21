@@ -227,6 +227,27 @@ function makeDeferredProxy(getReal: () => Promise<any>): any {
       // proxy object which some runtimes (undici) reject.
       if (prop === 'headers') return {};
 
+      // Support common array and object prototype methods so consumers can
+      // call them on deferred results (e.g. result.push(...)) without the
+      // proxy throwing. These are forwarded to the underlying resolved
+      // value once available.
+      const arrayMethods = [
+        'push', 'pop', 'shift', 'unshift', 'slice', 'splice', 'map', 'filter',
+        'forEach', 'find', 'reduce', 'includes', 'indexOf', 'concat', 'join'
+      ];
+      const objectMethods = ['hasOwnProperty', 'toJSON', 'valueOf', 'isPrototypeOf'];
+
+      if (typeof prop === 'string' && (arrayMethods.includes(prop) || objectMethods.includes(prop))) {
+        return (...args: any[]) =>
+          getReal().then((real: any) => {
+            if (real == null) return undefined;
+            const fn = (real as any)[prop];
+            if (typeof fn === 'function') return fn.apply(real, args);
+            // If property isn't a function, just return it (e.g., length)
+            return (real as any)[prop];
+          });
+      }
+
       // Provide some commonly-used methods synchronously so callers that
       // expect a function can call them immediately without awaiting the
       // deferred client. These return safe stubs until the real client is
