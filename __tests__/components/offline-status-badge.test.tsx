@@ -23,6 +23,7 @@ describe('OfflineStatusBadge Component', () => {
       pendingCount: 0,
       failedCount: 0,
       isOnline: true,
+      queue: [],
     });
 
     const { queryByText } = render(<OfflineStatusBadge />);
@@ -37,6 +38,7 @@ describe('OfflineStatusBadge Component', () => {
       pendingCount: 3,
       failedCount: 0,
       isOnline: false,
+      queue: [],
     });
 
     const { getByText } = render(<OfflineStatusBadge />);
@@ -49,6 +51,7 @@ describe('OfflineStatusBadge Component', () => {
       pendingCount: 5,
       failedCount: 0,
       isOnline: true,
+      queue: [],
     });
 
     const { getByText } = render(<OfflineStatusBadge />);
@@ -61,6 +64,7 @@ describe('OfflineStatusBadge Component', () => {
       pendingCount: 2,
       failedCount: 1,
       isOnline: true,
+      queue: [],
     });
 
     const { getByText } = render(<OfflineStatusBadge />);
@@ -73,6 +77,7 @@ describe('OfflineStatusBadge Component', () => {
       pendingCount: 10,
       failedCount: 3,
       isOnline: true,
+      queue: [],
     });
 
     const { getByText, queryByText } = render(<OfflineStatusBadge />);
@@ -87,6 +92,7 @@ describe('OfflineStatusBadge Component', () => {
       pendingCount: 1,
       failedCount: 0,
       isOnline: false,
+      queue: [],
     });
 
     const onPressMock = jest.fn();
@@ -101,6 +107,7 @@ describe('OfflineStatusBadge Component', () => {
       pendingCount: 7,
       failedCount: 0,
       isOnline: false,
+      queue: [],
     });
 
     const { getByText } = render(<OfflineStatusBadge />);

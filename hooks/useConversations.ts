@@ -11,6 +11,7 @@ interface UseConversationsResult {
   conversations: Conversation[];
   loading: boolean;
   isValidating: boolean;
+  isStale?: boolean;
   error: string | null;
   refresh: () => Promise<void>;
   markAsRead: (conversationId: string) => Promise<void>;
@@ -20,7 +21,6 @@ interface UseConversationsResult {
 
 export function useConversations(): UseConversationsResult {
   const currentUserId = getCurrentUserId();
-
   // Check if we have a valid authenticated user (not the fallback ID)
   const hasValidUser = !!(currentUserId && currentUserId !== '00000000-0000-0000-0000-000000000001');
 
@@ -40,7 +40,8 @@ export function useConversations(): UseConversationsResult {
     isValidating,
     error: fetchError,
     refetch,
-    setData: setCachedConversations
+    setData: setCachedConversations,
+    isStale,
   } = useCachedData<Conversation[]>(cacheKey, fetchFn, { enabled: hasValidUser });
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -140,6 +141,7 @@ export function useConversations(): UseConversationsResult {
     conversations,
     loading,
     isValidating,
+    isStale,
     error,
     refresh,
     markAsRead,

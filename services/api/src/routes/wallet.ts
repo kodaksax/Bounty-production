@@ -397,17 +397,25 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
 
       // Process Stripe transfer
       if (stripe && status.stripeAccountId) {
+        // Narrow types for TypeScript: capture into local non-optional constants
+        const destinationAcc: string = status.stripeAccountId;
+        const userIdStr: string = request.userId as string;
+
         try {
-          const transfer = await stripe.transfers.create({
-            amount: amountCents,
-            currency,
-            destination: status.stripeAccountId,
-            metadata: {
-              user_id: request.userId,
-              transaction_id: transaction.id,
-              type: 'withdrawal',
-            },
-          }, idempotencyKey ? { idempotencyKey } : {});
+          const { withStripeIdempotency } = await import('../services/stripe-safeguards');
+          const transfer = await withStripeIdempotency(
+            idempotencyKey || `withdraw_${transaction.id}`,
+            async (opts: any = {}) => stripe!.transfers.create({
+              amount: amountCents,
+              currency,
+              destination: destinationAcc,
+              metadata: {
+                user_id: userIdStr,
+                transaction_id: transaction.id,
+                type: 'withdrawal',
+              },
+            }, opts)
+          );
           transferId = transfer.id;
           console.log(`✅ Created Stripe transfer ${transfer.id} for $${amount}`);
         } catch (stripeError) {

@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { riskAssessmentCron } from './services/risk-assessment-cron';
 import { walletCleanupCron } from './services/wallet-cleanup-cron';
+import { reconciliationCron } from './services/reconciliation-cron';
 
 // Initialize OpenTelemetry FIRST - before any other modules
 // This must happen before importing instrumented modules
@@ -94,6 +95,7 @@ const { registerConsolidatedProfileRoutes } = require('./routes/consolidated-pro
 const { registerConsolidatedBountyRoutes } = require('./routes/consolidated-bounties');
 const { registerConsolidatedBountyRequestRoutes } = require('./routes/consolidated-bounty-requests');
 const { registerConsolidatedWebhookRoutes } = require('./routes/consolidated-webhooks');
+const { registerDisputeRoutes } = require('./routes/disputes');
 const { registerHealthRoutes } = require('./routes/health');
 const { registerMetricsRoutes } = require('./routes/metrics');
 const { registerMonitoringDashboardRoutes } = require('./routes/monitoring-dashboard');
@@ -245,6 +247,9 @@ const startServer = async () => {
 
   // Register consolidated webhook routes (Stripe events)
   await registerConsolidatedWebhookRoutes(fastify);
+
+  // Register dispute routes (evidence staging, upload proxy, transactional commit)
+  await registerDisputeRoutes(fastify);
 
   // Register risk management routes
   await fastify.register(riskManagementRoutes.default || riskManagementRoutes);
@@ -944,6 +949,13 @@ const start = async () => {
       console.warn('⚠️  Failed to start wallet cleanup cron:', cronErr);
     }
 
+      // Start reconciliation cron job
+      try {
+        reconciliationCron.start();
+        console.log('🕐 Reconciliation cron started');
+      } catch (cronErr) {
+        console.warn('⚠️  Failed to start reconciliation cron:', cronErr);
+      }
     // If Supabase mode is enabled, avoid pinging the Postgres pool (this
     // prevents ECONNRESET/ECONNREFUSED logs when legacy DB envs point at
     // a different DB type or closed port). Start the outbox worker and let

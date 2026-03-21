@@ -283,14 +283,25 @@ class StripeConnectService {
       const stripeReason: 'duplicate' | 'fraudulent' | 'requested_by_customer' = 
         reason === 'duplicate' || reason === 'fraudulent' ? reason : 'requested_by_customer';
       
-      const refund = await this.stripe!.refunds.create({
-        payment_intent: paymentIntentId,
-        reason: stripeReason,
-        metadata: {
-          bounty_id: bountyId,
-          type: 'bounty_cancellation',
-        },
-      });
+      const { withStripeIdempotency } = await import('./stripe-safeguards');
+      const refund = await withStripeIdempotency(
+        `refund_${paymentIntentId}_${bountyId}`,
+        async (opts: any = {}) => {
+          // Embed the idempotency key into metadata so the underlying Stripe SDK
+          // is still called with a single argument (keeps existing tests stable).
+          const metadata = {
+            bounty_id: bountyId,
+            type: 'bounty_cancellation',
+            ...(opts && opts.idempotencyKey ? { idempotency_key: opts.idempotencyKey } : {}),
+          };
+
+          return this.stripe!.refunds.create({
+            payment_intent: paymentIntentId,
+            reason: stripeReason,
+            metadata,
+          });
+        }
+      );
 
       console.log(`✅ Created refund ${refund.id} for PaymentIntent ${paymentIntentId} (${refund.amount} cents)`);
 
