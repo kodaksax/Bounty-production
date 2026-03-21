@@ -1,9 +1,9 @@
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
+import { reconciliationCron } from './services/reconciliation-cron';
 import { riskAssessmentCron } from './services/risk-assessment-cron';
 import { walletCleanupCron } from './services/wallet-cleanup-cron';
-import { reconciliationCron } from './services/reconciliation-cron';
 
 // Initialize OpenTelemetry FIRST - before any other modules
 // This must happen before importing instrumented modules
@@ -1024,4 +1024,13 @@ process.on('SIGINT', async () => {
   process.exit(0);
 });
 
-start();
+// Only start the server when this file is executed directly. This prevents
+// automatic startup (and background cron/interval tasks) when the module is
+// imported by tests, which can leave open handles and prevent Jest from
+// exiting.
+if (require.main === module) {
+  start().catch((err) => {
+    console.error('[startup] Failed to start server:', err);
+    process.exit(1);
+  });
+}
