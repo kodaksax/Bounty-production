@@ -3,6 +3,7 @@ import { analyticsService } from 'lib/services/analytics-service';
 import { bountyService as baseBountyService } from 'lib/services/bounty-service';
 import type { Bounty } from 'lib/services/database.types';
 import { performanceService } from 'lib/services/performance-service';
+import { offlineQueueService } from 'lib/services/offline-queue-service';
 import { isSupabaseConfigured, supabaseEnv } from 'lib/supabase';
 import { validateTitle } from 'lib/utils/bounty-validation';
 import { getCurrentUserId } from 'lib/utils/data-utils';
@@ -84,7 +85,31 @@ export const bountyService = {
         attachments: draft.attachments || [],
       };
 
-      // Call the base bounty service to create
+      // If offline, enqueue the bounty for later processing and return an optimistic temp object
+      const isOnline = offlineQueueService.getOnlineStatus();
+
+      if (!isOnline) {
+        // Generate a temporary id for optimistic UI
+        const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+        // Enqueue for background processing
+        try {
+          await offlineQueueService.enqueue('bounty', { bounty: payload, tempId });
+          // Track as queued
+          await analyticsService.trackEvent('bounty_queued', { hasAttachments: (draft.attachments?.length || 0) > 0 });
+        } catch (e) {
+          console.error('Failed to enqueue bounty for offline processing:', e);
+        }
+
+        // Return optimistic temp bounty so UI can proceed
+        return {
+          ...payload,
+          id: tempId,
+          created_at: new Date().toISOString(),
+        } as unknown as Bounty;
+      }
+
+      // Call the base bounty service to create when online
       const result = await baseBountyService.create(payload);
 
       if (!result) {

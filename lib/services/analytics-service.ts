@@ -17,6 +17,7 @@ export type AnalyticsEvent =
   | 'email_verified'
   // Bounty events
   | 'bounty_created'
+  | 'bounty_queued'
   | 'bounty_viewed'
   | 'bounty_accepted'
   | 'bounty_completed'

@@ -9,9 +9,13 @@ export type QueueItemType = 'bounty' | 'message';
 export interface QueueItem {
   id: string;
   type: QueueItemType;
+  // Timestamp of creation or last activity. This is updated when processing
+  // attempts occur so callers that show "last activity" can use the same field.
   timestamp: number;
   retryCount: number;
   data: BountyQueueData | MessageQueueData;
+  // Timestamp of the last processing attempt (used for backoff). 0 or undefined means never attempted.
+  lastAttempt?: number;
   status: 'pending' | 'processing' | 'failed';
   error?: string;
 }
@@ -46,13 +50,41 @@ class OfflineQueueService {
       this.isOnline = !!state.isConnected;
       
       // If we just came back online, process the queue
-      if (wasOffline && this.isOnline) {
-        this.processQueue();
-      }
+        if (wasOffline && this.isOnline) {
+          // Reset backoff timers for pending items so we attempt flush immediately
+          this.flushQueue();
+        }
     });
 
     // Load queue from storage on initialization
     this.loadQueue();
+  }
+
+  /**
+   * Reset backoff timers for pending items and trigger processing immediately.
+   * Useful when connectivity is restored and we want to flush queued actions.
+   */
+  async flushQueue() {
+    let changed = false;
+    const now = Date.now();
+    this.queue = this.queue.map(item => {
+      // Only touch items that are pending or failed (we may want to retry failed on reconnect)
+      if (item.status === 'pending' || item.status === 'failed') {
+        // Reset lastAttempt so backoff logic allows immediate attempt
+        changed = true;
+        return { ...item, lastAttempt: 0, status: 'pending', timestamp: now };
+      }
+      return item;
+    });
+
+    if (changed) {
+      await this.saveQueue();
+    }
+
+    // Kick off processing if online
+    if (this.isOnline) {
+      this.processQueue();
+    }
   }
 
   /**
@@ -124,6 +156,7 @@ class OfflineQueueService {
       id: `${type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       type,
       timestamp: Date.now(),
+      lastAttempt: 0,
       retryCount: 0,
       data,
       status: 'pending',
@@ -176,23 +209,29 @@ class OfflineQueueService {
       for (const item of pendingItems) {
         // Check if item has exceeded max retries
         if (item.retryCount >= MAX_RETRIES) {
-          item.status = 'failed';
-          item.error = 'Max retries exceeded';
-          console.error(`❌ Item ${item.id} failed: max retries exceeded`);
+              const failedAt = Date.now();
+              item.status = 'failed';
+              item.error = 'Max retries exceeded';
+              item.timestamp = failedAt;
+              console.error(`❌ Item ${item.id} failed: max retries exceeded`);
           continue;
         }
 
-        // Calculate backoff delay
+        // Calculate backoff delay based on last attempt (or allow immediate attempt if never tried)
         const backoffMs = INITIAL_BACKOFF_MS * Math.pow(2, item.retryCount);
-        const timeSinceLastAttempt = Date.now() - item.timestamp;
+        const lastAttemptAt = item.lastAttempt ?? 0;
+        const timeSinceLastAttempt = Date.now() - lastAttemptAt;
 
-        if (timeSinceLastAttempt < backoffMs) {
+        if (lastAttemptAt !== 0 && timeSinceLastAttempt < backoffMs) {
           // Too soon to retry, skip for now
           continue;
         }
 
-        // Mark as processing
+        // Mark as processing and record attempt time
+        const attemptAt = Date.now();
         item.status = 'processing';
+        item.lastAttempt = attemptAt;
+        item.timestamp = attemptAt;
         await this.saveQueue();
 
         try {
@@ -206,10 +245,12 @@ class OfflineQueueService {
           // Remove from queue on success
           this.queue = this.queue.filter(i => i.id !== item.id);
         } catch (error) {
-          // Mark as pending for retry
+          // Mark as pending for retry and record last attempt time
+          const attemptFailAt = Date.now();
           item.status = 'pending';
           item.retryCount++;
-          item.timestamp = Date.now();
+          item.lastAttempt = attemptFailAt;
+          item.timestamp = attemptFailAt;
           item.error = error instanceof Error ? error.message : 'Unknown error';
           console.error(`⚠️ Failed to process item ${item.id}, retry ${item.retryCount}/${MAX_RETRIES}:`, error);
         }
@@ -305,6 +346,9 @@ class OfflineQueueService {
     // Reset retry count and mark as pending
     item.status = 'pending';
     item.retryCount = 0;
+    // Allow immediate retry by clearing lastAttempt
+    item.lastAttempt = 0;
+    // Update timestamp to indicate retry/reset action
     item.timestamp = Date.now();
     item.error = undefined;
     

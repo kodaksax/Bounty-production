@@ -1,37 +1,53 @@
-import { useEffect, useState } from 'react';
-import { offlineQueueService, type QueueItem } from '../lib/services/offline-queue-service';
+import { useEffect, useState, useCallback } from 'react';
+import { offlineQueueService, type QueueItem, type QueueItemType } from 'lib/services/offline-queue-service';
 
 export function useOfflineQueue() {
-  const [queue, setQueue] = useState<QueueItem[]>([]);
-  const [isOnline, setIsOnline] = useState(true);
+  const [queue, setQueue] = useState<QueueItem[]>(() => offlineQueueService.getQueue());
+  const [isOnline, setIsOnline] = useState<boolean>(() => offlineQueueService.getOnlineStatus());
 
   useEffect(() => {
-    // Initial load
-    setQueue(offlineQueueService.getQueue());
-    setIsOnline(offlineQueueService.getOnlineStatus());
-
-    // Subscribe to queue changes
-    const unsubscribe = offlineQueueService.addListener(() => {
+    const unsub = offlineQueueService.addListener(() => {
       setQueue(offlineQueueService.getQueue());
       setIsOnline(offlineQueueService.getOnlineStatus());
     });
 
-    // offlineQueueService.addListener returns a function that may return a boolean (Set.delete return).
-    // Wrap it to ensure the cleanup callback returns void (useEffect expects void or a void-returning function).
+
+    // Wrap unsubscribe so cleanup returns void (listener removal returns boolean)
     return () => {
-      // Call unsubscribe and ignore its return value
-      try { unsubscribe(); } catch {}
+      try { unsub(); } catch (e) { /* ignore */ }
     };
+  }, []);
+
+  const pendingCount = queue.filter(i => i.status === 'pending' || i.status === 'processing').length;
+  const failedCount = queue.filter(i => i.status === 'failed').length;
+
+  const retryItem = useCallback(async (id: string) => {
+    return offlineQueueService.retryItem(id);
+  }, []);
+
+  const removeItem = useCallback(async (id: string) => {
+    return offlineQueueService.removeItem(id);
+  }, []);
+
+  const clearFailedItems = useCallback(async () => {
+    return offlineQueueService.clearFailedItems();
+  }, []);
+
+  const enqueue = useCallback(async (type: QueueItemType, data: any) => {
+    return offlineQueueService.enqueue(type, data);
   }, []);
 
   return {
     queue,
+    pendingCount,
+    failedCount,
     isOnline,
-    pendingCount: queue.filter(item => item.status === 'pending').length,
-    failedCount: queue.filter(item => item.status === 'failed').length,
-    hasPending: offlineQueueService.hasPendingItems(),
-    retryItem: (itemId: string) => offlineQueueService.retryItem(itemId),
-    removeItem: (itemId: string) => offlineQueueService.removeItem(itemId),
-    clearFailed: () => offlineQueueService.clearFailedItems(),
-  };
+    retryItem,
+    removeItem,
+    clearFailedItems,
+    enqueue,
+  } as const;
 }
+
+export default useOfflineQueue;
+
