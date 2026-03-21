@@ -6,8 +6,9 @@ import {
 } from './auth-session-storage';
 
 // Public env vars in Expo must be EXPO_PUBLIC_ prefixed.
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim() || '';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim() || '';
+// Fallback to standard SUPABASE_URL/ANON_KEY if Expo vars are missing during build.
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim() || process.env.SUPABASE_URL?.trim() || '';
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim() || '';
 
 export const isSupabaseConfigured = !!supabaseUrl && !!supabaseAnonKey;
 // Keep compatibility shape expected by callers (hasUrl/hasKey/mismatch).
@@ -28,12 +29,11 @@ let initPromise: Promise<void> | null = null;
 function validateSupabaseShape(obj: any): obj is SupabaseClient {
   try {
     if (!obj) return false;
-    // Basic, conservative checks: important methods / namespaces used by app
+    // Relaxed check: we strictly need .auth and .from, but don't strictly require .channel
+    // as it may optionally fail validation depending on how the runtime bundled the client.
     const hasFrom = typeof obj.from === 'function';
-    const hasRpc = typeof obj.rpc === 'function';
     const hasAuth = obj.auth && typeof obj.auth.onAuthStateChange === 'function';
-    const hasChannel = typeof (obj as any).channel === 'function' || typeof (obj as any).removeChannel === 'function';
-    return !!(hasFrom && hasRpc && hasAuth && hasChannel);
+    return !!(hasFrom && hasAuth);
   } catch {
     return false;
   }
@@ -214,7 +214,12 @@ function makeDeferredProxy(getReal: () => Promise<any>): any {
 
   const proxy = new Proxy(fn, {
     get(_t, prop) {
-      if (prop === 'then') return undefined;
+      if (prop === 'then') {
+        // Return a thenable that resolves the real object. This ensures that
+        // `await supabase.auth.getSession()` (and similar) unwraps the proxy
+        // to the final resolved value instead of returning the proxy itself.
+        return (resolve: any, reject: any) => getReal().then(resolve, reject);
+      }
       // Ensure primitive coercions work synchronously (avoid Symbol.toPrimitive
       // throwing when consumers coerce the proxy to string/number). If the
       // real object isn't available synchronously we'll return a stable
@@ -251,16 +256,18 @@ function makeDeferredProxy(getReal: () => Promise<any>): any {
       return makeDeferredProxy(() => getReal().then((r) => r[prop]));
     },
     apply(_t, thisArg, args) {
-      return getReal().then((real: any) => {
-        if (typeof real !== 'function') {
-          // If someone tried to call a non-function, return it.
-          return real;
-        }
-        const res = real.apply(thisArg, args);
-        // If the result is an object (builder), wrap it so chaining continues.
-        if (res && typeof res === 'object') return makeDeferredProxy(() => Promise.resolve(res));
-        return res;
-      });
+      // Return another deferred proxy for the result of the call immediately.
+      // This preserves Supabase's fluent builder pattern (chaining) while
+      // allowing the whole chain to be awaited at the end.
+      return makeDeferredProxy(() =>
+        getReal().then((real: any) => {
+          if (typeof real !== 'function') {
+            // If someone tried to call a non-function, return it.
+            return real;
+          }
+          return real.apply(thisArg, args);
+        })
+      );
     },
   });
 
@@ -286,6 +293,12 @@ if (isSupabaseConfigured) {
 } else {
   // eslint-disable-next-line no-console
   console.warn('[supabase] Not configured: missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY');
+  
+  const isDev = typeof __DEV__ !== 'undefined' ? __DEV__ : false;
+  if (!isDev) {
+    // eslint-disable-next-line no-console
+    console.error('CRITICAL: Supabase is not configured in a production build. Environment variables were likely not injected during the build process.');
+  }
 }
 
 export default supabase;
