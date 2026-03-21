@@ -2,6 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { cachedDataService, type CacheOptions } from '../lib/services/cached-data-service';
 import { logger } from '../lib/utils/error-logger';
 
+// Consider data stale on foreground if older than this (ms)
+const FOREGROUND_STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+
 export interface UseCachedDataResult<T> {
   data: T | null;
   isLoading: boolean;
@@ -83,6 +86,43 @@ export function useCachedData<T>(
       unsubscribeError();
     };
   }, [key, enabled]);
+
+  // Subscribe to app foreground events to detect stale cache and trigger revalidation
+  useEffect(() => {
+    if (!enabled) return;
+
+    if (typeof (cachedDataService as any).onForeground !== 'function') {
+      // Not available (e.g., in some test mocks); skip gracefully
+      return;
+    }
+
+    const unsubscribeForeground = (cachedDataService as any).onForeground(async (eventKey: string, meta: any) => {
+      try {
+        if (eventKey !== key) return;
+
+        if (!meta || typeof meta.age !== 'number') return;
+
+        // Mark stale if age exceeds threshold
+        if (meta.age > FOREGROUND_STALE_THRESHOLD_MS) {
+          setIsStale(true);
+
+          // If we're online, automatically revalidate
+          const online = cachedDataService.getOnlineStatus();
+          if (online) {
+            setIsValidating(true);
+            await fetchData(true);
+            setIsStale(false);
+          }
+        }
+      } catch (err) {
+        logger.error('Error handling foreground revalidation', { key, error: err });
+      }
+    });
+
+    return () => {
+      unsubscribeForeground();
+    };
+  }, [key, enabled, fetchData]);
 
   // Check online status periodically
   useEffect(() => {

@@ -6,6 +6,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
+import { AppState, AppStateStatus } from 'react-native';
 import { EventEmitter } from 'events';
 import { logger } from '../utils/error-logger';
 
@@ -13,6 +14,7 @@ const CACHE_PREFIX = 'cache_v1_';
 const CACHE_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 const REVALIDATION_EVENT = 'revalidated';
 const REVALIDATION_ERROR_EVENT = 'revalidation_error';
+const FOREGROUND_EVENT = 'foreground';
 
 // Cache keys for common data types
 export const CACHE_KEYS = {
@@ -46,6 +48,29 @@ class CachedDataService {
     NetInfo.addEventListener(state => {
       this.isOnline = !!state.isConnected;
     });
+    // Listen for app foreground events so consumers can revalidate stale cache
+    try {
+      AppState.addEventListener('change', (next: AppStateStatus) => {
+        if (next === 'active') {
+          // Emit a foreground event for all in-memory cache keys with their ages
+          for (const [key, entry] of this.memoryCache.entries()) {
+            const age = Date.now() - entry.timestamp;
+            try {
+              this.events.emit(FOREGROUND_EVENT, key, {
+                age,
+                timestamp: entry.timestamp,
+                expiresAt: entry.expiresAt,
+              });
+            } catch (err) {
+              logger.error('Failed to emit foreground event', { key, error: err });
+            }
+          }
+        }
+      });
+    } catch (err) {
+      // AppState may not be available in some test environments; ignore gracefully
+      logger.info('AppState not available; skipping foreground revalidation setup');
+    }
   }
 
   /**
@@ -59,6 +84,34 @@ class CachedDataService {
     };
     this.events.on(REVALIDATION_EVENT, handler);
     return () => this.events.off(REVALIDATION_EVENT, handler);
+  }
+
+  onForeground(callback: (key: string, meta: { age: number; timestamp: number; expiresAt: number }) => void): () => void {
+    const handler = (eventKey: string, meta: any) => {
+      callback(eventKey, meta);
+    };
+    this.events.on(FOREGROUND_EVENT, handler);
+    return () => this.events.off(FOREGROUND_EVENT, handler);
+  }
+
+  /**
+   * Return cache entry metadata (if available) for a key.
+   */
+  async getEntryMeta(key: string): Promise<CacheEntry<any> | null> {
+    // Check memory cache first (fast)
+    const mem = this.memoryCache.get(key);
+    if (mem) return mem;
+
+    try {
+      const cacheKey = this.getCacheKey(key);
+      const stored = await AsyncStorage.getItem(cacheKey);
+      if (!stored) return null;
+      const entry: CacheEntry<any> = JSON.parse(stored);
+      return entry;
+    } catch (err) {
+      logger.error('Error reading cache metadata', { key, error: err });
+      return null;
+    }
   }
 
   onRevalidationError(key: string, callback: (error: Error) => void): () => void {

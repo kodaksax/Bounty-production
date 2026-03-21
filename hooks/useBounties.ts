@@ -19,6 +19,7 @@ export interface BountiesState {
   bounties: Bounty[];
   loading: boolean;
   isValidating?: boolean;
+  isStale?: boolean;
   error: string | null;
 }
 
@@ -78,7 +79,8 @@ export function useBounties(options: UseBountiesOptions = {}): BountiesState & B
     isValidating,
     error: fetchError,
     refetch,
-    setData: setCachedBounties
+    setData: setCachedBounties,
+    isStale,
   } = useCachedData<Bounty[]>(cacheKey, fetchFn);
 
   const [bounties, setBounties] = useState<Bounty[]>([]);
@@ -243,6 +245,7 @@ export function useBounties(options: UseBountiesOptions = {}): BountiesState & B
     bounties,
     loading,
     isValidating,
+    isStale,
     error,
     refreshBounties,
     updateBountyStatus,
