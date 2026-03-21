@@ -467,16 +467,20 @@ export async function retryTransfer(
     await updateBalance(userId, -amount);
     
     // Create new Stripe transfer
-    const transfer = await stripe.transfers.create({
-      amount: Math.round(amount * 100), // Convert to cents
-      currency: 'usd',
-      destination: accountId,
-      metadata: {
-        user_id: userId,
-        transaction_id: transactionId,
-        retry_attempt: retryCount + 1,
-      },
-    });
+    const { withStripeIdempotency } = await import('./stripe-safeguards');
+    const transfer = await withStripeIdempotency(
+      `retry_transfer_${transactionId}_${retryCount + 1}`,
+      async (opts: any = {}) => stripe.transfers.create({
+        amount: Math.round(amount * 100), // Convert to cents
+        currency: 'usd',
+        destination: accountId,
+        metadata: {
+          user_id: userId,
+          transaction_id: transactionId,
+          retry_attempt: retryCount + 1,
+        },
+      }, opts)
+    );
     
     // Update transaction with new transfer ID and incremented retry count
     const { error: updateError } = await admin
