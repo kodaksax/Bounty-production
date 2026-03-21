@@ -15,6 +15,19 @@ export interface OperationQueueData {
  */
 export const queuedOperationsService = {
   async processQueuedOperation(op: OperationQueueData) {
+    // Helper: attempt to get supabase session token but don't wait indefinitely
+    const getSessionToken = async (timeoutMs = 2000): Promise<string | undefined> => {
+      try {
+        const sessionPromise = supabase.auth.getSession();
+        const timeout = new Promise(resolve => setTimeout(() => resolve({ data: { session: null } }), timeoutMs));
+        // Race to avoid hanging when supabase init blocks in test envs
+        const { data: sessionData } = (await Promise.race([sessionPromise, timeout]) as any) || { data: { session: null } };
+        return sessionData?.session?.access_token ?? undefined;
+      } catch {
+        return undefined;
+      }
+    };
+
     switch (op.opType) {
       case 'release_escrow': {
         // Payload should include either `escrowId` (payment_intent_id) or { bountyId, hunterId }
@@ -23,8 +36,7 @@ export const queuedOperationsService = {
         // Try using paymentService path which mirrors client logic and handles auth
         try {
           // Get access token if available
-          const { data: sessionData } = await supabase.auth.getSession();
-          const token = sessionData.session?.access_token ?? undefined;
+          const token = await getSessionToken();
 
           if (escrowId) {
             await paymentService.releaseEscrow(escrowId, token);
@@ -69,8 +81,7 @@ export const queuedOperationsService = {
         }
 
         try {
-          const { data: sessionData } = await supabase.auth.getSession();
-          const token = sessionData.session?.access_token ?? undefined;
+          const token = await getSessionToken();
 
           if (escrowId) {
             const res = await paymentService.refundEscrow(escrowId, token);
