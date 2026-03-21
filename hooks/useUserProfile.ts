@@ -18,6 +18,7 @@ interface UseUserProfileResult {
   profile: ProfileData | null;
   loading: boolean;
   isValidating: boolean;
+  isStale?: boolean;
   error: string | null;
   isComplete: boolean;
   completeness: ProfileCompleteness | null;
@@ -48,7 +49,8 @@ export function useUserProfile(): UseUserProfileResult {
     isValidating,
     error: fetchError,
     refetch,
-    setData: setCachedData
+    setData: setCachedData,
+    isStale,
   } = useCachedData<{ profile: ProfileData | null; completeness: ProfileCompleteness | null }>(
     cacheKey,
     fetchFn,
@@ -140,6 +142,7 @@ export function useUserProfile(): UseUserProfileResult {
     profile,
     loading,
     isValidating,
+    isStale,
     error,
     isComplete: completeness?.isComplete ?? false,
     completeness,

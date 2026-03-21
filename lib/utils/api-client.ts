@@ -109,6 +109,17 @@ export async function apiRequest<T>(
     // Handle network errors, timeouts, etc.
     logger.error('API request exception', { url, error });
 
+    // Report to Sentry if available (best-effort)
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+      const Sentry = require('@sentry/react-native');
+      if (Sentry && typeof Sentry.captureException === 'function') {
+        Sentry.captureException(error);
+      }
+    } catch {
+      // ignore when Sentry is not installed or not available in this runtime
+    }
+
     const userError = getUserFriendlyError(error);
 
     return {

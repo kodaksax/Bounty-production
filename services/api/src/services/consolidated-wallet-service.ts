@@ -23,6 +23,7 @@ import {
 } from '../middleware/error-handler';
 import { stripe } from './consolidated-payment-service';
 import { logger } from './logger';
+import { withStripeIdempotency } from './stripe-safeguards';
 
 // Initialize Supabase admin client (relaxed typing to avoid PostgREST `never` inference)
 let supabaseAdmin: SupabaseClient<any> | null = null;
@@ -501,9 +502,9 @@ export async function createWithdrawal(
       },
     };
 
-    const transfer = await stripe.transfers.create(
-      transferParams,
-      idempotencyKey ? { idempotencyKey } : {}
+    const transfer = await withStripeIdempotency(
+      effectiveIdempotencyKey,
+      async (opts: any = {}) => stripe.transfers.create(transferParams, opts)
     );
 
     // Update transaction with transfer ID and mark as completed
@@ -744,15 +745,18 @@ export async function releaseEscrow(
       .single();
 
     if (profile?.stripe_connect_account_id) {
-      const transfer = await stripe.transfers.create({
-        amount: Math.round(hunterAmount * 100),
-        currency: 'usd',
-        destination: profile.stripe_connect_account_id,
-        metadata: {
-          bounty_id: bountyId,
-          transaction_id: transaction.id,
-        },
-      }, idempotencyKey ? { idempotencyKey: `tr_${idempotencyKey}` } : {});
+      const transfer = await withStripeIdempotency(
+        `tr_${effectiveIdempotencyKey}`,
+        async (opts: any = {}) => stripe.transfers.create({
+          amount: Math.round(hunterAmount * 100),
+          currency: 'usd',
+          destination: profile.stripe_connect_account_id,
+          metadata: {
+            bounty_id: bountyId,
+            transaction_id: transaction.id,
+          },
+        }, opts)
+      );
 
       // Update transaction with transfer ID
       await admin
