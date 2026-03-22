@@ -9,6 +9,9 @@ const verboseClientLogs = process.env.EXPO_PUBLIC_LOG_CLIENT_VERBOSE === '1';
 type LogLevel = 'info' | 'warn' | 'error'
 
 export async function logClientError(message: string, metadata?: Record<string, any>) {
+  // In test environments avoid emitting async logs which can run after
+  // Jest has finished and cause "Cannot log after tests are done".
+  if (process.env.NODE_ENV === 'test') return;
   const now = Date.now();
   const isDuplicate = !verboseClientLogs && message === lastError.message && (now - lastError.time) < DEDUPE_WINDOW_MS;
   lastError.message = message; lastError.time = now;
@@ -40,6 +43,8 @@ export async function logClientError(message: string, metadata?: Record<string, 
 }
 
 export async function logClientInfo(message: string, metadata?: Record<string, any>) {
+  // No-op during tests to avoid async console logs interfering with Jest
+  if (process.env.NODE_ENV === 'test') return;
   const now = Date.now();
   const isDuplicate = !verboseClientLogs && message === lastInfo.message && (now - lastInfo.time) < DEDUPE_WINDOW_MS;
   lastInfo.message = message; lastInfo.time = now;
