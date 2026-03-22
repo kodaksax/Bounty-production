@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import 'react-native-url-polyfill/auto';
+// Polyfill is now imported in index.js to ensure it's loaded as early as possible
 import {
     createAuthSessionStorageAdapter,
     getRememberMePreference,
@@ -68,6 +68,9 @@ async function initSupabase(): Promise<void> {
       detectSessionInUrl: false,
     },
   });
+  if (__DEV__) {
+    console.log('[supabase] Real client initialized successfully');
+  }
 
   // Validate the runtime shape of the created client. If it doesn't match the
   // minimal shape our code expects, fall back to the chainable stub client so
@@ -150,8 +153,8 @@ function makeStubClient(): any {
   // Chainable proxy for stub (so calls like supabase.from(...).select() work)
   const handler: ProxyHandler<any> = {
     get(_t, prop) {
-      if (prop === Symbol.toPrimitive) return () => 'http://localhost';
-      if (prop === 'toString' || prop === 'valueOf') return () => 'http://localhost';
+      if (prop === Symbol.toPrimitive) return () => supabaseUrl || 'http://localhost';
+      if (prop === 'toString' || prop === 'valueOf') return () => supabaseUrl || 'http://localhost';
       if (prop in terminal) return (terminal as any)[prop];
       return () => makeStubClient();
     },
@@ -163,126 +166,126 @@ function makeStubClient(): any {
   return new Proxy(() => Promise.resolve(noopResult), handler);
 }
 
-// Build a deferred, chainable proxy that wraps an async provider for the
-// real object. This supports chainable usage like `supabase.from('x').select()`
-// by returning proxies for intermediate builder objects.
 /**
- * Creates a proxy around an asynchronously-resolved "real" object (e.g. the
- * Supabase client or one of its query/builder instances) while preserving
- * Supabase's fluent API shape.
- *
- * This implements a **deferred initialization** pattern: callers can eagerly
- * write chains such as `supabase.from('bounties').select('*')` even when the
- * underlying client is not yet available. Each property access and function
- * call is represented as another proxy layer which only resolves `getReal()`
- * at the point a value is actually needed.
- *
- * How this keeps the builder pattern working:
- * - Property access (`.from`, `.select`, etc.) is trapped by `get` and
- *   returns another deferred proxy that, once `getReal()` resolves, reads the
- *   corresponding property from the real object.
- * - Method calls are trapped by `apply` and forwarded to the resolved real
- *   function. If that call returns another builder object (the usual pattern
- *   in Supabase's query API), the result is wrapped in a new deferred proxy so
- *   that chaining (`.from().select().eq()...`) continues to work.
- *
- * Why both traps are needed:
- * - `get` handles *reading* properties and building the next step in the
- *   chain without executing anything immediately.
- * - `apply` handles *calling* functions and ensures that any returned builder
- *   objects are also proxied, maintaining compatibility with Supabase's
- *   fluent API all the way to the terminal async call.
- *
- * The special-case for `then` in the `get` trap avoids the proxy being
- * mistaken for a Promise/thenable, which would otherwise cause unexpected
- * Promise chaining behavior when used with `await` or native Promise helpers.
- *
- * @param getReal Async provider that resolves to the real underlying object.
- * @returns A Proxy that lazily resolves to the real object while supporting
- *          Supabase-style chained method calls.
+ * Creates a proxy around an asynchronously-resolved "real" object while
+ * preserving Supabase's fluent API shape.
+ * 
+ * DESIGN:
+ * 1. Maintains a direct reference to the real target once resolved to avoid "proxy of proxy" chains.
+ * 2. Caches sub-property proxies (like .auth) to ensure stable object identity.
+ * 3. Correctly preserves `this` context for SDK methods.
  */
-function makeDeferredProxy(getReal: () => Promise<any>): any {
-  const fn = function (..._args: any[]) {
-    return getReal().then((real: any) => {
-      if (typeof real === 'function') {
-        return real.apply(null, _args);
-      }
-      // If the real is not callable, return it directly.
-      return real;
-    });
-  };
+function makeDeferredProxy<T extends object>(
+  getRealTarget: () => Promise<T>,
+  path: string = 'supabase'
+): T {
+  let resolvedTarget: T | null = null;
+  const taskQueue: Array<() => void> = [];
+  const propertyCache = new Map<string | symbol, any>();
 
-  const proxy = new Proxy(fn, {
-    get(_t, prop) {
-      if (prop === 'then') {
-        // Return a thenable that resolves the real object. This ensures that
-        // `await supabase.auth.getSession()` (and similar) unwraps the proxy
-        // to the final resolved value instead of returning the proxy itself.
-        return (resolve: any, reject: any) => getReal().then(resolve, reject);
-      }
-      // Ensure primitive coercions work synchronously (avoid Symbol.toPrimitive
-      // throwing when consumers coerce the proxy to string/number). If the
-      // real object isn't available synchronously we'll return a stable
-      // primitive placeholder so coercion doesn't throw.
-      if (prop === Symbol.toPrimitive) return (_hint: any) => 'http://localhost';
-      if (prop === 'toString' || prop === 'valueOf') return () => 'http://localhost';
-
-      // Provide a safe, plain-object `headers` synchronously so callers like
-      // `new Headers(headers)` receive a valid HeadersInit instead of a
-      // proxy object which some runtimes (undici) reject.
-      if (prop === 'headers') return {};
-
-      // Provide some commonly-used methods synchronously so callers that
-      // expect a function can call them immediately without awaiting the
-      // deferred client. These return safe stubs until the real client is
-      // available.
-      if (prop === 'channel') {
-        return (...args: any[]) => {
-          try {
-            return makeStubClient().channel(...args);
-          } catch {
-            return makeStubClient().channel(...args);
-          }
-        };
-      }
-
-      if (prop === 'removeChannel') {
-        return async (_ch: any) => {
-          // no-op until real client is ready
-          return;
-        };
-      }
-
-      return makeDeferredProxy(() => getReal().then((r) => r[prop]));
-    },
-    apply(_t, thisArg, args) {
-      // Return another deferred proxy for the result of the call immediately.
-      // This preserves Supabase's fluent builder pattern (chaining) while
-      // allowing the whole chain to be awaited at the end.
-      return makeDeferredProxy(() =>
-        getReal().then((real: any) => {
-          if (typeof real !== 'function') {
-            // If someone tried to call a non-function, return it.
-            return real;
-          }
-          return real.apply(thisArg, args);
-        })
-      );
-    },
+  // Start initialization immediately
+  getRealTarget().then((target) => {
+    resolvedTarget = target;
+    if (__DEV__) console.log(`[supabase] Proxy at "${path}" resolved to real target`);
+    
+    // Process any tasks that were queued while we were initializing
+    while (taskQueue.length > 0) {
+      const task = taskQueue.shift();
+      if (task) task();
+    }
   });
 
-  return proxy;
+  return new Proxy({} as T, {
+    get(_t, prop) {
+      // 1. Direct access to resolved target if available
+      if (resolvedTarget) {
+        const val = (resolvedTarget as any)[prop];
+        if (typeof val === 'function') {
+          return (...args: any[]) => val.apply(resolvedTarget, args);
+        }
+        return val;
+      }
+
+      // 2. Fundamental properties needed by JS engine/v8
+      if (prop === Symbol.toPrimitive) return (_hint: any) => path;
+      if (prop === 'toString' || prop === 'valueOf') return () => path;
+      
+      // 3. Special handling for Promise-like `then` to allow awaiting the proxy itself
+      if (prop === 'then') {
+        return (resolve: any, reject: any) => getRealTarget().then(resolve, reject);
+      }
+
+      // 4. Placeholder headers for initial boot
+      if (prop === 'headers') {
+        const headers = realSupabase 
+          ? (realSupabase as any).headers 
+          : { apikey: supabaseAnonKey, Authorization: `Bearer ${supabaseAnonKey}` };
+        return headers;
+      }
+
+      // 5. Check cache for sub-properties (like .auth, .from, etc.)
+      if (propertyCache.has(prop)) return propertyCache.get(prop);
+
+      // 6. Special handling for known methods to return functional proxies immediately
+      if (prop === 'from' || prop === 'channel') {
+        const subProxy = (...args: any[]) => {
+          return makeDeferredProxy(async () => {
+            const target = await getRealTarget();
+            return (target as any)[prop](...args);
+          }, `${path}.${String(prop)}(...)`);
+        };
+        propertyCache.set(prop, subProxy);
+        return subProxy;
+      }
+
+      // 7. Return a stable deferred proxy for the sub-property
+      const subProxy = makeDeferredProxy(
+        async () => {
+          const target = await getRealTarget();
+          return (target as any)[prop];
+        },
+        `${path}.${String(prop)}`
+      );
+      
+      propertyCache.set(prop, subProxy);
+      return subProxy;
+    },
+
+    apply(_t, _thisArg, args) {
+      if (resolvedTarget && typeof resolvedTarget === 'function') {
+        return (resolvedTarget as any).apply(resolvedTarget, args);
+      }
+
+      // If not resolved, return a Promise that resolves to the result of the call
+      return new Promise((resolve, reject) => {
+        const executeCall = async () => {
+          try {
+            const target = await getRealTarget();
+            if (typeof target !== 'function') {
+              throw new Error(`Target at ${path} is not a function`);
+            }
+            // Use the target itself as the `this` context for SDK compliance
+            resolve((target as any).apply(target, args));
+          } catch (err) {
+            reject(err);
+          }
+        };
+
+        if (resolvedTarget) {
+          executeCall();
+        } else {
+          taskQueue.push(executeCall);
+        }
+      });
+    }
+  });
 }
 
 // Exported supabase object — a deferred proxy that preserves chainability.
-export const supabase: SupabaseClient = makeDeferredProxy(() =>
-  ensureInit().then(() => {
-    // If initialization completed but real client isn't available (envs
-    // missing or init failed), return a stub client so callers still get a
-    // chainable object instead of a thrown error.
-    return realSupabase ?? makeStubClient();
-  })
-) as unknown as SupabaseClient;
+export const supabase: SupabaseClient = makeDeferredProxy(async () => {
+  await ensureInit();
+  return realSupabase ?? makeStubClient();
+}) as unknown as SupabaseClient;
 
 // Kick off initialization in background when configured to make first access faster.
 if (isSupabaseConfigured) {

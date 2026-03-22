@@ -1,3 +1,4 @@
+import 'react-native-url-polyfill/auto';
 import { registerRootComponent } from 'expo';
 import { ExpoRoot } from 'expo-router';
 import 'react-native-gesture-handler';

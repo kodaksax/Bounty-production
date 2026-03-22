@@ -168,9 +168,7 @@ export default function Index() {
       // No session: user should see sign-in form
       // Reset navigation flag to allow navigation after sign-in
       hasNavigatedRef.current = false
-      if (__DEV__) {
-        console.log('[index] No session found, showing sign-in form')
-      }
+      // No session found, showing sign-in form
     }
 
     return () => {

@@ -378,7 +378,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       // events that occur while the initial session fetch is in progress.
       // We rely on the subsequent logic (profile sync + timers) to be idempotent.
 
-      devLog('[AuthProvider] Auth state changed:', { event: _event, session: session ? 'present' : 'null' })
+      // devLog('[AuthProvider] Auth state changed:', { event: _event, session: session ? 'present' : 'null' })
       
       if (!isMountedRef.current) return
       
@@ -391,6 +391,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
 
       // If a different user is signing in, clear previous user's persisted data
       if (_event === 'SIGNED_IN' && incomingUserId) {
+        if (__DEV__flag) console.log('[AuthProvider] SIGNED_IN detected, running user cleanup');
         const prevUser = previousUserIdRef.current ?? outgoingUserId
         if (prevUser && prevUser !== incomingUserId) {
           try {
