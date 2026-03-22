@@ -94,12 +94,15 @@ class WebSocketAdapter {
             if (!this.intentionalDisconnect) {
               this.emit('disconnect', {});
               // Attempt automatic reconnect after a short delay.
-              setTimeout(() => {
-                if (!this.intentionalDisconnect) {
-                  this.appChannel = null;
-                  this.connect();
-                }
-              }, RECONNECT_DELAY_MS);
+                      const _t = setTimeout(() => {
+                        if (!this.intentionalDisconnect) {
+                          this.appChannel = null;
+                          this.connect();
+                        }
+                      }, RECONNECT_DELAY_MS);
+                      if (typeof (_t as any)?.unref === 'function') {
+                        try { (_t as any).unref(); } catch { /* ignore */ }
+                      }
             }
           }
         });
@@ -248,10 +251,13 @@ class WebSocketAdapter {
 
   reconnect(): void {
     this.disconnect();
-    setTimeout(() => {
+    const _t = setTimeout(() => {
       this.intentionalDisconnect = false;
       this.connect();
     }, 100);
+    if (typeof (_t as any)?.unref === 'function') {
+      try { (_t as any).unref(); } catch { /* ignore */ }
+    }
   }
 }
 
