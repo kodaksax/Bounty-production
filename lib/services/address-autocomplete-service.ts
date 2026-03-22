@@ -75,7 +75,8 @@ class AddressAutocompleteService {
                   null;
     
     if (!this.apiKey) {
-      console.error('Google Places API key not configured. Address autocomplete will be disabled.');
+      // Non-blocking: warn that the feature is unavailable, but do not throw.
+      console.warn('Google Places API key not configured. Address autocomplete will be disabled.');
     }
   }
 
@@ -181,16 +182,17 @@ class AddressAutocompleteService {
       } else if (data.status === 'ZERO_RESULTS') {
         return [];
       } else {
-        // Log error status for debugging but don't expose API error message to prevent information leakage
-        console.error('Places API error:', data.status);
+        // Non-blocking: log a warning and return empty suggestions instead of throwing
+        console.warn('Places API returned non-OK status:', data.status);
         if (__DEV__) {
-          console.error('Places API error details (dev only):', data.error_message);
+          console.warn('Places API warning details (dev only):', data.error_message);
         }
-        throw new Error('Unable to fetch address suggestions. Please try again later.');
+        return [];
       }
     } catch (error) {
-      console.error('Error fetching address suggestions:', error);
-      throw error;
+      // Non-blocking: log and return empty list so callers don't have to handle exceptions
+      console.error('Error fetching address suggestions (network/error):', error);
+      return [];
     }
   }
 
@@ -261,19 +263,19 @@ class AddressAutocompleteService {
           components,
         };
       } else if (data.status === 'NOT_FOUND') {
-        // Handle NOT_FOUND status specifically
-        console.error('Place not found:', sanitizedPlaceId);
+        // Handle NOT_FOUND status specifically (non-blocking)
+        console.warn('Place not found:', sanitizedPlaceId);
         return { error: 'Place not found', details: null };
       } else {
-        // Log error status for debugging but don't expose API error message
-        console.error('Place details API error:', data.status);
+        // Non-blocking: warn and return an error-shaped response rather than throwing
+        console.warn('Place details API returned non-OK status:', data.status);
         if (__DEV__) {
-          console.error('Place details API error details (dev only):', data.error_message);
+          console.warn('Place details API warning details (dev only):', data.error_message);
         }
         return { error: 'Unable to fetch place details', details: null };
       }
     } catch (error: any) {
-      console.error('Error fetching place details:', error);
+      console.error('Error fetching place details (network/error):', error);
       return { error: 'Network error occurred', details: null };
     }
   }
