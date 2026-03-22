@@ -133,6 +133,10 @@ export function useCachedData<T>(
 
     // Register interval for test cleanup
     if (process.env.NODE_ENV === 'test') {
+      const _i = interval as any
+      if (typeof _i?.unref === 'function') {
+        try { _i.unref(); } catch { /* ignore */ }
+      }
       ;(globalThis as any).__BACKGROUND_INTERVALS = (globalThis as any).__BACKGROUND_INTERVALS || []
       ;(globalThis as any).__BACKGROUND_INTERVALS.push(interval)
     }

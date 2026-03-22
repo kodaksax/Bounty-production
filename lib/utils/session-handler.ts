@@ -172,6 +172,10 @@ export function startSessionMonitoring(): () => void {
 
   // Register interval for test cleanup
   if (process.env.NODE_ENV === 'test') {
+    const _i = intervalId as any
+    if (typeof _i?.unref === 'function') {
+      try { _i.unref(); } catch { /* ignore */ }
+    }
     ;(globalThis as any).__BACKGROUND_INTERVALS = (globalThis as any).__BACKGROUND_INTERVALS || []
     ;(globalThis as any).__BACKGROUND_INTERVALS.push(intervalId)
   }
