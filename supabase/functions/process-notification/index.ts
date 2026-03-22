@@ -2,8 +2,8 @@
 // POST { id: '<outbox-uuid>' }
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { normalizeRecipients } from './recipients'
-import { createMessages } from './message'
+import { normalizeRecipients } from './recipients.ts'
+import { createMessages } from './message.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -40,9 +40,14 @@ Deno.serve(async (req: Request) => {
     if (req.method !== 'POST') return jsonResponse({ error: 'Invalid method' }, 405)
 
     let payload: any
-    try { payload = await req.json() } catch (e) { return jsonResponse({ error: 'Invalid JSON' }, 400) }
+    try { 
+      payload = await req.json();
+    } catch (e) { 
+      return jsonResponse({ error: 'Invalid JSON' }, 400);
+    }
 
-    const id = sanitizeUuid(payload.id)
+    // Support both direct {id} and Supabase Webhook {record: {id}} formats
+    const id = sanitizeUuid(payload.record?.id || payload.id);
 
     // Fetch outbox row
     const { data: rows, error: fetchErr } = await supabaseAdmin

@@ -7,7 +7,7 @@ import { sendPushViaEdge } from './supabase-edge-client';
 // Initialize Expo SDK
 const expo = new Expo();
 
-export type NotificationType = 'application' | 'acceptance' | 'rejection' | 'completion' | 'payment' | 'message' | 'follow' | 'cancellation' | 'stale_bounty' | 'stale_bounty_cancelled' | 'stale_bounty_reposted';
+export type NotificationType = 'application' | 'acceptance' | 'rejection' | 'completion' | 'payment' | 'message' | 'follow' | 'cancellation' | 'stale_bounty' | 'stale_bounty_cancelled' | 'stale_bounty_reposted' | 'review_needed';
 
 export interface CreateNotificationParams {
   userId: string;
@@ -57,6 +57,8 @@ export class NotificationService {
         case 'completion':
         case 'cancellation':
           return pref.completions_enabled;
+        case 'review_needed':
+          return pref.reminders_enabled || pref.completions_enabled;
         case 'payment':
           return pref.payments_enabled;
         case 'message':
@@ -560,6 +562,26 @@ export class NotificationService {
       title: 'Revision Requested',
       body: `The poster requested changes to "${bountyTitle}". Check the feedback and resubmit.`,
       data: { bountyId, feedback, isRevision: true },
+    });
+  }
+
+  async notifyBountyReadyForReview(posterId: string, bountyId: string, bountyTitle: string) {
+    return this.createNotification({
+      userId: posterId,
+      type: 'review_needed',
+      title: 'Review Needed',
+      body: `A hunter has marked "${bountyTitle}" as ready for review.`,
+      data: { bountyId },
+    });
+  }
+
+  async notifyBountyApproved(hunterId: string, bountyId: string, bountyTitle: string) {
+    return this.createNotification({
+      userId: hunterId,
+      type: 'completion',
+      title: 'Work Approved! 🎉',
+      body: `Excellent work! Your submission for "${bountyTitle}" has been approved.`,
+      data: { bountyId },
     });
   }
 

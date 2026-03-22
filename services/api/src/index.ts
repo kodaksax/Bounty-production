@@ -81,6 +81,7 @@ const { registerMessagingRoutes } = require('./routes/messaging');
 const { registerStaleBountyRoutes } = require('./routes/stale-bounty');
 const { registerPaymentRoutes } = require('./routes/payments');
 const { bountyService } = require('./services/bounty-service');
+const { notificationService } = require('./services/notification-service');
 const { outboxWorker } = require('./services/outbox-worker');
 const { realtimeService } = require('./services/realtime-service');
 const { wsMessagingService } = require('./services/websocket-messaging-service');
@@ -554,6 +555,17 @@ fastify.post('/bounties/:bountyId/ready', {
     }
 
     logger.info('Bounty marked ready for review', { bountyId, userId: request.userId });
+
+    // Notify the poster
+    try {
+      const posterId = bounty.creator_id;
+      if (posterId) {
+        await notificationService.notifyBountyReadyForReview(posterId, bountyId, bounty.title);
+      }
+    } catch (notifErr) {
+      logger.error('Failed to send ready notification', { bountyId, error: notifErr instanceof Error ? notifErr.message : String(notifErr) });
+    }
+
     return {
       message: 'Bounty marked ready successfully',
       data: {
@@ -641,6 +653,15 @@ fastify.post('/bounties/:bountyId/approve', {
 
     logger.info('Bounty completion approved', { bountyId, userId: request.userId, rating });
 
+    // Notify the hunter
+    try {
+      if (bounty.hunter_id) {
+        await notificationService.notifyBountyApproved(bounty.hunter_id, bountyId, bounty.title);
+      }
+    } catch (notifErr) {
+      logger.error('Failed to send approval notification', { bountyId, error: notifErr instanceof Error ? notifErr.message : String(notifErr) });
+    }
+
     return {
       message: 'Bounty completion approved successfully',
       bountyId,
@@ -690,6 +711,15 @@ fastify.post('/bounties/:bountyId/request-changes', {
     };
 
     logger.info('Revision requested for bounty', { bountyId, userId: request.userId });
+
+    // Notify the hunter
+    try {
+      if (bounty.hunter_id) {
+        await notificationService.notifyRevisionRequest(bounty.hunter_id, bountyId, bounty.title, feedback);
+      }
+    } catch (notifErr) {
+      logger.error('Failed to send revision notification', { bountyId, error: notifErr instanceof Error ? notifErr.message : String(notifErr) });
+    }
 
     return {
       message: 'Revision request sent successfully',

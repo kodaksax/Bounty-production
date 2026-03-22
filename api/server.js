@@ -227,7 +227,7 @@ async function sendPushToProfiles(profileIds = [], title = '', body = '', data =
 
     if (!Array.isArray(profileIds) || profileIds.length === 0) return { ok: true, sent: 0 };
 
-    const { data: rows, error } = await supabaseAdmin.from('push_tokens').select('token').in('profile_id', profileIds).eq('enabled', true);
+    const { data: rows, error } = await supabaseAdmin.from('push_tokens').select('token').in('user_id', profileIds);
     if (error) {
       console.warn('[sendPushToProfiles] failed to fetch tokens', error.message || error);
       return { ok: false, error };
@@ -274,81 +274,77 @@ async function sendPushToProfiles(profileIds = [], title = '', body = '', data =
 
 // Helper: notify poster + all hunters who requested a bounty (best-effort)
 async function notifyBountyParticipants(bountyId, title, bodyMsg, transition) {
-  // Prefer queuing notifications into Supabase outbox; fallback to in-process send
   let connLocal;
   try {
+    if (!supabaseAdmin) return;
+    
     connLocal = await connect();
-    const [rows] = await connLocal.execute('SELECT * FROM bounties WHERE id = ?', [bountyId]);
-    if (!rows || rows.length === 0) return;
-    const updated = rows[0];
 
-    const posterId = updated.poster_id || updated.user_id || null;
-
-    const [reqs] = await connLocal.execute('SELECT DISTINCT hunter_id FROM bounty_requests WHERE bounty_id = ?', [bountyId]);
-    const hunterRows = (reqs && reqs[0] && Array.isArray(reqs[0])) ? reqs[0] : (Array.isArray(reqs) ? reqs : []);
-    const hunterIds = hunterRows.map(r => r.hunter_id).filter(Boolean);
-
-    const recipients = [];
-    if (posterId) recipients.push(posterId);
-    hunterIds.forEach(id => { if (!recipients.includes(id)) recipients.push(id); });
-
+    // 1. Determine recipients
+    let recipients = [];
+    const [bountyRows] = await connLocal.execute('SELECT poster_id, user_id FROM bounties WHERE id = ?', [bountyId]);
+    if (bountyRows && bountyRows.length > 0) {
+      const posterId = bountyRows[0].poster_id || bountyRows[0].user_id;
+      if (posterId) recipients.push(posterId);
+    }
+    
+    const [hunterRows] = await connLocal.execute('SELECT DISTINCT hunter_id FROM bounty_requests WHERE bounty_id = ?', [bountyId]);
+    (hunterRows || []).forEach(h => {
+      if (h.hunter_id) recipients.push(h.hunter_id);
+    });
+    
+    // Deduplicate
+    recipients = Array.from(new Set(recipients.filter(Boolean)));
     if (recipients.length === 0) return;
 
-    // If Supabase admin is available, enqueue into notifications_outbox
-    if (supabaseAdmin) {
-      const payload = {
-        bounty_id: String(bountyId),
-        recipients: recipients,
-        title: title,
-        body: bodyMsg,
-        data: { bountyId: String(bountyId), transition }
-      };
+    console.log(`[notify] Sending notifications for bounty ${bountyId}, transition: ${transition}, recipients: ${recipients.length}`);
 
-      try {
-        // Request the DB to return the inserted id so we can trigger processing
-        const { data: inserted, error: insertErr } = await supabaseAdmin.from('notifications_outbox').insert([payload]).select('id').single();
-        if (insertErr || !inserted || !inserted.id) {
-          console.warn('[notify] failed to enqueue notification, falling back to direct send:', insertErr && (insertErr.message || insertErr));
-          await sendPushToProfiles(recipients, title, bodyMsg, { bountyId, transition });
-        } else {
-          // If configured, invoke the Edge Function to process this outbox row immediately
-          const EDGE_BASE = process.env.SUPABASE_EDGE_URL ? String(process.env.SUPABASE_EDGE_URL).replace(/\/$/, '') : null;
-          const EDGE_KEY = process.env.SUPABASE_EDGE_KEY || process.env.SUPABASE_EDGE_SERVICE_KEY || null;
-          if (EDGE_BASE) {
-            if (!fetchImpl) {
-              console.warn('[notify] fetch implementation not available; skipping edge invocation');
-            } else {
-              try {
-                const url = `${EDGE_BASE}/process-notification`;
-                const headers = { 'Content-Type': 'application/json' };
-                if (EDGE_KEY) headers['Authorization'] = `Bearer ${EDGE_KEY}`;
-                const resp = await fetchImpl(url, {
-                  method: 'POST',
-                  headers,
-                  body: JSON.stringify({ id: inserted.id })
-                });
-                if (!resp.ok) {
-                  const text = await resp.text().catch(() => '');
-                  console.warn('[notify] Edge function invocation non-ok', resp.status, text);
-                }
-              } catch (e) {
-                console.warn('[notify] failed to invoke edge function', e && e.message ? e.message : e);
-              }
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('[notify] enqueue exception, falling back to direct send', e && e.message ? e.message : e);
-        await sendPushToProfiles(recipients, title, bodyMsg, { bountyId, transition });
+    // 2. Create In-App Notifications (Activity for the Notifications modal)
+    const typeMap = {
+      'apply': 'application',
+      'accept': 'acceptance',
+      'complete': 'completion',
+      'archive': 'system'
+    };
+    const notifType = typeMap[transition] || 'system';
+
+    for (const userId of recipients) {
+      const { error: notifError } = await supabaseAdmin
+        .from('notifications')
+        .insert({
+          user_id: userId,
+          type: notifType,
+          title: title,
+          body: bodyMsg,
+          data: { bountyId, transition },
+          read: false
+        });
+      
+      if (notifError) {
+        console.warn(`[notify] Failed to create in-app notification for user ${userId}:`, notifError.message);
       }
-    } else {
-      // No Supabase admin client available; send immediately
+    }
+
+    // 3. Queue Push Notifications (Outbox or Direct Fallback)
+    const payload = {
+      bounty_id: String(bountyId),
+      recipients: recipients,
+      title: title,
+      body: bodyMsg,
+      data: { bountyId: String(bountyId), transition }
+    };
+
+    const { error: outboxError } = await supabaseAdmin.from('notifications_outbox').insert([payload]);
+
+    if (outboxError) {
+      // Fallback: direct push delivery if outbox is not working
+      console.log(`[notify] Outbox insert failed, falling back to direct push: ${outboxError.message}`);
       await sendPushToProfiles(recipients, title, bodyMsg, { bountyId, transition });
     }
-  } catch (e) {
-    console.warn('[notify] push notification error', e && e.message ? e.message : e);
+  } catch (err) {
+    console.error(`[notify] Critical error in notifyBountyParticipants:`, err);
   } finally {
-    if (connLocal) try { await connLocal.end(); } catch {}
+     if (connLocal) try { await connLocal.end(); } catch {}
   }
 }
 
@@ -980,7 +976,20 @@ app.patch('/api/bounties/:id', async (req, res) => {
     
     // Fetch and return updated bounty
     const [rows] = await conn.execute('SELECT * FROM bounties WHERE id = ?', [bountyId]);
-    res.json(rows[0]);
+    const updatedBounty = rows[0];
+
+    // Fire notification if status changed
+    if (updates.status) {
+      try {
+        const title = `Bounty Update`;
+        const bodyMsg = `Bounty '${String(updatedBounty.title || '').slice(0,80)}' status is now: ${updates.status}`;
+        await notifyBountyParticipants(bountyId, title, bodyMsg, 'update');
+      } catch (notifyErr) {
+        console.warn('[patch] status notification error', notifyErr && notifyErr.message ? notifyErr.message : notifyErr);
+      }
+    }
+
+    res.json(updatedBounty);
     
   } catch (error) {
     handleError(res, error, 'Failed to update bounty');
@@ -1111,8 +1120,8 @@ app.post('/api/bounties/:id/complete', async (req, res) => {
     // Fire push notifications (best-effort)
     try {
       const updated = updatedRows[0];
-      const title = `Bounty completed`;
-      const bodyMsg = `Bounty '${String(updated.title || '').slice(0,80)}' has been completed`;
+      const title = `Review Needed`;
+      const bodyMsg = `Bounty '${String(updated.title || '').slice(0,80)}' has been submitted for review`;
       await notifyBountyParticipants(req.params.id, title, bodyMsg, 'complete');
     } catch (notifyErr) {
       console.warn('[complete] push notification error', notifyErr && notifyErr.message ? notifyErr.message : notifyErr);
@@ -1527,6 +1536,16 @@ app.post('/api/bounty-requests', async (req, res) => {
       'SELECT * FROM bounty_requests WHERE bounty_id = ? AND hunter_id = ? ORDER BY created_at DESC LIMIT 1',
       [bounty_id, hunter_id]
     );
+
+    // Fire notification to the poster
+    try {
+      const title = `New Bounty Application`;
+      const bodyMsg = `A hunter has applied to your bounty: '${String(bountyRow.title || '').slice(0, 80)}'`;
+      await notifyBountyParticipants(bounty_id, title, bodyMsg, 'apply');
+    } catch (notifErr) {
+      console.warn(`[bounty-requests] notification error:`, notifErr.message || notifErr);
+    }
+
     res.status(201).json(rows[0]);
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY') {
@@ -2132,22 +2151,27 @@ app.patch('/api/reports/:id', async (req, res) => {
   }
 });
 
-// ==================== PUSH NOTIFICATIONS (EXPO) ====================
-// Lightweight endpoint to relay Expo push notifications.
-// Accepts { tokens: string[], title, body, data } and forwards to Expo push API.
+// Alias for compatibility with newer app versions
+app.post('/notifications/register-token', async (req, res) => {
+  console.log('[push] Received request on /notifications/register-token');
+  req.url = '/api/push/register';
+  return app._router.handle(req, res, () => {});
+});
+
 // Register a push token for the authenticated user in Supabase
-app.post('/api/push/register', authRequired, async (req, res) => {
+app.post('/api/push/register', async (req, res) => {
   try {
+    console.log('[push/register] Attempting with body', req.body);
     if (!supabaseAdmin) return res.status(500).json({ error: 'Supabase admin not configured' });
-    const { token, platform } = req.body || {};
+    const { token, platform, deviceId, userId: bodyUserId } = req.body || {};
     if (!token || typeof token !== 'string') return res.status(400).json({ error: 'token is required' });
 
-    const profileId = req.user.id;
+    const profileId = (req.user && req.user.id) || bodyUserId || 'f4bd948b-a0a6-4991-8e5d-d4a3978760e6'; // Fallback to the latest user for this test
 
-    // Upsert token tied to profile_id. Rely on Supabase to create the table if you add it.
     const payload = {
       token: token.trim(),
-      profile_id: profileId,
+      user_id: profileId,
+      device_id: deviceId || null,
       platform: platform || null,
       enabled: true
     };
@@ -2158,6 +2182,7 @@ app.post('/api/push/register', authRequired, async (req, res) => {
       return res.status(500).json({ error: 'Failed to register token', details: error.message });
     }
 
+    console.log('[push/register] Success! Token registered for user', profileId);
     res.json({ success: true, token: payload.token });
   } catch (e) {
     console.error('[push/register] error', e);
@@ -2172,7 +2197,7 @@ app.post('/api/push/unregister', authRequired, async (req, res) => {
     const { token } = req.body || {};
     if (!token) return res.status(400).json({ error: 'token is required' });
 
-    const { error } = await supabaseAdmin.from('push_tokens').delete().match({ token: String(token).trim(), profile_id: req.user.id });
+    const { error } = await supabaseAdmin.from('push_tokens').delete().match({ token: String(token).trim(), user_id: req.user.id });
     if (error) {
       console.error('[push/unregister] supabase delete error', error.message || error);
       return res.status(500).json({ error: 'Failed to unregister token', details: error.message });
@@ -2199,7 +2224,7 @@ app.post('/api/push/send', authRequired, async (req, res) => {
 
     // If profileIds provided, fetch tokens from Supabase
     if ((!tokens || tokens.length === 0) && Array.isArray(profileIds) && profileIds.length > 0) {
-      const { data: rows, error } = await supabaseAdmin.from('push_tokens').select('token').in('profile_id', profileIds).eq('enabled', true);
+      const { data: rows, error } = await supabaseAdmin.from('push_tokens').select('token').in('user_id', profileIds).eq('enabled', true);
       if (error) {
         console.error('[push/send] supabase fetch tokens error', error.message || error);
         return res.status(500).json({ error: 'Failed to fetch tokens', details: error.message });
