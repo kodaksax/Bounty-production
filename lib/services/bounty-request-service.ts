@@ -411,12 +411,22 @@ export const bountyRequestService = {
           .select('*')
           .single()
         if (error) {
-          // PostgreSQL error code 23505 = unique_violation
+          // Detect unique-violation (duplicate) errors robustly. Supabase
+          // sometimes returns a `code` field (e.g. '23505') or only a
+          // textual message referencing 'duplicate'/'unique'. Check both.
+          const pgError = error as any
+          // Build a representative message string from common Supabase error fields
+          const detailedMessage = String(
+            pgError?.message || pgError?.error?.message || pgError?.details || pgError?.hint || (() => {
+              try { return JSON.stringify(pgError) } catch { return String(pgError) }
+            })()
+          )
+          const isUniqueViolation = (pgError?.code === '23505') || /duplicate|unique|unique_bounty_user/i.test(detailedMessage)
+
           // The hunter already has a pending application for this bounty.
           // Return the existing record so the caller can treat this as a success
           // (e.g. set hasApplied = true) instead of surfacing a confusing error.
-          const pgError = error as { code?: string; message?: string }
-          if (pgError?.code === '23505') {
+          if (isUniqueViolation) {
             // A unique_violation occurred. It's possible a concurrent insert succeeded
             // but the DB now contains multiple matching rows (data drift or previous bug).
             // Attempt to read the most-recent matching row ordered by `created_at`.

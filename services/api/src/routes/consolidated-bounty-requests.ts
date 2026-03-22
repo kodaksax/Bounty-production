@@ -610,9 +610,16 @@ export async function registerConsolidatedBountyRequestRoutes(
           .single();
 
         if (createError) {
+          // Detect duplicate/unique violation either by code or by message text.
+          const createErr: any = createError
+          const createMsg = String(createErr?.message || createErr?.error?.message || createErr?.details || createErr?.hint || (() => {
+            try { return JSON.stringify(createErr) } catch { return String(createErr) }
+          })())
+          const isUniqueViolation = (createErr && createErr.code === '23505') || /duplicate|unique|unique_bounty_user/i.test(createMsg)
+
           // Handle duplicate entry error by attempting to read the existing record.
-          if (createError.code === '23505') {
-            request.log.warn({ error: createError.message, userId, bountyId: body.bounty_id }, 'Duplicate bounty request detected for user and bounty; attempting to return existing record')
+          if (isUniqueViolation) {
+            request.log.warn({ error: createMsg, userId, bountyId: body.bounty_id }, 'Duplicate bounty request detected for user and bounty; attempting to return existing record')
             try {
               const { data: existingRows, error: fetchErr } = await supabase
                 .from('bounty_requests')
