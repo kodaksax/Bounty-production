@@ -109,7 +109,13 @@
       "expo-build-properties",
       "expo-font",
       "@react-native-community/datetimepicker",
-      "@sentry/react-native"
+      [
+        "@sentry/react-native/expo",
+        {
+          "organization": "bounty-4e",
+          "project": "react-native"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

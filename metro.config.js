@@ -11,8 +11,12 @@ const aliasExtraNodeModules = {
   app: path.resolve(projectRoot, 'app'),
   assets: path.resolve(projectRoot, 'assets'),
   '@': path.resolve(projectRoot, 'components'),
-  // Ensure Metro can resolve tweetnacl's shipped build file on all platforms
+  // Ensure Metro can resolve tweetnacl's build file explicitly via require.resolve
+  tweetnacl: path.dirname(require.resolve('tweetnacl/package.json')),
 };
+
+console.log('[METRO DIAGNOSTIC] projectRoot:', projectRoot);
+console.log('[METRO DIAGNOSTIC] tweetnacl path:', aliasExtraNodeModules.tweetnacl);
 
 // Always extend expo/metro-config so tooling (expo-doctor, EAS) recognizes it.
 try {
@@ -38,6 +42,9 @@ try {
     resolver: Object.assign({}, defaultConfig.resolver || {}, {
       extraNodeModules: Object.assign({}, (defaultConfig.resolver && defaultConfig.resolver.extraNodeModules) || {}, aliasExtraNodeModules),
       sourceExts: Array.from(new Set([].concat((defaultConfig.resolver && defaultConfig.resolver.sourceExts) || [], ['cjs']))),
+      nodeModulesPaths: [
+        path.resolve(projectRoot, 'node_modules'),
+      ],
       resolveRequest,
     }),
     watchFolders: Array.from(new Set([].concat(defaultConfig.watchFolders || [], [path.resolve(projectRoot)]))),
