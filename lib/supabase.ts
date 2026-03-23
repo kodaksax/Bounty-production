@@ -41,6 +41,21 @@ function validateSupabaseShape(obj: any): obj is SupabaseClient {
 
 async function initSupabase(): Promise<void> {
   if (realSupabase || !isSupabaseConfigured) return;
+  // Add safe, non-secret context to Sentry (best-effort) so errors during
+  // early startup include whether Supabase envs were present.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+    const Sentry = require('@sentry/react-native');
+    if (Sentry && typeof Sentry.setContext === 'function') {
+      Sentry.setContext('supabase', {
+        hasUrl: !!supabaseUrl,
+        hasKey: !!supabaseAnonKey,
+        urlPrefix: supabaseUrl ? String(supabaseUrl).substring(0, 40) : undefined,
+      });
+    }
+  } catch {
+    // ignore if Sentry not available at startup
+  }
 
   try {
     // Kick off a background read of the remember-me preference to prime the
@@ -60,17 +75,27 @@ async function initSupabase(): Promise<void> {
     console.warn('[supabase] warning: getRememberMePreference background start failed during init', e);
   }
 
-  realSupabase = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: (() => {
-      const isTestEnv = typeof process !== 'undefined' && (process.env.JEST_WORKER_ID !== undefined || process.env.NODE_ENV === 'test');
-      return {
-        storage: createAuthSessionStorageAdapter(),
-        autoRefreshToken: !isTestEnv,
-        persistSession: !isTestEnv,
-        detectSessionInUrl: false,
-      };
-    })(),
-  });
+  try {
+    realSupabase = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: (() => {
+        const isTestEnv = typeof process !== 'undefined' && (process.env.JEST_WORKER_ID !== undefined || process.env.NODE_ENV === 'test');
+        return {
+          storage: createAuthSessionStorageAdapter(),
+          autoRefreshToken: !isTestEnv,
+          persistSession: !isTestEnv,
+          detectSessionInUrl: false,
+        };
+      })(),
+    });
+  } catch (e) {
+    // Defensive: if the Supabase client throws (e.g., invalid URL), fall back
+    // to the stub client to avoid crashing the entire app during startup.
+    // eslint-disable-next-line no-console
+    console.error('[supabase] createClient failed during init - falling back to stub client', e);
+    // mark mismatch so diagnostic breadcrumbs show mismatch state
+    try { (supabaseEnv as any).mismatch = true; } catch {}
+    realSupabase = makeStubClient();
+  }
   if (__DEV__) {
     console.log('[supabase] Real client initialized successfully');
   }
