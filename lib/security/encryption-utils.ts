@@ -9,7 +9,7 @@
  */
 
 import * as Crypto from 'expo-crypto';
-import nacl from 'tweetnacl';
+import * as nacl from 'tweetnacl';
 
 /**
  * Generate a random encryption key
