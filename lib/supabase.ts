@@ -57,6 +57,13 @@ async function initSupabase(): Promise<void> {
     // ignore if Sentry not available at startup
   }
 
+  // Quick runtime diagnostics to surface env presence in Release logs.
+  // eslint-disable-next-line no-console
+  console.debug('[supabase.debug] env', {
+    hasUrl: !!supabaseUrl,
+    urlPrefix: supabaseUrl ? String(supabaseUrl).substring(0, 60) : undefined,
+    hasKey: !!supabaseAnonKey,
+  });
   try {
     // Kick off a background read of the remember-me preference to prime the
     // in-memory cache without blocking client creation. We intentionally do

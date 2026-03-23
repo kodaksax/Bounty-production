@@ -31,6 +31,15 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       return false;
     }
 
+    // Diagnostic: surface runtime types for supabase auth surface in Release.
+    // eslint-disable-next-line no-console
+    console.debug('[admin.debug] verifyAdminStatus types', {
+      supabaseType: typeof supabase,
+      authType: typeof (supabase as any).auth,
+      getSessionType: typeof (supabase as any).auth?.getSession,
+      onAuthStateChangeType: typeof (supabase as any).auth?.onAuthStateChange,
+    });
+
     try {
       // Get current session
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
