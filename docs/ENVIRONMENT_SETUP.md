@@ -34,18 +34,29 @@ A robust environment strategy ensures that development work is isolated from pro
 ### 1. Environment Variable Management
 
 #### Local Development
-Current setup uses a single `.env` file. Shift to using specific suffixes:
-- `.env.development` (for `npm run dev`)
-- `.env.preview` (for staging builds)
+Current setup uses environment-specific files with a prioritized lookup. Use these filenames:
+- `.env.development` (for local development / `NODE_ENV=development`)
+- `.env.preview` (for preview / staging builds)
 - `.env.production` (for production builds)
 
+Environment loading behavior implemented in the codebase:
+1. Compute `envName = process.env.NODE_ENV ? `.env.${String(process.env.NODE_ENV).toLowerCase()}` : '.env'` (NODE_ENV normalized to lowercase).
+2. Try service-local env file first (e.g., `services/api/.env.preview`).
+3. Fall back to the repository root env file (e.g., `.env.preview` at repo root).
+4. Fall back to loading the plain `.env` file at repo root.
+
+This ensures predictable loading regardless of where a script is executed and supports per-service overrides.
+
 #### Backend (Node.js API)
-Update `services/api/src/config/index.ts` to load the appropriate file based on `NODE_ENV`.
+Backend code now prefers `.env.<lowercase-node-env>` with service-local and repo-root fallbacks.
+
+Example behavior (already implemented in `services/api` and helper scripts):
 
 ```typescript
-// services/api/src/config/index.ts
-const envFile = process.env.NODE_ENV ? `.env.${process.env.NODE_ENV}` : '.env';
-dotenv.config({ path: path.resolve(process.cwd(), envFile) });
+const envName = process.env.NODE_ENV ? `.env.${String(process.env.NODE_ENV).toLowerCase()}` : '.env';
+// Service-local path: services/api/<envName>
+// Repo-root fallback: <repo>/.env.<envName> then <repo>/.env
+dotenv.config({ path: resolvedPath });
 ```
 
 #### Mobile App (Expo)
@@ -121,6 +132,8 @@ const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
 ## Best Practices
 
 1. **Never Commit Secrets**: Ensure all `.env.*` files are in `.gitignore`. Use a secret manager for production keys.
+
+**Commit non-secret examples:** Commit `.env.*.example` templates (no real secrets) to the repo so developers and CI have a reference. Keep actual `.env` and `.env.*` with secrets excluded by `.gitignore`.
 2. **Schema Migrations**: Always test database migrations in the **Preview** environment before applying them to **Production**.
 3. **Feature Flags**: Use environment-specific feature flags to hide incomplete work even if it has been merged to the main branch.
 4. **Parity**: Keep the **Preview** environment as identical to **Production** as possible (same DB version, same Node.js runtime).

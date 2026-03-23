@@ -8,6 +8,8 @@ node_modules/
 .env.example
 .env.local
 .env.production
+.env.development
+.env.preview
 # Expo
 .expo/
 dist/

@@ -10,17 +10,39 @@ import path from 'path';
 
 // Load environment variables with fallback strategy
 function loadEnvironment() {
-  // Try local .env first
-  const local = dotenv.config();
+  // Prefer environment-specific .env files, e.g. .env.development, .env.preview, .env.production
+  const envName = process.env.NODE_ENV ? `.env.${String(process.env.NODE_ENV).toLowerCase()}` : '.env';
 
-  // If critical vars missing, try root .env
-  if (!process.env.STRIPE_SECRET_KEY && !process.env.DATABASE_URL) {
-    const rootEnv = path.resolve(__dirname, '../../../../.env');
+  // Try loading from service folder first
+  const serviceEnvPath = path.resolve(__dirname, '../../..', envName);
+  let loaded = false;
+  if (fs.existsSync(serviceEnvPath)) {
+    dotenv.config({ path: serviceEnvPath });
+    console.log(`[Config] Loaded environment from ${serviceEnvPath}`);
+    loaded = true;
+  }
+
+  // If still missing critical vars, try repo root
+  if (!loaded) {
+    const rootEnv = path.resolve(process.cwd(), envName);
     if (fs.existsSync(rootEnv)) {
       dotenv.config({ path: rootEnv });
       console.log(`[Config] Loaded environment from ${rootEnv}`);
-    } else if (local.error) {
-      console.warn('[Config] No .env found in service folder or repo root; using existing environment');
+      loaded = true;
+    }
+  }
+
+  // Final fallback: try plain .env in service folder then repo root
+  if (!loaded) {
+    const local = dotenv.config();
+    if (local.error) {
+      const rootPlain = path.resolve(process.cwd(), '.env');
+      if (fs.existsSync(rootPlain)) {
+        dotenv.config({ path: rootPlain });
+        console.log(`[Config] Loaded environment from ${rootPlain}`);
+      } else {
+        console.warn('[Config] No .env found in service folder or repo root; using existing environment');
+      }
     }
   }
 }

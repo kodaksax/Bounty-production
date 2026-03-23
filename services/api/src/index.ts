@@ -12,27 +12,36 @@ import { walletCleanupCron } from './services/wallet-cleanup-cron';
 // we've loaded the .env file below. The actual imports happen just after
 // the dotenv loading block.
 
-// After other route registrations
-// Load environment variables. Prefer a local .env in the service folder,
-// but fall back to the repository root .env (common in monorepos) so dev
-// tooling that places the .env at repo root still works when running
-// `npm run dev` from services/api.
-const local = dotenv.config();
-if (!process.env.STRIPE_SECRET_KEY) {
-  // __dirname points to services/api/src when running tsx on source files.
-  // The repository root is three levels up from here: services/api/src -> services/api -> services -> <repo-root>
-  const rootEnv = path.resolve(__dirname, '../../../.env');
-  if (fs.existsSync(rootEnv)) {
-    dotenv.config({ path: rootEnv });
-    console.log(`[env] Loaded environment from ${rootEnv}`);
+// Load environment variables. Prefer environment-specific files like
+// `.env.development` or `.env.production`, falling back to plain `.env`.
+{
+  const envName = process.env.NODE_ENV ? `.env.${String(process.env.NODE_ENV).toLowerCase()}` : '.env';
+
+  // Prefer service-local env file first
+  const serviceEnv = path.resolve(__dirname, '..', envName);
+  if (fs.existsSync(serviceEnv)) {
+    dotenv.config({ path: serviceEnv });
+    console.log(`[env] Loaded environment from ${serviceEnv}`);
   } else {
-    // If no root .env found, re-use local result (may populate other vars)
-    if (local.error) {
-      console.warn('[env] No .env found in service folder and repo root; continuing with existing environment');
+    // Try repo root
+    const rootEnv = path.resolve(process.cwd(), envName);
+    if (fs.existsSync(rootEnv)) {
+      dotenv.config({ path: rootEnv });
+      console.log(`[env] Loaded environment from ${rootEnv}`);
+    } else {
+      // Final fallback: try plain .env in service folder then repo root
+      const local = dotenv.config();
+      if (local.error) {
+        const rootPlain = path.resolve(process.cwd(), '.env');
+        if (fs.existsSync(rootPlain)) {
+          dotenv.config({ path: rootPlain });
+          console.log(`[env] Loaded environment from ${rootPlain}`);
+        } else {
+          console.warn('[env] No .env found in service folder and repo root; continuing with existing environment');
+        }
+      }
     }
   }
-} else {
-  // local already provided STRIPE_SECRET_KEY (or env inherited)
 }
 
 // Sanitize a handful of DB-related env vars so legacy quoted values do not

@@ -9,8 +9,16 @@ import path from 'path';
 import { Pool } from 'pg';
 import { fileURLToPath } from 'url';
 
-// Load environment variables
-dotenv.config();
+// Load environment variables (prefer .env.<NODE_ENV> at repo root then fallback)
+{
+  const envName = process.env.NODE_ENV ? `.env.${String(process.env.NODE_ENV).toLowerCase()}` : '.env';
+  const rootEnv = path.resolve(process.cwd(), envName);
+  if (fs.existsSync(rootEnv)) {
+    dotenv.config({ path: rootEnv });
+  } else {
+    dotenv.config();
+  }
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

@@ -4,23 +4,40 @@
  */
 
 import dotenv from 'dotenv';
-import path from 'path';
 import fs from 'fs';
+import path from 'path';
 
-// Load environment variables
-dotenv.config();
-if (!process.env.STRIPE_SECRET_KEY) {
-  const rootEnv = path.resolve(__dirname, '../../../.env');
-  if (fs.existsSync(rootEnv)) {
-    dotenv.config({ path: rootEnv });
-    console.log(`[env] Loaded environment from ${rootEnv}`);
+// Load environment variables (prefer .env.<NODE_ENV> then fallbacks)
+{
+  const envName = process.env.NODE_ENV ? `.env.${String(process.env.NODE_ENV).toLowerCase()}` : '.env';
+  const serviceEnv = path.resolve(__dirname, '..', '..', envName);
+  if (fs.existsSync(serviceEnv)) {
+    dotenv.config({ path: serviceEnv });
+    console.log(`[env] Loaded environment from ${serviceEnv}`);
+  } else {
+    const rootEnv = path.resolve(process.cwd(), envName);
+    if (fs.existsSync(rootEnv)) {
+      dotenv.config({ path: rootEnv });
+      console.log(`[env] Loaded environment from ${rootEnv}`);
+    } else {
+      const local = dotenv.config();
+      if (local.error) {
+        const rootPlain = path.resolve(process.cwd(), '.env');
+        if (fs.existsSync(rootPlain)) {
+          dotenv.config({ path: rootPlain });
+          console.log(`[env] Loaded environment from ${rootPlain}`);
+        } else {
+          console.warn('[env] No .env found; continuing with existing environment');
+        }
+      }
+    }
   }
 }
 
 import { createClient } from '@supabase/supabase-js';
 import { config } from './config';
-import * as WalletService from './services/consolidated-wallet-service';
 import { stripe } from './services/consolidated-payment-service';
+import * as WalletService from './services/consolidated-wallet-service';
 
 console.log('=== Consolidated Webhook Handler Test ===\n');
 

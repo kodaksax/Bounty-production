@@ -4,12 +4,28 @@
  */
 
 import dotenv from 'dotenv';
-import { db } from './db/connection';
-import { users, notifications } from './db/schema';
-import { notificationService } from './services/notification-service';
 import { eq } from 'drizzle-orm';
+import fs from 'fs';
+import path from 'path';
+import { db } from './db/connection';
+import { users } from './db/schema';
+import { notificationService } from './services/notification-service';
 
-dotenv.config();
+// Load environment variables (prefer .env.<NODE_ENV> then fallbacks)
+{
+  const envName = process.env.NODE_ENV ? `.env.${String(process.env.NODE_ENV).toLowerCase()}` : '.env';
+  const serviceEnv = path.resolve(__dirname, '..', envName);
+  if (fs.existsSync(serviceEnv)) {
+    dotenv.config({ path: serviceEnv });
+  } else {
+    const rootEnv = path.resolve(process.cwd(), envName);
+    if (fs.existsSync(rootEnv)) {
+      dotenv.config({ path: rootEnv });
+    } else {
+      dotenv.config();
+    }
+  }
+}
 
 async function testNotifications() {
   console.log('🧪 Testing Notifications System\n');

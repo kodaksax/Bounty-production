@@ -10,11 +10,15 @@
       "ios": {
         "simulator": true
       },
-      "channel": "development"
+      "channel": "development",
+      "env": {
+        "EXPO_PUBLIC_ENVIRONMENT": "development",
+        "EXPO_PUBLIC_API_URL": "http://localhost:3001"
+      }
     },
     "preview": {
-      "distribution": "store",
-      "channel": "beta",
+      "distribution": "internal",
+      "channel": "preview",
       "ios": {
         "simulator": false,
         "resourceClass": "m-medium"
@@ -25,7 +29,7 @@
         "EXPO_PUBLIC_SUPABASE_URL": "${STAGING_SUPABASE_URL}",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "${STAGING_SUPABASE_ANON_KEY}",
         "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "${STRIPE_TEST_PUBLISHABLE_KEY}",
-        "EXPO_PUBLIC_ENVIRONMENT": "beta"
+        "EXPO_PUBLIC_ENVIRONMENT": "preview"
       }
     },
     "production": {

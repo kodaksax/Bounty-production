@@ -2,16 +2,30 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 
-// Load environment variables before importing pool
-dotenv.config();
-if (!process.env.DATABASE_URL) {
-    const rootEnv = path.resolve(__dirname, '../../../.env');
-    console.log(`Checking for root .env at ${rootEnv}`);
-    if (fs.existsSync(rootEnv)) {
-        dotenv.config({ path: rootEnv });
-        console.log('Loaded root .env');
+// Load environment variables (prefer .env.<NODE_ENV> then fallbacks)
+{
+    const envName = process.env.NODE_ENV ? `.env.${String(process.env.NODE_ENV).toLowerCase()}` : '.env';
+    const serviceEnv = path.resolve(__dirname, '..', '..', envName);
+    if (fs.existsSync(serviceEnv)) {
+        dotenv.config({ path: serviceEnv });
+        console.log(`[env] Loaded environment from ${serviceEnv}`);
     } else {
-        console.log('Root .env not found');
+        const rootEnv = path.resolve(process.cwd(), envName);
+        if (fs.existsSync(rootEnv)) {
+            dotenv.config({ path: rootEnv });
+            console.log(`[env] Loaded environment from ${rootEnv}`);
+        } else {
+            const local = dotenv.config();
+            if (local.error) {
+                const rootPlain = path.resolve(process.cwd(), '.env');
+                if (fs.existsSync(rootPlain)) {
+                    dotenv.config({ path: rootPlain });
+                    console.log(`[env] Loaded environment from ${rootPlain}`);
+                } else {
+                    console.warn('[env] No .env found; continuing with existing environment');
+                }
+            }
+        }
     }
 }
 console.log('DATABASE_URL length:', process.env.DATABASE_URL?.length || 0);

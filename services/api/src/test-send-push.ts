@@ -9,9 +9,25 @@
  */
 
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
 import { notificationService } from './services/notification-service';
 
-dotenv.config();
+// Load environment variables (prefer .env.<NODE_ENV> then fallbacks)
+{
+  const envName = process.env.NODE_ENV ? `.env.${String(process.env.NODE_ENV).toLowerCase()}` : '.env';
+  const serviceEnv = path.resolve(__dirname, '..', envName);
+  if (fs.existsSync(serviceEnv)) {
+    dotenv.config({ path: serviceEnv });
+  } else {
+    const rootEnv = path.resolve(process.cwd(), envName);
+    if (fs.existsSync(rootEnv)) {
+      dotenv.config({ path: rootEnv });
+    } else {
+      dotenv.config();
+    }
+  }
+}
 
 async function run() {
   const hunterId = process.env.TEST_HUNTER_ID || '00000000-0000-4000-8000-000000000002';
