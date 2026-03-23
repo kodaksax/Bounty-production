@@ -11,6 +11,8 @@ const aliasExtraNodeModules = {
   app: path.resolve(projectRoot, 'app'),
   assets: path.resolve(projectRoot, 'assets'),
   '@': path.resolve(projectRoot, 'components'),
+  // Ensure Metro can resolve tweetnacl's shipped build file on all platforms
+  tweetnacl: path.resolve(projectRoot, 'node_modules', 'tweetnacl'),
 };
 
 // Always extend expo/metro-config so tooling (expo-doctor, EAS) recognizes it.
