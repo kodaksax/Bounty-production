@@ -36,21 +36,50 @@ export function initializeSentry() {
   }
 
   try {
-    const ReactNativeTracingIntegration = (Sentry as { ReactNativeTracing?: new (options: {
-      routingInstrumentation?: unknown;
-      tracingOrigins?: (string | RegExp)[];
-    }) => Integration }).ReactNativeTracing;
+    // Defensive detection for tracing integrations across SDK versions.
+    // v7->v8 renamed/changed tracing exports (class vs factory). Try common names
+    // and handle both constructor (new ...) and factory (fn(...) -> Integration).
+    const integrationCandidates = [
+      (Sentry as any).reactNativeTracingIntegration,
+      (Sentry as any).reactNativeTracing,
+      (Sentry as any).ReactNativeTracing,
+      (Sentry as any).ReactNativeTracingIntegration,
+    ];
 
-    const integrations: Integration[] | undefined = ReactNativeTracingIntegration
-      ? [
-          new ReactNativeTracingIntegration({
-            // Routing instrumentation not needed for Expo Router
-            routingInstrumentation: undefined,
-            // Track automatic spans
-            tracingOrigins: ['localhost', /^\//],
-          }) as Integration,
-        ]
-      : undefined;
+    const tracingOptions = {
+      routingInstrumentation: undefined,
+      tracingOrigins: ['localhost', /^\//],
+    };
+
+    let integrations: Integration[] | undefined;
+
+    for (const candidate of integrationCandidates) {
+      if (!candidate) continue;
+      try {
+        // If candidate is a function that returns an integration (factory)
+        if (typeof candidate === 'function') {
+          // Try as factory first
+          const maybe = candidate(tracingOptions);
+          if (maybe && typeof maybe === 'object') {
+            integrations = [maybe as Integration];
+            break;
+          }
+
+          // Try as constructor with `new`
+          try {
+            const inst = new (candidate as any)(tracingOptions);
+            if (inst) {
+              integrations = [inst as Integration];
+              break;
+            }
+          } catch {
+            // ignore constructor error and continue
+          }
+        }
+      } catch {
+        // ignore and try next candidate
+      }
+    }
 
     Sentry.init({
       dsn: SENTRY_DSN,
@@ -98,7 +127,7 @@ export function initializeSentry() {
 
         return event;
       },
-      // Integrations
+      // Integrations (tracing integration may be undefined on older/newer SDKs)
       integrations,
     });
 
@@ -120,3 +149,4 @@ export function getSentrySafe() {
 }
 
 export { getSentrySafe as getSentry };
+

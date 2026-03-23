@@ -1,5 +1,3 @@
-import dotenv from 'dotenv';
-import fs from 'fs';
 import path from 'path';
 import { reconciliationCron } from './services/reconciliation-cron';
 import { riskAssessmentCron } from './services/risk-assessment-cron';
@@ -12,36 +10,17 @@ import { walletCleanupCron } from './services/wallet-cleanup-cron';
 // we've loaded the .env file below. The actual imports happen just after
 // the dotenv loading block.
 
-// Load environment variables. Prefer environment-specific files like
-// `.env.development` or `.env.production`, falling back to plain `.env`.
-{
-  const envName = process.env.NODE_ENV ? `.env.${String(process.env.NODE_ENV).toLowerCase()}` : '.env';
-
-  // Prefer service-local env file first
-  const serviceEnv = path.resolve(__dirname, '..', envName);
-  if (fs.existsSync(serviceEnv)) {
-    dotenv.config({ path: serviceEnv });
-    console.log(`[env] Loaded environment from ${serviceEnv}`);
-  } else {
-    // Try repo root
-    const rootEnv = path.resolve(process.cwd(), envName);
-    if (fs.existsSync(rootEnv)) {
-      dotenv.config({ path: rootEnv });
-      console.log(`[env] Loaded environment from ${rootEnv}`);
-    } else {
-      // Final fallback: try plain .env in service folder then repo root
-      const local = dotenv.config();
-      if (local.error) {
-        const rootPlain = path.resolve(process.cwd(), '.env');
-        if (fs.existsSync(rootPlain)) {
-          dotenv.config({ path: rootPlain });
-          console.log(`[env] Loaded environment from ${rootPlain}`);
-        } else {
-          console.warn('[env] No .env found in service folder and repo root; continuing with existing environment');
-        }
-      }
-    }
+// Load environment using shared loader (dynamic require to avoid TS rootDir issues)
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+  const loadEnvPath = path.resolve(__dirname, '..', '..', '..', 'scripts', 'load-env.js');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+  const loadEnvMod = require(loadEnvPath);
+  if (loadEnvMod && typeof loadEnvMod.loadEnv === 'function') {
+    loadEnvMod.loadEnv(path.resolve(__dirname, '..'));
   }
+} catch (err) {
+  // Ignore; env loader is optional for environments where scripts aren't present
 }
 
 // Sanitize a handful of DB-related env vars so legacy quoted values do not

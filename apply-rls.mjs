@@ -4,21 +4,15 @@
  * Usage: node apply-rls.js
  */
 
-import dotenv from 'dotenv';
 import path from 'path';
 import { Pool } from 'pg';
 import { fileURLToPath } from 'url';
 
 // Load environment variables (prefer .env.<NODE_ENV> at repo root then fallback)
-{
-  const envName = process.env.NODE_ENV ? `.env.${String(process.env.NODE_ENV).toLowerCase()}` : '.env';
-  const rootEnv = path.resolve(process.cwd(), envName);
-  if (fs.existsSync(rootEnv)) {
-    dotenv.config({ path: rootEnv });
-  } else {
-    dotenv.config();
-  }
-}
+// Load environment using shared loader
+import('./scripts/load-env.js').then(({ loadEnv }) => {
+  loadEnv(new URL('.', import.meta.url).pathname + '..');
+});
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

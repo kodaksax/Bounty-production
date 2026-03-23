@@ -3,35 +3,18 @@
  * Manual test script to verify webhook handler logic
  */
 
-import dotenv from 'dotenv';
-import fs from 'fs';
 import path from 'path';
-
-// Load environment variables (prefer .env.<NODE_ENV> then fallbacks)
-{
-  const envName = process.env.NODE_ENV ? `.env.${String(process.env.NODE_ENV).toLowerCase()}` : '.env';
-  const serviceEnv = path.resolve(__dirname, '..', '..', envName);
-  if (fs.existsSync(serviceEnv)) {
-    dotenv.config({ path: serviceEnv });
-    console.log(`[env] Loaded environment from ${serviceEnv}`);
-  } else {
-    const rootEnv = path.resolve(process.cwd(), envName);
-    if (fs.existsSync(rootEnv)) {
-      dotenv.config({ path: rootEnv });
-      console.log(`[env] Loaded environment from ${rootEnv}`);
-    } else {
-      const local = dotenv.config();
-      if (local.error) {
-        const rootPlain = path.resolve(process.cwd(), '.env');
-        if (fs.existsSync(rootPlain)) {
-          dotenv.config({ path: rootPlain });
-          console.log(`[env] Loaded environment from ${rootPlain}`);
-        } else {
-          console.warn('[env] No .env found; continuing with existing environment');
-        }
-      }
-    }
+// Load environment using shared loader (dynamic require to avoid TS rootDir issues)
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+  const loadEnvPath = path.resolve(__dirname, '..', '..', '..', 'scripts', 'load-env.js');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+  const loadEnvMod = require(loadEnvPath);
+  if (loadEnvMod && typeof loadEnvMod.loadEnv === 'function') {
+    loadEnvMod.loadEnv(path.resolve(__dirname, '..', '..'));
   }
+} catch (err) {
+  // ignore
 }
 
 import { createClient } from '@supabase/supabase-js';

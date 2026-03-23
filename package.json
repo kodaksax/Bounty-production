@@ -70,7 +70,6 @@
     "@react-native-google-signin/google-signin": "^16.1.1",
     "@react-navigation/bottom-tabs": "^7.4.0",
     "@react-navigation/elements": "^2.9.5",
-    "@react-navigation/native": "^7.1.8",
     "@sentry/react-native": "^8.5.0",
     "@stripe/react-stripe-js": "^5.5.0",
     "@stripe/stripe-js": "^8.6.4",

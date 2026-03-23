@@ -14,7 +14,7 @@ function loadEnvironment() {
   const envName = process.env.NODE_ENV ? `.env.${String(process.env.NODE_ENV).toLowerCase()}` : '.env';
 
   // Try loading from service folder first
-  const serviceEnvPath = path.resolve(__dirname, '../../..', envName);
+  const serviceEnvPath = path.resolve(__dirname, '../..', envName);
   let loaded = false;
   if (fs.existsSync(serviceEnvPath)) {
     dotenv.config({ path: serviceEnvPath });

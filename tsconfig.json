@@ -50,6 +50,9 @@
     "**/.git/**",
     "**/__tests__/**",
     "**/*.test.*",
-    "**/*.spec.*"
+    "**/*.spec.*",
+    "services/api/src/test-*.ts",
+    "services/api/src/test-*.js",
+    "services/api/scripts/**"
   ]
 }

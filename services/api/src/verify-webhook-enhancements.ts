@@ -3,18 +3,19 @@
  * Tests internal retries and error recording
  */
 
-import dotenv from 'dotenv';
-import fs from 'fs';
 import path from 'path';
 
-// Load environment variables
-dotenv.config();
-if (!process.env.STRIPE_SECRET_KEY) {
-    const rootEnv = path.resolve(__dirname, '../../../.env');
-    if (fs.existsSync(rootEnv)) {
-        dotenv.config({ path: rootEnv });
-        console.log(`[env] Loaded environment from ${rootEnv}`);
+// Load environment using shared loader (dynamic require to avoid TS rootDir issues)
+try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+    const loadEnvPath = path.resolve(__dirname, '..', '..', '..', 'scripts', 'load-env.js');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+    const loadEnvMod = require(loadEnvPath);
+    if (loadEnvMod && typeof loadEnvMod.loadEnv === 'function') {
+        loadEnvMod.loadEnv(path.resolve(__dirname, '..', '..'));
     }
+} catch (err) {
+    // ignore
 }
 
 import { createClient } from '@supabase/supabase-js';

@@ -1,9 +1,9 @@
-import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { FastifyInstance } from 'fastify';
 import Stripe from 'stripe';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
+import { applePayReceiptService } from '../services/apple-pay-receipt-service';
 import { createDeposit } from '../services/consolidated-wallet-service';
 import { logger } from '../services/logger';
-import { applePayReceiptService } from '../services/apple-pay-receipt-service';
 
 export async function registerApplePayRoutes(fastify: FastifyInstance) {
   const stripeKey = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_API_KEY || '';
