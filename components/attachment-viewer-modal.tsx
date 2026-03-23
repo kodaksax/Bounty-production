@@ -1,21 +1,23 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
-import * as MediaLibrary from 'expo-media-library';
+// Lazy-load expo-media-library at runtime to avoid crashing when the
+// native module is not present (e.g. running in Expo Go or mismatched dev client).
+// The module will be imported dynamically inside handlers when needed.
 import * as Sharing from 'expo-sharing';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { useEffect, useMemo, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    Image,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Image,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import type { Attachment } from '../lib/types';
@@ -148,19 +150,25 @@ export function AttachmentViewerModal({
     try {
       // For images and videos on device, save to photos/gallery when possible
       if ((fileType === 'image' || fileType === 'video') && Platform.OS !== 'web') {
-        // Feature-detect the native MediaLibrary module to avoid crashing
-        // when running in environments that don't include the native module
-        // (e.g. Expo Go with a mismatched SDK). If it's not available,
-        // fall back to opening the share sheet.
+        // Lazy-import expo-media-library and feature-detect the native module
+        // to avoid crashing when running in environments that don't include
+        // the native module (e.g. mismatched Expo Go / dev client).
+        let mediaLib: any = null;
+        try {
+          mediaLib = await import('expo-media-library');
+        } catch (err) {
+          mediaLib = null;
+        }
+
         let mediaLibAvailable = !!(
-          MediaLibrary &&
-          typeof (MediaLibrary as any).requestPermissionsAsync === 'function' &&
-          typeof (MediaLibrary as any).saveToLibraryAsync === 'function'
+          mediaLib &&
+          typeof mediaLib.requestPermissionsAsync === 'function' &&
+          typeof mediaLib.saveToLibraryAsync === 'function'
         );
 
         if (mediaLibAvailable) {
           try {
-            const permResult = await (MediaLibrary as any).requestPermissionsAsync();
+            const permResult = await mediaLib.requestPermissionsAsync();
             const status = permResult?.status ?? permResult;
             if (status !== 'granted') {
               Alert.alert('Permission required', 'Please grant photo permissions to save media to your device.');
@@ -245,9 +253,9 @@ export function AttachmentViewerModal({
         }
 
         // Save to library if available, otherwise fallback to sharing
-        if ((MediaLibrary as any) && typeof (MediaLibrary as any).saveToLibraryAsync === 'function') {
+        if (mediaLib && typeof mediaLib.saveToLibraryAsync === 'function') {
           try {
-            await (MediaLibrary as any).saveToLibraryAsync(finalLocalUri);
+            await mediaLib.saveToLibraryAsync(finalLocalUri);
             Alert.alert('Saved', 'Media saved to your device gallery.');
           } catch (err) {
             const e = err as any;
