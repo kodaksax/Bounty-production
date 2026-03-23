@@ -2,8 +2,8 @@
 // POST { id: '<outbox-uuid>' }
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { normalizeRecipients } from './recipients.ts'
-import { createMessages } from './message.ts'
+import { createMessages } from './message'
+import { normalizeRecipients } from './recipients'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
