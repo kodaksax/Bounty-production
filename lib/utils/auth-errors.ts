@@ -150,10 +150,14 @@ export function parseAuthError(error: any, correlationId?: string): AuthError {
   // Configuration errors
   else if (
     message.includes('not configured') ||
-    message.includes('Configuration error')
+    message.includes('Configuration error') ||
+    // Supabase or other services may return a literal "Invalid API key" when
+    // a publishable/anon key was not injected or is incorrect at build time.
+    // Map that to a configuration_error so the UI shows a clear recovery path.
+    message.toLowerCase().includes('invalid api key')
   ) {
     category = 'configuration_error';
-    userMessage = 'Authentication service is not configured. Please contact support.';
+    userMessage = 'Authentication configuration appears invalid. Please contact support.';
     recoveryAction = 'contact_support';
     retryable = false;
   }
@@ -267,8 +271,9 @@ export function getAuthErrorMessage(error: any): string {
   }
   
   // Configuration issues
-  if (message.includes('not configured')) {
-    return 'Authentication service is not configured. Please contact support.'
+  // Handle explicit invalid API key messages too
+  if (message.includes('not configured') || message.toLowerCase().includes('invalid api key')) {
+    return 'Authentication configuration appears invalid. Please contact support.'
   }
   
   // Supabase auth errors
