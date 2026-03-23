@@ -12,7 +12,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import * as nacl from 'tweetnacl/nacl-fast';
+import * as nacl from 'tweetnacl/nacl-fast.js';
 import { base64ToUint8, generateKeyPair, uint8ToBase64 } from '../security/encryption-utils';
 import { supabase } from '../supabase';
 
