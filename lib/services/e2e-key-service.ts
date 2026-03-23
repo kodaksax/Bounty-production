@@ -10,11 +10,11 @@
  *   const recipientKey = await e2eKeyService.getRecipientPublicKey(recipientUserId);
  */
 
-import nacl from 'tweetnacl';
-import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
+import * as nacl from 'tweetnacl';
+import { base64ToUint8, generateKeyPair, uint8ToBase64 } from '../security/encryption-utils';
 import { supabase } from '../supabase';
-import { generateKeyPair, uint8ToBase64, base64ToUint8 } from '../security/encryption-utils';
 
 const PUBLIC_KEY_CACHE_PREFIX = '@bountyexpo:e2e_pubkey_';
 
