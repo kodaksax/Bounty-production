@@ -54,6 +54,7 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "app.bountyfinder.BOUNTYExpo",
+      "versionCode": 20,
       "intentFilters": [
         {
           "action": "VIEW",

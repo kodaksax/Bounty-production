@@ -411,24 +411,64 @@ export const bountyRequestService = {
           .select('*')
           .single()
         if (error) {
-          // PostgreSQL error code 23505 = unique_violation
+          // Detect unique-violation (duplicate) errors robustly. Supabase
+          // sometimes returns a `code` field (e.g. '23505') or only a
+          // textual message referencing 'duplicate'/'unique'. Check both.
+          const pgError = error as any
+          // Build a representative message string from common Supabase error fields
+          const detailedMessage = String(
+            pgError?.message || pgError?.error?.message || pgError?.details || pgError?.hint || (() => {
+              try { return JSON.stringify(pgError) } catch { return String(pgError) }
+            })()
+          )
+          const isUniqueViolation = (pgError?.code === '23505') || /duplicate|unique|unique_bounty_user/i.test(detailedMessage)
+
           // The hunter already has a pending application for this bounty.
           // Return the existing record so the caller can treat this as a success
           // (e.g. set hasApplied = true) instead of surfacing a confusing error.
-          const pgError = error as { code?: string; message?: string }
-          if (pgError?.code === '23505') {
-            const { data: existing, error: fetchErr } = await supabase
-              .from('bounty_requests')
-              .select('*')
-              .eq('bounty_id', String(normalizedRequest.bounty_id))
-              .eq('hunter_id', String(normalizedRequest.hunter_id))
-              .single()
-            if (fetchErr) {
-              // If we can't read the existing record (e.g. RLS), log and fall through to throw original error
-              logger.error('Failed to fetch existing bounty request after duplicate key error', { bountyId: normalizedRequest.bounty_id, hunterId: normalizedRequest.hunter_id, error: fetchErr?.message || fetchErr })
-            } else if (existing) {
-              // Supabase returns rows as `Record<string, unknown>`; BountyRequest has the same shape
-              return { success: true, request: existing as unknown as BountyRequest }
+          if (isUniqueViolation) {
+            // A unique_violation occurred. It's possible a concurrent insert succeeded
+            // but the DB now contains multiple matching rows (data drift or previous bug).
+            // Attempt to read the most-recent matching row ordered by `created_at`.
+            try {
+              // Fetch up to two rows so we can detect if multiple matching rows exist.
+              const { data: rows, error: fetchErr } = await supabase
+                .from('bounty_requests')
+                .select('*')
+                .eq('bounty_id', String(normalizedRequest.bounty_id))
+                .eq('hunter_id', String(normalizedRequest.hunter_id))
+                .order('created_at', { ascending: false })
+                .limit(2)
+
+              if (fetchErr) {
+                logger.error('Failed to fetch existing bounty request after duplicate key error', { bountyId: normalizedRequest.bounty_id, hunterId: normalizedRequest.hunter_id, error: fetchErr?.message || fetchErr })
+              } else if (Array.isArray(rows) && rows.length > 0) {
+                // If more than one row is returned, this indicates a data integrity
+                // issue where the unique constraint was violated or bypassed.
+                if (rows.length > 1) {
+                  try {
+                    const ids = rows.map((r: any) => r.id)
+                    const createdAts = rows.map((r: any) => r.created_at)
+                    logger.error('Data integrity: multiple bounty_requests rows for same bounty/hunter (requires manual cleanup)', {
+                      bountyId: normalizedRequest.bounty_id,
+                      hunterId: normalizedRequest.hunter_id,
+                      count: rows.length,
+                      ids,
+                      createdAt: createdAts,
+                      dataIntegrity: true,
+                    })
+                  } catch (logErr) {
+                    logger.error('Failed to log detailed data-integrity information for duplicate bounty_requests', { bountyId: normalizedRequest.bounty_id, hunterId: normalizedRequest.hunter_id, error: logErr instanceof Error ? logErr.message : String(logErr) })
+                  }
+                }
+
+                // Return the most-recent row so callers can continue treating this
+                // as a successful application while the corruption is investigated.
+                const existing = rows[0] as unknown as BountyRequest
+                return { success: true, request: existing }
+              }
+            } catch (fetchErr) {
+              logger.error('Exception while fetching existing bounty request after duplicate key error', { bountyId: normalizedRequest.bounty_id, hunterId: normalizedRequest.hunter_id, error: fetchErr instanceof Error ? fetchErr.message : String(fetchErr) })
             }
           }
           // Log Supabase error details for better diagnostics

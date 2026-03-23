@@ -22,8 +22,8 @@ import {
   ValidationError
 } from '../middleware/error-handler';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/unified-auth';
-import { toJsonSchema } from '../utils/zod-json';
 import { notificationService } from '../services/notification-service';
+import { toJsonSchema } from '../utils/zod-json';
 
 /**
  * Validation schemas using Zod
@@ -610,21 +610,58 @@ export async function registerConsolidatedBountyRequestRoutes(
           .single();
 
         if (createError) {
-          // Handle duplicate entry error
-          if (createError.code === '23505') {
-            throw new ConflictError('You have already applied to this bounty');
+          // Detect duplicate/unique violation either by code or by message text.
+          const createErr: any = createError
+          const createMsg = String(createErr?.message || createErr?.error?.message || createErr?.details || createErr?.hint || (() => {
+            try { return JSON.stringify(createErr) } catch { return String(createErr) }
+          })())
+          const isUniqueViolation = (createErr && createErr.code === '23505') || /duplicate|unique|unique_bounty_user/i.test(createMsg)
+
+          // Handle duplicate entry error by attempting to read the existing record.
+          if (isUniqueViolation) {
+            request.log.warn({ error: createMsg, userId, bountyId: body.bounty_id }, 'Duplicate bounty request detected for user and bounty; attempting to return existing record')
+            try {
+              const { data: existingRows, error: fetchErr } = await supabase
+                .from('bounty_requests')
+                .select('*')
+                .eq('bounty_id', body.bounty_id)
+                .eq('hunter_id', userId)
+                .order('created_at', { ascending: false })
+                .limit(2)
+
+              if (fetchErr) {
+                request.log.error({ error: fetchErr.message, userId, bountyId: body.bounty_id }, 'Failed to fetch existing bounty request after duplicate key error')
+                throw new ConflictError('You have already applied to this bounty');
+              }
+
+              if (Array.isArray(existingRows) && existingRows.length > 0) {
+                if (existingRows.length > 1) {
+                  try {
+                    const ids = existingRows.map((r: any) => r.id)
+                    const createdAts = existingRows.map((r: any) => r.created_at)
+                    request.log.error({ bountyId: body.bounty_id, hunterId: userId, count: existingRows.length, ids, createdAt: createdAts, dataIntegrity: true }, 'Data integrity: multiple bounty_requests rows for same bounty/hunter (requires manual cleanup)')
+                  } catch (logErr) {
+                    request.log.error({ error: logErr }, 'Failed to log detailed data-integrity information for duplicate bounty_requests')
+                  }
+                }
+
+                // Return existing request (creation race) so callers can treat this as success
+                reply.code(200);
+                return existingRows[0];
+              }
+
+              // No matching row found despite duplicate error: surface conflict
+              throw new ConflictError('You have already applied to this bounty');
+            } catch (err) {
+              if (err instanceof ConflictError) throw err;
+              request.log.error({ err, userId, bountyId: body.bounty_id }, 'Unexpected error handling duplicate bounty request')
+              throw new ConflictError('You have already applied to this bounty');
+            }
           }
-          request.log.error(
-            { error: createError.message, userId, bountyId: body.bounty_id },
-            'Bounty request creation failed'
-          );
+
+          request.log.error({ error: createError.message, userId, bountyId: body.bounty_id }, 'Bounty request creation failed')
           throw new Error(createError.message);
         }
-
-        request.log.info(
-          { userId, requestId: bountyRequest.id, bountyId: body.bounty_id },
-          'Bounty request created successfully'
-        );
 
         // Send notification to the bounty poster
         try {
