@@ -705,42 +705,60 @@ export const bountyRequestService = {
       return result;
     }
 
-    // API mode: keep using updateStatus(...) so tests that mock updateStatus continue to work.
-    // This also preserves the previous client-side escrow creation flow for API consumers.
+    // API mode: call an atomic server-side function to accept the request.
+    // This replaces sequential client updates with a single server-side operation
+    // exposed at POST ${API_BASE_URL}/functions/v1/accept-bounty-request
     try {
-      const result = await this.updateStatus(requestId, "accepted");
+      const fnUrl = `${API_BASE_URL.replace(/\/$/, '')}/functions/v1/accept-bounty-request`
+      const res = await fetch(fnUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ request_id: String(requestId) }),
+      })
 
-      if (result) {
-        try {
-          const bountyData = await this.getBountyForRequest(result.bounty_id);
-          if (bountyData && !bountyData.is_for_honor && bountyData.amount > 0) {
-            const escrowResult = await paymentService.createEscrow({
-              bountyId: String(result.bounty_id),
-              amount: bountyData.amount,
-              posterId: bountyData.user_id || bountyData.poster_id,
-              hunterId: result.hunter_id,
-              userId: bountyData.user_id || bountyData.poster_id,
-            });
-
-            if (escrowResult.success && escrowResult.escrowId) {
-              try {
-                await this.updateBountyPaymentIntent(result.bounty_id, escrowResult.escrowId);
-              } catch (updateError) {
-                logger.error('Failed to update bounty with payment_intent_id', { bountyId: result.bounty_id, escrowId: escrowResult.escrowId, error: updateError });
-              }
-            } else if (!escrowResult.success) {
-              logger.error('Failed to create escrow for accepted bounty request', { requestId, bountyId: result.bounty_id, error: escrowResult.error });
-            }
-          }
-        } catch (error) {
-          logger.error('Error creating escrow after accepting bounty request', { requestId, error: error instanceof Error ? error.message : String(error) });
-        }
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        const msg = `Accept function failed: ${res.status} ${res.statusText} ${text}`
+        logger.error('acceptRequest: edge function error', { requestId, status: res.status, body: text })
+        const err = new Error(msg)
+        ;(err as any).status = res.status
+        throw err
       }
 
-      return result;
+      // On success, fetch the accepted request to return it (authoritative state)
+      const acceptedReq = await this.getById(requestId as any)
+
+      // Create escrow if needed using authoritative bounty data
+      try {
+        const bountyData = await this.getBountyForRequest((acceptedReq as any)?.bounty_id)
+        if (acceptedReq && bountyData && !bountyData.is_for_honor && bountyData.amount > 0) {
+          const escrowResult = await paymentService.createEscrow({
+            bountyId: String((acceptedReq as any).bounty_id),
+            amount: bountyData.amount,
+            posterId: bountyData.user_id || bountyData.poster_id,
+            hunterId: (acceptedReq as any).hunter_id,
+            userId: bountyData.user_id || bountyData.poster_id,
+          })
+
+          if (escrowResult.success && escrowResult.escrowId) {
+            try {
+              await this.updateBountyPaymentIntent((acceptedReq as any).bounty_id, escrowResult.escrowId)
+            } catch (updateError) {
+              logger.error('Failed to update bounty with payment_intent_id', { bountyId: (acceptedReq as any).bounty_id, escrowId: escrowResult.escrowId, error: updateError })
+            }
+          } else if (!escrowResult.success) {
+            logger.error('Failed to create escrow for accepted bounty request', { requestId, bountyId: (acceptedReq as any).bounty_id, error: escrowResult.error })
+          }
+        }
+      } catch (error) {
+        logger.error('Error creating escrow after accepting bounty request (edge function path)', { requestId, error: error instanceof Error ? error.message : String(error) })
+      }
+
+      return acceptedReq
     } catch (err) {
-      logger.error('Error accepting request via API mode', { requestId, error: err instanceof Error ? err.message : String(err) });
-      return null;
+      logger.error('Error accepting request via Edge Function / API mode', { requestId, error: err instanceof Error ? err.message : String(err) })
+      // Re-throw to allow caller to present structured errors (useAcceptRequest will catch)
+      throw err
     }
   },
 

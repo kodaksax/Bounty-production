@@ -105,22 +105,30 @@ export function useAcceptRequest({
       }
 
       // ANNOTATION: This API call should be transactional on your backend.
-      const result = await bountyRequestService.acceptRequest(requestId)
+      let result: any = null
+      try {
+        result = await bountyRequestService.acceptRequest(requestId)
+      } catch (acceptErr: any) {
+        // Handle structured errors from the server/edge function
+        const status = (acceptErr && (acceptErr as any).status) || null
+        console.error('Accept request failed for', requestId, acceptErr)
+        if (status === 409) {
+          Alert.alert('Conflict', 'This bounty was updated elsewhere. Refresh and try again.')
+        } else if (status === 403) {
+          Alert.alert('Not authorized', 'You are not allowed to accept this request.')
+        } else if (status === 400) {
+          Alert.alert('Invalid request', 'The accept request was invalid. Please refresh and try again.')
+        } else {
+          Alert.alert('Accept Failed', 'Failed to accept the request on the server. The UI may be out of sync; please refresh.')
+        }
 
-      if (!result) {
-        // If accept failed server-side, inform the user and reload lists to reflect server state
-        console.error('Accept request failed for', requestId)
-        Alert.alert('Accept Failed', 'Failed to accept the request on the server. The UI may be out of sync; please refresh.')
         // Reload lists to attempt to restore correct state
         await Promise.allSettled([loadMyBounties(), loadInProgress(), loadRequestsForMyBounties(myBounties)])
         return
       }
 
-      // Update bounty status to in_progress and set accepted_by
-      // Prefer the full bounty object id, but fall back to the canonical bounty_id
+      // Fetch authoritative bounty object (server performed the transition atomically)
       const bountyId = (request.bounty as any)?.id ?? (request as any)?.bounty_id
-
-      // If we don't have the full bounty object available on the request, fetch it
       let bountyObj: Bounty | null = (request.bounty as unknown as Bounty) ?? null
       if (!bountyObj && bountyId != null) {
         try {
@@ -128,45 +136,6 @@ export function useAcceptRequest({
           if (fetched) bountyObj = fetched
         } catch (fetchErr) {
           console.error('Accept: failed to fetch bounty details', fetchErr)
-          // continue: we still attempt update using bountyId, and skip escrow if bounty data missing
-        }
-      }
-      if (bountyId != null) {
-        try {
-          const updated = await (bountyService as any).update(bountyId, {
-            status: 'in_progress',
-            accepted_by: hunterIdForConv,
-          })
-          if (!updated) {
-            console.error('bountyService.update returned null for', bountyId, 'updates:', { status: 'in_progress' })
-            // Diagnostic: fetch server bounty and log its current state
-            try {
-              await bountyService.getById(bountyId)
-              Alert.alert('Server update failed', `Failed to update bounty ${String(bountyId)}.`)
-            } catch (srvErr) {
-              console.error('Diagnostic: failed to fetch server bounty after update failure', srvErr)
-              Alert.alert('Server update failed', `Failed to update bounty ${String(bountyId)} and failed to fetch server state.`)
-            }
-          }
-        } catch (statusError) {
-          console.error('Error updating bounty status:', statusError)
-          // Continue with the flow even if status update fails
-        }
-      }
-
-      // Remove all competing requests for this bounty (cleanup)
-      const competingRequests = bountyRequests.filter(
-        req => String(req.bounty_id) === String(request.bounty_id) && String(req.id) !== String(requestId)
-      )
-
-      if (competingRequests.length > 0) {
-        try {
-          await Promise.all(
-            competingRequests.map(req => bountyRequestService.delete((req.id as any)))
-          )
-        } catch (cleanupError) {
-          console.error('Error cleaning up competing requests:', cleanupError)
-          // Continue even if cleanup fails
         }
       }
 
