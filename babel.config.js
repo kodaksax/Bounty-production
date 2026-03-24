@@ -27,5 +27,22 @@ module.exports = function (api) {
       // Reanimated plugin must be listed last
       'react-native-reanimated/plugin',
     ],
+    // Ensure react-native-css-interop and nativewind runtime files are fully
+    // transpiled on all platforms.  When jsEngine:"hermes" is set, babel-preset-expo
+    // passes unstable_transformProfile:"hermes-stable" to @react-native/babel-preset,
+    // which causes it to skip @babel/plugin-transform-logical-assignment-operators
+    // (on the assumption that Hermes already supports ??= / ||= / &&=).
+    // In practice some Android Hermes builds (particularly older Expo Go builds) do
+    // not fully support ES2021 logical-assignment operators, producing redbox parse
+    // errors on Android while iOS works fine.  The overrides below force-apply the
+    // transform only to the affected node_modules so no other code is affected.
+    overrides: [
+      {
+        test: /node_modules\/(react-native-css-interop|nativewind)\//,
+        plugins: [
+          '@babel/plugin-transform-logical-assignment-operators',
+        ],
+      },
+    ],
   };
 };
