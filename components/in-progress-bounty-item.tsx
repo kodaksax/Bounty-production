@@ -38,7 +38,7 @@ export function InProgressBountyItem({
     <TouchableOpacity onPress={handlePress} activeOpacity={0.7}>
       <View className="bg-emerald-800/50 backdrop-blur-sm rounded-lg overflow-hidden mb-3">
         <View className="p-3">
-          <View className="flex items-center gap-3">
+          <View className="flex items-center">
             <Avatar className="h-8 w-8 border border-emerald-400/30">
               <AvatarImage src={avatarSrc || "/placeholder.svg?height=32&width=32"} alt={username} />
               <AvatarFallback className="bg-emerald-900 text-emerald-200 text-xs">
@@ -55,7 +55,7 @@ export function InProgressBountyItem({
           </View>
 
           <View className="flex-row justify-between items-center mt-2">
-            <View className="flex-row items-center gap-2">
+            <View className="flex-row items-center">
               {isForHonor ? (
                 <View className="bg-pink-600/80 px-2 py-1 rounded">
                   <Text className="text-white font-bold text-xs">For Honor</Text>

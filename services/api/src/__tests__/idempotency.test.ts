@@ -280,7 +280,7 @@ describe('Stripe API Idempotency Integration', () => {
     
     validKeys.forEach(key => {
       expect(key.length).toBeLessThanOrEqual(255);
-      expect(key).toMatch(/^[a-zA-Z0-9_-]+$/);
+      expect(key).toMatch(/^[a-zA-Z0-9-]+$/);
     });
   });
 

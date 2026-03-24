@@ -391,7 +391,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#0f291e',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
   },
   loadingText: {
     color: '#a7f3d0',
@@ -403,7 +402,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#0f291e',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
     padding: 24,
   },
   errorText: {
@@ -418,7 +416,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: 'rgba(5, 150, 105, 0.2)',
     borderRadius: 99,
-    gap: 8,
     marginTop: 16,
   },
   backButtonText: {
@@ -455,7 +452,6 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    gap: 16,
   },
   heroCard: {
     backgroundColor: 'rgba(5, 150, 105, 0.2)',
@@ -497,7 +493,6 @@ const styles = StyleSheet.create({
   priceRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
     marginBottom: 20,
   },
   amount: {
@@ -508,7 +503,6 @@ const styles = StyleSheet.create({
   honorBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     backgroundColor: 'rgba(245, 158, 11, 0.2)',
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -540,7 +534,6 @@ const styles = StyleSheet.create({
   posterInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
   },
   avatarPlaceholder: {
     width: 44,
@@ -572,7 +565,6 @@ const styles = StyleSheet.create({
     padding: 24,
     borderWidth: 1,
     borderColor: 'rgba(16, 185, 129, 0.1)',
-    gap: 24,
   },
   sectionTitle: {
     color: '#a7f3d0',
@@ -588,14 +580,12 @@ const styles = StyleSheet.create({
   },
   infoGrid: {
     flexDirection: 'row',
-    gap: 16,
   },
   infoBox: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.2)',
     borderRadius: 16,
     padding: 16,
-    gap: 8,
   },
   infoIconBg: {
     width: 36,
@@ -618,12 +608,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   skillsSection: {
-    gap: 12,
   },
   skillsList: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
   },
   skillTag: {
     backgroundColor: 'rgba(16, 185, 129, 0.15)',
@@ -644,7 +632,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.2)',
     padding: 16,
     borderRadius: 16,
-    gap: 16,
   },
   timelineValue: {
     color: '#fff',

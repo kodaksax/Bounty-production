@@ -785,7 +785,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                   ListHeaderComponent={(
                     <View>
                       <BountyWorkflowGuide variant="hunter-inprogress" />
-                      <View className="flex-row gap-2 mb-1">
+                      <View className="flex-row mb-1">
                         {(['all', 'applied', 'in_progress', 'completed', 'rejected'] as const).map((f) => {
                           const label = f === 'all' ? 'All' : f === 'applied' ? 'Applied' : f === 'in_progress' ? 'In Progress' : f === 'completed' ? 'Completed' : 'Rejected'
                           const selected = statusFilterInProgress === f
@@ -918,7 +918,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                   ListHeaderComponent={(
                     <View>
                       <BountyWorkflowGuide variant="poster-postings" />
-                      <View className="flex-row gap-2 mb-1">
+                      <View className="flex-row mb-1">
                         {(['all', 'open', 'in_progress', 'completed', 'archived'] as const).map((f) => {
                           const label = f === 'all' ? 'All' : f === 'open' ? 'Open' : f === 'in_progress' ? 'In Progress' : f === 'completed' ? 'Completed' : 'Archived'
                           const selected = statusFilterMyPostings === f
@@ -1016,7 +1016,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
 
             {/* Preset amount chips + dynamic Other chip (horizontal scroll to keep fixed height) */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.amountScrollContent} style={styles.scrollHeight48}>
-              <View className="flex-row items-center gap-3 mb-0">
+              <View className="flex-row items-center mb-0">
                 {AMOUNT_PRESETS.map((amt) => {
                   const selected = formData.amount === amt && !formData.isForHonor;
                   const lowBalance = !formData.isForHonor && formData.amount === amt && formData.amount > balance;
@@ -1128,7 +1128,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                     )}
                     activeOpacity={0.85}
                   >
-                    <View className="flex-row items-center justify-center gap-2">
+                    <View className="flex-row items-center justify-center">
                       {isSubmitting && !lowBalance && <ActivityIndicator size="small" color="white" />}
                       <Text className={cn("font-semibold tracking-wide", lowBalance ? "text-amber-200" : "text-white")}>{label}</Text>
                     </View>

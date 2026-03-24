@@ -32,7 +32,6 @@ const styles = StyleSheet.create({
   labelContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   label: {
     fontSize: 14,

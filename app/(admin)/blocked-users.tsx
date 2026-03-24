@@ -209,7 +209,6 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    gap: 12,
   },
   loadingContainer: {
     flex: 1,
@@ -266,10 +265,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   blockCard: {
-    gap: 12,
   },
   userSection: {
-    gap: 4,
   },
   sectionLabel: {
     fontSize: 12,
@@ -280,7 +277,6 @@ const styles = StyleSheet.create({
   userInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   username: {
     fontSize: 16,
@@ -292,7 +288,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   dateSection: {
-    gap: 4,
     paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: '#047857',
@@ -310,9 +305,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
     paddingVertical: 10,
-    backgroundColor: '#10b98120',
+    backgroundColor: 'rgba(16,185,129,0.125)',
     borderRadius: 8,
     marginTop: 8,
   },

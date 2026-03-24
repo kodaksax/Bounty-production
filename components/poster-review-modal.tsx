@@ -791,13 +791,11 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    gap: 20,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
   },
   loadingText: {
     color: 'rgba(255,254,245,0.8)',
@@ -808,7 +806,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
-    gap: 16,
   },
   emptyText: {
     color: '#fff',
@@ -823,7 +820,6 @@ const styles = StyleSheet.create({
   hunterInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
     backgroundColor: 'rgba(5, 150, 105, 0.2)',
     padding: 16,
     borderRadius: 12,
@@ -857,7 +853,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   section: {
-    gap: 12,
   },
   sectionTitle: {
     color: '#6ee7b7',
@@ -879,7 +874,6 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   proofList: {
-    gap: 12,
   },
   proofItem: {
     flexDirection: 'row',
@@ -887,7 +881,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(5, 150, 105, 0.2)',
     borderRadius: 12,
     padding: 12,
-    gap: 12,
     borderWidth: 1,
     borderColor: 'rgba(110, 231, 183, 0.2)',
   },
@@ -901,7 +894,6 @@ const styles = StyleSheet.create({
   },
   proofInfo: {
     flex: 1,
-    gap: 4,
   },
   proofName: {
     color: '#fff',
@@ -924,14 +916,12 @@ const styles = StyleSheet.create({
   },
   actionButtons: {
     flexDirection: 'row',
-    gap: 12,
   },
   rejectButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
     backgroundColor: '#ef4444',
     paddingVertical: 16,
     borderRadius: 12,
@@ -946,7 +936,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
     backgroundColor: '#10b981',
     paddingVertical: 16,
     borderRadius: 12,
@@ -963,7 +952,6 @@ const styles = StyleSheet.create({
   },
   ratingFormContainer: {
     alignItems: 'center',
-    gap: 20,
     padding: 20,
   },
   ratingTitle: {
@@ -1007,7 +995,6 @@ const styles = StyleSheet.create({
   },
   revisionFormContainer: {
     alignItems: 'center',
-    gap: 20,
     padding: 20,
   },
   revisionTitle: {
@@ -1033,7 +1020,6 @@ const styles = StyleSheet.create({
   },
   buttonRow: {
     flexDirection: 'row',
-    gap: 12,
     width: '100%',
   },
   secondaryButton: {
@@ -1051,7 +1037,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   payoutWarningContainer: {
-    gap: 16,
     padding: 20,
     borderRadius: 16,
     backgroundColor: 'rgba(5, 150, 105, 0.18)',
@@ -1083,7 +1068,6 @@ const styles = StyleSheet.create({
   warningAmountChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 999,
@@ -1145,12 +1129,10 @@ const styles = StyleSheet.create({
   warningActions: {
     alignItems: 'center',
     marginTop: 8,
-    gap: 12,
   },
   warningCancelButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     paddingHorizontal: 18,
     paddingVertical: 10,
     borderRadius: 999,

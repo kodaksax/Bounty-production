@@ -414,7 +414,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
-    gap: 16,
   },
   errorText: {
     color: '#ef4444',
@@ -444,7 +443,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
-    gap: 12,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(110, 231, 183, 0.1)',
   },
@@ -461,7 +459,6 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    gap: 20,
   },
   bountyInfoCard: {
     backgroundColor: 'rgba(5, 150, 105, 0.2)',
@@ -469,7 +466,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(110, 231, 183, 0.3)',
-    gap: 8,
   },
   bountyTitle: {
     color: '#fff',
@@ -482,7 +478,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   timelineContainer: {
-    gap: 12,
   },
   sectionTitle: {
     color: '#6ee7b7',
@@ -492,7 +487,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   timeline: {
-    gap: 16,
     paddingVertical: 8,
   },
   stageItem: {
@@ -541,7 +535,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 24,
     alignItems: 'center',
-    gap: 12,
     borderWidth: 1,
     borderColor: 'rgba(251, 191, 36, 0.3)',
   },
@@ -559,7 +552,6 @@ const styles = StyleSheet.create({
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     backgroundColor: 'rgba(251, 191, 36, 0.2)',
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -576,7 +568,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 24,
     alignItems: 'center',
-    gap: 12,
     borderWidth: 1,
     borderColor: 'rgba(16, 185, 129, 0.3)',
   },
@@ -596,7 +587,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 20,
     alignItems: 'center',
-    gap: 8,
     marginTop: 12,
     width: '100%',
   },
@@ -620,7 +610,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 20,
     alignItems: 'center',
-    gap: 8,
     marginTop: 12,
     width: '100%',
   },
@@ -639,7 +628,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
-    gap: 8,
   },
   balanceLabel: {
     color: '#6ee7b7',
@@ -654,14 +642,12 @@ const styles = StyleSheet.create({
   },
   actionsContainer: {
     flexDirection: 'row',
-    gap: 12,
   },
   actionButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
     paddingVertical: 14,
     borderRadius: 12,
   },
@@ -680,14 +666,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(5, 150, 105, 0.1)',
     borderRadius: 12,
     padding: 16,
-    gap: 12,
     borderWidth: 1,
     borderColor: 'rgba(110, 231, 183, 0.2)',
   },
   receiptHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   receiptTitle: {
     color: '#6ee7b7',
@@ -717,7 +701,6 @@ const styles = StyleSheet.create({
   statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     backgroundColor: 'rgba(16, 185, 129, 0.2)',
     paddingHorizontal: 8,
     paddingVertical: 4,

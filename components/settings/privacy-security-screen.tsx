@@ -397,7 +397,7 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
           {state.sessions.map(s => (
             <View key={s.id} className="flex-row items-center justify-between py-2 border-b border-emerald-700/40 last:border-b-0">
               <View className="flex-1 mr-3">
-                <View className="flex-row items-center gap-2">
+                <View className="flex-row items-center">
                   <Text className="text-white text-xs font-medium">{s.device_name}</Text>
                   {s.is_current && <View className="bg-emerald-500/20 px-1.5 py-0.5 rounded"><Text className="text-emerald-400 text-[10px]">Current</Text></View>}
                 </View>

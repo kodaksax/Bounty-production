@@ -339,13 +339,11 @@ const styles = StyleSheet.create({
   statusSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
     marginBottom: 20,
   },
   flaggedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     backgroundColor: 'rgba(244,67,54,0.15)',
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -381,7 +379,6 @@ const styles = StyleSheet.create({
   actionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
   },
   actionButton: {
     flex: 1,
@@ -390,7 +387,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
-    gap: 8,
     borderWidth: 1,
     borderColor: 'rgba(0,145,44,0.4)',
   },

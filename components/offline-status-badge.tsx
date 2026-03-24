@@ -109,7 +109,6 @@ const styles = StyleSheet.create({
   content: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
   },
   text: {
     color: '#fff',

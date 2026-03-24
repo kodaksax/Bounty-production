@@ -193,7 +193,7 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
     <View className="flex flex-col min-h-screen bg-emerald-600">
       {/* Search Header */}
       <View className="p-4 pt-8">
-        <View className="flex items-center gap-3">
+        <View className="flex items-center">
           <TouchableOpacity onPress={onBack} className="text-white">
             <MaterialIcons name="arrow-back" size={20} color="white" />
           </TouchableOpacity>
@@ -322,7 +322,7 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
           <View className="space-y-3 pb-4">
             {searchResults.map((bounty) => (
               <View key={bounty.id} className="bg-emerald-700/40 rounded-lg p-3">
-                <View className="flex items-center gap-3 mb-2">
+                <View className="flex items-center mb-2">
                   <Avatar className="h-8 w-8 border border-emerald-400/30">
                     <AvatarImage src={`/placeholder.svg?height=32&width=32`} alt={bounty.username} />
                     <AvatarFallback className="bg-emerald-900 text-emerald-200 text-xs">

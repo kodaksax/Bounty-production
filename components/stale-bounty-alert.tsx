@@ -61,7 +61,7 @@ export const StaleBountyAlert: React.FC<StaleBountyAlertProps> = ({
         </View>
       </View>
 
-      <View className="flex-row gap-2">
+      <View className="flex-row">
         <TouchableOpacity
           onPress={handleCancel}
           className="flex-1 bg-red-600 rounded-lg py-3 px-4"

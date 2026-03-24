@@ -316,7 +316,6 @@ const inputStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: SPACING.COMPACT_GAP / 2,
-    gap: 4,
   },
   errorText: {
     fontSize: TYPOGRAPHY.SIZE_SMALL,

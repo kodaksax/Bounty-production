@@ -159,7 +159,6 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
     borderWidth: 1,
     borderColor: 'rgba(0,145,44,0.2)',
     height: 140,
@@ -179,7 +178,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
-    gap: 16,
   },
   errorText: {
     fontSize: 14,

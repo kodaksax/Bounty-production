@@ -97,7 +97,6 @@ const styles = StyleSheet.create({
   },
   actions: {
     width: '100%',
-    gap: 12,
     marginBottom: 40,
   },
   primaryButton: {
@@ -108,7 +107,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 24,
     borderRadius: 12,
-    gap: 10,
   },
   primaryButtonText: {
     fontSize: 16,
@@ -123,7 +121,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 24,
     borderRadius: 12,
-    gap: 10,
     borderWidth: 1,
     borderColor: 'rgba(0,145,44,0.3)',
   },
@@ -134,7 +131,6 @@ const styles = StyleSheet.create({
   },
   helpSection: {
     alignItems: 'center',
-    gap: 4,
   },
   helpText: {
     fontSize: 14,

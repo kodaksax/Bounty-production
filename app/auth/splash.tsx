@@ -203,7 +203,6 @@ const styles = StyleSheet.create({
 	},
 	devBannerActions: {
 		flexDirection: 'row',
-		gap: 8,
 		justifyContent: 'center',
 		alignItems: 'center',
 	},

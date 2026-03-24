@@ -69,7 +69,6 @@ const styles = StyleSheet.create({
     padding: 12,
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
     maxWidth: '85%',
     borderWidth: 1,
     borderColor: 'rgba(110, 231, 183, 0.3)',
@@ -84,7 +83,6 @@ const styles = StyleSheet.create({
   },
   textContainer: {
     flex: 1,
-    gap: 4,
   },
   messageText: {
     color: '#fff',

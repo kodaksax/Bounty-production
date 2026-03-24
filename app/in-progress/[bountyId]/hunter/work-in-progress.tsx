@@ -543,7 +543,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
-    gap: 16,
   },
   errorText: {
     color: '#ef4444',
@@ -573,7 +572,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
-    gap: 12,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(110, 231, 183, 0.1)',
   },
@@ -590,7 +588,6 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    gap: 20,
   },
   bountyCard: {
     backgroundColor: 'rgba(5, 150, 105, 0.2)',
@@ -601,7 +598,6 @@ const styles = StyleSheet.create({
   },
   bountyHeader: {
     flexDirection: 'row',
-    gap: 12,
     marginBottom: 12,
   },
   avatarPlaceholder: {
@@ -636,7 +632,6 @@ const styles = StyleSheet.create({
   honorBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     backgroundColor: '#ec4899',
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -648,7 +643,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   timelineContainer: {
-    gap: 12,
   },
   sectionTitle: {
     color: '#6ee7b7',
@@ -658,7 +652,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   timeline: {
-    gap: 16,
     paddingVertical: 8,
   },
   stageItem: {
@@ -703,7 +696,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   section: {
-    gap: 12,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -713,7 +705,6 @@ const styles = StyleSheet.create({
   addUpdateButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
@@ -725,7 +716,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   progressFormContainer: {
-    gap: 12,
     backgroundColor: 'rgba(5, 150, 105, 0.15)',
     borderRadius: 12,
     padding: 12,
@@ -748,7 +738,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
     paddingVertical: 12,
     borderRadius: 10,
   },
@@ -763,7 +752,6 @@ const styles = StyleSheet.create({
   progressHint: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     padding: 12,
     backgroundColor: 'rgba(5, 150, 105, 0.1)',
     borderRadius: 8,
@@ -778,7 +766,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
     paddingVertical: 16,
     borderRadius: 12,
     shadowColor: '#000',
@@ -795,7 +782,6 @@ const styles = StyleSheet.create({
   },
   messageInputContainer: {
     flexDirection: 'row',
-    gap: 12,
     alignItems: 'flex-end',
   },
   messageInput: {
@@ -825,7 +811,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(5, 150, 105, 0.1)',
     borderRadius: 12,
     padding: 16,
-    gap: 8,
   },
   contextTitle: {
     color: '#6ee7b7',
@@ -848,12 +833,10 @@ const styles = StyleSheet.create({
   infoRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 16,
   },
   infoItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
   },
   infoText: {
     color: 'rgba(255,254,245,0.8)',
@@ -864,7 +847,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
     paddingVertical: 16,
     borderRadius: 12,
     shadowColor: '#000',
@@ -882,7 +864,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
     paddingVertical: 14,
     borderRadius: 12,
     backgroundColor: 'rgba(245, 158, 11, 0.15)',

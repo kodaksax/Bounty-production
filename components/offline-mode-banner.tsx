@@ -129,7 +129,6 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
   },
   textContainer: {
     flex: 1,
@@ -184,7 +183,6 @@ const compactStyles = StyleSheet.create({
   compactContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 4,
     backgroundColor: '#fef3c7',

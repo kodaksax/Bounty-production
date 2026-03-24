@@ -521,7 +521,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 999,
     marginBottom: 20,
-    gap: 8,
   },
   nextButtonDisabled: {
     backgroundColor: 'rgba(167,243,208,0.3)',
@@ -534,7 +533,6 @@ const styles = StyleSheet.create({
   progressContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 8,
     paddingTop: 8,
   },
   progressDot: {

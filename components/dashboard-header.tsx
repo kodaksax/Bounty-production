@@ -5,7 +5,7 @@ import { View, Text, TextInput, TouchableOpacity } from "react-native"
 
 export function DashboardHeader() {
   return (
-    <View className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6">
+    <View className="sticky top-0 z-10 flex h-16 items-center border-b bg-background px-4 md:px-6">
       <TouchableOpacity>
         <MaterialIcons name="menu" size={24} color="#000000" />
       </TouchableOpacity>
@@ -18,7 +18,7 @@ export function DashboardHeader() {
           />
         </View>
       </View>
-      <View className="ml-auto flex items-center gap-2">
+      <View className="ml-auto flex items-center">
         <TouchableOpacity className="relative">
           <MaterialIcons name="notifications" size={24} color="#000000" />
           <Text className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">

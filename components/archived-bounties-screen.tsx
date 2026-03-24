@@ -69,7 +69,7 @@ export function ArchivedBountiesScreen({ onBack }: ArchivedBountiesScreenProps) 
     <View className="flex flex-col min-h-screen bg-emerald-600">
       {/* Header: icon + title on left, back on right */}
       <View className="flex flex-row justify-between items-center p-4 pt-8">
-        <View className="flex flex-row items-center gap-3">
+        <View className="flex flex-row items-center">
           <MaterialIcons name="archive" size={24} color="#ffffff" />
           <Text className="text-lg font-bold tracking-wider text-white">ARCHIVED BOUNTIES</Text>
         </View>

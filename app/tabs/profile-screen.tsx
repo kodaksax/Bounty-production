@@ -119,9 +119,13 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   // This effect is now redundant as authProfileService handles this, but kept for backward compatibility
   useEffect(() => {
     const ensureProfile = async () => {
-      if (!authUserId || authUserId === CURRENT_USER_ID) return;
+      if (!authUserId || authUserId === CURRENT_USER_ID) {
+        return;
+      }
       // Debounced refresh to avoid repeated calls when mounting + focusing
-      if (!shouldRefresh()) return;
+      if (!shouldRefresh()) {
+        return;
+      }
 
       // Refresh the auth profile to ensure it's synced
       await refreshAuthProfile();
@@ -145,7 +149,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
       };
       let isActive = true;
       run();
-      return () => { isActive = false };
+      return () => { isActive = false; };
     }, [refreshAuthProfile, refreshUserProfile])
   );
 
@@ -156,14 +160,14 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
         // Prefer auth profile (Supabase-synced) first
         if (authProfile) {
           setProfileData({
-            name: `@${authProfile.username}`,
+            name: '@' + authProfile.username,
             about: authProfile.about || "Bounty user",
             avatar: authProfile.avatar || "/placeholder.svg?height=80&width=80",
           })
         } else if (userProfile) {
           // Fallback to local/normalized profile
           setProfileData({
-            name: userProfile.name ? `${userProfile.name} (@${userProfile.username})` : `@${userProfile.username}`,
+            name: userProfile.name ? (userProfile.name + ' (@' + userProfile.username + ')') : ('@' + userProfile.username),
             about: userProfile.bio || "Bounty user",
             avatar: userProfile.avatar || "/placeholder.svg?height=80&width=80",
           })
@@ -195,7 +199,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
 
           if (authProfile?.created_at) {
             const joinDate = new Date(authProfile.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-            defaultSkills.push({ id: '3', icon: 'favorite', text: `Joined ${joinDate}` })
+            defaultSkills.push({ id: '3', icon: 'favorite', text: 'Joined ' + joinDate })
           } else {
             defaultSkills.push({ id: '3', icon: 'favorite', text: 'Joined December 28th 2024' })
           }
@@ -246,7 +250,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   // NOTE: profileUrl is a placeholder. Replace with your real public profile URL scheme.
   const shareProfile = async () => {
     try {
-      const skillsText = skills.length > 0 ? skills.map(s => s.text + (s.credentialUrl ? ` (${s.credentialUrl.split('/').pop()})` : '')).join(', ') : 'No skills listed'
+      const skillsText = skills.length > 0 ? skills.map(s => s.text + (s.credentialUrl ? ' (' + s.credentialUrl.split('/').pop() + ')' : '')).join(', ') : 'No skills listed'
       const profileUrl = authUserId ? `https://example.com/u/${authUserId}` : 'https://example.com'
       const message = `${profileData.name}\n\n${profileData.about}\n\nSkills: ${skillsText}\n\nView profile: ${profileUrl}`
 
@@ -288,7 +292,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
       )}
       {/* Header — left: BOUNTY brand, right: back + settings */}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 10 }}>
-        <View className="flex-row items-center gap-2">
+        <View className="flex-row items-center">
           <BrandingLogo size="medium" />
         </View>
         <View className="flex-row items-center">

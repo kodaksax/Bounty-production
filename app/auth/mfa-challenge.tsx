@@ -28,7 +28,7 @@ import { supabase } from '../../lib/supabase';
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation';
 
 export default function MfaChallengeScreen() {
-  useScreenBackground('#097959ff');
+  useScreenBackground('rgba(9,121,89,1)');
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { challengeAndVerify, isLoading: authLoading, isMfaChallengeRequired, isEnrolled } = useTwoFactorAuth();

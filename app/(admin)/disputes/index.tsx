@@ -327,7 +327,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
   },
   loadingText: {
     color: 'rgba(255,254,245,0.8)',
@@ -383,7 +382,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: 'rgba(244,67,54,0.4)',
-    gap: 8,
   },
   errorText: {
     flex: 1,
@@ -420,7 +418,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   disputesList: {
-    gap: 12,
   },
   disputeCard: {
     marginBottom: 0,
@@ -435,7 +432,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    gap: 12,
   },
   disputeHeaderText: {
     flex: 1,
@@ -471,7 +467,6 @@ const styles = StyleSheet.create({
   disputeMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: 'rgba(0,145,44,0.2)',
@@ -479,7 +474,6 @@ const styles = StyleSheet.create({
   metaItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
   },
   metaText: {
     fontSize: 12,
@@ -499,7 +493,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 6,
-    gap: 6,
   },
   quickActionText: {
     fontSize: 13,

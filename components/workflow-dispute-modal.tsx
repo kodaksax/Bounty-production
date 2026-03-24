@@ -513,7 +513,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
-    gap: 12,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(110, 231, 183, 0.1)',
   },
@@ -553,7 +552,6 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   stepContent: {
-    gap: 16,
   },
   iconContainer: {
     alignItems: 'center',
@@ -587,12 +585,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(5, 150, 105, 0.15)',
     borderRadius: 12,
     padding: 16,
-    gap: 12,
   },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
   },
   infoText: {
     flex: 1,
@@ -605,7 +601,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(245, 158, 11, 0.15)',
     borderRadius: 12,
     padding: 14,
-    gap: 12,
     alignItems: 'flex-start',
     borderWidth: 1,
     borderColor: 'rgba(245, 158, 11, 0.3)',
@@ -617,12 +612,10 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   reasonsList: {
-    gap: 8,
   },
   reasonOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
     backgroundColor: 'rgba(5, 150, 105, 0.1)',
     borderRadius: 10,
     padding: 14,
@@ -666,7 +659,6 @@ const styles = StyleSheet.create({
   },
   evidenceInputRow: {
     flexDirection: 'row',
-    gap: 8,
     alignItems: 'center',
   },
   textInput: {
@@ -693,7 +685,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
     backgroundColor: 'rgba(5, 150, 105, 0.3)',
     borderRadius: 10,
     padding: 14,
@@ -707,7 +698,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   evidenceList: {
-    gap: 8,
     marginTop: 4,
   },
   evidenceCount: {
@@ -718,7 +708,6 @@ const styles = StyleSheet.create({
   evidenceItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
     backgroundColor: 'rgba(5, 150, 105, 0.2)',
     borderRadius: 8,
     padding: 10,
@@ -734,7 +723,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(5, 150, 105, 0.2)',
     borderRadius: 12,
     padding: 16,
-    gap: 8,
     borderWidth: 1,
     borderColor: 'rgba(110, 231, 183, 0.3)',
   },
@@ -763,7 +751,6 @@ const styles = StyleSheet.create({
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     paddingVertical: 10,
     paddingHorizontal: 12,
   },
@@ -775,7 +762,6 @@ const styles = StyleSheet.create({
   nextBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     backgroundColor: '#10b981',
     paddingVertical: 12,
     paddingHorizontal: 20,
@@ -792,7 +778,6 @@ const styles = StyleSheet.create({
   submitBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     backgroundColor: '#f59e0b',
     paddingVertical: 12,
     paddingHorizontal: 24,

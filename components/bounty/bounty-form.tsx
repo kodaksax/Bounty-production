@@ -179,7 +179,7 @@ export function BountyForm({ defaultValues, onSuccess, isEditMode = false, bount
       </View>
 
       <View className="space-y-2">
-        <View className="flex items-center gap-2">
+        <View className="flex items-center">
           <Checkbox
             id="is_for_honor"
             checked={formData.is_for_honor}

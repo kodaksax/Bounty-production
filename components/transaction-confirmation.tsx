@@ -195,7 +195,6 @@ const styles = StyleSheet.create({
   actions: {
     paddingHorizontal: 24,
     paddingBottom: 32,
-    gap: 12,
   },
   primaryButton: {
     backgroundColor: '#ffffff',

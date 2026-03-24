@@ -143,7 +143,7 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
         {/* Sticky composer */}
         <View className="absolute left-0 right-0" style={{ bottom: 0, paddingBottom: effectiveBottomInset }}>
           <View className="px-3 pb-3">
-            <View className="flex-row items-end gap-2 bg-emerald-700/30 rounded-2xl px-3 pt-2 pb-2 border border-emerald-500/30">
+            <View className="flex-row items-end bg-emerald-700/30 rounded-2xl px-3 pt-2 pb-2 border border-emerald-500/30">
               <TouchableOpacity className="h-9 w-9 rounded-full bg-emerald-700/60 items-center justify-center mt-auto">
                 <MaterialIcons name="add" size={22} color="#ffffff" />
               </TouchableOpacity>
@@ -347,7 +347,7 @@ const TypingIndicator: React.FC = () => {
 
   return (
     <View className="mb-3 px-3 max-w-[80%] mr-auto">
-      <View className="px-4 py-3 rounded-2xl bg-emerald-700/60 rounded-bl-none flex-row gap-1.5">
+      <View className="px-4 py-3 rounded-2xl bg-emerald-700/60 rounded-bl-none flex-row .5">
         <Animated.View 
           style={{ 
             width: 8, 

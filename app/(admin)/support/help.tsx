@@ -241,7 +241,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     marginBottom: 20,
-    gap: 12,
     borderWidth: 1,
     borderColor: 'rgba(0,145,44,0.2)',
   },
@@ -261,7 +260,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(0,145,44,0.2)',
-    gap: 12,
   },
   categoryIcon: {
     width: 40,
@@ -288,7 +286,6 @@ const styles = StyleSheet.create({
   articlesList: {
     marginTop: 8,
     paddingLeft: 16,
-    gap: 8,
   },
   articleItem: {
     flexDirection: 'row',
@@ -296,7 +293,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(45,82,64,0.5)',
     borderRadius: 10,
     padding: 14,
-    gap: 12,
   },
   articleInfo: {
     flex: 1,
@@ -314,7 +310,6 @@ const styles = StyleSheet.create({
   emptyState: {
     alignItems: 'center',
     padding: 40,
-    gap: 12,
   },
   emptyTitle: {
     fontSize: 16,
@@ -356,7 +351,6 @@ const styles = StyleSheet.create({
   },
   bulletList: {
     marginTop: 12,
-    gap: 8,
   },
   bulletItem: {
     fontSize: 14,
@@ -365,7 +359,6 @@ const styles = StyleSheet.create({
   },
   articleFooter: {
     alignItems: 'center',
-    gap: 12,
   },
   footerLabel: {
     fontSize: 14,
@@ -373,7 +366,6 @@ const styles = StyleSheet.create({
   },
   feedbackButtons: {
     flexDirection: 'row',
-    gap: 16,
   },
   feedbackButton: {
     flexDirection: 'row',
@@ -382,7 +374,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 8,
-    gap: 8,
   },
   feedbackButtonText: {
     fontSize: 14,

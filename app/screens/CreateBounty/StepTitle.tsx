@@ -108,7 +108,7 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
           <Text className="text-emerald-100 text-base font-semibold mb-3">
             Category (optional)
           </Text>
-          <View className="flex-row flex-wrap gap-2">
+          <View className="flex-row flex-wrap">
             {CATEGORIES.map((category) => {
               const isSelected = draft.category === category.id;
               return (
@@ -146,7 +146,7 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
         className="px-4 pb-4 pt-3 bg-emerald-600 border-t border-emerald-700/50"
         style={{ marginBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 8) }}
       >
-        <View className="flex-row gap-3">
+        <View className="flex-row">
           {onBack && (
             <TouchableOpacity
               onPress={onBack}

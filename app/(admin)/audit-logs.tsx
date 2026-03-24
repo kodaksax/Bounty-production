@@ -765,7 +765,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 8,
-    gap: 10,
   },
   searchInputWrapper: {
     flex: 1,
@@ -775,7 +774,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    gap: 8,
   },
   searchInput: {
     flex: 1,
@@ -790,17 +788,14 @@ const styles = StyleSheet.create({
   filtersSection: {
     paddingHorizontal: 16,
     paddingBottom: 12,
-    gap: 8,
   },
   filterChipsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
   },
   filterChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 6,
     backgroundColor: 'rgba(0,0,0,0.2)',
@@ -821,7 +816,6 @@ const styles = StyleSheet.create({
   severityFiltersRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   severityLabel: {
     fontSize: 12,
@@ -831,7 +825,6 @@ const styles = StyleSheet.create({
   severityChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 16,
@@ -848,12 +841,10 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 16,
-    gap: 10,
   },
   logEntry: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
     position: 'relative',
     overflow: 'hidden',
   },
@@ -866,7 +857,6 @@ const styles = StyleSheet.create({
   },
   logContent: {
     flex: 1,
-    gap: 8,
   },
   logHeader: {
     flexDirection: 'row',
@@ -876,7 +866,6 @@ const styles = StyleSheet.create({
   logHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
   },
   categoryIcon: {
     width: 32,
@@ -913,7 +902,6 @@ const styles = StyleSheet.create({
   actorRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
   },
   actorText: {
     fontSize: 12,
@@ -964,7 +952,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
-    gap: 16,
   },
   errorText: {
     fontSize: 15,
@@ -1011,13 +998,11 @@ const styles = StyleSheet.create({
   },
   detailHeaderRow: {
     flexDirection: 'row',
-    gap: 10,
     marginBottom: 24,
   },
   detailCategoryBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 10,
@@ -1063,7 +1048,6 @@ const styles = StyleSheet.create({
   detailActorRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
   },
   detailActorIcon: {
     width: 36,
@@ -1077,11 +1061,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.2)',
     borderRadius: 10,
     padding: 12,
-    gap: 8,
   },
   metadataRow: {
     flexDirection: 'row',
-    gap: 8,
   },
   metadataKey: {
     fontSize: 13,

@@ -143,7 +143,7 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
           <Text className="text-emerald-100 text-base font-semibold mb-3">
             Where will the work be done? *
           </Text>
-          <View className="flex-row gap-3">
+          <View className="flex-row">
             <TouchableOpacity
               onPress={() => handleWorkTypeChange('in_person')}
               className={`flex-1 p-4 rounded-lg border-2 ${
@@ -300,7 +300,7 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
         className="px-4 pb-4 pt-3 bg-emerald-600 border-t border-emerald-700/50"
         style={{ marginBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 8) }}
       >
-        <View className="flex-row gap-3">
+        <View className="flex-row">
           <TouchableOpacity
             onPress={onBack}
             className="flex-1 bg-emerald-700/50 py-3 rounded-lg flex-row items-center justify-center"

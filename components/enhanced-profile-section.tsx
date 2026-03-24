@@ -491,7 +491,7 @@ export function EnhancedProfileSection({
             </Text>
           </View>
           {isOwnProfile && (
-            <View className="flex-row items-center gap-2">
+            <View className="flex-row items-center">
               {items.length > 1 && (
                 <TouchableOpacity
                   className={`px-2 py-1 rounded ${isReordering ? 'bg-emerald-600' : 'bg-emerald-700'}`}
@@ -534,7 +534,7 @@ export function EnhancedProfileSection({
           </View>
         ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View className="flex-row gap-3">
+            <View className="flex-row">
               {(
                 // If there's a local lastPicked asset show it first as an optimistic preview
                 lastPicked ? [{
@@ -585,7 +585,7 @@ export function EnhancedProfileSection({
                     {/* Reorder mode indicators */}
                     {isReordering && isOwnProfile && items.length > 1 && (
                       <View className="absolute inset-0 bg-black/30 items-center justify-center">
-                        <View className="flex-row gap-2">
+                        <View className="flex-row">
                           {index > 0 && (
                             <TouchableOpacity
                               className="bg-emerald-500 rounded-full p-2"
@@ -740,7 +740,7 @@ export function PortfolioSection({ userId, isOwnProfile = true }: { userId?: str
           </Text>
         </View>
         {isOwnProfile && (
-          <View className="flex-row items-center gap-2">
+          <View className="flex-row items-center">
             {items.length > 1 && (
               <TouchableOpacity
                 className={`px-2 py-1 rounded ${isReordering ? 'bg-emerald-600' : 'bg-emerald-700'}`}
@@ -775,7 +775,7 @@ export function PortfolioSection({ userId, isOwnProfile = true }: { userId?: str
         </View>
       ) : (
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View className="flex-row gap-3">
+          <View className="flex-row">
             {(
               lastPickedStandalone ? [{
                 id: lastPickedStandalone.id,
@@ -814,7 +814,7 @@ export function PortfolioSection({ userId, isOwnProfile = true }: { userId?: str
                   {/* Reorder mode indicators */}
                   {isReordering && isOwnProfile && items.length > 1 && (
                     <View className="absolute inset-0 bg-black/30 items-center justify-center">
-                      <View className="flex-row gap-2">
+                      <View className="flex-row">
                         {index > 0 && (
                           <TouchableOpacity
                             className="bg-emerald-500 rounded-full p-2"

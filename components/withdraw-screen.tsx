@@ -612,7 +612,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#047857',
   },
   methodRowInactive: {
-    backgroundColor: '#04785799',
+    backgroundColor: 'rgba(4,120,87,0.6)',
   },
   methodIconCircle: {
     height: 32,
@@ -663,7 +663,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#10b981',
   },
   bottomButtonInactive: {
-    backgroundColor: '#04785799',
+    backgroundColor: 'rgba(4,120,87,0.6)',
   },
   bottomButtonText: {
     color: '#fff',

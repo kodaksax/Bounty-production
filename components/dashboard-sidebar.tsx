@@ -22,7 +22,7 @@ export function DashboardSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="flex items-center px-4 py-2">
-        <View className="flex items-center gap-2">
+        <View className="flex items-center">
           <View className="rounded-md bg-primary p-1">
             <MaterialIcons name="local-shipping" size={24} color="#000000" />
           </View>
@@ -79,7 +79,7 @@ export function DashboardSidebar() {
       </SidebarContent>
       <SidebarFooter>
         <View className="flex items-center justify-between px-4 py-2">
-          <View className="flex items-center gap-2">
+          <View className="flex items-center">
             <Avatar className="h-8 w-8">
               <AvatarImage src="/placeholder.svg?height=32&width=32" alt="User" />
               <AvatarFallback>JD</AvatarFallback>

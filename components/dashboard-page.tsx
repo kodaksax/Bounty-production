@@ -16,7 +16,7 @@ export function DashboardPage() {
         <View className="flex-1">
           <DashboardHeader />
           <main className="p-4 md:p-6 space-y-6">
-            <View className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <View className="grid md:grid-cols-2 lg:grid-cols-4">
               <Card>
                 <CardHeader>
                   <CardTitle>Total Revenue</CardTitle>
@@ -78,7 +78,7 @@ export function DashboardPage() {
                 </CardContent>
               </Card>
             </View>
-            <View className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+            <View className="grid md:grid-cols-2 lg:grid-cols-7">
               <Card className="col-span-4">
                 <CardHeader>
                   <CardTitle>Overview</CardTitle>

@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import { BrandingLogo } from 'components/ui/branding-logo';
 import React from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
-import { BrandingLogo } from 'components/ui/branding-logo';
 
 interface FAQScreenProps { onBack: () => void }
 
@@ -14,25 +14,28 @@ const FAQS = [
 
 export const FAQScreen: React.FC<FAQScreenProps> = ({ onBack }) => {
   return (
-    <View className="flex-1 bg-emerald-600">
-      <View className="flex-row justify-between items-center p-4 pt-8">
-        <View className="flex-row items-center">
+    <View style={{ flex: 1, backgroundColor: '#059669' }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 16, paddingTop: 32 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <BrandingLogo size="small" />
         </View>
-        <TouchableOpacity onPress={onBack} className="p-2">
+        <TouchableOpacity onPress={onBack} style={{ padding: 8 }}>
           <MaterialIcons name="arrow-back" size={24} color="#000" />
         </TouchableOpacity>
       </View>
-      <ScrollView className="px-4" contentContainerStyle={{ paddingBottom: 64 }}>
-        <Text className="text-xl font-semibold text-white mb-4">FAQ</Text>
+      <ScrollView style={{ paddingHorizontal: 16 }} contentContainerStyle={{ paddingBottom: 64 }}>
+        <Text style={{ fontSize: 20, fontWeight: '700', color: '#fff', marginBottom: 16 }}>FAQ</Text>
         {FAQS.map((f, i) => (
-          <View key={i} className="bg-black/30 rounded-xl p-4 mb-4">
-            <Text className="text-white font-medium mb-1">{f.q}</Text>
-            <Text className="text-emerald-200 text-xs leading-5">{f.a}</Text>
+          <View key={i} style={{ backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+            <Text style={{ color: '#fff', fontWeight: '500', marginBottom: 4 }}>{f.q}</Text>
+            <Text style={{ color: '#a7f3d0', fontSize: 12, lineHeight: 20 }}>{f.a}</Text>
           </View>
         ))}
-        <TouchableOpacity onPress={onBack} className="mt-2 self-start px-4 py-2 rounded-md bg-emerald-700">
-          <Text className="text-white text-sm font-medium">Back to Settings</Text>
+        <TouchableOpacity
+          onPress={onBack}
+          style={{ marginTop: 8, alignSelf: 'flex-start', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 6, backgroundColor: '#047857' }}
+        >
+          <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>Back to Settings</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>

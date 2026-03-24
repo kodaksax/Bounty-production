@@ -141,7 +141,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const now = Date.now();
         const hasRecentOptimisticDeposit =
           lastOptimisticDepositRef.current !== null &&
-          now - lastOptimisticDepositRef.current < 60_000;
+          now - lastOptimisticDepositRef.current < 60000;
 
         const currentBalance = balanceRef.current;
 

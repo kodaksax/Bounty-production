@@ -161,7 +161,7 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
               <Text className="text-emerald-100 text-base font-semibold mb-3">
                 How much will you pay? *
               </Text>
-              <View className="flex-row flex-wrap gap-2 mb-3">
+              <View className="flex-row flex-wrap mb-3">
                 {AMOUNT_PRESETS.map((preset) => {
                   const isSelected = draft.amount === preset;
                   const isOverBalance = preset > balance;
@@ -294,7 +294,7 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
         className="px-4 pb-4 pt-3 bg-emerald-600 border-t border-emerald-700/50"
         style={{ marginBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 8) }}
       >
-        <View className="flex-row gap-3">
+        <View className="flex-row">
           <TouchableOpacity
             onPress={onBack}
             className="flex-1 bg-emerald-700/50 py-3 rounded-lg flex-row items-center justify-center"

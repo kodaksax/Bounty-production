@@ -829,12 +829,10 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
   },
   statBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 16,
@@ -858,7 +856,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
     paddingVertical: 8,
     paddingHorizontal: 8,
     borderRadius: 8,
@@ -894,7 +891,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 8,
-    gap: 10,
   },
   searchInputWrapper: {
     flex: 1,
@@ -904,7 +900,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    gap: 8,
   },
   searchInput: {
     flex: 1,
@@ -914,7 +909,6 @@ const styles = StyleSheet.create({
   sortButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     paddingHorizontal: 12,
     paddingVertical: 8,
     backgroundColor: 'rgba(0,0,0,0.2)',
@@ -923,7 +917,6 @@ const styles = StyleSheet.create({
   actionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   priorityButton: {
     marginLeft: 8,
@@ -935,10 +928,8 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 16,
-    gap: 12,
   },
   reportCard: {
-    gap: 12,
     position: 'relative',
     overflow: 'hidden',
   },
@@ -957,7 +948,6 @@ const styles = StyleSheet.create({
   reportHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
   },
   contentTypeIcon: {
     width: 36,
@@ -979,12 +969,10 @@ const styles = StyleSheet.create({
   reportHeaderRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   priorityBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
@@ -997,7 +985,6 @@ const styles = StyleSheet.create({
   reasonRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   reasonBadge: {
     paddingHorizontal: 10,
@@ -1019,7 +1006,6 @@ const styles = StyleSheet.create({
   },
   quickActions: {
     flexDirection: 'row',
-    gap: 8,
     marginTop: 4,
   },
   quickActionButton: {
@@ -1027,7 +1013,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
     paddingVertical: 10,
     borderRadius: 8,
   },
@@ -1058,7 +1043,6 @@ const styles = StyleSheet.create({
   resolutionInfo: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 6,
     backgroundColor: 'rgba(16,185,129,0.1)',
     padding: 10,
     borderRadius: 8,
@@ -1114,7 +1098,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
-    gap: 16,
   },
   errorText: {
     fontSize: 15,

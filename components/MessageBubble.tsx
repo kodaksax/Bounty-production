@@ -127,7 +127,6 @@ const styles = StyleSheet.create({
   pinnedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     marginBottom: 4,
     paddingVertical: 2,
     paddingHorizontal: 6,
@@ -143,7 +142,6 @@ const styles = StyleSheet.create({
   retryButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     paddingVertical: 4,
     paddingHorizontal: 8,
     marginTop: 4,

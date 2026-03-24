@@ -35,7 +35,7 @@ export default function SignInRoute() {
 
 export function SignInForm() {
   // set status/safe-area color for this screen
-  useScreenBackground('#097959ff') // EMERALD_800 / dark
+  useScreenBackground('rgba(9,121,89,1)') // EMERALD_800 / dark
   const router = useRouter()
   const [identifier, setIdentifier] = useState('') // email or username
   const [password, setPassword] = useState('')
@@ -470,7 +470,7 @@ export function SignInForm() {
                 resizeMode="contain"
               />
             </View>
-            <View className="gap-5">
+            <View className="">
               
               {authError && (() => {
                 const friendlyError = getUserFriendlyError(authError);

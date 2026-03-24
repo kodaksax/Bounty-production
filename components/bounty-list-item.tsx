@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#6ee7b780', // emerald-400/50
+    borderColor: 'rgba(110,231,183,0.502)', // emerald-400/50
   },
   avatarFallback: {
     backgroundColor: '#064e3b', // dark emerald
@@ -222,7 +222,6 @@ const styles = StyleSheet.create({
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
   },
   username: {
     color: '#a7f3d0', // emerald-200
@@ -247,7 +246,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: SPACING.COMPACT_GAP,
-    gap: 2,
   },
   onlineText: {
     fontSize: 10,
@@ -272,7 +270,6 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    gap: 4,
     marginBottom: 2,
   },
   honorText: {

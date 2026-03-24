@@ -341,7 +341,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 12,
-    gap: 8,
   },
   avatarContainer: {
     marginRight: 4,
@@ -371,7 +370,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
-    gap: 4,
   },
   urgentText: {
     color: "#dc2626",
@@ -385,7 +383,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
-    gap: 4,
   },
   filledText: {
     color: "#065f46",
@@ -408,13 +405,11 @@ const styles = StyleSheet.create({
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
     marginBottom: 12,
   },
   metaItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
   },
   metaText: {
     fontSize: 12,
@@ -434,7 +429,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
-    gap: 4,
   },
   ratingText: {
     fontSize: 12,
@@ -457,7 +451,6 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    gap: 4,
   },
   honorText: {
     color: "#052e1b",
@@ -471,7 +464,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
-    gap: 6,
     marginLeft: 8,
   },
   revisionText: {
@@ -487,7 +479,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
-    gap: 6,
   },
   cancellationText: {
     color: '#92400e',
@@ -502,7 +493,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
-    gap: 6,
   },
   disputeText: {
     color: '#7c2d12',
@@ -526,7 +516,6 @@ const styles = StyleSheet.create({
   },
   actionButtons: {
     flexDirection: "row",
-    gap: 8,
   },
   actionButton: {
     flexDirection: "row",
@@ -535,7 +524,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 8,
-    gap: 6,
   },
   actionButtonText: {
     fontSize: 12,

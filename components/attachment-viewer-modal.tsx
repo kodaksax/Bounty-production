@@ -576,7 +576,6 @@ const styles = StyleSheet.create({
   },
   headerActions: {
     flexDirection: 'row',
-    gap: 12,
   },
   actionButton: {
     width: 40,
@@ -659,7 +658,6 @@ const styles = StyleSheet.create({
   footerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   footerText: {
     flex: 1,

@@ -636,7 +636,6 @@ const styles = StyleSheet.create({
   },
   quickAmounts: {
     flexDirection: 'row',
-    gap: 8,
   },
   quickAmountButton: {
     flex: 1,

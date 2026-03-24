@@ -256,7 +256,7 @@ export function MessengerScreen({
         <Text className="text-xl font-bold text-white">INBOX</Text>
 
         {/* Right-side actions: refresh, create new group (icon), and offline badge */}
-        <View className="flex-row items-center gap-4">
+        <View className="flex-row items-center">
           <TouchableOpacity onPress={refresh} className="p-2 rounded">
             <MaterialIcons name="refresh" size={20} color="white" />
           </TouchableOpacity>

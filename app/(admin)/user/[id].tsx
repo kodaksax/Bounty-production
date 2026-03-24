@@ -373,13 +373,11 @@ const styles = StyleSheet.create({
   statusSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
     marginBottom: 20,
   },
   verificationBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     backgroundColor: 'rgba(76,175,80,0.15)',
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -414,7 +412,6 @@ const styles = StyleSheet.create({
   },
   statsGrid: {
     flexDirection: 'row',
-    gap: 12,
   },
   statCard: {
     flex: 1,
@@ -422,7 +419,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
-    gap: 8,
     borderWidth: 1,
     borderColor: 'rgba(0,145,44,0.2)',
   },
@@ -439,7 +435,6 @@ const styles = StyleSheet.create({
     moderationGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 12,
     },
     modButton: {
       flex: 1,
@@ -447,7 +442,6 @@ const styles = StyleSheet.create({
       borderRadius: 12,
       padding: 16,
       alignItems: 'center',
-      gap: 8,
       borderWidth: 1,
     },
     modButtonText: {

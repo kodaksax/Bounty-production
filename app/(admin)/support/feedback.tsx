@@ -249,7 +249,6 @@ const styles = StyleSheet.create({
   typeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
   },
   typeCard: {
     width: '48%',
@@ -257,7 +256,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
-    gap: 8,
     borderWidth: 2,
     borderColor: 'transparent',
   },
@@ -271,7 +269,6 @@ const styles = StyleSheet.create({
   },
   priorityRow: {
     flexDirection: 'row',
-    gap: 8,
   },
   priorityChip: {
     flex: 1,
@@ -282,7 +279,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 12,
-    gap: 6,
     borderWidth: 1,
     borderColor: 'transparent',
   },
@@ -318,7 +314,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,220,80,0.1)',
     borderRadius: 12,
     padding: 16,
-    gap: 12,
     borderWidth: 1,
     borderColor: 'rgba(0,220,80,0.2)',
     marginBottom: 24,
@@ -336,7 +331,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#00912C',
     paddingVertical: 16,
     borderRadius: 12,
-    gap: 8,
   },
   submitButtonDisabled: {
     opacity: 0.6,

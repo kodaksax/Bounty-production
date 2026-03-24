@@ -34,7 +34,7 @@ export const ContactSupportScreen: React.FC<ContactSupportScreenProps> = ({ onBa
         <TextInput value={subject} onChangeText={setSubject} placeholder="Issue subject" placeholderTextColor="#a7f3d0" className="bg-black/30 rounded-md px-3 py-2 text-white mb-4" />
         <Text className="text-xs text-emerald-100 mb-1">Details</Text>
         <TextInput value={details} onChangeText={setDetails} placeholder="Describe the issue or request" placeholderTextColor="#a7f3d0" multiline numberOfLines={6} textAlignVertical="top" className="bg-black/30 rounded-md px-3 py-2 text-white mb-4" />
-        <View className="flex-row gap-3">
+        <View className="flex-row">
           <TouchableOpacity onPress={submit} disabled={!subject || !details} className={`px-4 py-2 rounded-md ${subject && details ? 'bg-emerald-700' : 'bg-emerald-900 opacity-60'}`}>
             <Text className="text-white text-sm font-medium">Submit Request</Text>
           </TouchableOpacity>

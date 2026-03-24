@@ -38,7 +38,7 @@ export function validateUsername(username: string): { valid: boolean; error?: st
   if (username.length > 20) {
     return { valid: false, error: 'Username must be 20 characters or less' };
   }
-  if (!/^[a-z0-9_]+$/.test(username)) {
+  if (!/^[a-z0-9]+$/.test(username)) {
     return { valid: false, error: 'Username must contain only lowercase letters, numbers, and underscores' };
   }
   return { valid: true };

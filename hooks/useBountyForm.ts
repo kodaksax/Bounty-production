@@ -1,9 +1,9 @@
-import { useRef, useState } from 'react'
-import { Alert, Animated } from 'react-native'
 import { bountyService } from 'lib/services/bounty-service'
 import type { Bounty } from 'lib/services/database.types'
 import { logger } from 'lib/utils/error-logger'
 import type { WalletTransactionRecord } from 'lib/wallet-context'
+import { useRef, useState } from 'react'
+import { Alert, Animated } from 'react-native'
 
 export interface BountyFormData {
   title: string
@@ -138,6 +138,11 @@ export function useBountyForm({
       }
 
       // Prepare bounty data
+      const attachments_json = (() => {
+        const uploaded = formData.attachments.filter(a => a.remoteUri || a.status === 'uploaded')
+        return uploaded.length ? JSON.stringify(uploaded) : undefined
+      })();
+
       const bountyData: Omit<Bounty, 'id' | 'created_at'> & { attachments_json?: string } = {
         title: formData.title,
         description: formData.description,
@@ -151,10 +156,7 @@ export function useBountyForm({
         work_type: formData.workType,
         is_time_sensitive: formData.isTimeSensitive,
         deadline: formData.isTimeSensitive ? formData.deadline : undefined,
-        attachments_json: (() => {
-          const uploaded = formData.attachments.filter(a => a.remoteUri || a.status === 'uploaded')
-          return uploaded.length ? JSON.stringify(uploaded) : undefined
-        })(),
+        attachments_json,
       }
 
       // Debug: log exact payload being sent to create
@@ -210,7 +212,6 @@ export function useBountyForm({
         // Close confirmation card
         setShowConfirmationCard(false)
 
-        // Navigate to the main bounty feed so the new bounty is visible
         setActiveScreen('bounty')
 
         // Reset success state after a delay

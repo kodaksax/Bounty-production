@@ -52,7 +52,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(251, 191, 36, 0.15)',
     borderRadius: 12,
     padding: 16,
-    gap: 12,
     borderWidth: 2,
     borderColor: '#fbbf24',
   },
@@ -64,7 +63,6 @@ const styles = StyleSheet.create({
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     flex: 1,
   },
   headerTitle: {
@@ -99,7 +97,6 @@ const styles = StyleSheet.create({
   actionHint: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
     backgroundColor: 'rgba(5, 150, 105, 0.15)',
     padding: 10,
     borderRadius: 8,

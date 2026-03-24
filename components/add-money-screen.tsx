@@ -232,7 +232,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
           <TouchableOpacity onPress={onBack} className="p-2 touch-target-min">
             <MaterialIcons name="close" size={24} color="#ffffff" />
           </TouchableOpacity>
-          <View className="flex-row items-center gap-2">
+          <View className="flex-row items-center">
             <BrandingLogo size="small" />
           </View>
           <View style={{ width: 40 }} />

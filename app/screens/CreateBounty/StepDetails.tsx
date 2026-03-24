@@ -275,7 +275,7 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
         className="px-4 pb-4 pt-3 bg-emerald-600 border-t border-emerald-700/50"
         style={{ marginBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 8) }}
       >
-        <View className="flex-row gap-3">
+        <View className="flex-row">
           <TouchableOpacity
             onPress={onBack}
             className="flex-1 bg-emerald-700/50 py-3 rounded-lg flex-row items-center justify-center"

@@ -483,7 +483,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 24,
     flexWrap: 'wrap',
-    gap: 16,
   },
   trustItem: {
     flexDirection: 'row',

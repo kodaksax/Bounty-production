@@ -588,7 +588,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
-    gap: 16,
   },
   errorText: {
     color: '#ef4444',
@@ -618,7 +617,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
-    gap: 12,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(110, 231, 183, 0.1)',
   },
@@ -635,7 +633,6 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    gap: 20,
   },
   bountyInfoCard: {
     backgroundColor: 'rgba(5, 150, 105, 0.2)',
@@ -643,7 +640,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(110, 231, 183, 0.3)',
-    gap: 12,
   },
   bountyTitle: {
     color: '#fff',
@@ -653,7 +649,6 @@ const styles = StyleSheet.create({
   timerContainer: {
     alignItems: 'center',
     paddingVertical: 20,
-    gap: 8,
   },
   timerLabel: {
     color: '#6ee7b7',
@@ -683,14 +678,12 @@ const styles = StyleSheet.create({
   distanceInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
   },
   distanceText: {
     color: '#6ee7b7',
     fontSize: 14,
   },
   timelineContainer: {
-    gap: 12,
   },
   sectionTitle: {
     color: '#6ee7b7',
@@ -700,7 +693,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   timeline: {
-    gap: 16,
     paddingVertical: 8,
   },
   stageItem: {
@@ -745,7 +737,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   section: {
-    gap: 12,
   },
   sectionSubtitle: {
     color: 'rgba(255,254,245,0.7)',
@@ -763,7 +754,6 @@ const styles = StyleSheet.create({
   },
   messageInputContainer: {
     flexDirection: 'row',
-    gap: 12,
     alignItems: 'flex-end',
   },
   messageInput: {
@@ -790,7 +780,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(16, 185, 129, 0.5)',
   },
   proofList: {
-    gap: 12,
   },
   proofItem: {
     flexDirection: 'row',
@@ -798,7 +787,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(5, 150, 105, 0.2)',
     borderRadius: 12,
     padding: 12,
-    gap: 12,
     borderWidth: 1,
     borderColor: 'rgba(110, 231, 183, 0.2)',
   },
@@ -812,7 +800,6 @@ const styles = StyleSheet.create({
   },
   proofInfo: {
     flex: 1,
-    gap: 4,
   },
   proofName: {
     color: '#fff',
@@ -829,7 +816,6 @@ const styles = StyleSheet.create({
   emptyProof: {
     alignItems: 'center',
     padding: 32,
-    gap: 12,
     backgroundColor: 'rgba(5, 150, 105, 0.1)',
     borderRadius: 12,
     borderWidth: 2,
@@ -844,7 +830,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
     backgroundColor: 'rgba(16, 185, 129, 0.3)',
     paddingVertical: 12,
     borderRadius: 8,
@@ -861,7 +846,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
     paddingVertical: 16,
     borderRadius: 12,
     shadowColor: '#000',
@@ -882,7 +866,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
     paddingVertical: 14,
     borderRadius: 12,
     backgroundColor: 'rgba(245, 158, 11, 0.15)',

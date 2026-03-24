@@ -284,7 +284,6 @@ const styles = StyleSheet.create({
   actions: {
     width: '100%',
     alignItems: 'center',
-    gap: SPACING.ELEMENT_GAP,
   },
   button: {
     flexDirection: 'row',
@@ -294,7 +293,6 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.ELEMENT_GAP,
     borderRadius: 12,
     minHeight: SIZING.MIN_TOUCH_TARGET,
-    gap: SPACING.COMPACT_GAP,
     width: '100%',
     maxWidth: 280,
   },

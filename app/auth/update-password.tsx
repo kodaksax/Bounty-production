@@ -231,7 +231,7 @@ export function UpdatePasswordScreen() {
             </View>
           )}
 
-          <View className="gap-5">
+          <View className="">
             {/* New Password Field */}
             <View>
               <Text className="text-white/80 text-sm mb-1">New Password</Text>

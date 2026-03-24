@@ -546,7 +546,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a3d2e',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
   },
   loadingText: {
     color: 'rgba(255,254,245,0.8)',
@@ -557,7 +556,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a3d2e',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
     padding: 24,
   },
   errorText: {
@@ -648,7 +646,6 @@ const styles = StyleSheet.create({
   ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
   },
   hunterRating: {
     color: '#fcd34d',
@@ -689,7 +686,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   proofList: {
-    gap: 8,
   },
   proofItem: {
     flexDirection: 'row',
@@ -741,7 +737,6 @@ const styles = StyleSheet.create({
   ratingContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 8,
     marginVertical: 16,
   },
   starButton: {
@@ -772,7 +767,6 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   buttonContainer: {
-    gap: 12,
     marginTop: 8,
   },
   revisionButton: {
@@ -782,7 +776,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 14,
     borderRadius: 12,
-    gap: 8,
   },
   revisionButtonDisabled: {
     backgroundColor: 'rgba(245, 158, 11, 0.5)',
@@ -799,7 +792,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 16,
     borderRadius: 12,
-    gap: 8,
   },
   nextButtonText: {
     color: '#fff',

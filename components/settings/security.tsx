@@ -450,7 +450,6 @@ const styles = StyleSheet.create({
   labelWithBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     marginBottom: 4,
   },
   settingLabel: {

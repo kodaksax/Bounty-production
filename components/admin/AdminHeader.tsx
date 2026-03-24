@@ -71,7 +71,6 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
   },
   backButton: {
     padding: 8,
@@ -80,7 +79,6 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   title: {
     fontSize: 20,
@@ -103,7 +101,6 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: 'row',
-    gap: 8,
   },
   iconButton: {
     padding: 6,

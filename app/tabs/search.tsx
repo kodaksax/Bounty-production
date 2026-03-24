@@ -786,7 +786,6 @@ const styles = {
     flexDirection: 'row',
     paddingHorizontal: SPACING.ELEMENT_GAP,
     marginBottom: SPACING.COMPACT_GAP,
-    gap: SPACING.COMPACT_GAP,
   },
   tab: {
     flex: 1,
@@ -909,7 +908,6 @@ const styles = {
   modalFooter: {
     flexDirection: 'row',
     padding: SPACING.CARD_PADDING,
-    gap: SPACING.ELEMENT_GAP,
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.1)',
   },

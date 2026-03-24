@@ -223,7 +223,6 @@ const styles = StyleSheet.create({
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     flex: 1,
   },
   headerTitle: {
@@ -235,7 +234,6 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
   },
   iconButton: {
     padding: 4,
@@ -247,13 +245,11 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   stepsContainer: {
-    gap: 8,
     marginBottom: 12,
   },
   stepRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
   },
   stepNumber: {
     width: 20,
@@ -286,11 +282,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
     backgroundColor: '#10b981',
     borderRadius: 20,
     paddingVertical: 8,
-    paddingHorizontal: 20,
+    paddingLeft: 20,
+    paddingRight: 20,
     alignSelf: 'flex-end',
   },
   gotItText: {

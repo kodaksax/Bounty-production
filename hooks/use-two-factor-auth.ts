@@ -12,7 +12,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
 /** Wallet balance threshold (in cents) above which 2FA is strongly recommended. */
-export const HIGH_VALUE_ACCOUNT_THRESHOLD_CENTS = 10_000; // $100.00
+export const HIGH_VALUE_ACCOUNT_THRESHOLD_CENTS = 10000; // $100.00
 
 export interface TwoFactorAuthState {
   /** Whether a TOTP factor is enrolled and verified for this account. */

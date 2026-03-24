@@ -213,7 +213,6 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: SPACING.ELEMENT_GAP,
   },
   textContainer: {
     flex: 1,
@@ -233,7 +232,6 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.COMPACT_GAP,
     marginLeft: SPACING.COMPACT_GAP,
   },
   actionButton: {

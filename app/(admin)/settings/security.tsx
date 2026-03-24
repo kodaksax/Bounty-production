@@ -271,7 +271,6 @@ const styles = StyleSheet.create({
   labelWithBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     marginBottom: 2,
   },
   settingLabel: {
@@ -308,7 +307,6 @@ const styles = StyleSheet.create({
   selectValue: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
   },
   selectValueText: {
     fontSize: 14,
@@ -317,7 +315,6 @@ const styles = StyleSheet.create({
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
     paddingVertical: 8,
   },
   statusText: {
@@ -331,7 +328,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#00912C',
     paddingVertical: 14,
     borderRadius: 12,
-    gap: 8,
     marginTop: 16,
   },
   saveButtonText: {

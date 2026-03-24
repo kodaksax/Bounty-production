@@ -21,7 +21,7 @@ export default function SignUpRoute() {
 
 export function SignUpForm() {
   // set status/safe-area color for this screen
-  useScreenBackground('#097959ff') // EMERALD_800 / dark
+  useScreenBackground('rgba(9,121,89,1)') // EMERALD_800 / dark
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [username, setUsername] = useState('')
@@ -45,7 +45,7 @@ export function SignUpForm() {
     // Validate username
     if (!username || username.trim().length === 0) {
       errors.username = 'Username is required'
-    } else if (!/^[a-zA-Z0-9_]{3,24}$/.test(username.trim())) {
+    } else if (!/^[a-zA-Z0-9]{3,24}$/.test(username.trim())) {
       errors.username = 'Username must be 3-24 characters (letters, numbers, underscore)'
     }
 
@@ -228,7 +228,7 @@ export function SignUpForm() {
           <View className="flex-row items-center justify-center mb-10">
             <BrandingLogo size="large" />
           </View>
-          <View className="gap-5">
+          <View className="">
             {authError ? (
               <View className="bg-red-500/20 border border-red-400 rounded p-3">
                 <Text className="text-red-200 text-sm">{authError}</Text>

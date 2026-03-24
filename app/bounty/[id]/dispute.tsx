@@ -339,7 +339,7 @@ export default function DisputeScreen() {
                 <Text className="text-emerald-800 text-sm mb-2">
                   Our support team typically responds within {SUPPORT_RESPONSE_TIMES.dispute}. For urgent matters, please call us directly.
                 </Text>
-                <View className="flex-row flex-wrap gap-2">
+                <View className="flex-row flex-wrap">
                   <TouchableOpacity
                     onPress={handleContactSupport}
                     className="flex-row items-center bg-emerald-600 px-3 py-2 rounded-lg"
@@ -465,7 +465,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   modalButtons: {
-    gap: 12,
   },
   modalButton: {
     paddingVertical: 12,

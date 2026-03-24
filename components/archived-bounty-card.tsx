@@ -66,7 +66,7 @@ export function ArchivedBountyCard({
   <View className="relative p-4">
         {/* Username and menu */}
         <View className="flex justify-between items-center mb-2">
-          <View className="flex items-center gap-2">
+          <View className="flex items-center">
             <View className="h-6 w-6 rounded-full bg-emerald-500 flex items-center justify-center">
               <Avatar className="h-5 w-5">
                 <AvatarImage src={avatarSrc || "/placeholder.svg?height=20&width=20"} alt={username} />

@@ -337,7 +337,6 @@ const styles = StyleSheet.create({
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     marginBottom: 4,
   },
   applicantName: {
@@ -348,7 +347,6 @@ const styles = StyleSheet.create({
   ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
   },
   ratingText: {
     color: '#a7f3d0', // emerald-200
@@ -406,7 +404,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#ef4444', // red-500
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
@@ -419,7 +416,6 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: 'row',
-    gap: 8,
   },
   button: {
     flex: 1,
@@ -428,7 +424,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 10,
     borderRadius: 8,
-    gap: 6,
   },
   rejectButton: {
     backgroundColor: '#dc2626', // red-600

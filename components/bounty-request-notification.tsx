@@ -15,7 +15,7 @@ interface BountyRequestNotificationProps {
 export function BountyRequestNotification({ username, avatarSrc, onAccept, onReject }: BountyRequestNotificationProps) {
   return (
     <View className="bg-emerald-700/40 backdrop-blur-sm rounded-lg overflow-hidden mb-3 p-3">
-      <View className="flex items-center gap-3">
+      <View className="flex items-center">
         <Avatar className="h-10 w-10 border border-emerald-400/30">
           <AvatarImage src={avatarSrc || "/placeholder.svg?height=40&width=40"} alt={username} />
           <AvatarFallback className="bg-emerald-900 text-emerald-200 text-xs">
@@ -29,7 +29,7 @@ export function BountyRequestNotification({ username, avatarSrc, onAccept, onRej
           </Text>
         </View>
 
-        <View className="flex items-center gap-2">
+        <View className="flex items-center">
           <TouchableOpacity
             onPress={onAccept}
             className="h-8 w-8 rounded-full bg-emerald-500 flex items-center justify-center hover:bg-emerald-400 transition-colors"

@@ -355,7 +355,6 @@ const styles = StyleSheet.create({
   searchHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     marginBottom: 4,
   },
   searchName: {
@@ -374,7 +373,6 @@ const styles = StyleSheet.create({
   },
   searchActions: {
     flexDirection: 'row',
-    gap: 4,
   },
   actionBtn: {
     padding: 8,
@@ -435,7 +433,6 @@ const styles = StyleSheet.create({
   modalFooter: {
     flexDirection: 'row',
     padding: 16,
-    gap: 12,
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.1)',
   },

@@ -168,7 +168,7 @@ export const userProfileSchema = z.object({
   username: z.string()
     .min(3, 'Username must be at least 3 characters')
     .max(50, 'Username must be 50 characters or less')
-    .regex(/^[a-zA-Z0-9_-]+$/, 'Username can only contain letters, numbers, underscores, and hyphens')
+    .regex(/^[a-zA-Z0-9-]+$/, 'Username can only contain letters, numbers, underscores, and hyphens')
     .transform(val => sanitizeText(val, 50)),
 
   displayName: z.string()

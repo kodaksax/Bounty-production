@@ -1581,7 +1581,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
     backgroundColor: '#fbbf24',
     paddingVertical: 14,
     paddingHorizontal: 16,
@@ -1600,7 +1599,6 @@ const styles = StyleSheet.create({
   timerContainer: {
     alignItems: 'center',
     paddingVertical: 20,
-    gap: 8,
     backgroundColor: 'rgba(5, 150, 105, 0.1)',
     borderRadius: 12,
   },
@@ -1635,7 +1633,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(5, 150, 105, 0.2)',
     borderRadius: 12,
     padding: 12,
-    gap: 12,
     borderWidth: 1,
     borderColor: 'rgba(110, 231, 183, 0.2)',
     marginBottom: 8,
@@ -1650,7 +1647,6 @@ const styles = StyleSheet.create({
   },
   proofInfo: {
     flex: 1,
-    gap: 4,
   },
   proofName: {
     color: '#fff',
@@ -1671,7 +1667,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
     backgroundColor: 'rgba(16, 185, 129, 0.2)',
     paddingVertical: 12,
     borderRadius: 10,
@@ -1692,7 +1687,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 24,
     alignItems: 'center',
-    gap: 12,
     borderWidth: 1,
     borderColor: 'rgba(16, 185, 129, 0.3)',
   },
@@ -1712,7 +1706,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 20,
     alignItems: 'center',
-    gap: 8,
     marginTop: 12,
     width: '100%',
   },
@@ -1736,7 +1729,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 20,
     alignItems: 'center',
-    gap: 8,
     marginTop: 12,
     width: '100%',
   },
@@ -1754,14 +1746,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(5, 150, 105, 0.1)',
     borderRadius: 12,
     padding: 16,
-    gap: 12,
     borderWidth: 1,
     borderColor: 'rgba(110, 231, 183, 0.2)',
   },
   receiptHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   receiptTitle: {
     color: '#6ee7b7',
@@ -1791,7 +1781,6 @@ const styles = StyleSheet.create({
   statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     backgroundColor: 'rgba(16, 185, 129, 0.2)',
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -1825,7 +1814,6 @@ const styles = StyleSheet.create({
   withdrawButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -1842,7 +1830,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
     // Sits in the gap below the card, above the next item
     paddingTop: 2,
     paddingBottom: 6,
@@ -1853,7 +1840,6 @@ const styles = StyleSheet.create({
   },
   hunterToolsSection: {
     marginTop: 2,
-    gap: 8,
   },
   hunterToolsToggle: {
     flexDirection: 'row',
@@ -1869,7 +1855,6 @@ const styles = StyleSheet.create({
   hunterToolsToggleLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   hunterToolsToggleText: {
     color: '#a7f3d0',
@@ -1882,12 +1867,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(110, 231, 183, 0.25)',
     padding: 10,
-    gap: 8,
   },
   hunterToolBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     paddingHorizontal: 10,
     paddingVertical: 10,
     borderRadius: 8,
@@ -1896,7 +1879,6 @@ const styles = StyleSheet.create({
   hunterToolBtnDanger: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     paddingHorizontal: 10,
     paddingVertical: 10,
     borderRadius: 8,
@@ -1919,7 +1901,6 @@ const styles = StyleSheet.create({
   },
   posterToolsSection: {
     marginTop: 2,
-    gap: 8,
   },
   posterToolsToggle: {
     flexDirection: 'row',
@@ -1935,7 +1916,6 @@ const styles = StyleSheet.create({
   posterToolsToggleLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   posterToolsToggleText: {
     color: '#a7f3d0',
@@ -1948,19 +1928,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(110, 231, 183, 0.25)',
     padding: 10,
-    gap: 8,
   },
   actionsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
     marginTop: 12,
     justifyContent: 'space-between',
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 10,

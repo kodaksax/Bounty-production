@@ -267,7 +267,7 @@ export function DisputeSubmissionForm({
         </View>
 
         {/* Upload Buttons */}
-        <View className="flex-row gap-2">
+        <View className="flex-row">
           <TouchableOpacity
             onPress={handlePickImage}
             disabled={isSubmitting}
@@ -313,7 +313,7 @@ export function DisputeSubmissionForm({
       </View>
 
       {/* Action Buttons */}
-      <View className="gap-3 pb-6">
+      <View className="pb-6">
         <TouchableOpacity
           onPress={handleSubmit}
           disabled={isSubmitting || !reason.trim()}

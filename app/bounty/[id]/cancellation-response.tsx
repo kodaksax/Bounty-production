@@ -410,7 +410,7 @@ export default function CancellationResponseScreen() {
                   {"'"}
                   re unsure about your decision or feel the refund amount is unfair, contact our support team for guidance. Response time: {SUPPORT_RESPONSE_TIMES.email}.
                 </Text>
-                <View className="flex-row flex-wrap gap-2">
+                <View className="flex-row flex-wrap">
                   <TouchableOpacity
                     onPress={handleContactSupport}
                     className="flex-row items-center bg-blue-600 px-3 py-2 rounded-lg"

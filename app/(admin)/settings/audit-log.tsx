@@ -247,7 +247,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    gap: 8,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0,145,44,0.2)',
   },
@@ -258,7 +257,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: 'rgba(255,255,255,0.1)',
-    gap: 6,
   },
   filterTabActive: {
     backgroundColor: '#00912C',
@@ -290,7 +288,6 @@ const styles = StyleSheet.create({
   logHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
   },
   statusIndicator: {
     width: 4,
@@ -327,12 +324,10 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.08)',
-    gap: 6,
   },
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   detailText: {
     fontSize: 13,
@@ -342,7 +337,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
   },
   loadingText: {
     fontSize: 14,

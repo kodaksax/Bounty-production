@@ -143,7 +143,7 @@ export function EditPostingModal({
                 <TextInput
                   style={styles.input}
                   placeholder="Enter title"
-                  placeholderTextColor="#6ee7b780"
+                  placeholderTextColor="rgba(110,231,183,0.502)"
                   value={formData.title}
                   onChangeText={(text) =>
                     setFormData({ ...formData, title: text })
@@ -159,7 +159,7 @@ export function EditPostingModal({
                 <TextInput
                   style={[styles.input, styles.textArea]}
                   placeholder="Describe what you need"
-                  placeholderTextColor="#6ee7b780"
+                  placeholderTextColor="rgba(110,231,183,0.502)"
                   value={formData.description}
                   onChangeText={(text) =>
                     setFormData({ ...formData, description: text })
@@ -205,7 +205,7 @@ export function EditPostingModal({
                   <TextInput
                     style={styles.input}
                     placeholder="0"
-                    placeholderTextColor="#6ee7b780"
+                    placeholderTextColor="rgba(110,231,183,0.502)"
                     value={formData.amount === 0 ? "" : String(formData.amount)}
                     onChangeText={(text) => {
                       const num = parseFloat(text) || 0;
@@ -223,7 +223,7 @@ export function EditPostingModal({
                 <TextInput
                   style={styles.input}
                   placeholder="Enter location"
-                  placeholderTextColor="#6ee7b780"
+                  placeholderTextColor="rgba(110,231,183,0.502)"
                   value={formData.location}
                   onChangeText={(text) =>
                     setFormData({ ...formData, location: text })
@@ -343,7 +343,6 @@ const styles = StyleSheet.create({
   toggleLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
   },
   toggleLabel: {
     fontSize: 16,
@@ -377,7 +376,6 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     marginBottom: 16,
-    gap: 8,
   },
   errorText: {
     flex: 1,

@@ -149,7 +149,6 @@ const styles = StyleSheet.create({
   filtersContent: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    gap: 8,
   },
   filterChip: {
     paddingHorizontal: 16,
@@ -186,7 +185,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 12,
-    gap: 12,
   },
   userInfo: {
     flex: 1,
@@ -232,7 +230,6 @@ const styles = StyleSheet.create({
   verificationBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
   },
   verificationText: {
     fontSize: 12,

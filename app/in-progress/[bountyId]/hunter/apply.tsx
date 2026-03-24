@@ -320,7 +320,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
-    gap: 16,
   },
   errorText: {
     color: '#ef4444',
@@ -350,7 +349,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
-    gap: 12,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(110, 231, 183, 0.1)',
   },
@@ -367,7 +365,6 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    gap: 20,
   },
   bountyCard: {
     backgroundColor: 'rgba(5, 150, 105, 0.2)',
@@ -378,7 +375,6 @@ const styles = StyleSheet.create({
   },
   bountyHeader: {
     flexDirection: 'row',
-    gap: 12,
     marginBottom: 12,
   },
   avatarPlaceholder: {
@@ -413,7 +409,6 @@ const styles = StyleSheet.create({
   honorBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     backgroundColor: '#ec4899',
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -425,7 +420,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   timelineContainer: {
-    gap: 12,
   },
   sectionTitle: {
     color: '#6ee7b7',
@@ -435,7 +429,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   timeline: {
-    gap: 16,
     paddingVertical: 8,
   },
   stageItem: {
@@ -484,7 +477,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 24,
     alignItems: 'center',
-    gap: 12,
     borderWidth: 1,
     borderColor: 'rgba(110, 231, 183, 0.2)',
   },
@@ -502,7 +494,6 @@ const styles = StyleSheet.create({
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     backgroundColor: 'rgba(251, 191, 36, 0.2)',
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -518,7 +509,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(5, 150, 105, 0.1)',
     borderRadius: 12,
     padding: 16,
-    gap: 12,
   },
   detailsTitle: {
     color: '#6ee7b7',
@@ -536,7 +526,6 @@ const styles = StyleSheet.create({
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   detailText: {
     color: 'rgba(255,254,245,0.8)',

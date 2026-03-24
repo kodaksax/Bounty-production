@@ -152,7 +152,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
   },
   loadingText: {
     color: 'rgba(255,254,245,0.8)',
@@ -163,7 +162,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
-    gap: 16,
   },
   errorTitle: {
     fontSize: 20,
@@ -183,7 +181,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 8,
-    gap: 8,
   },
   backButtonText: {
     color: '#fffef5',

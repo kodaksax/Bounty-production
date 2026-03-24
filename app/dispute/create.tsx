@@ -435,7 +435,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     borderWidth: 1,
     borderColor: 'rgba(59,130,246,0.3)',
-    gap: 8,
+
   },
   infoBannerText: {
     flex: 1,
@@ -480,7 +480,7 @@ const styles = StyleSheet.create({
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+
   },
   addButtonText: {
     fontSize: 14,
@@ -488,7 +488,7 @@ const styles = StyleSheet.create({
     color: '#00912C',
   },
   evidenceList: {
-    gap: 12,
+
     marginTop: 12,
   },
   evidenceItem: {
@@ -500,7 +500,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
-    gap: 8,
+
   },
   evidenceType: {
     fontSize: 11,
@@ -535,7 +535,7 @@ const styles = StyleSheet.create({
   },
   typeSelector: {
     flexDirection: 'row',
-    gap: 8,
+
     marginBottom: 16,
   },
   typeButton: {
@@ -568,7 +568,7 @@ const styles = StyleSheet.create({
   },
   formActions: {
     flexDirection: 'row',
-    gap: 8,
+
   },
   formActionButton: {
     flex: 1,
@@ -578,7 +578,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#00912C',
     padding: 10,
     borderRadius: 6,
-    gap: 6,
+
   },
   formActionButtonCancel: {
     backgroundColor: 'transparent',
@@ -602,7 +602,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#dc2626',
     padding: 16,
     borderRadius: 8,
-    gap: 8,
+
     marginTop: 8,
   },
   submitButtonDisabled: {
@@ -620,7 +620,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(251,191,36,0.4)',
     padding: 16,
     marginBottom: 16,
-    gap: 12,
+
     alignItems: 'flex-start',
   },
   webConfirmText: {
@@ -630,7 +630,7 @@ const styles = StyleSheet.create({
   },
   webConfirmActions: {
     flexDirection: 'row',
-    gap: 8,
+
     width: '100%',
   },
   webConfirmYes: {

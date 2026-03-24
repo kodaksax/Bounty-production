@@ -308,7 +308,7 @@ export default function CancellationRequestScreen() {
             <Text className="text-base font-semibold text-gray-900 mb-2">
               Why are you cancelling? *
             </Text>
-            <View className="flex-row flex-wrap gap-2 mb-3">
+            <View className="flex-row flex-wrap mb-3">
               {CANCELLATION_REASON_OPTIONS.map((option) => (
                 <TouchableOpacity
                   key={option.value}
@@ -374,7 +374,7 @@ export default function CancellationRequestScreen() {
                 <Text className="text-blue-800 text-sm mb-3">
                   If you have questions about the cancellation process or need assistance with a dispute, our support team is here to help.
                 </Text>
-                <View className="flex-row flex-wrap gap-2">
+                <View className="flex-row flex-wrap">
                   <TouchableOpacity
                     onPress={handleContactSupport}
                     className="flex-row items-center bg-blue-600 px-3 py-2 rounded-lg"

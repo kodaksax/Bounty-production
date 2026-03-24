@@ -244,7 +244,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: "#059669",
-    gap: 8,
   },
   title: {
     flex: 1,
@@ -318,7 +317,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     marginBottom: 20,
-    gap: 12,
   },
   supportTextContainer: {
     flex: 1,
@@ -368,7 +366,6 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     marginBottom: 16,
-    gap: 8,
   },
   errorText: {
     flex: 1,

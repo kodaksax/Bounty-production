@@ -234,7 +234,6 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
     paddingHorizontal: 16,
     paddingVertical: 16,
     backgroundColor: '#047857', // emerald-700
@@ -249,7 +248,6 @@ const styles = StyleSheet.create({
   infoBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
     padding: 12,
     margin: 16,
     backgroundColor: 'rgba(5, 150, 105, 0.3)',
@@ -281,7 +279,6 @@ const styles = StyleSheet.create({
   attachmentCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
     padding: 16,
     marginBottom: 8,
     backgroundColor: '#047857',
@@ -350,7 +347,6 @@ const styles = StyleSheet.create({
   featureItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
     paddingVertical: 6,
   },
   featureText: {

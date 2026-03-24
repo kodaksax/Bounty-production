@@ -153,7 +153,6 @@ const styles = StyleSheet.create({
   filtersContent: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    gap: 8,
   },
   filterChip: {
     paddingHorizontal: 16,
@@ -190,7 +189,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 8,
-    gap: 12,
   },
   bountyTitle: {
     flex: 1,
@@ -211,12 +209,10 @@ const styles = StyleSheet.create({
   },
   bountyMeta: {
     flexDirection: 'row',
-    gap: 12,
   },
   metaItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
   },
   metaText: {
     fontSize: 12,
@@ -229,7 +225,6 @@ const styles = StyleSheet.create({
   flaggedBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,

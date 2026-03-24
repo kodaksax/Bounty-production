@@ -1,11 +1,10 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import type { ComponentProps } from 'react';
-import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import {
-  type VerificationBadge,
-  type VerificationBadgeInput,
-  getVerificationBadges,
+    type VerificationBadge,
+    type VerificationBadgeInput,
+    getVerificationBadges,
 } from '../../lib/utils/verification-badges';
 
 type MaterialIconName = ComponentProps<typeof MaterialIcons>['name'];
@@ -58,14 +57,17 @@ export function VerificationBadgeChips({ input }: VerificationBadgeChipsProps) {
 function BadgeChip({ badge }: { badge: VerificationBadge }) {
   const color = BADGE_COLORS[badge.id] ?? '#9ca3af';
   const iconName: MaterialIconName = BADGE_ICONS[badge.id] ?? 'help-outline';
+  // Avoid building an 8-digit hex via template literal inside JSX
+  // (older Android JS parsers can be fragile with some generated tokens).
+  const bgColorWithAlpha = color + '22';
 
   if (badge.earned) {
     return (
       <View
-        style={[styles.chip, { backgroundColor: `${color}22`, borderColor: color }]}
+        style={[styles.chip, { backgroundColor: bgColorWithAlpha, borderColor: color }]}
         accessible={true}
         accessibilityRole="text"
-        accessibilityLabel={`${badge.label} earned`}
+        accessibilityLabel={badge.label + ' earned'}
       >
         <MaterialIcons name={iconName} size={14} color={color} />
         <Text style={[styles.chipLabel, { color }]}>{badge.label}</Text>
@@ -78,7 +80,7 @@ function BadgeChip({ badge }: { badge: VerificationBadge }) {
       style={[styles.chip, styles.chipUnearned]}
       accessible={true}
       accessibilityRole="text"
-      accessibilityLabel={`${badge.label} not yet earned`}
+      accessibilityLabel={badge.label + ' not yet earned'}
     >
       <MaterialIcons name={iconName} size={14} color="#6b7280" />
       <Text style={styles.chipLabelUnearned}>{badge.label}</Text>
@@ -94,7 +96,6 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     marginBottom: 8,
   },
   title: {
@@ -105,7 +106,6 @@ const styles = StyleSheet.create({
   chips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
   },
   chip: {
     flexDirection: 'row',
@@ -114,7 +114,6 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 14,
     borderWidth: 1,
-    gap: 5,
   },
   chipUnearned: {
     backgroundColor: 'rgba(107, 114, 128, 0.1)',

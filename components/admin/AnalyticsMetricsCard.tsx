@@ -186,7 +186,6 @@ export const AnalyticsMetricsCard: React.FC<AnalyticsMetricsCardProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    gap: 24,
   },
   section: {
     marginBottom: 0,
@@ -200,7 +199,6 @@ const styles = StyleSheet.create({
   loadingContainer: {
     padding: 40,
     alignItems: 'center',
-    gap: 12,
   },
   loadingText: {
     color: 'rgba(255,254,245,0.8)',

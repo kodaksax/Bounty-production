@@ -297,12 +297,10 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
     backgroundColor: '#059669',
-    gap: SPACING.COMPACT_GAP,
   },
   headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.COMPACT_GAP,
     transform: [
       { translateY: -2 },
       { translateX: -2 },
@@ -354,7 +352,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: SPACING.ELEMENT_GAP,
-    gap: SPACING.COMPACT_GAP,
   },
   actionButton: {
     flexDirection: 'row',
@@ -366,7 +363,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     minHeight: SIZING.BUTTON_HEIGHT_DEFAULT,
-    gap: SPACING.COMPACT_GAP,
   },
   actionButtonText: {
     color: '#fff',
@@ -396,7 +392,7 @@ const styles = StyleSheet.create({
   accountCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#047857cc',
+    backgroundColor: 'rgba(4,120,87,0.8)',
     borderRadius: SPACING.ELEMENT_GAP,
     padding: SPACING.SCREEN_HORIZONTAL,
     marginBottom: SPACING.COMPACT_GAP,
@@ -427,7 +423,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#047857cc',
+    backgroundColor: 'rgba(4,120,87,0.8)',
     borderRadius: SPACING.ELEMENT_GAP,
     padding: SPACING.SCREEN_HORIZONTAL,
     marginBottom: SPACING.COMPACT_GAP,

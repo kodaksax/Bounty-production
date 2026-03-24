@@ -44,7 +44,7 @@ export function sanitizePlaceId(placeId: string): string {
   }
   
   // Place IDs from Google are typically alphanumeric with hyphens and underscores
-  const VALID_PLACE_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+  const VALID_PLACE_ID_PATTERN = /^[A-Za-z0-9-]+$/;
   
   if (!VALID_PLACE_ID_PATTERN.test(placeId)) {
     console.error('Invalid place ID format detected:', placeId.substring(0, 20));

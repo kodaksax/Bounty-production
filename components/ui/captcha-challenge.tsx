@@ -93,7 +93,7 @@ export function CaptchaChallenge({ onVerified, onReset }: CaptchaChallengeProps)
       </Text>
 
       {verified ? (
-        <View className="flex-row items-center gap-2">
+        <View className="flex-row items-center">
           <MaterialIcons name="check-circle" size={18} color="#34d399" />
           <Text className="text-emerald-300 text-sm">Verification passed</Text>
         </View>

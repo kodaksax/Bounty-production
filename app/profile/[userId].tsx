@@ -613,7 +613,6 @@ const styles = StyleSheet.create({
   headerCenter: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
   },
   backButton: {
     padding: 4,
@@ -662,7 +661,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 12,
     paddingVertical: 10,
-    gap: 12,
   },
   moreMenuText: {
     fontSize: 14,
@@ -760,7 +758,6 @@ const styles = StyleSheet.create({
   },
   actionButtons: {
     flexDirection: "row",
-    gap: 12,
     marginBottom: 16,
     paddingHorizontal: 16,
   },
@@ -772,7 +769,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#a7f3d0", // emerald-200
     paddingVertical: 12,
     borderRadius: 12,
-    gap: 6,
   },
   primaryButtonDisabled: {
     opacity: 0.6,
@@ -792,7 +788,6 @@ const styles = StyleSheet.create({
     borderColor: "#a7f3d0", // emerald-200
     paddingVertical: 12,
     borderRadius: 12,
-    gap: 6,
   },
   secondaryButtonText: {
     color: "#ffffff",
@@ -844,7 +839,6 @@ const styles = StyleSheet.create({
   verificationSection: {
     paddingHorizontal: 16,
     marginBottom: 12,
-    gap: 6,
   },
   emailBadge: {
     flexDirection: "row",
@@ -854,7 +848,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 20,
-    gap: 4,
   },
   emailBadgeText: {
     fontSize: 12,
@@ -864,7 +857,6 @@ const styles = StyleSheet.create({
   resendPrompt: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
     flexWrap: "wrap",
   },
   resendPromptText: {

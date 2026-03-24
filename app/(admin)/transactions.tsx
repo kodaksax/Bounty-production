@@ -160,7 +160,6 @@ const styles = StyleSheet.create({
   filtersContent: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    gap: 8,
   },
   filterChip: {
     paddingHorizontal: 16,
@@ -195,7 +194,6 @@ const styles = StyleSheet.create({
   transactionHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
     marginBottom: 12,
   },
   transactionIcon: {
@@ -222,7 +220,6 @@ const styles = StyleSheet.create({
   },
   transactionAmount: {
     alignItems: 'flex-end',
-    gap: 6,
   },
   amountText: {
     fontSize: 18,
@@ -230,13 +227,11 @@ const styles = StyleSheet.create({
     color: '#fffef5',
   },
   transactionMeta: {
-    gap: 6,
     marginBottom: 8,
   },
   metaItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
   },
   metaText: {
     fontSize: 12,

@@ -51,7 +51,7 @@ export function useAcceptRequest({
     let pendingConvId: string | null = null
     try {
       // Show quick-refresh UI for list transitions
-      setIsLoading((prev) => ({ ...prev, requests: true, myBounties: true, inProgress: true }))
+      setIsLoading((prev) => Object.assign({}, prev, { requests: true, myBounties: true, inProgress: true }))
 
       // Find the request to get bounty and profile info
       const request = bountyRequests.find(req => String(req.id) === String(requestId))
@@ -65,34 +65,42 @@ export function useAcceptRequest({
 
       // Check balance before any optimistic UI updates so the UI stays consistent if we bail early
       if (request.bounty && !request.bounty.is_for_honor && request.bounty.amount > 0) {
-        if (balance < request.bounty.amount) {
-          Alert.alert(
-            'Insufficient Balance',
-            `You need $${request.bounty.amount.toFixed(2)} to accept this request. Your current balance is $${balance.toFixed(2)}.\n\nWould you like to add money to your wallet?`,
-            [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Add Money', onPress: () => setShowAddMoney(true) }
-            ]
-          )
-          return
-        }
+          if (balance < request.bounty.amount) {
+            Alert.alert(
+              'Insufficient Balance',
+              'You need $' + request.bounty.amount.toFixed(2) + ' to accept this request. Your current balance is $' + balance.toFixed(2) + '.\n\nWould you like to add money to your wallet?',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Add Money', onPress: () => setShowAddMoney(true) }
+              ]
+            )
+            return
+          }
       }
 
       // Optimistically remove all requests for this bounty so UI moves immediately
       if (resolvedBountyId != null) {
-        setBountyRequests((prev) => prev.filter(req => String(req.bounty_id) !== String(resolvedBountyId)))
+        setBountyRequests((prev) => {
+          return prev.filter(req => String(req.bounty_id) !== String(resolvedBountyId));
+        });
       } else {
         // If we don't know bounty id, at least remove the single request
-        setBountyRequests((prev) => prev.filter(req => String(req.id) !== String(requestId)))
+        setBountyRequests((prev) => {
+          return prev.filter(req => String(req.id) !== String(requestId));
+        });
       }
 
       // Optimistically update My Postings to in_progress
       setMyBounties((prev) =>
-        prev.map((b) =>
-          String(b.id) === String(resolvedBountyId)
-            ? { ...b, status: 'in_progress' as const, accepted_by: hunterIdForConv }
-            : b
-        )
+        prev.map((b) => {
+          if (String(b.id) === String(resolvedBountyId)) {
+            const updated: any = Object.assign({}, b)
+            updated.status = 'in_progress'
+            updated.accepted_by = hunterIdForConv
+            return updated
+          }
+          return b
+        })
       )
 
       // If current user is the accepted hunter, optimistically add to In Progress list
@@ -242,40 +250,38 @@ export function useAcceptRequest({
 
       // Show escrow instructions if it's a paid bounty
       // Show a confirmation alert with next-step guidance for the poster
-      const nextSteps = `\n\nNext steps:\n• Confirm details with your hunter in the conversation.\n• When the work is done, mark the bounty complete and release escrow (for paid bounties).`
+      const nextSteps = '\n\nNext steps:\n- Confirm details with your hunter in the conversation.\n- When the work is done, mark the bounty complete and release escrow (for paid bounties).'
 
       const viewAction = {
         text: 'View Conversation',
-        onPress: () => {
+        onPress: async () => {
           // Re-assert the pending conversation id and a pending navigation
           // target just before navigating so the root app and MessengerScreen
           // can reliably pick them up on mount.
-          ;(async () => {
-            try { await navigationIntent.setPendingConversationId(pendingConvId) } catch {}
-            try { await navigationIntent.setPendingNavigation('?screen=create') } catch {}
-            try { setActiveScreen('create') } catch {}
-          })()
+          try { await navigationIntent.setPendingConversationId(pendingConvId) } catch {}
+          try { await navigationIntent.setPendingNavigation('?screen=create') } catch {}
+          try { setActiveScreen('create') } catch {}
         }
       }
 
+      // Build alert message without template literals or emoji to avoid
+      // generating fragile tokens in the bundle that some Android JS engines
+      // can reject during parsing.
+      const who = request.profile?.username || 'the hunter'
+      const baseMsg = "You've accepted " + who + ' for "' + request.bounty.title + '".\n\n'
+
       if (request.bounty && !request.bounty.is_for_honor && request.bounty.amount > 0) {
-        Alert.alert(
-          'Request Accepted',
-          `You've accepted ${request.profile?.username || 'the hunter'} for "${request.bounty.title}".\n\n💰 Escrow: $${request.bounty.amount.toFixed(2)} has been secured and will be held until completion.\n💬 A conversation has been created to coordinate.${nextSteps}`,
-          [viewAction, { text: 'OK' }]
-        )
+        const msg = baseMsg + 'Escrow: $' + request.bounty.amount.toFixed(2) + ' has been secured and will be held until completion.\nA conversation has been created to coordinate.' + nextSteps
+        Alert.alert('Request Accepted', msg, [viewAction, { text: 'OK' }])
       } else {
-        Alert.alert(
-          'Request Accepted',
-          `You've accepted ${request.profile?.username || 'the hunter'} for "${request.bounty.title}".\n\n💬 A conversation has been created to coordinate.${nextSteps}`,
-          [viewAction, { text: 'OK' }]
-        )
+        const msg = baseMsg + 'A conversation has been created to coordinate.' + nextSteps
+        Alert.alert('Request Accepted', msg, [viewAction, { text: 'OK' }])
       }
     } catch (err: any) {
       console.error("Error accepting request:", err)
       setError(err.message || "Failed to accept request")
-    } finally {
-      setIsLoading((prev) => ({ ...prev, requests: false, myBounties: false, inProgress: false }))
+      } finally {
+      setIsLoading((prev) => Object.assign({}, prev, { requests: false, myBounties: false, inProgress: false }))
     }
   }, [
     currentUserId,

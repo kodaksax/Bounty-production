@@ -725,7 +725,6 @@ const styles = StyleSheet.create({
   skillsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
     marginBottom: 12,
   },
   skillChip: {
@@ -752,13 +751,11 @@ const styles = StyleSheet.create({
   customSkillsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
     marginBottom: 12,
   },
   customSkillChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
@@ -796,7 +793,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 999,
     marginBottom: 12,
-    gap: 8,
   },
   nextButtonText: {
     color: '#052e1b',
@@ -814,7 +810,6 @@ const styles = StyleSheet.create({
   progressContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 8,
     paddingTop: 16,
   },
   progressDot: {

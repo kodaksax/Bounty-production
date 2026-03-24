@@ -536,7 +536,6 @@ const styles = StyleSheet.create({
   skillsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
     marginLeft: 26,
   },
   skillBadge: {
@@ -573,7 +572,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#a7f3d0',
     paddingVertical: 16,
     borderRadius: 999,
-    gap: 8,
     marginBottom: 16,
   },
   continueButtonText: {
@@ -584,7 +582,6 @@ const styles = StyleSheet.create({
   progressContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 8,
     paddingBottom: 4,
   },
   progressDot: {

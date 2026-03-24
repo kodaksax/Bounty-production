@@ -338,7 +338,7 @@ const SettingsCard = ({ title, description, primaryLabel, secondaryLabel, onPrim
         <Text className="ml-2 text-white font-medium text-sm flex-1" numberOfLines={1}>{title}</Text>
       </View>
       <Text className="text-emerald-200 text-xs leading-4 mb-3" numberOfLines={4}>{description}</Text>
-      <View className="flex-row gap-2">
+      <View className="flex-row">
         <TouchableOpacity onPress={onPrimary} className="px-3 py-1 rounded-md bg-emerald-700">
           <Text className="text-white text-xs font-medium">{primaryLabel}</Text>
         </TouchableOpacity>

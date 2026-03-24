@@ -55,7 +55,6 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
   },
   chip: {
     flexDirection: "row",
@@ -64,7 +63,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingVertical: 6,
     paddingHorizontal: 12,
-    gap: 6,
   },
   iconContainer: {
     width: 20,

@@ -154,12 +154,10 @@ export function RetryButton({
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
-    gap: SPACING.COMPACT_GAP,
   },
   inlineContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.ELEMENT_GAP,
   },
   button: {
     flexDirection: 'row',
@@ -169,7 +167,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.SECTION_GAP,
     paddingVertical: SPACING.ELEMENT_GAP,
     borderRadius: 12,
-    gap: SPACING.COMPACT_GAP,
     minHeight: SIZING.BUTTON_HEIGHT_DEFAULT,
     minWidth: 120,
     ...theme.shadows.sm,

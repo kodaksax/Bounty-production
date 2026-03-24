@@ -269,7 +269,6 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     marginBottom: 4,
   },
   title: {
@@ -285,10 +284,8 @@ const styles = StyleSheet.create({
   gridContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
   },
   listContainer: {
-    gap: 12,
   },
   gridBadge: {
     width: '30%',
@@ -303,7 +300,6 @@ const styles = StyleSheet.create({
     padding: 12,
     backgroundColor: 'rgba(6, 78, 59, 0.5)',
     borderRadius: 12,
-    gap: 12,
   },
   badgeIconCircle: {
     width: 48,
@@ -329,7 +325,6 @@ const styles = StyleSheet.create({
     marginVertical: 8,
   },
   compactScrollContent: {
-    gap: 8,
     paddingHorizontal: 4,
   },
   compactBadge: {
@@ -339,7 +334,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 16,
-    gap: 6,
   },
   compactBadgeText: {
     fontSize: 11,

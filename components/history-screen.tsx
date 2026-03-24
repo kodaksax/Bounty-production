@@ -1,19 +1,19 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import React, { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { bountyService } from "lib/services/bounty-service";
 import type { Bounty } from "lib/services/database.types";
 import type { WalletTransaction } from "lib/types";
-import { bountyService } from "lib/services/bounty-service";
 import { getCurrentUserId } from "lib/utils/data-utils";
 import { useWallet } from "lib/wallet-context";
+import { useEffect, useState } from "react";
+import {
+    ActivityIndicator,
+    FlatList,
+    RefreshControl,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native";
 
 interface HistoryScreenProps {
   onBack: () => void;
@@ -56,53 +56,48 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
   }, []);
 
   const renderBountyItem = ({ item }: { item: Bounty }) => (
-    <View style={styles.item}>
-      <View style={styles.itemHeader}>
-        <View
-          style={[
-            styles.statusBadge,
-            {
-              backgroundColor:
-                item.status === "completed" 
-                  ? "#6366f1" 
-                  : item.status === "archived"
-                  ? "#6b7280"
-                  : "#ef4444", // deleted = red
-            },
-          ]}
-        >
-          <Text style={styles.statusText}>
-            {item.status === "completed" 
-              ? "COMPLETED" 
-              : item.status === "archived"
-              ? "ARCHIVED"
-              : "DELETED"}
-          </Text>
+    (() => {
+      // Move complex ternaries out of JSX to reduce fragile generated tokens
+      const statusBackground =
+        item.status === "completed"
+          ? "#6366f1"
+          : item.status === "archived"
+          ? "#6b7280"
+          : "#ef4444";
+
+      const statusLabel =
+        item.status === "completed"
+          ? "COMPLETED"
+          : item.status === "archived"
+          ? "ARCHIVED"
+          : "DELETED";
+
+      const footerContent = item.is_for_honor ? (
+        <View style={styles.honorBadge}>
+          <MaterialIcons name="favorite" size={12} color="#052e1b" />
+          <Text style={styles.honorText}>For Honor</Text>
         </View>
-        <Text style={styles.date}>
-          {new Date(item.created_at).toLocaleDateString()}
-        </Text>
-      </View>
+      ) : (
+        <Text style={styles.amount}>${item.amount}</Text>
+      );
 
-      <Text style={styles.itemTitle} numberOfLines={2}>
-        {item.title}
-      </Text>
-
-      <Text style={styles.itemDescription} numberOfLines={2}>
-        {item.description}
-      </Text>
-
-      <View style={styles.itemFooter}>
-        {item.is_for_honor ? (
-          <View style={styles.honorBadge}>
-            <MaterialIcons name="favorite" size={12} color="#052e1b" />
-            <Text style={styles.honorText}>For Honor</Text>
+      return (
+        <View style={styles.item}>
+          <View style={styles.itemHeader}>
+            <View style={[styles.statusBadge, { backgroundColor: statusBackground }]}>
+              <Text style={styles.statusText}>{statusLabel}</Text>
+            </View>
+            <Text style={styles.date}>{new Date(item.created_at).toLocaleDateString()}</Text>
           </View>
-        ) : (
-          <Text style={styles.amount}>${item.amount}</Text>
-        )}
-      </View>
-    </View>
+
+          <Text style={styles.itemTitle} numberOfLines={2}>{item.title}</Text>
+
+          <Text style={styles.itemDescription} numberOfLines={2}>{item.description}</Text>
+
+          <View style={styles.itemFooter}>{footerContent}</View>
+        </View>
+      );
+    })()
   );
 
   const renderTransactionItem = ({ item }: { item: WalletTransaction }) => (
@@ -168,7 +163,7 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <MaterialIcons name="history" size={64} color="#6ee7b780" />
+              <MaterialIcons name="history" size={64} color="rgba(110,231,183,0.5)" />
               <Text style={styles.emptyTitle}>No History Yet</Text>
               <Text style={styles.emptyText}>
                 Your completed, archived, and deleted bounties will appear here
@@ -269,7 +264,6 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    gap: 4,
   },
   honorText: {
     color: "#052e1b",
@@ -298,7 +292,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    gap: 4,
   },
   disputeText: {
     color: "#fff",

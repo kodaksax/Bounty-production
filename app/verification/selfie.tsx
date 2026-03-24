@@ -328,7 +328,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: SPACING.ELEMENT_GAP,
     marginBottom: SPACING.SECTION_GAP,
-    gap: SPACING.COMPACT_GAP,
   },
   tipText: {
     flex: 1,
@@ -344,7 +343,6 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.CARD_PADDING,
     borderRadius: 999,
     marginBottom: SPACING.SECTION_GAP,
-    gap: SPACING.COMPACT_GAP,
   },
   primaryButtonText: {
     color: '#052e1b',
@@ -353,7 +351,6 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     flexDirection: 'row',
-    gap: SPACING.ELEMENT_GAP,
     marginBottom: SPACING.SECTION_GAP,
   },
   retakeButton: {
@@ -366,7 +363,6 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 2,
     borderColor: '#a7f3d0',
-    gap: SPACING.COMPACT_GAP,
   },
   retakeButtonText: {
     color: '#a7f3d0',
@@ -381,7 +377,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#a7f3d0',
     paddingVertical: SPACING.CARD_PADDING,
     borderRadius: 999,
-    gap: SPACING.COMPACT_GAP,
   },
   confirmButtonText: {
     color: '#052e1b',

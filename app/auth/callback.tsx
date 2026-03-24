@@ -404,7 +404,6 @@ const styles = StyleSheet.create({
   },
   errorActions: {
     width: '100%',
-    gap: 12,
   },
   primaryButton: {
     flexDirection: 'row',
@@ -413,7 +412,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#a7f3d0',
     paddingVertical: 16,
     borderRadius: 999,
-    gap: 8,
   },
   primaryButtonText: {
     color: '#052e1b',
@@ -427,7 +425,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(5,46,27,0.4)',
     paddingVertical: 16,
     borderRadius: 999,
-    gap: 8,
     borderWidth: 2,
     borderColor: '#a7f3d0',
   },

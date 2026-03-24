@@ -70,7 +70,6 @@ export function RatingStars({
 
 const styles = StyleSheet.create({
   container: {
-    gap: 8,
   },
   label: {
     color: '#6ee7b7',
@@ -82,7 +81,6 @@ const styles = StyleSheet.create({
   starsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
   },
   hint: {
     color: 'rgba(110,231,183,0.7)',

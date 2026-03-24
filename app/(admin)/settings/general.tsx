@@ -217,7 +217,6 @@ const styles = StyleSheet.create({
   selectValue: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
   },
   selectValueText: {
     fontSize: 14,
@@ -231,7 +230,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#00912C',
     paddingVertical: 14,
     borderRadius: 12,
-    gap: 8,
     marginTop: 16,
   },
   saveButtonText: {

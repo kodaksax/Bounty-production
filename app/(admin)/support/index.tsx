@@ -183,7 +183,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   linksContainer: {
-    gap: 12,
   },
   linkCard: {
     flexDirection: 'row',
@@ -193,7 +192,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(0,145,44,0.2)',
-    gap: 16,
   },
   linkIcon: {
     width: 48,
@@ -219,7 +217,6 @@ const styles = StyleSheet.create({
   resourcesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
   },
   resourceCard: {
     width: '48%',
@@ -229,7 +226,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(0,145,44,0.2)',
     alignItems: 'center',
-    gap: 8,
   },
   resourceTitle: {
     fontSize: 13,
@@ -243,7 +239,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(0,145,44,0.2)',
-    gap: 12,
   },
   infoRow: {
     flexDirection: 'row',
@@ -262,7 +257,6 @@ const styles = StyleSheet.create({
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
   },
   statusDot: {
     width: 8,
@@ -283,7 +277,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,193,7,0.3)',
-    gap: 12,
     marginTop: 8,
   },
   emergencyContent: {

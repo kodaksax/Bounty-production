@@ -147,7 +147,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     borderWidth: 1,
     borderColor: 'rgba(0,220,80,0.3)',
-    gap: 8,
   },
   infoBannerText: {
     flex: 1,
@@ -192,7 +191,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
-    gap: 8,
   },
   retryButtonText: {
     color: '#fffef5',

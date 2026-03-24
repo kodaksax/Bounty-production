@@ -671,7 +671,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 20,
-    gap: 12,
   },
   hunterBountyCard: {
     backgroundColor: 'rgba(5, 150, 105, 0.2)',
@@ -683,20 +682,16 @@ const styles = StyleSheet.create({
   },
   hunterBountyHeader: {
     flexDirection: 'row',
-    gap: 12,
     marginBottom: 12,
   },
   hunterBountyInfo: {
     flex: 1,
-    gap: 8,
   },
   hunterTimeline: {
     marginBottom: 20,
-    gap: 12,
   },
   hunterTimelineScroll: {
     flexDirection: 'row',
-    gap: 16,
     paddingVertical: 8,
   },
   hunterStageItem: {
@@ -705,14 +700,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: 'rgba(5, 150, 105, 0.1)',
     minWidth: 120,
-    gap: 8,
   },
   hunterPanel: {
     backgroundColor: 'rgba(5, 150, 105, 0.15)',
     borderRadius: 12,
     padding: 24,
     alignItems: 'center',
-    gap: 12,
     marginBottom: 20,
     borderWidth: 1,
     borderColor: 'rgba(110, 231, 183, 0.2)',
@@ -721,6 +714,5 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(5, 150, 105, 0.1)',
     borderRadius: 12,
     padding: 16,
-    gap: 12,
   },
 });

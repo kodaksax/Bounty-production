@@ -82,7 +82,6 @@ export function MessageBar({
 
 const styles = StyleSheet.create({
   container: {
-    gap: 8,
   },
   label: {
     color: '#6ee7b7',
@@ -93,7 +92,6 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     flexDirection: 'row',
-    gap: 8,
     alignItems: 'flex-end',
   },
   input: {

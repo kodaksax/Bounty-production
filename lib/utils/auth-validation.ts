@@ -96,7 +96,7 @@ export function validateUsername(username: string): string | null {
     return 'Username is required';
   }
   
-  if (!/^[a-zA-Z0-9_]{3,24}$/.test(username)) {
+  if (!/^[a-zA-Z0-9]{3,24}$/.test(username)) {
     return 'Username must be 3-24 characters (letters, numbers, underscore only)';
   }
   

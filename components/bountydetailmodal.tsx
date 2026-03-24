@@ -788,7 +788,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   bountyCard: {
-    backgroundColor: '#047857cc', // emerald-700/80
+    backgroundColor: 'rgba(4,120,87,0.8)', // emerald-700/80
     borderRadius: 12,
     overflow: 'hidden',
     marginBottom: 16,
@@ -799,13 +799,11 @@ const styles = StyleSheet.create({
   userInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
     marginBottom: 12,
   },
   profileLoadingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
     flex: 1,
   },
   loadingText: {
@@ -820,7 +818,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderWidth: 1,
-    borderColor: '#6ee7b780', // emerald-400/30
+    borderColor: 'rgba(110,231,183,0.502)', // emerald-400/30
   },
   avatarFallback: {
     backgroundColor: '#064e3b', // emerald-900
@@ -857,7 +855,7 @@ const styles = StyleSheet.create({
     color: '#065f46', // emerald-800
   },
   priceContainer: {
-    backgroundColor: '#064e3b80', // emerald-900/50
+    backgroundColor: 'rgba(6,78,59,0.502)', // emerald-900/50
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
@@ -877,7 +875,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
-    gap: 4,
   },
   categoryPill: {
     marginTop: 8,
@@ -899,7 +896,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    gap: 4,
   },
   honorText: {
     color: '#052e1b', // emerald-950
@@ -911,7 +907,7 @@ const styles = StyleSheet.create({
   },
   additionalDetailsContainer: {
     marginBottom: 16,
-    backgroundColor: '#05543280', // emerald-800/50
+    backgroundColor: 'rgba(5,84,50,0.502)', // emerald-800/50
     padding: 12,
     borderRadius: 8,
   },
@@ -919,7 +915,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     marginBottom: 8,
-    gap: 10,
   },
   detailContent: {
     flex: 1,
@@ -950,16 +945,14 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   attachmentsContainer: {
-    gap: 8,
   },
   attachmentsLoadingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 16,
-    backgroundColor: '#05543280', // emerald-800/50
+    backgroundColor: 'rgba(5,84,50,0.502)', // emerald-800/50
     borderRadius: 8,
-    gap: 12,
   },
   attachmentsLoadingText: {
     color: '#a7f3d0', // emerald-300
@@ -969,7 +962,7 @@ const styles = StyleSheet.create({
   attachmentItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#05543280', // emerald-800/50
+    backgroundColor: 'rgba(5,84,50,0.502)', // emerald-800/50
     padding: 12,
     borderRadius: 8,
   },
@@ -1001,7 +994,7 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     backgroundColor: '#047857', // emerald-700
     borderTopWidth: 1,
-    borderTopColor: '#05966920', // emerald-600/20
+    borderTopColor: 'rgba(5,150,105,0.125)', // emerald-600/20
   },
   acceptButton: {
     width: '100%',

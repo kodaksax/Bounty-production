@@ -539,7 +539,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a3d2e',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
   },
   loadingText: {
     color: 'rgba(255,254,245,0.8)',
@@ -550,7 +549,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a3d2e',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
     padding: 24,
   },
   errorText: {
@@ -662,7 +660,6 @@ const styles = StyleSheet.create({
   honorBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     backgroundColor: '#10b981',
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -698,7 +695,6 @@ const styles = StyleSheet.create({
   },
   timeline: {
     paddingVertical: 8,
-    gap: 12,
   },
   stageItem: {
     alignItems: 'center',
@@ -773,7 +769,6 @@ const styles = StyleSheet.create({
   },
   messageInputContainer: {
     flexDirection: 'row',
-    gap: 8,
     alignItems: 'flex-end',
   },
   messageInput: {
@@ -837,7 +832,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
     paddingVertical: 8,
   },
   expandButtonText: {
@@ -848,7 +842,6 @@ const styles = StyleSheet.create({
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     marginTop: 8,
   },
   infoText: {
@@ -862,7 +855,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 16,
     borderRadius: 12,
-    gap: 8,
     marginTop: 8,
   },
   nextButtonText: {

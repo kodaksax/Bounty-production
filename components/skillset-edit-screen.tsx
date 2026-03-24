@@ -44,7 +44,7 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
   const getIconComponent = (iconName: string) => <MaterialIcons name={(alias[iconName] || iconName) as any} size={20} color="#ffffff" />
   
   // User-specific storage key to prevent data leaks between users
-  const SKILLS_STORAGE_KEY = `profileSkills:${resolvedUserId || 'anon'}`;
+  const SKILLS_STORAGE_KEY = 'profileSkills:' + (resolvedUserId || 'anon');
 
   // If prop changes while open (unlikely), sync once.
   useEffect(() => {
@@ -129,7 +129,7 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
       if (res.canceled) return
       if (res.assets && res.assets.length > 0) {
         const uri = res.assets[0].uri
-        setSkills(prev => prev.map(s => s.id === skillId ? { ...s, credentialUrl: uri } : s))
+        setSkills(prev => prev.map(s => s.id === skillId ? Object.assign({}, s, { credentialUrl: uri }) : s))
         setBanner('Credential attached')
         setTimeout(()=>setBanner(null), 1200)
       }
@@ -140,13 +140,13 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
   }
 
   const removeCredential = (skillId: string) => {
-    setSkills(prev => prev.map(s => s.id === skillId ? { ...s, credentialUrl: undefined } : s))
+    setSkills(prev => prev.map(s => s.id === skillId ? Object.assign({}, s, { credentialUrl: undefined }) : s))
     setBanner('Credential removed')
     setTimeout(()=>setBanner(null), 1200)
   }
 
   const changeIcon = (skillId: string, icon: string) => {
-    setSkills(prev => prev.map(s => s.id === skillId ? { ...s, icon } : s))
+    setSkills(prev => prev.map(s => s.id === skillId ? Object.assign({}, s, { icon }) : s))
   }
 
   return (

@@ -355,7 +355,6 @@ const styles = StyleSheet.create({
   otpContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 8,
     marginBottom: 16,
   },
   otpInput: {
@@ -382,7 +381,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
-    gap: 6,
   },
   errorText: {
     color: '#ef4444',
@@ -397,7 +395,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 999,
     marginBottom: 16,
-    gap: 8,
   },
   buttonDisabled: {
     opacity: 0.6,

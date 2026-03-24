@@ -114,7 +114,7 @@ export function ResetPasswordScreen() {
             </View>
           )}
 
-          <View className="gap-5">
+          <View className="">
             {/* Email Input */}
             {!emailSent && (
               <View>
@@ -152,7 +152,7 @@ export function ResetPasswordScreen() {
 
             {/* Action Buttons */}
             {emailSent ? (
-              <View className="gap-3">
+              <View className="">
                 {/* Open Email App */}
                 <Button onPress={() => {
                   // This is a placeholder - in production, use expo-mail-composer

@@ -487,7 +487,6 @@ const styles = StyleSheet.create({
   },
   docTypeContainer: {
     flexDirection: 'row',
-    gap: SPACING.ELEMENT_GAP,
   },
   docTypeButton: {
     flex: 1,
@@ -571,7 +570,6 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.CARD_PADDING,
     borderRadius: 999,
     marginBottom: SPACING.SCREEN_HORIZONTAL,
-    gap: SPACING.COMPACT_GAP,
   },
   submitButtonDisabled: {
     opacity: 0.5,

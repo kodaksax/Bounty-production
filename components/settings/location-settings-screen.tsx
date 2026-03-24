@@ -1,18 +1,18 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import React, { useState, useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  FlatList,
-  Alert,
-  ActivityIndicator,
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocation } from '../../app/hooks/useLocation';
 import { useAddressLibrary } from '../../app/hooks/useAddressLibrary';
+import { useLocation } from '../../app/hooks/useLocation';
 import type { SavedAddress } from '../../lib/types';
 
 const BOTTOM_NAV_OFFSET = 70;
@@ -105,23 +105,23 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
 
   const renderAddressItem = useCallback(
     ({ item }: { item: SavedAddress }) => (
-      <View className="bg-emerald-700/50 rounded-lg p-4 mb-2">
-        <View className="flex-row items-start justify-between">
-          <View className="flex-1 mr-3">
-            <Text className="text-white font-semibold text-base mb-1">{item.label}</Text>
-            <Text className="text-emerald-200 text-sm" numberOfLines={2}>
+      <View style={{ backgroundColor: 'rgba(4,120,87,0.3)', borderRadius: 12, padding: 16, marginBottom: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <View style={{ flex: 1, marginRight: 12 }}>
+            <Text style={{ color: '#fff', fontWeight: '600', fontSize: 16, marginBottom: 4 }}>{item.label}</Text>
+            <Text style={{ color: '#a7f3d0', fontSize: 14 }} numberOfLines={2}>
               {item.address}
             </Text>
             {item.latitude && item.longitude && (
-              <Text className="text-emerald-300/60 text-xs mt-1">
+              <Text style={{ color: 'rgba(5,110,99,0.6)', fontSize: 12, marginTop: 4 }}>
                 Coordinates available
               </Text>
             )}
           </View>
-          <View className="flex-row gap-2">
+          <View style={{ flexDirection: 'row' }}>
             <TouchableOpacity
               onPress={() => handleEdit(item)}
-              className="bg-emerald-600 p-2 rounded"
+              style={{ backgroundColor: '#047857', padding: 8, borderRadius: 6 }}
               accessibilityLabel={`Edit ${item.label}`}
               accessibilityRole="button"
             >
@@ -129,7 +129,7 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => handleDelete(item)}
-              className="bg-red-600 p-2 rounded"
+              style={{ backgroundColor: '#dc2626', padding: 8, borderRadius: 6, marginLeft: 8 }}
               accessibilityLabel={`Delete ${item.label}`}
               accessibilityRole="button"
             >
@@ -248,7 +248,7 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
               <ActivityIndicator color="#6ee7b7" />
             )}
 
-            <Text className="text-emerald-200/60 text-xs mt-3">
+            <Text style={{ color: 'rgba(167,243,208,0.6)', fontSize: 12, marginTop: 12 }}>
               Location is used to calculate distances to in-person bounties and help you find
               opportunities nearby.
             </Text>
@@ -257,7 +257,7 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
 
         {/* Saved Addresses Section */}
         <View className="px-4">
-          <View className="flex-row items-center justify-between mb-3">
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <Text className="text-white text-xl font-semibold">Saved Addresses</Text>
             {!showAddForm && (
               <TouchableOpacity
@@ -305,7 +305,7 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
                 numberOfLines={2}
               />
 
-              <View className="flex-row gap-2">
+              <View className="flex-row">
                 <TouchableOpacity
                   onPress={handleCancelForm}
                   className="flex-1 bg-emerald-700/50 py-3 rounded-lg"

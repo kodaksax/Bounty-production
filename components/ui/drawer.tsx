@@ -159,7 +159,6 @@ const styles = StyleSheet.create({
   footer: {
     marginTop: 'auto',
     flexDirection: 'column',
-    gap: 8,
     padding: 16,
   },
   title: {

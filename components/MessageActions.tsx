@@ -149,7 +149,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 16,
     paddingHorizontal: 20,
-    gap: 12,
   },
   actionText: {
     fontSize: 16,

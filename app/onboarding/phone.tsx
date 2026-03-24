@@ -340,7 +340,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     borderWidth: 1,
     borderColor: 'rgba(167,243,208,0.2)',
-    gap: 12,
   },
   trustBenefitItem: {
     flexDirection: 'row',
@@ -413,7 +412,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 999,
     marginBottom: 12,
-    gap: 8,
   },
   nextButtonText: {
     color: '#052e1b',
@@ -431,7 +429,6 @@ const styles = StyleSheet.create({
   progressContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 8,
     paddingTop: 16,
   },
   progressDot: {

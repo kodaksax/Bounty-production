@@ -340,14 +340,14 @@ SidebarInput.displayName = "SidebarInput"
 
 const SidebarHeader = React.forwardRef<React.ElementRef<typeof View>, React.ComponentProps<typeof View>>(({ className, ...props }: React.ComponentProps<typeof View>, ref) => {
   return (
-    <View ref={ref} {...({ 'data-sidebar': 'header' } as any)} className={cn("flex flex-col gap-2 p-2", className)} {...(props as any)} />
+    <View ref={ref} {...({ 'data-sidebar': 'header' } as any)} className={cn("flex flex-col  p-2", className)} {...(props as any)} />
   )
 })
 SidebarHeader.displayName = "SidebarHeader"
 
 const SidebarFooter = React.forwardRef<React.ElementRef<typeof View>, React.ComponentProps<typeof View>>(({ className, ...props }: React.ComponentProps<typeof View>, ref) => {
   return (
-    <View ref={ref} {...({ 'data-sidebar': 'footer' } as any)} className={cn("flex flex-col gap-2 p-2", className)} {...(props as any)} />
+    <View ref={ref} {...({ 'data-sidebar': 'footer' } as any)} className={cn("flex flex-col  p-2", className)} {...(props as any)} />
   )
 })
 SidebarFooter.displayName = "SidebarFooter"
@@ -376,7 +376,7 @@ SidebarSeparator.displayName = "SidebarSeparator"
 
 const SidebarContent = React.forwardRef<React.ElementRef<typeof View>, React.ComponentProps<typeof View>>(({ className, ...props }: React.ComponentProps<typeof View>, ref) => {
   return (
-    <View ref={ref} {...({ 'data-sidebar': 'content' } as any)} className={cn("flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden", className)} {...(props as any)} />
+    <View ref={ref} {...({ 'data-sidebar': 'content' } as any)} className={cn("flex min-h-0 flex-1 flex-col  overflow-auto group-data-[collapsible=icon]:overflow-hidden", className)} {...(props as any)} />
   )
 })
 SidebarContent.displayName = "SidebarContent"
@@ -416,7 +416,7 @@ const SidebarGroupContent = React.forwardRef<React.ElementRef<typeof View>, Reac
 SidebarGroupContent.displayName = "SidebarGroupContent"
 
 const SidebarMenu = React.forwardRef<React.ElementRef<typeof View>, React.ComponentProps<typeof View>>(({ className, ...props }: React.ComponentProps<typeof View>, ref) => (
-  <View ref={ref} {...({ 'data-sidebar': 'menu' } as any)} className={cn("flex w-full min-w-0 flex-col gap-1", className)} {...props} />
+  <View ref={ref} {...({ 'data-sidebar': 'menu' } as any)} className={cn("flex w-full min-w-0 flex-col ", className)} {...props} />
 ))
 SidebarMenu.displayName = "SidebarMenu"
 
@@ -531,7 +531,7 @@ const SidebarMenuSkeleton = React.forwardRef<React.ElementRef<typeof View>, Reac
   }, [])
 
   return (
-    <View ref={ref} data-sidebar="menu-skeleton" className={cn("rounded-md h-8 flex gap-2 px-2 items-center", className)} {...props}>
+    <View ref={ref} data-sidebar="menu-skeleton" className={cn("rounded-md h-8 flex  px-2 items-center", className)} {...props}>
       {showIcon && (
         <Skeleton
           className="size-4 rounded-md"
@@ -545,7 +545,7 @@ const SidebarMenuSkeleton = React.forwardRef<React.ElementRef<typeof View>, Reac
 SidebarMenuSkeleton.displayName = "SidebarMenuSkeleton"
 
 const SidebarMenuSub = React.forwardRef<React.ElementRef<typeof View>, React.ComponentProps<typeof View>>(({ className, ...props }: React.ComponentProps<typeof View>, ref) => (
-  <View ref={ref} data-sidebar="menu-sub" className={cn("mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 border-l border-sidebar-border px-2.5 py-0.5", "group-data-[collapsible=icon]:hidden", className)} {...(props as any)} />
+  <View ref={ref} data-sidebar="menu-sub" className={cn("mx-3.5 flex min-w-0 translate-x-px flex-col  border-l border-sidebar-border px-2.5 py-0.5", "group-data-[collapsible=icon]:hidden", className)} {...(props as any)} />
 ))
 SidebarMenuSub.displayName = "SidebarMenuSub"
 
@@ -558,7 +558,7 @@ const SidebarMenuSubButton = React.forwardRef<React.ElementRef<typeof TouchableO
 
     return (
       <Comp ref={ref} data-sidebar="menu-sub-button" data-size={size} data-active={isActive} className={cn(
-        "flex h-7 min-w-0 -translate-x-px items-center gap-2 overflow-hidden rounded-md px-2 text-sidebar-foreground outline-none ring-sidebar-ring hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-sidebar-accent-foreground",
+        "flex h-7 min-w-0 -translate-x-px items-center  overflow-hidden rounded-md px-2 text-sidebar-foreground outline-none ring-sidebar-ring hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-sidebar-accent-foreground",
         "data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground",
         size === "sm" && "text-xs",
         size === "md" && "text-sm",

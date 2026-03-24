@@ -539,7 +539,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a3d2e',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
   },
   loadingText: {
     color: 'rgba(255,254,245,0.8)',
@@ -550,7 +549,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a3d2e',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
     padding: 24,
   },
   errorText: {
@@ -628,7 +626,6 @@ const styles = StyleSheet.create({
   summaryRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   summaryLabel: {
     color: '#6ee7b7',
@@ -651,7 +648,6 @@ const styles = StyleSheet.create({
   payoutHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
     marginBottom: 16,
   },
   payoutTitle: {
@@ -668,7 +664,6 @@ const styles = StyleSheet.create({
   balanceInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   balanceLabel: {
     color: '#6ee7b7',
@@ -754,7 +749,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 14,
     borderRadius: 12,
-    gap: 8,
     marginBottom: 16,
     borderWidth: 1,
     borderColor: '#10b981',
@@ -765,7 +759,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   actionButtons: {
-    gap: 12,
     marginBottom: 16,
   },
   releaseButton: {
@@ -775,7 +768,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 16,
     borderRadius: 12,
-    gap: 8,
   },
   releaseButtonText: {
     color: '#fff',
@@ -789,7 +781,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 16,
     borderRadius: 12,
-    gap: 8,
   },
   completeButtonText: {
     color: '#fff',
@@ -803,7 +794,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 16,
     borderRadius: 12,
-    gap: 8,
   },
   deleteButtonText: {
     color: '#fff',
@@ -820,7 +810,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(16, 185, 129, 0.2)',
-    gap: 12,
   },
   infoText: {
     flex: 1,

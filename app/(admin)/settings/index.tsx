@@ -106,7 +106,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   sectionsContainer: {
-    gap: 12,
   },
   sectionCard: {
     flexDirection: 'row',
@@ -116,7 +115,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(0,145,44,0.2)',
-    gap: 16,
   },
   sectionIcon: {
     width: 48,

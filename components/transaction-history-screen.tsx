@@ -522,7 +522,6 @@ const styles = StyleSheet.create({
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   timeText: {
     fontSize: 12,

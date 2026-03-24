@@ -46,7 +46,6 @@ const styles = StyleSheet.create({
     backgroundColor: ADMIN_BG_COLOR,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
   },
   loadingText: {
     color: 'rgba(255,254,245,0.8)',

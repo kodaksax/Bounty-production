@@ -597,7 +597,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
   },
   loadingText: {
     color: 'rgba(255,254,245,0.8)',
@@ -607,7 +606,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
     padding: 32,
   },
   errorText: {
@@ -620,7 +618,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     marginBottom: 16,
-    gap: 12,
   },
   statusBannerText: {
     fontSize: 16,
@@ -631,7 +628,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 16,
-    gap: 8,
   },
   sectionTitle: {
     fontSize: 16,
@@ -682,7 +678,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
-    gap: 8,
   },
   evidenceType: {
     fontSize: 11,
@@ -713,7 +708,6 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 8,
     marginBottom: 12,
-    gap: 8,
   },
   actionButtonText: {
     fontSize: 14,
@@ -759,7 +753,6 @@ const styles = StyleSheet.create({
   },
   winnerSelection: {
     flexDirection: 'row',
-    gap: 8,
     marginBottom: 12,
   },
   winnerButton: {
@@ -772,7 +765,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,254,245,0.3)',
     backgroundColor: 'transparent',
-    gap: 6,
   },
   winnerButtonActive: {
     backgroundColor: '#059669',
@@ -801,6 +793,5 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   resolveFormActions: {
-    gap: 8,
   },
 });

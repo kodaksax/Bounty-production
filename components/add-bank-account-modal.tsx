@@ -613,7 +613,6 @@ const styles = StyleSheet.create({
   helperText: { color: '#6ee7b7', fontSize: 11, marginTop: 6, fontStyle: 'italic' },
   accountTypeContainer: {
     flexDirection: 'row',
-    gap: 12,
   },
   accountTypeButton: {
     flex: 1,

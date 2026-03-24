@@ -206,7 +206,7 @@ export function ChatDetailScreen({
             </View>
           </TouchableOpacity>
         </View>
-        <View className="flex-row gap-3">
+        <View className="flex-row">
           <TouchableOpacity className="text-white">
             <MaterialIcons name="phone" size={24} color="#000000" />
           </TouchableOpacity>

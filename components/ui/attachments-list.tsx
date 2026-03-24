@@ -110,7 +110,6 @@ export function AttachmentsList({ attachments, onAttachmentPress }: AttachmentsL
 
 const styles = StyleSheet.create({
   container: {
-    gap: 8,
   },
   label: {
     color: '#6ee7b7',
@@ -120,12 +119,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   listContent: {
-    gap: 8,
   },
   emptyContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     padding: 16,
     backgroundColor: 'rgba(5, 150, 105, 0.1)',
     borderRadius: 8,
@@ -141,7 +138,6 @@ const styles = StyleSheet.create({
   attachmentItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
     padding: 12,
     backgroundColor: 'rgba(5, 150, 105, 0.2)',
     borderRadius: 8,

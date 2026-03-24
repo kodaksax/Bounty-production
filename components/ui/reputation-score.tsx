@@ -314,7 +314,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 8,
-    gap: 12,
   },
   scoreSection: {
     alignItems: 'center',
@@ -327,7 +326,6 @@ const styles = StyleSheet.create({
   },
   starsRow: {
     flexDirection: 'row',
-    gap: 2,
     marginBottom: 4,
   },
   ratingCount: {
@@ -339,7 +337,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 16,
-    gap: 6,
   },
   levelText: {
     fontWeight: '700',
@@ -347,12 +344,10 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection: 'row',
     marginTop: 8,
-    gap: 16,
   },
   statItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
   },
   statText: {
     fontSize: 12,
@@ -366,7 +361,6 @@ const styles = StyleSheet.create({
   compactInline: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
   },
   compactScore: {
     fontSize: 13,
@@ -414,7 +408,6 @@ const styles = StyleSheet.create({
   },
   modalStars: {
     flexDirection: 'row',
-    gap: 4,
     marginTop: 4,
   },
   modalLevelBadge: {
@@ -423,7 +416,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     marginBottom: 20,
-    gap: 12,
   },
   modalLevelText: {
     fontSize: 16,
@@ -439,7 +431,6 @@ const styles = StyleSheet.create({
   modalStats: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 24,
     marginBottom: 20,
   },
   modalStatItem: {

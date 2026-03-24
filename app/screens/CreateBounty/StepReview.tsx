@@ -216,7 +216,7 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
         className="px-4 pb-4 pt-3 bg-emerald-600 border-t border-emerald-700/50"
         style={{ marginBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 8) }}
       >
-        <View className="flex-row gap-3">
+        <View className="flex-row">
           <TouchableOpacity
             onPress={onBack}
             disabled={isSubmitting}

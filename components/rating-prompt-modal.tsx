@@ -118,7 +118,7 @@ export function RatingPromptModal({
               <TextInput
                 style={styles.commentInput}
                 placeholder="Share your thoughts..."
-                placeholderTextColor="#6ee7b780"
+                placeholderTextColor="rgba(110,231,183,0.502)"
                 value={comment}
                 onChangeText={setComment}
                 multiline
@@ -231,7 +231,6 @@ const styles = StyleSheet.create({
   stars: {
     flexDirection: "row",
     justifyContent: "center",
-    gap: 8,
   },
   starButton: {
     padding: 4,
@@ -263,7 +262,6 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     marginBottom: 16,
-    gap: 8,
   },
   errorText: {
     flex: 1,

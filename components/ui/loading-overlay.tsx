@@ -218,7 +218,6 @@ const styles = StyleSheet.create({
   },
   content: {
     alignItems: 'center',
-    gap: SPACING.ELEMENT_GAP,
   },
   message: {
     color: '#d1fae5',
@@ -230,7 +229,6 @@ const styles = StyleSheet.create({
   progressContainer: {
     width: '100%',
     alignItems: 'center',
-    gap: SPACING.COMPACT_GAP,
     marginTop: SPACING.COMPACT_GAP,
   },
   progressTrack: {
@@ -253,7 +251,6 @@ const styles = StyleSheet.create({
   inlineContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.COMPACT_GAP,
   },
   inlineText: {
     fontSize: TYPOGRAPHY.SIZE_SMALL,

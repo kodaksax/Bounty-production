@@ -20,7 +20,7 @@ import { toJsonSchema } from '../utils/zod-json';
 const registerSchema = z.object({
   email: z.string().email('Invalid email format'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
-  username: z.string().min(3, 'Username must be at least 3 characters').max(24, 'Username must be at most 24 characters').regex(/^[a-zA-Z0-9_]+$/, 'Username must contain only letters, numbers, and underscores').optional(),
+  username: z.string().min(3, 'Username must be at least 3 characters').max(24, 'Username must be at most 24 characters').regex(/^[a-zA-Z0-9]+$/, 'Username must contain only letters, numbers, and underscores').optional(),
 });
 
 const signInSchema = z.object({
@@ -31,7 +31,7 @@ const signInSchema = z.object({
 const signUpSchema = z.object({
   email: z.string().email('Invalid email format'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
-  username: z.string().min(3, 'Username must be at least 3 characters').max(24, 'Username must be at most 24 characters').regex(/^[a-zA-Z0-9_]+$/, 'Username must contain only letters, numbers, and underscores').optional(),
+  username: z.string().min(3, 'Username must be at least 3 characters').max(24, 'Username must be at most 24 characters').regex(/^[a-zA-Z0-9]+$/, 'Username must contain only letters, numbers, and underscores').optional(),
 });
 
 /**

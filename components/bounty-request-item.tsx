@@ -51,7 +51,7 @@ function BountyRequestItemComponent({
   return (
     <View className="bg-emerald-800/50 backdrop-blur-sm rounded-lg overflow-hidden mb-3">
       <View className="p-3">
-        <View className="flex items-center gap-3">
+        <View className="flex items-center">
           <View className="h-10 w-10 rounded-full bg-emerald-500 flex items-center justify-center border border-emerald-400/30">
             <Avatar className="h-8 w-8">
               <AvatarImage src={validAvatarUrl} alt={username} />
@@ -64,7 +64,7 @@ function BountyRequestItemComponent({
           <View className="flex-1">
             <View className="flex justify-between items-center">
               <Text className="text-sm text-emerald-100">{username}</Text>
-              <View className="flex items-center gap-2">
+              <View className="flex items-center">
                 <Text className="text-xs text-emerald-300">{timeAgo}</Text>
                 <TouchableOpacity onPress={onMenuClick} className="text-emerald-300">
                   <MaterialIcons name="more-vert" size={24} color="#000000" />
@@ -72,7 +72,7 @@ function BountyRequestItemComponent({
               </View>
             </View>
             <Text className="text-white font-medium mt-0.5">{title}</Text>
-            <View className="flex-row gap-2 mt-1">
+            <View className="flex-row mt-1">
               {workType && (
                 <View className="bg-emerald-700/40 px-2 py-0.5 rounded">
                   <Text className="text-emerald-200 text-[10px] uppercase tracking-wide">{workType === 'online' ? 'Online' : 'In Person'}</Text>

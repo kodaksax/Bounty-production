@@ -1,8 +1,8 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 // Polyfill is now imported in index.js to ensure it's loaded as early as possible
 import {
-  createAuthSessionStorageAdapter,
-  getRememberMePreference,
+    createAuthSessionStorageAdapter,
+    getRememberMePreference,
 } from './auth-session-storage';
 
 // Public env vars in Expo must be EXPO_PUBLIC_ prefixed.
@@ -83,16 +83,16 @@ async function initSupabase(): Promise<void> {
   }
 
   try {
+    const isTestEnv = typeof process !== 'undefined' && (process.env.JEST_WORKER_ID !== undefined || process.env.NODE_ENV === 'test');
+    const authConfig = {
+      storage: createAuthSessionStorageAdapter(),
+      autoRefreshToken: !isTestEnv,
+      persistSession: !isTestEnv,
+      detectSessionInUrl: false,
+    };
+
     realSupabase = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: (() => {
-        const isTestEnv = typeof process !== 'undefined' && (process.env.JEST_WORKER_ID !== undefined || process.env.NODE_ENV === 'test');
-        return {
-          storage: createAuthSessionStorageAdapter(),
-          autoRefreshToken: !isTestEnv,
-          persistSession: !isTestEnv,
-          detectSessionInUrl: false,
-        };
-      })(),
+      auth: authConfig,
     });
   } catch (e) {
     // Defensive: if the Supabase client throws (e.g., invalid URL), fall back

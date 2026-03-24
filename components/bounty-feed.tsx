@@ -745,7 +745,6 @@ const styles = StyleSheet.create({
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: HEADER_LAYOUT.iconToTitleGap,
     transform: [
       { translateX: -2 },
       { translateY: -1 },
@@ -817,7 +816,6 @@ const styles = StyleSheet.create({
   trendingHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     marginBottom: 8,
   },
   trendingTitle: {
@@ -863,7 +861,6 @@ const styles = StyleSheet.create({
   trendingNewBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     marginTop: 4,
   },
   trendingNewText: {

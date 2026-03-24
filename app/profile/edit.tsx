@@ -805,7 +805,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 24,
     borderRadius: 8,
-    gap: 8,
   },
   infoText: {
     flex: 1,

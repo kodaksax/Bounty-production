@@ -467,7 +467,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 12,
   },
   loadingText: {
     color: '#6ee7b7',
@@ -477,7 +476,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 16,
   },
   errorText: {
     color: '#ef4444',
@@ -498,7 +496,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
-    gap: 12,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(110, 231, 183, 0.1)',
   },
@@ -511,7 +508,6 @@ const styles = StyleSheet.create({
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
@@ -523,14 +519,12 @@ const styles = StyleSheet.create({
   },
   disputeInfo: {
     padding: 16,
-    gap: 8,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(110, 231, 183, 0.1)',
   },
   stageTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     alignSelf: 'flex-start',
     backgroundColor: 'rgba(245, 158, 11, 0.15)',
     paddingHorizontal: 10,
@@ -560,7 +554,6 @@ const styles = StyleSheet.create({
   },
   resolutionBanner: {
     flexDirection: 'row',
-    gap: 12,
     backgroundColor: 'rgba(16, 185, 129, 0.15)',
     margin: 16,
     padding: 14,
@@ -589,7 +582,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
     marginHorizontal: 16,
     marginBottom: 8,
     padding: 10,
@@ -613,7 +605,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
     paddingVertical: 12,
   },
   tabActive: {
@@ -635,7 +626,6 @@ const styles = StyleSheet.create({
   emptyState: {
     alignItems: 'center',
     paddingVertical: 48,
-    gap: 12,
   },
   emptyText: {
     color: 'rgba(255,254,245,0.5)',
@@ -675,7 +665,6 @@ const styles = StyleSheet.create({
   commentInputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 8,
     paddingHorizontal: 16,
     paddingTop: 8,
     borderTopWidth: 1,
@@ -705,7 +694,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(16, 185, 129, 0.3)',
   },
   addEvidenceSection: {
-    gap: 10,
     marginTop: 16,
     paddingTop: 16,
     borderTopWidth: 1,
@@ -718,14 +706,12 @@ const styles = StyleSheet.create({
   },
   evidenceInputRow: {
     flexDirection: 'row',
-    gap: 8,
     alignItems: 'center',
   },
   uploadBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
     padding: 10,
     backgroundColor: 'rgba(5, 150, 105, 0.2)',
     borderRadius: 8,
@@ -742,14 +728,12 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 12,
     marginTop: 8,
-    gap: 6,
     borderWidth: 1,
     borderColor: 'rgba(110, 231, 183, 0.1)',
   },
   evidenceHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   evidenceUploader: {
     flex: 1,

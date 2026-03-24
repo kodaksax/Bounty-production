@@ -269,7 +269,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#a7f3d0',
     paddingVertical: 16,
     borderRadius: 999,
-    gap: 8,
   },
   primaryButtonText: {
     color: '#052e1b',

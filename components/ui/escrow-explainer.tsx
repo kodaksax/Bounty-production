@@ -234,7 +234,6 @@ const styles = StyleSheet.create({
     padding: 16,
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
   },
   inlineContainer: {
     backgroundColor: 'transparent',
@@ -280,7 +279,6 @@ const styles = StyleSheet.create({
   learnMoreButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
   },
   learnMoreText: {
     fontSize: 13,
@@ -294,7 +292,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 16,
-    gap: 6,
     alignSelf: 'flex-start',
   },
   protectionBannerText: {
@@ -355,7 +352,6 @@ const styles = StyleSheet.create({
   step: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
   },
   stepNumber: {
     width: 32,
@@ -400,7 +396,6 @@ const styles = StyleSheet.create({
   guarantee: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
     marginBottom: 10,
   },
   guaranteeText: {
@@ -414,7 +409,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(6, 78, 59, 0.3)',
     borderRadius: 8,
     padding: 12,
-    gap: 10,
     marginBottom: 20,
   },
   processingText: {

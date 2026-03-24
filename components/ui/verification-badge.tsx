@@ -178,7 +178,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
-    gap: 4,
   },
   label: {
     fontWeight: '600',
@@ -227,12 +226,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     marginBottom: 16,
-    gap: 8,
   },
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   detailText: {
     fontSize: 13,
@@ -244,7 +241,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     marginBottom: 16,
-    gap: 8,
     alignItems: 'flex-start',
   },
   tipText: {
