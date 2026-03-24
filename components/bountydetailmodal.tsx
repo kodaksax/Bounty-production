@@ -141,7 +141,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
 
     if (!shouldFetchDetail) return () => { mounted = false }
 
-      ; (async () => {
+      async function fetchDetail() {
         if (!mounted) return
         setIsLoadingAttachments(true)
         try {
@@ -155,7 +155,8 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
         } finally {
           if (mounted) setIsLoadingAttachments(false)
         }
-      })()
+      }
+      fetchDetail()
 
     return () => { mounted = false }
   }, [initialBounty])

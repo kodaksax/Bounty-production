@@ -96,7 +96,7 @@ export function MessengerScreen({
   // If another screen set a pending conversation id (e.g. after accept flow), open it
   React.useEffect(() => {
     let mounted = true
-    ;(async () => {
+    async function openPendingConversation() {
       try {
         const pending = await navigationIntent.getAndClearPendingConversationId()
         if (!mounted || !pending) return
@@ -148,7 +148,8 @@ export function MessengerScreen({
         console.error('Messenger: failed to open pending conversation', e)
         try { _logClientError('Messenger failed to open pending conversation', { error: String(e) }) } catch {}
       }
-    })()
+    }
+    openPendingConversation()
     return () => { mounted = false }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

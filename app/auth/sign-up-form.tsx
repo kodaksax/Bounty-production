@@ -82,7 +82,7 @@ export function SignUpForm() {
   // Prefill username from onboarding state if available to avoid duplicate entry
   useEffect(() => {
     let mounted = true
-    ;(async () => {
+    async function prefillUsername() {
       try {
         const stored = await AsyncStorage.getItem('@bounty_onboarding_state')
         if (!stored) return
@@ -92,7 +92,8 @@ export function SignUpForm() {
       } catch (e) {
         // ignore
       }
-    })()
+    }
+    prefillUsername()
     return () => { mounted = false }
   }, [])
 

@@ -93,7 +93,7 @@ function BountyAppInner() {
   // Consume any pending navigation intent and apply active screen / initialTab.
   useEffect(() => {
     let mounted = true
-    ;(async () => {
+    async function consumePendingNavigation() {
       try {
         const pending = await navigationIntent.getAndClearPendingNavigation()
         if (!pending || !mounted) return
@@ -110,7 +110,8 @@ function BountyAppInner() {
       } catch (err) {
         // ignore
       }
-    })()
+    }
+    consumePendingNavigation()
     return () => { mounted = false }
   }, [])
 

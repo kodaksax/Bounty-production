@@ -346,21 +346,23 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
 
   // Restore last-selected chip on mount
   useEffect(() => {
-    ;(async () => {
+    async function restoreFilter() {
       try {
         const saved = await storage.getItem('BE:lastFilter')
         if (saved) setActiveCategory(saved as any)
       } catch {}
-    })()
+    }
+    restoreFilter()
   }, [])
 
   // Persist chip selection
   useEffect(() => {
-    ;(async () => {
+    async function persistFilter() {
       try {
         await storage.setItem('BE:lastFilter', String(activeCategory))
       } catch {}
-    })()
+    }
+    persistFilter()
   }, [activeCategory])
 
   // Ensure activeCategory matches available filters

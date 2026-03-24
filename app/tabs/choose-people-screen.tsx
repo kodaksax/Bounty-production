@@ -23,7 +23,7 @@ export default function ChoosePeopleScreen() {
 
   useEffect(() => {
     let mounted = true
-    ;(async () => {
+    async function loadMutuals() {
       setLoading(true)
       try {
         // Get followers and following for current user
@@ -46,7 +46,8 @@ export default function ChoosePeopleScreen() {
       } finally {
         if (mounted) setLoading(false)
       }
-    })()
+    }
+    loadMutuals()
     return () => { mounted = false }
   }, [])
 

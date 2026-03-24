@@ -143,14 +143,15 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
   // Check Apple Pay availability on mount
   useEffect(() => {
     let mounted = true
-      ; (async () => {
-        try {
-          const available = await applePayService.isAvailable()
-          if (mounted) setIsApplePayAvailable(available)
-        } catch (e) {
-          // ignore
-        }
-      })()
+    async function checkApplePay() {
+      try {
+        const available = await applePayService.isAvailable()
+        if (mounted) setIsApplePayAvailable(available)
+      } catch (e) {
+        // ignore
+      }
+    }
+    checkApplePay()
     return () => { mounted = false }
   }, [])
 
