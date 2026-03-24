@@ -1,7 +1,6 @@
 {
   "expo": {
     "name": "BOUNTY",
-    "jsEngine": "hermes",
     "slug": "BOUNTYExpo",
     "version": "1.0.2",
     "orientation": "portrait",
@@ -12,7 +11,6 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.bounty.BOUNTYExpo",
       "buildNumber": "1",
-      "jsEngine": "hermes",
       "infoPlist": {
         "NSApplePayCapability": "production",
         "ITSAppUsesNonExemptEncryption": false,
@@ -47,12 +45,11 @@
       }
     },
     "android": {
-      "jsEngine": "hermes",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/bounty-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true,
+      
       "package": "app.bountyfinder.BOUNTYExpo",
       "versionCode": 20,
       "intentFilters": [

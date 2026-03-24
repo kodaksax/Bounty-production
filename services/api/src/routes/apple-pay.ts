@@ -23,7 +23,7 @@ export async function registerApplePayRoutes(fastify: FastifyInstance) {
   }
 
   const stripe = new Stripe(stripeKey, {
-    apiVersion: '2026-01-28.clover',
+    apiVersion: '2026-02-25.clover',
   });
 
   // Proceed to register real routes below

@@ -5,9 +5,9 @@ import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
 import { getRequestContext, logErrorWithContext } from '../middleware/request-context';
 import * as ConsolidatedWalletService from '../services/consolidated-wallet-service';
 import {
-  checkIdempotencyKey,
-  removeIdempotencyKey,
-  storeIdempotencyKey
+    checkIdempotencyKey,
+    removeIdempotencyKey,
+    storeIdempotencyKey
 } from '../services/idempotency-service';
 import { logger } from '../services/logger';
 import { stripeConnectService } from '../services/stripe-connect-service';
@@ -85,7 +85,7 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
   }
 
   const stripe = new Stripe(stripeKey, {
-    apiVersion: '2026-01-28.clover',
+    apiVersion: '2026-02-25.clover',
   });
 
   /**

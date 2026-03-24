@@ -6,7 +6,7 @@ import { checkIdempotencyKey, removeIdempotencyKey, storeIdempotencyKey } from '
 export const completionReleaseRouter = Router();
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
-const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: '2026-01-28.clover' }) : null;
+const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: '2026-02-25.clover' }) : null;
 
 /**
  * POST /api/completion-release
