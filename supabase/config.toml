@@ -1,10 +1,96 @@
-## Supabase CLI config
-# This file was intentionally left minimal to avoid CLI parsing errors.
-# The `supabase` CLI can be pointed to a project using `--project-ref`
-# or by running `supabase link --project-ref <ref>` which will create
-# a proper local config. If you need to store a project ref here,
-# ensure it matches the CLI's expected format.
+## Supabase project configuration
+# ─────────────────────────────────────────────────────────────────────────────
+# ENVIRONMENTS
+#
+# This project uses three Supabase branches:
+#
+#   production   – live environment; external beta users only.
+#                  Never run seed data against this environment.
+#
+#   preview      – shared staging / QA branch.
+#                  Receives a copy of internal-beta data via
+#                  scripts/migrate-prod-to-staging.sql.
+#
+#   development  – individual developer sandbox.
+#                  Bootstrap with migrations + optional seed data.
+#
+# MIGRATION ORDER (applied top-to-bottom on every fresh branch)
+#
+#   20251001_baseline_schema.sql              – profiles, bounties, wallet, notifications …
+#   20251002_messaging_schema.sql             – conversations, messages, participants
+#   20251010_risk_management_system.sql       – risk scoring & KYC tables
+#   20251015_seed_restricted_categories.sql   – business-category reference data
+#   20251022_inprogress_flow.sql … (all dated migrations in order)
+#
+# HOW TO BOOTSTRAP A NEW BRANCH
+#
+#   1. Create the branch in the Supabase dashboard or CLI:
+#        supabase branches create preview --experimental
+#
+#   2. Link your local CLI to the branch:
+#        supabase link --project-ref <preview-project-ref>
+#
+#   3. Push all migrations:
+#        supabase db push
+#
+#   4. (Preview / staging only) Restore internal-beta data:
+#        psql <staging-connection-string> -f scripts/migrate-prod-to-staging.sql
+#
+#   5. Deploy edge functions:
+#        supabase functions deploy
+#
+# HOW TO CLEAN PRODUCTION FOR EXTERNAL BETA
+#
+#   After confirming that all data is safely copied to the staging branch:
+#        psql <production-connection-string> -f scripts/clean-production-data.sql
+# ─────────────────────────────────────────────────────────────────────────────
 
-# NOTE: Do not add a top-level [project] table here unless it matches
-# the supabase CLI schema — an invalid key will cause `supabase` to
-# fail with "has invalid keys: project".
+[project]
+# Replace these values with the real project refs from your Supabase dashboard.
+# Production:   Dashboard → Project Settings → General → Reference ID
+# Preview:      Dashboard → Branches → <branch-name> → Reference ID
+# Development:  Dashboard → Branches → <branch-name> → Reference ID
+#
+# Uncomment and fill in when linking locally:
+# id = "your-production-project-ref"
+
+[api]
+# Port used by the local Supabase stack when running `supabase start`.
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[studio]
+port = 54323
+
+[inbucket]
+port = 54324
+smtp_port = 54325
+pop3_port = 54326
+
+[storage]
+file_size_limit = "50MiB"
+
+[auth]
+site_url = "exp://localhost:8081"
+additional_redirect_urls = [
+  "exp://localhost:8081",
+  "bountyexpo://",
+  "bountyexpo://auth/callback"
+]
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = false
+
+[functions]
+verify_jwt = true
