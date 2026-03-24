@@ -1,8 +1,11 @@
-import { registerRootComponent } from 'expo';
-import { ExpoRoot } from 'expo-router';
-import 'react-native-gesture-handler';
-import 'react-native-url-polyfill/auto';
-import { supabaseEnv } from './lib/supabase';
+// Load small runtime shims before any other imports to avoid native logger crashes
+require('./expo-shims');
+
+const { registerRootComponent } = require('expo');
+const { ExpoRoot } = require('expo-router');
+require('react-native-gesture-handler');
+require('react-native-url-polyfill/auto');
+const { supabaseEnv } = require('./lib/supabase');
 
 // Global handler for unhandled promise rejections — best-effort report to Sentry
 try {
