@@ -19,16 +19,16 @@ if (fs.existsSync(envFile)) {
 // Detect likely secret-like env keys and warn at build-time if any are present.
 // We intentionally only check variable NAMES (not values) and ignore EXPO_PUBLIC_* keys.
 {
-  const secretNamePattern = /SECRET\b|SERVICE_ROLE\b|PRIVATE_KEY\b|SERVICE_KEY\b|SERVICE_ACCOUNT\b|_TOKEN\b|_PASSWORD\b/i;
+  const secretNamePattern = /SECRET|SERVICE_ROLE|PRIVATE_KEY|SERVICE_KEY|SERVICE_ACCOUNT|_TOKEN|_PASSWORD/i;
   const unsafe = Object.keys(process.env).filter(
     (k) => secretNamePattern.test(k) && !k.startsWith('EXPO_PUBLIC_')
   );
-  if (unsafe.length > 0 && !process.env.SUPPRESS_ENV_SECRET_WARNING) {
-    // Short, non-sensitive warning: only report a count (no variable names)
+  if (unsafe.length > 0) {
+    // Short, non-sensitive warning: list variable NAMES only
     console.warn(
-      `[build-time warning] Detected ${unsafe.length} environment variable(s) that look like secrets and may be embedded into the app. ` +
-        'Move these into EAS secrets or remove them from the build environment to avoid baking sensitive keys. ' +
-        'Set SUPPRESS_ENV_SECRET_WARNING=1 to silence this warning in CI/CD environments.'
+      `[build-time warning] Detected ${unsafe.length} environment variable(s) that look like secrets and may be embedded into the app: ${unsafe.join(
+        ', '
+      )}. Use EAS secrets or remove them from the build environment to avoid baking sensitive keys.`
     );
   }
 }
