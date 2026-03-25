@@ -11,7 +11,26 @@
  * - Graceful degradation if Redis unavailable
  */
 
-import { logger } from './logger';
+// Avoid importing the real logger at module load time to prevent pino
+// (which uses diagnostics hooks) from initializing in unit test environments.
+let _logger: any = console;
+function getLoggerSync() {
+  if (_logger) return _logger;
+  if (process.env.NODE_ENV === 'test') {
+    _logger = console;
+    return _logger;
+  }
+  try {
+    // Use require here so this only happens in non-test runtimes
+    // where the logger/pino initialization is expected.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const mod = require('./logger');
+    _logger = mod.logger ?? mod.default ?? console;
+  } catch (err) {
+    _logger = console;
+  }
+  return _logger;
+}
 
 // Redis client (optional, lazy-loaded)
 let Redis: any = null;
@@ -31,7 +50,7 @@ export async function initializeIdempotencyService(): Promise<void> {
   const redisEnabledEnv = process.env.REDIS_ENABLED?.toLowerCase();
   
   if (!redisUrl || redisEnabledEnv === 'false') {
-    logger.info('[IdempotencyService] Redis not configured, using in-memory fallback');
+    getLoggerSync().info('[IdempotencyService] Redis not configured, using in-memory fallback');
     return;
   }
 
@@ -43,7 +62,7 @@ export async function initializeIdempotencyService(): Promise<void> {
       retryStrategy: (times: number) => {
         // Retry with exponential backoff up to 3 times
         if (times > 3) {
-          logger.error('[IdempotencyService] Redis connection failed after 3 retries, FALLING BACK TO IN-MEMORY - Multi-instance deployments may experience issues');
+            getLoggerSync().error('[IdempotencyService] Redis connection failed after 3 retries, FALLING BACK TO IN-MEMORY - Multi-instance deployments may experience issues');
           // Explicitly disable Redis to trigger fallback
           redisEnabled = false;
           return null; // Stop retrying
@@ -60,20 +79,20 @@ export async function initializeIdempotencyService(): Promise<void> {
     await redisClient.ping();
     
     redisEnabled = true;
-    logger.info('[IdempotencyService] Redis connected successfully');
+    getLoggerSync().info('[IdempotencyService] Redis connected successfully');
     
     // Handle connection errors
     redisClient.on('error', (err: Error) => {
-      logger.error({ err }, '[IdempotencyService] Redis error');
+      getLoggerSync().error({ err }, '[IdempotencyService] Redis error');
       // Don't disable Redis on transient errors, let retry logic handle it
     });
     
     redisClient.on('close', () => {
-      logger.warn('[IdempotencyService] Redis connection closed');
+      getLoggerSync().warn('[IdempotencyService] Redis connection closed');
     });
     
   } catch (error) {
-    logger.warn({ error }, '[IdempotencyService] Failed to initialize Redis, using in-memory fallback');
+    getLoggerSync().warn({ error }, '[IdempotencyService] Failed to initialize Redis, using in-memory fallback');
     redisEnabled = false;
     redisClient = null;
   }
@@ -87,7 +106,7 @@ export async function initializeIdempotencyService(): Promise<void> {
 export async function checkIdempotencyKey(key: string): Promise<boolean> {
   // If key is empty, treat as not set (do not throw here so callers can safely check)
   if (!key || key.trim() === '') {
-    logger.warn('[IdempotencyService] checkIdempotencyKey called with empty idempotency key; returning false');
+    getLoggerSync().warn('[IdempotencyService] checkIdempotencyKey called with empty idempotency key; returning false');
     return false;
   }
   
@@ -95,8 +114,8 @@ export async function checkIdempotencyKey(key: string): Promise<boolean> {
     try {
       const exists = await redisClient.exists(key);
       return exists === 1;
-    } catch (error) {
-      logger.error({ error }, '[IdempotencyService] CRITICAL: Redis check failed, falling back to in-memory - Multi-instance safety compromised');
+      } catch (error) {
+      getLoggerSync().error({ error }, '[IdempotencyService] CRITICAL: Redis check failed, falling back to in-memory - Multi-instance safety compromised');
       // Fallback to in-memory check
       return checkInMemory(key);
     }
@@ -112,7 +131,7 @@ export async function checkIdempotencyKey(key: string): Promise<boolean> {
  */
 export async function storeIdempotencyKey(key: string, ttlSeconds: number = 86400): Promise<void> {
   // Validate key is not empty
-  if (!key || key.trim() === '') {
+    if (!key || key.trim() === '') {
     throw new Error('Idempotency key cannot be empty');
   }
   
@@ -121,8 +140,8 @@ export async function storeIdempotencyKey(key: string, ttlSeconds: number = 8640
       // Store with TTL
       await redisClient.setex(key, ttlSeconds, Date.now().toString());
       return;
-    } catch (error) {
-      logger.error({ error }, '[IdempotencyService] CRITICAL: Redis store failed, falling back to in-memory - Multi-instance safety compromised');
+      } catch (error) {
+      getLoggerSync().error({ error }, '[IdempotencyService] CRITICAL: Redis store failed, falling back to in-memory - Multi-instance safety compromised');
       // Fallback to in-memory
       storeInMemory(key);
     }
@@ -141,7 +160,7 @@ export async function removeIdempotencyKey(key: string): Promise<void> {
       await redisClient.del(key);
       return;
     } catch (error) {
-      logger.error({ error }, '[IdempotencyService] Redis delete failed, falling back to in-memory');
+      getLoggerSync().error({ error }, '[IdempotencyService] Redis delete failed, falling back to in-memory');
       // Fallback to in-memory
       inMemoryStore.delete(key);
     }
@@ -220,9 +239,9 @@ export async function closeIdempotencyService(): Promise<void> {
   if (redisClient) {
     try {
       await redisClient.quit();
-      logger.info('[IdempotencyService] Redis connection closed');
+      getLoggerSync().info('[IdempotencyService] Redis connection closed');
     } catch (error) {
-      logger.error({ error }, '[IdempotencyService] Error closing Redis connection');
+      getLoggerSync().error({ error }, '[IdempotencyService] Error closing Redis connection');
     }
   }
 }

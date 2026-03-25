@@ -1,6 +1,21 @@
-import { logger } from './logger';
-import { checkIdempotencyKey, storeIdempotencyKey, removeIdempotencyKey } from './idempotency-service';
-import { backendAnalytics } from './analytics';
+// Lazy-load logger to avoid importing pino (and its diagnostics hooks)
+// during module initialization in unit tests.
+let _logger: any | null = null;
+async function getLogger(): Promise<any> {
+  if (_logger) return _logger;
+  if (process.env.NODE_ENV === 'test') {
+    _logger = console;
+    return _logger;
+  }
+  const mod = await import('./logger');
+  _logger = mod.logger ?? mod.default ?? console;
+  return _logger;
+}
+
+// Note: do not import idempotency-service or analytics at module level — those
+// modules import the logger (pino) and can trigger diagnostics_channel
+// initialization that breaks the test environment. Dynamically import them
+// inside the function where needed.
 
 /**
  * Safely execute a Stripe call with idempotency protection using the IdempotencyService.
@@ -19,9 +34,11 @@ export async function withStripeIdempotency<T>(
   }
 
   try {
+    const idempoMod = await import('./idempotency-service');
+    const { checkIdempotencyKey, storeIdempotencyKey, removeIdempotencyKey } = idempoMod;
     const exists = await checkIdempotencyKey(idempotencyKey);
     if (exists) {
-      logger.warn({ idempotencyKey }, '[stripe-safeguards] Duplicate idempotency key detected');
+      (await getLogger()).warn({ idempotencyKey }, '[stripe-safeguards] Duplicate idempotency key detected');
       throw new Error('Duplicate idempotency key');
     }
 
@@ -31,25 +48,36 @@ export async function withStripeIdempotency<T>(
     // Call the provided function with an options arg containing the idempotency key
     const result = await fn({ idempotencyKey });
     // Track successful Stripe call
-    try { backendAnalytics.trackEvent('system', 'stripe_call_success', { idempotencyKey }); } catch (e) { /* ignore */ }
+    try {
+      const analyticsMod = await import('./analytics');
+      const { backendAnalytics } = analyticsMod;
+      backendAnalytics.trackEvent('system', 'stripe_call_success', { idempotencyKey });
+    } catch (e) { /* ignore */ }
     // In test environments, remove the reserved key after success so unit tests
     // can re-run the same scenarios without triggering duplicate detection.
     if (process.env.NODE_ENV === 'test') {
       try {
         await removeIdempotencyKey(idempotencyKey);
       } catch (e) {
-        logger.warn({ err: e, idempotencyKey }, '[stripe-safeguards] Failed to remove idempotency key in test cleanup');
+        (await getLogger()).warn({ err: e, idempotencyKey }, '[stripe-safeguards] Failed to remove idempotency key in test cleanup');
       }
     }
     return result;
   } catch (err) {
     // On Stripe failure remove the stored key so retries are possible
     try {
-      await removeIdempotencyKey(idempotencyKey);
+      const idempoMod = await import('./idempotency-service');
+      if (idempoMod && typeof idempoMod.removeIdempotencyKey === 'function') {
+        await idempoMod.removeIdempotencyKey(idempotencyKey);
+      }
     } catch (remErr) {
-      logger.error({ remErr, idempotencyKey }, '[stripe-safeguards] Failed to remove idempotency key after error');
+      (await getLogger()).error({ remErr, idempotencyKey }, '[stripe-safeguards] Failed to remove idempotency key after error');
     }
-    try { backendAnalytics.trackEvent('system', 'stripe_call_failed', { idempotencyKey, error: err instanceof Error ? err.message : String(err) }); } catch (e) { /* ignore */ }
+    try {
+      const analyticsMod = await import('./analytics');
+      const { backendAnalytics } = analyticsMod;
+      backendAnalytics.trackEvent('system', 'stripe_call_failed', { idempotencyKey, error: err instanceof Error ? err.message : String(err) });
+    } catch (e) { /* ignore */ }
     throw err;
   }
 }

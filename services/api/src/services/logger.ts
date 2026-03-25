@@ -1,82 +1,89 @@
 // services/api/src/services/logger.ts - Structured logging with Pino
-import pino from 'pino';
+// Make logger safe to import in `test` environment by using a lightweight
+// console-based shim to avoid pino/diagnostics_channel initialization during
+// unit tests.
 
 const isDevelopment = process.env.NODE_ENV !== 'production';
 const logLevel = process.env.LOG_LEVEL || (isDevelopment ? 'debug' : 'info');
 
-// Create Pino logger with configuration
-export const logger = pino({
-  level: logLevel,
-  // In development, use pretty printing. In production, use JSON
-  transport: isDevelopment
-    ? {
-        target: 'pino-pretty',
-        options: {
-          colorize: true,
-          translateTime: 'HH:MM:ss Z',
-          ignore: 'pid,hostname',
-        },
-      }
-    : undefined,
-  // Base fields to include in all logs
-  base: {
-    env: process.env.NODE_ENV,
-    service: 'bountyexpo-api',
-  },
-  // Timestamp configuration
-  timestamp: pino.stdTimeFunctions.isoTime,
-  // Serializers for common objects
-  serializers: {
-    req: pino.stdSerializers.req,
-    res: pino.stdSerializers.res,
-    err: pino.stdSerializers.err,
-  },
-  // Redact sensitive fields
-  redact: {
-    paths: [
-      'req.headers.authorization',
-      'req.headers.cookie',
-      'password',
-      'token',
-      'secret',
-      'apiKey',
-      '*.password',
-      '*.token',
-      '*.secret',
-      '*.apiKey',
-    ],
-    censor: '[REDACTED]',
-  },
-});
+function createConsoleLogger(moduleName?: string) {
+  const base = moduleName ? { module: moduleName } : {};
+  const wrap = (fn: (...args: any[]) => void) => (...args: any[]) => fn(...args);
+  const loggerShim: any = {
+    info: wrap(console.info),
+    warn: wrap(console.warn),
+    error: wrap(console.error),
+    debug: wrap(console.debug),
+    child: (_opts: any) => loggerShim,
+  };
+  return loggerShim;
+}
+
+let logger: any;
+let createModuleLogger: (module: string) => any;
+
+if (process.env.NODE_ENV === 'test') {
+  logger = createConsoleLogger();
+  createModuleLogger = (m: string) => createConsoleLogger(m);
+} else {
+  // Defer importing pino to runtime (non-test) to avoid diagnostic issues in tests
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const pino = require('pino');
+
+  // Create Pino logger with configuration
+  logger = pino({
+    level: logLevel,
+    transport: isDevelopment
+      ? {
+          target: 'pino-pretty',
+          options: {
+            colorize: true,
+            translateTime: 'HH:MM:ss Z',
+            ignore: 'pid,hostname',
+          },
+        }
+      : undefined,
+    base: {
+      env: process.env.NODE_ENV,
+      service: 'bountyexpo-api',
+    },
+    timestamp: pino.stdTimeFunctions.isoTime,
+    serializers: {
+      req: pino.stdSerializers.req,
+      res: pino.stdSerializers.res,
+      err: pino.stdSerializers.err,
+    },
+    redact: {
+      paths: [
+        'req.headers.authorization',
+        'req.headers.cookie',
+        'password',
+        'token',
+        'secret',
+        'apiKey',
+        '*.password',
+        '*.token',
+        '*.secret',
+        '*.apiKey',
+      ],
+      censor: '[REDACTED]',
+    },
+  });
+
+  createModuleLogger = (module: string) => logger.child({ module });
+}
 
 // Create child loggers for different modules
-export const createModuleLogger = (module: string) => {
-  return logger.child({ module });
-};
-
-// Analytics logger
-export const analyticsLogger = createModuleLogger('analytics');
-
-// Auth logger
-export const authLogger = createModuleLogger('auth');
-
-// Payment logger
-export const paymentLogger = createModuleLogger('payment');
-
-// Bounty logger
-export const bountyLogger = createModuleLogger('bounty');
-
-// Messaging logger
-export const messagingLogger = createModuleLogger('messaging');
-
-// Performance logger
-export const performanceLogger = createModuleLogger('performance');
-
-// Admin logger
-export const adminLogger = createModuleLogger('admin');
+const analyticsLogger = createModuleLogger('analytics');
+const authLogger = createModuleLogger('auth');
+const paymentLogger = createModuleLogger('payment');
+const bountyLogger = createModuleLogger('bounty');
+const messagingLogger = createModuleLogger('messaging');
+const performanceLogger = createModuleLogger('performance');
+const adminLogger = createModuleLogger('admin');
 
 // Helper functions for common log patterns
-export const loggers = {
+const loggers = {
   /**
    * Log a user action
    */
@@ -193,6 +200,11 @@ export const loggers = {
       ...metadata,
     }, `Security event: ${event}`);
   },
+};
+
+export {
+    adminLogger, analyticsLogger,
+    authLogger, bountyLogger, createModuleLogger, logger, loggers, messagingLogger, paymentLogger, performanceLogger
 };
 
 export default logger;
