@@ -1,0 +1,37 @@
+name: EAS Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - 'release/**'
+    tags:
+      - '*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform: [ios, android]
+    env:
+      EAS_PROFILE: ${{ github.ref == 'refs/heads/main' && 'preview' || (startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/')) && 'production' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and Push
+        if: ${{ env.EAS_PROFILE != '' }}
+        run: npx eas build --platform ${{ matrix.platform }} --profile $EAS_PROFILE
+        env:
+          EAS_TOKEN: ${{ secrets.EAS_TOKEN }}
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}

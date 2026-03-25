@@ -4,11 +4,11 @@ import {
   createAuthSessionStorageAdapter,
   getRememberMePreference,
 } from './auth-session-storage';
+import { config } from './config';
 
-// Public env vars in Expo must be EXPO_PUBLIC_ prefixed.
-// Fallback to standard SUPABASE_URL/ANON_KEY if Expo vars are missing during build.
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim() || process.env.SUPABASE_URL?.trim() || '';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim() || '';
+// Use centralized frontend config for env access
+const supabaseUrl = config.supabase.url;
+const supabaseAnonKey = config.supabase.anonKey;
 
 export const isSupabaseConfigured = !!supabaseUrl && !!supabaseAnonKey;
 // Keep compatibility shape expected by callers (hasUrl/hasKey/mismatch).
