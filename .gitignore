@@ -10,6 +10,7 @@ node_modules/
 .env.production
 .env.development
 .env.preview
+.env.staging
 # Expo
 .expo/
 dist/
