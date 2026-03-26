@@ -34,13 +34,25 @@ if (fs.existsSync(envFile)) {
 }
 
 module.exports = ({ config }) => {
+  // When native project folders exist, avoid returning native-only
+  // configuration fields so EAS can sync properties. Instead, native
+  // configuration should be kept in the native projects themselves.
+  const hasIos = fs.existsSync(path.resolve(process.cwd(), 'ios'));
+  const hasAndroid = fs.existsSync(path.resolve(process.cwd(), 'android'));
+
+  // Create a shallow copy of the incoming config and strip native-only
+  // keys when native folders are present.
+  const filtered = { ...config };
+  if (hasIos || hasAndroid) {
+    const nativeKeys = ['orientation', 'icon', 'scheme', 'userInterfaceStyle', 'ios', 'android', 'plugins'];
+    for (const k of nativeKeys) {
+      if (k in filtered) delete filtered[k];
+    }
+  }
+
   return {
-    ...config,
+    ...filtered,
     extra: {
-      // Preserve any existing values defined in static app.json (for example
-      // `extra.eas.projectId`) and merge runtime overrides from environment
-      // variables. This prevents accidentally removing `extra.eas.projectId`
-      // when app.config.js runs.
       ...(config.extra || {}),
       APP_ENV,
       EXPO_PUBLIC_API_URL:
