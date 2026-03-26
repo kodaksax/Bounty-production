@@ -24,8 +24,21 @@ module.exports = function (api) {
           }
         }
       ],
-      // Reanimated plugin must be listed last
-      'react-native-reanimated/plugin',
+      // Reanimated plugin must be listed last.
+      // Pass the logical-assignment-operators transform as an extraPlugin so
+      // that worklet code strings (serialized by the plugin from their TS
+      // source) also have ??= / ||= / &&= replaced before Hermes sees them at
+      // runtime.  Without this, the plugin's internal workletTransformSync
+      // only runs @babel/preset-typescript and leaves those operators in the
+      // serialized code string.
+      [
+        'react-native-reanimated/plugin',
+        {
+          extraPlugins: [
+            '@babel/plugin-transform-logical-assignment-operators',
+          ],
+        },
+      ],
     ],
     // When building for Android with Hermes, babel-preset-expo skips
     // @babel/plugin-transform-logical-assignment-operators because Hermes
