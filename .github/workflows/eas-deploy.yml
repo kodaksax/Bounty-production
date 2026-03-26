@@ -40,13 +40,22 @@ jobs:
       - name: Install EAS CLI
         run: npm install -g eas-cli
 
-      - name: Check tokens
+      - name: Normalize tokens
         run: |
-          if [ -z "$EAS_TOKEN" ]; then echo "Missing EAS_TOKEN secret"; exit 1; fi
-          if [ -z "$EXPO_TOKEN" ]; then echo "Missing EXPO_TOKEN secret"; exit 1; fi
-        env:
-          EAS_TOKEN: ${{ secrets.EAS_TOKEN }}
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          echo "Normalizing tokens: prefer EAS_TOKEN, fall back to EXPO_TOKEN"
+          if [ -n "${{ secrets.EAS_TOKEN }}" ]; then
+            echo "EAS_TOKEN is provided at secret level"
+            echo "EAS_TOKEN=${{ secrets.EAS_TOKEN }}" >> $GITHUB_ENV
+          elif [ -n "${{ secrets.EXPO_TOKEN }}" ]; then
+            echo "EAS_TOKEN secret missing; using EXPO_TOKEN as fallback"
+            echo "EAS_TOKEN=${{ secrets.EXPO_TOKEN }}" >> $GITHUB_ENV
+          else
+            echo "No EAS_TOKEN or EXPO_TOKEN secret provided"
+          fi
+
+      - name: Check token
+        run: |
+          if [ -z "$EAS_TOKEN" ]; then echo "Missing EAS_TOKEN/EXPO_TOKEN secret"; exit 1; fi
 
       - name: Verify EAS token
         run: |
