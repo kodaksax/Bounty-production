@@ -22,7 +22,6 @@
         "NSMicrophoneUsageDescription": "BOUNTY needs microphone access for voice messages.",
         "NSContactsUsageDescription": "BOUNTY needs access to your contacts to help you invite friends.",
         "UIBackgroundModes": [
-          "location",
           "location"
         ]
       },
@@ -36,7 +35,6 @@
       },
       "entitlements": {
         "com.apple.developer.applesignin": [
-          "Default",
           "Default"
         ],
         "com.apple.developer.in-app-payments": [
@@ -103,7 +101,19 @@
       "expo-secure-store",
       "expo-web-browser",
       "expo-video",
-      "expo-build-properties",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useHermesV1": true,
+            "buildReactNativeFromSource": true
+          },
+          "android": {
+            "useHermesV1": true,
+            "buildReactNativeFromSource": true
+          }
+        }
+      ],
       "expo-font",
       "@react-native-community/datetimepicker",
       [

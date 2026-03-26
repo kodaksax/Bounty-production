@@ -24,8 +24,13 @@ module.exports = function (api) {
           }
         }
       ],
-      // Reanimated plugin must be listed last
+      // Reanimated plugin must be listed last.
       'react-native-reanimated/plugin',
     ],
+    // NOTE: logical-assignment transforms (??= / ||= / &&=) removed —
+    // Hermes V1 (useHermesV1: true in expo-build-properties) supports
+    // these operators natively.  If you fall back to legacy Hermes,
+    // re-add @babel/plugin-transform-logical-assignment-operators here
+    // and in a node_modules override.
   };
 };
