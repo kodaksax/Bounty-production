@@ -23,3 +23,17 @@ jobs:
           eas whoami --token "$EAS_TOKEN" || (echo "whoami failed"; exit 1)
         env:
           EAS_TOKEN: ${{ secrets.EAS_TOKEN }}
+
+      - name: Diagnostics (versions + API test)
+        run: |
+          echo "node version:"; node --version
+          echo "npm version:"; npm --version
+          echo "eas version:"; eas --version || true
+          echo
+          echo "Testing Expo API with curl (shows status + headers):"
+          curl -s -D - -o /dev/null -H "Authorization: Bearer $EAS_TOKEN" https://api.expo.dev/v2/whoami || true
+          echo
+          echo "Running eas whoami with debug logs:";
+          eas whoami --token "$EAS_TOKEN" --log debug || true
+        env:
+          EAS_TOKEN: ${{ secrets.EAS_TOKEN }}
