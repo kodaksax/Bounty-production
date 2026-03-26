@@ -34,24 +34,8 @@ if (fs.existsSync(envFile)) {
 }
 
 module.exports = ({ config }) => {
-  // When native project folders exist, avoid returning native-only
-  // configuration fields so EAS can sync properties. Instead, native
-  // configuration should be kept in the native projects themselves.
-  const hasIos = fs.existsSync(path.resolve(process.cwd(), 'ios'));
-  const hasAndroid = fs.existsSync(path.resolve(process.cwd(), 'android'));
-
-  // Create a shallow copy of the incoming config and strip native-only
-  // keys when native folders are present.
-  const filtered = { ...config };
-  if (hasIos || hasAndroid) {
-    const nativeKeys = ['orientation', 'icon', 'scheme', 'userInterfaceStyle', 'ios', 'android', 'plugins'];
-    for (const k of nativeKeys) {
-      if (k in filtered) delete filtered[k];
-    }
-  }
-
   return {
-    ...filtered,
+    ...config,
     // Ensure a scheme is always present at runtime so Linking works in
     // Expo Go / dev environments. Allow override via `EXPO_SCHEME` env var
     // or an existing `config.scheme` / `config.slug` / `config.name`.
