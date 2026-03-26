@@ -1,0 +1,25 @@
+name: EAS Debug
+
+on:
+  workflow_dispatch:
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+
+      - name: Verify EAS token in runner
+        run: |
+          echo "EAS_TOKEN length: ${#EAS_TOKEN}"
+          eas whoami --token "$EAS_TOKEN" || (echo "whoami failed"; exit 1)
+        env:
+          EAS_TOKEN: ${{ secrets.EAS_TOKEN }}
