@@ -26,8 +26,16 @@ jobs:
         with:
           node-version: '18'
 
+      - name: Verify package.json exists
+        run: |
+          echo "PWD: $(pwd)"
+          ls -la
+          if [ ! -f package.json ]; then echo "package.json not found at repo root"; exit 1; fi
+          head -n 50 package.json
+
       - name: Install dependencies
         run: npm ci
+        working-directory: .
 
       - name: Build and Push
         if: ${{ env.EAS_PROFILE != '' }}
