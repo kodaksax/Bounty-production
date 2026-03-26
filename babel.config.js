@@ -29,14 +29,16 @@ module.exports = function (api) {
     ],
     // When building for Android with Hermes, babel-preset-expo skips
     // @babel/plugin-transform-logical-assignment-operators because Hermes
-    // is assumed to support them natively. However, react-native-css-interop
-    // and nativewind ship pre-built dist files that already contain ??= / ||=
-    // syntax, so Hermes still needs to parse them — but the transform has
-    // already been skipped. These overrides re-enable the transform for those
-    // packages so Android / Hermes builds succeed.
+    // is assumed to support them natively. However, several packages ship
+    // pre-built dist files that already contain ??= / ||= syntax
+    // (react-native-reanimated, expo-router, react-native-css-interop,
+    // nativewind), so Hermes fails to compile those files at runtime.
+    // This override re-enables the transform for all node_modules so
+    // Android / Hermes builds succeed regardless of which dependency
+    // ships pre-compiled code with these operators.
     overrides: [
       {
-        test: /node_modules[\\/](react-native-css-interop|nativewind)[\\/]/,
+        test: /node_modules[\\/]/,
         plugins: [
           '@babel/plugin-transform-logical-assignment-operators',
         ],
