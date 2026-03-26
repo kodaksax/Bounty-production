@@ -37,9 +37,12 @@ jobs:
         run: npm ci
         working-directory: .
 
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+
       - name: Build and Push
         if: ${{ env.EAS_PROFILE != '' }}
-        run: npx eas build --platform ${{ matrix.platform }} --profile $EAS_PROFILE
+        run: eas build --platform ${{ matrix.platform }} --profile $EAS_PROFILE
         env:
           EAS_TOKEN: ${{ secrets.EAS_TOKEN }}
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
