@@ -40,6 +40,15 @@ jobs:
       - name: Build workspace packages
         run: npm run build
       
+      - name: Validate environment variables
+        run: npm run env:check
+        env:
+          APP_ENV: development
+          ALLOW_MISSING_SECRETS: '1'
+          EXPO_PUBLIC_SUPABASE_URL:  ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL }}
+
       - name: Run linter
         run: npm run lint --if-present
         # continue-on-error: true
