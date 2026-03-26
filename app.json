@@ -104,8 +104,14 @@
       [
         "expo-build-properties",
         {
-          "useHermesV1": true,
-          "buildReactNativeFromSource": true
+          "ios": {
+            "useHermesV1": true,
+            "buildReactNativeFromSource": true
+          },
+          "android": {
+            "useHermesV1": true,
+            "buildReactNativeFromSource": true
+          }
         }
       ],
       "expo-font",

@@ -139,20 +139,38 @@ cp .env.example .env
 # For local development, the defaults work out of the box!
 ```
 
-3. **Start Development Stack**
-```bash
-# Start infrastructure services (PostgreSQL + Redis + Stripe Mock)
-pnpm dev
+4. **Start Mobile App**
+```
+# In a new terminal window
+pnpm start
 
-# In a new terminal, start the API server  
-pnpm dev:api
+# Follow Expo CLI instructions to:
+# - Open in Dev Client (recommended) or Expo Go (legacy)
+# - Press 'i' for iOS Simulator
+# - Press 'a' for Android Emulator
+# - Press 'w' for web browser
+```
 
-# This will:
-# ✅ Start PostgreSQL database on port 5432
-# ✅ Start Redis cache on port 6379
-# ✅ Start Stripe Mock server on port 12111
-# ✅ Start BountyExpo API server on port 3001
-# ✅ Automatically run database migrations
+**Dev client (preferred)**
+
+To stop using Expo Go and use a development client instead, follow these steps:
+
+- Build a development client with EAS (recommended):
+  - Android: `pnpm build:dev-android` (alias: `eas build --profile development -p android`)
+  - iOS: `pnpm build:dev-ios` (alias: `eas build --profile development -p ios`)
+- Install the generated artifact on your device (follow the EAS build output link), or use local device/emulator builds:
+  - Quick local (Android emulator/device): `expo run:android`
+  - Quick local (iOS simulator/device): `expo run:ios`
+- Start the Metro server in dev-client mode:
+  - `pnpm start` (runs `expo start --dev-client`)
+- Open the app using the installed dev client app on your device and connect to Metro (scan the QR or use the link).
+- Optionally uninstall Expo Go from your device to avoid confusion.
+
+Notes:
+- `expo-dev-client` is already included in this repo dependencies.
+- Use the `development` EAS profile (see `eas.json`) to produce a development client (`developmentClient: true`).
+- For fast iteration on Android emulators, `expo run:android` builds and installs a dev client locally.
+
 ```
 
 4. **Start Mobile App**

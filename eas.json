@@ -8,11 +8,21 @@
       "developmentClient": true,
       "distribution": "internal",
       "ios": {
-        "simulator": true
+        "simulator": true,
+        "resourceClass": "m1-medium"
       },
       "android": {
         "gradleCommand": ":app:assembleDebug",
-        "buildType": "apk"
+        "buildType": "apk",
+        "resourceClass": "large"
+      },
+      "cache": {
+        "key": "expo-55-hermesv1-rn083-v1",
+        "paths": [
+          "~/.gradle/caches",
+          "~/.m2/repository",
+          "~/.ccache"
+        ]
       },
       "channel": "development",
       "env": {
@@ -25,9 +35,17 @@
       "channel": "beta",
       "ios": {
         "simulator": false,
-        "resourceClass": "m-medium"
+        "resourceClass": "m1-medium"
       },
       "autoIncrement": true,
+      "cache": {
+        "key": "expo-55-hermesv1-rn083-v1",
+        "paths": [
+          "~/.gradle/caches",
+          "~/.m2/repository",
+          "~/.ccache"
+        ]
+      },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api-staging.bountyfinder.app",
         "EXPO_PUBLIC_SUPABASE_URL": "${STAGING_SUPABASE_URL}",
@@ -42,10 +60,18 @@
       "channel": "production",
       "ios": {
         "simulator": false,
-        "resourceClass": "m1-medium"
+        "resourceClass": "m1-large"
       },
       "android": {
         "resourceClass": "large"
+      },
+      "cache": {
+        "key": "expo-55-hermesv1-rn083-v1",
+        "paths": [
+          "~/.gradle/caches",
+          "~/.m2/repository",
+          "~/.ccache"
+        ]
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.bountyfinder.app",

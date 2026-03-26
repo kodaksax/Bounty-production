@@ -13,6 +13,7 @@ jobs:
   build:
     name: Build and Deploy
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     strategy:
       matrix:
         platform: [ios, android]
@@ -20,6 +21,24 @@ jobs:
       EAS_PROFILE: ${{ github.ref == 'refs/heads/main' && 'preview' || (startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/')) && 'production' }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            node-modules-${{ runner.os }}-
+
+      # ccache accelerates Clang/GCC C++ compilation for any local
+      # prebuild or native module compilation steps run on this runner.
+      # The heavy Hermes/RN-from-source compilation happens on EAS worker
+      # machines and is cached there via eas.json cache.paths [~/.ccache].
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ccache-${{ runner.os }}-expo55-hermesv1
+          max-size: 500M
 
       - name: Use Node.js
         uses: actions/setup-node@v4
