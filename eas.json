@@ -60,7 +60,7 @@
       "channel": "production",
       "ios": {
         "simulator": false,
-        "resourceClass": "m1-large"
+        "resourceClass": "m-large"
       },
       "android": {
         "resourceClass": "large"
