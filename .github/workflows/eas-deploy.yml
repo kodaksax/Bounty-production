@@ -40,6 +40,14 @@ jobs:
       - name: Install EAS CLI
         run: npm install -g eas-cli
 
+      - name: Check tokens
+        run: |
+          if [ -z "$EAS_TOKEN" ]; then echo "Missing EAS_TOKEN secret"; exit 1; fi
+          if [ -z "$EXPO_TOKEN" ]; then echo "Missing EXPO_TOKEN secret"; exit 1; fi
+        env:
+          EAS_TOKEN: ${{ secrets.EAS_TOKEN }}
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
       - name: Build and Push
         if: ${{ env.EAS_PROFILE != '' }}
         run: eas build --platform ${{ matrix.platform }} --profile $EAS_PROFILE
