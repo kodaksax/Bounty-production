@@ -10,6 +10,10 @@
       "ios": {
         "simulator": true
       },
+      "android": {
+        "gradleCommand": ":app:assembleDebug",
+        "buildType": "apk"
+      },
       "channel": "development",
       "env": {
         "EXPO_PUBLIC_ENVIRONMENT": "development",
@@ -39,6 +43,9 @@
       "ios": {
         "simulator": false,
         "resourceClass": "m1-medium"
+      },
+      "android": {
+        "resourceClass": "large"
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.bountyfinder.app",
