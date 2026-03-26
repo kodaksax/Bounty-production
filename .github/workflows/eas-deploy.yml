@@ -48,6 +48,13 @@ jobs:
           EAS_TOKEN: ${{ secrets.EAS_TOKEN }}
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
+      - name: Verify EAS token
+        run: |
+          echo "Verifying EAS token..."
+          eas whoami --token "$EAS_TOKEN" || (echo "EAS_TOKEN is invalid or expired"; exit 1)
+        env:
+          EAS_TOKEN: ${{ secrets.EAS_TOKEN }}
+
       - name: Build and Push
         if: ${{ env.EAS_PROFILE != '' }}
         run: eas build --platform ${{ matrix.platform }} --profile $EAS_PROFILE
