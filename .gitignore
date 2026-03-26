@@ -18,6 +18,8 @@ dist/
 web-build/
 expo-env.d.ts
 eas.json.bak
+/ios
+/android
 
 # Native
 .kotlin/

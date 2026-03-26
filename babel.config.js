@@ -25,37 +25,12 @@ module.exports = function (api) {
         }
       ],
       // Reanimated plugin must be listed last.
-      // Pass the logical-assignment-operators transform as an extraPlugin so
-      // that worklet code strings (serialized by the plugin from their TS
-      // source) also have ??= / ||= / &&= replaced before Hermes sees them at
-      // runtime.  Without this, the plugin's internal workletTransformSync
-      // only runs @babel/preset-typescript and leaves those operators in the
-      // serialized code string.
-      [
-        'react-native-reanimated/plugin',
-        {
-          extraPlugins: [
-            '@babel/plugin-transform-logical-assignment-operators',
-          ],
-        },
-      ],
+      'react-native-reanimated/plugin',
     ],
-    // When building for Android with Hermes, babel-preset-expo skips
-    // @babel/plugin-transform-logical-assignment-operators because Hermes
-    // is assumed to support them natively. However, several packages ship
-    // pre-built dist files that already contain ??= / ||= syntax
-    // (react-native-reanimated, expo-router, react-native-css-interop,
-    // nativewind), so Hermes fails to compile those files at runtime.
-    // This override re-enables the transform for all node_modules so
-    // Android / Hermes builds succeed regardless of which dependency
-    // ships pre-compiled code with these operators.
-    overrides: [
-      {
-        test: /node_modules[\\/]/,
-        plugins: [
-          '@babel/plugin-transform-logical-assignment-operators',
-        ],
-      },
-    ],
+    // NOTE: logical-assignment transforms (??= / ||= / &&=) removed —
+    // Hermes V1 (useHermesV1: true in expo-build-properties) supports
+    // these operators natively.  If you fall back to legacy Hermes,
+    // re-add @babel/plugin-transform-logical-assignment-operators here
+    // and in a node_modules override.
   };
 };

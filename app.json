@@ -101,7 +101,13 @@
       "expo-secure-store",
       "expo-web-browser",
       "expo-video",
-      "expo-build-properties",
+      [
+        "expo-build-properties",
+        {
+          "useHermesV1": true,
+          "buildReactNativeFromSource": true
+        }
+      ],
       "expo-font",
       "@react-native-community/datetimepicker",
       [
