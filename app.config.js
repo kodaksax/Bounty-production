@@ -52,6 +52,10 @@ module.exports = ({ config }) => {
 
   return {
     ...filtered,
+    // Ensure a scheme is always present at runtime so Linking works in
+    // Expo Go / dev environments. Allow override via `EXPO_SCHEME` env var
+    // or an existing `config.scheme` / `config.slug` / `config.name`.
+    scheme: process.env.EXPO_SCHEME || config.scheme || config.slug || config.name || 'bountyexpo',
     extra: {
       ...(config.extra || {}),
       APP_ENV,

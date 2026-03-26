@@ -17,6 +17,26 @@ try {
     if (typeof l.removeListeners !== 'function') {
       l.removeListeners = function () {};
     }
+    // Also provide a NativeModules-compatible stub so modules that read
+    // `NativeModules.ExpoModulesCoreJSLogger` don't get `undefined`.
+    try {
+      if (!g.NativeModules) g.NativeModules = {};
+      var nm = g.NativeModules;
+      if (!nm.ExpoModulesCoreJSLogger) {
+        nm.ExpoModulesCoreJSLogger = {};
+      }
+      var nml = nm.ExpoModulesCoreJSLogger;
+      if (typeof nml.addListener !== 'function') {
+        nml.addListener = function () {
+          return { remove: function () {} };
+        };
+      }
+      if (typeof nml.removeListeners !== 'function') {
+        nml.removeListeners = function () {};
+      }
+    } catch (e) {
+      // ignore any failures creating NativeModules shim
+    }
   }
 } catch (e) {
   // Intentionally ignore shim failures
