@@ -5,12 +5,13 @@ node_modules/
 .env
 .env.test
 .env.production.template
-.env.example
 .env.local
 .env.production
 .env.development
 .env.preview
 .env.staging
+# .env.*.example files are intentionally tracked (they contain no real secrets)
+# Actual secret files are ignored above.
 # Expo
 .expo/
 dist/
