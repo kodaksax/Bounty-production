@@ -27,7 +27,9 @@ const preferred = (process.env.EXPO_PUBLIC_API_BASE_URL as string | undefined)
  * URL helpers.
  */
 export function getApiBaseUrl(fallbackPort = 3001): string {
-  // If a Supabase Functions URL is configured, use it directly (no LAN resolution needed)
+  // Prefer Supabase Edge Functions when configured — this is the primary backend.
+  // Explicit EXPO_PUBLIC_API_BASE_URL / EXPO_PUBLIC_API_URL are only consulted as
+  // a fallback when Supabase Functions are not configured (e.g. local dev without Supabase).
   if (supabaseFunctionsUrl) return supabaseFunctionsUrl
 
   // Resolve using network helper first

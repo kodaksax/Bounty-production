@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { BrandingLogo } from '../../components/ui/branding-logo'
 import { ValidationPatterns } from '../../hooks/use-form-validation'
+import { config } from '../../lib/config'
 import { API_BASE_URL } from '../../lib/config/api'
 import useScreenBackground from '../../lib/hooks/useScreenBackground'
 import { isSupabaseConfigured, supabase } from '../../lib/supabase'
@@ -116,9 +117,19 @@ export function SignUpForm() {
       // Register via backend to ensure duplicate-email checks use admin API
       const normalizedEmail = email.trim().toLowerCase()
       const normalizedUsername = username.trim()
+      // Supabase edge functions require the anon key for unauthenticated calls
+      if (!config.supabase.anonKey) {
+        console.error('[sign-up] Supabase anon key is missing while Supabase is configured', { correlationId })
+        setAuthError('Authentication service is misconfigured. Please contact support.')
+        return
+      }
+      const anonKey = config.supabase.anonKey
       const registerRes = await fetch(`${API_BASE_URL}/auth/register`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(anonKey ? { apikey: anonKey, Authorization: `Bearer ${anonKey}` } : {}),
+        },
         body: JSON.stringify({ email: normalizedEmail, username: normalizedUsername, password }),
       })
 
