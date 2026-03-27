@@ -29,6 +29,9 @@ eas.json.bak
 *.p12
 *.key
 *.mobileprovision
+google-service-account.json
+google-services.json
+GoogleService-Info.plist
 
 # Metro
 .metro-health-check*

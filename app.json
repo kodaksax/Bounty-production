@@ -46,7 +46,7 @@
         "foregroundImage": "./assets/images/bounty-icon.png",
         "backgroundColor": "#ffffff"
       },
-      
+      "googleServicesFile": "./google-services.json",
       "package": "app.bountyfinder.BOUNTYExpo",
       "versionCode": 20,
       "intentFilters": [
