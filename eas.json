@@ -17,11 +17,11 @@
         "resourceClass": "large"
       },
       "cache": {
-        "key": "expo-55-hermesv1-rn083-v1",
+        "key": "expo-55-hermesv1-rn083-v2",
         "paths": [
-          "~/.gradle/caches",
-          "~/.m2/repository",
-          "~/.ccache"
+          "/home/expo/.gradle/caches",
+          "/home/expo/.m2/repository",
+          "/home/expo/.ccache"
         ]
       },
       "channel": "development",
@@ -39,11 +39,11 @@
       },
       "autoIncrement": true,
       "cache": {
-        "key": "expo-55-hermesv1-rn083-v1",
+        "key": "expo-55-hermesv1-rn083-v2",
         "paths": [
-          "~/.gradle/caches",
-          "~/.m2/repository",
-          "~/.ccache"
+          "/home/expo/.gradle/caches",
+          "/home/expo/.m2/repository",
+          "/home/expo/.ccache"
         ]
       },
       "env": {
@@ -66,11 +66,11 @@
         "resourceClass": "large"
       },
       "cache": {
-        "key": "expo-55-hermesv1-rn083-v1",
+        "key": "expo-55-hermesv1-rn083-v2",
         "paths": [
-          "~/.gradle/caches",
-          "~/.m2/repository",
-          "~/.ccache"
+          "/home/expo/.gradle/caches",
+          "/home/expo/.m2/repository",
+          "/home/expo/.ccache"
         ]
       },
       "env": {
