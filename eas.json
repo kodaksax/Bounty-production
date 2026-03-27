@@ -20,7 +20,6 @@
         "key": "expo-55-hermesv1-rn083-v2",
         "paths": [
           "/home/expo/.gradle/caches",
-          "/home/expo/.m2/repository",
           "/home/expo/.ccache"
         ]
       },
@@ -42,7 +41,6 @@
         "key": "expo-55-hermesv1-rn083-v2",
         "paths": [
           "/home/expo/.gradle/caches",
-          "/home/expo/.m2/repository",
           "/home/expo/.ccache"
         ]
       },
@@ -69,7 +67,6 @@
         "key": "expo-55-hermesv1-rn083-v2",
         "paths": [
           "/home/expo/.gradle/caches",
-          "/home/expo/.m2/repository",
           "/home/expo/.ccache"
         ]
       },
