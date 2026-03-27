@@ -105,10 +105,12 @@
         "expo-build-properties",
         {
           "ios": {
-            "useHermesV1": true
+            "useHermesV1": true,
+            "buildReactNativeFromSource": true
           },
           "android": {
-            "useHermesV1": true
+            "useHermesV1": true,
+            "buildReactNativeFromSource": true
           }
         }
       ],
