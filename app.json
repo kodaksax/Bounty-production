@@ -30,7 +30,6 @@
         "applinks:*.bountyfinder.app"
       ],
       "config": {
-        "googleMapsApiKey": "${EXPO_GOOGLE_MAPS_IOS_KEY}",
         "usesNonExemptEncryption": false
       },
       "entitlements": {
@@ -116,6 +115,12 @@
       ],
       "expo-font",
       "@react-native-community/datetimepicker",
+      [
+        "react-native-maps",
+        {
+          "iosGoogleMapsApiKey": "${EXPO_GOOGLE_MAPS_IOS_KEY}"
+        }
+      ],
       [
         "@sentry/react-native/expo",
         {
