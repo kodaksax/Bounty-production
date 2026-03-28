@@ -53,7 +53,7 @@
     "build:dev-android": "eas build --profile development -p android",
     "build:dev-ios": "eas build --profile development -p ios",
     "start:dev": "cross-env APP_ENV=development expo start",
-    "start:staging": "cross-env APP_ENV=staging expo start",
+    "start:staging": "cross-env APP_ENV=staging NODE_ENV=staging expo start",
     "start:prod": "cross-env APP_ENV=production expo start",
     "env:dev": "cross-env APP_ENV=development npm run env:check && echo \"\" && echo \"Next: npm run start:dev (runs expo start with APP_ENV=development)\"",
     "env:staging": "cross-env APP_ENV=staging npm run env:check && echo \"\" && echo \"Next: npm run start:staging (runs expo start with APP_ENV=staging)\"",

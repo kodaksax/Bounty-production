@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { getNetworkErrorMessage } from './utils/network-connectivity';
-import { CreatePaymentMethodData, StripePaymentMethod, StripeSetupIntent, stripeService } from './services/stripe-service';
 import { useAuthContext } from '../hooks/use-auth-context';
+import { CreatePaymentMethodData, StripePaymentMethod, StripeSetupIntent, stripeService } from './services/stripe-service';
+import { getNetworkErrorMessage } from './utils/network-connectivity';
 
 interface StripeContextType {
   isInitialized: boolean;
@@ -39,7 +39,7 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paymentMethods, setPaymentMethods] = useState<StripePaymentMethod[]>([]);
-  const { session } = useAuthContext();
+  const { session, isLoading: isAuthLoading } = useAuthContext();
 
   const clearError = () => setError(null);
 
@@ -50,9 +50,9 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
       setIsLoading(true);
       await stripeService.initialize();
       setIsInitialized(true);
-      
-      // Load initial payment methods
-      await loadPaymentMethods();
+      // Payment methods are loaded by the token-change effect once auth resolves.
+      // Do NOT call loadPaymentMethods() here — session.access_token may be an
+      // expired cached token at mount time, which would cause a 401 "Invalid JWT".
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to initialize payment service';
       setError(errorMessage);
@@ -250,7 +250,9 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
   useEffect(() => {
     const currentToken = session?.access_token || null;
 
-    if (!isInitialized || !currentToken) return;
+    // Wait until the service is ready, there is a token, and auth has finished
+    // its initial load (prevents fetching with a stale cached/expired token).
+    if (!isInitialized || !currentToken || isAuthLoading) return;
 
     // Skip if we've already loaded payment methods for this token
     if (lastLoadedAccessTokenRef.current === currentToken) return;
@@ -266,7 +268,7 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
     }, 1000);
 
     return () => clearTimeout(timeoutId);
-  }, [isInitialized, session?.access_token]);
+  }, [isInitialized, session?.access_token, isAuthLoading]);
 
   const contextValue: StripeContextType = {
     isInitialized,

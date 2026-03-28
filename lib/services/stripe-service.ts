@@ -6,13 +6,13 @@ import { fetchWithTimeout } from '../utils/fetch-with-timeout';
 import { getNetworkErrorMessage } from '../utils/network-connectivity';
 import { analyticsService } from './analytics-service';
 import {
-    checkDuplicatePayment,
-    completePaymentAttempt,
-    generateIdempotencyKey,
-    logPaymentError,
-    parsePaymentError,
-    recordPaymentAttempt,
-    withPaymentRetry,
+  checkDuplicatePayment,
+  completePaymentAttempt,
+  generateIdempotencyKey,
+  logPaymentError,
+  parsePaymentError,
+  recordPaymentAttempt,
+  withPaymentRetry,
 } from './payment-error-handler';
 import { performanceService } from './performance-service';
 
@@ -610,7 +610,16 @@ class StripeService {
         };
       });
     } catch (error) {
-      console.error('[StripeService] Error fetching payment methods:', error);
+      // Demote 401 auth errors to warn — they are expected when the session
+      // token is still being refreshed at startup and will resolve automatically.
+      const errCode = error && typeof error === 'object'
+        ? String((error as Record<string, unknown>).code ?? '')
+        : '';
+      if (errCode === '401') {
+        console.warn('[StripeService] Payment methods fetch skipped (auth not ready):', (error as Record<string, unknown>).message ?? error);
+      } else {
+        console.error('[StripeService] Error fetching payment methods:', error);
+      }
       
       // Use proper typing for enhanced error with dynamic properties
       type EnhancedError = Error & Record<string, unknown> & { cause?: unknown };
