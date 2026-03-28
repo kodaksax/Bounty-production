@@ -51,6 +51,8 @@ module.exports = ({ config }) => {
         process.env.EXPO_PUBLIC_SUPABASE_URL || (config.extra && config.extra.EXPO_PUBLIC_SUPABASE_URL) || null,
       EXPO_PUBLIC_SUPABASE_ANON_KEY:
         process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || (config.extra && config.extra.EXPO_PUBLIC_SUPABASE_ANON_KEY) || null,
+      EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL:
+        process.env.EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL || (config.extra && config.extra.EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL) || null,
       EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY:
         process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || (config.extra && config.extra.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY) || null,
     },

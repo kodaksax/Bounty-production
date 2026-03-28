@@ -39,7 +39,7 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paymentMethods, setPaymentMethods] = useState<StripePaymentMethod[]>([]);
-  const { session, isLoading: isAuthLoading } = useAuthContext();
+  const { session, isLoading: isAuthLoading, isAuthStale, attemptRefresh } = useAuthContext();
 
   const clearError = () => setError(null);
 
@@ -90,6 +90,26 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
       const methods = await stripeService.listPaymentMethods(session?.access_token);
       setPaymentMethods(methods);
     } catch (err: unknown) {
+      // 401 "Invalid JWT" is a transient auth state that occurs when a stale
+      // session from a different Supabase project is in storage (e.g. switching
+      // between environments). Suppress the visible error and attempt a token
+      // refresh — auth will auto-recover by re-issuing or signing the user out.
+      const errObj = err as Record<string, unknown>;
+      const isInvalidJwt =
+        String(errObj?.message ?? '').includes('Invalid JWT') &&
+        (String(errObj?.message ?? '').includes('(401)') || errObj?.code === '401');
+      if (isInvalidJwt) {
+        console.warn('[StripeContext] Suppressed transient Invalid JWT — auth will refresh automatically.');
+        if (attemptRefresh) {
+          await Promise.resolve(attemptRefresh()).catch((refreshError) => {
+            console.warn(
+              '[StripeContext] Auth refresh attempt after Invalid JWT failed:',
+              refreshError
+            );
+          });
+        }
+        return;
+      }
       // Improve error messaging for network issues using centralized utility
       const errorMessage = getNetworkErrorMessage(err);
       setError(errorMessage);
@@ -245,14 +265,17 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Reload payment methods when auth token becomes available/changes,
+    // Also skip when the auth session is marked as stale by the auth context
+    // (see useAuthContext / auth provider for the authoritative contract) to avoid
   // avoid redundant calls for repeated token refreshes and debounce slightly.
   useEffect(() => {
     const currentToken = session?.access_token || null;
 
     // Wait until the service is ready, there is a token, and auth has finished
     // its initial load (prevents fetching with a stale cached/expired token).
-    if (!isInitialized || !currentToken || isAuthLoading) return;
+    // Also skip when the session is stale (network/refresh failures) to avoid
+    // sending an expired or wrong-project token to the edge function.
+    if (!isInitialized || !currentToken || isAuthLoading || isAuthStale) return;
 
     // Skip if we've already loaded payment methods for this token
     if (lastLoadedAccessTokenRef.current === currentToken) return;
@@ -268,7 +291,7 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
     }, 1000);
 
     return () => clearTimeout(timeoutId);
-  }, [isInitialized, session?.access_token, isAuthLoading]);
+  }, [isInitialized, session?.access_token, isAuthLoading, isAuthStale]);
 
   const contextValue: StripeContextType = {
     isInitialized,
