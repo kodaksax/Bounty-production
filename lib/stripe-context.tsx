@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { getNetworkErrorMessage } from './utils/network-connectivity';
+import { logger } from './utils/error-logger';
 import { CreatePaymentMethodData, StripePaymentMethod, StripeSetupIntent, stripeService } from './services/stripe-service';
 import { useAuthContext } from '../hooks/use-auth-context';
 
@@ -56,7 +57,7 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to initialize payment service';
       setError(errorMessage);
-      console.error('Stripe initialization error:', err);
+      logger.error('Stripe initialization error:', { error: err });
     } finally {
       setIsLoading(false);
     }
@@ -93,7 +94,7 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
       // Improve error messaging for network issues using centralized utility
       const errorMessage = getNetworkErrorMessage(err);
       setError(errorMessage);
-      console.error('Error loading payment methods:', err);
+      logger.error('Error loading payment methods:', { error: err });
       // Rethrow so callers (who may implement retry logic) can detect failures
       throw err;
     } finally {
@@ -261,7 +262,7 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
     const timeoutId = setTimeout(() => {
       loadPaymentMethods().catch(err => {
         // loadPaymentMethods already sets error; swallow here to avoid unhandled rejection
-        console.error('Failed to reload payment methods on token change:', err);
+        logger.error('Failed to reload payment methods on token change:', { error: err });
       });
     }, 1000);
 

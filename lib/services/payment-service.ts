@@ -12,6 +12,7 @@ import {
 import {
     PaymentMethodResponse
 } from '../types/payment-types';
+import { logger } from '../utils/error-logger';
 import { analyticsService } from './analytics-service';
 import { StripePaymentMethod, stripeService } from './stripe-service';
 
@@ -125,7 +126,7 @@ class PaymentService {
 
       // Log security warnings
       if (securityCheck.warnings.length > 0) {
-        console.error('[PaymentService] Security warnings:', securityCheck.warnings);
+        logger.warning('[PaymentService] Security warnings:', { warnings: securityCheck.warnings });
         await analyticsService.trackEvent('payment_security_warning', {
           warnings: securityCheck.warnings.join(', '),
           userId: options.userId,
@@ -168,7 +169,7 @@ class PaymentService {
         status: paymentIntent.status,
       };
     } catch (error: any) {
-      console.error('[PaymentService] Error creating payment:', error);
+      logger.error('[PaymentService] Error creating payment:', { error: error });
 
       return {
         success: false,
@@ -240,7 +241,7 @@ class PaymentService {
             };
           } catch (err: any) {
             // Provide specific feedback for authentication/3DS failures
-            console.error('[PaymentService] Error completing 3DS authentication:', err);
+            logger.error('[PaymentService] Error completing 3DS authentication:', { error: err });
             return {
               success: false,
               escrowId: escrow.escrowId,
@@ -274,7 +275,7 @@ class PaymentService {
         status: escrow.status,
       };
     } catch (error: any) {
-      console.error('[PaymentService] Error creating escrow:', error);
+      logger.error('[PaymentService] Error creating escrow:', { error: error });
       return {
         success: false,
         error: {
@@ -301,7 +302,7 @@ class PaymentService {
         paymentIntentId: res.paymentIntentId,
       };
     } catch (error: any) {
-      console.error('[PaymentService] Error releasing escrow:', error);
+      logger.error('[PaymentService] Error releasing escrow:', { error: error });
       return {
         success: false,
         error: { message: error.message || 'Failed to release escrow' },
@@ -324,7 +325,7 @@ class PaymentService {
         refundAmount: res.refundAmount,
       };
     } catch (error: any) {
-      console.error('[PaymentService] Error refunding escrow:', error);
+      logger.error('[PaymentService] Error refunding escrow:', { error: error });
       return {
         success: false,
         error: { message: error.message || 'Failed to refund escrow' },
@@ -386,7 +387,7 @@ class PaymentService {
         },
       };
     } catch (error: any) {
-      console.error('[PaymentService] Error confirming payment:', error);
+      logger.error('[PaymentService] Error confirming payment:', { error: error });
 
       return {
         success: false,
@@ -447,7 +448,7 @@ class PaymentService {
         paymentMethods: methods.map(m => this.convertToPaymentMethodResponse(m)),
       };
     } catch (error: any) {
-      console.error('[PaymentService] Error listing payment methods:', error);
+      logger.error('[PaymentService] Error listing payment methods:', { error: error });
 
       return {
         success: false,
@@ -475,7 +476,7 @@ class PaymentService {
 
       return { success: true };
     } catch (error: any) {
-      console.error('[PaymentService] Error removing payment method:', error);
+      logger.error('[PaymentService] Error removing payment method:', { error: error });
 
       return {
         success: false,
@@ -505,7 +506,7 @@ class PaymentService {
         clientSecret: setupIntent.client_secret,
       };
     } catch (error: any) {
-      console.error('[PaymentService] Error creating setup intent:', error);
+      logger.error('[PaymentService] Error creating setup intent:', { error: error });
 
       return {
         success: false,
@@ -540,7 +541,7 @@ class PaymentService {
         },
       };
     } catch (error: any) {
-      console.error('[PaymentService] Error confirming setup intent:', error);
+      logger.error('[PaymentService] Error confirming setup intent:', { error: error });
 
       return {
         success: false,

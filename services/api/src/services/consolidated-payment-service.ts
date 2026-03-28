@@ -12,6 +12,7 @@ import {
     handleStripeError,
     ValidationError,
 } from '../middleware/error-handler';
+import { logger } from './logger';
 
 /**
  * Build Stripe request options with optional idempotency key
@@ -88,8 +89,10 @@ export interface PaymentMethodResult {
 
 /**
  * Get or create Stripe customer for user
+ * Reads/writes stripe_customer_id from the profiles table.
+ * This is the DB-backed implementation; use this instead of any in-memory cache.
  */
-async function getOrCreateStripeCustomer(
+export async function getOrCreateStripeCustomer(
   userId: string,
   email?: string
 ): Promise<string> {
@@ -133,7 +136,7 @@ async function getOrCreateStripeCustomer(
     
     if (updateError) {
       // Log error but don't fail - customer was created successfully
-      console.error('[PaymentService] Failed to save customer ID:', updateError);
+      logger.warn('[PaymentService] Failed to save customer ID to profile:', { error: updateError });
     }
     
     return customer.id;
