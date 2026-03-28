@@ -92,48 +92,45 @@ with the `{ error }` context shape expected by the logger's normalisation pass.
 | Platform fee (10% on release) | ✅ Complete | Hardcoded in release route; configurable via `config.stripe.platformFeePercent` |
 | Input validation | ✅ Complete | zod schemas on most routes |
 
+### ✅ Fixed in This PR (Previously Broken)
+
+1. **In-memory `customerIds` Map**  
+   Stripe Customer IDs were cached only in memory; a process restart lost all mappings,
+   causing duplicate Stripe customers per user.  
+   **Fixed:** `getOrCreateStripeCustomer()` now reads/writes `profiles.stripe_customer_id`
+   in Supabase. The local `getStripeCustomerId()` helper also queries the DB.
+
+2. **Hunter balance not credited after escrow release**  
+   The escrow-release handler used `walletService.createTransaction()` which records a
+   ledger row but does NOT update `profiles.balance`.  
+   **Fixed:** Added `ConsolidatedWalletService.updateBalance(hunterId, ...)` after the
+   transaction is recorded to credit the hunter's balance.
+
 ### ⚠️ Known Limitations / Technical Debt
 
 #### HIGH PRIORITY
 
-1. **In-memory `customerIds` Map** (`payments.ts` line 1008)  
-   Stripe Customer IDs are cached only in memory.  A process restart loses all mappings,
-   causing a new `stripe.customers.create()` on every request — creating duplicate Stripe
-   customers per user.  
-   **Fix:** `SELECT stripe_customer_id FROM users WHERE id = $1` + 
-   `UPDATE users SET stripe_customer_id = $2 WHERE id = $1`.  
-   The `users` table already has a `stripe_customer_id` column per the migration file.
-
-2. **`walletService` vs `ConsolidatedWalletService` split in release route**  
-   The escrow-release handler uses `walletService.createTransaction()` (the older thin wrapper
-   in `wallet-service.ts`) while the rest of the payment system uses `ConsolidatedWalletService`.
-   These two services write to the same `wallet_transactions` table but the old service does
-   **not** update `profiles.balance`.  As a result, release transactions are recorded but the
-   hunter's balance is not credited.  
-   **Fix:** Replace the two `walletService.createTransaction()` calls in the release handler
-   with `ConsolidatedWalletService.releaseEscrow()`.
-
-3. **`platform_fee` transaction uses a hardcoded zero-UUID** (`PLATFORM_ACCOUNT_ID`)  
+1. **`platform_fee` transaction uses a hardcoded zero-UUID** (`PLATFORM_ACCOUNT_ID`)  
    `00000000-0000-0000-0000-000000000000` is used as the platform user ID.  This must be
    replaced with a real platform account UUID (or a dedicated ledger mechanism).
 
 #### MEDIUM PRIORITY
 
-4. **`stripe-service.ts` is 1 930 lines**  
+2. **`stripe-service.ts` is 1 930 lines**  
    The file handles SDK initialisation, PaymentIntents, SetupIntents, payment methods,
    escrow, Apple Pay, Stripe Connect, and utility helpers.  Splitting into focused modules
    (`escrow-service.ts`, `payment-methods-service.ts`, `connect-service.ts`) would improve
    readability and testability.
 
-5. **`processPayment` in `StripeProvider` (lib/stripe-context.tsx)**  
+3. **`processPayment` in `StripeProvider` (lib/stripe-context.tsx)**  
    Uses `createPaymentIntent` (no idempotency) rather than `createPaymentIntentSecure`.
    Consider deprecating `processPayment` in favour of `processPaymentSecure`.
 
-6. **`_getPaymentReceiptNotImplemented` placeholder**  
+4. **`_getPaymentReceiptNotImplemented` placeholder**  
    This method in `payment-service.ts` throws unconditionally and has a prefixed underscore
    name.  It should be removed until the backend endpoint exists.
 
-7. **Webhook handlers with `TODO:` stubs** (several events in `payments.ts`)  
+5. **Webhook handlers with `TODO:` stubs** (several events in `payments.ts`)  
    `payment_intent.payment_failed`, `setup_intent.succeeded`, `charge.refunded`,
    `payout.paid`, `account.updated` all have TODO comments.  These are required for production
    reliability (user notifications, dispute handling, account status sync).
@@ -158,11 +155,11 @@ with the `{ error }` context shape expected by the logger's normalisation pass.
 
 | Priority | Task |
 |----------|------|
-| 🔴 Critical | Migrate `customerIds` Map to database (`users.stripe_customer_id`) |
-| 🔴 Critical | Fix escrow-release to use `ConsolidatedWalletService.releaseEscrow()` so hunter balance is credited |
-| 🟠 High | Implement webhook stubs: `payment_intent.payment_failed`, `setup_intent.succeeded`, `charge.refunded` |
-| 🟠 High | Implement real `PLATFORM_ACCOUNT_ID` or dedicated ledger row for platform fees |
-| 🟠 High | Add input validation schemas (zod) for `POST /payments/escrows` and other unvalidated routes |
+| ✅ Done | Migrate `customerIds` Map to database (`profiles.stripe_customer_id`) — completed in this PR |
+| ✅ Done | Fix escrow-release hunter balance credit — completed in this PR |
+| 🔴 Critical | Implement webhook stubs: `payment_intent.payment_failed`, `setup_intent.succeeded`, `charge.refunded` |
+| 🔴 Critical | Implement real `PLATFORM_ACCOUNT_ID` or dedicated ledger row for platform fees |
+| 🟠 High | Add input validation schemas (zod) for `POST /payments/escrows` body fields |
 
 ### Medium-Term (Post-Launch)
 
