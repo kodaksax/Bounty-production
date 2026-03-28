@@ -12,6 +12,7 @@ import { OptimizedImage } from "lib/components/OptimizedImage";
 import { blockingService } from "lib/services/blocking-service";
 import { MAX_PORTFOLIO_ITEMS, portfolioService } from "lib/services/portfolio-service";
 import type { PortfolioItem } from "lib/types";
+import { useRouter } from 'expo-router';
 import { normalizeAuthProfile, type NormalizedProfile } from "lib/utils/normalize-profile";
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -34,7 +35,7 @@ import { VerificationBadge, type VerificationLevel } from "./ui/verification-bad
  */
 function UploadProgressBar({ progress, message }: { progress: number; message?: string | null }) {
   const [showBar, setShowBar] = useState(false);
-
+  
   useEffect(() => {
     if (progress > 0 && progress < 1) {
       setShowBar(true);
@@ -131,6 +132,8 @@ export function EnhancedProfileSection({
   // 4) Only use the 'current-user' sentinel as a last resort when no other
   //    identifier is available.
   // Note: `usePortfolio` requires a string id, so we always produce a string.
+  const router = useRouter();
+  
   const resolvedUserId = (() => {
     if (normalizedFromHookOrLocal?.id) return normalizedFromHookOrLocal.id;
     if (userId) return userId;
@@ -464,10 +467,16 @@ export function EnhancedProfileSection({
             <Text className="text-2xl font-bold">{activityStats?.bountiesPosted ?? 0}</Text>
             <Text className="text-xs text-emerald-200 mt-1">Bounties Posted</Text>
           </View>
-          <View className="items-center">
-            <Text className="text-2xl font-bold">{followerCount ?? 0}</Text>
-            <Text className="text-xs text-emerald-200 mt-1">Followers</Text>
-          </View>
+<TouchableOpacity
+  className="items-center"
+  onPress={() => {
+    // Pass `from=profile` so FollowersScreen knows where it came from
+    router.push(`/profile/followers${userId ? `?userId=${userId}&from=profile` : '?from=profile'}`);
+  }}
+>
+  <Text className="text-2xl font-bold">{followerCount ?? 0}</Text>
+  <Text className="text-xs text-emerald-200 mt-1">Followers</Text>
+</TouchableOpacity>
         </View>
 
         {/* Joined Date */}

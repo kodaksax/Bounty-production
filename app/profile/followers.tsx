@@ -15,14 +15,22 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function FollowersScreen() {
-  const { userId } = useLocalSearchParams<{ userId: string }>();
+  const { userId, from } = useLocalSearchParams<{ userId?: string; from?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-
+  
   const [followers, setFollowers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
+  const handleBack = () => {
+  // If we came from a profile screen, go back to that profile
+  if (from === 'profile' && userId) {
+    router.push(`/profile/${userId}`);
+  } else {
+    // Default back behavior
+    router.back();
+  }
+};
   useEffect(() => {
     loadFollowers();
   }, [userId]);
@@ -86,9 +94,9 @@ export default function FollowersScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <MaterialIcons name="arrow-back" size={24} color="#fffef5" />
-        </TouchableOpacity>
+              <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+        <MaterialIcons name="arrow-back" size={24} color="#fffef5" />
+      </TouchableOpacity>
         <Text style={styles.headerTitle}>Followers</Text>
       </View>
 
