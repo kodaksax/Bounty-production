@@ -11,9 +11,11 @@ const APP_ENV = process.env.APP_ENV || process.env.EXPO_PUBLIC_ENVIRONMENT || 'd
 const envFile = path.resolve(process.cwd(), `.env.${APP_ENV}`);
 
 if (fs.existsSync(envFile)) {
-  dotenv.config({ path: envFile });
+  // override: true ensures this env file wins over any .env/.env.local already
+  // loaded by Expo's built-in env loader before app.config.js runs.
+  dotenv.config({ path: envFile, override: true });
 } else if (fs.existsSync(path.resolve(process.cwd(), '.env'))) {
-  dotenv.config();
+  dotenv.config({ override: true });
 }
 
 // Detect likely secret-like env keys and warn at build-time if any are present.
