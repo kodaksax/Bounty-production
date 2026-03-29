@@ -1,10 +1,9 @@
 
 // Stripe API types
 import { API_BASE_URL } from '../config/api';
-import { API_TIMEOUTS } from '../config/network';
-import { fetchWithTimeout } from '../utils/fetch-with-timeout';
-import { getNetworkErrorMessage } from '../utils/network-connectivity';
+import { supabase } from '../supabase';
 import { logger } from '../utils/error-logger';
+import { getNetworkErrorMessage } from '../utils/network-connectivity';
 import { analyticsService } from './analytics-service';
 import {
   checkDuplicatePayment,
@@ -16,6 +15,38 @@ import {
   withPaymentRetry,
 } from './payment-error-handler';
 import { performanceService } from './performance-service';
+
+/**
+ * Call a Supabase Edge Function sub-path under /payments.
+ *
+ * Uses `supabase.functions.invoke()` which calls `supabase.auth.getSession()`
+ * internally to always attach the freshest possible token — bypassing any
+ * React-state propagation lag that can cause a stale JWT to be sent.
+ * Both the `Authorization` and `apikey` headers are set automatically by
+ * the Supabase JS client.
+ */
+async function invokePayments<T>(
+  subPath: string,
+  options: { method?: string; body?: Record<string, unknown> } = {}
+): Promise<T> {
+  const { data, error } = await (supabase as any).functions.invoke(subPath, {
+    method: options.method ?? 'POST',
+    body: options.body,
+  });
+  if (error) {
+    const status: number = (error as any).context?.status ?? 0;
+    let errorMsg = '';
+    try {
+      const parsed: Record<string, unknown> | null =
+        await (error as any).context?.json?.().catch(() => null);
+      errorMsg = ((parsed?.error as string) || (parsed?.message as string)) || String((error as Error).message);
+    } catch {
+      errorMsg = String((error as Error).message);
+    }
+    throw { type: 'api_error', code: String(status), message: `Request failed (${status}): ${errorMsg}` };
+  }
+  return data as T;
+}
 
 export interface StripePaymentMethod {
   id: string;
@@ -286,34 +317,18 @@ class StripeService {
         };
       }
       
-      // Call backend API to create PaymentIntent with timeout and retry
-      const response = await fetchWithTimeout(`${API_BASE_URL}/payments/create-payment-intent`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
-        },
-        body: JSON.stringify({
-          amountCents: Math.round(amount * 100),
-          currency,
-          metadata: {
-            purpose: 'wallet_deposit',
-          },
-        }),
-        timeout: API_TIMEOUTS.LONG, // 30 seconds for payment intent creation
-        retries: 2,
-      });
-
-      if (!response.ok) {
-        // Do not expose backend error details to the client
-        throw {
-          type: 'api_error',
-          code: response.status.toString(),
-          message: 'Failed to create payment intent',
-        };
-      }
-
-      const { clientSecret, paymentIntentId } = await response.json();
+      // Call backend Edge Function via supabase.functions.invoke() which always
+      // uses the freshest session token from auth.getSession() internally.
+      const { clientSecret, paymentIntentId } = await invokePayments<{ clientSecret: string; paymentIntentId: string }>(
+        'payments/create-payment-intent',
+        {
+          body: {
+            amountCents: Math.round(amount * 100) as unknown as Record<string, unknown>,
+            currency,
+            metadata: { purpose: 'wallet_deposit' },
+          } as Record<string, unknown>,
+        }
+      );
       
       const paymentIntent: StripePaymentIntent = {
         id: paymentIntentId,
@@ -467,18 +482,8 @@ class StripeService {
         // This ensures the backend is aware of 3DS authentication completion
         try {
           const paymentIntentId = paymentIntentClientSecret.split('_secret_')[0];
-          await fetchWithTimeout(`${API_BASE_URL}/payments/confirm`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
-            },
-            body: JSON.stringify({
-              paymentIntentId,
-              paymentMethodId,
-            }),
-            timeout: API_TIMEOUTS.DEFAULT,
-            retries: 1,
+          await invokePayments('payments/confirm', {
+            body: { paymentIntentId, paymentMethodId } as Record<string, unknown>,
           });
         } catch (backendError) {
           // Log but don't fail - the webhook will handle the actual balance update
@@ -561,39 +566,14 @@ class StripeService {
 
       // Use fetchWithTimeout with retry logic for better reliability
       // Listing payment methods is a read-only operation, use DEFAULT timeout
-      const response = await fetchWithTimeout(`${API_BASE_URL}/payments/methods`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-        },
-        timeout: API_TIMEOUTS.DEFAULT, // 15 seconds for read operations
-        retries: 2, // Retry twice on failure
-      });
+      // supabase.functions.invoke() reads the token from auth.getSession() directly
+      // (in-memory cache), not from React state — guaranteeing the freshest token.
+      const fnData = await invokePayments<{ paymentMethods: unknown[] }>(
+        'payments/methods',
+        { method: 'GET' }
+      );
 
-      if (!response.ok) {
-        // Treat non-OK responses as errors so callers can distinguish
-        // between an empty list and an API failure.
-        const text = await response.text().catch(() => null);
-        let errorBody: string | null = null;
-        // Try to extract a human-readable message from the JSON body
-        if (text) {
-          try {
-            const parsed = JSON.parse(text) as Record<string, unknown>;
-            errorBody = ((parsed.error || parsed.message) as string | undefined) ?? text;
-          } catch {
-            errorBody = text;
-          }
-        }
-        const message = errorBody
-          ? `Payment methods request failed (${response.status}): ${errorBody}`
-          : `Payment methods request failed with status ${response.status}`;
-        throw { type: 'api_error', code: response.status.toString(), message };
-      }
-
-      const data = await response.json();
-      
-      return (data.paymentMethods || []).map((pm: unknown) => {
+      return (fnData?.paymentMethods || []).map((pm: unknown) => {
         // Type guard for payment method data
         const pmData = pm as Record<string, unknown>;
         const cardData = (pmData.card || {}) as Record<string, unknown>;
@@ -611,8 +591,18 @@ class StripeService {
         };
       });
     } catch (error) {
-      logger.error('[StripeService] Error fetching payment methods:', { error });
-      
+      // 401 "Invalid JWT" is a transient auth state (expired/stale token). Log at
+      // warning level — the StripeContext catch-handler suppresses and refreshes.
+      const _err = error as Record<string, unknown> | null;
+      const _isInvalidJwt =
+        _err && _err.type === 'api_error' && String(_err.code) === '401' &&
+        String(_err.message ?? '').includes('Invalid JWT');
+      if (_isInvalidJwt) {
+        logger.warning('[StripeService] Transient Invalid JWT (401) on payment methods — auth will refresh.', { error });
+      } else {
+        logger.error('[StripeService] Error fetching payment methods:', { error });
+      }
+
       // Use proper typing for enhanced error with dynamic properties
       type EnhancedError = Error & Record<string, unknown> & { cause?: unknown };
 
@@ -681,24 +671,7 @@ class StripeService {
         throw new Error('Authentication required to remove payment method');
       }
 
-      const response = await fetchWithTimeout(`${API_BASE_URL}/payments/methods/${paymentMethodId}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-        },
-        timeout: API_TIMEOUTS.DEFAULT, // 15 seconds
-        retries: 1,
-      });
-
-      if (!response.ok) {
-        // Do not expose backend error details to the client
-        throw {
-          type: 'api_error',
-          code: response.status.toString(),
-          message: 'Failed to remove payment method',
-        };
-      }
+      await invokePayments(`payments/methods/${paymentMethodId}`, { method: 'DELETE' });
     } catch (error) {
       logger.error('[StripeService] Error detaching payment method:', { error });
       throw this.handleStripeError(error);
@@ -717,38 +690,18 @@ class StripeService {
         throw new Error('Authentication required to save payment method');
       }
 
-      const response = await fetchWithTimeout(`${API_BASE_URL}/payments/methods`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({ paymentMethodId }),
-        timeout: API_TIMEOUTS.DEFAULT,
-        retries: 1,
-      });
-
-      if (!response.ok) {
-        const text = await response.text().catch(() => null);
-        let errorBody: string | null = null;
-        if (text) {
-          try {
-            const parsed = JSON.parse(text) as Record<string, unknown>;
-            errorBody = ((parsed.error || parsed.message) as string | undefined) ?? text;
-          } catch {
-            errorBody = text;
-          }
+      let rawJson: Record<string, unknown> | null = null;
+      try {
+        rawJson = await invokePayments<Record<string, unknown>>('payments/methods', {
+          body: { paymentMethodId } as Record<string, unknown>,
+        });
+      } catch (parseErr: unknown) {
+        // Re-throw structured API / auth errors so callers can handle them
+        if (parseErr && typeof parseErr === 'object' && 'type' in (parseErr as object)) {
+          throw parseErr;
         }
-        const message = errorBody
-          ? `Payment method save failed (${response.status}): ${errorBody}`
-          : `Payment method save failed with status ${response.status}`;
-        throw { type: 'api_error', code: response.status.toString(), message };
-      }
-
-      const rawJson = await response.json().catch((parseErr: unknown) => {
         logger.error('[StripeService] Failed to parse attachPaymentMethod response body:', { error: parseErr });
-        return null;
-      }) as Record<string, unknown> | null;
+      }
       if (!rawJson || typeof rawJson !== 'object') {
         throw {
           type: 'api_error',
@@ -1431,26 +1384,10 @@ class StripeService {
     try {
       await this.initialize();
 
-      const response = await fetch(`${API_BASE_URL}/payments/create-setup-intent`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
-        },
-        body: JSON.stringify({
-          usage: 'off_session', // Allow future off-session payments
-        }),
-      });
-
-      if (!response.ok) {
-        throw {
-          type: 'api_error',
-          code: response.status.toString(),
-          message: 'Failed to create setup intent',
-        };
-      }
-
-      const { clientSecret, setupIntentId } = await response.json();
+      const { clientSecret, setupIntentId } = await invokePayments<{ clientSecret: string; setupIntentId: string }>(
+        'payments/create-setup-intent',
+        { body: { usage: 'off_session' } as Record<string, unknown> }
+      );
 
       const setupIntent: StripeSetupIntent = {
         id: setupIntentId,

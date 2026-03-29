@@ -9,6 +9,7 @@ import { SignInForm } from "./auth/sign-in-form"
 import { markInitialNavigationDone } from './initial-navigation/initialNavigation'
 import 'react-native-get-random-values'; // must run before using tweetnacl
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { authProfileService } from '../lib/services/auth-profile-service'
 
 /**
  * Root Index - Auth Gate
@@ -116,10 +117,35 @@ export default function Index() {
             if (!isActive || latestSessionIdRef.current !== startingSessionId || hasNavigatedRef.current) return
 
             if (localOnboardingDone) {
-              // Local flag says onboarding was completed — go to main app.
-              // The Supabase profile will be repaired in the background by bounty-app.tsx.
+              // Local flag says onboarding was completed — but verify the profile row
+              // actually exists in Supabase before trusting it. A missing profile row
+              // causes cascading null-access failures throughout the main app.
+              let profileExists = false
+              try {
+                const fetchedProfile = await authProfileService.getProfileById(userId, { bypassCache: true })
+                profileExists = fetchedProfile !== null
+              } catch (profileCheckError) {
+                if (__DEV__) {
+                  console.warn('[index] Profile existence check failed, defaulting to onboarding:', profileCheckError)
+                }
+              }
+
+              // Re-check guards after the async operation
+              if (!isActive || latestSessionIdRef.current !== startingSessionId || hasNavigatedRef.current) return
+
+              if (!profileExists) {
+                // Profile row missing — local flag is stale. Force onboarding.
+                if (__DEV__) {
+                  console.log('[index] Local flag set but profile row missing — forcing onboarding')
+                }
+                hasNavigatedRef.current = true
+                router.replace('/onboarding')
+                try { markInitialNavigationDone() } catch {}
+                return
+              }
+
               if (__DEV__) {
-                console.log('[index] Supabase profile incomplete but local flag set — going to main app')
+                console.log('[index] Profile confirmed + local flag set — going to main app')
               }
               hasNavigatedRef.current = true
               router.replace(ROUTES.TABS.BOUNTY_APP)

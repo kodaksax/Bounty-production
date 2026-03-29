@@ -6,10 +6,11 @@ import { cachedDataService } from 'lib/services/cached-data-service'
 import { notificationService } from 'lib/services/notification-service'
 import { PropsWithChildren, useContext, useEffect, useRef, useState } from 'react'
 import { clearBountyDraftForUser } from '../app/hooks/useBountyDraft'
+import { clearAllSessionData } from '../lib/auth-session-storage'
 import { analyticsService } from '../lib/services/analytics-service'
 import { authProfileService } from '../lib/services/auth-profile-service'
 import { getSentry } from '../lib/services/sentry-init'
-import { isSupabaseConfigured, supabase } from '../lib/supabase'
+import { isSupabaseConfigured, PROJECT_STORAGE_KEY, supabase } from '../lib/supabase'
 
 type AuthData = {
   session: Session | null | undefined
@@ -487,6 +488,13 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           cachedDataService.clearAll(),
         ]).catch(e => {
           reportError(e, '[AuthProvider] Data cleanup on sign-out failed (non-critical)')
+        })
+        // Belt-and-suspenders: wipe the project-scoped session key (and the
+        // legacy shared key) from SecureStore and in-memory cache. The Supabase
+        // client calls storage.removeItem on signOut, but this handles edge
+        // cases such as sim data clears without a proper signOut.
+        void clearAllSessionData(PROJECT_STORAGE_KEY).catch(e => {
+          reportError(e, '[AuthProvider] Session storage cleanup on sign-out failed (non-critical)')
         })
         previousUserIdRef.current = null
       }

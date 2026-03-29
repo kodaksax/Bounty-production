@@ -24,8 +24,11 @@ import { Platform } from 'react-native';
 // Storage key for remember me preference
 const REMEMBER_ME_KEY = 'auth_remember_me_preference';
 
-// Storage key used by Supabase for session data
-// This is the default key that Supabase uses internally
+// LEGACY storage key used by Supabase for session data when no storageKey option
+// is passed.  In this app we now pass a project-scoped storageKey to createClient
+// so each environment uses its own slot (see lib/supabase.ts).  This constant is
+// kept for the clearAllSessionData() legacy-cleanup path so that stale data under
+// the OLD shared key is also wiped on sign-out.
 // Reference: https://github.com/supabase/gotrue-js/blob/master/src/lib/constants.ts
 const SUPABASE_SESSION_KEY = 'supabase.auth.token';
 
@@ -165,27 +168,43 @@ export async function clearRememberMePreference(): Promise<void> {
  * Clear all session data from secure storage and in-memory cache
  * This is called during sign out to ensure no session data remains
  */
-export async function clearAllSessionData(): Promise<void> {
+/**
+ * Helper to delete a single session key and any associated chunks from SecureStore.
+ * Handles both plain values and the __chunked__ format written by the storage adapter.
+ */
+async function _deleteSessionKey(key: string): Promise<void> {
+  try {
+    const val = await SecureStore.getItemAsync(key);
+    if (val === '__chunked__') {
+      const countStr = await SecureStore.getItemAsync(key + CHUNK_META_SUFFIX);
+      const count = parseInt(countStr || '0', 10);
+      for (let i = 0; i < count; i++) {
+        await SecureStore.deleteItemAsync(`${key}__${i}`);
+      }
+      await SecureStore.deleteItemAsync(key + CHUNK_META_SUFFIX);
+    }
+    await SecureStore.deleteItemAsync(key);
+  } catch {
+    // Ignore — key may not exist
+  }
+}
+
+export async function clearAllSessionData(projectStorageKey?: string): Promise<void> {
   try {
     // Clear in-memory caches
     inMemorySessionCache.clear();
     inMemoryRememberMeCache = null;
-    
+
     // Clear any in-flight read operation
     inFlightPreferenceRead = null;
-    
-    // Check if it's chunked
-    const val = await SecureStore.getItemAsync(SUPABASE_SESSION_KEY);
-    if (val === '__chunked__') {
-      const countStr = await SecureStore.getItemAsync(SUPABASE_SESSION_KEY + CHUNK_META_SUFFIX);
-      const count = parseInt(countStr || '0', 10);
-      for (let i = 0; i < count; i++) {
-        await SecureStore.deleteItemAsync(`${SUPABASE_SESSION_KEY}__${i}`);
-      }
-      await SecureStore.deleteItemAsync(SUPABASE_SESSION_KEY + CHUNK_META_SUFFIX);
+
+    // Delete the legacy shared key (pre-project-scoped builds) and the
+    // project-scoped key (current builds) so all environments are wiped.
+    await _deleteSessionKey(SUPABASE_SESSION_KEY);
+    if (projectStorageKey && projectStorageKey !== SUPABASE_SESSION_KEY) {
+      await _deleteSessionKey(projectStorageKey);
     }
-    await SecureStore.deleteItemAsync(SUPABASE_SESSION_KEY);
-    
+
     console.log('[AuthSessionStorage] All session data and preferences cleared from secure storage and memory');
   } catch (e) {
     console.error('[AuthSessionStorage] Error clearing session data:', e);
