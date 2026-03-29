@@ -5,6 +5,10 @@ import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
 import { getRequestContext, logErrorWithContext } from '../middleware/request-context';
 import * as ConsolidatedWalletService from '../services/consolidated-wallet-service';
 import {
+    getOrCreateStripeCustomer,
+    getStripeCustomerId,
+} from '../services/consolidated-payment-service';
+import {
     checkIdempotencyKey,
     removeIdempotencyKey,
     storeIdempotencyKey
@@ -17,6 +21,15 @@ const createPaymentIntentSchema = z.object({
   amountCents: z.number().int().min(100, 'Amount must be at least $1.00 (100 cents)'),
   currency: z.string().toLowerCase().optional().default('usd'),
   metadata: z.record(z.string()).optional(),
+  idempotencyKey: z.string().optional(),
+});
+
+const createEscrowSchema = z.object({
+  bountyId: z.string().min(1, 'bountyId is required'),
+  amountCents: z.number().int().min(100, 'amountCents must be at least 100 (i.e. $1.00)'),
+  posterId: z.string().min(1, 'posterId is required'),
+  hunterId: z.string().min(1, 'hunterId is required'),
+  currency: z.string().toLowerCase().optional().default('usd'),
   idempotencyKey: z.string().optional(),
 });
 
@@ -199,7 +212,7 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
       }
 
       // Get or create Stripe customer for this user
-      const customerId = await getOrCreateStripeCustomer(stripe, request.userId);
+      const customerId = await getOrCreateStripeCustomer(request.userId);
 
       // Create SetupIntent
       const setupIntent = await stripe.setupIntents.create({
@@ -421,15 +434,8 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
   }, async (request: AuthenticatedRequest, reply) => {
     let idempotencyKey: string | undefined;
     try {
-      const body = request.body as {
-        bountyId: string;
-        amountCents: number;
-        posterId: string;
-        hunterId: string;
-        currency?: string;
-        idempotencyKey?: string;
-      };
-      const { bountyId, amountCents, posterId, hunterId, currency = 'usd' } = body;
+      const body = createEscrowSchema.parse(request.body);
+      const { bountyId, amountCents, posterId, hunterId, currency } = body;
       idempotencyKey = body.idempotencyKey;
 
       if (idempotencyKey) {
@@ -447,11 +453,49 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
         return reply.code(401).send({ error: 'Unauthorized' });
       }
 
+      // Only the poster can create the escrow for their own bounty
+      if (posterId !== request.userId) {
+        return reply.code(403).send({ error: 'Only the bounty poster can create an escrow' });
+      }
+
+      // Create a manual-capture PaymentIntent so funds are held until bounty completion
+      const paymentIntent = await stripe.paymentIntents.create(
+        {
+          amount: amountCents,
+          currency,
+          capture_method: 'manual',
+          payment_method_types: ['card'],
+          metadata: {
+            bounty_id: bountyId,
+            poster_id: posterId,
+            hunter_id: hunterId,
+            type: 'escrow',
+          },
+          description: `Escrow for bounty ${bountyId}`,
+        },
+        idempotencyKey ? { idempotencyKey } : {}
+      );
+
+      logger.info(`[payments] Created escrow PaymentIntent ${paymentIntent.id} for bounty ${bountyId}`);
+
+      return {
+        escrowId: paymentIntent.id,
+        paymentIntentId: paymentIntent.id,
+        paymentIntentClientSecret: paymentIntent.client_secret,
+        status: paymentIntent.status,
+      };
     } catch (error: any) {
       logger.error('[payments] Error creating escrow:', error);
 
       if (idempotencyKey) {
         await removeIdempotencyKey(idempotencyKey);
+      }
+
+      if (error instanceof z.ZodError) {
+        return reply.code(400).send({
+          error: 'Invalid escrow request',
+          details: error.errors.map((e) => e.message),
+        });
       }
 
       if (error.type === 'StripeInvalidRequestError') {
@@ -566,7 +610,7 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
         description: `Bounty payment for ${bountyId}`,
       }, idempotencyKey ? { idempotencyKey } : {});
 
-      // Create release transaction for hunter
+      // Create release transaction for hunter and credit their wallet balance
       await walletService.createTransaction({
         user_id: hunterId,
         type: 'release',
@@ -575,6 +619,9 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
         stripe_transfer_id: transfer.id,
         platform_fee_cents: platformFeeCents,
       });
+      // Credit the hunter's internal wallet balance (walletService.createTransaction
+      // records the ledger row but does not update profiles.balance)
+      await ConsolidatedWalletService.updateBalance(hunterId, hunterAmountCents / 100);
 
       // Record platform fee
       await walletService.createTransaction({
@@ -928,7 +975,7 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
       }
 
       // Get or create Stripe customer
-      const customerId = await getOrCreateStripeCustomer(stripe, request.userId);
+      const customerId = await getOrCreateStripeCustomer(request.userId);
 
       // Create bank account token
       const token = await stripe.tokens.create({
@@ -990,49 +1037,4 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
       return reply.code(400).send({ error: errorMessage });
     }
   });
-}
-
-// Helper functions
-
-/**
- * Customer ID storage
- * 
- * IMPORTANT: This in-memory Map is for development/testing only.
- * In production, customer IDs should be stored in the database (users table)
- * with the stripe_customer_id field. The users schema already has this field.
- * 
- * TODO: Replace this with database queries when deploying to production:
- * - On lookup: SELECT stripe_customer_id FROM users WHERE id = userId
- * - On create: UPDATE users SET stripe_customer_id = customerId WHERE id = userId
- */
-const customerIds = new Map<string, string>();
-
-async function getStripeCustomerId(userId: string): Promise<string | null> {
-  return customerIds.get(userId) || null;
-}
-
-async function getOrCreateStripeCustomer(stripe: Stripe, userId: string): Promise<string> {
-  // Check cache first
-  const existingId = customerIds.get(userId);
-  if (existingId) {
-    return existingId;
-  }
-
-  // In production, check database first
-  // For now, create a new customer in Stripe and cache in-memory
-  try {
-    const customer = await stripe.customers.create({
-      metadata: {
-        user_id: userId,
-      },
-    });
-
-    customerIds.set(userId, customer.id);
-    return customer.id;
-  } catch (err: any) {
-    // Log detailed error with context to help diagnose failures creating customers
-    logger.error({ err }, `[payments] Failed to create Stripe customer for user ${userId}`);
-    // Re-throw so callers can surface meaningful errors
-    throw err;
-  }
 }

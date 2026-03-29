@@ -4,6 +4,7 @@ import { API_BASE_URL } from '../config/api';
 import { API_TIMEOUTS } from '../config/network';
 import { fetchWithTimeout } from '../utils/fetch-with-timeout';
 import { getNetworkErrorMessage } from '../utils/network-connectivity';
+import { logger } from '../utils/error-logger';
 import { analyticsService } from './analytics-service';
 import {
   checkDuplicatePayment,
@@ -128,7 +129,7 @@ class StripeService {
     // Read from Expo public env (must be prefixed EXPO_PUBLIC_ to reach client bundle)
     const key = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY;
     if (!key) {
-      console.error('[StripeService] Missing EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY env variable. Payments disabled.');
+      logger.error('[StripeService] Missing EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY env variable. Payments disabled.');
       this.publishableKey = '';
     } else {
       this.publishableKey = key;
@@ -159,13 +160,13 @@ class StripeService {
       } catch (sdkError) {
         // SDK initialization may fail in non-native environments (e.g., web, Node)
         if (__DEV__) {
-          console.error('[StripeService] Unable to initialize SDK (expected in non-native environments):', sdkError);
+          logger.error('[StripeService] Unable to initialize SDK (expected in non-native environments):', { error: sdkError });
         }
       }
       
       this.isInitialized = true;
     } catch (error) {
-      console.error('[StripeService] Failed to initialize:', error);
+      logger.error('[StripeService] Failed to initialize:', { error });
       throw new Error('Failed to initialize payment service');
     }
   }
@@ -253,7 +254,7 @@ class StripeService {
       
       return paymentMethod;
     } catch (error) {
-      console.error('[StripeService] Error creating payment method:', error);
+      logger.error('[StripeService] Error creating payment method:', { error });
       throw this.handleStripeError(error);
     }
   }
@@ -336,7 +337,7 @@ class StripeService {
 
       return paymentIntent;
     } catch (error) {
-      console.error('[StripeService] Error creating payment intent:', error);
+      logger.error('[StripeService] Error creating payment intent:', { error });
 
       await analyticsService.trackEvent('payment_failed', {
         amount,
@@ -481,7 +482,7 @@ class StripeService {
           });
         } catch (backendError) {
           // Log but don't fail - the webhook will handle the actual balance update
-          console.error('[StripeService] Failed to notify backend of confirmation:', backendError);
+          logger.error('[StripeService] Failed to notify backend of confirmation:', { error: backendError });
         }
 
         // Track payment completed
@@ -504,7 +505,7 @@ class StripeService {
 
       return paymentIntent;
     } catch (error) {
-      console.error('[StripeService] Error confirming payment:', error);
+      logger.error('[StripeService] Error confirming payment:', { error });
 
       await analyticsService.trackEvent('payment_failed', {
         paymentMethodId,
@@ -610,16 +611,7 @@ class StripeService {
         };
       });
     } catch (error) {
-      // Demote 401 auth errors to warn — they are expected when the session
-      // token is still being refreshed at startup and will resolve automatically.
-      const errCode = error && typeof error === 'object'
-        ? String((error as Record<string, unknown>).code ?? '')
-        : '';
-      if (errCode === '401') {
-        console.warn('[StripeService] Payment methods fetch skipped (auth not ready):', (error as Record<string, unknown>).message ?? error);
-      } else {
-        console.error('[StripeService] Error fetching payment methods:', error);
-      }
+      logger.error('[StripeService] Error fetching payment methods:', { error });
       
       // Use proper typing for enhanced error with dynamic properties
       type EnhancedError = Error & Record<string, unknown> & { cause?: unknown };
@@ -708,7 +700,7 @@ class StripeService {
         };
       }
     } catch (error) {
-      console.error('[StripeService] Error detaching payment method:', error);
+      logger.error('[StripeService] Error detaching payment method:', { error });
       throw this.handleStripeError(error);
     }
   }
@@ -754,7 +746,7 @@ class StripeService {
       }
 
       const rawJson = await response.json().catch((parseErr: unknown) => {
-        console.error('[StripeService] Failed to parse attachPaymentMethod response body:', parseErr);
+        logger.error('[StripeService] Failed to parse attachPaymentMethod response body:', { error: parseErr });
         return null;
       }) as Record<string, unknown> | null;
       if (!rawJson || typeof rawJson !== 'object') {
@@ -789,7 +781,7 @@ class StripeService {
         created: (typeof pm.created === 'number' ? pm.created : Math.floor(Date.now() / 1000)),
       };
     } catch (error) {
-      console.error('[StripeService] Error attaching payment method:', error);
+      logger.error('[StripeService] Error attaching payment method:', { error });
 
       // Use proper typing for enhanced error with known Stripe error fields
       type EnhancedError = Error & { type?: string; code?: string; cause?: unknown };
@@ -906,7 +898,7 @@ class StripeService {
 
       return { success: true };
     } catch (error) {
-      console.error('[StripeService] Error presenting payment sheet:', error);
+      logger.error('[StripeService] Error presenting payment sheet:', { error });
       return {
         success: false,
         error: this.handleStripeError(error) as StripeError,
@@ -963,7 +955,7 @@ class StripeService {
 
       return { accountId };
     } catch (error) {
-      console.error('[StripeService] Error creating connect account:', error);
+      logger.error('[StripeService] Error creating connect account:', { error });
 
       await performanceService.endMeasurement('connect_account_create', {
         success: false,
@@ -1018,7 +1010,7 @@ class StripeService {
 
       return url;
     } catch (error) {
-      console.error('[StripeService] Error creating connect account link:', error);
+      logger.error('[StripeService] Error creating connect account link:', { error });
 
       await performanceService.endMeasurement('connect_account_link', {
         success: false,
@@ -1107,7 +1099,7 @@ class StripeService {
 
       return { escrowId, paymentIntentClientSecret, paymentIntentId, status };
     } catch (error) {
-      console.error('[StripeService] Error creating escrow:', error);
+      logger.error('[StripeService] Error creating escrow:', { error });
       await performanceService.endMeasurement('escrow_create', { success: false, error: String(error) });
       throw this.handleStripeError(error);
     }
@@ -1151,7 +1143,7 @@ class StripeService {
 
       return { transferId, paymentIntentId, status: data.status };
     } catch (error) {
-      console.error('[StripeService] Error releasing escrow:', error);
+      logger.error('[StripeService] Error releasing escrow:', { error });
       await performanceService.endMeasurement('escrow_release', { success: false, error: String(error) });
       throw this.handleStripeError(error);
     }
@@ -1194,7 +1186,7 @@ class StripeService {
 
       return { paymentIntentId, refundAmount: data.refundAmount, status: data.status };
     } catch (error) {
-      console.error('[StripeService] Error refunding escrow:', error);
+      logger.error('[StripeService] Error refunding escrow:', { error });
       await performanceService.endMeasurement('escrow_refund', { success: false, error: String(error) });
       throw this.handleStripeError(error);
     }
@@ -1252,7 +1244,7 @@ class StripeService {
       await performanceService.endMeasurement('payment_next_action', { success: false });
       throw { type: 'api_error', message: 'No payment intent returned from handleNextAction' };
     } catch (error) {
-      console.error('[StripeService] Error handling next action:', error);
+      logger.error('[StripeService] Error handling next action:', { error });
       await performanceService.endMeasurement('payment_next_action', { success: false, error: String(error) });
       throw this.handleStripeError(error);
     }
@@ -1289,7 +1281,7 @@ class StripeService {
       const capabilities = data.capabilities ?? data.account?.capabilities ?? {};
       return { detailsSubmitted, capabilities };
     } catch (error) {
-      console.error('[StripeService] Error verifying connect account:', error);
+      logger.error('[StripeService] Error verifying connect account:', { error });
       throw this.handleStripeError(error);
     }
   }
@@ -1476,7 +1468,7 @@ class StripeService {
 
       return setupIntent;
     } catch (error) {
-      console.error('[StripeService] Error creating setup intent:', error);
+      logger.error('[StripeService] Error creating setup intent:', { error });
 
       await analyticsService.trackEvent('setup_intent_failed', {
         error: String(error),
@@ -1575,7 +1567,7 @@ class StripeService {
 
       return { success: true };
     } catch (error) {
-      console.error('[StripeService] Error confirming setup intent:', error);
+      logger.error('[StripeService] Error confirming setup intent:', { error });
       return {
         success: false,
         error: this.handleStripeError(error) as StripeError,
@@ -1719,7 +1711,7 @@ class StripeService {
 
       return false;
     } catch (error) {
-      console.error('[StripeService] Error checking Apple Pay support:', error);
+      logger.error('[StripeService] Error checking Apple Pay support:', { error });
       return false;
     }
   }
@@ -1775,10 +1767,7 @@ class StripeService {
           Number.isFinite(amountInCents) &&
           totalFromCartInCents !== amountInCents
         ) {
-          console.warn(
-            '[StripeService] Apple Pay amount mismatch:',
-            { amount, totalFromCart }
-          );
+          logger.warning('[StripeService] Apple Pay amount mismatch:', { amount, totalFromCart });
           return {
             success: false,
             error: 'Payment amount does not match cart total',
@@ -1829,7 +1818,7 @@ class StripeService {
       });
 
       if (presentError) {
-        console.error('[StripeService] Apple Pay presentation error:', presentError);
+        logger.error('[StripeService] Apple Pay presentation error:', { error: presentError });
 
         // Handle user cancellation separately
         const cancelCodes = ['Canceled', 'canceled', 'USER_CANCELLED', 'user_cancelled'];
@@ -1855,7 +1844,7 @@ class StripeService {
         success: true,
       };
     } catch (error) {
-      console.error('[StripeService] Error presenting Apple Pay:', error);
+      logger.error('[StripeService] Error presenting Apple Pay:', { error });
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
