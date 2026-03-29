@@ -6,13 +6,13 @@ import { logger } from '../utils/error-logger';
 import { getNetworkErrorMessage } from '../utils/network-connectivity';
 import { analyticsService } from './analytics-service';
 import {
-  checkDuplicatePayment,
-  completePaymentAttempt,
-  generateIdempotencyKey,
-  logPaymentError,
-  parsePaymentError,
-  recordPaymentAttempt,
-  withPaymentRetry,
+    checkDuplicatePayment,
+    completePaymentAttempt,
+    generateIdempotencyKey,
+    logPaymentError,
+    parsePaymentError,
+    recordPaymentAttempt,
+    withPaymentRetry,
 } from './payment-error-handler';
 import { performanceService } from './performance-service';
 
@@ -696,11 +696,15 @@ class StripeService {
           body: { paymentMethodId } as Record<string, unknown>,
         });
       } catch (parseErr: unknown) {
-        // Re-throw structured API / auth errors so callers can handle them
-        if (parseErr && typeof parseErr === 'object' && 'type' in (parseErr as object)) {
-          throw parseErr;
+        // Log unexpected (unstructured) errors before re-throwing so we preserve
+        // the original cause in production logs instead of masking it with the
+        // generic "invalid response format" error that follows this block.
+        if (!parseErr || typeof parseErr !== 'object' || !('type' in (parseErr as object))) {
+          logger.error('[StripeService] Failed to invoke attachPaymentMethod (network or unexpected error):', { error: parseErr });
         }
-        logger.error('[StripeService] Failed to parse attachPaymentMethod response body:', { error: parseErr });
+        // Always re-throw — structured API/auth errors AND raw network errors must
+        // propagate to the outer catch so callers receive the real failure reason.
+        throw parseErr;
       }
       if (!rawJson || typeof rawJson !== 'object') {
         throw {
