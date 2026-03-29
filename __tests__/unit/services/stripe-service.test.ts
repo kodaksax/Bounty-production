@@ -316,20 +316,20 @@ describe('Stripe Service', () => {
     });
 
     it('should pass Authorization header when auth token is provided', async () => {
-      (fetchWithTimeout as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: async () => ({ paymentMethods: [] }),
+      (supabase.functions.invoke as jest.Mock).mockResolvedValue({
+        data: { paymentMethods: [] },
+        error: null,
       });
 
       const authToken = 'test_bearer_token';
       await stripeService.listPaymentMethods(authToken);
 
-      expect(fetchWithTimeout).toHaveBeenCalledWith(
-        expect.any(String),
+      // When an auth token is provided the service calls the payments API via
+      // supabase.functions.invoke (auth is handled internally by the Supabase client).
+      expect(supabase.functions.invoke).toHaveBeenCalledWith(
+        'payments/methods',
         expect.objectContaining({
-          headers: expect.objectContaining({
-            Authorization: `Bearer ${authToken}`,
-          }),
+          method: 'GET',
         })
       );
     });
