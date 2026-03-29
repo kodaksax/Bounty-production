@@ -1,6 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
-import { clearRememberMePreference } from '../auth-session-storage';
-import { supabase } from '../supabase';
+import { clearAllSessionData, clearRememberMePreference } from '../auth-session-storage';
+import { PROJECT_STORAGE_KEY, supabase } from '../supabase';
 import { markIntentionalSignOut } from '../utils/session-handler';
 import { authProfileService } from './auth-profile-service';
 import { notificationService } from './notification-service';
@@ -89,6 +89,9 @@ export async function performLogout(deps: LogoutDeps = {}) {
   // Fire-and-forget background cleanup. Only attempt a redundant signOut when prior attempts failed.
   const backgroundTasks: Promise<unknown>[] = [
     (clearRemember?.() as Promise<unknown>)?.catch?.(() => undefined),
+    // Wipe the project-scoped session key (and the legacy shared key) from
+    // SecureStore and the in-memory cache so no stale token can survive logout.
+    clearAllSessionData(PROJECT_STORAGE_KEY).catch(() => undefined),
     Promise.all([
       Secure.deleteItemAsync('sb-access-token').catch(() => undefined),
       Secure.deleteItemAsync('sb-refresh-token').catch(() => undefined),

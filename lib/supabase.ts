@@ -1,14 +1,26 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 // Polyfill is now imported in index.js to ensure it's loaded as early as possible
 import {
-  createAuthSessionStorageAdapter,
-  getRememberMePreference,
+    createAuthSessionStorageAdapter,
+    getRememberMePreference,
 } from './auth-session-storage';
 import { config } from './config';
 
 // Use centralized frontend config for env access
 const supabaseUrl = config.supabase.url;
 const supabaseAnonKey = config.supabase.anonKey;
+
+// Project-scoped storage key derived from the Supabase URL at module load time.
+// Exported so logout code and auth handlers can reference the same key that the
+// Supabase client uses internally, ensuring complete session cleanup on sign-out.
+export const PROJECT_STORAGE_KEY = (() => {
+  try {
+    const ref = new URL(supabaseUrl).hostname.split('.')[0] || 'default';
+    return `supabase.auth.token.${ref}`;
+  } catch {
+    return 'supabase.auth.token.default';
+  }
+})();
 
 export const isSupabaseConfigured = !!supabaseUrl && !!supabaseAnonKey;
 // Keep compatibility shape expected by callers (hasUrl/hasKey/mismatch).
@@ -83,11 +95,17 @@ async function initSupabase(): Promise<void> {
   }
 
   try {
+    // Use PROJECT_STORAGE_KEY as the single source of truth so all auth-related
+    // code shares the same key. This ensures sessions from different Supabase
+    // projects (dev / staging / production) never share the same SecureStore
+    // slot and eliminates cross-environment JWT contamination.
+
     realSupabase = createClient(supabaseUrl, supabaseAnonKey, {
       auth: (() => {
         const isTestEnv = typeof process !== 'undefined' && (process.env.JEST_WORKER_ID !== undefined || process.env.NODE_ENV === 'test');
         return {
           storage: createAuthSessionStorageAdapter(),
+          storageKey: PROJECT_STORAGE_KEY,
           autoRefreshToken: !isTestEnv,
           persistSession: !isTestEnv,
           detectSessionInUrl: false,

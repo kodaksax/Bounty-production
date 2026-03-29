@@ -89,6 +89,7 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
       clearError();
 
       const methods = await stripeService.listPaymentMethods(session?.access_token);
+      consecutiveJwtFailuresRef.current = 0; // reset on success
       setPaymentMethods(methods);
     } catch (err: unknown) {
       // 401 "Invalid JWT" is a transient auth state that occurs when a stale
@@ -100,7 +101,16 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
         String(errObj?.message ?? '').includes('Invalid JWT') &&
         (String(errObj?.message ?? '').includes('(401)') || errObj?.code === '401');
       if (isInvalidJwt) {
-        console.warn('[StripeContext] Suppressed transient Invalid JWT — auth will refresh automatically.');
+        consecutiveJwtFailuresRef.current += 1;
+        // If a refresh already happened and we still get a 401 the JWT is
+        // structurally invalid (wrong Supabase project, missing secrets, etc.).
+        // Stop the retry loop and surface a clear, actionable error.
+        if (consecutiveJwtFailuresRef.current > 1) {
+          logger.warning('[StripeContext] Repeated Invalid JWT after refresh — check Supabase project config.', { error: err });
+          setError('Session error loading payment methods. Please sign out and sign in again.');
+          return;
+        }
+        console.warn('[StripeContext] Transient Invalid JWT — requesting token refresh.');
         if (attemptRefresh) {
           await Promise.resolve(attemptRefresh()).catch((refreshError) => {
             console.warn(
@@ -259,6 +269,11 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
 
   // Track the last access token for which we loaded payment methods
   const lastLoadedAccessTokenRef = React.useRef<string | null>(null);
+  // Count consecutive Invalid JWT failures. If the same problem recurs after
+  // a token refresh it means the JWT is structurally incompatible (e.g. wrong
+  // Supabase project). We stop suppressing after the first failed refresh
+  // attempt and surface an actionable error instead of looping.
+  const consecutiveJwtFailuresRef = React.useRef<number>(0);
 
   // Initialize on mount
   useEffect(() => {
@@ -286,7 +301,10 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
     try {
       const [, payload] = currentToken.split('.');
       const { exp } = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
-      if (typeof exp === 'number' && exp * 1000 < Date.now()) return;
+      // Treat tokens expiring within 90 seconds as expired to match Supabase's
+      // own EXPIRY_MARGIN_MS (90 000 ms) and avoid clock-skew / race-condition
+      // rejections by the Supabase Edge Function gateway.
+      if (typeof exp === 'number' && exp * 1000 < Date.now() + 90_000) return;
     } catch {
       // Malformed JWT — skip and wait for auth refresh
       return;
@@ -296,6 +314,9 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
     if (lastLoadedAccessTokenRef.current === currentToken) return;
 
     lastLoadedAccessTokenRef.current = currentToken;
+    // A new token means a fresh auth cycle — reset the failure counter so a
+    // legitimately refreshed token gets a clean attempt.
+    consecutiveJwtFailuresRef.current = 0;
 
     // Longer debounce (1 second) to avoid rapid re-fetches during auth flows
     const timeoutId = setTimeout(() => {

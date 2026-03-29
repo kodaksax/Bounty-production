@@ -4,12 +4,9 @@ import { MaterialIcons } from "@expo/vector-icons"
 import { useEffect, useState } from "react"
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
 import { useAuthContext } from "../hooks/use-auth-context"
-import { API_BASE_URL } from "../lib/config/api"
-import { API_TIMEOUTS } from "../lib/config/network"
 import { stripeService } from "../lib/services/stripe-service"
 import { useStripe } from "../lib/stripe-context"
 import { theme } from "../lib/theme"
-import { fetchWithTimeout } from "../lib/utils/fetch-with-timeout"
 import PaymentElementWrapper from "./payment-element-wrapper"
 
 interface AddCardModalProps {
@@ -116,46 +113,11 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
 
     setIsCreatingSetupIntent(true)
     try {
-      // Use centralized fetchWithTimeout with retries
-      const response = await fetchWithTimeout(`${API_BASE_URL}/payments/create-setup-intent`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          usage: 'off_session',
-        }),
-        timeout: API_TIMEOUTS.DEFAULT, // 15 seconds
-        retries: 2,
-      })
-
-      if (!response.ok) {
-        // Try to surface a meaningful error message from the server
-        let message = `Request failed with status ${response.status}`
-        try {
-          const data: unknown = await response.json()
-          if (data && typeof data === 'object' && 'error' in data) {
-            const errorField = (data as { error?: unknown }).error
-            if (typeof errorField === 'string' && errorField.trim().length > 0) {
-              message = errorField
-            }
-          }
-        } catch {
-          try {
-            const text = await response.text()
-            if (text && text.trim().length > 0) {
-              message = text
-            }
-          } catch {
-            // Ignore body parsing errors; fall back to status-based message
-          }
-        }
-
-        throw new Error(message)
-      }
-
-      const { clientSecret } = await response.json()
+      // Delegate entirely to stripeService which uses supabase.functions.invoke()
+      // internally — always reads the freshest token from auth.getSession() and
+      // attaches both Authorization + apikey headers automatically.
+      const setupIntent = await stripeService.createSetupIntent()
+      const clientSecret = setupIntent.client_secret
 
       // Log detected key mode for debugging
       // This helps diagnose configuration issues during development
