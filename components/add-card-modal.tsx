@@ -49,7 +49,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
   const [paymentElementFailed, setPaymentElementFailed] = useState<boolean>(false)
 
   const { createPaymentMethod, loadPaymentMethods, error: stripeError } = useStripe()
-  const { session } = useAuthContext()
+  const { session, isAuthStale, attemptRefresh, isLoading: isAuthLoading } = useAuthContext()
 
   // Refresh payment methods with retry logic
   // Let Stripe SDK and network stack handle timeouts naturally
@@ -90,13 +90,23 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
 
   const shouldUsePaymentElement = usePaymentElement || isSDKAvailable
 
-  // Create SetupIntent for Payment Element mode
+  // Create SetupIntent for Payment Element mode.
+  // Wait for auth to finish loading and for the session token to be valid before
+  // making the request — avoids a 401 from a stale/wrong-project JWT on first render.
+  // Adding session?.access_token to deps ensures an automatic retry after token refresh.
   useEffect(() => {
-    if (shouldUsePaymentElement && !paymentElementFailed && !setupIntentSecret) {
+    if (
+      shouldUsePaymentElement &&
+      !paymentElementFailed &&
+      !setupIntentSecret &&
+      !isAuthLoading &&
+      !isAuthStale &&
+      session?.access_token
+    ) {
       createSetupIntent()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shouldUsePaymentElement, paymentElementFailed])
+  }, [shouldUsePaymentElement, paymentElementFailed, isAuthLoading, isAuthStale, session?.access_token])
 
   const createSetupIntent = async () => {
     if (!session?.access_token) {
