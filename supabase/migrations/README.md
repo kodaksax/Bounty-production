@@ -2,10 +2,67 @@
 
 This directory contains SQL migration files for the BOUNTYExpo database schema.
 
+## Environments & Branching
+
+BOUNTYExpo uses three Supabase branches:
+
+| Branch | Purpose |
+|--------|---------|
+| **production** | Live environment – external beta users only |
+| **preview** | Shared staging / QA – receives a copy of internal-beta data |
+| **development** | Developer sandbox – fresh schema + optional seed data |
+
+## Bootstrap a New Branch
+
+Use this procedure whenever you create a new **preview** or **development** Supabase branch.
+
+### 1. Create the branch (Supabase dashboard or CLI)
+
+```bash
+# Experimental branching feature
+supabase branches create preview --experimental
+```
+
+### 2. Link your local CLI
+
+```bash
+supabase link --project-ref <BRANCH_PROJECT_REF>
+```
+
+### 3. Push all migrations
+
+```bash
+supabase db push
+```
+
+This applies every `.sql` file in this directory in lexicographic order.  
+The full sequence is described under **Migration Order** below.
+
+### 4. (Preview / staging only) Restore internal-beta data
+
+```bash
+# Export user data from production (see scripts/migrate-prod-to-staging.sql for full instructions)
+pg_dump "postgresql://postgres:${PROD_PASS}@db.${PROD_REF}.supabase.co:5432/postgres" \
+  --data-only --no-privileges --no-owner --column-inserts \
+  --table=public.profiles ... > /tmp/prod_data.sql
+
+# Apply to staging
+psql "postgresql://postgres:${STAGING_PASS}@db.${STAGING_REF}.supabase.co:5432/postgres" \
+  -f /tmp/prod_data.sql \
+  -f scripts/migrate-prod-to-staging.sql
+```
+
+### 5. Deploy Edge Functions
+
+```bash
+supabase functions deploy
+```
+
+---
+
 ## Running Migrations
 
 ### Option 1: Supabase CLI (Recommended)
-If you have the Supabase CLI installed:
 
 ```bash
 # Link to your project (first time only)
@@ -27,6 +84,70 @@ If you have direct access to the PostgreSQL database:
 ```bash
 psql -h your-db-host -U postgres -d postgres -f supabase/migrations/20251022_inprogress_flow.sql
 ```
+
+---
+
+## Migration Order
+
+All files in this directory are applied in lexicographic (filename) order.  
+The table below shows the intended sequence:
+
+| File | Purpose |
+|------|---------|
+| `20251001_baseline_schema.sql` | **Foundational tables**: profiles, bounties, wallet_transactions, notifications, skills, reports, blocked_users, user_follows |
+| `20251002_messaging_schema.sql` | **Messaging**: conversations, conversation_participants, messages + RLS + Realtime publication |
+| `20251010_risk_management_system.sql` | **Risk/KYC**: risk scoring tables, extends profiles with KYC columns |
+| `20251015_seed_restricted_categories.sql` | **Reference data**: 26 business categories (prohibited → low risk) |
+| `20251022_inprogress_flow.sql` | Completion workflow tables |
+| `20251025_fix_messaging_rls.sql` | Messaging RLS fix |
+| `20251102_stripe_payments_integration.sql` | Stripe columns + payment_methods + stripe_events |
+| `20251117_safe_user_deletion.sql` | Cascading user deletion trigger |
+| `20251119_add_bounty_requests_table.sql` | Hunter application/request table |
+| `20251120_*` | Conversation `created_by` column fixes |
+| `20251122_add_onboarding_completed.sql` | Onboarding flag on profiles |
+| `20251126_add_age_verification_columns.sql` | Age verification columns |
+| `20251126_allow_conversation_owner_invites.sql` | Conversation management helper |
+| `20251216_add_notifications_rls.sql` | RLS for notifications + push_tokens |
+| `20251230_auto_create_profile_trigger.sql` | Auto-create profile on auth.users insert |
+| `20260107_add_performance_indexes.sql` | Query optimization indexes |
+| `20260109_comprehensive_dispute_system.sql` | Full dispute resolution system |
+| `20260115_*` | update_balance RPC, user_devices, webhook tracking |
+| `20260212_fix_bounty_requests_rls_policy.sql` | Bounty requests RLS diagnostic fix |
+| `20260215_fix_updated_at_typo.sql` | Column name typo fix |
+| `20260221_backfill_missing_profiles.sql` | Backfill profiles for pre-trigger users |
+| `20260224_add_e2e_public_key.sql` | E2E encryption public key on profiles |
+| `20260301_add_phone_verified_to_profiles.sql` | Phone verification columns |
+| `20260302_add_id_verification_columns.sql` | ID verification columns + storage bucket |
+| `20260302_add_profile_creation_trigger.sql` | Profile creation trigger update |
+| `20260302_add_selfie_submitted_at.sql` | Selfie submission timestamp |
+| `20260303_add_profiles_rls_policies.sql` | Profiles RLS policies |
+| `20260303_add_winner_to_bounty_disputes.sql` | Winner column on disputes |
+| `20260303_admin_only_dispute_updates.sql` | Admin-only dispute update policy |
+| `20260304_add_message_to_bounty_requests.sql` | Application message column |
+| `20260309_*` | Completion ready RLS, conversation participant RLS |
+| `20260310_apply_deposit.sql` | Atomic deposit function |
+| `20260311_*` | Unique index on payment intent, admin_warnings table |
+| `20260316_*` | notifications_outbox, push_tokens (profile_id variant), bounty category backfill |
+| `20260317_workflow_stage_disputes.sql` | Dispute workflow stage |
+| `20260318_add_reason_bounty_disputes.sql` | Reason column on disputes |
+| `20260320_*` | Evidence staging, geospatial column, indexes, pg_stat_statements, full-text search |
+| `20260322_serverless_notification_triggers.sql` | DB triggers for async notifications |
+| `20260323_add_fn_accept_bounty_request.sql` | RPC for accepting bounty requests |
+
+---
+
+## Archived Files
+
+The following files have been moved to `supabase/archive/` to prevent double-execution.  
+Their content is captured in the timestamped migration files above:
+
+| Archived File | Replaced By |
+|---------------|-------------|
+| `risk_management_system.sql.bak` | `20251010_risk_management_system.sql` |
+| `seed_restricted_categories.sql.bak` | `20251015_seed_restricted_categories.sql` |
+| `schema-messaging.sql.bak` | `20251002_messaging_schema.sql` |
+
+---
 
 ## Migration: 20251022_inprogress_flow.sql
 
