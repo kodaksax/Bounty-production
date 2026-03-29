@@ -3,6 +3,8 @@ import { getNetworkErrorMessage } from './utils/network-connectivity';
 import { logger } from './utils/error-logger';
 import { CreatePaymentMethodData, StripePaymentMethod, StripeSetupIntent, stripeService } from './services/stripe-service';
 import { useAuthContext } from '../hooks/use-auth-context';
+import { CreatePaymentMethodData, StripePaymentMethod, StripeSetupIntent, stripeService } from './services/stripe-service';
+import { getNetworkErrorMessage } from './utils/network-connectivity';
 
 interface StripeContextType {
   isInitialized: boolean;
@@ -40,7 +42,7 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paymentMethods, setPaymentMethods] = useState<StripePaymentMethod[]>([]);
-  const { session } = useAuthContext();
+  const { session, isLoading: isAuthLoading, isAuthStale, attemptRefresh } = useAuthContext();
 
   const clearError = () => setError(null);
 
@@ -51,9 +53,9 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
       setIsLoading(true);
       await stripeService.initialize();
       setIsInitialized(true);
-      
-      // Load initial payment methods
-      await loadPaymentMethods();
+      // Payment methods are loaded by the token-change effect once auth resolves.
+      // Do NOT call loadPaymentMethods() here — session.access_token may be an
+      // expired cached token at mount time, which would cause a 401 "Invalid JWT".
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to initialize payment service';
       setError(errorMessage);
@@ -91,6 +93,26 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
       const methods = await stripeService.listPaymentMethods(session?.access_token);
       setPaymentMethods(methods);
     } catch (err: unknown) {
+      // 401 "Invalid JWT" is a transient auth state that occurs when a stale
+      // session from a different Supabase project is in storage (e.g. switching
+      // between environments). Suppress the visible error and attempt a token
+      // refresh — auth will auto-recover by re-issuing or signing the user out.
+      const errObj = err as Record<string, unknown>;
+      const isInvalidJwt =
+        String(errObj?.message ?? '').includes('Invalid JWT') &&
+        (String(errObj?.message ?? '').includes('(401)') || errObj?.code === '401');
+      if (isInvalidJwt) {
+        console.warn('[StripeContext] Suppressed transient Invalid JWT — auth will refresh automatically.');
+        if (attemptRefresh) {
+          await Promise.resolve(attemptRefresh()).catch((refreshError) => {
+            console.warn(
+              '[StripeContext] Auth refresh attempt after Invalid JWT failed:',
+              refreshError
+            );
+          });
+        }
+        return;
+      }
       // Improve error messaging for network issues using centralized utility
       const errorMessage = getNetworkErrorMessage(err);
       setError(errorMessage);
@@ -246,12 +268,31 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Reload payment methods when auth token becomes available/changes,
-  // avoid redundant calls for repeated token refreshes and debounce slightly.
+  // Also skip when the auth session is marked as stale by the auth context
+  // (see useAuthContext / auth provider for the authoritative contract) to avoid
+  // redundant calls for repeated token refreshes and debounce slightly.
   useEffect(() => {
     const currentToken = session?.access_token || null;
 
-    if (!isInitialized || !currentToken) return;
+    // Wait until the service is ready, there is a token, and auth has finished
+    // its initial load (prevents fetching with a stale cached/expired token).
+    // Also skip when the session is stale (network/refresh failures) to avoid
+    // sending an expired or wrong-project token to the edge function.
+    if (!isInitialized || !currentToken || isAuthLoading || isAuthStale) return;
+
+    // Skip if the JWT token is already expired — the auth provider will refresh
+    // it and the TOKEN_REFRESHED event will update session.access_token, which
+    // triggers this effect again with a valid token.  This prevents the 401
+    // "Invalid JWT" warning that occurs when a cached expired token is loaded
+    // from storage before the automatic refresh completes.
+    try {
+      const [, payload] = currentToken.split('.');
+      const { exp } = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+      if (typeof exp === 'number' && exp * 1000 < Date.now()) return;
+    } catch {
+      // Malformed JWT — skip and wait for auth refresh
+      return;
+    }
 
     // Skip if we've already loaded payment methods for this token
     if (lastLoadedAccessTokenRef.current === currentToken) return;
@@ -267,7 +308,7 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
     }, 1000);
 
     return () => clearTimeout(timeoutId);
-  }, [isInitialized, session?.access_token]);
+  }, [isInitialized, session?.access_token, isAuthLoading, isAuthStale]);
 
   const contextValue: StripeContextType = {
     isInitialized,

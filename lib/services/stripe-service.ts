@@ -7,13 +7,13 @@ import { getNetworkErrorMessage } from '../utils/network-connectivity';
 import { logger } from '../utils/error-logger';
 import { analyticsService } from './analytics-service';
 import {
-    checkDuplicatePayment,
-    completePaymentAttempt,
-    generateIdempotencyKey,
-    logPaymentError,
-    parsePaymentError,
-    recordPaymentAttempt,
-    withPaymentRetry,
+  checkDuplicatePayment,
+  completePaymentAttempt,
+  generateIdempotencyKey,
+  logPaymentError,
+  parsePaymentError,
+  recordPaymentAttempt,
+  withPaymentRetry,
 } from './payment-error-handler';
 import { performanceService } from './performance-service';
 

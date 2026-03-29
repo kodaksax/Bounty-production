@@ -1,13 +1,30 @@
-import getApiBaseFallback from 'lib/utils/dev-host'
-import { getReachableApiBaseUrl } from 'lib/utils/network'
+import Constants from 'expo-constants';
+import getApiBaseFallback from 'lib/utils/dev-host';
+import { getReachableApiBaseUrl } from 'lib/utils/network';
+
+/** Read a string key from Constants.expoConfig.extra (set by app.config.js). */
+function fromExtra(key: string): string {
+  try {
+    const extra = Constants.expoConfig?.extra as Record<string, unknown> | undefined;
+    const v = extra?.[key];
+    return typeof v === 'string' ? v.trim() : '';
+  } catch {
+    return '';
+  }
+}
 
 // Supabase Edge Functions base URL.
 // Prefer EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL when explicitly set; otherwise
 // derive from EXPO_PUBLIC_SUPABASE_URL so wallet/payments route to Edge
 // Functions automatically without extra configuration.
 // Format: https://<project-ref>.supabase.co/functions/v1  (no trailing slash)
-const explicitFunctionsUrl = (process.env.EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL as string | undefined)?.trim() || ''
-const supabaseBaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL as string | undefined)?.trim() || ''
+// Falls back to Constants.expoConfig.extra when process.env inlining is absent.
+const explicitFunctionsUrl = (process.env.EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL as string | undefined)?.trim()
+  || fromExtra('EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL')
+  || ''
+const supabaseBaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL as string | undefined)?.trim()
+  || fromExtra('EXPO_PUBLIC_SUPABASE_URL')
+  || ''
 const derivedFunctionsUrl = supabaseBaseUrl ? `${supabaseBaseUrl.replace(/\/+$/, '')}/functions/v1` : ''
 const supabaseFunctionsUrl = (explicitFunctionsUrl || derivedFunctionsUrl).replace(/\/+$/, '')
 

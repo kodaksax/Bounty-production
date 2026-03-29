@@ -154,6 +154,18 @@ export function SignUpForm() {
           return
         }
 
+        // Supabase Edge Runtime returns "Invalid JWT" (401) when the anon key
+        // doesn't match the project — surface a friendlier message.
+        if (
+          registerRes.status === 401 ||
+          String(backendMessage).toLowerCase().includes('invalid jwt') ||
+          String(backendMessage).toLowerCase().includes('missing jwt')
+        ) {
+          console.error('[sign-up] Auth service configuration error (JWT rejected)', { correlationId })
+          setAuthError('Unable to reach the sign-up service. Please try again later or contact support.')
+          return
+        }
+
         setAuthError(backendMessage)
         return
       }

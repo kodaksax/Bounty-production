@@ -102,7 +102,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const { error: profileError } = await supabase
       .from('profiles')
       .upsert(
-        { id: userId, username: normalizedUsername, email: normalizedEmail, balance: 0 },
+        { id: userId, username: normalizedUsername, email: normalizedEmail, balance: 0, onboarding_completed: false },
         { onConflict: 'id' },
       )
 
