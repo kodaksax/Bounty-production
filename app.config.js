@@ -42,6 +42,16 @@ module.exports = ({ config }) => {
     // Expo Go / dev environments. Allow override via `EXPO_SCHEME` env var
     // or an existing `config.scheme` / `config.slug` / `config.name`.
     scheme: process.env.EXPO_SCHEME || config.scheme || config.slug || config.name || 'bountyexpo',
+    android: {
+      ...(config.android || {}),
+      // Allow EAS file secret to provide google-services.json.
+      // Create the secret with:
+      //   eas secret:create --scope project --name GOOGLE_SERVICES_JSON --type file --value ./google-services.json
+      googleServicesFile:
+        process.env.GOOGLE_SERVICES_JSON ||
+        (config.android && config.android.googleServicesFile) ||
+        './google-services.json',
+    },
     extra: {
       ...(config.extra || {}),
       APP_ENV,
