@@ -196,6 +196,37 @@ describe('Stripe Service', () => {
       
       expect(paymentIntent.currency).toBe('eur');
     });
+
+    it('should pass authToken as Authorization header when provided', async () => {
+      const authToken = 'my-test-token';
+      await stripeService.createPaymentIntent(50, 'usd', authToken);
+
+      expect(supabase.functions.invoke).toHaveBeenCalledWith(
+        'payments/create-payment-intent',
+        expect.objectContaining({
+          headers: { Authorization: `Bearer ${authToken}` },
+        })
+      );
+    });
+
+    it('should not include Authorization header when authToken is not provided', async () => {
+      await stripeService.createPaymentIntent(50, 'usd');
+
+      const callArgs = (supabase.functions.invoke as jest.Mock).mock.calls[0];
+      const invokeOptions = callArgs?.[1] ?? {};
+      expect(invokeOptions.headers).toBeUndefined();
+    });
+
+    it('should send amountCents as a number (no type cast)', async () => {
+      await stripeService.createPaymentIntent(12.5, 'usd');
+
+      expect(supabase.functions.invoke).toHaveBeenCalledWith(
+        'payments/create-payment-intent',
+        expect.objectContaining({
+          body: expect.objectContaining({ amountCents: 1250 }),
+        })
+      );
+    });
   });
 
   describe('confirmPayment', () => {
@@ -220,7 +251,7 @@ describe('Stripe Service', () => {
       jest.clearAllMocks();
     });
 
-    it('should handle slow network requests with fetchWithTimeout', async () => {
+    it('should handle slow network requests via invokePayments', async () => {
       // Mock a slow response that takes 20 seconds
       // supabase functions invoke handles timeouts and retries
       (supabase.functions.invoke as jest.Mock).mockImplementation(() =>
@@ -231,7 +262,7 @@ describe('Stripe Service', () => {
 
       const authToken = 'test_token';
 
-      // The method will wait for the network request via fetchWithTimeout
+      // The method will wait for the network request via invokePayments
       const methodsPromise = stripeService.listPaymentMethods(authToken);
       
       // For testing purposes, we'll verify it returns the result when it completes
@@ -332,6 +363,31 @@ describe('Stripe Service', () => {
         .toMatchObject({
           message: expect.stringMatching(/Unable to connect|connect|network/i)
         });
+    });
+
+    it('should fall back to fetch when supabase.functions is unavailable', async () => {
+      // Temporarily override the supabase mock to simulate a stub client without .functions
+      const { supabase: supabaseMock } = require('../../../lib/supabase');
+      const originalFunctions = supabaseMock.functions;
+      supabaseMock.functions = undefined;
+
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify({ paymentMethods: [
+          { id: 'pm_fallback', card: { brand: 'visa', last4: '1234', exp_month: 6, exp_year: 2027 }, created: 0 }
+        ]}),
+      });
+
+      try {
+        const methods = await stripeService.listPaymentMethods('test_token');
+        expect(Array.isArray(methods)).toBe(true);
+        expect(global.fetch).toHaveBeenCalledWith(
+          expect.stringContaining('/payments/methods'),
+          expect.objectContaining({ method: 'GET' })
+        );
+      } finally {
+        supabaseMock.functions = originalFunctions;
+      }
     });
   });
 
