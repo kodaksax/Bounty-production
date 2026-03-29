@@ -95,30 +95,17 @@ async function initSupabase(): Promise<void> {
   }
 
   try {
-    // Derive a project-scoped storage key so sessions from different Supabase
+    // Use PROJECT_STORAGE_KEY as the single source of truth so all auth-related
+    // code shares the same key. This ensures sessions from different Supabase
     // projects (dev / staging / production) never share the same SecureStore
-    // slot.  @supabase/auth-js uses the hardcoded constant
-    // `"supabase.auth.token"` as the default key for ALL projects, which
-    // causes cross-environment JWT contamination when switching environments
-    // in the same simulator/device (the old project's JWT is read back and
-    // sent to the new project's Edge Function, which rejects it with 401
-    // "Invalid JWT").  By passing a URL-specific storageKey we make each
-    // environment fully isolated.
-    const projectRef = (() => {
-      try {
-        return new URL(supabaseUrl).hostname.split('.')[0] || 'default'
-      } catch {
-        return 'default'
-      }
-    })()
-    const projectStorageKey = `supabase.auth.token.${projectRef}`
+    // slot and eliminates cross-environment JWT contamination.
 
     realSupabase = createClient(supabaseUrl, supabaseAnonKey, {
       auth: (() => {
         const isTestEnv = typeof process !== 'undefined' && (process.env.JEST_WORKER_ID !== undefined || process.env.NODE_ENV === 'test');
         return {
           storage: createAuthSessionStorageAdapter(),
-          storageKey: projectStorageKey,
+          storageKey: PROJECT_STORAGE_KEY,
           autoRefreshToken: !isTestEnv,
           persistSession: !isTestEnv,
           detectSessionInUrl: false,

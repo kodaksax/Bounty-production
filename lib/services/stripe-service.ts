@@ -24,28 +24,96 @@ import { performanceService } from './performance-service';
  * React-state propagation lag that can cause a stale JWT to be sent.
  * Both the `Authorization` and `apikey` headers are set automatically by
  * the Supabase JS client.
+ *
+ * When the Supabase client is not fully configured (e.g. in dev/test where a
+ * stub client is used and `.functions` is unavailable), this safely falls
+ * back to the legacy REST path under `${API_BASE_URL}`.
  */
+interface InvokePaymentsOptions {
+  method?: string;
+  body?: Record<string, unknown>;
+  headers?: Record<string, string>;
+}
+
 async function invokePayments<T>(
   subPath: string,
-  options: { method?: string; body?: Record<string, unknown> } = {}
+  options: InvokePaymentsOptions = {}
 ): Promise<T> {
-  const { data, error } = await (supabase as any).functions.invoke(subPath, {
-    method: options.method ?? 'POST',
-    body: options.body,
-  });
-  if (error) {
-    const status: number = (error as any).context?.status ?? 0;
-    let errorMsg = '';
-    try {
-      const parsed: Record<string, unknown> | null =
-        await (error as any).context?.json?.().catch(() => null);
-      errorMsg = ((parsed?.error as string) || (parsed?.message as string)) || String((error as Error).message);
-    } catch {
-      errorMsg = String((error as Error).message);
+  const supabaseClient = supabase as any;
+
+  // Preferred path: Supabase Edge Function invocation when available.
+  if (
+    supabaseClient &&
+    supabaseClient.functions &&
+    typeof supabaseClient.functions.invoke === 'function'
+  ) {
+    const invokeOptions: Record<string, unknown> = {
+      method: options.method ?? 'POST',
+      body: options.body,
+    };
+    if (options.headers) {
+      invokeOptions.headers = options.headers;
     }
-    throw { type: 'api_error', code: String(status), message: `Request failed (${status}): ${errorMsg}` };
+    const { data, error } = await supabaseClient.functions.invoke(subPath, invokeOptions);
+    if (error) {
+      const status: number = (error as any).context?.status ?? 0;
+      let errorMsg = '';
+      try {
+        const parsed: Record<string, unknown> | null =
+          await (error as any).context?.json?.().catch(() => null);
+        errorMsg = ((parsed?.error as string) || (parsed?.message as string)) || String((error as Error).message);
+      } catch {
+        errorMsg = String((error as Error).message);
+      }
+      throw { type: 'api_error', code: String(status), message: `Request failed (${status}): ${errorMsg}` };
+    }
+    return data as T;
   }
-  return data as T;
+
+  // Fallback path: direct HTTP call to legacy API_BASE_URL endpoint.
+  // subPath already includes the 'payments/' prefix (e.g. 'payments/methods'),
+  // so concatenate directly to avoid a duplicate '/payments/' segment.
+  const url = `${API_BASE_URL}/${subPath}`;
+  const method = options.method ?? 'POST';
+  const hasBody = options.body !== undefined;
+  const headers: Record<string, string> = { ...(options.headers ?? {}) };
+  if (hasBody) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  try {
+    const response = await fetch(url, {
+      method,
+      headers,
+      body: hasBody ? JSON.stringify(options.body) : undefined,
+    });
+
+    let parsedBody: any = null;
+    const responseText = await response.text();
+    if (responseText) {
+      try {
+        parsedBody = JSON.parse(responseText);
+      } catch {
+        // Non-JSON response; leave parsedBody as null and use raw text in message.
+      }
+    }
+
+    if (!response.ok) {
+      const status = response.status;
+      const errorMsgFromBody =
+        (parsedBody && (parsedBody.error || parsedBody.message)) || responseText;
+      const errorMsg = errorMsgFromBody ? String(errorMsgFromBody) : `HTTP ${status}`;
+      throw { type: 'api_error', code: String(status), message: `Request failed (${status}): ${errorMsg}` };
+    }
+
+    return parsedBody as T;
+  } catch (err: any) {
+    // Re-throw structured errors from above.
+    if (err && err.type === 'api_error') throw err;
+    // Network-level failure (e.g. offline, DNS).
+    const message = getNetworkErrorMessage(err as Error);
+    throw { type: 'network_error', code: 'NETWORK_ERROR', message };
+  }
 }
 
 export interface StripePaymentMethod {
@@ -319,15 +387,19 @@ class StripeService {
       
       // Call backend Edge Function via supabase.functions.invoke() which always
       // uses the freshest session token from auth.getSession() internally.
+      const invokeOptions: InvokePaymentsOptions = {
+        body: {
+          amountCents: Math.round(amount * 100),
+          currency,
+          metadata: { purpose: 'wallet_deposit' },
+        },
+      };
+      if (authToken) {
+        invokeOptions.headers = { Authorization: `Bearer ${authToken}` };
+      }
       const { clientSecret, paymentIntentId } = await invokePayments<{ clientSecret: string; paymentIntentId: string }>(
         'payments/create-payment-intent',
-        {
-          body: {
-            amountCents: Math.round(amount * 100) as unknown as Record<string, unknown>,
-            currency,
-            metadata: { purpose: 'wallet_deposit' },
-          } as Record<string, unknown>,
-        }
+        invokeOptions
       );
       
       const paymentIntent: StripePaymentIntent = {
@@ -564,8 +636,7 @@ class StripeService {
         return [];
       }
 
-      // Use fetchWithTimeout with retry logic for better reliability
-      // Listing payment methods is a read-only operation, use DEFAULT timeout
+      // Use the payments Edge Function via invokePayments.
       // supabase.functions.invoke() reads the token from auth.getSession() directly
       // (in-memory cache), not from React state — guaranteeing the freshest token.
       const fnData = await invokePayments<{ paymentMethods: unknown[] }>(
