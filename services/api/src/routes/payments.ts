@@ -1,11 +1,13 @@
-import { createClient } from '@supabase/supabase-js';
 import { FastifyInstance } from 'fastify';
 import Stripe from 'stripe';
 import { z } from 'zod';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
 import { getRequestContext, logErrorWithContext } from '../middleware/request-context';
 import * as ConsolidatedWalletService from '../services/consolidated-wallet-service';
-import { getOrCreateStripeCustomer } from '../services/consolidated-payment-service';
+import {
+    getOrCreateStripeCustomer,
+    getStripeCustomerId,
+} from '../services/consolidated-payment-service';
 import {
     checkIdempotencyKey,
     removeIdempotencyKey,
@@ -14,12 +16,20 @@ import {
 import { logger } from '../services/logger';
 import { stripeConnectService } from '../services/stripe-connect-service';
 import { walletService } from '../services/wallet-service';
-import { config } from '../config';
 
 const createPaymentIntentSchema = z.object({
   amountCents: z.number().int().min(100, 'Amount must be at least $1.00 (100 cents)'),
   currency: z.string().toLowerCase().optional().default('usd'),
   metadata: z.record(z.string()).optional(),
+  idempotencyKey: z.string().optional(),
+});
+
+const createEscrowSchema = z.object({
+  bountyId: z.string().min(1, 'bountyId is required'),
+  amountCents: z.number().int().min(100, 'amountCents must be at least 100 (i.e. $1.00)'),
+  posterId: z.string().min(1, 'posterId is required'),
+  hunterId: z.string().min(1, 'hunterId is required'),
+  currency: z.string().toLowerCase().optional().default('usd'),
   idempotencyKey: z.string().optional(),
 });
 
@@ -424,15 +434,8 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
   }, async (request: AuthenticatedRequest, reply) => {
     let idempotencyKey: string | undefined;
     try {
-      const body = request.body as {
-        bountyId: string;
-        amountCents: number;
-        posterId: string;
-        hunterId: string;
-        currency?: string;
-        idempotencyKey?: string;
-      };
-      const { bountyId, amountCents, posterId, hunterId, currency = 'usd' } = body;
+      const body = createEscrowSchema.parse(request.body);
+      const { bountyId, amountCents, posterId, hunterId, currency } = body;
       idempotencyKey = body.idempotencyKey;
 
       if (idempotencyKey) {
@@ -448,15 +451,6 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
 
       if (!request.userId) {
         return reply.code(401).send({ error: 'Unauthorized' });
-      }
-
-      // Validate required fields
-      if (!bountyId || !posterId || !hunterId) {
-        return reply.code(400).send({ error: 'bountyId, posterId, and hunterId are required' });
-      }
-
-      if (!amountCents || amountCents < 100) {
-        return reply.code(400).send({ error: 'amountCents must be at least 100 (i.e. $1.00)' });
       }
 
       // Only the poster can create the escrow for their own bounty
@@ -495,6 +489,13 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
 
       if (idempotencyKey) {
         await removeIdempotencyKey(idempotencyKey);
+      }
+
+      if (error instanceof z.ZodError) {
+        return reply.code(400).send({
+          error: 'Invalid escrow request',
+          details: error.errors.map((e) => e.message),
+        });
       }
 
       if (error.type === 'StripeInvalidRequestError') {
@@ -1036,26 +1037,4 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
       return reply.code(400).send({ error: errorMessage });
     }
   });
-}
-
-// Helper functions
-
-/**
- * Look up the Stripe customer ID stored in the profiles table.
- * Returns null if the user does not have a customer ID yet.
- */
-async function getStripeCustomerId(userId: string): Promise<string | null> {
-  const admin = createClient<any>(
-    config.supabase.url,
-    config.supabase.serviceRoleKey,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
-
-  const { data: profile } = await admin
-    .from('profiles')
-    .select('stripe_customer_id')
-    .eq('id', userId)
-    .maybeSingle();
-
-  return profile?.stripe_customer_id ?? null;
 }

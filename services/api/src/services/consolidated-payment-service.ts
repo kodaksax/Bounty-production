@@ -22,11 +22,30 @@ import { logger } from './logger';
 const buildStripeRequestOptions = (idempotencyKey?: string): Stripe.RequestOptions =>
   idempotencyKey ? { idempotencyKey } : {};
 
-// Initialize Stripe
-const stripe = new Stripe(config.stripe.secretKey, {
-  // Align with repository-wide pinned Stripe API version
-  apiVersion: '2026-02-25.clover',
-  typescript: true,
+// Lazily-initialise the Stripe singleton so that importing this module does NOT
+// require STRIPE_SECRET_KEY to be present at module-load time.  This lets the
+// payments route register 501 fallbacks when the key is absent without crashing.
+let _stripeInstance: Stripe | null = null;
+
+function getStripeInstance(): Stripe {
+  if (!_stripeInstance) {
+    const key = config.stripe.secretKey; // throws if missing – intentional at call-time
+    _stripeInstance = new Stripe(key, {
+      apiVersion: '2026-02-25.clover',
+      typescript: true,
+    });
+  }
+  return _stripeInstance;
+}
+
+// Proxy so existing `stripe.xyz()` call sites continue working without changes.
+// The Stripe SDK is NOT initialised until the first method call.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const stripe: Stripe = new Proxy({} as Stripe, {
+  get(_target, prop: string | symbol) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (getStripeInstance() as any)[prop];
+  },
 });
 
 // Initialize Supabase admin client
@@ -91,6 +110,10 @@ export interface PaymentMethodResult {
  * Get or create Stripe customer for user
  * Reads/writes stripe_customer_id from the profiles table.
  * This is the DB-backed implementation; use this instead of any in-memory cache.
+ *
+ * Email is included when available but is NOT required – Stripe supports
+ * creating customers without one, and the profile trigger only stores
+ * id/username/balance (not email).
  */
 export async function getOrCreateStripeCustomer(
   userId: string,
@@ -116,15 +139,14 @@ export async function getOrCreateStripeCustomer(
     return profile.stripe_customer_id;
   }
   
-  // Create new Stripe customer
-  const customerEmail = email || profile?.email;
-  if (!customerEmail) {
-    throw new ValidationError('Email required to create Stripe customer');
-  }
+  // Resolve email: prefer explicit arg, then profile column (may be NULL)
+  const customerEmail = email || profile?.email || undefined;
   
   try {
     const customer = await stripe.customers.create({
-      email: customerEmail,
+      // Only include email when we actually have one – Stripe supports
+      // metadata-only customers and profiles.email is not always populated.
+      ...(customerEmail ? { email: customerEmail } : {}),
       metadata: { user_id: userId },
     });
     
@@ -136,13 +158,39 @@ export async function getOrCreateStripeCustomer(
     
     if (updateError) {
       // Log error but don't fail - customer was created successfully
-      logger.warn('[PaymentService] Failed to save customer ID to profile:', { error: updateError });
+      logger.warn(
+        { error: updateError },
+        '[PaymentService] Failed to save customer ID to profile'
+      );
     }
     
     return customer.id;
   } catch (error) {
     throw handleStripeError(error);
   }
+}
+
+/**
+ * Look up the Stripe customer ID stored in the profiles table.
+ * Returns null if the user does not have a customer ID yet.
+ * Uses the shared Supabase admin singleton and surfaces DB errors.
+ */
+export async function getStripeCustomerId(userId: string): Promise<string | null> {
+  const admin = getSupabaseAdmin();
+
+  const { data: profile, error } = await admin
+    .from('profiles')
+    .select('stripe_customer_id')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (error) {
+    throw new ExternalServiceError('Supabase', 'Failed to fetch Stripe customer ID', {
+      error: error.message,
+    });
+  }
+
+  return profile?.stripe_customer_id ?? null;
 }
 
 /**
