@@ -265,9 +265,9 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-    // Also skip when the auth session is marked as stale by the auth context
-    // (see useAuthContext / auth provider for the authoritative contract) to avoid
-  // avoid redundant calls for repeated token refreshes and debounce slightly.
+  // Also skip when the auth session is marked as stale by the auth context
+  // (see useAuthContext / auth provider for the authoritative contract) to avoid
+  // redundant calls for repeated token refreshes and debounce slightly.
   useEffect(() => {
     const currentToken = session?.access_token || null;
 
@@ -276,6 +276,20 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
     // Also skip when the session is stale (network/refresh failures) to avoid
     // sending an expired or wrong-project token to the edge function.
     if (!isInitialized || !currentToken || isAuthLoading || isAuthStale) return;
+
+    // Skip if the JWT token is already expired — the auth provider will refresh
+    // it and the TOKEN_REFRESHED event will update session.access_token, which
+    // triggers this effect again with a valid token.  This prevents the 401
+    // "Invalid JWT" warning that occurs when a cached expired token is loaded
+    // from storage before the automatic refresh completes.
+    try {
+      const [, payload] = currentToken.split('.');
+      const { exp } = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+      if (typeof exp === 'number' && exp * 1000 < Date.now()) return;
+    } catch {
+      // Malformed JWT — skip and wait for auth refresh
+      return;
+    }
 
     // Skip if we've already loaded payment methods for this token
     if (lastLoadedAccessTokenRef.current === currentToken) return;
