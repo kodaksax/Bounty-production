@@ -8,7 +8,9 @@
 BOUNTYExpo makes it **fast and safe** to post small jobs ("bounties"), get matched with a hunter, coordinate in-app, and settle payment via an escrow flow. Designed for trust, speed, and clarity.
 
 ## 🌱 Status
-Early development / scaffolding. Core navigation + initial domain modeling in progress. Short-term focus: posting flow polish, chat stability, wallet (mock) interactions.
+**External Beta** — Core flows (Create, Match, Chat, Complete, Settle) are feature-complete and stable. The app is now open to external beta testers. See [BETA_GUIDE.md](docs/BETA_GUIDE.md) for testing instructions and [KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) for documented limitations.
+
+> 📣 **Beta testers**: Please report bugs and feedback via [GitHub Issues](https://github.com/kodaksax/Bounty-production/issues/new/choose). Check the [Beta Guide](docs/BETA_GUIDE.md) to get started.
 
 ## 📱 Core User Flows (Happy Paths)
 1. Create Bounty: Poster enters title, description, amount (or marks as honor), optional location → bounty appears in Postings feed.
