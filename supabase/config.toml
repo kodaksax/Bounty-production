@@ -93,4 +93,8 @@ double_confirm_changes = true
 enable_confirmations = false
 
 [functions]
-verify_jwt = true
+
+[functions.verify_jwt]
+enabled = true
+# issuer = "https://<project-ref>.supabase.co/auth/v1"
+# audience = "authenticated"
