@@ -1,9 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { getNetworkErrorMessage } from './utils/network-connectivity';
-import { logger } from './utils/error-logger';
-import { CreatePaymentMethodData, StripePaymentMethod, StripeSetupIntent, stripeService } from './services/stripe-service';
 import { useAuthContext } from '../hooks/use-auth-context';
 import { CreatePaymentMethodData, StripePaymentMethod, StripeSetupIntent, stripeService } from './services/stripe-service';
+import { logger } from './utils/error-logger';
 import { getNetworkErrorMessage } from './utils/network-connectivity';
 
 interface StripeContextType {
