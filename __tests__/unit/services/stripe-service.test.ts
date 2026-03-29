@@ -286,6 +286,25 @@ describe('Stripe Service', () => {
       expect(fetchWithTimeout).not.toHaveBeenCalled();
     });
 
+    it('should pass Authorization header when auth token is provided', async () => {
+      (fetchWithTimeout as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ paymentMethods: [] }),
+      });
+
+      const authToken = 'test_bearer_token';
+      await stripeService.listPaymentMethods(authToken);
+
+      expect(fetchWithTimeout).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: `Bearer ${authToken}`,
+          }),
+        })
+      );
+    });
+
     it('should handle API errors correctly', async () => {
       (fetchWithTimeout as jest.Mock).mockResolvedValue({
         ok: false,
