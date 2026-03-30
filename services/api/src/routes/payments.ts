@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import Stripe from 'stripe';
 import { z } from 'zod';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
+import { toJsonSchema } from '../utils/zod-json';
 import { getRequestContext, logErrorWithContext } from '../middleware/request-context';
 import * as ConsolidatedWalletService from '../services/consolidated-wallet-service';
 import {
@@ -421,7 +422,19 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
    * Uses manual capture to hold funds until bounty completion
    */
   fastify.post('/payments/escrows', {
-    preHandler: authMiddleware
+    preHandler: authMiddleware,
+    schema: {
+      body: toJsonSchema(createEscrowSchema, 'CreateEscrowBody'),
+      response: {
+        400: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+            details: { type: 'array', items: { type: 'string' } },
+          },
+        },
+      },
+    },
   }, async (request: AuthenticatedRequest, reply) => {
     let idempotencyKey: string | undefined;
     try {
