@@ -10,12 +10,13 @@ import { createClient } from '@supabase/supabase-js';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { config } from '../config';
 import {
-  ExternalServiceError,
-  ValidationError,
+    ExternalServiceError,
+    ValidationError,
 } from '../middleware/error-handler';
 import { stripe } from '../services/consolidated-payment-service';
 import * as WalletService from '../services/consolidated-wallet-service';
 import { logger } from '../services/logger';
+import { notificationService } from '../services/notification-service';
 
 // Extend FastifyRequest to include rawBody for webhook signature verification
 declare module 'fastify' {
@@ -672,33 +673,91 @@ async function handleAccountUpdated(event: Stripe.Event): Promise<void> {
 
 /**
  * Handle payout.paid event
- * Informational only - funds have been paid to connected account's bank
+ * Notifies the hunter that their payout has been successfully sent to their bank.
  */
 async function handlePayoutPaid(event: Stripe.Event): Promise<void> {
   const payout = event.data.object as Stripe.Payout;
+  const accountId = (event as any).account as string | undefined;
 
   logger.info({
     payoutId: payout.id,
     amount: payout.amount / 100,
     destination: payout.destination,
+    accountId,
   }, 'Payout paid to bank account');
+
+  if (!accountId) {
+    logger.warn({ payoutId: payout.id }, 'payout.paid event missing account ID, skipping notification');
+    return;
+  }
+
+  const admin = getSupabaseAdmin();
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('id')
+    .eq('stripe_connect_account_id', accountId)
+    .maybeSingle();
+
+  if (!profile) {
+    logger.warn({ accountId }, 'No profile found for payout account, skipping notification');
+    return;
+  }
+
+  await notificationService.createNotification({
+    userId: profile.id,
+    type: 'payment',
+    title: 'Payout Successful',
+    body: `Your payout of $${(payout.amount / 100).toFixed(2)} has been processed and sent to your bank account.`,
+    data: { payoutId: payout.id },
+  });
 }
 
 /**
  * Handle payout.failed event
- * Logs failure for support follow-up
+ * Notifies the hunter that their payout failed and flags the event for follow-up.
  */
 async function handlePayoutFailed(event: Stripe.Event): Promise<void> {
   const payout = event.data.object as Stripe.Payout;
+  const accountId = (event as any).account as string | undefined;
 
   logger.error({
     payoutId: payout.id,
     amount: payout.amount / 100,
     failureCode: payout.failure_code,
     failureMessage: payout.failure_message,
+    accountId,
   }, 'Payout failed');
 
-  // TODO: Notify user and support about failed payout
+  if (!accountId) {
+    logger.warn({ payoutId: payout.id }, 'payout.failed event missing account ID, skipping notification');
+    return;
+  }
+
+  const admin = getSupabaseAdmin();
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('id')
+    .eq('stripe_connect_account_id', accountId)
+    .maybeSingle();
+
+  if (!profile) {
+    logger.warn({ accountId }, 'No profile found for payout account, skipping notification');
+    return;
+  }
+
+  await notificationService.createNotification({
+    userId: profile.id,
+    type: 'payment',
+    title: 'Payout Failed',
+    body: `Your payout of $${(payout.amount / 100).toFixed(2)} could not be processed. ${payout.failure_message || payout.failure_code || 'Please update your bank account details.'}`,
+    data: { payoutId: payout.id, failureCode: payout.failure_code, failureMessage: payout.failure_message },
+  });
+
+  // Flag the profile so support can follow up
+  await admin
+    .from('profiles')
+    .update({ payout_failed_at: new Date().toISOString() })
+    .eq('id', profile.id);
 }
 
 /**
