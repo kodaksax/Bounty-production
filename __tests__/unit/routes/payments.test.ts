@@ -53,6 +53,12 @@ jest.mock('../../../services/api/src/services/idempotency-service', () => ({
 }));
 
 // Mock Supabase admin client used by webhook handlers
+// Mock Notification service
+const mockCreateNotification = jest.fn();
+jest.mock('../../../services/api/src/services/notification-service', () => ({
+  notificationService: { createNotification: mockCreateNotification },
+}));
+
 const adminData: any = {
   // Filled by tests as needed
   originalTx: null,
@@ -78,34 +84,8 @@ jest.mock('@supabase/supabase-js', () => ({
             ctx._eq = ctx._eq || [];
             ctx._eq.push([col, val]);
 
-            return {
-              eq(col2: string, val2: any) {
-                ctx._eq.push([col2, val2]);
-                // If selecting metadata refunds list, return processedRefunds
-                if (table === 'wallet_transactions' && ctx._select === 'metadata' && ctx._eq?.some((e: any) => e[0] === 'stripe_charge_id')) {
-                  return Promise.resolve({ data: adminData.processedRefunds });
-                }
-                return obj;
-              },
-              in(field: string, vals: any[]) {
-                ctx._in = [field, vals];
-                return {
-                  maybeSingle: async () => {
-                    if (table === 'wallet_transactions' && ctx._eq?.some((e: any) => e[0] === 'stripe_payment_intent_id')) {
-                      return { data: adminData.originalTx, error: adminData.txFetchError };
-                    }
-                    return { data: null };
-                  }
-                };
-              },
-              then(resolve: any) {
-                if (table === 'wallet_transactions' && ctx._select === 'metadata' && ctx._eq?.some((e: any) => e[0] === 'stripe_charge_id') && ctx._eq?.some((e: any) => e[0] === 'type')) {
-                  resolve({ data: adminData.processedRefunds });
-                } else {
-                  resolve({ data: null });
-                }
-              }
-            };
+            // Return the chainable query object so callers can call .maybeSingle() directly
+            return obj;
           },
           in(field: string, vals: any[]) {
             ctx._in = [field, vals];
@@ -118,7 +98,24 @@ jest.mock('@supabase/supabase-js', () => ({
               }
             };
           },
-          maybeSingle: async () => ({ data: adminData.originalTx, error: adminData.txFetchError }),
+          maybeSingle: async () => {
+            // If fetching processed refund metadata for a charge
+            if (table === 'wallet_transactions' && ctx._select === 'metadata' && ctx._eq?.some((e: any) => e[0] === 'stripe_charge_id')) {
+              return { data: adminData.processedRefunds };
+            }
+
+            // If fetching original transaction by payment intent
+            if (table === 'wallet_transactions' && ctx._eq?.some((e: any) => e[0] === 'stripe_payment_intent_id')) {
+              return { data: adminData.originalTx, error: adminData.txFetchError };
+            }
+
+            // Profiles lookup uses the same maybeSingle path in tests; return adminData.originalTx when appropriate
+            if (table === 'profiles') {
+              return { data: adminData.originalTx, error: adminData.txFetchError };
+            }
+
+            return { data: null };
+          },
           upsert: async () => ({ error: adminData.upsertError }),
           insert: async () => ({ error: adminData.insertError }),
           update: (_obj: any) => ({
@@ -343,5 +340,85 @@ describe('payments routes (confirm + webhook deposit)', () => {
     expect(result).toEqual({ received: true });
     // Refund amount is 200 cents => $2.00; updateBalance receives negative dollars
     expect(mockUpdateBalance).toHaveBeenCalledWith('user_123', -2);
+  });
+
+  it('POST /payments/webhook: handles account.updated and syncs profile and sends notification when requirements changed', async () => {
+    const fastify = new MockFastify();
+
+    const account = {
+      id: 'acct_test_777',
+      charges_enabled: true,
+      payouts_enabled: true,
+      details_submitted: true,
+      requirements: { currently_due: ['id_document'] },
+    };
+
+    const profile = {
+      id: 'profile_user_1',
+      stripe_connect_onboarded_at: null,
+      stripe_connect_requirements: { currently_due: [] },
+    };
+
+    // Preserve previous admin mock and set profile for this test
+    const prevOriginal = adminData.originalTx;
+    adminData.originalTx = profile;
+    adminData.updateError = null;
+
+    mockStripeInstance.webhooks.constructEvent.mockImplementation((body: any) => JSON.parse(body));
+
+    const event = {
+      id: 'evt_account_1',
+      type: 'account.updated',
+      data: { object: account },
+    };
+
+    const { notificationService } = require('../../../services/api/src/services/notification-service');
+
+    await registerPaymentRoutes(fastify as any);
+
+    const handler = fastify.routes['/payments/webhook'];
+    const req: any = { headers: { 'stripe-signature': 'sig' }, rawBody: JSON.stringify(event) };
+
+    const result = await handler(req, {});
+
+    expect(result).toEqual({ received: true });
+    expect(notificationService.createNotification).toHaveBeenCalledWith(expect.objectContaining({
+      userId: profile.id,
+      type: 'payment',
+      data: { currentlyDue: account.requirements.currently_due, accountId: account.id },
+    }));
+
+    // Restore admin mock
+    adminData.originalTx = prevOriginal;
+  });
+
+  it('POST /payments/webhook: handles account.updated with no profile found', async () => {
+    const fastify = new MockFastify();
+
+    const account = {
+      id: 'acct_no_profile',
+      charges_enabled: false,
+      payouts_enabled: false,
+      details_submitted: false,
+      requirements: { currently_due: [] },
+    };
+
+    mockStripeInstance.webhooks.constructEvent.mockImplementation((body: any) => JSON.parse(body));
+
+    // Ensure no profile found
+    const prevOriginal = adminData.originalTx;
+    adminData.originalTx = null;
+
+    const event = { id: 'evt_account_2', type: 'account.updated', data: { object: account } };
+
+    await registerPaymentRoutes(fastify as any);
+
+    const handler = fastify.routes['/payments/webhook'];
+    const req: any = { headers: { 'stripe-signature': 'sig' }, rawBody: JSON.stringify(event) };
+
+    const result = await handler(req, {});
+    expect(result).toEqual({ received: true });
+
+    adminData.originalTx = prevOriginal;
   });
 });
