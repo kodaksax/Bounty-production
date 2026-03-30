@@ -45,6 +45,10 @@ jest.mock('stripe', () => {
 
 jest.mock('../../../services/api/src/services/logger', () => ({ logger: { info: jest.fn(), error: jest.fn(), warn: jest.fn() } }));
 
+jest.mock('../../../services/api/src/services/notification-service', () => ({
+  notificationService: { createNotification: jest.fn(async () => {}) },
+}));
+
 // Minimal mock idempotency service used by the route
 jest.mock('../../../services/api/src/services/idempotency-service', () => ({
   checkIdempotencyKey: jest.fn(async () => false),
@@ -86,6 +90,15 @@ jest.mock('@supabase/supabase-js', () => ({
                   return Promise.resolve({ data: adminData.processedRefunds });
                 }
                 return obj;
+              },
+              maybeSingle: async () => {
+                if (table === 'wallet_transactions' && ctx._eq?.some((e: any) => e[0] === 'stripe_payment_intent_id')) {
+                  return { data: adminData.originalTx, error: adminData.txFetchError };
+                }
+                if (table === 'profiles') {
+                  return { data: adminData.originalTx, error: adminData.txFetchError };
+                }
+                return { data: null };
               },
               in(field: string, vals: any[]) {
                 ctx._in = [field, vals];
@@ -343,5 +356,69 @@ describe('payments routes (confirm + webhook deposit)', () => {
     expect(result).toEqual({ received: true });
     // Refund amount is 200 cents => $2.00; updateBalance receives negative dollars
     expect(mockUpdateBalance).toHaveBeenCalledWith('user_123', -2);
+  });
+
+  it('POST /payments/webhook: handles payout.paid and sends notification', async () => {
+    const fastify = new MockFastify();
+
+    const event: any = {
+      id: 'evt_payout_paid_1',
+      type: 'payout.paid',
+      data: { object: { id: 'po_1', amount: 2500 } },
+      account: 'acct_connect_1',
+    };
+
+    mockStripeInstance.webhooks.constructEvent.mockImplementation((body: any) => JSON.parse(body));
+
+    // Make profile lookup return a profile id
+    adminData.originalTx = { id: 'profile_abc' };
+    adminData.txFetchError = null;
+
+    await registerPaymentRoutes(fastify as any);
+
+    const handler = fastify.routes['/payments/webhook'];
+    const req: any = { headers: { 'stripe-signature': 'sig' }, rawBody: JSON.stringify(event) };
+
+    const result = await handler(req, {});
+
+    expect(result).toEqual({ received: true });
+    const notif = require('../../../services/api/src/services/notification-service').notificationService;
+    expect(notif.createNotification).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'profile_abc',
+      type: 'payment',
+      title: expect.stringContaining('Payout Successful'),
+    }));
+  });
+
+  it('POST /payments/webhook: handles payout.failed and notifies & flags account', async () => {
+    const fastify = new MockFastify();
+
+    const event: any = {
+      id: 'evt_payout_failed_1',
+      type: 'payout.failed',
+      data: { object: { id: 'po_fail_1', amount: 4000, failure_code: 'acct_invalid', failure_message: 'Bank account invalid' } },
+      account: 'acct_connect_2',
+    };
+
+    mockStripeInstance.webhooks.constructEvent.mockImplementation((body: any) => JSON.parse(body));
+
+    adminData.originalTx = { id: 'profile_def' };
+    adminData.txFetchError = null;
+    adminData.updateError = null;
+
+    await registerPaymentRoutes(fastify as any);
+
+    const handler = fastify.routes['/payments/webhook'];
+    const req: any = { headers: { 'stripe-signature': 'sig' }, rawBody: JSON.stringify(event) };
+
+    const result = await handler(req, {});
+
+    expect(result).toEqual({ received: true });
+    const notif = require('../../../services/api/src/services/notification-service').notificationService;
+    expect(notif.createNotification).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'profile_def',
+      type: 'payment',
+      title: expect.stringContaining('Payout Failed'),
+    }));
   });
 });
