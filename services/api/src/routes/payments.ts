@@ -4,15 +4,15 @@ import Stripe from 'stripe';
 import { z } from 'zod';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
 import { getRequestContext, logErrorWithContext } from '../middleware/request-context';
+import {
+  getOrCreateStripeCustomer,
+  getStripeCustomerId,
+} from '../services/consolidated-payment-service';
 import * as ConsolidatedWalletService from '../services/consolidated-wallet-service';
 import {
-    getOrCreateStripeCustomer,
-    getStripeCustomerId,
-} from '../services/consolidated-payment-service';
-import {
-    checkIdempotencyKey,
-    removeIdempotencyKey,
-    storeIdempotencyKey
+  checkIdempotencyKey,
+  removeIdempotencyKey,
+  storeIdempotencyKey
 } from '../services/idempotency-service';
 import { logger } from '../services/logger';
 import { stripeConnectService } from '../services/stripe-connect-service';
@@ -939,6 +939,9 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
             break;
           }
 
+          // Track if any refund processing failed so we can avoid marking webhook processed
+          let anyRefundFailed = false;
+
           // Process each refund that hasn't been recorded yet
           // Pre-fetch all processed refund IDs for this charge in one query
           const { data: processedRefunds } = await admin
@@ -986,6 +989,8 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
             if (insertError) {
               logger.error({ err: insertError.message, refundId: refund.id, chargeId: charge.id },
                 '[payments] Failed to insert refund transaction — skipping balance update for this refund');
+              // Mark that a refund failed so we don't mark the webhook event processed
+              anyRefundFailed = true;
               continue;
             }
 
@@ -995,6 +1000,8 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
             } catch (balanceErr: any) {
               logger.error({ err: balanceErr?.message, refundId: refund.id, userId: originalTx.user_id },
                 '[payments] Failed to update balance after inserting refund — ledger and balance may be inconsistent');
+              // Mark that a refund failed so we don't mark the webhook event processed
+              anyRefundFailed = true;
               // Continue processing remaining refunds; inconsistency will need manual reconciliation
               continue;
             }
@@ -1005,6 +1012,15 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
               userId: originalTx.user_id,
               amount: refundAmountDollars,
             }, '[payments] Refund recorded and balance updated');
+          }
+
+          // If any individual refund failed to insert or update balance, throw so
+          // the webhook handler does not mark the event as processed. This allows
+          // Stripe to retry the webhook and ensures idempotent processing can
+          // complete the remaining work (or manual reconciliation can be triggered).
+          if (anyRefundFailed) {
+            logger.error({ chargeId: charge.id }, '[payments] One or more refunds failed to process; aborting to allow webhook retry');
+            throw new Error(`Partial refund processing failure for charge ${charge.id}`);
           }
           break;
         }
