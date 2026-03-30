@@ -88,48 +88,8 @@ jest.mock('@supabase/supabase-js', () => ({
             ctx._eq = ctx._eq || [];
             ctx._eq.push([col, val]);
 
-<<<<<<< copilot/implement-payout-webhook-handlers
-            return {
-              eq(col2: string, val2: any) {
-                ctx._eq.push([col2, val2]);
-                // If selecting metadata refunds list, return processedRefunds
-                if (table === 'wallet_transactions' && ctx._select === 'metadata' && ctx._eq?.some((e: any) => e[0] === 'stripe_charge_id')) {
-                  return Promise.resolve({ data: adminData.processedRefunds });
-                }
-                return obj;
-              },
-              maybeSingle: async () => {
-                if (table === 'wallet_transactions' && ctx._eq?.some((e: any) => e[0] === 'stripe_payment_intent_id')) {
-                  return { data: adminData.originalTx, error: adminData.txFetchError };
-                }
-                if (table === 'profiles') {
-                  return { data: adminData.originalTx, error: adminData.txFetchError };
-                }
-                return { data: null };
-              },
-              in(field: string, vals: any[]) {
-                ctx._in = [field, vals];
-                return {
-                  maybeSingle: async () => {
-                    if (table === 'wallet_transactions' && ctx._eq?.some((e: any) => e[0] === 'stripe_payment_intent_id')) {
-                      return { data: adminData.originalTx, error: adminData.txFetchError };
-                    }
-                    return { data: null };
-                  }
-                };
-              },
-              then(resolve: any) {
-                if (table === 'wallet_transactions' && ctx._select === 'metadata' && ctx._eq?.some((e: any) => e[0] === 'stripe_charge_id') && ctx._eq?.some((e: any) => e[0] === 'type')) {
-                  resolve({ data: adminData.processedRefunds });
-                } else {
-                  resolve({ data: null });
-                }
-              }
-            };
-=======
             // Return the chainable query object so callers can call .maybeSingle() directly
             return obj;
->>>>>>> main
           },
           in(field: string, vals: any[]) {
             ctx._in = [field, vals];
@@ -386,7 +346,6 @@ describe('payments routes (confirm + webhook deposit)', () => {
     expect(mockUpdateBalance).toHaveBeenCalledWith('user_123', -2);
   });
 
-<<<<<<< copilot/implement-payout-webhook-handlers
   it('POST /payments/webhook: handles payout.paid and sends notification', async () => {
     const fastify = new MockFastify();
 
@@ -402,7 +361,55 @@ describe('payments routes (confirm + webhook deposit)', () => {
     // Make profile lookup return a profile id
     adminData.originalTx = { id: 'profile_abc' };
     adminData.txFetchError = null;
-=======
+
+    await registerPaymentRoutes(fastify as any);
+
+    const handler = fastify.routes['/payments/webhook'];
+    const req: any = { headers: { 'stripe-signature': 'sig' }, rawBody: JSON.stringify(event) };
+
+    const result = await handler(req, {});
+
+    expect(result).toEqual({ received: true });
+    const notif = require('../../../services/api/src/services/notification-service').notificationService;
+    expect(notif.createNotification).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'profile_abc',
+      type: 'payment',
+      title: expect.stringContaining('Payout Successful'),
+    }));
+  });
+
+  it('POST /payments/webhook: handles payout.failed and notifies & flags account', async () => {
+    const fastify = new MockFastify();
+
+    const event: any = {
+      id: 'evt_payout_failed_1',
+      type: 'payout.failed',
+      data: { object: { id: 'po_fail_1', amount: 4000, failure_code: 'acct_invalid', failure_message: 'Bank account invalid' } },
+      account: 'acct_connect_2',
+    };
+
+    mockStripeInstance.webhooks.constructEvent.mockImplementation((body: any) => JSON.parse(body));
+
+    adminData.originalTx = { id: 'profile_def' };
+    adminData.txFetchError = null;
+    adminData.updateError = null;
+
+    await registerPaymentRoutes(fastify as any);
+
+    const handler = fastify.routes['/payments/webhook'];
+    const req: any = { headers: { 'stripe-signature': 'sig' }, rawBody: JSON.stringify(event) };
+
+    const result = await handler(req, {});
+
+    expect(result).toEqual({ received: true });
+    const notif2 = require('../../../services/api/src/services/notification-service').notificationService;
+    expect(notif2.createNotification).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'profile_def',
+      type: 'payment',
+      title: expect.stringContaining('Payout Failed'),
+    }));
+  });
+
   it('POST /payments/webhook: handles account.updated and syncs profile and sends notification when requirements changed', async () => {
     const fastify = new MockFastify();
 
@@ -420,7 +427,6 @@ describe('payments routes (confirm + webhook deposit)', () => {
       stripe_connect_requirements: { currently_due: [] },
     };
 
-    // Preserve previous admin mock and set profile for this test
     const prevOriginal = adminData.originalTx;
     adminData.originalTx = profile;
     adminData.updateError = null;
@@ -434,7 +440,6 @@ describe('payments routes (confirm + webhook deposit)', () => {
     };
 
     const { notificationService } = require('../../../services/api/src/services/notification-service');
->>>>>>> main
 
     await registerPaymentRoutes(fastify as any);
 
@@ -444,31 +449,12 @@ describe('payments routes (confirm + webhook deposit)', () => {
     const result = await handler(req, {});
 
     expect(result).toEqual({ received: true });
-<<<<<<< copilot/implement-payout-webhook-handlers
-    const notif = require('../../../services/api/src/services/notification-service').notificationService;
-    expect(notif.createNotification).toHaveBeenCalledWith(expect.objectContaining({
-      userId: 'profile_abc',
-      type: 'payment',
-      title: expect.stringContaining('Payout Successful'),
-    }));
-  });
-
-  it('POST /payments/webhook: handles payout.failed and notifies & flags account', async () => {
-    const fastify = new MockFastify();
-
-    const event: any = {
-      id: 'evt_payout_failed_1',
-      type: 'payout.failed',
-      data: { object: { id: 'po_fail_1', amount: 4000, failure_code: 'acct_invalid', failure_message: 'Bank account invalid' } },
-      account: 'acct_connect_2',
-=======
     expect(notificationService.createNotification).toHaveBeenCalledWith(expect.objectContaining({
       userId: profile.id,
       type: 'payment',
       data: { currentlyDue: account.requirements.currently_due, accountId: account.id },
     }));
 
-    // Restore admin mock
     adminData.originalTx = prevOriginal;
   });
 
@@ -481,22 +467,14 @@ describe('payments routes (confirm + webhook deposit)', () => {
       payouts_enabled: false,
       details_submitted: false,
       requirements: { currently_due: [] },
->>>>>>> main
     };
 
     mockStripeInstance.webhooks.constructEvent.mockImplementation((body: any) => JSON.parse(body));
 
-<<<<<<< copilot/implement-payout-webhook-handlers
-    adminData.originalTx = { id: 'profile_def' };
-    adminData.txFetchError = null;
-    adminData.updateError = null;
-=======
-    // Ensure no profile found
     const prevOriginal = adminData.originalTx;
     adminData.originalTx = null;
 
     const event = { id: 'evt_account_2', type: 'account.updated', data: { object: account } };
->>>>>>> main
 
     await registerPaymentRoutes(fastify as any);
 
@@ -504,19 +482,8 @@ describe('payments routes (confirm + webhook deposit)', () => {
     const req: any = { headers: { 'stripe-signature': 'sig' }, rawBody: JSON.stringify(event) };
 
     const result = await handler(req, {});
-<<<<<<< copilot/implement-payout-webhook-handlers
-
-    expect(result).toEqual({ received: true });
-    const notif = require('../../../services/api/src/services/notification-service').notificationService;
-    expect(notif.createNotification).toHaveBeenCalledWith(expect.objectContaining({
-      userId: 'profile_def',
-      type: 'payment',
-      title: expect.stringContaining('Payout Failed'),
-    }));
-=======
     expect(result).toEqual({ received: true });
 
     adminData.originalTx = prevOriginal;
->>>>>>> main
   });
 });
