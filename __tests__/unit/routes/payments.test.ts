@@ -6,10 +6,12 @@ export { };
 // Mocks and helpers follow the project's existing test style
 const mockCreateDeposit = jest.fn();
 const mockGetTxByPI = jest.fn();
+const mockUpdateBalance = jest.fn();
 
 jest.mock('../../../services/api/src/services/consolidated-wallet-service', () => ({
   createDeposit: (...args: any[]) => mockCreateDeposit(...args),
   getTransactionByPaymentIntent: (...args: any[]) => mockGetTxByPI(...args),
+  updateBalance: (...args: any[]) => mockUpdateBalance(...args),
 }));
 
 // Mock auth middleware to avoid Supabase dependency in unit tests
@@ -23,6 +25,13 @@ jest.mock('../../../services/api/src/middleware/auth', () => ({
 const mockStripeInstance = {
   paymentIntents: {
     retrieve: jest.fn(),
+    capture: jest.fn(),
+  },
+  paymentMethods: {
+    retrieve: jest.fn(),
+  },
+  transfers: {
+    create: jest.fn(),
   },
   webhooks: {
     constructEvent: jest.fn((body: any) => JSON.parse(body)),
@@ -41,6 +50,88 @@ jest.mock('../../../services/api/src/services/idempotency-service', () => ({
   checkIdempotencyKey: jest.fn(async () => false),
   storeIdempotencyKey: jest.fn(async () => {}),
   removeIdempotencyKey: jest.fn(async () => {}),
+}));
+
+// Mock Supabase admin client used by webhook handlers
+const adminData: any = {
+  // Filled by tests as needed
+  originalTx: null,
+  txFetchError: null,
+  processedRefunds: [],
+  upsertError: null,
+  insertError: null,
+  updateError: null,
+};
+
+jest.mock('@supabase/supabase-js', () => ({
+  createClient: () => ({
+    from: (table: string) => {
+      return (() => {
+        const ctx: any = { _select: undefined, _eq: undefined, _in: undefined };
+
+        const obj: any = {
+          select(selectStr?: string) {
+            ctx._select = selectStr;
+            return obj;
+          },
+          eq(col: string, val: any) {
+            ctx._eq = ctx._eq || [];
+            ctx._eq.push([col, val]);
+
+            return {
+              eq(col2: string, val2: any) {
+                ctx._eq.push([col2, val2]);
+                // If selecting metadata refunds list, return processedRefunds
+                if (table === 'wallet_transactions' && ctx._select === 'metadata' && ctx._eq?.some((e: any) => e[0] === 'stripe_charge_id')) {
+                  return Promise.resolve({ data: adminData.processedRefunds });
+                }
+                return obj;
+              },
+              in(field: string, vals: any[]) {
+                ctx._in = [field, vals];
+                return {
+                  maybeSingle: async () => {
+                    if (table === 'wallet_transactions' && ctx._eq?.some((e: any) => e[0] === 'stripe_payment_intent_id')) {
+                      return { data: adminData.originalTx, error: adminData.txFetchError };
+                    }
+                    return { data: null };
+                  }
+                };
+              },
+              then(resolve: any) {
+                if (table === 'wallet_transactions' && ctx._select === 'metadata' && ctx._eq?.some((e: any) => e[0] === 'stripe_charge_id') && ctx._eq?.some((e: any) => e[0] === 'type')) {
+                  resolve({ data: adminData.processedRefunds });
+                } else {
+                  resolve({ data: null });
+                }
+              }
+            };
+          },
+          in(field: string, vals: any[]) {
+            ctx._in = [field, vals];
+            return {
+              maybeSingle: async () => {
+                if (table === 'wallet_transactions' && ctx._eq?.some((e: any) => e[0] === 'stripe_payment_intent_id')) {
+                  return { data: adminData.originalTx, error: adminData.txFetchError };
+                }
+                return { data: null };
+              }
+            };
+          },
+          maybeSingle: async () => ({ data: adminData.originalTx, error: adminData.txFetchError }),
+          upsert: async () => ({ error: adminData.upsertError }),
+          insert: async () => ({ error: adminData.insertError }),
+          update: (_obj: any) => ({
+            eq: (_col: string, _val: any) => ({
+              eq: (_col2: string, _val2: any) => Promise.resolve({ error: adminData.updateError }),
+            }),
+          }),
+        };
+
+        return obj;
+      })();
+    }
+  })
 }));
 
 // Ensure auth middleware uses test path (no supabase env) and will populate request.userId
@@ -180,5 +271,77 @@ describe('payments routes (confirm + webhook deposit)', () => {
 
     expect(result).toEqual({ received: true });
     expect(mockGetTxByPI).toHaveBeenCalledWith('pi_w_1');
+  });
+
+  it('POST /payments/webhook: handles setup_intent.succeeded and saves payment method', async () => {
+    const fastify = new MockFastify();
+
+    const event = {
+      id: 'evt_setup_1',
+      type: 'setup_intent.succeeded',
+      data: {
+        object: {
+          id: 'si_1',
+          metadata: { user_id: 'test-user-id' },
+          payment_method: 'pm_1',
+        }
+      }
+    };
+
+    mockStripeInstance.webhooks.constructEvent.mockImplementation((body: any) => JSON.parse(body));
+    mockStripeInstance.paymentMethods.retrieve.mockResolvedValueOnce({
+      id: 'pm_1',
+      type: 'card',
+      card: { brand: 'visa', last4: '4242', exp_month: 12, exp_year: 2026 }
+    });
+
+    // Ensure Supabase upsert returns no error
+    adminData.upsertError = null;
+
+    await registerPaymentRoutes(fastify as any);
+
+    const handler = fastify.routes['/payments/webhook'];
+    const req: any = { headers: { 'stripe-signature': 'sig' }, rawBody: JSON.stringify(event) };
+
+    const result = await handler(req, {});
+
+    expect(result).toEqual({ received: true });
+    expect(mockStripeInstance.paymentMethods.retrieve).toHaveBeenCalledWith('pm_1');
+  });
+
+  it('POST /payments/webhook: handles charge.refunded and records refund + updates balance', async () => {
+    const fastify = new MockFastify();
+
+    const event = {
+      id: 'evt_refund_1',
+      type: 'charge.refunded',
+      data: {
+        object: {
+          id: 'ch_1',
+          payment_intent: 'pi_ref_1',
+          refunds: { data: [ { id: 're_1', amount: 200, reason: 'requested_by_customer' } ] }
+        }
+      }
+    };
+
+    // Setup admin data for original transaction lookup
+    adminData.originalTx = { id: 'orig_tx_1', user_id: 'user_123', amount: 5, type: 'deposit' };
+    adminData.processedRefunds = [];
+    adminData.insertError = null;
+    adminData.txFetchError = null;
+
+    mockStripeInstance.webhooks.constructEvent.mockImplementation((body: any) => JSON.parse(body));
+    mockUpdateBalance.mockResolvedValueOnce(undefined);
+
+    await registerPaymentRoutes(fastify as any);
+
+    const handler = fastify.routes['/payments/webhook'];
+    const req: any = { headers: { 'stripe-signature': 'sig' }, rawBody: JSON.stringify(event) };
+
+    const result = await handler(req, {});
+
+    expect(result).toEqual({ received: true });
+    // Refund amount is 200 cents => $2.00; updateBalance receives negative dollars
+    expect(mockUpdateBalance).toHaveBeenCalledWith('user_123', -2);
   });
 });
