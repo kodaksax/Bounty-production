@@ -3,22 +3,22 @@ import { FastifyInstance } from 'fastify';
 import Stripe from 'stripe';
 import { z } from 'zod';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
-import { toJsonSchema } from '../utils/zod-json';
 import { getRequestContext, logErrorWithContext } from '../middleware/request-context';
 import {
-  getOrCreateStripeCustomer,
-  getStripeCustomerId,
+    getOrCreateStripeCustomer,
+    getStripeCustomerId,
 } from '../services/consolidated-payment-service';
 import * as ConsolidatedWalletService from '../services/consolidated-wallet-service';
 import {
-  checkIdempotencyKey,
-  removeIdempotencyKey,
-  storeIdempotencyKey
+    checkIdempotencyKey,
+    removeIdempotencyKey,
+    storeIdempotencyKey
 } from '../services/idempotency-service';
 import { logger } from '../services/logger';
 import { notificationService } from '../services/notification-service';
 import { stripeConnectService } from '../services/stripe-connect-service';
 import { walletService } from '../services/wallet-service';
+import { toJsonSchema } from '../utils/zod-json';
 
 // Lazy-initialized Supabase admin client for webhook DB operations
 let _supabaseAdmin: ReturnType<typeof createClient<any>> | null = null;
@@ -1216,6 +1216,7 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
               _flagged_user_id: profile.id,
             };
 
+            const createdTimestamp = event && event.created ? Number(event.created) : Math.floor(Date.now() / 1000);
             const { error: upsertError } = await admin
               .from('stripe_events')
               .upsert({
@@ -1225,7 +1226,7 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
                 processed: false,
                 status: 'pending',
                 retry_count: 0,
-                created_at: new Date(event.created * 1000).toISOString(),
+                created_at: new Date(createdTimestamp * 1000).toISOString(),
               }, { onConflict: 'stripe_event_id', ignoreDuplicates: false });
 
             if (upsertError) {
