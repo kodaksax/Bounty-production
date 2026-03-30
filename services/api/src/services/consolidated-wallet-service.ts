@@ -717,21 +717,16 @@ export async function releaseEscrow(
     });
   }
 
-  // Record platform fee transaction
-  const PLATFORM_ACCOUNT_ID = '00000000-0000-0000-0000-000000000000';
-  await admin.from('wallet_transactions').insert([{
-    user_id: PLATFORM_ACCOUNT_ID,
-    bounty_id: bountyId,
-    type: 'deposit', // Platform fee is a deposit for the platform
+  // Record platform fee in the dedicated platform_ledger table.
+  // This table does not require a user UUID, avoiding ghost/fake user references.
+  await recordPlatformFeeWithClient(admin, {
+    bountyId,
     amount: platformFee,
     description: `Platform fee for bounty ${bountyId}`,
-    status: 'completed',
     metadata: {
-      bounty_id: bountyId,
       source_transaction_id: transaction.id,
-      type: 'platform_fee',
-    }
-  }]);
+    },
+  });
 
   // Add to hunter's balance atomically
   await updateBalance(hunterId, hunterAmount);
@@ -968,6 +963,59 @@ export async function updateBalance(userId: string, amount: number): Promise<voi
   }
 
   // RPC succeeded
+}
+
+// ---------------------------------------------------------------------------
+// Platform ledger helpers
+// ---------------------------------------------------------------------------
+
+interface PlatformFeeInput {
+  bountyId: string;
+  amount: number; // USD dollars (not cents)
+  description?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Internal helper that accepts an already-resolved admin client.
+ * Used when the caller has already obtained the client (e.g. inside releaseEscrow).
+ * NOTE: failures are logged but not thrown — fee recording should never abort a release.
+ */
+async function recordPlatformFeeWithClient(
+  admin: ReturnType<typeof getSupabaseAdmin>,
+  input: PlatformFeeInput
+): Promise<void> {
+  const { error } = await admin.from('platform_ledger').insert([{
+    bounty_id: input.bountyId,
+    amount: input.amount,
+    fee_type: 'platform_fee',
+    description: input.description ?? `Platform fee for bounty ${input.bountyId}`,
+    metadata: input.metadata ?? {},
+  }]);
+
+  if (error) {
+    // Log but do not throw — a fee recording failure should not roll back the hunter payment.
+    // An alert/monitoring job should reconcile any missing platform_ledger rows.
+    logger.error('[wallet] Failed to record platform fee in platform_ledger', {
+      bountyId: input.bountyId,
+      amount: input.amount,
+      error: error.message,
+    });
+  }
+}
+
+/**
+ * Record a platform fee in the dedicated platform_ledger table.
+ * This replaces the previous pattern of writing a fake zero-UUID row into wallet_transactions.
+ *
+ * Platform fee rows are queryable via: SELECT * FROM platform_ledger
+ *
+ * NOTE: This function logs but does NOT throw on insert failure. Callers should treat
+ * fee recording as best-effort and rely on external reconciliation for missing rows.
+ */
+export async function recordPlatformFee(input: PlatformFeeInput): Promise<void> {
+  const admin = getSupabaseAdmin();
+  return recordPlatformFeeWithClient(admin, input);
 }
 
 /**
