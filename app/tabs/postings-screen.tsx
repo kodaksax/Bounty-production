@@ -1203,7 +1203,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
 
         {/* Confirmation Card */}
         {showConfirmationCard && (
-          <View className="fixed inset-0 z-50">
+          <View style={styles.confirmationOverlay}>
             <BountyConfirmationCard
               bountyData={{
                 title: formData.title,
@@ -1245,6 +1245,14 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
 export default PostingsScreen;
 
 const styles = StyleSheet.create({
+  confirmationOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 50,
+  },
   headerBase: {
     position: 'absolute',
     top: -55,
