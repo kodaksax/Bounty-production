@@ -1,21 +1,47 @@
+import { createClient } from '@supabase/supabase-js';
 import { FastifyInstance } from 'fastify';
 import Stripe from 'stripe';
 import { z } from 'zod';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
+import { toJsonSchema } from '../utils/zod-json';
 import { getRequestContext, logErrorWithContext } from '../middleware/request-context';
+import {
+  getOrCreateStripeCustomer,
+  getStripeCustomerId,
+} from '../services/consolidated-payment-service';
 import * as ConsolidatedWalletService from '../services/consolidated-wallet-service';
 import {
-    getOrCreateStripeCustomer,
-    getStripeCustomerId,
-} from '../services/consolidated-payment-service';
-import {
-    checkIdempotencyKey,
-    removeIdempotencyKey,
-    storeIdempotencyKey
+  checkIdempotencyKey,
+  removeIdempotencyKey,
+  storeIdempotencyKey
 } from '../services/idempotency-service';
 import { logger } from '../services/logger';
 import { stripeConnectService } from '../services/stripe-connect-service';
 import { walletService } from '../services/wallet-service';
+
+// Lazy-initialized Supabase admin client for webhook DB operations
+let _supabaseAdmin: ReturnType<typeof createClient<any>> | null = null;
+function getSupabaseAdmin(): ReturnType<typeof createClient<any>> {
+  if (!_supabaseAdmin) {
+    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      logger.error(
+        { hasSupabaseUrl: !!supabaseUrl, hasServiceRoleKey: !!serviceRoleKey },
+        '[payments] Supabase admin client misconfigured: missing SUPABASE URL and/or service role key environment variables',
+      );
+      throw new Error(
+        'Supabase admin client misconfigured: expected EXPO_PUBLIC_SUPABASE_URL or SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_KEY to be set',
+      );
+    }
+
+    _supabaseAdmin = createClient<any>(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+  }
+  return _supabaseAdmin;
+}
 
 const createPaymentIntentSchema = z.object({
   amountCents: z.number().int().min(100, 'Amount must be at least $1.00 (100 cents)'),
@@ -421,7 +447,19 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
    * Uses manual capture to hold funds until bounty completion
    */
   fastify.post('/payments/escrows', {
-    preHandler: authMiddleware
+    preHandler: authMiddleware,
+    schema: {
+      body: toJsonSchema(createEscrowSchema, 'CreateEscrowBody'),
+      response: {
+        400: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+            details: { type: 'array', items: { type: 'string' } },
+          },
+        },
+      },
+    },
   }, async (request: AuthenticatedRequest, reply) => {
     let idempotencyKey: string | undefined;
     try {
@@ -767,9 +805,46 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
 
         case 'payment_intent.payment_failed': {
           const paymentIntent = event.data.object as Stripe.PaymentIntent;
-          logger.warn({ error: paymentIntent.last_payment_error?.message }, `[payments] PaymentIntent ${paymentIntent.id} failed`);
-          // TODO: Notify user of payment failure
-          // TODO: Track failed payment attempts for fraud detection
+          const failureError = paymentIntent.last_payment_error;
+          logger.warn({
+            paymentIntentId: paymentIntent.id,
+            userId: paymentIntent.metadata?.user_id,
+            bountyId: paymentIntent.metadata?.bounty_id,
+            errorCode: failureError?.code,
+            errorMessage: failureError?.message,
+          }, '[payments] PaymentIntent failed');
+
+          // If this is an escrow payment, update the bounty status to reflect the failure
+          const isEscrow = paymentIntent.metadata?.type === 'escrow';
+          const bountyId = paymentIntent.metadata?.bounty_id;
+          if (isEscrow && bountyId) {
+            const admin = getSupabaseAdmin();
+            const { error: updateError } = await admin
+              .from('bounties')
+              .update({ status: 'open', accepted_by: null, hunter_id: null })
+              .eq('id', bountyId)
+              .eq('status', 'in_progress');
+
+            if (updateError) {
+              logger.error({ err: updateError.message, bountyId, paymentIntentId: paymentIntent.id },
+                '[payments] Failed to revert bounty status after escrow payment failure');
+            } else {
+              logger.info({ bountyId, paymentIntentId: paymentIntent.id },
+                '[payments] Reverted bounty status to open after escrow payment failure');
+            }
+          }
+
+          // Log failure for analytics / fraud detection
+          const posterId = paymentIntent.metadata?.poster_id || paymentIntent.metadata?.user_id;
+          if (posterId) {
+            logger.warn({
+              userId: posterId,
+              paymentIntentId: paymentIntent.id,
+              isEscrow,
+              bountyId,
+              errorCode: failureError?.code,
+            }, '[payments] Payment failed — poster should be notified');
+          }
           break;
         }
 
@@ -789,8 +864,51 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
 
         case 'setup_intent.succeeded': {
           const setupIntent = event.data.object as Stripe.SetupIntent;
-          logger.info(`[payments] SetupIntent ${setupIntent.id} succeeded, payment method: ${setupIntent.payment_method}`);
-          // TODO: Update user's payment method status in database
+          const userId = setupIntent.metadata?.user_id;
+          const paymentMethodId = typeof setupIntent.payment_method === 'string'
+            ? setupIntent.payment_method
+            : setupIntent.payment_method?.id;
+
+          logger.info({
+            setupIntentId: setupIntent.id,
+            userId,
+            paymentMethodId,
+          }, '[payments] SetupIntent succeeded — saving payment method');
+
+          if (userId && paymentMethodId) {
+            try {
+              // Retrieve full payment method details from Stripe
+              const pm = await stripe.paymentMethods.retrieve(paymentMethodId);
+              const admin = getSupabaseAdmin();
+
+              // Upsert into payment_methods table so the method is available for future charges
+              const { error: upsertError } = await admin
+                .from('payment_methods')
+                .upsert({
+                  user_id: userId,
+                  stripe_payment_method_id: pm.id,
+                  type: pm.type,
+                  card_brand: pm.card?.brand ?? null,
+                  card_last4: pm.card?.last4 ?? null,
+                  card_exp_month: pm.card?.exp_month ?? null,
+                  card_exp_year: pm.card?.exp_year ?? null,
+                }, { onConflict: 'stripe_payment_method_id' });
+
+              if (upsertError) {
+                logger.error({ err: upsertError.message, userId, paymentMethodId },
+                  '[payments] Failed to upsert payment method after setup_intent.succeeded');
+              } else {
+                logger.info({ userId, paymentMethodId },
+                  '[payments] Payment method saved successfully after SetupIntent succeeded');
+              }
+            } catch (pmErr: any) {
+              logger.error({ err: pmErr?.message, userId, paymentMethodId },
+                '[payments] Error retrieving/saving payment method after setup_intent.succeeded');
+            }
+          } else {
+            logger.warn({ setupIntentId: setupIntent.id, userId, paymentMethodId },
+              '[payments] setup_intent.succeeded missing user_id or payment_method — skipping DB upsert');
+          }
           break;
         }
 
@@ -802,9 +920,132 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
 
         case 'charge.refunded': {
           const charge = event.data.object as Stripe.Charge;
-          logger.info(`[payments] Charge ${charge.id} refunded`);
-          // Record refund in wallet transactions
-          // TODO: Update bounty status if refund is for escrow
+          const paymentIntentId = typeof charge.payment_intent === 'string'
+            ? charge.payment_intent
+            : charge.payment_intent?.id;
+          const refunds = charge.refunds?.data || [];
+
+          logger.info({
+            chargeId: charge.id,
+            paymentIntentId,
+            refundCount: refunds.length,
+          }, '[payments] Charge refunded — recording in ledger');
+
+          if (refunds.length === 0 || !paymentIntentId) {
+            logger.warn({ chargeId: charge.id, paymentIntentId },
+              '[payments] charge.refunded received with no refunds or missing paymentIntentId');
+            break;
+          }
+
+          const admin = getSupabaseAdmin();
+
+          // Find the original transaction that was charged (deposit or escrow release)
+          const { data: originalTx, error: txFetchError } = await admin
+            .from('wallet_transactions')
+            .select('id, user_id, amount, type')
+            .eq('stripe_payment_intent_id', paymentIntentId)
+            .in('type', ['deposit', 'release'])
+            .maybeSingle();
+
+          if (txFetchError || !originalTx) {
+            logger.warn({
+              chargeId: charge.id,
+              paymentIntentId,
+              err: txFetchError?.message,
+            }, '[payments] Could not find original wallet transaction for refund — skipping balance update');
+            break;
+          }
+
+          // Track failed refund IDs for idempotent retry handling
+          // (use `failedRefundIds` below to determine if we should abort)
+
+          // Process each refund that hasn't been recorded yet
+          // Pre-fetch all processed refund IDs for this charge in one query
+          const { data: processedRefunds, error: prefetchError } = await admin
+            .from('wallet_transactions')
+            .select('metadata')
+            .eq('stripe_charge_id', charge.id)
+            .eq('type', 'refund');
+
+          if (prefetchError) {
+            logger.error({ err: prefetchError.message, chargeId: charge.id },
+              '[payments] Failed to fetch existing refund records — aborting to prevent duplicate processing');
+            throw new Error(`Failed to fetch existing refunds for charge ${charge.id}: ${prefetchError.message}`);
+          }
+
+          const processedRefundIds = new Set(
+            (processedRefunds || [])
+              .map((r: any) => r.metadata?.refund_id)
+              .filter(Boolean)
+          );
+
+          const failedRefundIds: string[] = [];
+
+          for (const refund of refunds) {
+            const refundAmountDollars = refund.amount / 100;
+
+            // Idempotency: skip if this refund was already processed
+            if (processedRefundIds.has(refund.id)) {
+              logger.info({ refundId: refund.id },
+                '[payments] Refund already recorded, skipping');
+              continue;
+            }
+
+            // Insert a refund ledger entry (negative amount = debit from wallet balance,
+            // reflecting that the money was returned to the card / outside of app wallet)
+            const { error: insertError } = await admin
+              .from('wallet_transactions')
+              .insert({
+                user_id: originalTx.user_id,
+                type: 'refund',
+                amount: -refundAmountDollars,
+                description: 'Charge refunded',
+                status: 'completed',
+                stripe_charge_id: charge.id,
+                stripe_payment_intent_id: paymentIntentId,
+                metadata: {
+                  refund_id: refund.id,
+                  refund_reason: refund.reason,
+                  original_transaction_id: originalTx.id,
+                  original_transaction_type: originalTx.type,
+                },
+              });
+
+            if (insertError) {
+              logger.error({ err: insertError.message, refundId: refund.id, chargeId: charge.id },
+                '[payments] Failed to insert refund transaction — will retry via Stripe webhook');
+              failedRefundIds.push(refund.id);
+              continue;
+            }
+
+            // Update the user's wallet balance (deduct because money returned to card)
+            try {
+              await ConsolidatedWalletService.updateBalance(originalTx.user_id, -refundAmountDollars);
+            } catch (balanceErr: any) {
+              logger.error({ err: balanceErr?.message, refundId: refund.id, userId: originalTx.user_id },
+                '[payments] Failed to update balance after inserting refund — will retry via Stripe webhook');
+              failedRefundIds.push(refund.id);
+              continue;
+            }
+
+            logger.info({
+              chargeId: charge.id,
+              refundId: refund.id,
+              userId: originalTx.user_id,
+              amount: refundAmountDollars,
+            }, '[payments] Refund recorded and balance updated');
+          }
+
+          // If any individual refund failed to insert or update balance, the
+          // `failedRefundIds` array will be populated; we rely on that below to
+          // determine whether to abort and let Stripe retry the webhook.
+
+          // If any refund failed, throw so Stripe retries and the event is NOT marked processed
+          if (failedRefundIds.length > 0) {
+            throw new Error(
+              `[payments] Failed to process ${failedRefundIds.length} refund(s) for charge ${charge.id}: ${failedRefundIds.join(', ')}`
+            );
+          }
           break;
         }
 
