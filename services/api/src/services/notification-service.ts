@@ -615,6 +615,7 @@ export class NotificationService {
     });
   }
 
+  /** Notify a hunter that their Stripe payout was sent to their bank account. */
   async notifyPayoutPaid(hunterId: string, amount: number, payoutId: string) {
     return this.createNotification({
       userId: hunterId,
@@ -625,6 +626,7 @@ export class NotificationService {
     });
   }
 
+  /** Notify a hunter that their Stripe payout failed and include failure details. */
   async notifyPayoutFailed(
     hunterId: string,
     amount: number,
