@@ -947,6 +947,30 @@ app.patch('/api/bounties/:id', async (req, res) => {
     }
     
     const updates = validation.data;
+
+    // Prevent updating bounty "terms" if there are pending applications.
+    // This avoids a race where a hunter applies while the poster is editing.
+    try {
+      const termKeys = ['amount','title','description','is_for_honor','location','work_type','skills_required','deadline'];
+      const updatingTerms = Object.keys(updates || {}).some(k => termKeys.includes(k));
+      if (updatingTerms) {
+        const [pendingRows] = await conn.execute(
+          'SELECT COUNT(*) as pendingCount FROM bounty_requests WHERE bounty_id = ? AND status = ?',
+          [bountyId, 'pending']
+        );
+        const pendingCount = Array.isArray(pendingRows) && pendingRows[0] && pendingRows[0].pendingCount ? Number(pendingRows[0].pendingCount) : 0;
+        if (pendingCount > 0) {
+          return res.status(409).json({ error: 'Cannot update bounty terms: pending applications exist' });
+        }
+      }
+    } catch (e) {
+      console.warn('[patch] failed to verify pending requests before update:', e && e.message ? e.message : e);
+      // If the check fails (for example due to a transient DB/network issue),
+      // do not proceed with the update, to avoid the race this check is meant to prevent.
+      return res.status(503).json({
+        error: 'Unable to verify pending applications before update. Please retry shortly.',
+      });
+    }
     
     // Build dynamic update query
     const updateFields = [];

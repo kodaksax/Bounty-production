@@ -11,8 +11,8 @@ import { bountyService } from "lib/services/bounty-service"
 import type { Bounty } from "lib/services/database.types"
 import { cn } from "lib/utils"
 import * as React from "react"
-import { useEffect, useRef, useState, useMemo } from "react"
-import { ActivityIndicator, Alert, Animated, FlatList, Keyboard, RefreshControl, ScrollView, Text, TouchableOpacity, TouchableWithoutFeedback, View, StyleSheet } from "react-native"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { ActivityIndicator, Alert, Animated, FlatList, Keyboard, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { AddBountyAmountScreen } from "../../components/add-bounty-amount-screen"
 import { AddMoneyScreen } from "../../components/add-money-screen"
@@ -374,7 +374,29 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
     if (!editingBounty) return
 
     try {
-      // Optimistic update
+      // Re-validate pending applications to avoid a race where someone
+      // applied while the poster was editing the bounty.
+      try {
+        const pending = await bountyRequestService.getAll({ bountyId: editingBounty.id, status: 'pending' })
+        if (pending && pending.length > 0) {
+          Alert.alert(
+            "Cannot Edit Posting",
+            "A hunter applied while you were editing. You cannot change the terms after someone has applied.",
+            [{ text: "OK" }]
+          )
+          return
+        }
+      } catch (checkErr) {
+        // If we cannot verify (likely network or service error), block the update to be safe.
+        console.error('Failed to re-check pending requests before save:', checkErr)
+        Alert.alert(
+          'Cannot Edit Posting',
+          "We couldn't verify whether any new applications arrived while you were editing. Please check your internet connection, review the bounty's current status, and then try saving again."
+        )
+        return
+      }
+
+      // Optimistic update after revalidation
       const optimisticBounty = { ...editingBounty, ...updates }
       setMyBounties((prev) =>
         prev.map((b) => (b.id === editingBounty.id ? optimisticBounty : b))
@@ -399,7 +421,27 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
       setMyBounties((prev) =>
         prev.map((b) => (b.id === editingBounty.id ? editingBounty : b))
       )
-      throw err
+
+      // Attempt to detect whether the failure was due to a pending application
+      // (server-side 409). If so, surface a clear message to the poster.
+      try {
+        const pendingAfter = await bountyRequestService.getAll({ bountyId: editingBounty.id, status: 'pending' })
+        if (pendingAfter && pendingAfter.length > 0) {
+          Alert.alert(
+            'Cannot Edit Posting',
+            'A hunter applied while you were saving. Your changes were not saved. You cannot change terms after an application has been submitted.',
+            [{ text: 'OK' }]
+          )
+          return
+        }
+      } catch (checkErr) {
+        console.error('Failed to re-check pending requests after save failure:', checkErr)
+      }
+
+      // Fallback: show server-provided error message if available, else generic
+      const msg = (err && (err.message || String(err))) || 'Failed to save changes'
+      Alert.alert('Error', msg)
+      console.error('Error saving bounty edit:', err)
     }
   }
 
