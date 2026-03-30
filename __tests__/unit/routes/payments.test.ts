@@ -57,6 +57,12 @@ jest.mock('../../../services/api/src/services/idempotency-service', () => ({
 }));
 
 // Mock Supabase admin client used by webhook handlers
+// Mock Notification service
+const mockCreateNotification = jest.fn();
+jest.mock('../../../services/api/src/services/notification-service', () => ({
+  notificationService: { createNotification: mockCreateNotification },
+}));
+
 const adminData: any = {
   // Filled by tests as needed
   originalTx: null,
@@ -82,6 +88,7 @@ jest.mock('@supabase/supabase-js', () => ({
             ctx._eq = ctx._eq || [];
             ctx._eq.push([col, val]);
 
+<<<<<<< copilot/implement-payout-webhook-handlers
             return {
               eq(col2: string, val2: any) {
                 ctx._eq.push([col2, val2]);
@@ -119,6 +126,10 @@ jest.mock('@supabase/supabase-js', () => ({
                 }
               }
             };
+=======
+            // Return the chainable query object so callers can call .maybeSingle() directly
+            return obj;
+>>>>>>> main
           },
           in(field: string, vals: any[]) {
             ctx._in = [field, vals];
@@ -131,7 +142,24 @@ jest.mock('@supabase/supabase-js', () => ({
               }
             };
           },
-          maybeSingle: async () => ({ data: adminData.originalTx, error: adminData.txFetchError }),
+          maybeSingle: async () => {
+            // If fetching processed refund metadata for a charge
+            if (table === 'wallet_transactions' && ctx._select === 'metadata' && ctx._eq?.some((e: any) => e[0] === 'stripe_charge_id')) {
+              return { data: adminData.processedRefunds };
+            }
+
+            // If fetching original transaction by payment intent
+            if (table === 'wallet_transactions' && ctx._eq?.some((e: any) => e[0] === 'stripe_payment_intent_id')) {
+              return { data: adminData.originalTx, error: adminData.txFetchError };
+            }
+
+            // Profiles lookup uses the same maybeSingle path in tests; return adminData.originalTx when appropriate
+            if (table === 'profiles') {
+              return { data: adminData.originalTx, error: adminData.txFetchError };
+            }
+
+            return { data: null };
+          },
           upsert: async () => ({ error: adminData.upsertError }),
           insert: async () => ({ error: adminData.insertError }),
           update: (_obj: any) => ({
@@ -358,6 +386,7 @@ describe('payments routes (confirm + webhook deposit)', () => {
     expect(mockUpdateBalance).toHaveBeenCalledWith('user_123', -2);
   });
 
+<<<<<<< copilot/implement-payout-webhook-handlers
   it('POST /payments/webhook: handles payout.paid and sends notification', async () => {
     const fastify = new MockFastify();
 
@@ -373,6 +402,39 @@ describe('payments routes (confirm + webhook deposit)', () => {
     // Make profile lookup return a profile id
     adminData.originalTx = { id: 'profile_abc' };
     adminData.txFetchError = null;
+=======
+  it('POST /payments/webhook: handles account.updated and syncs profile and sends notification when requirements changed', async () => {
+    const fastify = new MockFastify();
+
+    const account = {
+      id: 'acct_test_777',
+      charges_enabled: true,
+      payouts_enabled: true,
+      details_submitted: true,
+      requirements: { currently_due: ['id_document'] },
+    };
+
+    const profile = {
+      id: 'profile_user_1',
+      stripe_connect_onboarded_at: null,
+      stripe_connect_requirements: { currently_due: [] },
+    };
+
+    // Preserve previous admin mock and set profile for this test
+    const prevOriginal = adminData.originalTx;
+    adminData.originalTx = profile;
+    adminData.updateError = null;
+
+    mockStripeInstance.webhooks.constructEvent.mockImplementation((body: any) => JSON.parse(body));
+
+    const event = {
+      id: 'evt_account_1',
+      type: 'account.updated',
+      data: { object: account },
+    };
+
+    const { notificationService } = require('../../../services/api/src/services/notification-service');
+>>>>>>> main
 
     await registerPaymentRoutes(fastify as any);
 
@@ -382,6 +444,7 @@ describe('payments routes (confirm + webhook deposit)', () => {
     const result = await handler(req, {});
 
     expect(result).toEqual({ received: true });
+<<<<<<< copilot/implement-payout-webhook-handlers
     const notif = require('../../../services/api/src/services/notification-service').notificationService;
     expect(notif.createNotification).toHaveBeenCalledWith(expect.objectContaining({
       userId: 'profile_abc',
@@ -398,13 +461,42 @@ describe('payments routes (confirm + webhook deposit)', () => {
       type: 'payout.failed',
       data: { object: { id: 'po_fail_1', amount: 4000, failure_code: 'acct_invalid', failure_message: 'Bank account invalid' } },
       account: 'acct_connect_2',
+=======
+    expect(notificationService.createNotification).toHaveBeenCalledWith(expect.objectContaining({
+      userId: profile.id,
+      type: 'payment',
+      data: { currentlyDue: account.requirements.currently_due, accountId: account.id },
+    }));
+
+    // Restore admin mock
+    adminData.originalTx = prevOriginal;
+  });
+
+  it('POST /payments/webhook: handles account.updated with no profile found', async () => {
+    const fastify = new MockFastify();
+
+    const account = {
+      id: 'acct_no_profile',
+      charges_enabled: false,
+      payouts_enabled: false,
+      details_submitted: false,
+      requirements: { currently_due: [] },
+>>>>>>> main
     };
 
     mockStripeInstance.webhooks.constructEvent.mockImplementation((body: any) => JSON.parse(body));
 
+<<<<<<< copilot/implement-payout-webhook-handlers
     adminData.originalTx = { id: 'profile_def' };
     adminData.txFetchError = null;
     adminData.updateError = null;
+=======
+    // Ensure no profile found
+    const prevOriginal = adminData.originalTx;
+    adminData.originalTx = null;
+
+    const event = { id: 'evt_account_2', type: 'account.updated', data: { object: account } };
+>>>>>>> main
 
     await registerPaymentRoutes(fastify as any);
 
@@ -412,6 +504,7 @@ describe('payments routes (confirm + webhook deposit)', () => {
     const req: any = { headers: { 'stripe-signature': 'sig' }, rawBody: JSON.stringify(event) };
 
     const result = await handler(req, {});
+<<<<<<< copilot/implement-payout-webhook-handlers
 
     expect(result).toEqual({ received: true });
     const notif = require('../../../services/api/src/services/notification-service').notificationService;
@@ -420,5 +513,10 @@ describe('payments routes (confirm + webhook deposit)', () => {
       type: 'payment',
       title: expect.stringContaining('Payout Failed'),
     }));
+=======
+    expect(result).toEqual({ received: true });
+
+    adminData.originalTx = prevOriginal;
+>>>>>>> main
   });
 });

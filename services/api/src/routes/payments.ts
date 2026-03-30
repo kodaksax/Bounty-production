@@ -1067,19 +1067,76 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
         // Stripe Connect Account Events
         case 'account.updated': {
           const account = event.data.object as Stripe.Account;
-          logger.info(`[payments] Connect account ${account.id} updated`);
-          // Track verification status changes
-          if (account.details_submitted) {
-            logger.info(`[payments] Connect account ${account.id} details submitted`);
+          logger.info({
+            accountId: account.id,
+            chargesEnabled: account.charges_enabled,
+            payoutsEnabled: account.payouts_enabled,
+            detailsSubmitted: account.details_submitted,
+          }, '[payments] Connect account updated');
+
+          const admin = getSupabaseAdmin();
+
+          // Look up the user owning this Connect account
+          const { data: profile, error: lookupError } = await admin
+            .from('profiles')
+            .select('id, stripe_connect_onboarded_at, stripe_connect_requirements')
+            .eq('stripe_connect_account_id', account.id)
+            .maybeSingle();
+
+          if (lookupError) {
+            logger.error({ error: lookupError.message, accountId: account.id }, '[payments] Failed to look up profile for Connect account');
+            break;
           }
-          if (account.charges_enabled) {
-            logger.info(`[payments] Connect account ${account.id} charges enabled`);
+
+          if (!profile) {
+            logger.warn({ accountId: account.id }, '[payments] No profile found for Connect account — skipping sync');
+            break;
           }
-          if (account.payouts_enabled) {
-            logger.info(`[payments] Connect account ${account.id} payouts enabled`);
+
+          const onboardingComplete = account.details_submitted && account.payouts_enabled;
+          const currentlyDue: string[] = account.requirements?.currently_due ?? [];
+
+          // Only set stripe_connect_onboarded_at once (on first transition to onboarded)
+          const onboardingUpdate = onboardingComplete && !profile.stripe_connect_onboarded_at
+            ? { stripe_connect_onboarded_at: new Date().toISOString() }
+            : {};
+
+          const { error: updateError } = await admin
+            .from('profiles')
+            .update({
+              stripe_connect_charges_enabled: account.charges_enabled ?? false,
+              stripe_connect_payouts_enabled: account.payouts_enabled ?? false,
+              stripe_connect_requirements: account.requirements ?? null,
+              ...onboardingUpdate,
+            })
+            .eq('id', profile.id);
+
+          if (updateError) {
+            logger.error({ error: updateError.message, accountId: account.id, userId: profile.id }, '[payments] Failed to sync Connect account status to profile');
+            break;
           }
-          // TODO: Update user's Connect account status in database
-          // TODO: Notify user if action required (requirements.currently_due)
+
+          logger.info({ accountId: account.id, userId: profile.id, onboardingComplete }, '[payments] Connect account status synced to profile');
+
+          // Notify hunter only if the currently_due requirements have changed since last sync
+          const prevCurrentlyDue: string[] = (profile.stripe_connect_requirements as Stripe.Account.Requirements | null)?.currently_due ?? [];
+          const requirementsChanged =
+            currentlyDue.length > 0 &&
+            JSON.stringify([...currentlyDue].sort()) !== JSON.stringify([...prevCurrentlyDue].sort());
+
+          if (requirementsChanged) {
+            try {
+              await notificationService.createNotification({
+                userId: profile.id,
+                type: 'payment',
+                title: 'Action Required: Stripe Account',
+                body: 'Your payout account needs attention. Please complete the required verification steps to continue receiving payments.',
+                data: { currentlyDue, accountId: account.id },
+              });
+            } catch (notifyError) {
+              logger.warn({ error: notifyError instanceof Error ? notifyError.message : String(notifyError), userId: profile.id }, '[payments] Failed to send Connect action-required notification');
+            }
+          }
           break;
         }
 
