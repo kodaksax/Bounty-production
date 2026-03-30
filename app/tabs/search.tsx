@@ -2,14 +2,14 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  FlatList,
-  Modal,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    FlatList,
+    Modal,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { SPACING } from '../../lib/constants/accessibility';
 import { bountyService } from '../../lib/services/bounty-service';
@@ -146,7 +146,7 @@ export default function EnhancedSearchScreen() {
 
     if (suggestion.type === 'bounty') {
       const bountyId = suggestion.id.replace('bounty_', '');
-      router.push(`/postings/${bountyId}`);
+      router.push(`/bounty/${bountyId}/public`);
     } else if (suggestion.type === 'user') {
       const userId = suggestion.id.replace('user_', '');
       router.push(`/profile/${userId}`);
@@ -265,7 +265,7 @@ export default function EnhancedSearchScreen() {
     return (
       <TouchableOpacity
         style={styles.card}
-        onPress={() => router.push(`/postings/${item.id}`)}
+        onPress={() => router.push(`/bounty/${item.id}/public`)}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
         accessibilityHint="Opens bounty details"
