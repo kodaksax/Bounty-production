@@ -178,7 +178,7 @@ export function ChatDetailScreen({
       return
     }
     if (typeof onNavigate === 'function') {
-      onNavigate('create')
+      onNavigate('messages')
     }
   }}
   className="mr-1 p-2 touch-target-min"

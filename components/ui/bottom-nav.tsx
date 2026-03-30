@@ -6,7 +6,7 @@ import { A11Y, SIZING } from "../../lib/constants/accessibility";
 import { theme } from "../../lib/theme";
 
 
-export type ScreenKey = "create" | "wallet" | "bounty" | "postings" | "profile" | "admin";
+export type ScreenKey = "messages" | "wallet" | "bounty" | "postings" | "profile" | "admin";
 
 interface BottomNavProps {
   activeScreen: string;
@@ -87,17 +87,17 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
         {/* Left side items - evenly distributed */}
         <View style={styles.sideSection}>
           <TouchableOpacity
-            onPress={() => handleNavigate("create")}
+            onPress={() => handleNavigate("messages")}
             style={styles.navButton}
             accessible={true}
             accessibilityRole="button"
             accessibilityLabel={unreadMessageCount > 0 ? `Messages, ${unreadMessageCount} unread` : "Create new bounty or message"}
-            accessibilityState={{ selected: activeScreen === "create" }}
+            accessibilityState={{ selected: activeScreen === "messages" }}
           >
             <View style={styles.iconWrapper}>
               <MaterialIcons
                 name="chat"
-                color={activeScreen === "create" ? "#fffef5" : "#9ca3af"}
+                color={activeScreen === "messages" ? "#fffef5" : "#9ca3af"}
                 size={NAV_ICON_SIZE}
               />
               {unreadMessageCount > 0 && (

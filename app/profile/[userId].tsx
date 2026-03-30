@@ -226,8 +226,8 @@ export default function UserProfileScreen() {
       // Navigate into the BountyApp container and request the messenger view so
       // the BottomNav (tab bar) is preserved. Navigating directly to the
       // messenger route renders the screen outside the tabs and hides the nav.
-      type BountyAppScreen = "create";
-      const targetScreen: BountyAppScreen = "create";
+      type BountyAppScreen = "messages";
+      const targetScreen: BountyAppScreen = "messages";
       const bountyAppRoute = `${ROUTES.TABS.BOUNTY_APP}?screen=${encodeURIComponent(
         targetScreen
       )}` as const;

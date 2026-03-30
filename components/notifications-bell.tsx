@@ -75,7 +75,7 @@ export function NotificationsBell() {
       router.push(`/bounty/${data.bountyId}` as '/bounty/[id]');
     } else if (data.senderId) {
       // Navigate to messages
-      router.push('/tabs/bounty-app?screen=create' as '/tabs/bounty-app');
+      router.push('/tabs/bounty-app?screen=messages' as '/tabs/bounty-app');
     } else if (data.followerId) {
       router.push(`/profile/${data.followerId}` as '/profile/[id]');
     }

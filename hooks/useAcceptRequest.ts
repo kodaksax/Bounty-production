@@ -252,8 +252,8 @@ export function useAcceptRequest({
           // can reliably pick them up on mount.
           ;(async () => {
             try { await navigationIntent.setPendingConversationId(pendingConvId) } catch {}
-            try { await navigationIntent.setPendingNavigation('?screen=create') } catch {}
-            try { setActiveScreen('create') } catch {}
+            try { await navigationIntent.setPendingNavigation('?screen=messages') } catch {}
+            try { setActiveScreen('messages') } catch {}
           })()
         }
       }
