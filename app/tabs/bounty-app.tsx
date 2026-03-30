@@ -63,7 +63,7 @@ function BountyAppInner() {
   // null, verify that the Supabase profile row actually exists before allowing entry
   // to the main app. A completely missing row causes cascading null-access failures.
   useEffect(() => {
-    if (profile !== null) {
+    if (profile != null) {
       // Profile is present in AuthContext — no separate fetch needed.
       setProfileVerifiedForLocalFlag(true)
       return
@@ -77,7 +77,7 @@ function BountyAppInner() {
     authProfileService
       .getProfileById(currentUserId, { bypassCache: true })
       .then(fetchedProfile => {
-        if (!cancelled) setProfileVerifiedForLocalFlag(fetchedProfile !== null)
+        if (!cancelled) setProfileVerifiedForLocalFlag(fetchedProfile != null)
       })
       .catch(() => {
         // On network error, treat as missing — force onboarding to be safe.
@@ -94,7 +94,7 @@ function BountyAppInner() {
       !repairAttemptedRef.current &&
       storageOnboardingDone === true &&
       currentUserId &&
-      profile !== null &&
+      profile != null &&
       profile.onboarding_completed !== true
     ) {
       // Mark that a repair attempt is in-flight to avoid duplicate updates.
@@ -178,7 +178,7 @@ function BountyAppInner() {
   const isVerificationInProgress =
     isLoading ||
     storageOnboardingDone === null ||
-    (storageOnboardingDone === true && profile === null && profileVerifiedForLocalFlag === null)
+    (storageOnboardingDone === true && profile == null && profileVerifiedForLocalFlag === null)
 
   if (isVerificationInProgress) {
     return (
@@ -201,14 +201,14 @@ function BountyAppInner() {
     session &&
     (
       // If the profile explicitly indicates onboarding is required OR
-      // the profile is null and the per-user storage flag says not done,
+      // the profile is null/undefined and the per-user storage flag says not done,
       // redirect to onboarding. However, allow the per-user AsyncStorage
       // flag to temporarily override an authored `onboarding_completed: false`
       // value to reduce redirect loops when the DB/profile hasn't propagated yet.
-      (profile !== null && (profile.needs_onboarding === true || (profile.onboarding_completed === false && !storageOnboardingDone))) ||
-      (profile === null && !storageOnboardingDone) ||
+      (profile != null && (profile.needs_onboarding === true || (profile.onboarding_completed === false && !storageOnboardingDone))) ||
+      (profile == null && !storageOnboardingDone) ||
       // Profile row confirmed missing despite the local flag being set — stale flag.
-      (profile === null && storageOnboardingDone === true && profileVerifiedForLocalFlag === false)
+      (profile == null && storageOnboardingDone === true && profileVerifiedForLocalFlag === false)
     )
   ) {
     if (__DEV__) {

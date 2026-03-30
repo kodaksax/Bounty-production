@@ -1,15 +1,15 @@
-import { useRouter } from "expo-router"
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { Href } from "expo-router"
+import { useRouter } from "expo-router"
 import { useEffect, useRef } from "react"
 import { ActivityIndicator, Text, View } from "react-native"
+import 'react-native-get-random-values'; // must run before using tweetnacl
 import { useAuthContext } from "../hooks/use-auth-context"
 import { ROUTES } from "../lib/routes"
+import { authProfileService } from '../lib/services/auth-profile-service'
 import { getOnboardingCompleteKey } from "../lib/storage/onboarding"
 import { SignInForm } from "./auth/sign-in-form"
 import { markInitialNavigationDone } from './initial-navigation/initialNavigation'
-import 'react-native-get-random-values'; // must run before using tweetnacl
-import AsyncStorage from '@react-native-async-storage/async-storage'
-import { authProfileService } from '../lib/services/auth-profile-service'
 
 /**
  * Root Index - Auth Gate
@@ -97,7 +97,7 @@ export default function Index() {
           // This happens when auth user exists but no profile is found, OR
           // profile fetch failed (null) — treat as needing onboarding to avoid
           // landing in the main app with no profile data (causes "Profile not found" errors)
-          if (profile === null || profile?.needs_onboarding === true || profile?.onboarding_completed === false) {
+          if (profile == null || profile?.needs_onboarding === true || profile?.onboarding_completed === false) {
             // Before redirecting to onboarding, check the per-user AsyncStorage flag.
             // When the Supabase write in done.tsx fails (e.g. bad network), the local
             // flag is the only reliable indicator that onboarding was completed.
@@ -123,7 +123,7 @@ export default function Index() {
               let profileExists = false
               try {
                 const fetchedProfile = await authProfileService.getProfileById(userId, { bypassCache: true })
-                profileExists = fetchedProfile !== null
+                profileExists = fetchedProfile != null
               } catch (profileCheckError) {
                 if (__DEV__) {
                   console.warn('[index] Profile existence check failed, defaulting to onboarding:', profileCheckError)
