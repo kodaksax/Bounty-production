@@ -33,9 +33,6 @@ const createEscrowSchema = z.object({
   idempotencyKey: z.string().optional(),
 });
 
-// Platform account ID for fee collection
-// In production, this should be stored in environment variables
-const PLATFORM_ACCOUNT_ID = process.env.PLATFORM_ACCOUNT_ID || '00000000-0000-0000-0000-000000000000';
 
 export async function registerPaymentRoutes(fastify: FastifyInstance) {
   const stripeKey = process.env.STRIPE_SECRET_KEY || '';
@@ -65,12 +62,6 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
     });
 
     return;
-  }
-
-  // Validate PLATFORM_ACCOUNT_ID in production
-  if (process.env.NODE_ENV === 'production' && !process.env.PLATFORM_ACCOUNT_ID) {
-    logger.error('[payments] PLATFORM_ACCOUNT_ID environment variable is required in production');
-    throw new Error('PLATFORM_ACCOUNT_ID environment variable must be set in production');
   }
 
   // Detect key mode and log warning if there might be a mismatch
@@ -623,12 +614,15 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
       // records the ledger row but does not update profiles.balance)
       await ConsolidatedWalletService.updateBalance(hunterId, hunterAmountCents / 100);
 
-      // Record platform fee
-      await walletService.createTransaction({
-        user_id: PLATFORM_ACCOUNT_ID,
-        type: 'platform_fee',
+      // Record platform fee in the dedicated platform_ledger table (no fake user UUID)
+      await ConsolidatedWalletService.recordPlatformFee({
+        bountyId,
         amount: platformFeeCents / 100,
-        bounty_id: bountyId,
+        description: `Platform fee for bounty ${bountyId}`,
+        metadata: {
+          stripe_transfer_id: transfer.id,
+          platform_fee_cents: platformFeeCents,
+        },
       });
 
       logger.info(`[payments] Released escrow ${escrowId}, transferred ${hunterAmountCents} cents to hunter ${hunterId}`);
