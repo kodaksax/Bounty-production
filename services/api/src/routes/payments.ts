@@ -16,6 +16,7 @@ import {
   storeIdempotencyKey
 } from '../services/idempotency-service';
 import { logger } from '../services/logger';
+import { notificationService } from '../services/notification-service';
 import { stripeConnectService } from '../services/stripe-connect-service';
 import { walletService } from '../services/wallet-service';
 
@@ -1103,15 +1104,104 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
 
         case 'payout.paid': {
           const payout = event.data.object as Stripe.Payout;
-          logger.info(`[payments] Payout paid: ${payout.id}`);
-          // TODO: Update transaction status in database
+          const connectAccountId = (event as any).account as string | undefined;
+          logger.info({
+            payoutId: payout.id,
+            amount: payout.amount / 100,
+            connectAccountId,
+          }, '[payments] Payout paid to bank account');
+
+          if (connectAccountId) {
+            try {
+              const admin = getSupabaseAdmin();
+              const { data: profile } = await admin
+                .from('profiles')
+                .select('id')
+                .eq('stripe_connect_account_id', connectAccountId)
+                .maybeSingle();
+
+              if (profile?.id) {
+                await notificationService.createNotification({
+                  userId: profile.id,
+                  type: 'payment',
+                  title: 'Payout Successful 🎉',
+                  body: `Your payout of $${(payout.amount / 100).toFixed(2)} has landed in your bank account.`,
+                  data: { payoutId: payout.id, amount: payout.amount },
+                });
+                logger.info({ userId: profile.id, payoutId: payout.id }, '[payments] Payout confirmation notification sent to hunter');
+              } else {
+                logger.warn({ connectAccountId, payoutId: payout.id }, '[payments] No user found for Connect account in payout.paid');
+              }
+            } catch (notifErr: any) {
+              logger.error({ err: notifErr.message, payoutId: payout.id, connectAccountId }, '[payments] Failed to send payout.paid notification');
+            }
+          }
           break;
         }
 
         case 'payout.failed': {
           const payout = event.data.object as Stripe.Payout;
-          logger.error(`[payments] Payout failed: ${payout.id}`);
-          // TODO: Notify user and admin
+          const connectAccountId = (event as any).account as string | undefined;
+          logger.error({
+            payoutId: payout.id,
+            amount: payout.amount / 100,
+            failureCode: payout.failure_code,
+            failureMessage: payout.failure_message,
+            connectAccountId,
+          }, '[payments] Payout failed');
+
+          if (connectAccountId) {
+            try {
+              const admin = getSupabaseAdmin();
+              const { data: profile } = await admin
+                .from('profiles')
+                .select('id')
+                .eq('stripe_connect_account_id', connectAccountId)
+                .maybeSingle();
+
+              if (profile?.id) {
+                // Notify the hunter that their payout failed
+                await notificationService.createNotification({
+                  userId: profile.id,
+                  type: 'payment',
+                  title: 'Payout Failed ⚠️',
+                  body: `Your payout of $${(payout.amount / 100).toFixed(2)} could not be processed. Please check your bank details.`,
+                  data: {
+                    payoutId: payout.id,
+                    amount: payout.amount,
+                    failureCode: payout.failure_code,
+                    failureMessage: payout.failure_message,
+                  },
+                });
+                logger.info({ userId: profile.id, payoutId: payout.id }, '[payments] Payout failure notification sent to hunter');
+
+                // Flag the account for review by annotating the stripe_events record
+                const { data: existingEvent } = await admin
+                  .from('stripe_events')
+                  .select('event_data')
+                  .eq('stripe_event_id', event.id)
+                  .maybeSingle();
+
+                await admin
+                  .from('stripe_events')
+                  .update({
+                    event_data: {
+                      ...(existingEvent?.event_data as Record<string, any> || {}),
+                      _processed_notes: `Payout failed: ${payout.failure_code} - ${payout.failure_message}`,
+                      _flagged_for_review: true,
+                      _flagged_user_id: profile.id,
+                    },
+                  })
+                  .eq('stripe_event_id', event.id);
+
+                logger.warn({ userId: profile.id, payoutId: payout.id, failureCode: payout.failure_code }, '[payments] Account flagged for review due to payout failure');
+              } else {
+                logger.warn({ connectAccountId, payoutId: payout.id }, '[payments] No user found for Connect account in payout.failed');
+              }
+            } catch (notifErr: any) {
+              logger.error({ err: notifErr.message, payoutId: payout.id, connectAccountId }, '[payments] Failed to send payout.failed notification');
+            }
+          }
           break;
         }
 

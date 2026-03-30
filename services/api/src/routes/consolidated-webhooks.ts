@@ -16,6 +16,7 @@ import {
 import { stripe } from '../services/consolidated-payment-service';
 import * as WalletService from '../services/consolidated-wallet-service';
 import { logger } from '../services/logger';
+import { notificationService } from '../services/notification-service';
 
 // Extend FastifyRequest to include rawBody for webhook signature verification
 declare module 'fastify' {
@@ -672,33 +673,132 @@ async function handleAccountUpdated(event: Stripe.Event): Promise<void> {
 
 /**
  * Handle payout.paid event
- * Informational only - funds have been paid to connected account's bank
+ * Sends push notification to hunter confirming payout landed
  */
 async function handlePayoutPaid(event: Stripe.Event): Promise<void> {
   const payout = event.data.object as Stripe.Payout;
+  const connectAccountId = (event as any).account as string | undefined;
 
   logger.info({
     payoutId: payout.id,
     amount: payout.amount / 100,
     destination: payout.destination,
+    connectAccountId,
   }, 'Payout paid to bank account');
+
+  if (!connectAccountId) {
+    logger.warn({ payoutId: payout.id }, 'payout.paid event missing connected account ID — cannot notify hunter');
+    return;
+  }
+
+  const admin = getSupabaseAdmin();
+  const { data: profile, error: profileError } = await admin
+    .from('profiles')
+    .select('id')
+    .eq('stripe_connect_account_id', connectAccountId)
+    .maybeSingle();
+
+  if (profileError) {
+    logger.error({ error: profileError.message, connectAccountId }, 'Failed to look up user for payout.paid');
+    throw new ExternalServiceError('Supabase', 'Failed to look up hunter for payout notification', { error: profileError.message });
+  }
+
+  if (!profile?.id) {
+    logger.warn({ connectAccountId, payoutId: payout.id }, 'No user found for Connect account in payout.paid');
+    return;
+  }
+
+  try {
+    await notificationService.createNotification({
+      userId: profile.id,
+      type: 'payment',
+      title: 'Payout Successful 🎉',
+      body: `Your payout of $${(payout.amount / 100).toFixed(2)} has landed in your bank account.`,
+      data: { payoutId: payout.id, amount: payout.amount },
+    });
+    logger.info({ userId: profile.id, payoutId: payout.id }, 'Payout confirmation notification sent to hunter');
+  } catch (notifErr: any) {
+    logger.error({ err: notifErr.message, payoutId: payout.id, userId: profile.id }, 'Failed to send payout.paid notification');
+  }
 }
 
 /**
  * Handle payout.failed event
- * Logs failure for support follow-up
+ * Notifies hunter of failure, logs reason, and flags account for review
  */
 async function handlePayoutFailed(event: Stripe.Event): Promise<void> {
   const payout = event.data.object as Stripe.Payout;
+  const connectAccountId = (event as any).account as string | undefined;
 
   logger.error({
     payoutId: payout.id,
     amount: payout.amount / 100,
     failureCode: payout.failure_code,
     failureMessage: payout.failure_message,
+    connectAccountId,
   }, 'Payout failed');
 
-  // TODO: Notify user and support about failed payout
+  if (!connectAccountId) {
+    logger.warn({ payoutId: payout.id }, 'payout.failed event missing connected account ID — cannot notify hunter');
+    return;
+  }
+
+  const admin = getSupabaseAdmin();
+  const { data: profile, error: profileError } = await admin
+    .from('profiles')
+    .select('id')
+    .eq('stripe_connect_account_id', connectAccountId)
+    .maybeSingle();
+
+  if (profileError) {
+    logger.error({ error: profileError.message, connectAccountId }, 'Failed to look up user for payout.failed');
+    throw new ExternalServiceError('Supabase', 'Failed to look up hunter for payout failure notification', { error: profileError.message });
+  }
+
+  if (!profile?.id) {
+    logger.warn({ connectAccountId, payoutId: payout.id }, 'No user found for Connect account in payout.failed');
+    return;
+  }
+
+  try {
+    // Notify the hunter that their payout failed
+    await notificationService.createNotification({
+      userId: profile.id,
+      type: 'payment',
+      title: 'Payout Failed ⚠️',
+      body: `Your payout of $${(payout.amount / 100).toFixed(2)} could not be processed. Please check your bank details.`,
+      data: {
+        payoutId: payout.id,
+        amount: payout.amount,
+        failureCode: payout.failure_code,
+        failureMessage: payout.failure_message,
+      },
+    });
+    logger.info({ userId: profile.id, payoutId: payout.id }, 'Payout failure notification sent to hunter');
+  } catch (notifErr: any) {
+    logger.error({ err: notifErr.message, payoutId: payout.id, userId: profile.id }, 'Failed to send payout.failed notification');
+  }
+
+  // Flag account for review by annotating the stripe_events record (merging with existing event_data)
+  const { data: existingEvent } = await admin
+    .from('stripe_events')
+    .select('event_data')
+    .eq('stripe_event_id', event.id)
+    .maybeSingle();
+
+  await admin
+    .from('stripe_events')
+    .update({
+      event_data: {
+        ...(existingEvent?.event_data as Record<string, any> || {}),
+        _processed_notes: `Payout failed: ${payout.failure_code} - ${payout.failure_message}`,
+        _flagged_for_review: true,
+        _flagged_user_id: profile.id,
+      },
+    })
+    .eq('stripe_event_id', event.id);
+
+  logger.warn({ userId: profile.id, payoutId: payout.id, failureCode: payout.failure_code }, 'Account flagged for review due to payout failure');
 }
 
 /**
