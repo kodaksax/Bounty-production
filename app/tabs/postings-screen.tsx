@@ -347,10 +347,28 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
     setError,
   })
 
+  // Set of bounty IDs that have at least one pending hunter application.
+  // Used to prevent the poster from editing bounty terms after a hunter has applied.
+  const bountiesWithPendingRequestsSet = React.useMemo(() => {
+    const pendingBountyIds = new Set<string>()
+    bountyRequests.forEach((r) => {
+      if (r.status === 'pending') pendingBountyIds.add(String(r.bounty_id))
+    })
+    return pendingBountyIds
+  }, [bountyRequests])
+
   const handleEditBounty = React.useCallback((bounty: Bounty) => {
+    if (bountiesWithPendingRequestsSet.has(String(bounty.id))) {
+      Alert.alert(
+        "Cannot Edit Posting",
+        "This bounty already has hunters who have applied. You cannot change the terms after someone has applied.",
+        [{ text: "OK" }]
+      )
+      return
+    }
     setEditingBounty(bounty)
     setShowEditModal(true)
-  }, [])
+  }, [bountiesWithPendingRequestsSet])
 
   const handleSaveEdit = async (updates: Partial<Bounty>) => {
     if (!editingBounty) return
@@ -545,7 +563,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
         currentUserId={currentUserId}
         expanded={!!expandedMap[String(bounty.id)]}
         onToggle={() => handleToggleAndScroll('myPostings', bounty.id)}
-        onEdit={bounty.status === 'open' ? () => handleEditBounty(bounty) : undefined}
+        onEdit={bounty.status === 'open' && !bountiesWithPendingRequestsSet.has(String(bounty.id)) ? () => handleEditBounty(bounty) : undefined}
         onDelete={bounty.status === 'open' ? () => handleDeleteBounty(bounty) : undefined}
         onGoToReview={(id: string) => { /* legacy route removed - modal only */ }}
         onGoToPayout={(id: string) => router.push({ pathname: '/postings/[bountyId]/payout', params: { bountyId: id } })}
@@ -554,7 +572,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
         onRefresh={refreshAll}
       />
     </View>
-  ), [currentUserId, expandedMap, isListScrolling, router, handleEditBounty, handleDeleteBounty, refreshAll]);
+  ), [currentUserId, expandedMap, isListScrolling, router, handleEditBounty, handleDeleteBounty, refreshAll, bountiesWithPendingRequestsSet]);
 
   const renderInProgressItem = React.useCallback(({ item: bounty, index }: { item: Bounty; index: number }) => (
     <View
