@@ -780,13 +780,17 @@ async function handlePayoutFailed(event: Stripe.Event): Promise<void> {
   }
 
   // Flag account for review by annotating the stripe_events record (merging with existing event_data)
-  const { data: existingEvent } = await admin
+  const { data: existingEvent, error: selectError } = await admin
     .from('stripe_events')
     .select('event_data')
     .eq('stripe_event_id', event.id)
     .maybeSingle();
 
-  await admin
+  if (selectError) {
+    logger.error({ err: selectError.message, payoutId: payout.id, userId: profile.id }, 'Failed to fetch stripe_events record for payout.failed flagging');
+  }
+
+  const { error: updateError } = await admin
     .from('stripe_events')
     .update({
       event_data: {
@@ -798,7 +802,11 @@ async function handlePayoutFailed(event: Stripe.Event): Promise<void> {
     })
     .eq('stripe_event_id', event.id);
 
-  logger.warn({ userId: profile.id, payoutId: payout.id, failureCode: payout.failure_code }, 'Account flagged for review due to payout failure');
+  if (updateError) {
+    logger.error({ err: updateError.message, payoutId: payout.id, userId: profile.id }, 'Failed to annotate stripe_events record for payout.failed review flag');
+  } else {
+    logger.warn({ userId: profile.id, payoutId: payout.id, failureCode: payout.failure_code }, 'Account flagged for review due to payout failure');
+  }
 }
 
 /**
