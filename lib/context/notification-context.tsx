@@ -104,7 +104,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     } else if (data.conversationId && typeof data.conversationId === 'string') {
       // Use navigation intent to pass the conversation ID to the messenger screen
       await navigationIntent.setPendingConversationId(data.conversationId);
-      router.push('/tabs/bounty-app?screen=create');
+      router.push('/tabs/bounty-app?screen=messages');
     } else if (data.senderId) {
       router.push(`/profile/${data.senderId}`);
     } else if (data.followerId) {

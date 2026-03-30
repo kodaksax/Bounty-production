@@ -82,8 +82,8 @@ export default function ChoosePeopleScreen() {
 
       if (conv && conv.id) {
         await navigationIntent.setPendingConversationId(conv.id)
-        // Navigate to bounty-app with screen=create so the in-app Messenger renders (matches bottom nav create behavior)
-        router.push({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'create' } } as any)
+        // Navigate to bounty-app with screen=messages so the in-app Messenger renders (matches bottom nav messages behavior)
+        router.push({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'messages' } } as any)
       } else {
         router.back()
       }
@@ -123,16 +123,16 @@ export default function ChoosePeopleScreen() {
         <TouchableOpacity
           onPress={() => {
               // Prefer going back if possible, otherwise navigate to the in-app Messenger
-              // by pushing the bounty-app route with screen=create (this matches the left-most bottom-nav behavior).
+              // by pushing the bounty-app route with screen=messages (this matches the left-most bottom-nav behavior).
               try {
                 // @ts-ignore
                 if (typeof router.canGoBack === 'function' ? router.canGoBack() : false) {
                   router.back()
                 } else {
-                  router.push({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'create' } } as any)
+                  router.push({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'messages' } } as any)
                 }
               } catch {
-                router.push({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'create' } } as any)
+                router.push({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'messages' } } as any)
               }
             }}
           style={styles.iconButton}

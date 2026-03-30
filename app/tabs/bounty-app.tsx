@@ -111,7 +111,7 @@ function BountyAppInner() {
 
   // Admin tab is only shown if user has admin permissions AND has enabled the toggle
   const showAdminTab = isAdmin && isAdminTabEnabled
-  const allowedScreens = new Set(['bounty', 'wallet', 'postings', 'profile', 'create', 'admin'])
+  const allowedScreens = new Set(['bounty', 'wallet', 'postings', 'profile', 'messages', 'admin'])
   const paramScreen = typeof screen === 'string' && screen.length > 0 && allowedScreens.has(screen) ? screen : 'bounty'
   const allowedInitialTabs = new Set(['new', 'inProgress', 'myPostings', 'requests'])
   const paramInitialTab = typeof initialTab === 'string' && initialTab.length > 0 && allowedInitialTabs.has(initialTab) ? initialTab : undefined
@@ -250,7 +250,7 @@ function BountyAppInner() {
       {activeScreen === "profile" && (
         <ProfileScreen onBack={() => setActiveScreen("bounty")} />
       )}
-      {activeScreen === "create" && (
+      {activeScreen === "messages" && (
         <MessengerScreen
           activeScreen={activeScreen}
           onNavigate={setActiveScreen}

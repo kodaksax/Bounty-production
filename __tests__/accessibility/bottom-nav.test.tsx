@@ -98,7 +98,7 @@ describe('BottomNav Accessibility', () => {
       const content = fs.readFileSync(bottomNavPath, 'utf-8');
       
       // Verify ScreenKey type includes all main screens
-      const screens = ['create', 'wallet', 'bounty', 'postings', 'profile'];
+      const screens = ['messages', 'wallet', 'bounty', 'postings', 'profile'];
       screens.forEach(screen => {
         expect(content).toContain(`"${screen}"`);
       });

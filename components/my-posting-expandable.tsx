@@ -805,7 +805,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         // Prefer navigationIntent so root UI opens the correct tab, fallback to direct route
         try {
           await navigationIntent.setPendingConversationId(createdId)
-          router.push('/tabs/bounty-app?screen=create' as '/tabs/bounty-app')
+          router.push('/tabs/bounty-app?screen=messages' as '/tabs/bounty-app')
           return
         } catch (err) {
           console.error('Failed to open new conversation via navigation intent', err)
@@ -826,7 +826,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     // If we have an existing conversation id, navigate to it
     try {
       await navigationIntent.setPendingConversationId(convId)
-      router.push('/tabs/bounty-app?screen=create' as '/tabs/bounty-app')
+      router.push('/tabs/bounty-app?screen=messages' as '/tabs/bounty-app')
     } catch (err) {
       console.error('Failed to open conversation via navigation intent', err)
       // Fallback: try to open the conversation route directly

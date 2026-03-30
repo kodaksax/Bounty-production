@@ -99,3 +99,4 @@ temp/
 # Local editor/history artifacts
 .history/
 /supabase/.temp/
+package-lock.json
