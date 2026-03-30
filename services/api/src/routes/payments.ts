@@ -22,8 +22,19 @@ import { walletService } from '../services/wallet-service';
 let _supabaseAdmin: ReturnType<typeof createClient<any>> | null = null;
 function getSupabaseAdmin(): ReturnType<typeof createClient<any>> {
   if (!_supabaseAdmin) {
-    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '';
+    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      logger.error(
+        { hasSupabaseUrl: !!supabaseUrl, hasServiceRoleKey: !!serviceRoleKey },
+        '[payments] Supabase admin client misconfigured: missing SUPABASE URL and/or service role key environment variables',
+      );
+      throw new Error(
+        'Supabase admin client misconfigured: expected EXPO_PUBLIC_SUPABASE_URL or SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_KEY to be set',
+      );
+    }
+
     _supabaseAdmin = createClient<any>(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
@@ -803,7 +814,7 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
             const admin = getSupabaseAdmin();
             const { error: updateError } = await admin
               .from('bounties')
-              .update({ status: 'open' })
+              .update({ status: 'open', accepted_by: null, hunter_id: null })
               .eq('id', bountyId)
               .eq('status', 'in_progress');
 
@@ -874,7 +885,6 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
                   card_last4: pm.card?.last4 ?? null,
                   card_exp_month: pm.card?.exp_month ?? null,
                   card_exp_year: pm.card?.exp_year ?? null,
-                  is_default: false,
                 }, { onConflict: 'stripe_payment_method_id' });
 
               if (upsertError) {
@@ -941,17 +951,25 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
 
           // Process each refund that hasn't been recorded yet
           // Pre-fetch all processed refund IDs for this charge in one query
-          const { data: processedRefunds } = await admin
+          const { data: processedRefunds, error: prefetchError } = await admin
             .from('wallet_transactions')
             .select('metadata')
             .eq('stripe_charge_id', charge.id)
             .eq('type', 'refund');
+
+          if (prefetchError) {
+            logger.error({ err: prefetchError.message, chargeId: charge.id },
+              '[payments] Failed to fetch existing refund records — aborting to prevent duplicate processing');
+            throw new Error(`Failed to fetch existing refunds for charge ${charge.id}: ${prefetchError.message}`);
+          }
 
           const processedRefundIds = new Set(
             (processedRefunds || [])
               .map((r: any) => r.metadata?.refund_id)
               .filter(Boolean)
           );
+
+          const failedRefundIds: string[] = [];
 
           for (const refund of refunds) {
             const refundAmountDollars = refund.amount / 100;
@@ -985,7 +1003,8 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
 
             if (insertError) {
               logger.error({ err: insertError.message, refundId: refund.id, chargeId: charge.id },
-                '[payments] Failed to insert refund transaction — skipping balance update for this refund');
+                '[payments] Failed to insert refund transaction — will retry via Stripe webhook');
+              failedRefundIds.push(refund.id);
               continue;
             }
 
@@ -994,8 +1013,8 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
               await ConsolidatedWalletService.updateBalance(originalTx.user_id, -refundAmountDollars);
             } catch (balanceErr: any) {
               logger.error({ err: balanceErr?.message, refundId: refund.id, userId: originalTx.user_id },
-                '[payments] Failed to update balance after inserting refund — ledger and balance may be inconsistent');
-              // Continue processing remaining refunds; inconsistency will need manual reconciliation
+                '[payments] Failed to update balance after inserting refund — will retry via Stripe webhook');
+              failedRefundIds.push(refund.id);
               continue;
             }
 
@@ -1005,6 +1024,13 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
               userId: originalTx.user_id,
               amount: refundAmountDollars,
             }, '[payments] Refund recorded and balance updated');
+          }
+
+          // If any refund failed, throw so Stripe retries and the event is NOT marked processed
+          if (failedRefundIds.length > 0) {
+            throw new Error(
+              `[payments] Failed to process ${failedRefundIds.length} refund(s) for charge ${charge.id}: ${failedRefundIds.join(', ')}`
+            );
           }
           break;
         }
