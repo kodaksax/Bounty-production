@@ -17,10 +17,7 @@
         "resourceClass": "large"
       },
       "cache": {
-        "key": "expo-55-hermesv1-rn083-v2",
-        "paths": [
-          "/home/expo/.gradle/caches"
-        ]
+        "key": "expo-55-hermesv1-rn083-v2"
       },
       "channel": "development",
       "env": {
@@ -37,10 +34,7 @@
       },
       "autoIncrement": true,
       "cache": {
-        "key": "expo-55-hermesv1-rn083-v2",
-        "paths": [
-          "/home/expo/.gradle/caches"
-        ]
+        "key": "expo-55-hermesv1-rn083-v2"
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api-staging.bountyfinder.app",
@@ -62,10 +56,7 @@
         "resourceClass": "large"
       },
       "cache": {
-        "key": "expo-55-hermesv1-rn083-v2",
-        "paths": [
-          "/home/expo/.gradle/caches"
-        ]
+        "key": "expo-55-hermesv1-rn083-v2"
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.bountyfinder.app",
