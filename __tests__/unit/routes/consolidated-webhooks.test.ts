@@ -46,8 +46,14 @@ jest.mock('../../../services/api/src/services/consolidated-payment-service', () 
 // 3. Mock the notification service
 // ---------------------------------------------------------------------------
 const mockCreateNotification = jest.fn();
+const mockNotifyPayoutPaid = jest.fn();
+const mockNotifyPayoutFailed = jest.fn();
 jest.mock('../../../services/api/src/services/notification-service', () => ({
-  notificationService: { createNotification: mockCreateNotification },
+  notificationService: {
+    createNotification: mockCreateNotification,
+    notifyPayoutPaid: mockNotifyPayoutPaid,
+    notifyPayoutFailed: mockNotifyPayoutFailed,
+  },
 }));
 
 // ---------------------------------------------------------------------------
@@ -187,13 +193,11 @@ describe('POST /webhooks/stripe', () => {
     // Route should reply with { received: true }
     expect(reply.payload).toMatchObject({ received: true });
 
-    // Notification must be sent to the hunter
-    expect(mockCreateNotification).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: 'profile_hunter_1',
-        type: 'payment',
-        title: expect.stringContaining('Payout Successful'),
-      }),
+    // Notification must be sent to the hunter via the helper
+    expect(mockNotifyPayoutPaid).toHaveBeenCalledWith(
+      'profile_hunter_1',
+      50,            // amount in dollars
+      'po_paid_1',   // payout id
     );
   });
 
@@ -231,13 +235,82 @@ describe('POST /webhooks/stripe', () => {
 
     expect(reply.payload).toMatchObject({ received: true });
 
-    // Notification must be sent to the hunter
-    expect(mockCreateNotification).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: 'profile_hunter_2',
-        type: 'payment',
-        title: expect.stringContaining('Payout Failed'),
-      }),
+    // Notification must be sent to the hunter via the helper
+    expect(mockNotifyPayoutFailed).toHaveBeenCalledWith(
+      'profile_hunter_2',
+      40,                      // amount in dollars
+      'po_fail_1',             // payout id
+      'acct_invalid',          // failure code
+      'Bank account invalid',  // failure message
     );
+  });
+
+  it('payout.paid skips notification when account ID is missing', async () => {
+    const fastify = new MockFastify();
+    adminData.profile = { id: 'profile_hunter_3' };
+
+    const event = {
+      id: 'evt_payout_paid_no_acct',
+      type: 'payout.paid',
+      // no account field
+      created: Math.floor(Date.now() / 1000),
+      data: {
+        object: {
+          id: 'po_paid_2',
+          amount: 3000,
+          destination: 'ba_test_3',
+          failure_code: null,
+          failure_message: null,
+        },
+      },
+    };
+
+    await registerConsolidatedWebhookRoutes(fastify as any);
+    const handler = fastify.routes['/webhooks/stripe'];
+    const req: any = {
+      headers: { 'stripe-signature': 'sig_test' },
+      rawBody: JSON.stringify(event),
+    };
+    const reply = makeReply();
+
+    await handler(req, reply);
+
+    expect(reply.payload).toMatchObject({ received: true });
+    expect(mockNotifyPayoutPaid).not.toHaveBeenCalled();
+  });
+
+  it('payout.failed skips notification when no profile found', async () => {
+    const fastify = new MockFastify();
+    // No profile for this account
+    adminData.profile = null;
+
+    const event = {
+      id: 'evt_payout_failed_no_profile',
+      type: 'payout.failed',
+      account: 'acct_connect_unknown',
+      created: Math.floor(Date.now() / 1000),
+      data: {
+        object: {
+          id: 'po_fail_2',
+          amount: 2000,
+          destination: 'ba_test_4',
+          failure_code: 'no_account',
+          failure_message: 'Account not found',
+        },
+      },
+    };
+
+    await registerConsolidatedWebhookRoutes(fastify as any);
+    const handler = fastify.routes['/webhooks/stripe'];
+    const req: any = {
+      headers: { 'stripe-signature': 'sig_test' },
+      rawBody: JSON.stringify(event),
+    };
+    const reply = makeReply();
+
+    await handler(req, reply);
+
+    expect(reply.payload).toMatchObject({ received: true });
+    expect(mockNotifyPayoutFailed).not.toHaveBeenCalled();
   });
 });

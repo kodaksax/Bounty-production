@@ -615,6 +615,32 @@ export class NotificationService {
     });
   }
 
+  async notifyPayoutPaid(hunterId: string, amount: number, payoutId: string) {
+    return this.createNotification({
+      userId: hunterId,
+      type: 'payment',
+      title: 'Payout Successful',
+      body: `Your payout of $${amount.toFixed(2)} has been processed and sent to your bank account.`,
+      data: { payoutId },
+    });
+  }
+
+  async notifyPayoutFailed(
+    hunterId: string,
+    amount: number,
+    payoutId: string,
+    failureCode: string | null,
+    failureMessage: string | null,
+  ) {
+    return this.createNotification({
+      userId: hunterId,
+      type: 'payment',
+      title: 'Payout Failed',
+      body: `Your payout of $${amount.toFixed(2)} could not be processed. ${failureMessage || failureCode || 'Please update your bank account details.'}`,
+      data: { payoutId, failureCode, failureMessage },
+    });
+  }
+
   // Notification Preferences Management
 
   /**
