@@ -10,7 +10,6 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.bounty.BOUNTYExpo",
-      "buildNumber": "1",
       "infoPlist": {
         "NSApplePayCapability": "production",
         "ITSAppUsesNonExemptEncryption": false,
@@ -48,7 +47,6 @@
       },
       "googleServicesFile": "./google-services.json",
       "package": "app.bountyfinder.BOUNTYExpo",
-      "versionCode": 20,
       "intentFilters": [
         {
           "action": "VIEW",
