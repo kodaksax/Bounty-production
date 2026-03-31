@@ -365,20 +365,35 @@ Deno.serve(async (req: Request) => {
         console.log(`[webhooks] Payout paid: ${payout.id} for $${payout.amount / 100}`)
 
         if (paidAccountId) {
-          const { data: paidProfile } = await supabase
+          const { data: paidProfile, error: paidProfileError } = await supabase
             .from('profiles')
             .select('id')
             .eq('stripe_connect_account_id', paidAccountId)
             .maybeSingle()
 
+          if (paidProfileError) {
+            console.error('[webhooks] Supabase error looking up profile for payout.paid', {
+              accountId: paidAccountId,
+              error: paidProfileError,
+            })
+            throw paidProfileError
+          }
+
           if (paidProfile) {
-            await supabase.from('notifications').insert({
+            const { error: notifError } = await supabase.from('notifications').insert({
               user_id: paidProfile.id,
               type: 'payment',
               title: 'Payout Successful',
               body: `Your payout of $${(payout.amount / 100).toFixed(2)} has been processed and sent to your bank account.`,
               data: { payoutId: payout.id },
             })
+            if (notifError) {
+              console.error('[webhooks] Failed to insert payout.paid notification', {
+                profileId: paidProfile.id,
+                error: notifError,
+              })
+              throw notifError
+            }
             console.log(`[webhooks] Notified hunter ${paidProfile.id} of payout.paid`)
           } else {
             console.warn(`[webhooks] No profile found for Connect account ${paidAccountId}`)
@@ -393,25 +408,47 @@ Deno.serve(async (req: Request) => {
         console.log(`[webhooks] Payout failed: ${payout.id}, reason: ${payout.failure_code}`)
 
         if (failedAccountId) {
-          const { data: failedProfile } = await supabase
+          const { data: failedProfile, error: failedProfileError } = await supabase
             .from('profiles')
             .select('id')
             .eq('stripe_connect_account_id', failedAccountId)
             .maybeSingle()
 
+          if (failedProfileError) {
+            console.error('[webhooks] Supabase error looking up profile for payout.failed', {
+              accountId: failedAccountId,
+              error: failedProfileError,
+            })
+            throw failedProfileError
+          }
+
           if (failedProfile) {
-            await supabase.from('notifications').insert({
+            const { error: notifError } = await supabase.from('notifications').insert({
               user_id: failedProfile.id,
               type: 'payment',
               title: 'Payout Failed',
               body: `Your payout of $${(payout.amount / 100).toFixed(2)} could not be processed. ${payout.failure_message || payout.failure_code || 'Please update your bank account details.'}`,
               data: { payoutId: payout.id, failureCode: payout.failure_code, failureMessage: payout.failure_message },
             })
+            if (notifError) {
+              console.error('[webhooks] Failed to insert payout.failed notification', {
+                profileId: failedProfile.id,
+                error: notifError,
+              })
+              throw notifError
+            }
             // Flag the profile so support can follow up
-            await supabase
+            const { error: payoutFlagError } = await supabase
               .from('profiles')
               .update({ payout_failed_at: new Date().toISOString() })
               .eq('id', failedProfile.id)
+            if (payoutFlagError) {
+              console.error('[webhooks] Failed to flag profile payout_failed_at', {
+                profileId: failedProfile.id,
+                error: payoutFlagError,
+              })
+              throw payoutFlagError
+            }
             console.log(`[webhooks] Notified hunter ${failedProfile.id} of payout.failed`)
           } else {
             console.warn(`[webhooks] No profile found for Connect account ${failedAccountId}`)

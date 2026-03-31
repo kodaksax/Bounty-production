@@ -692,11 +692,16 @@ async function handlePayoutPaid(event: Stripe.Event): Promise<void> {
   }
 
   const admin = getSupabaseAdmin();
-  const { data: profile } = await admin
+  const { data: profile, error: profileError } = await admin
     .from('profiles')
     .select('id')
     .eq('stripe_connect_account_id', accountId)
     .maybeSingle();
+
+  if (profileError) {
+    logger.error({ accountId, error: profileError.message }, 'Supabase error looking up profile for payout.paid');
+    throw profileError;
+  }
 
   if (!profile) {
     logger.warn({ accountId }, 'No profile found for payout account, skipping notification');
@@ -728,11 +733,16 @@ async function handlePayoutFailed(event: Stripe.Event): Promise<void> {
   }
 
   const admin = getSupabaseAdmin();
-  const { data: profile } = await admin
+  const { data: profile, error: profileError } = await admin
     .from('profiles')
     .select('id')
     .eq('stripe_connect_account_id', accountId)
     .maybeSingle();
+
+  if (profileError) {
+    logger.error({ accountId, error: profileError.message }, 'Supabase error looking up profile for payout.failed');
+    throw profileError;
+  }
 
   if (!profile) {
     logger.warn({ accountId }, 'No profile found for payout account, skipping notification');
