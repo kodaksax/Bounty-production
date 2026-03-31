@@ -677,6 +677,43 @@ export const bountyRequestService = {
       const result = await this.updateStatus(requestId, "accepted");
 
       if (result) {
+        // Transition the bounty from 'open' → 'in_progress' and record accepted_by.
+        // Without this the bounty stays 'open' even though the request is 'accepted',
+        // which causes the hunter's In Progress view to never show the bounty as in_progress.
+        try {
+          const { error: bountyUpdateError } = await supabase
+            .from('bounties')
+            .update({
+              status: 'in_progress',
+              accepted_by: result.hunter_id,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', String(result.bounty_id))
+            .eq('status', 'open'); // optimistic lock: only transition if still open
+
+          if (bountyUpdateError) {
+            logger.error('Failed to transition bounty to in_progress', { requestId, bountyId: result.bounty_id, error: bountyUpdateError });
+          }
+        } catch (statusErr) {
+          logger.error('Error transitioning bounty to in_progress after accepting request', { requestId, bountyId: result.bounty_id, error: statusErr instanceof Error ? statusErr.message : String(statusErr) });
+        }
+
+        // Reject other pending requests for this bounty so only one hunter is accepted
+        try {
+          const { error: rejectOthersError } = await supabase
+            .from('bounty_requests')
+            .update({ status: 'rejected', updated_at: new Date().toISOString() })
+            .eq('bounty_id', String(result.bounty_id))
+            .neq('id', String(requestId))
+            .eq('status', 'pending');
+
+          if (rejectOthersError) {
+            logger.error('Failed to reject other pending requests', { requestId, bountyId: result.bounty_id, error: rejectOthersError });
+          }
+        } catch (rejectErr) {
+          logger.error('Error rejecting competing requests', { requestId, bountyId: result.bounty_id, error: rejectErr instanceof Error ? rejectErr.message : String(rejectErr) });
+        }
+
         try {
           const bountyData = await this.getBountyForRequest(result.bounty_id);
           if (bountyData && !bountyData.is_for_honor && bountyData.amount > 0) {

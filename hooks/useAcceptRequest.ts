@@ -97,7 +97,9 @@ export function useAcceptRequest({
 
       // If current user is the accepted hunter, optimistically add to In Progress list
       if (String(hunterIdForConv) === String(currentUserId)) {
-        const newBounty = (request.bounty as Bounty) ?? ({ id: resolvedBountyId, title: (request.bounty as any)?.title || '', status: 'in_progress' } as unknown as Bounty)
+        const baseBounty = (request.bounty as Bounty) ?? ({ id: resolvedBountyId, title: (request.bounty as any)?.title || '' } as unknown as Bounty)
+        // Always override status to 'in_progress' — the embedded bounty object may still have 'open'
+        const newBounty = { ...baseBounty, status: 'in_progress' as const, accepted_by: hunterIdForConv }
         setInProgressBounties((prev) => {
           if (resolvedBountyId != null && prev.some(pb => String(pb.id) === String(resolvedBountyId))) return prev
           return [newBounty, ...prev]
@@ -216,8 +218,9 @@ export function useAcceptRequest({
 
       // If the current user is the accepted hunter, optimistically add the bounty to In Progress list
       if (String(hunterIdForConv) === String(currentUserId)) {
-        // If the request includes a full bounty object, use it; otherwise insert a minimal placeholder
-        const newBounty = (request.bounty as Bounty) ?? ({ id: bountyId, title: (request.bounty as any)?.title || '', status: 'in_progress' } as unknown as Bounty)
+        // Use the full bounty object if available, but always override status to 'in_progress'
+        const baseBounty = (request.bounty as Bounty) ?? ({ id: bountyId, title: (request.bounty as any)?.title || '' } as unknown as Bounty)
+        const newBounty = { ...baseBounty, status: 'in_progress' as const, accepted_by: hunterIdForConv }
         setInProgressBounties((prev) => {
           if (prev.some(pb => String(pb.id) === String(bountyId))) return prev
           return [newBounty, ...prev]
