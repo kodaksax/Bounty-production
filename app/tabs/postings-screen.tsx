@@ -208,9 +208,10 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
         return
       }
       setIsLoading((prev) => ({ ...prev, requests: true }))
-      // Batch fetch requests for all open bounties to avoid N+1 network calls
+      // Batch fetch requests for all open bounties — only pending so the Requests tab
+      // surfaces only unreviewed applications (accepted/rejected ones are handled elsewhere).
       const ids = openBounties.map(b => String(b.id))
-      const requests = await bountyRequestService.getAllWithDetailsBatch(ids, { page: 1, pageSize: 200 })
+      const requests = await bountyRequestService.getAllWithDetailsBatch(ids, { status: 'pending', page: 1, pageSize: 200 })
       setBountyRequests(requests)
     } catch (e: any) {
       console.error('Error loading bounty requests:', e)
@@ -299,6 +300,12 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
     { id: "myPostings", label: "My Postings" },
     { id: "requests", label: "Requests" },
   ]
+
+  // Count of unreviewed (pending) requests — drives the badge on the Requests tab
+  const pendingRequestCount = React.useMemo(
+    () => bountyRequests.filter((r) => r.status === 'pending').length,
+    [bountyRequests]
+  )
 
   // Fetch data from the API
   useEffect(() => {
@@ -772,19 +779,43 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                       elevation: isActive ? 2 : 0,
                     }}
                     accessibilityRole="tab"
-                    accessibilityLabel={tab.label}
+                    accessibilityLabel={
+                      tab.id === 'requests' && pendingRequestCount > 0
+                        ? `${tab.label}, ${pendingRequestCount} pending`
+                        : tab.label
+                    }
                     accessibilityState={{ selected: isActive }}
                     accessibilityHint={`Switch to ${tab.label} tab`}
                   >
-                    <Text
-                      className={cn(
-                        "text-xs font-semibold tracking-wide",
-                        isActive ? "text-emerald-700" : "text-emerald-200/70"
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text
+                        className={cn(
+                          "text-xs font-semibold tracking-wide",
+                          isActive ? "text-emerald-700" : "text-emerald-200/70"
+                        )}
+                        numberOfLines={1}
+                      >
+                        {tab.label.toUpperCase()}
+                      </Text>
+                      {tab.id === 'requests' && pendingRequestCount > 0 && (
+                        <View
+                          style={{
+                            marginLeft: 4,
+                            backgroundColor: isActive ? '#dc2626' : '#ef4444',
+                            borderRadius: 8,
+                            minWidth: 16,
+                            height: 16,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            paddingHorizontal: 3,
+                          }}
+                        >
+                          <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', lineHeight: 12 }}>
+                            {pendingRequestCount > 99 ? '99+' : pendingRequestCount}
+                          </Text>
+                        </View>
                       )}
-                      numberOfLines={1}
-                    >
-                      {tab.label.toUpperCase()}
-                    </Text>
+                    </View>
                   </TouchableOpacity>
                 )
               })}

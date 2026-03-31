@@ -205,7 +205,7 @@ export function useAcceptRequest({
       }
 
       // Update local state - remove all requests for this bounty since it's now in progress
-      setBountyRequests((prev) => prev.filter(req => req.bounty_id !== request.bounty_id))
+      setBountyRequests((prev) => prev.filter(req => String(req.bounty_id) !== String(request.bounty_id)))
 
       // Update bounty in local state (normalize ID comparison using resolved bountyId)
       setMyBounties((prev) =>
