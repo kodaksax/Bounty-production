@@ -499,6 +499,9 @@ export class NotificationService {
         notificationIds.includes(notif.id) ? { ...notif, read: true } : notif
       );
       await AsyncStorage.setItem(NOTIFICATION_CACHE_KEY, JSON.stringify(this.cachedNotifications));
+
+      // Sync OS badge with updated unread count
+      this.syncBadgeCount().catch(() => {});
     } catch (error) {
       console.error('Error marking notifications as read:', error);
     }
@@ -533,6 +536,9 @@ export class NotificationService {
       this.cachedNotifications = this.cachedNotifications.map(notif => ({ ...notif, read: true }));
       await AsyncStorage.setItem(NOTIFICATION_CACHE_KEY, JSON.stringify(this.cachedNotifications));
       this.unreadCount = 0;
+
+      // Sync OS badge to 0
+      this.syncBadgeCount().catch(() => {});
     } catch (error) {
       console.error('Error marking all notifications as read:', error);
       // Best-effort Supabase fallback
@@ -568,8 +574,9 @@ export class NotificationService {
       if (onNotificationReceived) {
         onNotificationReceived(notification);
       }
-      // Refresh notifications
+      // Refresh notifications and sync badge count
       this.fetchNotifications();
+      this.syncBadgeCount();
     });
 
     // Listener for when user taps on a notification
@@ -590,6 +597,22 @@ export class NotificationService {
   }
 
   /**
+   * Sync the OS app-icon badge number with the true unread count.
+   * Call after marking notifications as read or when the app comes to the foreground.
+   */
+  async syncBadgeCount(): Promise<void> {
+    try {
+      this.ensureNotificationsModule();
+      if (!Notifications || typeof Notifications.setBadgeCountAsync !== 'function') return;
+
+      const count = await this.getUnreadCount();
+      await Notifications.setBadgeCountAsync(count);
+    } catch {
+      // Non-fatal: badge sync is best-effort
+    }
+  }
+
+  /**
    * Clear all cached notifications
    */
   async clearCache(): Promise<void> {
@@ -598,6 +621,8 @@ export class NotificationService {
       await AsyncStorage.removeItem(LAST_FETCH_KEY);
       this.cachedNotifications = [];
       this.unreadCount = 0;
+      // Also clear the OS badge
+      this.syncBadgeCount().catch(() => {});
     } catch (error) {
       console.error('Error clearing notification cache:', error);
     }

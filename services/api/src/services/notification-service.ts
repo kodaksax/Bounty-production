@@ -1,5 +1,5 @@
-import { and, desc, eq, ne } from 'drizzle-orm';
-import { Expo, ExpoPushMessage } from 'expo-server-sdk';
+import { and, count, desc, eq, ne } from 'drizzle-orm';
+import { Expo, ExpoPushMessage, ExpoPushTicket } from 'expo-server-sdk';
 import { db } from '../db/connection';
 import { conversations, messages, notificationPreferences, notifications, pushTokens, users } from '../db/schema';
 import { sendPushViaEdge } from './supabase-edge-client';
@@ -8,6 +8,38 @@ import { sendPushViaEdge } from './supabase-edge-client';
 const expo = new Expo();
 
 export type NotificationType = 'application' | 'acceptance' | 'rejection' | 'completion' | 'payment' | 'message' | 'follow' | 'cancellation' | 'stale_bounty' | 'stale_bounty_cancelled' | 'stale_bounty_reposted' | 'review_needed';
+
+// ── Message debounce state ─────────────────────────────────────────────
+// Key: `${recipientUserId}:${senderUserId}:${conversationId}`, Value: { timer, count, conversationId, latestText }
+const MESSAGE_DEBOUNCE_MS = 5_000; // 5-second window to batch rapid messages from same sender
+interface DebouncedMessage {
+  timer: ReturnType<typeof setTimeout>;
+  count: number;
+  conversationId: string;
+  latestText: string;
+  senderHandle: string;
+}
+const messageDebounceMap = new Map<string, DebouncedMessage>();
+
+// Map notification types to Android notification channel IDs
+function getAndroidChannelId(type: NotificationType): string {
+  switch (type) {
+    case 'message': return 'messages';
+    case 'application':
+    case 'acceptance':
+    case 'rejection':
+    case 'completion':
+    case 'cancellation':
+    case 'review_needed':
+    case 'stale_bounty':
+    case 'stale_bounty_cancelled':
+    case 'stale_bounty_reposted':
+      return 'bounties';
+    case 'payment': return 'payments';
+    case 'follow':
+    default: return 'default';
+  }
+}
 
 export interface CreateNotificationParams {
   userId: string;
@@ -110,7 +142,9 @@ export class NotificationService {
 
     // Send push notification if enabled and user preferences allow it
     if (sendPush && isEnabled) {
-      await this.sendPushNotification(userId, title, body, data);
+      // Include the notification type in the push data for Android channel routing
+      const pushData = { ...data, notificationType: type };
+      await this.sendPushNotification(userId, title, body, pushData);
     }
 
     return notification as NotificationData;
@@ -137,14 +171,14 @@ export class NotificationService {
   async getUnreadCount(userId: string): Promise<number> {
     try {
       const results = await db
-        .select()
+        .select({ count: count(notifications.id) })
         .from(notifications)
         .where(and(
           eq(notifications.user_id, userId),
           eq(notifications.read, false)
         ));
 
-      return results.length;
+      return Number(results[0]?.count ?? 0);
     } catch (error) {
       console.error(`Error getting unread count for user ${userId}:`, error);
       throw new Error(`Failed to get unread count: ${error instanceof Error ? error.message : String(error)}`);
@@ -321,7 +355,11 @@ export class NotificationService {
   }
 
   /**
-   * Send push notification to user's devices
+   * Send push notification to user's devices.
+   * Calculates the recipient's true unread count and includes it in the badge
+   * field so the OS app-icon badge stays accurate even when the app is closed.
+   * After sending, performs best-effort cleanup of tokens that the push
+   * provider reports as invalid/expired (stale token lifecycle management).
    */
   async sendPushNotification(
     userId: string,
@@ -341,18 +379,34 @@ export class NotificationService {
         return;
       }
 
+      // Calculate the true unread count for the badge
+      let badge = 1;
+      try {
+        badge = await this.getUnreadCount(userId);
+      } catch {
+        // Non-fatal – default to 1 so the badge appears
+      }
+
+      // Determine the Android channel based on notification type
+      const notificationType = (data?.notificationType ?? 'default') as NotificationType;
+      const channelId = getAndroidChannelId(notificationType);
+
+      // Filter to valid tokens and keep track of which token record each message corresponds to
+      const validTokenEntries = tokens.filter(t => Expo.isExpoPushToken(t.token));
+
       // Prepare messages
-      const messages: ExpoPushMessage[] = tokens
-        .filter(t => Expo.isExpoPushToken(t.token))
+      const pushMessages: ExpoPushMessage[] = validTokenEntries
         .map(t => ({
           to: t.token,
           sound: 'default' as const,
           title,
           body,
           data: data || {},
+          badge,
+          channelId,
         }));
 
-      if (messages.length === 0) {
+      if (pushMessages.length === 0) {
         console.log(`No valid Expo push tokens for user ${userId}`);
         return;
       }
@@ -361,17 +415,18 @@ export class NotificationService {
       const edgeUrl = process.env.SUPABASE_EDGE_URL
       if (edgeUrl) {
         try {
-          const resp = await sendPushViaEdge(messages.map(m => ({ to: m.to, title: m.title, body: m.body, data: m.data, sound: m.sound })));
+          const resp = await sendPushViaEdge(pushMessages.map(m => ({ to: m.to, title: m.title, body: m.body, data: m.data, sound: m.sound, badge: m.badge, channelId: m.channelId })));
           console.log(`Edge function push response for user ${userId}:`, resp);
+          return; // Success – no need to fall through to expo-server-sdk
         } catch (err) {
-          console.error('Error sending push via Supabase Edge Function:', err);
+          console.error('Error sending push via Supabase Edge Function, falling back to expo-server-sdk:', err);
+          // Fall through to chunked Expo send below
         }
-        return;
       }
 
       // Fallback: send notifications in chunks via expo-server-sdk
-      const chunks = expo.chunkPushNotifications(messages);
-      const tickets = [];
+      const chunks = expo.chunkPushNotifications(pushMessages);
+      const tickets: ExpoPushTicket[] = [];
 
       for (const chunk of chunks) {
         try {
@@ -384,9 +439,45 @@ export class NotificationService {
 
       // Log results
       console.log(`Sent ${tickets.length} push notifications to user ${userId}`);
+
+      // ── Stale token cleanup (best-effort) ──────────────────────────
+      // Tokens that return an "error" status with "DeviceNotRegistered" are stale
+      // (e.g. user uninstalled the app). Remove them so future sends are efficient.
+      // Use validTokenEntries (not the unfiltered tokens) so indices match tickets.
+      this.cleanupStaleTokens(validTokenEntries, tickets).catch((err) => {
+        console.error('Error during stale token cleanup:', err);
+      });
     } catch (error) {
       console.error('Error in sendPushNotification:', error);
     }
+  }
+
+  /**
+   * Remove push tokens that the Expo push service reported as invalid.
+   * Called after each push send as best-effort cleanup.
+   */
+  private async cleanupStaleTokens(
+    tokenRecords: { id: string; token: string }[],
+    tickets: ExpoPushTicket[]
+  ): Promise<void> {
+    const staleTokenIds: string[] = [];
+
+    for (let i = 0; i < tickets.length && i < tokenRecords.length; i++) {
+      const ticket = tickets[i];
+      if (
+        ticket.status === 'error' &&
+        ticket.details?.error === 'DeviceNotRegistered'
+      ) {
+        staleTokenIds.push(tokenRecords[i].id);
+        console.log(`🗑️  Marking stale push token with id ${tokenRecords[i].id} for cleanup`);
+      }
+    }
+
+    if (staleTokenIds.length === 0) return;
+
+    const { inArray } = await import('drizzle-orm');
+    await db.delete(pushTokens).where(inArray(pushTokens.id, staleTokenIds));
+    console.log(`✅ Cleaned up ${staleTokenIds.length} stale push token(s)`);
   }
 
   /**
@@ -520,28 +611,91 @@ export class NotificationService {
     });
   }
 
+  /**
+   * Send a message notification with debouncing.
+   * If multiple messages arrive from the same sender to the same recipient within
+   * MESSAGE_DEBOUNCE_MS, they are batched into a single summary notification
+   * (e.g. "3 new messages from John") instead of individual pings.
+   */
   async sendMessageNotification(userId: string, senderId: string, conversationId: string, messageText: string) {
-    // Get sender info
-    const { users } = await import('../db/schema');
-    const senderInfo = await db
-      .select({ handle: users.handle })
-      .from(users)
-      .where(eq(users.id, senderId))
-      .limit(1);
+    const debounceKey = `${userId}:${senderId}:${conversationId}`;
+    const existing = messageDebounceMap.get(debounceKey);
 
-    const senderHandle = senderInfo[0]?.handle || 'Someone';
-    
+    // Pre-fetch sender handle (needed for both immediate and batched sends)
+    let senderHandle = 'Someone';
+    try {
+      const { users: usersTable } = await import('../db/schema');
+      const senderInfo = await db
+        .select({ handle: usersTable.handle })
+        .from(usersTable)
+        .where(eq(usersTable.id, senderId))
+        .limit(1);
+      senderHandle = senderInfo[0]?.handle || 'Someone';
+    } catch {
+      // Use fallback handle
+    }
+
+    if (existing) {
+      // Another message arrived within the debounce window – accumulate
+      clearTimeout(existing.timer);
+      existing.count += 1;
+      existing.latestText = messageText;
+      existing.senderHandle = senderHandle;
+
+      // Reset the timer to flush after the debounce window
+      existing.timer = setTimeout(() => {
+        this.flushDebouncedMessage(debounceKey).catch((err) => {
+          console.error('Error flushing debounced message notification:', err);
+        });
+      }, MESSAGE_DEBOUNCE_MS);
+      return;
+    }
+
+    // First message in the window – start the debounce timer
+    const timer = setTimeout(() => {
+      this.flushDebouncedMessage(debounceKey).catch((err) => {
+        console.error('Error flushing debounced message notification:', err);
+      });
+    }, MESSAGE_DEBOUNCE_MS);
+
+    messageDebounceMap.set(debounceKey, {
+      timer,
+      count: 1,
+      conversationId,
+      latestText: messageText,
+      senderHandle,
+    });
+  }
+
+  /**
+   * Flush a debounced message notification – sends a single (possibly grouped) notification.
+   */
+  private async flushDebouncedMessage(debounceKey: string): Promise<void> {
+    const entry = messageDebounceMap.get(debounceKey);
+    if (!entry) return;
+    messageDebounceMap.delete(debounceKey);
+
+    const [userId, senderId] = debounceKey.split(':');
+    const { count, conversationId, latestText, senderHandle } = entry;
+
     // Truncate message for preview
-    const preview = messageText.length > 100 
-      ? messageText.substring(0, 100) + '...'
-      : messageText;
+    const preview = latestText.length > 100
+      ? latestText.substring(0, 100) + '...'
+      : latestText;
 
-    return this.createNotification({
+    const title = count > 1
+      ? `${count} new messages from ${senderHandle}`
+      : `Message from ${senderHandle}`;
+    const body = count > 1
+      ? `Latest: ${preview}`
+      : preview;
+
+    await this.createNotification({
       userId,
       type: 'message',
-      title: `Message from ${senderHandle}`,
-      body: preview,
-      data: { senderId, conversationId, messageText },
+      title,
+      body,
+      data: { senderId, conversationId, messageText: latestText, notificationType: 'message' },
     });
   }
 
