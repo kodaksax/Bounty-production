@@ -69,10 +69,10 @@ export class WalletService {
         stripe_transfer_id: input.stripe_transfer_id,
         platform_fee_cents: input.platform_fee_cents,
       }).returning();
-    } catch (insertError: any) {
+    } catch (insertError: unknown) {
       // Catch unique-constraint violations for escrow duplicates and surface
       // a deterministic error message instead of a raw DB error.
-      const msg = insertError?.message || '';
+      const msg = (insertError instanceof Error ? insertError.message : String(insertError)) || '';
       if (input.type === 'escrow' && bountyId && /duplicate|unique|already exists/i.test(msg)) {
         throw new Error(`Duplicate escrow: an escrow transaction already exists for bounty ${bountyId}`);
       }

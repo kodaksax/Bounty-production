@@ -246,12 +246,13 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
           userId,
           originalError: error.message,
         }, 'Potential duplicate deposit error but no existing transaction found for paymentIntentId');
-      } catch (lookupError: any) {
+      } catch (lookupError: unknown) {
         // If we cannot verify the duplicate, do not silently swallow the error.
+        const lookupMsg = lookupError instanceof Error ? lookupError.message : String(lookupError);
         logger.error({
           paymentIntentId: paymentIntent.id,
           userId,
-          lookupError: lookupError?.message ?? lookupError,
+          lookupError: lookupMsg,
           originalError: error.message,
         }, '[Webhook] Failed to verify potential duplicate deposit by paymentIntentId');
       }
