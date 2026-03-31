@@ -37,7 +37,11 @@ const createRequestSchema = z.object({
     .max(1000, 'Application message must be at most 1000 characters'),
   proposed_completion_date: z.string()
     .datetime('Invalid date format')
-    .optional(),
+    .optional()
+    .refine(
+      (val) => !val || new Date(val) > new Date(),
+      'Proposed completion date must be in the future'
+    ),
 });
 
 // Schema for updating a bounty request
@@ -589,6 +593,21 @@ export async function registerConsolidatedBountyRequestRoutes(
           throw new ConflictError('You have already applied to this bounty');
         }
 
+        // Limit concurrent pending applications per hunter to prevent spam
+        const MAX_PENDING_APPLICATIONS = 10;
+        const { count: pendingCount, error: countError } = await supabase
+          .from('bounty_requests')
+          .select('id', { count: 'exact', head: true })
+          .eq('hunter_id', userId)
+          .eq('status', 'pending');
+
+        if (!countError && typeof pendingCount === 'number' && pendingCount >= MAX_PENDING_APPLICATIONS) {
+          throw new ConflictError(
+            `You have reached the maximum of ${MAX_PENDING_APPLICATIONS} pending applications. ` +
+            'Please wait for existing applications to be reviewed or withdraw some before applying to more bounties.'
+          );
+        }
+
         // Prepare request data
         const requestData: Partial<BountyRequest> = {
           bounty_id: body.bounty_id,
@@ -889,7 +908,7 @@ export async function registerConsolidatedBountyRequestRoutes(
           }
 
           // 3. Reject all other pending requests for this bounty
-          const { error: rejectOthersError } = await supabase
+          const { data: rejectedRequests, error: rejectOthersError } = await supabase
             .from('bounty_requests')
             .update({
               status: 'rejected',
@@ -897,7 +916,8 @@ export async function registerConsolidatedBountyRequestRoutes(
             })
             .eq('bounty_id', bountyRequest.bounty_id)
             .eq('status', 'pending')
-            .neq('id', requestId);
+            .neq('id', requestId)
+            .select('id, hunter_id');
 
           if (rejectOthersError) {
             request.log.warn(
@@ -905,6 +925,24 @@ export async function registerConsolidatedBountyRequestRoutes(
               'Failed to reject other pending requests (continuing)'
             );
             // Don't fail the whole operation if this fails
+          }
+
+          // Notify rejected hunters so they know the bounty is no longer available
+          if (Array.isArray(rejectedRequests) && rejectedRequests.length > 0) {
+            for (const rejected of rejectedRequests) {
+              try {
+                await notificationService.notifyBountyRejection(
+                  rejected.hunter_id,
+                  bountyRequest.bounty_id,
+                  bounty.title
+                );
+              } catch (notifErr) {
+                request.log.warn(
+                  { error: notifErr, hunterId: rejected.hunter_id },
+                  'Failed to send rejection notification to competing hunter (non-fatal)'
+                );
+              }
+            }
           }
 
           request.log.info(

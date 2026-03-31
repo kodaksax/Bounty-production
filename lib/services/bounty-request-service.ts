@@ -672,6 +672,21 @@ export const bountyRequestService = {
    * Creates escrow PaymentIntent to hold funds
    */
   async acceptRequest(requestId: string | number): Promise<BountyRequest | null> {
+    // Pre-check: verify the request is still in 'pending' status before attempting acceptance.
+    // This avoids wasted work and clearer errors when the request was already handled.
+    try {
+      const currentRequest = await this.getById(requestId as any);
+      if (currentRequest && currentRequest.status !== 'pending') {
+        logger.error('Cannot accept a request that is not pending', {
+          requestId,
+          currentStatus: currentRequest.status,
+        });
+        return null;
+      }
+    } catch {
+      // If the pre-check fails (e.g. network), continue with the original flow
+    }
+
     // If using Supabase client, perform update and create escrow client-side as before.
     if (isSupabaseConfigured) {
       const result = await this.updateStatus(requestId, "accepted");
@@ -778,6 +793,15 @@ export const bountyRequestService = {
 
       // On success, fetch the accepted request to return it (authoritative state)
       const acceptedReq = await this.getById(requestId as any)
+
+      // Post-acceptance verification: confirm the request actually transitioned to 'accepted'
+      if (acceptedReq && acceptedReq.status !== 'accepted') {
+        logger.error('Post-acceptance verification failed: request did not transition to accepted', {
+          requestId,
+          actualStatus: acceptedReq.status,
+        })
+        return null
+      }
 
       // Create escrow if needed using authoritative bounty data
       try {

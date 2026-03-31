@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import { db } from '../db/connection';
-import { bounties } from '../db/schema';
+import { bounties, users } from '../db/schema';
 import { emailService } from './email-service';
 import { notificationService } from './notification-service';
 import { outboxService } from './outbox-service';
@@ -143,6 +143,20 @@ export class BountyService {
           // Verify payment_intent_id exists
           if (!bounty.payment_intent_id) {
             return { success: false, error: 'No payment intent found for this bounty. Cannot process completion.' };
+          }
+
+          // Verify hunter has a connected Stripe account before proceeding
+          const hunterRecord = await tx
+            .select({ stripe_account_id: users.stripe_account_id })
+            .from(users)
+            .where(eq(users.id, completedBy))
+            .limit(1);
+
+          if (!hunterRecord.length || !hunterRecord[0].stripe_account_id) {
+            return {
+              success: false,
+              error: 'You must connect a Stripe account before completing a paid bounty. Please set up payouts in your profile settings.',
+            };
           }
 
           // Create outbox event for fund release

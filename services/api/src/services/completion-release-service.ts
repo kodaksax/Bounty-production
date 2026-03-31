@@ -102,7 +102,12 @@ export class CompletionReleaseService {
       const hunter = hunterRecord[0];
 
       if (!hunter.stripe_account_id) {
-        throw new Error('Hunter does not have a Stripe Connect account');
+        throw new Error('Hunter does not have a Stripe Connect account. Hunter must set up payouts before receiving funds.');
+      }
+
+      // Verify Stripe account is usable (basic format check)
+      if (!hunter.stripe_account_id.startsWith('acct_')) {
+        throw new Error('Hunter has an invalid Stripe Connect account ID. Please contact support.');
       }
 
       // Calculate amounts
@@ -114,6 +119,14 @@ export class CompletionReleaseService {
 
       const platformFeeCents = Math.round((bounty.amount_cents * platformFeePercentage) / 100);
       const releaseAmountCents = bounty.amount_cents - platformFeeCents;
+
+      // Ensure the release amount is positive after fee deduction
+      if (releaseAmountCents <= 0) {
+        throw new Error(
+          `Release amount (${releaseAmountCents} cents) must be positive. ` +
+          `Bounty amount: ${bounty.amount_cents} cents, platform fee: ${platformFeeCents} cents.`
+        );
+      }
 
       // Check for existing release to prevent double release (after validating bounty/hunter)
       const existingRelease = await db
