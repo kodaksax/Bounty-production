@@ -53,7 +53,9 @@ const createPaymentIntentSchema = z.object({
 
 const createEscrowSchema = z.object({
   bountyId: z.string().min(1, 'bountyId is required'),
-  amountCents: z.number().int().min(100, 'amountCents must be at least 100 (i.e. $1.00)'),
+  amountCents: z.number().int()
+    .min(100, 'amountCents must be at least 100 (i.e. $1.00)')
+    .max(1_000_000, 'amountCents must not exceed 1000000 (i.e. $10,000.00)'),
   posterId: z.string().min(1, 'posterId is required'),
   hunterId: z.string().min(1, 'hunterId is required'),
   currency: z.string().toLowerCase().optional().default('usd'),
@@ -446,6 +448,12 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
   /**
    * Create escrow PaymentIntent for bounty
    * Uses manual capture to hold funds until bounty completion
+   *
+   * Safeguards:
+   * - Zod schema validates required fields and amount bounds (min $1, max $10K)
+   * - Poster ownership check (only poster can escrow their bounty)
+   * - Idempotency key deduplication (stored AFTER validation guards)
+   * - Hunter ≠ poster guard
    */
   fastify.post('/payments/escrows', {
     preHandler: authMiddleware,
@@ -468,6 +476,22 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
       const { bountyId, amountCents, posterId, hunterId, currency } = body;
       idempotencyKey = body.idempotencyKey;
 
+      if (!request.userId) {
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
+
+      // Only the poster can create the escrow for their own bounty
+      if (posterId !== request.userId) {
+        return reply.code(403).send({ error: 'Only the bounty poster can create an escrow' });
+      }
+
+      // Poster and hunter must be different users
+      if (posterId === hunterId) {
+        return reply.code(400).send({ error: 'Poster and hunter must be different users' });
+      }
+
+      // Store idempotency key AFTER all validation guards so that an early
+      // 400/403 return does not leave a stale key that blocks legitimate retries.
       if (idempotencyKey) {
         const isDuplicate = await checkIdempotencyKey(idempotencyKey);
         if (isDuplicate) {
@@ -477,15 +501,6 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
           });
         }
         await storeIdempotencyKey(idempotencyKey);
-      }
-
-      if (!request.userId) {
-        return reply.code(401).send({ error: 'Unauthorized' });
-      }
-
-      // Only the poster can create the escrow for their own bounty
-      if (posterId !== request.userId) {
-        return reply.code(403).send({ error: 'Only the bounty poster can create an escrow' });
       }
 
       // Create a manual-capture PaymentIntent so funds are held until bounty completion

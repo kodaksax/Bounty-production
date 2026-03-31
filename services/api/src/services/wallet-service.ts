@@ -3,6 +3,10 @@ import { db } from '../db/connection';
 import { walletTransactions } from '../db/schema';
 import { walletRiskIntegration } from './wallet-risk-integration';
 
+/** Allowed wallet transaction types to prevent invalid ledger entries */
+export const VALID_TRANSACTION_TYPES = ['escrow', 'release', 'refund', 'deposit', 'withdrawal', 'bounty_posted'] as const;
+export type WalletTransactionType = typeof VALID_TRANSACTION_TYPES[number];
+
 // Define types locally to avoid import issues
 export interface CreateWalletTransactionInput {
   user_id: string;
@@ -33,7 +37,14 @@ export class WalletService {
    * Create a new wallet transaction with risk validation
    */
   async createTransaction(input: CreateWalletTransactionInput): Promise<WalletTransaction> {
-    // STEP 1: Validate transaction is allowed (BEFORE creating)
+    // STEP 0: Validate transaction type is in the allowed set
+    if (!VALID_TRANSACTION_TYPES.includes(input.type as WalletTransactionType)) {
+      throw new Error(`Invalid transaction type "${input.type}". Must be one of: ${VALID_TRANSACTION_TYPES.join(', ')}`);
+    }
+
+    const bountyId = input.bounty_id || input.bountyId;
+
+    // STEP 0b: Validate transaction is allowed (BEFORE creating)
     const validation = await walletRiskIntegration.validateTransactionAllowed(
       input.user_id,
       input.type,
@@ -44,16 +55,29 @@ export class WalletService {
       throw new Error(validation.reason || 'Transaction not allowed due to risk restrictions');
     }
 
-    // STEP 2: Create the transaction
-    const bountyId = input.bounty_id || input.bountyId; // Support both naming conventions
-    const transaction = await db.insert(walletTransactions).values({
-      user_id: input.user_id,
-      bounty_id: bountyId,
-      type: input.type,
-      amount_cents: Math.round(input.amount * 100), // Convert to cents
-      stripe_transfer_id: input.stripe_transfer_id,
-      platform_fee_cents: input.platform_fee_cents,
-    }).returning();
+    // STEP 1: Create the transaction.
+    // For escrow transactions we rely on the DB insert to detect duplicates
+    // (via a unique-constraint error) rather than a pre-read SELECT, which is
+    // not atomic and can race under concurrent calls.
+    let transaction: any[];
+    try {
+      transaction = await db.insert(walletTransactions).values({
+        user_id: input.user_id,
+        bounty_id: bountyId,
+        type: input.type,
+        amount_cents: Math.round(input.amount * 100), // Convert to cents
+        stripe_transfer_id: input.stripe_transfer_id,
+        platform_fee_cents: input.platform_fee_cents,
+      }).returning();
+    } catch (insertError: unknown) {
+      // Catch unique-constraint violations for escrow duplicates and surface
+      // a deterministic error message instead of a raw DB error.
+      const msg = (insertError instanceof Error ? insertError.message : String(insertError)) || '';
+      if (input.type === 'escrow' && bountyId && /duplicate|unique|already exists/i.test(msg)) {
+        throw new Error(`Duplicate escrow: an escrow transaction already exists for bounty ${bountyId}`);
+      }
+      throw insertError;
+    }
 
     const transactionId = transaction[0].id;
 

@@ -176,6 +176,12 @@ class StripeConnectService {
 
   /**
    * Create a PaymentIntent for escrow (capture funds on platform)
+   *
+   * Safeguards:
+   * - Rejects honor-only and zero-amount bounties
+   * - Prevents duplicate escrow creation (checks payment_intent_id first)
+   * - Uses idempotency key derived from bountyId
+   * - Validates creator existence
    */
   async createEscrowPaymentIntent(bountyId: string): Promise<EscrowPaymentIntentResponse> {
     this.ensureConfigured();
@@ -202,6 +208,20 @@ class StripeConnectService {
         throw new Error('Cannot create escrow for zero amount bounties');
       }
 
+      // Prevent duplicate escrow: if payment_intent_id is already set, return it.
+      // Note: clientSecret is empty because the PaymentIntent was created in a prior
+      // call; callers should treat status 'existing' as an idempotent no-op.
+      if (bounty.payment_intent_id) {
+        console.warn(`⚠️ Bounty ${bountyId} already has payment_intent_id ${bounty.payment_intent_id}; skipping duplicate escrow creation`);
+        return {
+          paymentIntentId: bounty.payment_intent_id,
+          clientSecret: '', // unavailable for previously-created intents
+          amount: bounty.amount_cents,
+          currency: 'usd',
+          status: 'existing', // signals duplicate — callers should not attempt confirmation
+        };
+      }
+
       // Get creator details for payment method
       const creatorRecord = await db
         .select()
@@ -212,6 +232,10 @@ class StripeConnectService {
       if (!creatorRecord.length) {
         throw new Error('Bounty creator not found');
       }
+
+      // Use a deterministic idempotency key derived from the bountyId
+      // to prevent duplicate PaymentIntents on retry
+      const idempotencyKey = `escrow_${bountyId}`;
 
       // Create real Stripe PaymentIntent
       const paymentIntent = await this.stripe!.paymentIntents.create({
@@ -226,7 +250,7 @@ class StripeConnectService {
           bounty_title: bounty.title,
         },
         description: `Escrow for bounty: ${bounty.title}`,
-      });
+      }, { idempotencyKey });
 
       // Update bounty with payment intent ID
       await db

@@ -7,6 +7,55 @@
 /** Minimum number of characters required for a bounty description. */
 const MIN_DESCRIPTION_LENGTH = 20;
 
+/** Minimum escrow amount in cents ($1.00) */
+export const MIN_ESCROW_CENTS = 100;
+
+/** Maximum escrow amount in cents ($10,000.00) */
+export const MAX_ESCROW_CENTS = 1_000_000;
+
+/**
+ * Safely converts a dollar amount to integer cents, rounding to avoid
+ * floating-point precision errors (e.g. 19.99 * 100 = 1998.9999…).
+ *
+ * @param dollars - Amount in dollars
+ * @returns Integer amount in cents
+ */
+export function toCents(dollars: number): number {
+  // Normalize to two decimal places before converting to cents to avoid
+  // floating-point precision issues at half-cent boundaries (e.g. 1.005).
+  const normalized = Number(dollars.toFixed(2));
+  return Math.round(normalized * 100);
+}
+
+/**
+ * Validates that an escrow amount in cents is within acceptable bounds.
+ *
+ * @param amountCents - The amount in cents to validate
+ * @returns Error message string if invalid, null if valid
+ */
+export function validateEscrowAmount(amountCents: number): string | null {
+  if (!Number.isFinite(amountCents) || !Number.isInteger(amountCents)) {
+    return 'Escrow amount must be a whole number of cents';
+  }
+  if (amountCents < MIN_ESCROW_CENTS) {
+    return `Escrow amount must be at least $${(MIN_ESCROW_CENTS / 100).toFixed(2)}`;
+  }
+  if (amountCents > MAX_ESCROW_CENTS) {
+    return `Escrow amount must not exceed $${(MAX_ESCROW_CENTS / 100).toFixed(2)}`;
+  }
+  return null;
+}
+
+/**
+ * Validates that a Stripe PaymentIntent ID has the expected format.
+ *
+ * @param id - The payment intent ID to validate
+ * @returns true if the ID looks like a valid PaymentIntent ID
+ */
+export function isValidPaymentIntentId(id: string | undefined | null): boolean {
+  return typeof id === 'string' && /^pi_[a-zA-Z0-9]{8,}$/.test(id);
+}
+
 /**
  * Validates a bounty title. Uses trimmed length so whitespace-padded
  * strings are rejected.

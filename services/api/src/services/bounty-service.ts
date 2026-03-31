@@ -11,8 +11,21 @@ export class BountyService {
   /**
    * Accept a bounty - transitions from 'open' to 'in_progress'
    * Creates BOUNTY_ACCEPTED outbox event and escrow transaction
+   *
+   * Safeguards:
+   * 1. Atomic conditional UPDATE prevents concurrent accepts (optimistic lock)
+   * 2. Validates bounty amount before creating escrow (prevents zero-amount escrows)
+   * 3. Hunter cannot accept their own bounty
    */
   async acceptBounty(bountyId: string, hunterId: string): Promise<{ success: boolean; error?: string }> {
+    // Input validation
+    if (!bountyId || typeof bountyId !== 'string') {
+      return { success: false, error: 'Invalid bountyId' };
+    }
+    if (!hunterId || typeof hunterId !== 'string') {
+      return { success: false, error: 'Invalid hunterId' };
+    }
+
     try {
       // Start a transaction
       return await db.transaction(async (tx) => {
@@ -43,30 +56,45 @@ export class BountyService {
 
           const bounty = updated[0];
 
+          // Guard: poster cannot accept their own bounty
+          if (bounty.creator_id === hunterId) {
+            // Roll back the status change inside the same transaction
+            await tx
+              .update(bounties)
+              .set({ status: 'open', hunter_id: null, updated_at: new Date() })
+              .where(eq(bounties.id, bountyId));
+            return { success: false, error: 'You cannot accept your own bounty' };
+          }
+
         // Create escrow transaction if bounty has amount
         if (bounty.amount_cents > 0 && !bounty.is_for_honor) {
-          // Create ESCROW_HOLD outbox event for PaymentIntent creation
-          await outboxService.createEvent({
-            type: 'ESCROW_HOLD',
-            payload: {
-              bountyId,
-              creatorId: bounty.creator_id,
-              amount: bounty.amount_cents,
-              title: bounty.title,
-            },
-            status: 'pending',
-          });
+          // Validate escrow amount bounds
+          if (bounty.amount_cents < 100) {
+            console.warn(`⚠️ Bounty ${bountyId} has amount_cents ${bounty.amount_cents} < 100; skipping escrow`);
+          } else {
+            // Create ESCROW_HOLD outbox event for PaymentIntent creation
+            await outboxService.createEvent({
+              type: 'ESCROW_HOLD',
+              payload: {
+                bountyId,
+                creatorId: bounty.creator_id,
+                amount: bounty.amount_cents,
+                title: bounty.title,
+              },
+              status: 'pending',
+            });
 
-          // Create escrow transaction record
-          await walletService.createTransaction({
-            user_id: bounty.creator_id,
-            bountyId: bountyId,
-            type: 'escrow',
-            amount: bounty.amount_cents / 100, // Convert cents to dollars
-          });
+            // Create escrow transaction record
+            await walletService.createTransaction({
+              user_id: bounty.creator_id,
+              bountyId: bountyId,
+              type: 'escrow',
+              amount: bounty.amount_cents / 100, // Convert cents to dollars
+            });
 
-          // Send escrow confirmation email
-          await emailService.sendEscrowConfirmation(bountyId, bounty.creator_id);
+            // Send escrow confirmation email
+            await emailService.sendEscrowConfirmation(bountyId, bounty.creator_id);
+          }
         }
 
         // Create outbox event for BOUNTY_ACCEPTED
