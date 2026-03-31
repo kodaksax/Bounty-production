@@ -615,6 +615,34 @@ export class NotificationService {
     });
   }
 
+  /** Notify a hunter that their Stripe payout was sent to their bank account. */
+  async notifyPayoutPaid(hunterId: string, amount: number, payoutId: string) {
+    return this.createNotification({
+      userId: hunterId,
+      type: 'payment',
+      title: 'Payout Successful',
+      body: `Your payout of $${amount.toFixed(2)} has been processed and sent to your bank account.`,
+      data: { payoutId },
+    });
+  }
+
+  /** Notify a hunter that their Stripe payout failed and include failure details. */
+  async notifyPayoutFailed(
+    hunterId: string,
+    amount: number,
+    payoutId: string,
+    failureCode: string | null,
+    failureMessage: string | null,
+  ) {
+    return this.createNotification({
+      userId: hunterId,
+      type: 'payment',
+      title: 'Payout Failed',
+      body: `Your payout of $${amount.toFixed(2)} could not be processed. ${failureMessage || failureCode || 'Please update your bank account details.'}`,
+      data: { payoutId, failureCode, failureMessage },
+    });
+  }
+
   // Notification Preferences Management
 
   /**

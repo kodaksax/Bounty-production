@@ -27,6 +27,8 @@ export const users = pgTable('profiles', {
   balance: text('balance').default('0.00').notNull(), // Numeric in DB, using text for precision or number if scaled
   // X25519 public key for E2E encrypted messaging (private key stays on device)
   e2e_public_key: text('e2e_public_key'),
+  // Most recent failed payout timestamp (set by payout.failed webhook for support follow-up)
+  payout_failed_at: timestamp('payout_failed_at', { withTimezone: true }),
 });
 
 // Bounties table as specified in requirements

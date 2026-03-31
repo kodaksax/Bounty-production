@@ -692,24 +692,23 @@ async function handlePayoutPaid(event: Stripe.Event): Promise<void> {
   }
 
   const admin = getSupabaseAdmin();
-  const { data: profile } = await admin
+  const { data: profile, error: profileError } = await admin
     .from('profiles')
     .select('id')
     .eq('stripe_connect_account_id', accountId)
     .maybeSingle();
+
+  if (profileError) {
+    logger.error({ accountId, error: profileError.message }, 'Supabase error looking up profile for payout.paid');
+    throw profileError;
+  }
 
   if (!profile) {
     logger.warn({ accountId }, 'No profile found for payout account, skipping notification');
     return;
   }
 
-  await notificationService.createNotification({
-    userId: profile.id,
-    type: 'payment',
-    title: 'Payout Successful',
-    body: `Your payout of $${(payout.amount / 100).toFixed(2)} has been processed and sent to your bank account.`,
-    data: { payoutId: payout.id },
-  });
+  await notificationService.notifyPayoutPaid(profile.id, payout.amount / 100, payout.id);
 }
 
 /**
@@ -734,30 +733,43 @@ async function handlePayoutFailed(event: Stripe.Event): Promise<void> {
   }
 
   const admin = getSupabaseAdmin();
-  const { data: profile } = await admin
+  const { data: profile, error: profileError } = await admin
     .from('profiles')
     .select('id')
     .eq('stripe_connect_account_id', accountId)
     .maybeSingle();
+
+  if (profileError) {
+    logger.error({ accountId, error: profileError.message }, 'Supabase error looking up profile for payout.failed');
+    throw profileError;
+  }
 
   if (!profile) {
     logger.warn({ accountId }, 'No profile found for payout account, skipping notification');
     return;
   }
 
-  await notificationService.createNotification({
-    userId: profile.id,
-    type: 'payment',
-    title: 'Payout Failed',
-    body: `Your payout of $${(payout.amount / 100).toFixed(2)} could not be processed. ${payout.failure_message || payout.failure_code || 'Please update your bank account details.'}`,
-    data: { payoutId: payout.id, failureCode: payout.failure_code, failureMessage: payout.failure_message },
-  });
+  await notificationService.notifyPayoutFailed(
+    profile.id,
+    payout.amount / 100,
+    payout.id,
+    payout.failure_code ?? null,
+    payout.failure_message ?? null,
+  );
 
   // Flag the profile so support can follow up
-  await admin
+  const { error: flagError } = await admin
     .from('profiles')
     .update({ payout_failed_at: new Date().toISOString() })
     .eq('id', profile.id);
+
+  if (flagError) {
+    logger.error({ error: flagError.message, profileId: profile.id, payoutId: payout.id }, 'Failed to flag profile payout_failed_at');
+    throw new ExternalServiceError('Supabase', 'Failed to flag profile for failed payout', {
+      error: flagError.message,
+      profileId: profile.id,
+    });
+  }
 }
 
 /**
