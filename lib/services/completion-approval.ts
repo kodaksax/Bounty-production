@@ -16,6 +16,12 @@ export interface ApproveAndReleaseOptions {
 export async function approveAndRelease(opts: ApproveAndReleaseOptions): Promise<boolean> {
   const { bountyId, hunterId, title, isForHonor, releaseFn, approveFn, notifyFn } = opts
 
+  // Guard against missing required identifiers
+  if (!bountyId || !hunterId) {
+    logClientError('approveAndRelease called with missing bountyId or hunterId', { bountyId, hunterId })
+    return false
+  }
+
   try {
     // For honor bounties, skip release step
     if (!isForHonor) {

@@ -6,6 +6,12 @@ export type BountyStatus = "open" | "in_progress" | "completed" | "archived";
 // Valid transitions between statuses
 export type BountyTransition = "accept" | "complete" | "archive";
 
+// Valid bounty request statuses
+export type BountyRequestStatus = "pending" | "accepted" | "rejected" | "withdrawn";
+
+// Valid bounty request transitions
+export type BountyRequestAction = "accept" | "reject" | "withdraw";
+
 // Validation schema for bounty data
 export const bountyCreateSchema = z.object({
   title: z.string().min(5, "Title must be at least 5 characters"),
@@ -113,4 +119,49 @@ export function getValidTransitions(currentStatus: BountyStatus): BountyTransiti
   }
   
   return transitions;
+}
+
+// ── Bounty-request status transitions ──────────────────────────────
+
+// Define valid request status transitions keyed by action
+const VALID_REQUEST_TRANSITIONS: Record<BountyRequestAction, { from: BountyRequestStatus[]; to: BountyRequestStatus }> = {
+  accept:   { from: ["pending"],  to: "accepted"  },
+  reject:   { from: ["pending"],  to: "rejected"  },
+  withdraw: { from: ["pending"],  to: "withdrawn" },
+};
+
+/**
+ * Validate and return the resulting status for a bounty-request action.
+ *
+ * @param currentStatus - Current request status
+ * @param action        - Requested action (accept / reject / withdraw)
+ * @returns success + newStatus, or an error message
+ */
+export function transitionBountyRequest(
+  currentStatus: BountyRequestStatus,
+  action: BountyRequestAction
+): { success: true; newStatus: BountyRequestStatus } | { success: false; error: string } {
+  const rule = VALID_REQUEST_TRANSITIONS[action];
+  if (!rule) {
+    return { success: false, error: `Invalid request action: ${action}` };
+  }
+
+  if (!rule.from.includes(currentStatus)) {
+    return {
+      success: false,
+      error: `Cannot ${action} a request that is currently "${currentStatus}". Allowed from: ${rule.from.join(", ")}`,
+    };
+  }
+
+  return { success: true, newStatus: rule.to };
+}
+
+/**
+ * Check if a bounty-request action is valid without performing it
+ */
+export function isValidRequestTransition(
+  currentStatus: BountyRequestStatus,
+  action: BountyRequestAction
+): boolean {
+  return transitionBountyRequest(currentStatus, action).success;
 }
