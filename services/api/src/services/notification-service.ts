@@ -388,12 +388,14 @@ export class NotificationService {
       }
 
       // Determine the Android channel based on notification type
-      const notificationType = (data?.type ?? data?.notificationType ?? 'default') as NotificationType;
+      const notificationType = (data?.notificationType ?? 'default') as NotificationType;
       const channelId = getAndroidChannelId(notificationType);
 
+      // Filter to valid tokens and keep track of which token record each message corresponds to
+      const validTokenEntries = tokens.filter(t => Expo.isExpoPushToken(t.token));
+
       // Prepare messages
-      const pushMessages: ExpoPushMessage[] = tokens
-        .filter(t => Expo.isExpoPushToken(t.token))
+      const pushMessages: ExpoPushMessage[] = validTokenEntries
         .map(t => ({
           to: t.token,
           sound: 'default' as const,
@@ -440,7 +442,8 @@ export class NotificationService {
       // ── Stale token cleanup (best-effort) ──────────────────────────
       // Tokens that return an "error" status with "DeviceNotRegistered" are stale
       // (e.g. user uninstalled the app). Remove them so future sends are efficient.
-      this.cleanupStaleTokens(tokens, tickets).catch((err) => {
+      // Use validTokenEntries (not the unfiltered tokens) so indices match tickets.
+      this.cleanupStaleTokens(validTokenEntries, tickets).catch((err) => {
         console.error('Error during stale token cleanup:', err);
       });
     } catch (error) {
@@ -462,7 +465,7 @@ export class NotificationService {
       const ticket = tickets[i];
       if (
         ticket.status === 'error' &&
-        (ticket as any).details?.error === 'DeviceNotRegistered'
+        ticket.details?.error === 'DeviceNotRegistered'
       ) {
         staleTokenIds.push(tokenRecords[i].id);
         console.log(`🗑️  Marking stale push token ${tokenRecords[i].token.substring(0, 25)}... for user`);
@@ -671,7 +674,7 @@ export class NotificationService {
     if (!entry) return;
     messageDebounceMap.delete(debounceKey);
 
-    const [userId] = debounceKey.split(':');
+    const [userId, senderId] = debounceKey.split(':');
     const { count, conversationId, latestText, senderHandle } = entry;
 
     // Truncate message for preview
@@ -691,7 +694,7 @@ export class NotificationService {
       type: 'message',
       title,
       body,
-      data: { senderId: debounceKey.split(':')[1], conversationId, messageText: latestText, notificationType: 'message' },
+      data: { senderId, conversationId, messageText: latestText, notificationType: 'message' },
     });
   }
 
