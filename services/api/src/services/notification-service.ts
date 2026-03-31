@@ -1,4 +1,4 @@
-import { and, desc, eq, ne } from 'drizzle-orm';
+import { and, count, desc, eq, ne } from 'drizzle-orm';
 import { Expo, ExpoPushMessage, ExpoPushTicket } from 'expo-server-sdk';
 import { db } from '../db/connection';
 import { conversations, messages, notificationPreferences, notifications, pushTokens, users } from '../db/schema';
@@ -10,7 +10,7 @@ const expo = new Expo();
 export type NotificationType = 'application' | 'acceptance' | 'rejection' | 'completion' | 'payment' | 'message' | 'follow' | 'cancellation' | 'stale_bounty' | 'stale_bounty_cancelled' | 'stale_bounty_reposted' | 'review_needed';
 
 // ── Message debounce state ─────────────────────────────────────────────
-// Key: `${recipientUserId}:${senderUserId}`, Value: { timer, count, conversationId, latestText }
+// Key: `${recipientUserId}:${senderUserId}:${conversationId}`, Value: { timer, count, conversationId, latestText }
 const MESSAGE_DEBOUNCE_MS = 5_000; // 5-second window to batch rapid messages from same sender
 interface DebouncedMessage {
   timer: ReturnType<typeof setTimeout>;
@@ -171,14 +171,14 @@ export class NotificationService {
   async getUnreadCount(userId: string): Promise<number> {
     try {
       const results = await db
-        .select()
+        .select({ count: count(notifications.id) })
         .from(notifications)
         .where(and(
           eq(notifications.user_id, userId),
           eq(notifications.read, false)
         ));
 
-      return results.length;
+      return Number(results[0]?.count ?? 0);
     } catch (error) {
       console.error(`Error getting unread count for user ${userId}:`, error);
       throw new Error(`Failed to get unread count: ${error instanceof Error ? error.message : String(error)}`);
@@ -417,10 +417,11 @@ export class NotificationService {
         try {
           const resp = await sendPushViaEdge(pushMessages.map(m => ({ to: m.to, title: m.title, body: m.body, data: m.data, sound: m.sound, badge: m.badge, channelId: m.channelId })));
           console.log(`Edge function push response for user ${userId}:`, resp);
+          return; // Success – no need to fall through to expo-server-sdk
         } catch (err) {
-          console.error('Error sending push via Supabase Edge Function:', err);
+          console.error('Error sending push via Supabase Edge Function, falling back to expo-server-sdk:', err);
+          // Fall through to chunked Expo send below
         }
-        return;
       }
 
       // Fallback: send notifications in chunks via expo-server-sdk
@@ -468,7 +469,7 @@ export class NotificationService {
         ticket.details?.error === 'DeviceNotRegistered'
       ) {
         staleTokenIds.push(tokenRecords[i].id);
-        console.log(`🗑️  Marking stale push token ${tokenRecords[i].token.substring(0, 25)}... for user`);
+        console.log(`🗑️  Marking stale push token with id ${tokenRecords[i].id} for cleanup`);
       }
     }
 
@@ -617,7 +618,7 @@ export class NotificationService {
    * (e.g. "3 new messages from John") instead of individual pings.
    */
   async sendMessageNotification(userId: string, senderId: string, conversationId: string, messageText: string) {
-    const debounceKey = `${userId}:${senderId}`;
+    const debounceKey = `${userId}:${senderId}:${conversationId}`;
     const existing = messageDebounceMap.get(debounceKey);
 
     // Pre-fetch sender handle (needed for both immediate and batched sends)

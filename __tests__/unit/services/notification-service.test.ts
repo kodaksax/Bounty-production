@@ -203,7 +203,7 @@ describe('NotificationService', () => {
       const original = Notifications.setBadgeCountAsync;
       Notifications.setBadgeCountAsync = undefined;
 
-      await expect(notificationService.syncBadgeCount()).resolves.not.toThrow();
+      await notificationService.syncBadgeCount();
 
       // Restore
       Notifications.setBadgeCountAsync = original;

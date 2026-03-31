@@ -1,7 +1,7 @@
 /* eslint-env jest */
 /**
- * Tests for backend NotificationService – covers debounced message notifications,
- * stale token cleanup, badge count inclusion, and Android channel routing.
+ * Tests for backend NotificationService – covers debounced message notifications
+ * and Android channel routing via notificationType.
  */
 
 // ── Mocks ──────────────────────────────────────────────────────────────
@@ -153,7 +153,7 @@ describe('NotificationService (backend)', () => {
       expect(callArgs.title).not.toContain('new messages');
     });
 
-    it('should debounce independently per sender-recipient pair', async () => {
+    it('should debounce independently per sender-recipient-conversation tuple', async () => {
       const createSpy = jest.spyOn(service, 'createNotification').mockResolvedValue({
         id: 'notif-3',
         user_id: 'user-3',
