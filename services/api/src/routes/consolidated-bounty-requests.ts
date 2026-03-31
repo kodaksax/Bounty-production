@@ -601,7 +601,7 @@ export async function registerConsolidatedBountyRequestRoutes(
           .eq('hunter_id', userId)
           .eq('status', 'pending');
 
-        if (!countError && typeof pendingCount === 'number' && pendingCount >= MAX_PENDING_APPLICATIONS) {
+        if (!countError && pendingCount !== null && pendingCount >= MAX_PENDING_APPLICATIONS) {
           throw new ConflictError(
             `You have reached the maximum of ${MAX_PENDING_APPLICATIONS} pending applications. ` +
             'Please wait for existing applications to be reviewed or withdraw some before applying to more bounties.'

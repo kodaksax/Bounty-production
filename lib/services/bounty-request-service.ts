@@ -683,8 +683,12 @@ export const bountyRequestService = {
         });
         return null;
       }
-    } catch {
-      // If the pre-check fails (e.g. network), continue with the original flow
+    } catch (preCheckErr) {
+      // If the pre-check fails (e.g. network), log and continue with the original flow
+      logger.warning('Pre-acceptance status check failed, continuing with accept', {
+        requestId,
+        error: preCheckErr instanceof Error ? preCheckErr.message : String(preCheckErr),
+      });
     }
 
     // If using Supabase client, perform update and create escrow client-side as before.
