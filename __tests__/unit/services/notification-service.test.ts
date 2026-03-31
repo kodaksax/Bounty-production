@@ -9,6 +9,7 @@ jest.mock('expo-notifications', () => ({
   requestPermissionsAsync: jest.fn(),
   getExpoPushTokenAsync: jest.fn(),
   setNotificationHandler: jest.fn(),
+  setBadgeCountAsync: jest.fn().mockResolvedValue(true),
   addNotificationReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
   addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
 }));
@@ -186,6 +187,26 @@ describe('NotificationService', () => {
       const result = await notificationService.getStoredPermissionStatus();
 
       expect(result).toBe('undetermined');
+    });
+  });
+
+  describe('syncBadgeCount', () => {
+    it('should call setBadgeCountAsync with unread count', async () => {
+      // Mock getUnreadCount to return a known value (no session → returns 0)
+      const result = await notificationService.syncBadgeCount();
+
+      // Should call setBadgeCountAsync (available from the mock)
+      expect(Notifications.setBadgeCountAsync).toHaveBeenCalledWith(0);
+    });
+
+    it('should not throw when setBadgeCountAsync is unavailable', async () => {
+      const original = Notifications.setBadgeCountAsync;
+      Notifications.setBadgeCountAsync = undefined;
+
+      await expect(notificationService.syncBadgeCount()).resolves.not.toThrow();
+
+      // Restore
+      Notifications.setBadgeCountAsync = original;
     });
   });
 });
