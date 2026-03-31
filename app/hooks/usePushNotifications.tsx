@@ -1,3 +1,4 @@
+import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { useEffect, useState, useCallback } from 'react';
@@ -88,7 +89,10 @@ export function usePushNotifications() {
         return;
       }
 
-      const tokenResponse = await Notifications.getExpoPushTokenAsync();
+      const projectId = Constants.expoConfig?.extra?.eas?.projectId as string | undefined;
+      const tokenResponse = await Notifications.getExpoPushTokenAsync(
+        projectId ? { projectId } : undefined
+      );
       setExpoPushToken(tokenResponse.data);
 
       await setupAndroidChannels();
@@ -109,7 +113,10 @@ export function usePushNotifications() {
         );
 
         if (status === 'granted') {
-          const tokenResponse = await Notifications.getExpoPushTokenAsync();
+          const projectId = Constants.expoConfig?.extra?.eas?.projectId as string | undefined;
+          const tokenResponse = await Notifications.getExpoPushTokenAsync(
+            projectId ? { projectId } : undefined
+          );
           setExpoPushToken(tokenResponse.data);
           await setupAndroidChannels();
         }
