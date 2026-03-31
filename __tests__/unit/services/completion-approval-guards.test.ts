@@ -3,14 +3,13 @@
  * Covers new guard validations for missing identifiers
  */
 
-import { approveAndRelease } from '../../../lib/services/completion-approval'
-
 // Mock monitoring to suppress logs
 jest.mock('../../../lib/services/monitoring', () => ({
   logClientError: jest.fn(),
   logClientInfo: jest.fn(),
 }))
 
+import { approveAndRelease } from '../../../lib/services/completion-approval'
 describe('approveAndRelease – input guards', () => {
   it('returns false when bountyId is empty string', async () => {
     const releaseFn = jest.fn(async () => true)

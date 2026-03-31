@@ -601,7 +601,15 @@ export async function registerConsolidatedBountyRequestRoutes(
           .eq('hunter_id', userId)
           .eq('status', 'pending');
 
-        if (!countError && pendingCount !== null && pendingCount >= MAX_PENDING_APPLICATIONS) {
+        if (countError) {
+          request.log.error(
+            { error: countError.message, userId },
+            'Failed to check pending application count — failing closed to enforce rate limit'
+          );
+          throw new Error('Unable to verify application limit. Please try again later.');
+        }
+
+        if (pendingCount !== null && pendingCount >= MAX_PENDING_APPLICATIONS) {
           throw new ConflictError(
             `You have reached the maximum of ${MAX_PENDING_APPLICATIONS} pending applications. ` +
             'Please wait for existing applications to be reviewed or withdraw some before applying to more bounties.'
@@ -929,20 +937,24 @@ export async function registerConsolidatedBountyRequestRoutes(
 
           // Notify rejected hunters so they know the bounty is no longer available
           if (Array.isArray(rejectedRequests) && rejectedRequests.length > 0) {
-            for (const rejected of rejectedRequests) {
-              try {
-                await notificationService.notifyBountyRejection(
-                  rejected.hunter_id,
-                  bountyRequest.bounty_id,
-                  bounty.title
-                );
-              } catch (notifErr) {
-                request.log.warn(
-                  { error: notifErr, hunterId: rejected.hunter_id },
-                  'Failed to send rejection notification to competing hunter (non-fatal)'
-                );
-              }
-            }
+            const rejectionNotificationPromises = rejectedRequests.map((rejected) =>
+              (async () => {
+                try {
+                  await notificationService.notifyBountyRejection(
+                    rejected.hunter_id,
+                    bountyRequest.bounty_id,
+                    bounty.title
+                  );
+                } catch (notifErr) {
+                  request.log.warn(
+                    { error: notifErr, hunterId: rejected.hunter_id },
+                    'Failed to send rejection notification to competing hunter (non-fatal)'
+                  );
+                }
+              })()
+            );
+
+            await Promise.allSettled(rejectionNotificationPromises);
           }
 
           request.log.info(
