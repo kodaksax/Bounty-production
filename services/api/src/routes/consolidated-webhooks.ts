@@ -758,10 +758,18 @@ async function handlePayoutFailed(event: Stripe.Event): Promise<void> {
   );
 
   // Flag the profile so support can follow up
-  await admin
+  const { error: flagError } = await admin
     .from('profiles')
     .update({ payout_failed_at: new Date().toISOString() })
     .eq('id', profile.id);
+
+  if (flagError) {
+    logger.error({ error: flagError.message, profileId: profile.id, payoutId: payout.id }, 'Failed to flag profile payout_failed_at');
+    throw new ExternalServiceError('Supabase', 'Failed to flag profile for failed payout', {
+      error: flagError.message,
+      profileId: profile.id,
+    });
+  }
 }
 
 /**
