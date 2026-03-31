@@ -185,12 +185,58 @@ class PaymentService {
   /**
    * Create an escrow with manual capture. Optionally confirm immediately if a payment method is provided.
    * Server will create PaymentIntent (capture_method: manual) and escrow record, returning client secret.
+   *
+   * Safeguards:
+   * - Validates required fields (bountyId, amount, posterId, hunterId)
+   * - Validates amount >= $1 and <= $10,000
+   * - Validates poster ≠ hunter
    */
   async createEscrow(
     options: CreateEscrowOptions,
     authToken?: string
   ): Promise<EscrowCreateResult> {
     try {
+      // Client-side pre-flight validation to catch obvious issues before hitting the server
+      if (!options.bountyId || !options.posterId || !options.hunterId) {
+        return {
+          success: false,
+          error: {
+            type: 'validation_error',
+            message: 'Missing required escrow fields (bountyId, posterId, hunterId)',
+          },
+        };
+      }
+
+      if (options.posterId === options.hunterId) {
+        return {
+          success: false,
+          error: {
+            type: 'validation_error',
+            message: 'Poster and hunter must be different users',
+          },
+        };
+      }
+
+      if (!options.amount || options.amount < 1) {
+        return {
+          success: false,
+          error: {
+            type: 'validation_error',
+            message: 'Escrow amount must be at least $1.00',
+          },
+        };
+      }
+
+      if (options.amount > 10000) {
+        return {
+          success: false,
+          error: {
+            type: 'validation_error',
+            message: 'Escrow amount must not exceed $10,000.00',
+          },
+        };
+      }
+
       // Create escrow on backend and get client secret
       const escrow = await stripeService.createEscrow(
         {
@@ -289,12 +335,27 @@ class PaymentService {
 
   /**
    * Release an escrow: server captures PaymentIntent and transfers funds to hunter
+   *
+   * Safeguards:
+   * - Validates escrowId is non-empty before calling server
+   * - Logs a warning if ID format looks unexpected (not pi_ prefix)
    */
   async releaseEscrow(
     escrowId: string,
     authToken?: string
   ): Promise<EscrowReleaseResult> {
     try {
+      if (!escrowId) {
+        return {
+          success: false,
+          error: { message: 'escrowId is required' },
+        };
+      }
+
+      if (!escrowId.startsWith('pi_')) {
+        logger.warning('[PaymentService] releaseEscrow called with unexpected escrowId format', { escrowId });
+      }
+
       const res = await stripeService.releaseEscrow(escrowId, authToken);
       return {
         success: true,
@@ -312,12 +373,27 @@ class PaymentService {
 
   /**
    * Refund an escrow: server cancels/refunds the PaymentIntent, returning funds to poster
+   *
+   * Safeguards:
+   * - Validates escrowId is non-empty before calling server
+   * - Logs a warning if ID format looks unexpected (not pi_ prefix)
    */
   async refundEscrow(
     escrowId: string,
     authToken?: string
   ): Promise<EscrowRefundResult> {
     try {
+      if (!escrowId) {
+        return {
+          success: false,
+          error: { message: 'escrowId is required' },
+        };
+      }
+
+      if (!escrowId.startsWith('pi_')) {
+        logger.warning('[PaymentService] refundEscrow called with unexpected escrowId format', { escrowId });
+      }
+
       const res = await stripeService.refundEscrow(escrowId, authToken);
       return {
         success: true,

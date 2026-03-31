@@ -1,7 +1,11 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '../db/connection';
 import { walletTransactions } from '../db/schema';
 import { walletRiskIntegration } from './wallet-risk-integration';
+
+/** Allowed wallet transaction types to prevent invalid ledger entries */
+const VALID_TRANSACTION_TYPES = ['escrow', 'release', 'refund', 'deposit', 'withdrawal', 'bounty_posted'] as const;
+export type WalletTransactionType = typeof VALID_TRANSACTION_TYPES[number];
 
 // Define types locally to avoid import issues
 export interface CreateWalletTransactionInput {
@@ -33,6 +37,32 @@ export class WalletService {
    * Create a new wallet transaction with risk validation
    */
   async createTransaction(input: CreateWalletTransactionInput): Promise<WalletTransaction> {
+    // STEP 0: Validate transaction type is in the allowed set
+    if (!VALID_TRANSACTION_TYPES.includes(input.type as WalletTransactionType)) {
+      throw new Error(`Invalid transaction type "${input.type}". Must be one of: ${VALID_TRANSACTION_TYPES.join(', ')}`);
+    }
+
+    // STEP 0b: Prevent duplicate escrow transactions for the same bounty.
+    // If an escrow already exists for this bounty, reject the duplicate to avoid
+    // double-holds.
+    const bountyId = input.bounty_id || input.bountyId;
+    if (input.type === 'escrow' && bountyId) {
+      const existing = await db
+        .select()
+        .from(walletTransactions)
+        .where(
+          and(
+            eq(walletTransactions.bounty_id, bountyId),
+            eq(walletTransactions.type, 'escrow')
+          )
+        )
+        .limit(1);
+
+      if (existing.length > 0) {
+        throw new Error(`Duplicate escrow: an escrow transaction already exists for bounty ${bountyId}`);
+      }
+    }
+
     // STEP 1: Validate transaction is allowed (BEFORE creating)
     const validation = await walletRiskIntegration.validateTransactionAllowed(
       input.user_id,
@@ -45,7 +75,6 @@ export class WalletService {
     }
 
     // STEP 2: Create the transaction
-    const bountyId = input.bounty_id || input.bountyId; // Support both naming conventions
     const transaction = await db.insert(walletTransactions).values({
       user_id: input.user_id,
       bounty_id: bountyId,

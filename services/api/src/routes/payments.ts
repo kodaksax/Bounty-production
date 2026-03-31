@@ -446,6 +446,13 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
   /**
    * Create escrow PaymentIntent for bounty
    * Uses manual capture to hold funds until bounty completion
+   *
+   * Safeguards:
+   * - Zod schema validates required fields and amount bounds
+   * - Poster ownership check (only poster can escrow their bounty)
+   * - Idempotency key deduplication
+   * - Upper bound on escrow amount ($10,000)
+   * - Hunter ≠ poster guard
    */
   fastify.post('/payments/escrows', {
     preHandler: authMiddleware,
@@ -486,6 +493,16 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
       // Only the poster can create the escrow for their own bounty
       if (posterId !== request.userId) {
         return reply.code(403).send({ error: 'Only the bounty poster can create an escrow' });
+      }
+
+      // Poster and hunter must be different users
+      if (posterId === hunterId) {
+        return reply.code(400).send({ error: 'Poster and hunter must be different users' });
+      }
+
+      // Upper bound guard: prevent unreasonably large escrows
+      if (amountCents > 1_000_000) { // $10,000
+        return reply.code(400).send({ error: 'Escrow amount exceeds maximum limit of $10,000.00' });
       }
 
       // Create a manual-capture PaymentIntent so funds are held until bounty completion

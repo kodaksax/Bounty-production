@@ -375,6 +375,9 @@ describe('Stripe Connect Service', () => {
             bounty_id: 'bounty123',
             type: 'escrow',
           }),
+        }),
+        expect.objectContaining({
+          idempotencyKey: 'escrow_bounty123',
         })
       );
     });

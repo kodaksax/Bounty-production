@@ -33,6 +33,20 @@ describe('bountyRequestService (unit)', () => {
     const createEscrow = jest.fn().mockResolvedValue({ success: true, escrowId: 'esc_123' })
     jest.doMock('../../lib/services/payment-service', () => ({ paymentService: { createEscrow } }))
 
+    // Mock supabase so the bounty transition succeeds (bountyTransitioned = true)
+    const bountyUpdateChain = makeChainBuilder({ data: [{ id: 'b1', status: 'in_progress' }], error: null })
+    const rejectChain = makeChainBuilder({ data: null, error: null })
+    jest.doMock('../../lib/supabase', () => ({
+      isSupabaseConfigured: true,
+      supabase: {
+        from: jest.fn((table: string) => {
+          if (table === 'bounties') return bountyUpdateChain
+          if (table === 'bounty_requests') return rejectChain
+          return makeChainBuilder({ data: null, error: null })
+        }),
+      },
+    }))
+
     // Import the service module fresh
     const svcModule = require('../../lib/services/bounty-request-service')
     const svc = svcModule.bountyRequestService

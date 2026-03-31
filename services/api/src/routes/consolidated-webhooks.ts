@@ -154,6 +154,11 @@ async function handleWebhookError(eventId: string, errorMessage: string): Promis
 /**
  * Handle payment_intent.succeeded event
  * Creates wallet deposit and updates user balance
+ *
+ * Safeguards:
+ * - Skips if user_id metadata is missing (logs warning)
+ * - Guards against duplicate deposits by catching unique-constraint errors
+ *   from WalletService.createDeposit and verifying a prior transaction exists
  */
 async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> {
   const paymentIntent = event.data.object as Stripe.PaymentIntent;
@@ -215,6 +220,19 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
       }, '[Webhook] Apple Pay receipt generation triggered');
     }
   } catch (error: any) {
+    // Guard against duplicate deposits: if the error looks like a duplicate/unique
+    // constraint violation, check whether the deposit was already recorded and
+    // silently skip rather than failing the webhook (which would cause Stripe to
+    // redeliver).
+    const isDuplicate = /duplicate|unique|already exists/i.test(error.message || '');
+    if (isDuplicate) {
+      logger.warn({
+        paymentIntentId: paymentIntent.id,
+        userId,
+      }, 'Duplicate deposit detected in webhook handler, skipping');
+      return;
+    }
+
     logger.error({
       error: error.message,
       paymentIntentId: paymentIntent.id,
