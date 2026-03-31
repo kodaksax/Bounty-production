@@ -53,7 +53,9 @@ const createPaymentIntentSchema = z.object({
 
 const createEscrowSchema = z.object({
   bountyId: z.string().min(1, 'bountyId is required'),
-  amountCents: z.number().int().min(100, 'amountCents must be at least 100 (i.e. $1.00)'),
+  amountCents: z.number().int()
+    .min(100, 'amountCents must be at least 100 (i.e. $1.00)')
+    .max(1_000_000, 'amountCents must not exceed 1000000 (i.e. $10,000.00)'),
   posterId: z.string().min(1, 'posterId is required'),
   hunterId: z.string().min(1, 'hunterId is required'),
   currency: z.string().toLowerCase().optional().default('usd'),
@@ -448,10 +450,9 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
    * Uses manual capture to hold funds until bounty completion
    *
    * Safeguards:
-   * - Zod schema validates required fields and amount bounds
+   * - Zod schema validates required fields and amount bounds (min $1, max $10K)
    * - Poster ownership check (only poster can escrow their bounty)
-   * - Idempotency key deduplication
-   * - Upper bound on escrow amount ($10,000)
+   * - Idempotency key deduplication (stored AFTER validation guards)
    * - Hunter ≠ poster guard
    */
   fastify.post('/payments/escrows', {
@@ -475,17 +476,6 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
       const { bountyId, amountCents, posterId, hunterId, currency } = body;
       idempotencyKey = body.idempotencyKey;
 
-      if (idempotencyKey) {
-        const isDuplicate = await checkIdempotencyKey(idempotencyKey);
-        if (isDuplicate) {
-          return reply.code(409).send({
-            error: 'Duplicate request detected',
-            code: 'duplicate_transaction'
-          });
-        }
-        await storeIdempotencyKey(idempotencyKey);
-      }
-
       if (!request.userId) {
         return reply.code(401).send({ error: 'Unauthorized' });
       }
@@ -500,10 +490,17 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
         return reply.code(400).send({ error: 'Poster and hunter must be different users' });
       }
 
-      // Upper bound guard: prevent unreasonably large escrows
-      // Matches MAX_ESCROW_CENTS (1_000_000) from lib/utils/bounty-validation.ts
-      if (amountCents > 1_000_000) { // $10,000
-        return reply.code(400).send({ error: 'Escrow amount exceeds maximum limit of $10,000.00' });
+      // Store idempotency key AFTER all validation guards so that an early
+      // 400/403 return does not leave a stale key that blocks legitimate retries.
+      if (idempotencyKey) {
+        const isDuplicate = await checkIdempotencyKey(idempotencyKey);
+        if (isDuplicate) {
+          return reply.code(409).send({
+            error: 'Duplicate request detected',
+            code: 'duplicate_transaction'
+          });
+        }
+        await storeIdempotencyKey(idempotencyKey);
       }
 
       // Create a manual-capture PaymentIntent so funds are held until bounty completion

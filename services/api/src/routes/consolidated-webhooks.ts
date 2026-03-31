@@ -221,16 +221,40 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
     }
   } catch (error: any) {
     // Guard against duplicate deposits: if the error looks like a duplicate/unique
-    // constraint violation, check whether the deposit was already recorded and
-    // silently skip rather than failing the webhook (which would cause Stripe to
-    // redeliver).
+    // constraint violation, verify whether the deposit was already recorded for
+    // this paymentIntentId before deciding to skip. If no prior transaction exists,
+    // treat this as a real failure so Stripe can retry the webhook.
     const isDuplicate = /duplicate|unique|already exists/i.test(error.message || '');
+
     if (isDuplicate) {
-      logger.warn({
-        paymentIntentId: paymentIntent.id,
-        userId,
-      }, 'Duplicate deposit detected in webhook handler, skipping');
-      return;
+      try {
+        const existingTransaction = await WalletService.getTransactionByPaymentIntent(paymentIntent.id);
+
+        if (existingTransaction) {
+          logger.warn({
+            paymentIntentId: paymentIntent.id,
+            userId,
+            existingTransactionId: (existingTransaction as any).id,
+          }, 'Duplicate deposit detected in webhook handler; existing transaction found, skipping');
+          return;
+        }
+
+        // If we suspected a duplicate but did not find an existing transaction,
+        // fall through to generic error handling below rather than silently skipping.
+        logger.error({
+          paymentIntentId: paymentIntent.id,
+          userId,
+          originalError: error.message,
+        }, 'Potential duplicate deposit error but no existing transaction found for paymentIntentId');
+      } catch (lookupError: any) {
+        // If we cannot verify the duplicate, do not silently swallow the error.
+        logger.error({
+          paymentIntentId: paymentIntent.id,
+          userId,
+          lookupError: lookupError?.message ?? lookupError,
+          originalError: error.message,
+        }, '[Webhook] Failed to verify potential duplicate deposit by paymentIntentId');
+      }
     }
 
     logger.error({

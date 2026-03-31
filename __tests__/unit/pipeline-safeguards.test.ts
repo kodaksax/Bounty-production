@@ -27,7 +27,8 @@ describe('toCents', () => {
   it('should round correctly to avoid float precision issues', () => {
     // 19.99 * 100 = 1998.9999... without rounding
     expect(toCents(19.99)).toBe(1999);
-    // 1.005 * 100 = 100.4999... due to IEEE754, Math.round gives 100
+    // 1.005 rounds to "1.00" via toFixed(2) since IEEE-754 stores it as 1.004999…
+    // Half-cent values aren't valid dollar amounts in practice
     expect(toCents(1.005)).toBe(100);
     expect(toCents(0.1 + 0.2)).toBe(30); // classic float precision test
   });

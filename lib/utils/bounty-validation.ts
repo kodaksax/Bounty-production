@@ -21,7 +21,10 @@ export const MAX_ESCROW_CENTS = 1_000_000;
  * @returns Integer amount in cents
  */
 export function toCents(dollars: number): number {
-  return Math.round(dollars * 100);
+  // Normalize to two decimal places before converting to cents to avoid
+  // floating-point precision issues at half-cent boundaries (e.g. 1.005).
+  const normalized = Number(dollars.toFixed(2));
+  return Math.round(normalized * 100);
 }
 
 /**
