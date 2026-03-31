@@ -13,9 +13,11 @@ const envFile = path.resolve(process.cwd(), `.env.${APP_ENV}`);
 if (fs.existsSync(envFile)) {
   // override: true ensures this env file wins over any .env/.env.local already
   // loaded by Expo's built-in env loader before app.config.js runs.
-  dotenv.config({ path: envFile, override: true });
+  // quiet: true suppresses dotenv v17 stdout logging that would corrupt JSON
+  // output when tools like expo-doctor or expo install --check parse stdout.
+  dotenv.config({ path: envFile, override: true, quiet: true });
 } else if (fs.existsSync(path.resolve(process.cwd(), '.env'))) {
-  dotenv.config({ override: true });
+  dotenv.config({ override: true, quiet: true });
 }
 
 // Detect likely secret-like env keys and warn at build-time if any are present.
