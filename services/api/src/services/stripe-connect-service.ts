@@ -208,15 +208,17 @@ class StripeConnectService {
         throw new Error('Cannot create escrow for zero amount bounties');
       }
 
-      // Prevent duplicate escrow: if payment_intent_id is already set, return it
+      // Prevent duplicate escrow: if payment_intent_id is already set, return it.
+      // Note: clientSecret is empty because the PaymentIntent was created in a prior
+      // call; callers should treat status 'existing' as an idempotent no-op.
       if (bounty.payment_intent_id) {
         console.warn(`⚠️ Bounty ${bountyId} already has payment_intent_id ${bounty.payment_intent_id}; skipping duplicate escrow creation`);
         return {
           paymentIntentId: bounty.payment_intent_id,
-          clientSecret: '',
+          clientSecret: '', // unavailable for previously-created intents
           amount: bounty.amount_cents,
           currency: 'usd',
-          status: 'existing',
+          status: 'existing', // signals duplicate — callers should not attempt confirmation
         };
       }
 

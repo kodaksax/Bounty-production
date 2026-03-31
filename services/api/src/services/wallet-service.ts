@@ -4,7 +4,7 @@ import { walletTransactions } from '../db/schema';
 import { walletRiskIntegration } from './wallet-risk-integration';
 
 /** Allowed wallet transaction types to prevent invalid ledger entries */
-const VALID_TRANSACTION_TYPES = ['escrow', 'release', 'refund', 'deposit', 'withdrawal', 'bounty_posted'] as const;
+export const VALID_TRANSACTION_TYPES = ['escrow', 'release', 'refund', 'deposit', 'withdrawal', 'bounty_posted'] as const;
 export type WalletTransactionType = typeof VALID_TRANSACTION_TYPES[number];
 
 // Define types locally to avoid import issues

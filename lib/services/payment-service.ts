@@ -12,9 +12,15 @@ import {
 import {
     PaymentMethodResponse
 } from '../types/payment-types';
+import { MIN_ESCROW_CENTS, MAX_ESCROW_CENTS } from '../utils/bounty-validation';
 import { logger } from '../utils/error-logger';
 import { analyticsService } from './analytics-service';
 import { StripePaymentMethod, stripeService } from './stripe-service';
+
+/** Minimum escrow amount in dollars (derived from shared constant) */
+const MIN_ESCROW_DOLLARS = MIN_ESCROW_CENTS / 100;
+/** Maximum escrow amount in dollars (derived from shared constant) */
+const MAX_ESCROW_DOLLARS = MAX_ESCROW_CENTS / 100;
 
 export interface CreatePaymentOptions {
   amount: number;
@@ -217,22 +223,22 @@ class PaymentService {
         };
       }
 
-      if (!options.amount || options.amount < 1) {
+      if (!options.amount || options.amount < MIN_ESCROW_DOLLARS) {
         return {
           success: false,
           error: {
             type: 'validation_error',
-            message: 'Escrow amount must be at least $1.00',
+            message: `Escrow amount must be at least $${MIN_ESCROW_DOLLARS.toFixed(2)}`,
           },
         };
       }
 
-      if (options.amount > 10000) {
+      if (options.amount > MAX_ESCROW_DOLLARS) {
         return {
           success: false,
           error: {
             type: 'validation_error',
-            message: 'Escrow amount must not exceed $10,000.00',
+            message: `Escrow amount must not exceed $${MAX_ESCROW_DOLLARS.toFixed(2)}`,
           },
         };
       }

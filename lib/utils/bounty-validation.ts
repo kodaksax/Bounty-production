@@ -8,10 +8,10 @@
 const MIN_DESCRIPTION_LENGTH = 20;
 
 /** Minimum escrow amount in cents ($1.00) */
-const MIN_ESCROW_CENTS = 100;
+export const MIN_ESCROW_CENTS = 100;
 
 /** Maximum escrow amount in cents ($10,000.00) */
-const MAX_ESCROW_CENTS = 1_000_000;
+export const MAX_ESCROW_CENTS = 1_000_000;
 
 /**
  * Safely converts a dollar amount to integer cents, rounding to avoid

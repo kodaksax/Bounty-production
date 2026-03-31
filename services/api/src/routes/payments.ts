@@ -501,6 +501,7 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
       }
 
       // Upper bound guard: prevent unreasonably large escrows
+      // Matches MAX_ESCROW_CENTS (1_000_000) from lib/utils/bounty-validation.ts
       if (amountCents > 1_000_000) { // $10,000
         return reply.code(400).send({ error: 'Escrow amount exceeds maximum limit of $10,000.00' });
       }

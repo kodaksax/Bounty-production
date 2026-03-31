@@ -1,6 +1,7 @@
 import type { Bounty, BountyRequest, Profile } from "lib/services/database.types"
 import { isSupabaseConfigured, supabase } from 'lib/supabase'
 import { getApiBase } from 'lib/utils/dev-host'
+import { MIN_ESCROW_CENTS } from 'lib/utils/bounty-validation'
 import { logger } from "lib/utils/error-logger"
 import { paymentService } from './payment-service'
 
@@ -741,8 +742,8 @@ export const bountyRequestService = {
           try {
             const bountyData = await this.getBountyForRequest(result.bounty_id);
             if (bountyData && !bountyData.is_for_honor && bountyData.amount > 0) {
-              // Validate amount is at least $1 before calling the server
-              if (bountyData.amount < 1) {
+              // Validate amount meets minimum escrow threshold before calling the server
+              if (bountyData.amount < MIN_ESCROW_CENTS / 100) {
                 logger.error('Bounty amount below minimum for escrow', { bountyId: result.bounty_id, amount: bountyData.amount });
               } else {
                 const escrowResult = await paymentService.createEscrow({
