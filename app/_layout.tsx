@@ -3,7 +3,7 @@ import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
 import { Slot } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -171,7 +171,10 @@ function RootLayout({ children }: { children: React.ReactNode }) {
     const SAFETY_MS = 8000;
     const NAV_MAX_WAIT_MS = 3000;
     const safetyTimer = setTimeout(() => {
-      if (!cancelled) setPhase('app');
+      if (!cancelled) {
+        try { hideNativeSplashSafely(); } catch {}
+        setPhase('app');
+      }
     }, SAFETY_MS);
 
     const startedRef = { started: false } as { started: boolean };
@@ -206,7 +209,10 @@ function RootLayout({ children }: { children: React.ReactNode }) {
 
       try {
         await showNativeSplash();
-        await Asset.loadAsync([require('../assets/images/icon.png')]);
+        await Promise.race([
+          Asset.loadAsync([require('../assets/images/icon.png')]),
+          new Promise(r => setTimeout(r, 3000)),
+        ]);
       } catch (e) {
         // eslint-disable-next-line no-console
         console.error('[Splash] preparation error', e);
