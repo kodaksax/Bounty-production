@@ -139,7 +139,7 @@ export const createBountyWithValidationUtil = async (
     // If user doesn't exist, return an error - do not auto-create profiles with placeholder data
     if (!user) {
       console.error("User profile not found for poster_id:", bountyData.poster_id)
-      return { bounty: null, error: "User profile not found. Please complete your profile before creating a bounty." }
+      return { bounty: null, error: "User profile not found. Please create an account and set up your profile before creating a bounty." }
     }
 
     // Create the bounty using the service - include default status
