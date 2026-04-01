@@ -2,11 +2,16 @@
  * useOfflineMode Hook
  * Detects offline/online status and provides utilities for offline mode
  * Integrates with the existing offline queue service
+ *
+ * When wrapped in a NetworkProvider (recommended), this hook reads from the
+ * centralized context, eliminating redundant NetInfo subscriptions. Falls
+ * back to its own NetInfo subscription when used outside a provider.
  */
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import { offlineQueueService } from '../lib/services/offline-queue-service';
+import { useOptionalNetworkContext } from '../providers/network-provider';
 
 export interface OfflineMode {
   /**
@@ -53,10 +58,14 @@ export interface OfflineMode {
  * ```
  */
 export function useOfflineMode(): OfflineMode {
-  const [isOnline, setIsOnline] = useState(true);
+  const networkCtx = useOptionalNetworkContext();
+  const [localIsOnline, setLocalIsOnline] = useState(true);
   const [isChecking, setIsChecking] = useState(false);
   const [queuedItemsCount, setQueuedItemsCount] = useState(0);
   const prevOnlineStatus = useRef(true);
+
+  // Derive online status from provider when available, otherwise use local state
+  const isOnline = networkCtx ? networkCtx.isConnected : localIsOnline;
 
   // Update queued items count
   const updateQueueCount = useCallback(() => {
@@ -67,32 +76,28 @@ export function useOfflineMode(): OfflineMode {
     setQueuedItemsCount(pendingCount);
   }, []);
 
-  // Listen for network state changes
+  // Listen for network state changes — only subscribe when no provider is present
   useEffect(() => {
+    if (networkCtx) return; // Provider handles subscriptions centrally
+
     // Initial state check
     NetInfo.fetch().then((state: NetInfoState) => {
-      setIsOnline(!!state.isConnected);
+      setLocalIsOnline(!!state.isConnected);
       prevOnlineStatus.current = !!state.isConnected;
     });
 
     // Subscribe to network state changes
     const unsubscribe = NetInfo.addEventListener((state: NetInfoState) => {
-      const wasOffline = !prevOnlineStatus.current;
       const isNowOnline = !!state.isConnected;
       
       prevOnlineStatus.current = isNowOnline;
-      setIsOnline(isNowOnline);
-
-      // Log connectivity change
-      if (wasOffline && isNowOnline) {
-      } else if (!wasOffline && !isNowOnline) {
-      }
+      setLocalIsOnline(isNowOnline);
     });
 
     return () => {
       unsubscribe();
     };
-  }, []);
+  }, [networkCtx]);
 
   // Listen for queue changes
   useEffect(() => {
@@ -113,12 +118,20 @@ export function useOfflineMode(): OfflineMode {
     };
   }, [updateQueueCount]);
 
-  // Manual connectivity check
+  // Manual connectivity check — delegate to provider when available
   const checkConnection = useCallback(async () => {
+    if (networkCtx) {
+      await networkCtx.checkConnection();
+      // If online after check, try to process the queue
+      // (networkCtx.isConnected will update via context on next render)
+      offlineQueueService.processQueue();
+      return;
+    }
+
     setIsChecking(true);
     try {
       const state = await NetInfo.fetch();
-      setIsOnline(!!state.isConnected);
+      setLocalIsOnline(!!state.isConnected);
       
       // If online, try to process the queue
       if (state.isConnected) {
@@ -129,7 +142,7 @@ export function useOfflineMode(): OfflineMode {
     } finally {
       setIsChecking(false);
     }
-  }, []);
+  }, [networkCtx]);
 
   // Force process queue
   const processQueue = useCallback(() => {
@@ -140,7 +153,7 @@ export function useOfflineMode(): OfflineMode {
 
   return {
     isOnline,
-    isChecking,
+    isChecking: networkCtx ? networkCtx.isChecking : isChecking,
     queuedItemsCount,
     checkConnection,
     processQueue,
@@ -149,26 +162,30 @@ export function useOfflineMode(): OfflineMode {
 
 /**
  * Simple hook that just returns online status
- * For cases where you only need to know if we're online
+ * For cases where you only need to know if we're online.
+ * Uses the centralized NetworkProvider when available.
  */
 export function useIsOnline(): boolean {
-  const [isOnline, setIsOnline] = useState(true);
+  const networkCtx = useOptionalNetworkContext();
+  const [localIsOnline, setLocalIsOnline] = useState(true);
 
   useEffect(() => {
+    if (networkCtx) return; // Provider handles subscriptions centrally
+
     // Initial state
     NetInfo.fetch().then((state: NetInfoState) => {
-      setIsOnline(!!state.isConnected);
+      setLocalIsOnline(!!state.isConnected);
     });
 
     // Subscribe to changes
     const unsubscribe = NetInfo.addEventListener((state: NetInfoState) => {
-      setIsOnline(!!state.isConnected);
+      setLocalIsOnline(!!state.isConnected);
     });
 
     return () => {
       unsubscribe();
     };
-  }, []);
+  }, [networkCtx]);
 
-  return isOnline;
+  return networkCtx ? networkCtx.isConnected : localIsOnline;
 }

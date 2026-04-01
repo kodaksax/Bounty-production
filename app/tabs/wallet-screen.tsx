@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AddMoneyScreen } from "../../components/add-money-screen";
+import { ConnectionStatus } from "../../components/connection-status";
 import { PaymentMethodsModal } from "../../components/payment-methods-modal";
 import { TransactionHistoryScreen } from "../../components/transaction-history-screen";
 import { BrandingLogo } from "../../components/ui/branding-logo";
@@ -98,6 +99,8 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
 
   return (
     <>
+      {/* Connection Status Banner - appears at top when offline */}
+      <ConnectionStatus showQueueCount={true} />
       <FlatList<WalletTransactionRecord>
         style={styles.container}
         data={transactions}

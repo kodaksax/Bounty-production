@@ -2,6 +2,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AchievementsGrid } from "components/achievements-grid";
+import { ConnectionStatus } from "components/connection-status";
 import { EnhancedProfileSection, PortfolioSection } from "components/enhanced-profile-section";
 import { HistoryScreen } from "components/history-screen";
 import { SkillsetChips } from "components/skillset-chips";

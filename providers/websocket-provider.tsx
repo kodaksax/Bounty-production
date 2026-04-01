@@ -2,6 +2,7 @@ import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, 
 import { useAuthContext } from '../hooks/use-auth-context';
 import { useWebSocket, WebSocketState } from '../hooks/useWebSocket';
 import { logClientError, logClientInfo } from '../lib/services/monitoring';
+import { useOptionalNetworkContext } from './network-provider';
 
 interface WebSocketContextValue extends WebSocketState {
   connect: () => Promise<void>;
@@ -15,6 +16,7 @@ const WebSocketContext = createContext<WebSocketContextValue | undefined>(undefi
 
 export function WebSocketProvider({ children }: { children: ReactNode }) {
   const { isLoggedIn } = useAuthContext();
+  const networkCtx = useOptionalNetworkContext();
   const webSocketState = useWebSocket();
   const { reconnect } = webSocketState;
   const [connectionQuality, setConnectionQuality] = useState<'excellent' | 'good' | 'poor' | 'disconnected'>('disconnected');
@@ -156,6 +158,42 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       }
     }
   }, [isLoggedIn, webSocketState.isConnected, webSocketState.connect, webSocketState.disconnect]);
+
+  /**
+   * React to device network state changes from the centralized NetworkProvider.
+   * When the device loses network connectivity, proactively mark quality as
+   * disconnected and reset reconnect attempts. When connectivity resumes,
+   * trigger a reconnection attempt if the user is still logged in.
+   */
+  const prevDeviceConnectedRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (!networkCtx) return; // No provider — rely on WS connection monitoring
+
+    const deviceConnected = networkCtx.isConnected;
+    const prev = prevDeviceConnectedRef.current;
+    prevDeviceConnectedRef.current = deviceConnected;
+
+    // Skip the first render (initial state)
+    if (prev === null) return;
+
+    if (!deviceConnected && prev) {
+      // Device went offline — proactively mark disconnected
+      logClientInfo('Device network lost, marking WebSocket disconnected');
+      setConnectionQuality('disconnected');
+      reconnectAttemptsRef.current = 0;
+
+      // Clear any pending reconnection timeout
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+    } else if (deviceConnected && !prev && isLoggedIn) {
+      // Device came back online while user is logged in — reconnect
+      logClientInfo('Device network restored, triggering WebSocket reconnect');
+      reconnectAttemptsRef.current = 0;
+      enhancedReconnectRef.current();
+    }
+  }, [networkCtx?.isConnected, isLoggedIn]);
 
   const contextValue: WebSocketContextValue = useMemo(() => ({
     ...webSocketState,
