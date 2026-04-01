@@ -6,7 +6,7 @@ import { Label } from 'components/ui/label'
 import { useRouter } from 'expo-router'
 import { requestPasswordReset } from 'lib/services/auth-service'
 import { isValidEmail } from 'lib/utils/password-validation'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
 
 /** Seconds to wait between reset requests */
@@ -29,7 +29,6 @@ export function ResetPasswordScreen() {
 
   // Cooldown timer state
   const [resendCooldown, setResendCooldown] = useState(0)
-  const cooldownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Attempt tracking state
   const [resetAttempts, setResetAttempts] = useState(0)
@@ -37,20 +36,11 @@ export function ResetPasswordScreen() {
 
   // Cooldown countdown effect
   useEffect(() => {
-    if (resendCooldown > 0) {
-      cooldownTimerRef.current = setInterval(() => {
-        setResendCooldown(prev => {
-          if (prev <= 1) {
-            if (cooldownTimerRef.current) clearInterval(cooldownTimerRef.current)
-            return 0
-          }
-          return prev - 1
-        })
-      }, 1000)
-    }
-    return () => {
-      if (cooldownTimerRef.current) clearInterval(cooldownTimerRef.current)
-    }
+    if (resendCooldown <= 0) return
+    const timer = setTimeout(() => {
+      setResendCooldown(prev => prev - 1)
+    }, 1000)
+    return () => clearTimeout(timer)
   }, [resendCooldown])
 
   const isLockedOut = useCallback((): boolean => {
@@ -60,6 +50,12 @@ export function ResetPasswordScreen() {
     setLockoutUntil(null)
     setResetAttempts(0)
     return false
+  }, [lockoutUntil])
+
+  const lockoutMessage = useCallback((): string => {
+    const remainingSec = Math.ceil(((lockoutUntil ?? 0) - Date.now()) / 1000)
+    const remainingMin = Math.ceil(remainingSec / 60)
+    return `Too many attempts. Please try again in ${remainingMin} minute${remainingMin !== 1 ? 's' : ''}.`
   }, [lockoutUntil])
 
   const validateEmail = (value: string): boolean => {
@@ -82,9 +78,7 @@ export function ResetPasswordScreen() {
 
     // Check lockout
     if (isLockedOut()) {
-      const remainingSec = Math.ceil(((lockoutUntil ?? 0) - Date.now()) / 1000)
-      const remainingMin = Math.ceil(remainingSec / 60)
-      setError(`Too many attempts. Please try again in ${remainingMin} minute${remainingMin !== 1 ? 's' : ''}.`)
+      setError(lockoutMessage())
       return
     }
 
@@ -100,7 +94,7 @@ export function ResetPasswordScreen() {
     const newAttempts = resetAttempts + 1
     setResetAttempts(newAttempts)
 
-    if (newAttempts > MAX_RESET_ATTEMPTS) {
+    if (newAttempts >= MAX_RESET_ATTEMPTS) {
       const lockout = Date.now() + LOCKOUT_DURATION_SECONDS * 1000
       setLockoutUntil(lockout)
       setError(`Too many attempts. Please try again in ${Math.ceil(LOCKOUT_DURATION_SECONDS / 60)} minutes.`)

@@ -4,6 +4,7 @@
  */
 
 import { supabase } from '../supabase';
+import { Platform } from 'react-native';
 import { DEEP_LINK_PREFIX } from '../config/app';
 import { generateCorrelationId } from '../utils/auth-errors';
 import { isValidEmail, validateNewPassword } from '../utils/password-validation';
@@ -156,7 +157,7 @@ export async function requestPasswordReset(
   const correlationId = generateCorrelationId('password_reset');
 
   try {
-    const platform = typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown'
+    const platform = Platform.OS ?? 'unknown'
     console.log('[auth-service] Requesting password reset', { email: email.trim().toLowerCase(), correlationId, platform });
 
     // Validate email format using pre-compiled regex
