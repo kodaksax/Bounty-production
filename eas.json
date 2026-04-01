@@ -21,6 +21,7 @@
       },
       "channel": "development",
       "env": {
+        "APP_ENV": "development",
         "EXPO_PUBLIC_ENVIRONMENT": "development",
         "EXPO_PUBLIC_API_URL": "http://localhost:3001"
       }
@@ -37,6 +38,7 @@
         "key": "expo-55-hermesv1-rn083-v2"
       },
       "env": {
+        "APP_ENV": "preview",
         "EXPO_PUBLIC_API_URL": "https://api-staging.bountyfinder.app",
         "EXPO_PUBLIC_SUPABASE_URL": "${STAGING_SUPABASE_URL}",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "${STAGING_SUPABASE_ANON_KEY}",
@@ -59,11 +61,17 @@
         "key": "expo-55-hermesv1-rn083-v2"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.bountyfinder.app",
-        "EXPO_PUBLIC_SUPABASE_URL": "${PRODUCTION_SUPABASE_URL}",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "${PRODUCTION_SUPABASE_ANON_KEY}",
-        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "${STRIPE_LIVE_PUBLISHABLE_KEY}",
-        "EXPO_PUBLIC_ENVIRONMENT": "production"
+        "APP_ENV": "production",
+        "EXPO_PUBLIC_ENVIRONMENT": "production",
+        "EXPO_PUBLIC_API_URL": "${EXPO_PUBLIC_API_URL}",
+        "EXPO_PUBLIC_SUPABASE_URL": "${EXPO_PUBLIC_SUPABASE_URL}",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "${EXPO_PUBLIC_SUPABASE_ANON_KEY}",
+        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "${EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY}",
+        "EXPO_PUBLIC_GOOGLE_PLACES_API_KEY": "${EXPO_PUBLIC_GOOGLE_PLACES_API_KEY}",
+        "EXPO_PUBLIC_MIXPANEL_TOKEN": "${EXPO_PUBLIC_MIXPANEL_TOKEN}",
+        "EXPO_PUBLIC_SENTRY_DSN": "${EXPO_PUBLIC_SENTRY_DSN}",
+        "EXPO_PUBLIC_SENTRY_DEBUG": "false",
+        "EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID": "${EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID}"
       }
     }
   },
