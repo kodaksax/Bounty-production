@@ -1,7 +1,6 @@
 "use client"
 import { MaterialIcons } from '@expo/vector-icons'
 import { BrandingLogo } from 'components/ui/branding-logo'
-import { Button } from 'components/ui/button'
 import { Label } from 'components/ui/label'
 import { useRouter } from 'expo-router'
 import { requestPasswordReset } from 'lib/services/auth-service'
@@ -114,10 +113,8 @@ export function ResetPasswordScreen() {
       } else if (result.error === 'rate_limited') {
         setError(result.message)
       } else {
-        // For security, show success even if email doesn't exist
-        setMessage(result.message)
-        setEmailSent(true)
-        setResendCooldown(RESEND_COOLDOWN_SECONDS)
+        // Actual failure (e.g. unexpected error) — show the error message
+        setError(result.message)
       }
     } catch (e) {
       setError('An unexpected error occurred. Please try again.')
@@ -219,14 +216,14 @@ export function ResetPasswordScreen() {
             {emailSent ? (
               <View className="gap-3">
                 {/* Open Email App */}
-                <Button onPress={() => {
-                  // This is a placeholder - in production, use expo-mail-composer
-                }} className="w-full">
-                  <View className="flex-row items-center justify-center">
-                    <MaterialIcons name="email" size={20} color="#fff" style={{ marginRight: 8 }} />
-                    <Text className="text-white font-medium">Open Email App</Text>
-                  </View>
-                </Button>
+                <TouchableOpacity
+                  onPress={() => {
+                    // This is a placeholder - in production, use expo-mail-composer
+                  }}
+                  className="w-full bg-emerald-600 rounded-lg py-3 items-center"
+                >
+                  <Text className="text-white font-medium">Open Email App</Text>
+                </TouchableOpacity>
 
                 {/* Resend Email */}
                 <TouchableOpacity 
@@ -262,18 +259,21 @@ export function ResetPasswordScreen() {
                 </View>
               </View>
             ) : (
-              <Button disabled={loading || resendCooldown > 0 || isLockedOut()} onPress={handleReset} className="w-full">
-                <View className="flex-row items-center justify-center">
-                  {loading ? (
-                    <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />
-                  ) : (
-                    <MaterialIcons name="send" size={20} color="#fff" style={{ marginRight: 8 }} />
-                  )}
-                  <Text className="text-white font-medium">
-                    {loading ? 'Sending...' : 'Send Reset Link'}
-                  </Text>
-                </View>
-              </Button>
+              <TouchableOpacity
+                disabled={loading || resendCooldown > 0 || isLockedOut()}
+                onPress={handleReset}
+                className={`w-full rounded-lg py-3 items-center ${
+                  loading || resendCooldown > 0 || isLockedOut()
+                    ? 'bg-emerald-600/50'
+                    : 'bg-emerald-600'
+                }`}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text className="text-white font-medium">Send Reset Link</Text>
+                )}
+              </TouchableOpacity>
             )}
 
             {/* Back to Sign In */}
