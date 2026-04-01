@@ -11,6 +11,7 @@ import { MessageBubble } from "../../components/MessageBubble"
 import { PinnedMessageHeader } from "../../components/PinnedMessageHeader"
 import { ReportModal } from "../../components/ReportModal"
 import { TypingIndicator } from "../../components/TypingIndicator"
+import { CompactOfflineBanner } from '../../components/offline-mode-banner'
 import { useAttachmentUpload } from '../../hooks/use-attachment-upload'
 import { useMessages } from "../../hooks/useMessages"
 import { useNormalizedProfile } from "../../hooks/useNormalizedProfile"
@@ -182,6 +183,8 @@ export function ChatDetailScreen({
 
   return (
     <View className="flex flex-col min-h-screen bg-emerald-600 text-white" style={{ paddingBottom: Math.max(insets.bottom || 0, BOTTOM_NAV_OFFSET + 8) }}>
+      {/* Compact offline indicator for chat */}
+      <CompactOfflineBanner />
       {/* Header */}
       <View
         className="p-4 pt-8 pb-2 flex-row items-center justify-between border-b"

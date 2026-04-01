@@ -10,6 +10,7 @@ import { cn } from "lib/utils"
 import React, { useCallback, useMemo, useState } from "react"
 import { Alert, FlatList, RefreshControl, Text, TouchableOpacity, View } from "react-native"
 import { Swipeable } from 'react-native-gesture-handler'
+import { ConnectionStatus } from '../../components/connection-status'
 import { OfflineStatusBadge } from '../../components/offline-status-badge'
 import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
 import { useConversations } from "../../hooks/useConversations"
@@ -241,6 +242,8 @@ export function MessengerScreen({
 
   return (
     <View className="flex flex-col min-h-screen bg-emerald-600 text-white" style={{ marginTop: -20 }}>
+      {/* Connection Status Banner - appears at top when offline */}
+      <ConnectionStatus showQueueCount={true} />
       <View className="p-4 pt-8 pb-2">
         <View className="flex-row justify-between items-center mb-2">
           <View className="flex-row items-center">
