@@ -37,9 +37,19 @@ if (fs.existsSync(envFile)) {
   }
 }
 
+// Per-environment icon overrides.
+// Save the corresponding PNG to assets/images/ before building.
+const ENV_ICONS = {
+  development: './assets/images/icon-dev.png',
+  preview: './assets/images/icon-preview.png',
+};
+const envIcon = ENV_ICONS[APP_ENV]; // undefined for production → app.json default
+
 module.exports = ({ config }) => {
   return {
     ...config,
+    // Override icon for dev/preview builds when an env-specific asset exists.
+    ...(envIcon ? { icon: envIcon } : {}),
     // Ensure a scheme is always present at runtime so Linking works in
     // Expo Go / dev environments. Allow override via `EXPO_SCHEME` env var
     // or an existing `config.scheme` / `config.slug` / `config.name`.
@@ -53,6 +63,13 @@ module.exports = ({ config }) => {
         process.env.GOOGLE_SERVICES_JSON ||
         (config.android && config.android.googleServicesFile) ||
         './google-services.json',
+      // Override Android adaptive icon foreground for dev/preview builds.
+      ...(envIcon ? {
+        adaptiveIcon: {
+          ...((config.android && config.android.adaptiveIcon) || {}),
+          foregroundImage: envIcon,
+        },
+      } : {}),
     },
     extra: {
       ...(config.extra || {}),
