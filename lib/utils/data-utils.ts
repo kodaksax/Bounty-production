@@ -136,27 +136,10 @@ export const createBountyWithValidationUtil = async (
     // Check if the user exists first
   let user = await profileService.getById(bountyData.poster_id)
 
-    // If user doesn't exist, create a default profile
+    // If user doesn't exist, return an error - do not auto-create profiles with placeholder data
     if (!user) {
-      const defaultProfile = {
-        id: bountyData.poster_id,
-        username: "@Jon_Doe",
-        avatar_url: "/placeholder.svg?height=40&width=40",
-  about: "",
-        phone: "+998 90 943 32 00",
-        balance: 40.0,
-        email: "test@example.com"
-      }
-
-      try {
-  user = await profileService.create(defaultProfile)
-        if (!user) {
-          console.error("Failed to create default profile, continuing anyway...")
-        }
-      } catch (err) {
-        console.error("Error creating default profile:", err)
-        // Continue with bounty creation even if profile creation fails
-      }
+      console.error("User profile not found for poster_id:", bountyData.poster_id)
+      return { bounty: null, error: "User profile not found. Please complete your profile before creating a bounty." }
     }
 
     // Create the bounty using the service - include default status

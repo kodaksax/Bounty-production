@@ -79,17 +79,28 @@ logs/
 tmp/
 .tmp/
 
+# Debug & internal output files
+api-log.txt
+test-results.txt
+test_output.txt
+tsc-err.txt
+tsc-out.txt
+failed-suites.txt
+todo.txt
+stripe-connect-failures.txt
+listen-test.js
+
+# Internal test scripts (ad-hoc, not part of the Jest test suite)
+services/api/src/test-*.ts
+services/api/src/test-*.js
+
+# Old native backup directories
+android-backup-*/
+ios-backup-*/
+
 app-example
 
-.env.local
-
-.env.local
-
-.env.local
-
-.env.local
 google-service-account.json
-.env
 
 # Ignore generated temporary JS bundles that may contain secrets
 tmp_bundle/

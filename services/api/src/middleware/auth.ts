@@ -14,7 +14,7 @@ if (supabaseUrl && supabaseAnon) {
   supabase = createClient<Database>(supabaseUrl, supabaseAnon)
   console.log('✅ Supabase auth client initialized')
 } else {
-  console.log('⚠️  Supabase credentials not found - auth middleware will be disabled')
+  console.error('❌ Supabase credentials not found - authentication will be unavailable. Set SUPABASE_URL and SUPABASE_ANON_KEY.')
 }
 
 export type AuthenticatedRequest<RouteGeneric extends RouteGenericInterface = RouteGenericInterface> = FastifyRequest<RouteGeneric> & {
@@ -52,12 +52,13 @@ export async function authMiddleware(
   reply: FastifyReply
 ) {
   try {
-    // If no Supabase client, skip auth for testing
+    // If no Supabase client, reject requests — auth is required in production
     if (!supabase) {
-      request.log?.warn('Auth middleware disabled - no Supabase credentials');
-      request.userId = 'test-user-id';
-      request.user = { id: 'test-user-id', email: 'test@example.com' };
-      return;
+      request.log?.error('Auth middleware unavailable - Supabase credentials not configured');
+      return reply.code(503).send({
+        error: 'Authentication service unavailable',
+        message: 'The authentication service is not configured. Please contact support.'
+      });
     }
 
     const authHeader = request.headers.authorization;
@@ -131,7 +132,7 @@ export async function optionalAuthMiddleware(
   reply: FastifyReply
 ) {
   try {
-    // If no Supabase client, skip auth for testing
+    // If no Supabase client, skip user enrichment silently (optional auth)
     if (!supabase) {
       return;
     }
