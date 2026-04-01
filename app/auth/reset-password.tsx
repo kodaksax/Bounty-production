@@ -5,8 +5,16 @@ import { Button } from 'components/ui/button'
 import { Label } from 'components/ui/label'
 import { useRouter } from 'expo-router'
 import { requestPasswordReset } from 'lib/services/auth-service'
-import { useState } from 'react'
+import { isValidEmail } from 'lib/utils/password-validation'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
+
+/** Seconds to wait between reset requests */
+const RESEND_COOLDOWN_SECONDS = 60
+/** Maximum reset attempts before temporary lockout */
+const MAX_RESET_ATTEMPTS = 5
+/** Lockout duration in seconds after exceeding max attempts */
+const LOCKOUT_DURATION_SECONDS = 300 // 5 minutes
 
 export default function ResetPasswordRoute() { return <ResetPasswordScreen /> }
 
@@ -19,14 +27,48 @@ export function ResetPasswordScreen() {
   const [loading, setLoading] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
 
-  const validateEmail = (email: string): boolean => {
+  // Cooldown timer state
+  const [resendCooldown, setResendCooldown] = useState(0)
+  const cooldownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Attempt tracking state
+  const [resetAttempts, setResetAttempts] = useState(0)
+  const [lockoutUntil, setLockoutUntil] = useState<number | null>(null)
+
+  // Cooldown countdown effect
+  useEffect(() => {
+    if (resendCooldown > 0) {
+      cooldownTimerRef.current = setInterval(() => {
+        setResendCooldown(prev => {
+          if (prev <= 1) {
+            if (cooldownTimerRef.current) clearInterval(cooldownTimerRef.current)
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+    }
+    return () => {
+      if (cooldownTimerRef.current) clearInterval(cooldownTimerRef.current)
+    }
+  }, [resendCooldown])
+
+  const isLockedOut = useCallback((): boolean => {
+    if (!lockoutUntil) return false
+    if (Date.now() < lockoutUntil) return true
+    // Lockout expired — reset
+    setLockoutUntil(null)
+    setResetAttempts(0)
+    return false
+  }, [lockoutUntil])
+
+  const validateEmail = (value: string): boolean => {
     setFieldError(null)
-    if (!email || email.trim().length === 0) {
+    if (!value || value.trim().length === 0) {
       setFieldError('Email is required')
       return false
     }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(email)) {
+    if (!isValidEmail(value)) {
       setFieldError('Please enter a valid email address')
       return false
     }
@@ -37,9 +79,35 @@ export function ResetPasswordScreen() {
     setMessage(null)
     setError(null)
     setFieldError(null)
-    
+
+    // Check lockout
+    if (isLockedOut()) {
+      const remainingSec = Math.ceil(((lockoutUntil ?? 0) - Date.now()) / 1000)
+      const remainingMin = Math.ceil(remainingSec / 60)
+      setError(`Too many attempts. Please try again in ${remainingMin} minute${remainingMin !== 1 ? 's' : ''}.`)
+      return
+    }
+
+    // Check cooldown
+    if (resendCooldown > 0) {
+      setError(`Please wait ${resendCooldown} seconds before requesting another reset link.`)
+      return
+    }
+
     if (!validateEmail(email)) return
-    
+
+    // Track attempt
+    const newAttempts = resetAttempts + 1
+    setResetAttempts(newAttempts)
+
+    if (newAttempts > MAX_RESET_ATTEMPTS) {
+      const lockout = Date.now() + LOCKOUT_DURATION_SECONDS * 1000
+      setLockoutUntil(lockout)
+      setError(`Too many attempts. Please try again in ${Math.ceil(LOCKOUT_DURATION_SECONDS / 60)} minutes.`)
+      console.warn('[reset-password] Lockout triggered', { attempts: newAttempts })
+      return
+    }
+
     try {
       setLoading(true)
       
@@ -48,12 +116,14 @@ export function ResetPasswordScreen() {
       if (result.success) {
         setMessage(result.message)
         setEmailSent(true)
+        setResendCooldown(RESEND_COOLDOWN_SECONDS)
       } else if (result.error === 'rate_limited') {
         setError(result.message)
       } else {
         // For security, show success even if email doesn't exist
         setMessage(result.message)
         setEmailSent(true)
+        setResendCooldown(RESEND_COOLDOWN_SECONDS)
       }
     } catch (e) {
       setError('An unexpected error occurred. Please try again.')
@@ -64,6 +134,7 @@ export function ResetPasswordScreen() {
   }
 
   const handleResend = () => {
+    if (resendCooldown > 0 || isLockedOut()) return
     setEmailSent(false)
     setMessage(null)
     handleReset()
@@ -166,11 +237,15 @@ export function ResetPasswordScreen() {
                 {/* Resend Email */}
                 <TouchableOpacity 
                   onPress={handleResend} 
-                  disabled={loading}
+                  disabled={loading || resendCooldown > 0 || isLockedOut()}
                   className="py-3 items-center"
                 >
                   {loading ? (
                     <ActivityIndicator color="#fff" />
+                  ) : resendCooldown > 0 ? (
+                    <Text className="text-white/50 text-sm">
+                      Resend available in {resendCooldown}s
+                    </Text>
                   ) : (
                     <Text className="text-white/80 text-sm">
                       Didn
@@ -193,7 +268,7 @@ export function ResetPasswordScreen() {
                 </View>
               </View>
             ) : (
-              <Button disabled={loading} onPress={handleReset} className="w-full">
+              <Button disabled={loading || resendCooldown > 0 || isLockedOut()} onPress={handleReset} className="w-full">
                 <View className="flex-row items-center justify-center">
                   {loading ? (
                     <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />

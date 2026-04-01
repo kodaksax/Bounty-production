@@ -156,7 +156,8 @@ export async function requestPasswordReset(
   const correlationId = generateCorrelationId('password_reset');
 
   try {
-    console.log('[auth-service] Requesting password reset', { email: email.trim().toLowerCase(), correlationId });
+    const platform = typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown'
+    console.log('[auth-service] Requesting password reset', { email: email.trim().toLowerCase(), correlationId, platform });
 
     // Validate email format using pre-compiled regex
     const normalizedEmail = email.trim().toLowerCase()
@@ -193,7 +194,12 @@ export async function requestPasswordReset(
       } catch { /* Swallow analytics errors */ }
 
       // Handle rate limiting specifically
-      if (error.message.includes('rate limit') || error.message.includes('too many requests')) {
+      if (
+        error.message.includes('rate limit') ||
+        error.message.includes('too many requests') ||
+        error.message.includes('exceeded') ||
+        error.status === 429
+      ) {
         return {
           success: false,
           message: 'Too many requests. Please wait a few minutes before trying again.',
@@ -214,6 +220,7 @@ export async function requestPasswordReset(
       await analyticsService.trackEvent('auth_password_reset_requested', {
         email: normalizedEmail,
         correlation_id: correlationId,
+        platform,
       });
     } catch { /* Swallow analytics errors */ }
 
