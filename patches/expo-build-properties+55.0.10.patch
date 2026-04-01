@@ -1,0 +1,21 @@
+diff --git a/node_modules/expo-build-properties/build/pluginConfig.js b/node_modules/expo-build-properties/build/pluginConfig.js
+index 1cfbd71..c56e2f3 100644
+--- a/node_modules/expo-build-properties/build/pluginConfig.js
++++ b/node_modules/expo-build-properties/build/pluginConfig.js
+@@ -30,6 +30,7 @@ const EXPO_SDK_MINIMAL_SUPPORTED_VERSIONS = {
+  * @ignore
+  */
+ const HERMES_V1_COMPILER_VERSION = '250829098.0.4';
++const HERMES_V1_COMPILER_VERSION_PREFIX = '250829098.';
+ /**
+  * Resolves a shared config value with platform-specific override.
+  * Platform-specific values take precedence over top-level values.
+@@ -315,7 +316,7 @@ function validateConfig(config, projectRoot) {
+     // Hermes v1 requires a specific hermes-compiler version
+     if ((androidUseHermesV1 || iosUseHermesV1) && projectRoot) {
+         const hermesCompilerVersion = getHermesCompilerVersion(projectRoot);
+-        if (hermesCompilerVersion && hermesCompilerVersion !== HERMES_V1_COMPILER_VERSION) {
++        if (hermesCompilerVersion && !hermesCompilerVersion.startsWith(HERMES_V1_COMPILER_VERSION_PREFIX)) {
+             throw new Error(`\`useHermesV1\` requires setting the hermes-compiler version to ${HERMES_V1_COMPILER_VERSION} through resolutions. ` +
+                 `Found version "${hermesCompilerVersion}" instead.`);
+         }
