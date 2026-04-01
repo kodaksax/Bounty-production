@@ -1,15 +1,53 @@
-This PR fixes the issue where empty states never load in after signing into the app.
+## Summary
 
-## Problem
-Users were seeing perpetual skeleton loaders instead of empty state messages after sign-in.
+<!-- A brief description of what this PR does and why. -->
 
-## Solution  
-Added authentication guards to prevent data loading with invalid/fallback user IDs and ensure loading states properly reset.
+## Changes
+
+<!-- List the key changes introduced by this PR. -->
+
+- 
 
 ## Testing
-See EMPTY_STATES_FIX_TESTING.md for comprehensive testing instructions.
 
-## Documentation
-- EMPTY_STATES_FIX_COMPLETE.md - Complete summary
-- EMPTY_STATES_FIX_FLOW.md - Technical flow diagrams
-- EMPTY_STATES_FIX_TESTING.md - Testing guide
+<!-- How was this tested? Tick all that apply. -->
+
+- [ ] Unit tests added / updated
+- [ ] Integration tests added / updated
+- [ ] Manual testing on iOS
+- [ ] Manual testing on Android
+- [ ] TypeScript type-check passes (`npx tsc --noEmit`)
+
+## Affected areas
+
+<!-- Which domains or features does this PR touch? -->
+
+- [ ] Navigation
+- [ ] Authentication / Onboarding
+- [ ] Bounty creation / management
+- [ ] Postings feed
+- [ ] Messaging / Chat
+- [ ] Wallet / Payments
+- [ ] Profile & Settings
+- [ ] Search / Discovery
+- [ ] Notifications
+- [ ] Infrastructure / Config
+- [ ] Documentation
+
+## Security checklist
+
+<!-- If this PR touches auth, payments, or data storage, confirm the following. -->
+
+- [ ] No secrets or credentials committed
+- [ ] User input is sanitised before use or storage
+- [ ] No new sensitive data written to logs
+- [ ] RLS / auth guards in place for any new data access
+
+## Screenshots / recordings
+
+<!-- For UI changes, include before/after screenshots or a screen recording. -->
+
+## Related issues
+
+<!-- Link any related issues: Closes #<issue_number> -->
+

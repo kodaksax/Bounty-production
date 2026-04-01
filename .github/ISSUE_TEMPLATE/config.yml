@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 Beta Testing Guide
+    url: https://github.com/kodaksax/Bounty-production/blob/main/docs/BETA_GUIDE.md
+    about: Start here — what to test, how to report issues, and key features to try.
+  - name: 🔒 Security Vulnerability (private)
+    url: https://github.com/kodaksax/Bounty-production/security/advisories/new
+    about: Report a security vulnerability privately via GitHub Security Advisories.
+  - name: 📋 Known Issues
+    url: https://github.com/kodaksax/Bounty-production/blob/main/docs/KNOWN_ISSUES.md
+    about: Check the known issues list before reporting — your issue may already be documented.

@@ -1,0 +1,79 @@
+name: 🧪 Beta Feedback
+description: Share general feedback, usability issues, or first-impressions from your beta testing session
+labels: ["beta-feedback", "needs-triage"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for being part of the BOUNTYExpo external beta! Your feedback is invaluable.
+        
+        Use this template for **general feedback** — not specific bugs (use the Bug Report template for those).
+
+  - type: dropdown
+    id: flow
+    attributes:
+      label: Which flow or area does this feedback relate to?
+      options:
+        - Onboarding (sign up / profile setup)
+        - Create Bounty
+        - Postings Feed / Browse
+        - Accept / Apply to Bounty
+        - Messaging / Chat
+        - Complete Bounty / Escrow Release
+        - Wallet / Payments
+        - Profile & Settings
+        - Search & Discovery
+        - Notifications
+        - Overall app experience
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: sentiment
+    attributes:
+      label: Overall sentiment for this area
+      options:
+        - 😍 Love it
+        - 🙂 Works well
+        - 😐 Neutral / could be better
+        - 😕 Confusing or frustrating
+        - 😠 Broken or unusable
+    validations:
+      required: true
+
+  - type: textarea
+    id: feedback
+    attributes:
+      label: Your feedback
+      description: Tell us what you experienced, what confused you, or what delighted you.
+      placeholder: "When I first opened the app I was confused about..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestions
+    attributes:
+      label: Suggestions for improvement
+      description: How could this area be improved? Even rough ideas are helpful.
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - iOS
+        - Android
+
+  - type: input
+    id: device
+    attributes:
+      label: Device & OS version
+      placeholder: "e.g. iPhone 15 / iOS 17.4"
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Anything else?
+      description: Screenshots, recordings, or any other context welcome.
