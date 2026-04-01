@@ -175,4 +175,62 @@ describe('NetworkProvider', () => {
     );
     expect(getByTestId('hasContext').props.children).toBe('true');
   });
+
+  it('should handle NetInfo.fetch rejection gracefully', async () => {
+    NetInfo.fetch.mockRejectedValueOnce(new Error('NetInfo unavailable'));
+
+    const { getByTestId } = render(
+      <NetworkProvider>
+        <NetworkConsumer />
+      </NetworkProvider>
+    );
+
+    // Should default to connected (optimistic) when fetch fails
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(getByTestId('isConnected').props.children).toBe('true');
+  });
+
+  it('should handle connected but internet unreachable', async () => {
+    NetInfo.fetch.mockResolvedValueOnce({
+      isConnected: true,
+      isInternetReachable: false,
+      type: 'wifi',
+    });
+
+    const { getByTestId } = render(
+      <NetworkProvider>
+        <NetworkConsumer />
+      </NetworkProvider>
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(getByTestId('isConnected').props.children).toBe('true');
+    expect(getByTestId('isInternetReachable').props.children).toBe('false');
+  });
+
+  it('should reflect cellular connection type', async () => {
+    NetInfo.fetch.mockResolvedValueOnce({
+      isConnected: true,
+      isInternetReachable: true,
+      type: 'cellular',
+    });
+
+    const { getByTestId } = render(
+      <NetworkProvider>
+        <NetworkConsumer />
+      </NetworkProvider>
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(getByTestId('connectionType').props.children).toBe('cellular');
+  });
 });
