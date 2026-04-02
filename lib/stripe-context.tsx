@@ -84,12 +84,11 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
   };
 
   const loadPaymentMethods = async () => {
-    // Bail early when the JWT has been confirmed structurally invalid (wrong
-    // Supabase project, missing secrets) after a refresh has already been
-    // attempted. Without this guard, clearError() at the top of the try block
-    // would wipe the error state every tap, making a new network call each time
-    // and infinitely incrementing consecutiveJwtFailuresRef.
-    if (consecutiveJwtFailuresRef.current > 1) return;
+    // Bail early once the session is confirmed permanently invalid (> 2
+    // consecutive 401s even after the service-layer internal retry with a fresh
+    // token). Without this guard clearError() would wipe the displayed error
+    // on every call, triggering another doomed network round-trip.
+    if (consecutiveJwtFailuresRef.current > 2) return;
 
     try {
       setIsLoading(true);
@@ -99,33 +98,36 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
       consecutiveJwtFailuresRef.current = 0; // reset on success
       setPaymentMethods(methods);
     } catch (err: unknown) {
-      // 401 "Invalid JWT" is a transient auth state that occurs when a stale
-      // session from a different Supabase project is in storage (e.g. switching
-      // between environments). Suppress the visible error and attempt a token
-      // refresh — auth will auto-recover by re-issuing or signing the user out.
+      // Any 401 ("Invalid JWT" from the Supabase gateway, or "Authentication
+      // required" from the edge function's auth.getUser() check) that reaches
+      // here means the service layer already attempted one internal retry with
+      // a freshly-fetched session token and it still failed.  The session is
+      // genuinely expired or revoked.
+      //
+      // Strategy: suppress the error and wait for the Supabase client's own
+      // auto-refresh cycle to issue a new access token.  When that happens,
+      // session.access_token changes, which re-triggers the token-change effect
+      // and automatically retries loadPaymentMethods with the new token.
+      //
+      // IMPORTANT: do NOT call attemptRefresh() here.  Doing so creates a
+      // cascade where each refresh produces a new token → the token-change
+      // effect fires again → loadPaymentMethods() is called → 401 again →
+      // another refresh → infinite loop with isLoading perpetually true.
       const errObj = err as Record<string, unknown>;
-      const isInvalidJwt =
-        String(errObj?.message ?? '').includes('Invalid JWT') &&
-        (String(errObj?.message ?? '').includes('(401)') || errObj?.code === '401');
-      if (isInvalidJwt) {
+      const is401AuthError =
+        errObj?.code === '401' ||
+        String(errObj?.message ?? '').includes('(401)');
+      if (is401AuthError) {
         consecutiveJwtFailuresRef.current += 1;
-        // If a refresh already happened and we still get a 401 the JWT is
-        // structurally invalid (wrong Supabase project, missing secrets, etc.).
-        // Stop the retry loop and surface a clear, actionable error.
-        if (consecutiveJwtFailuresRef.current > 1) {
-          logger.warning('[StripeContext] Repeated Invalid JWT after refresh — check Supabase project config.', { error: err });
+        if (consecutiveJwtFailuresRef.current > 2) {
+          // Three 401 failures even across token refreshes — the session is
+          // permanently invalid. Surface an actionable error and stop retrying.
+          logger.warning('[StripeContext] Repeated 401s — session may be permanently invalid.', { error: err });
           setError('Session error loading payment methods. Please sign out and sign in again.');
           return;
         }
-        console.warn('[StripeContext] Transient Invalid JWT — requesting token refresh.');
-        if (attemptRefresh) {
-          await Promise.resolve(attemptRefresh()).catch((refreshError) => {
-            console.warn(
-              '[StripeContext] Auth refresh attempt after Invalid JWT failed:',
-              refreshError
-            );
-          });
-        }
+        // Transient — suppress; the auth provider will refresh naturally.
+        console.warn('[StripeContext] 401 loading payment methods — suppressed; waiting for auth auto-refresh.');
         return;
       }
       // Improve error messaging for network issues using centralized utility
@@ -321,9 +323,11 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
     if (lastLoadedAccessTokenRef.current === currentToken) return;
 
     lastLoadedAccessTokenRef.current = currentToken;
-    // A new token means a fresh auth cycle — reset the failure counter so a
-    // legitimately refreshed token gets a clean attempt.
-    consecutiveJwtFailuresRef.current = 0;
+    // Do NOT reset consecutiveJwtFailuresRef here. The counter tracks total
+    // 401 failures across all tokens in this mount cycle and is only cleared
+    // inside the try-block on a successful load. Resetting it on every new
+    // token would allow the infinite-loop pattern:
+    //   401 → (something refreshes) → new token → counter reset → 401 → loop.
 
     // Longer debounce (1 second) to avoid rapid re-fetches during auth flows
     const timeoutId = setTimeout(() => {

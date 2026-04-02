@@ -8,13 +8,13 @@ import { logger } from '../utils/error-logger';
 import { getNetworkErrorMessage } from '../utils/network-connectivity';
 import { analyticsService } from './analytics-service';
 import {
-  checkDuplicatePayment,
-  completePaymentAttempt,
-  generateIdempotencyKey,
-  logPaymentError,
-  parsePaymentError,
-  recordPaymentAttempt,
-  withPaymentRetry,
+    checkDuplicatePayment,
+    completePaymentAttempt,
+    generateIdempotencyKey,
+    logPaymentError,
+    parsePaymentError,
+    recordPaymentAttempt,
+    withPaymentRetry,
 } from './payment-error-handler';
 import { performanceService } from './performance-service';
 
@@ -747,40 +747,79 @@ class StripeService {
         return [];
       }
 
-      // Use the payments Edge Function via invokePayments.
-      // Pass the caller-provided authToken directly so invokePayments can skip
-      // the internal getSession() call and avoid supabase-js lock contention.
-      const fnData = await invokePayments<{ paymentMethods: unknown[] }>(
-        'payments/methods',
-        { method: 'GET', accessToken: authToken }
-      );
+      // Helper to map raw API response rows to StripePaymentMethod objects
+      const mapMethods = (fnData: { paymentMethods: unknown[] }): StripePaymentMethod[] =>
+        (fnData?.paymentMethods || []).map((pm: unknown) => {
+          const pmData = pm as Record<string, unknown>;
+          const cardData = (pmData.card || {}) as Record<string, unknown>;
+          return {
+            id: (pmData.id as string) || '',
+            type: 'card' as const,
+            card: {
+              brand: (cardData.brand || pmData.card_brand || 'unknown') as string,
+              last4: (cardData.last4 || pmData.card_last4 || '****') as string,
+              exp_month: (cardData.exp_month || pmData.card_exp_month || 0) as number,
+              exp_year: (cardData.exp_year || pmData.card_exp_year || 0) as number,
+            },
+            created: (pmData.created as number) || Math.floor(Date.now() / 1000),
+          };
+        });
 
-      return (fnData?.paymentMethods || []).map((pm: unknown) => {
-        // Type guard for payment method data
-        const pmData = pm as Record<string, unknown>;
-        const cardData = (pmData.card || {}) as Record<string, unknown>;
-        
-        return {
-          id: (pmData.id as string) || '',
-          type: 'card' as const,
-          card: {
-            brand: (cardData.brand || pmData.card_brand || 'unknown') as string,
-            last4: (cardData.last4 || pmData.card_last4 || '****') as string,
-            exp_month: (cardData.exp_month || pmData.card_exp_month || 0) as number,
-            exp_year: (cardData.exp_year || pmData.card_exp_year || 0) as number,
-          },
-          created: (pmData.created as number) || Math.floor(Date.now() / 1000),
-        };
-      });
+      // First attempt: use the React-state token directly (fast path — avoids
+      // supabase-js getSession() lock contention described in invokePayments).
+      let fnData: { paymentMethods: unknown[] };
+      try {
+        fnData = await invokePayments<{ paymentMethods: unknown[] }>(
+          'payments/methods',
+          { method: 'GET', accessToken: authToken }
+        );
+      } catch (firstErr: unknown) {
+        const fe = firstErr as Record<string, unknown>;
+        const is401 = fe?.type === 'api_error' && String(fe?.code) === '401';
+        if (!is401) throw firstErr;
+
+        // 401: the React-state token is stale (server-side expiry or clock-skew).
+        // The Supabase client may have already auto-refreshed internally and hold
+        // a fresher token that hasn't propagated to React state yet.  Fetch it
+        // directly and retry once — this resolves the issue without triggering
+        // any React state changes that would cause a refresh loop.
+        logger.warning('[StripeService] 401 on payment methods — retrying with fresh session token.', {});
+        let freshToken: string | undefined;
+        try {
+          const sessionResult = await Promise.race([
+            supabase.auth.getSession() as Promise<{ data: { session: { access_token: string } | null }; error: unknown }>,
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('getSession timeout')), 4000)
+            ),
+          ]);
+          freshToken = sessionResult.data?.session?.access_token;
+        } catch {
+          // getSession() timed out or errored — propagate the original 401
+          throw firstErr;
+        }
+
+        if (!freshToken || freshToken === authToken) {
+          // Same token or no session — a retry would not help; propagate the 401
+          throw firstErr;
+        }
+
+        // Retry with the fresh token.  If this also fails, the outer catch handles it.
+        fnData = await invokePayments<{ paymentMethods: unknown[] }>(
+          'payments/methods',
+          { method: 'GET', accessToken: freshToken }
+        );
+      }
+
+      return mapMethods(fnData);
     } catch (error) {
-      // 401 "Invalid JWT" is a transient auth state (expired/stale token). Log at
-      // warning level — the StripeContext catch-handler suppresses and refreshes.
+      // Any 401 that survived the internal retry above is a persistent auth
+      // failure (session revoked, wrong project, etc.).  Log at warning level
+      // so the StripeContext catch-handler can decide how to surface it.
       const _err = error as Record<string, unknown> | null;
-      const _isInvalidJwt =
-        _err && _err.type === 'api_error' && String(_err.code) === '401' &&
-        String(_err.message ?? '').includes('Invalid JWT');
-      if (_isInvalidJwt) {
-        logger.warning('[StripeService] Transient Invalid JWT (401) on payment methods — auth will refresh.', { error });
+      const _is401AuthError =
+        _err && _err.type === 'api_error' && String(_err.code) === '401';
+      if (_is401AuthError) {
+        logger.warning('[StripeService] 401 on payment methods (after retry) — session may be expired.', { error });
       } else {
         logger.error('[StripeService] Error fetching payment methods:', { error });
       }

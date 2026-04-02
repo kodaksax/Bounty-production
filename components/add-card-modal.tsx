@@ -100,6 +100,12 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
       !isAuthStale &&
       session?.access_token
     ) {
+      // Guard: if the session token is already expired, skip this render and wait
+      // for supabase-js to auto-refresh and fire onAuthStateChange → state update,
+      // which will re-run this effect with the new session?.access_token value.
+      if (session.expires_at !== undefined && Math.floor(Date.now() / 1000) >= session.expires_at - 30) {
+        return;
+      }
       createSetupIntent()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -113,10 +119,29 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
 
     setIsCreatingSetupIntent(true)
     try {
-      // Delegate entirely to stripeService, passing the session token directly
-      // so invokePayments skips the internal getSession() call and avoids
-      // supabase-js lock contention that causes a 5 s TIMEOUT → 401.
-      const setupIntent = await stripeService.createSetupIntent(session?.access_token || undefined)
+      // If the session token is expired or within 30 s of expiry, pass undefined so
+      // invokePayments calls supabase.auth.getSession() internally to get a fresh token.
+      // Otherwise pass the React-state token directly to bypass the supabase-js
+      // internal lock (which can block getSession() for up to 5 s under race conditions).
+      const tokenIsStale =
+        session.expires_at !== undefined &&
+        Math.floor(Date.now() / 1000) >= session.expires_at - 30
+
+      let setupIntent
+      try {
+        setupIntent = await stripeService.createSetupIntent(
+          tokenIsStale ? undefined : (session?.access_token || undefined)
+        )
+      } catch (firstErr: any) {
+        // On 401 (expired/invalid token), attempt a session refresh and retry once
+        // using no explicit token so invokePayments fetches a fresh one internally.
+        if (firstErr?.code === '401' && attemptRefresh) {
+          await attemptRefresh()
+          setupIntent = await stripeService.createSetupIntent(undefined)
+        } else {
+          throw firstErr
+        }
+      }
       const clientSecret = setupIntent.client_secret
 
       // Log detected key mode for debugging
