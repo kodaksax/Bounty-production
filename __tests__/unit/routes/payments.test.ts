@@ -131,7 +131,7 @@ jest.mock('@supabase/supabase-js', () => ({
   })
 }));
 
-// Ensure auth middleware uses test path (no supabase env) and will populate request.userId
+// Auth middleware is mocked above — these env vars are for the payment routes themselves
 process.env.STRIPE_SECRET_KEY = 'sk_test_mock';
 process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test';
 

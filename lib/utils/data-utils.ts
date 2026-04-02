@@ -134,7 +134,7 @@ export const createBountyWithValidationUtil = async (
 
   try {
     // Check if the user exists first
-  let user = await profileService.getById(bountyData.poster_id)
+    const user = await profileService.getById(bountyData.poster_id)
 
     // If user doesn't exist, return an error - do not auto-create profiles with placeholder data
     if (!user) {
