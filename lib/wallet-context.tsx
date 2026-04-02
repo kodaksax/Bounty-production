@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { config } from './config';
 import { API_BASE_URL } from './config/api';
 import { API_TIMEOUTS } from './config/network';
 import { bountyService } from './services/bounty-service';
@@ -124,6 +125,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
+          ...(config.supabase.anonKey ? { apikey: config.supabase.anonKey } : {}),
         },
         timeout: API_TIMEOUTS.DEFAULT,
         retries: 2,
@@ -167,6 +169,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
+          ...(config.supabase.anonKey ? { apikey: config.supabase.anonKey } : {}),
         },
         timeout: API_TIMEOUTS.DEFAULT,
         retries: 2,
@@ -388,6 +391,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
+            ...(config.supabase.anonKey ? { apikey: config.supabase.anonKey } : {}),
           },
           body: JSON.stringify({ bountyId: bountyIdStr, amount, title }),
           timeout: API_TIMEOUTS.DEFAULT,
@@ -543,6 +547,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
+            ...(config.supabase.anonKey ? { apikey: config.supabase.anonKey } : {}),
           },
           body: JSON.stringify({
             bountyId: bountyIdStr,
