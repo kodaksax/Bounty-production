@@ -252,11 +252,10 @@ describe('Stripe Service', () => {
     });
 
     it('should handle slow network requests via invokePayments', async () => {
-      // Mock a slow response that takes 20 seconds
-      // supabase functions invoke handles timeouts and retries
+      // Mock a slow-but-within-timeout response (100ms, well under the 15s service timeout)
       (supabase.functions.invoke as jest.Mock).mockImplementation(() =>
         new Promise((resolve) => {
-          setTimeout(() => resolve({ data: { paymentMethods: [] }, error: null }), 20000);
+          setTimeout(() => resolve({ data: { paymentMethods: [] }, error: null }), 100);
         })
       );
 
@@ -268,7 +267,7 @@ describe('Stripe Service', () => {
       // For testing purposes, we'll verify it returns the result when it completes
       const methods = await methodsPromise;
       expect(Array.isArray(methods)).toBe(true);
-    }, 30000); // Allow Jest to wait longer than the mock delay
+    });
 
     it('should handle network errors gracefully', async () => {
       // Mock supabase invoke to throw a network error

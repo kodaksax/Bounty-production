@@ -188,7 +188,9 @@ async function invokePayments<T>(
       method: options.method ?? 'POST',
       body: options.body,
     };
-    if (options.headers) invokeOptions.headers = options.headers;
+    const mergedHeaders: Record<string, string> = { ...(options.headers ?? {}) };
+    if (options.accessToken) mergedHeaders['Authorization'] = `Bearer ${options.accessToken}`;
+    if (Object.keys(mergedHeaders).length > 0) invokeOptions.headers = mergedHeaders;
 
     const invokeResult = await Promise.race<{ data: unknown; error: unknown }>([
       supabaseClient.functions.invoke(subPath, invokeOptions),
