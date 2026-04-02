@@ -2,7 +2,7 @@ import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, 
 import { useAuthContext } from '../hooks/use-auth-context';
 import { useWebSocket, WebSocketState } from '../hooks/useWebSocket';
 import { logClientError, logClientInfo } from '../lib/services/monitoring';
-import { useOptionalNetworkContext } from './network-provider';
+import { useOptionalNetworkContext, isDeviceOnline } from './network-provider';
 
 interface WebSocketContextValue extends WebSocketState {
   connect: () => Promise<void>;
@@ -169,7 +169,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!networkCtx) return; // No provider — rely on WS connection monitoring
 
-    const deviceConnected = networkCtx.isConnected && networkCtx.isInternetReachable !== false;
+    const deviceConnected = isDeviceOnline(networkCtx);
     const prev = prevDeviceConnectedRef.current;
     prevDeviceConnectedRef.current = deviceConnected;
 

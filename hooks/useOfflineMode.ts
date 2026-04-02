@@ -11,7 +11,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import { offlineQueueService } from '../lib/services/offline-queue-service';
-import { useOptionalNetworkContext } from '../providers/network-provider';
+import { useOptionalNetworkContext, isDeviceOnline } from '../providers/network-provider';
 
 export interface OfflineMode {
   /**
@@ -64,11 +64,10 @@ export function useOfflineMode(): OfflineMode {
   const [queuedItemsCount, setQueuedItemsCount] = useState(0);
 
   // Derive online status from provider when available, otherwise use local state.
-  // When using the provider, treat `isInternetReachable === false` as offline,
-  // and `null`/`undefined` as unknown (optimistically online) to match
-  // connectivity semantics used elsewhere in the app.
+  // isDeviceOnline() treats isInternetReachable === false as offline (captive portals)
+  // while treating null/unknown optimistically as online.
   const isOnline = networkCtx
-    ? networkCtx.isConnected && networkCtx.isInternetReachable !== false
+    ? isDeviceOnline(networkCtx)
     : localIsOnline;
 
   // Update queued items count
@@ -188,6 +187,6 @@ export function useIsOnline(): boolean {
   }, [networkCtx]);
 
   return networkCtx
-    ? networkCtx.isConnected && networkCtx.isInternetReachable !== false
+    ? isDeviceOnline(networkCtx)
     : localIsOnline;
 }

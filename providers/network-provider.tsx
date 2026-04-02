@@ -111,3 +111,12 @@ export function useNetworkContext(): NetworkContextValue {
 export function useOptionalNetworkContext(): NetworkContextValue | undefined {
   return useContext(NetworkContext);
 }
+
+/**
+ * Determines whether the device is truly online.
+ * Returns true when connected AND internet is reachable (or reachability is unknown/null).
+ * Treats `isInternetReachable === false` as offline to handle captive portals correctly.
+ */
+export function isDeviceOnline(ctx: NetworkContextValue): boolean {
+  return ctx.isConnected && ctx.isInternetReachable !== false;
+}
