@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { render, act, waitFor } from '@testing-library/react-native';
+import { render, act } from '@testing-library/react-native';
 import { Text } from 'react-native';
 import { NetworkProvider, useNetworkContext, useOptionalNetworkContext } from '../../../providers/network-provider';
 

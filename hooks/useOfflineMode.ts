@@ -8,7 +8,7 @@
  * back to its own NetInfo subscription when used outside a provider.
  */
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import { offlineQueueService } from '../lib/services/offline-queue-service';
 import { useOptionalNetworkContext } from '../providers/network-provider';
@@ -62,10 +62,14 @@ export function useOfflineMode(): OfflineMode {
   const [localIsOnline, setLocalIsOnline] = useState(true);
   const [isChecking, setIsChecking] = useState(false);
   const [queuedItemsCount, setQueuedItemsCount] = useState(0);
-  const prevOnlineStatus = useRef(true);
 
-  // Derive online status from provider when available, otherwise use local state
-  const isOnline = networkCtx ? networkCtx.isConnected : localIsOnline;
+  // Derive online status from provider when available, otherwise use local state.
+  // When using the provider, treat `isInternetReachable === false` as offline,
+  // and `null`/`undefined` as unknown (optimistically online) to match
+  // connectivity semantics used elsewhere in the app.
+  const isOnline = networkCtx
+    ? networkCtx.isConnected && networkCtx.isInternetReachable !== false
+    : localIsOnline;
 
   // Update queued items count
   const updateQueueCount = useCallback(() => {
@@ -83,15 +87,11 @@ export function useOfflineMode(): OfflineMode {
     // Initial state check
     NetInfo.fetch().then((state: NetInfoState) => {
       setLocalIsOnline(!!state.isConnected);
-      prevOnlineStatus.current = !!state.isConnected;
     });
 
     // Subscribe to network state changes
     const unsubscribe = NetInfo.addEventListener((state: NetInfoState) => {
-      const isNowOnline = !!state.isConnected;
-      
-      prevOnlineStatus.current = isNowOnline;
-      setLocalIsOnline(isNowOnline);
+      setLocalIsOnline(!!state.isConnected);
     });
 
     return () => {
@@ -187,5 +187,7 @@ export function useIsOnline(): boolean {
     };
   }, [networkCtx]);
 
-  return networkCtx ? networkCtx.isConnected : localIsOnline;
+  return networkCtx
+    ? networkCtx.isConnected && networkCtx.isInternetReachable !== false
+    : localIsOnline;
 }

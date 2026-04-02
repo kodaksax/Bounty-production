@@ -169,7 +169,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!networkCtx) return; // No provider — rely on WS connection monitoring
 
-    const deviceConnected = networkCtx.isConnected;
+    const deviceConnected = networkCtx.isConnected && networkCtx.isInternetReachable !== false;
     const prev = prevDeviceConnectedRef.current;
     prevDeviceConnectedRef.current = deviceConnected;
 
@@ -193,7 +193,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       reconnectAttemptsRef.current = 0;
       enhancedReconnectRef.current();
     }
-  }, [networkCtx?.isConnected, isLoggedIn]);
+  }, [networkCtx?.isConnected, networkCtx?.isInternetReachable, isLoggedIn]);
 
   const contextValue: WebSocketContextValue = useMemo(() => ({
     ...webSocketState,
