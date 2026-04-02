@@ -65,7 +65,14 @@ export function getNetworkErrorMessage(error: any): string {
   if (!error) return 'Network request failed';
   
   const message = error.message || String(error);
-  
+
+  // Structured infrastructure timeout from invokePayments / Edge Function races.
+  // Must be checked BEFORE the generic string match so we don't blame the user's
+  // connection when the real cause is a cold/paused Supabase project.
+  if ((error as any)?.code === 'TIMEOUT') {
+    return 'Payment service is temporarily unavailable. Please try again later.';
+  }
+
   // Timeout errors
   if (error.name === 'TimeoutError' || message.includes('timed out') || message.includes('timeout')) {
     return 'Request timed out. Please check your internet connection and try again.';

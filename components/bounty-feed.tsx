@@ -11,6 +11,7 @@ import { useRouter } from 'expo-router'
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { Alert, Animated, Dimensions, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useValidUserId } from '../hooks/useValidUserId'
+import { API_TIMEOUTS } from '../lib/config/network'
 import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../lib/constants/accessibility'
 import { bountyRequestService } from '../lib/services/bounty-request-service'
 import { bountyService } from '../lib/services/bounty-service'
@@ -243,7 +244,15 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     }
     try {
       const pageOffset = reset ? 0 : offsetRef.current
-      const fetchedBounties = await bountyService.getAll({ status: 'open', limit: PAGE_SIZE, offset: pageOffset })
+      const fetchedBounties = await Promise.race<Bounty[]>([
+        bountyService.getAll({ status: 'open', limit: PAGE_SIZE, offset: pageOffset }),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error('Service unavailable — please try again shortly')),
+            API_TIMEOUTS.DEFAULT
+          )
+        ),
+      ])
 
       const mergeUniqueById = (existing: Bounty[], incoming: Bounty[]) => {
         const map = new Map<string, Bounty>()
@@ -420,7 +429,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         <EmptyState
           icon="cloud-off"
           title="Unable to load bounties"
-          description="Check your internet connection and try again"
+          description={loadError.message.includes('unavailable') ? loadError.message : 'Service temporarily unavailable. Pull down to retry.'}
           actionLabel="Try Again"
           onAction={() => loadBounties({ reset: true })}
         />

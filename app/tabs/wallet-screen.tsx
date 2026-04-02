@@ -186,14 +186,14 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
                   style={styles.accountCard}
                   accessible={true}
                   accessibilityRole="alert"
-                  accessibilityLabel="Unable to load payment methods. Check your connection."
+                  accessibilityLabel="Unable to load payment methods. Service may be temporarily unavailable."
                 >
                   <View style={[styles.accountIcon, { backgroundColor: '#ef4444' }]}>
                     <MaterialIcons name="cloud-off" size={24} color="#fff" accessibilityElementsHidden={true} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.accountName}>Unable to Load Payment Methods</Text>
-                    <Text style={styles.accountSub}>Check your connection</Text>
+                    <Text style={styles.accountSub}>Service temporarily unavailable</Text>
                   </View>
                   <TouchableOpacity
                     onPress={loadPaymentMethods}

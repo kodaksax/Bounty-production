@@ -113,10 +113,10 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
 
     setIsCreatingSetupIntent(true)
     try {
-      // Delegate entirely to stripeService which uses supabase.functions.invoke()
-      // internally — always reads the freshest token from auth.getSession() and
-      // attaches both Authorization + apikey headers automatically.
-      const setupIntent = await stripeService.createSetupIntent()
+      // Delegate entirely to stripeService, passing the session token directly
+      // so invokePayments skips the internal getSession() call and avoids
+      // supabase-js lock contention that causes a 5 s TIMEOUT → 401.
+      const setupIntent = await stripeService.createSetupIntent(session?.access_token || undefined)
       const clientSecret = setupIntent.client_secret
 
       // Log detected key mode for debugging

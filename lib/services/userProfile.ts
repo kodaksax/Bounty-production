@@ -199,9 +199,13 @@ export const userProfileService = {
           let remoteError: any = null;
 
           try {
+            // Select columns known to exist in all environments (omit 'about' — not
+            // present in staging schema). The 'about' / bio field is sourced from
+            // auth-profile-service which uses select('*') and is the authoritative
+            // profile provider; this path is only a lightweight fallback for display names.
             const res = await supabase
               .from('profiles')
-              .select('id,username,displayName:display_name,avatar,location,about')
+              .select('id,username,display_name,avatar,location')
               .eq('id', resolvedUserId)
               .single();
             remoteData = res.data ?? null;
@@ -211,26 +215,32 @@ export const userProfileService = {
             remoteError = e;
           }
 
-          // If profiles table returned nothing or access was denied, try public_profiles
+          // If profiles table returned nothing or access was denied, try public_profiles.
+          // Skip silently when the table simply doesn't exist in this environment (PGRST205).
           if (!remoteData) {
             try {
               const pub = await supabase
                 .from('public_profiles')
-                .select('id,username,displayName:display_name,avatar,location,about')
+                .select('id,username,display_name,avatar,location')
                 .eq('id', resolvedUserId)
                 .single();
               if (pub.error) {
-                // Both attempts failed; log and return null. Include error details and the select used.
-                console.error('[userProfile] public_profiles fetch error for user', resolvedUserId, {
-                  select: 'id,username,displayName:display_name,avatar,location,about',
-                  errorCode: pub.error?.code,
-                  errorMessage: pub.error?.message || pub.error,
-                });
+                const isTableMissing =
+                  pub.error?.code === 'PGRST205' ||
+                  String(pub.error?.message ?? '').includes('schema cache');
+                if (!isTableMissing) {
+                  // Unexpected error — log so it's visible but don't block.
+                  console.warn('[userProfile] public_profiles fetch error for user', resolvedUserId, {
+                    errorCode: pub.error?.code,
+                    errorMessage: pub.error?.message,
+                  });
+                }
+                // table-not-found is a normal fallback failure in staging; skip silently.
               } else {
                 remoteData = pub.data ?? null;
               }
             } catch (e) {
-              console.error('[userProfile] Error fetching from public_profiles for user', resolvedUserId, e);
+              console.warn('[userProfile] Error fetching from public_profiles for user', resolvedUserId, e);
             }
           }
 
@@ -245,7 +255,7 @@ export const userProfileService = {
             displayName: remoteData.display_name || remoteData.displayName || undefined,
             avatar: remoteData.avatar || undefined,
             location: remoteData.location || undefined,
-            bio: remoteData.about || undefined,
+            bio: remoteData.about || remoteData.bio || undefined,
           } as ProfileData;
 
           // Cache locally under the per-user key so future reads are fast
