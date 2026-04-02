@@ -55,6 +55,8 @@
     "start:dev": "cross-env APP_ENV=development expo start",
     "start:staging": "cross-env APP_ENV=staging NODE_ENV=staging expo start",
     "start:prod": "cross-env APP_ENV=production expo start",
+    "deploy:functions:dev": "npx supabase functions deploy payments --no-verify-jwt --project-ref ajsbkocnixpwbrjokvnq",
+    "deploy:functions:staging": "npx supabase functions deploy payments --no-verify-jwt --project-ref gwumwpoomwvkjyibdmpj",
     "env:dev": "cross-env APP_ENV=development npm run env:check && echo \"\" && echo \"Next: npm run start:dev (runs expo start with APP_ENV=development)\"",
     "env:staging": "cross-env APP_ENV=staging npm run env:check && echo \"\" && echo \"Next: npm run start:staging (runs expo start with APP_ENV=staging)\"",
     "env:prod": "cross-env APP_ENV=production npm run env:check && echo \"\" && echo \"Next: npm run start:prod (runs expo start with APP_ENV=production)\"",
