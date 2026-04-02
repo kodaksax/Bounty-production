@@ -73,12 +73,15 @@ async function fetchEdgeFunction<T>(
   try {
     const fetchController = new AbortController();
     const fetchTimeoutId = setTimeout(() => fetchController.abort(), API_TIMEOUTS.DEFAULT);
-    const response = await fetch(url, {
+
+    const fetchResult = fetch(url, {
       method,
       headers,
       body: hasBody ? JSON.stringify(body) : undefined,
       signal: fetchController.signal,
-    }).finally(() => clearTimeout(fetchTimeoutId));
+    });
+
+    const response = await Promise.resolve(fetchResult).finally(() => clearTimeout(fetchTimeoutId));
 
     let parsedBody: any = null;
     const responseText = await response.text();
