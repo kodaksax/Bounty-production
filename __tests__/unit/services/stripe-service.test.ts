@@ -68,11 +68,17 @@ const { supabase } = require('../../../lib/supabase');
 describe('Stripe Service', () => {
   // Set up environment variables before all tests to ensure proper configuration
   beforeAll(() => {
+    // Force the direct-fetch path (fetchEdgeFunction) in all environments by ensuring
+    // EXPO_PUBLIC_SUPABASE_ANON_KEY is set. In CI it is already set via secrets; in
+    // local dev it may be absent, which would route through supabase.functions.invoke
+    // instead. Setting it here makes test behaviour identical in both environments.
+    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY = 'test-anon-key-for-stripe-unit-tests';
     process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_test_mock_key_for_testing';
   });
 
   afterAll(() => {
     // Clean up environment variables after tests
+    delete process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
     delete process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY;
   });
 
@@ -139,10 +145,11 @@ describe('Stripe Service', () => {
 
   describe('createPaymentIntent', () => {
     beforeEach(() => {
-      // Mock successful API response via supabase functions invoke
-      (supabase.functions.invoke as jest.Mock).mockResolvedValue({
-        data: { clientSecret: 'pi_mock_secret_12345', paymentIntentId: 'pi_mock_67890' },
-        error: null,
+      // Mock successful API response via global.fetch (invokePayments routes through
+      // fetchEdgeFunction when SUPABASE_ANON_KEY is set, as in CI)
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify({ clientSecret: 'pi_mock_secret_12345', paymentIntentId: 'pi_mock_67890' }),
       });
     });
 
@@ -201,10 +208,10 @@ describe('Stripe Service', () => {
       const authToken = 'my-test-token';
       await stripeService.createPaymentIntent(50, 'usd', authToken);
 
-      expect(supabase.functions.invoke).toHaveBeenCalledWith(
-        'payments/create-payment-intent',
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('payments/create-payment-intent'),
         expect.objectContaining({
-          headers: { Authorization: `Bearer ${authToken}` },
+          headers: expect.objectContaining({ Authorization: `Bearer ${authToken}` }),
         })
       );
     });
@@ -212,20 +219,18 @@ describe('Stripe Service', () => {
     it('should not include Authorization header when authToken is not provided', async () => {
       await stripeService.createPaymentIntent(50, 'usd');
 
-      const callArgs = (supabase.functions.invoke as jest.Mock).mock.calls[0];
-      const invokeOptions = callArgs?.[1] ?? {};
-      expect(invokeOptions.headers).toBeUndefined();
+      const callArgs = (global.fetch as jest.Mock).mock.calls[0];
+      const fetchOptions = callArgs?.[1] ?? {};
+      expect(fetchOptions.headers?.Authorization).toBeUndefined();
     });
 
     it('should send amountCents as a number (no type cast)', async () => {
       await stripeService.createPaymentIntent(12.5, 'usd');
 
-      expect(supabase.functions.invoke).toHaveBeenCalledWith(
-        'payments/create-payment-intent',
-        expect.objectContaining({
-          body: expect.objectContaining({ amountCents: 1250 }),
-        })
-      );
+      const callArgs = (global.fetch as jest.Mock).mock.calls[0];
+      const fetchOptions = callArgs?.[1] ?? {};
+      const parsedBody = JSON.parse(fetchOptions.body ?? '{}');
+      expect(parsedBody.amountCents).toBe(1250);
     });
   });
 
@@ -253,9 +258,12 @@ describe('Stripe Service', () => {
 
     it('should handle slow network requests via invokePayments', async () => {
       // Mock a slow-but-within-timeout response (100ms, well under the 15s service timeout)
-      (supabase.functions.invoke as jest.Mock).mockImplementation(() =>
+      (global.fetch as jest.Mock).mockImplementation(() =>
         new Promise((resolve) => {
-          setTimeout(() => resolve({ data: { paymentMethods: [] }, error: null }), 100);
+          setTimeout(() => resolve({
+            ok: true,
+            text: async () => JSON.stringify({ paymentMethods: [] }),
+          }), 100);
         })
       );
 
@@ -270,8 +278,8 @@ describe('Stripe Service', () => {
     });
 
     it('should handle network errors gracefully', async () => {
-      // Mock supabase invoke to throw a network error
-      (supabase.functions.invoke as jest.Mock).mockRejectedValue(
+      // Mock fetch to throw a network error
+      (global.fetch as jest.Mock).mockRejectedValue(
         Object.assign(new Error('Network request failed'), { name: 'NetworkError' })
       );
 
@@ -286,8 +294,9 @@ describe('Stripe Service', () => {
 
     it('should successfully fetch payment methods within timeout', async () => {
       // Mock a fast successful response
-      (supabase.functions.invoke as jest.Mock).mockResolvedValue({
-        data: {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify({
           paymentMethods: [
             {
               id: 'pm_test123',
@@ -295,8 +304,7 @@ describe('Stripe Service', () => {
               created: 1234567890,
             },
           ],
-        },
-        error: null,
+        }),
       });
 
       const authToken = 'test_token';
@@ -311,22 +319,22 @@ describe('Stripe Service', () => {
       const methods = await stripeService.listPaymentMethods();
       expect(methods).toEqual([]);
       // Verify no API call was made when auth token is not provided
-      expect(supabase.functions.invoke).not.toHaveBeenCalled();
+      expect(global.fetch).not.toHaveBeenCalled();
     });
 
     it('should pass Authorization header when auth token is provided', async () => {
-      (supabase.functions.invoke as jest.Mock).mockResolvedValue({
-        data: { paymentMethods: [] },
-        error: null,
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify({ paymentMethods: [] }),
       });
 
       const authToken = 'test_bearer_token';
       await stripeService.listPaymentMethods(authToken);
 
       // When an auth token is provided the service calls the payments API via
-      // supabase.functions.invoke (auth is handled internally by the Supabase client).
-      expect(supabase.functions.invoke).toHaveBeenCalledWith(
-        'payments/methods',
+      // fetchEdgeFunction (direct fetch with auth headers).
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/payments/methods'),
         expect.objectContaining({
           method: 'GET',
         })
@@ -334,12 +342,10 @@ describe('Stripe Service', () => {
     });
 
     it('should handle API errors correctly', async () => {
-      (supabase.functions.invoke as jest.Mock).mockResolvedValue({
-        data: null,
-        error: {
-          message: 'Unauthorized',
-          context: { status: 401, json: async () => ({ error: 'Unauthorized' }) },
-        },
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: false,
+        status: 401,
+        text: async () => JSON.stringify({ error: 'Unauthorized' }),
       });
 
       const authToken = 'invalid_token';
@@ -352,12 +358,10 @@ describe('Stripe Service', () => {
     });
 
     it('should surface 405 Method Not Allowed as a meaningful message', async () => {
-      (supabase.functions.invoke as jest.Mock).mockResolvedValue({
-        data: null,
-        error: {
-          message: 'Method not allowed',
-          context: { status: 405, json: async () => ({ error: 'Method not allowed' }) },
-        },
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: false,
+        status: 405,
+        text: async () => JSON.stringify({ error: 'Method not allowed' }),
       });
 
       const authToken = 'test_token';
@@ -370,7 +374,7 @@ describe('Stripe Service', () => {
     });
 
     it('should handle network errors with friendly messages', async () => {
-      (supabase.functions.invoke as jest.Mock).mockRejectedValue(
+      (global.fetch as jest.Mock).mockRejectedValue(
         new Error('Network request failed')
       );
 
@@ -415,8 +419,9 @@ describe('Stripe Service', () => {
     });
 
     it('should attach a payment method successfully', async () => {
-      (supabase.functions.invoke as jest.Mock).mockResolvedValue({
-        data: {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify({
           success: true,
           paymentMethod: {
             id: 'pm_attach123',
@@ -424,8 +429,7 @@ describe('Stripe Service', () => {
             card: { brand: 'visa', last4: '4242', exp_month: 12, exp_year: 2026 },
             created: 1234567890,
           },
-        },
-        error: null,
+        }),
       });
 
       const authToken = 'test_token';
@@ -434,8 +438,8 @@ describe('Stripe Service', () => {
       expect(result.id).toBe('pm_attach123');
       expect(result.card.brand).toBe('visa');
       expect(result.card.last4).toBe('4242');
-      expect(supabase.functions.invoke).toHaveBeenCalledWith(
-        'payments/methods',
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/payments/methods'),
         expect.objectContaining({ method: 'POST' })
       );
     });
@@ -448,12 +452,10 @@ describe('Stripe Service', () => {
     });
 
     it('should surface API errors from attachPaymentMethod', async () => {
-      (supabase.functions.invoke as jest.Mock).mockResolvedValue({
-        data: null,
-        error: {
-          message: 'Payment method ID is required',
-          context: { status: 400, json: async () => ({ error: 'Payment method ID is required' }) },
-        },
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: false,
+        status: 400,
+        text: async () => JSON.stringify({ error: 'Payment method ID is required' }),
       });
 
       await expect(stripeService.attachPaymentMethod('', 'test_token'))

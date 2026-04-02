@@ -53,9 +53,16 @@ function getExtraValue(key: string): string {
 
 // Supabase anon key — required alongside the user's JWT when calling Edge
 // Functions directly via fetch (identifies the project to the Supabase gateway).
-const SUPABASE_ANON_KEY =
-  getExtraValue('EXPO_PUBLIC_SUPABASE_ANON_KEY') ||
-  (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY as string | undefined)?.trim() || '';
+// Read dynamically (not as a module-level constant) so that the test environment
+// can control routing by setting/clearing process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
+// in beforeAll/afterAll without needing to re-load the module.
+function getSupabaseAnonKey(): string {
+  return (
+    getExtraValue('EXPO_PUBLIC_SUPABASE_ANON_KEY') ||
+    (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY as string | undefined)?.trim() ||
+    ''
+  );
+}
 
 /**
  * Shared fetch helper: makes the actual HTTP call to an Edge Function URL,
@@ -132,10 +139,11 @@ async function invokePayments<T>(
   // directly. This completely bypasses the lock contention because we hold the
   // token in hand before functions.invoke would even try to read it.
   //
-  // SUPABASE_ANON_KEY is required by the Supabase gateway alongside the user JWT.
+  // getSupabaseAnonKey() is required by the Supabase gateway alongside the user JWT.
   // It is always present in staging/prod (EXPO_PUBLIC_SUPABASE_ANON_KEY env var).
   // In local dev without Supabase we fall through to functions.invoke() below.
-  if (SUPABASE_ANON_KEY) {
+  const supabaseAnonKey = getSupabaseAnonKey();
+  if (supabaseAnonKey) {
     let token: string | undefined;
 
     if (options.accessToken) {
@@ -171,7 +179,7 @@ async function invokePayments<T>(
 
     const headers: Record<string, string> = {
       ...(options.headers ?? {}),
-      apikey: SUPABASE_ANON_KEY,
+      apikey: supabaseAnonKey,
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
 
