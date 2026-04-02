@@ -19,6 +19,7 @@ import { initMixpanel, track } from "../lib/mixpanel";
 import { StripeProvider } from '../lib/stripe-context';
 import { WalletProvider } from '../lib/wallet-context';
 import AuthProvider from '../providers/auth-provider';
+import { NetworkProvider } from '../providers/network-provider';
 import { WebSocketProvider } from '../providers/websocket-provider';
 import { hideNativeSplashSafely, showNativeSplash } from './auth/splash';
 import { isInitialNavigationDone, onInitialNavigationDone } from './initial-navigation/initialNavigation';
@@ -108,44 +109,46 @@ const LayoutContent = () => {
 
   return (
     <RootFrame bgColor={color}>
-      <AuthProvider>
-          <SessionMonitorGate />
-          <AdminProvider>
-            <StripeProvider>
-              <WalletProvider>
-                <NotificationProvider>
-                  <WebSocketProvider>
-                    <ErrorBoundary
-                      onError={(error, errorInfo) => {
-                        // Add custom breadcrumb for additional context (do not capture exception again)
-                        try {
-                          if (Sentry && typeof Sentry.addBreadcrumb === 'function') {
-                            Sentry.addBreadcrumb({
-                              category: 'root_layout',
-                              message: 'Error caught in root layout',
-                              level: 'error',
-                              data: {
-                                componentStack: errorInfo.componentStack,
-                              },
-                            });
+      <NetworkProvider>
+        <AuthProvider>
+            <SessionMonitorGate />
+            <AdminProvider>
+              <StripeProvider>
+                <WalletProvider>
+                  <NotificationProvider>
+                    <WebSocketProvider>
+                      <ErrorBoundary
+                        onError={(error, errorInfo) => {
+                          // Add custom breadcrumb for additional context (do not capture exception again)
+                          try {
+                            if (Sentry && typeof Sentry.addBreadcrumb === 'function') {
+                              Sentry.addBreadcrumb({
+                                category: 'root_layout',
+                                message: 'Error caught in root layout',
+                                level: 'error',
+                                data: {
+                                  componentStack: errorInfo.componentStack,
+                                },
+                              });
+                            }
+                          } catch {
+                            // ignore
                           }
-                        } catch {
-                          // ignore
-                        }
-                      }}
-                    >
-                      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-                        <View style={styles.inner}>
-                          <Slot />
-                        </View>
-                      </ThemeProvider>
-                    </ErrorBoundary>
-                  </WebSocketProvider>
-                </NotificationProvider>
-              </WalletProvider>
-            </StripeProvider>
-          </AdminProvider>
-        </AuthProvider>
+                        }}
+                      >
+                        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+                          <View style={styles.inner}>
+                            <Slot />
+                          </View>
+                        </ThemeProvider>
+                      </ErrorBoundary>
+                    </WebSocketProvider>
+                  </NotificationProvider>
+                </WalletProvider>
+              </StripeProvider>
+            </AdminProvider>
+          </AuthProvider>
+      </NetworkProvider>
     </RootFrame>
   );
 };

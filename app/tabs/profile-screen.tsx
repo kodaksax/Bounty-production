@@ -2,6 +2,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AchievementsGrid } from "components/achievements-grid";
+import { ConnectionStatus } from "components/connection-status";
 import { EnhancedProfileSection, PortfolioSection } from "components/enhanced-profile-section";
 import { HistoryScreen } from "components/history-screen";
 import { SkillsetChips } from "components/skillset-chips";
@@ -275,6 +276,8 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
 
   return (
     <View className="flex flex-col h-screen bg-emerald-600 text-white">
+      {/* Connection Status Banner - appears at top when offline */}
+      <ConnectionStatus showQueueCount={true} />
       {/* Update Message Banner */}
       {updateMessage && (
         <View style={{ position: 'absolute', top: 60, left: 16, right: 16, zIndex: 50 }}>
