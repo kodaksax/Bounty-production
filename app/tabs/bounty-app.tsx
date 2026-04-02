@@ -14,6 +14,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { useAuthContext } from '../../hooks/use-auth-context'
 import { useConversations } from '../../hooks/useConversations'
 import { useAdmin } from '../../lib/admin-context'
+import { API_TIMEOUTS } from '../../lib/config/network'
 import { authProfileService } from '../../lib/services/auth-profile-service'
 import { navigationIntent } from '../../lib/services/navigation-intent'
 import { getOnboardingCompleteKey } from '../../lib/storage/onboarding'
@@ -74,16 +75,27 @@ function BountyAppInner() {
     }
     // Guard against stale results when the effect re-runs before the fetch resolves.
     let cancelled = false
+    // Safety timeout: if the Supabase profile fetch hangs (e.g. staging with a
+    // non-responsive project) treat the profile as missing so the loading screen
+    // doesn't spin forever. This matches the existing error-path behaviour.
+    const safetyTimeoutId = setTimeout(() => {
+      if (!cancelled) setProfileVerifiedForLocalFlag(false)
+    }, API_TIMEOUTS.DEFAULT)
     authProfileService
       .getProfileById(currentUserId, { bypassCache: true })
       .then(fetchedProfile => {
+        clearTimeout(safetyTimeoutId)
         if (!cancelled) setProfileVerifiedForLocalFlag(fetchedProfile != null)
       })
       .catch(() => {
         // On network error, treat as missing — force onboarding to be safe.
+        clearTimeout(safetyTimeoutId)
         if (!cancelled) setProfileVerifiedForLocalFlag(false)
       })
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+      clearTimeout(safetyTimeoutId)
+    }
   }, [storageOnboardingDone, profile, currentUserId, isLoading])
 
   // Background repair: when the local flag says onboarding is done but the Supabase

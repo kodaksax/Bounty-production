@@ -24,6 +24,19 @@ function jsonResponse(data: unknown, status = 200) {
   })
 }
 
+// Wrap any promise-like DB query in a race against a timeout so the function
+// returns a proper 503 quickly instead of hanging when the database is paused
+// or on a cold start (free-tier projects can take 30-60s to wake).
+const DB_TIMEOUT_MS = 8000
+function withDbTimeout<T>(query: PromiseLike<T>): Promise<T> {
+  return Promise.race([
+    Promise.resolve(query),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(Object.assign(new Error('DB_TIMEOUT'), { code: 'DB_TIMEOUT' })), DB_TIMEOUT_MS)
+    ),
+  ])
+}
+
 // Input sanitization helpers (mirrors server/index.js logic)
 function sanitizeText(input: unknown): string {
   if (!input) return ''
@@ -60,11 +73,11 @@ async function resolveStripeCustomerForUser(params: {
 }) {
   const { supabaseAdmin, stripe, userId, userEmail } = params
 
-  const { data: profile, error: profileError } = await supabaseAdmin
+  const { data: profile, error: profileError } = await withDbTimeout(supabaseAdmin
     .from('profiles')
     .select('id, stripe_customer_id, email, username')
     .eq('id', userId)
-    .maybeSingle()
+    .maybeSingle())
 
   if (profileError) {
     console.error('[payments] Failed to fetch profile during customer resolution', { userId, profileError })
@@ -84,10 +97,10 @@ async function resolveStripeCustomerForUser(params: {
 
         customerId = null
         try {
-          await supabaseAdmin
+          await withDbTimeout(supabaseAdmin
             .from('profiles')
             .update({ stripe_customer_id: null })
-            .eq('id', userId)
+            .eq('id', userId))
         } catch (clearErr) {
           console.error('[payments] Failed to clear stale stripe_customer_id', { userId, clearErr })
         }
@@ -122,9 +135,9 @@ async function resolveStripeCustomerForUser(params: {
     profilePatch.balance = 0
   }
 
-  const { error: upsertError } = await supabaseAdmin
+  const { error: upsertError } = await withDbTimeout(supabaseAdmin
     .from('profiles')
-    .upsert(profilePatch, { onConflict: 'id' })
+    .upsert(profilePatch, { onConflict: 'id' }))
 
   if (upsertError) {
     console.error('[payments] Failed to upsert profile while saving stripe_customer_id', { userId, upsertError })
@@ -163,7 +176,16 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: 'Authentication required. Please sign in to continue.' }, 401)
   }
   const token = authHeader.substring(7)
-  const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
+  let authResult: Awaited<ReturnType<typeof supabaseAdmin.auth.getUser>>
+  try {
+    authResult = await withDbTimeout(supabaseAdmin.auth.getUser(token))
+  } catch (e: any) {
+    if (e?.code === 'DB_TIMEOUT') {
+      return jsonResponse({ error: 'Service temporarily unavailable. Please try again shortly.' }, 503)
+    }
+    throw e
+  }
+  const { data: { user }, error: authError } = authResult
   if (authError || !user) {
     console.warn('[payments edge fn] invalid or expired token', authError || 'no user')
     return jsonResponse({ error: 'Authentication required. Please sign in to continue.' }, 401)
@@ -254,11 +276,11 @@ Deno.serve(async (req: Request) => {
 
     // GET /payments/methods
     if (req.method === 'GET' && subPath === '/methods') {
-      const { data: profile } = await supabaseAdmin
+      const { data: profile } = await withDbTimeout(supabaseAdmin
         .from('profiles')
         .select('stripe_customer_id')
         .eq('id', userId)
-        .single()
+        .single())
 
       // If we don't have a customer yet, just return an empty list.
       if (!profile?.stripe_customer_id) {
@@ -295,10 +317,10 @@ Deno.serve(async (req: Request) => {
           })
 
           try {
-            await supabaseAdmin
+            await withDbTimeout(supabaseAdmin
               .from('profiles')
               .update({ stripe_customer_id: null })
-              .eq('id', userId)
+              .eq('id', userId))
           } catch (updateErr) {
             console.error('[payments] Failed to clear stale stripe_customer_id', { userId, updateErr })
           }
@@ -354,11 +376,11 @@ Deno.serve(async (req: Request) => {
     if (req.method === 'DELETE' && subPath.startsWith('/methods/')) {
       const paymentMethodId = subPath.split('/methods/')[1]
 
-      const { data: profile } = await supabaseAdmin
+      const { data: profile } = await withDbTimeout(supabaseAdmin
         .from('profiles')
         .select('stripe_customer_id')
         .eq('id', userId)
-        .single()
+        .single())
 
       if (!profile?.stripe_customer_id) {
         return jsonResponse({ error: 'No payment methods found' }, 404)
@@ -426,6 +448,9 @@ Deno.serve(async (req: Request) => {
   } catch (error: unknown) {
     const err = error as { type?: string; code?: string; decline_code?: string; message?: string }
     console.error('[payments edge fn] Error:', err)
+    if ((err as any)?.code === 'DB_TIMEOUT') {
+      return jsonResponse({ error: 'Service temporarily unavailable. Please try again shortly.' }, 503)
+    }
     if (err.type === 'StripeCardError') {
       return jsonResponse({ error: err.message, code: err.code, decline_code: err.decline_code }, 400)
     }

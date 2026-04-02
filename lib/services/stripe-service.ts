@@ -1,18 +1,20 @@
 
 // Stripe API types
+import Constants from 'expo-constants';
 import { API_BASE_URL } from '../config/api';
+import { API_TIMEOUTS } from '../config/network';
 import { supabase } from '../supabase';
 import { logger } from '../utils/error-logger';
 import { getNetworkErrorMessage } from '../utils/network-connectivity';
 import { analyticsService } from './analytics-service';
 import {
-    checkDuplicatePayment,
-    completePaymentAttempt,
-    generateIdempotencyKey,
-    logPaymentError,
-    parsePaymentError,
-    recordPaymentAttempt,
-    withPaymentRetry,
+  checkDuplicatePayment,
+  completePaymentAttempt,
+  generateIdempotencyKey,
+  logPaymentError,
+  parsePaymentError,
+  recordPaymentAttempt,
+  withPaymentRetry,
 } from './payment-error-handler';
 import { performanceService } from './performance-service';
 
@@ -33,15 +35,161 @@ interface InvokePaymentsOptions {
   method?: string;
   body?: Record<string, unknown>;
   headers?: Record<string, string>;
+  /** Pre-obtained JWT — skips the internal getSession() call and avoids lock contention. */
+  accessToken?: string;
+}
+
+// Read from Constants.expoConfig.extra FIRST (set by app.config.js with the correct
+// env-specific dotenv file loaded via override:true) before the Metro-baked process.env.
+// This prevents a base .env file's anon key from shadowing the correct .env.staging key
+// when running `expo start` with APP_ENV=staging.
+function getExtraValue(key: string): string {
+  try {
+    const extra = Constants.expoConfig?.extra as Record<string, unknown> | undefined;
+    const v = extra?.[key];
+    return typeof v === 'string' ? v.trim() : '';
+  } catch { return ''; }
+}
+
+// Supabase anon key — required alongside the user's JWT when calling Edge
+// Functions directly via fetch (identifies the project to the Supabase gateway).
+// Read dynamically (not as a module-level constant) so that the test environment
+// can control routing by setting/clearing process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
+// in beforeAll/afterAll without needing to re-load the module.
+function getSupabaseAnonKey(): string {
+  return (
+    getExtraValue('EXPO_PUBLIC_SUPABASE_ANON_KEY') ||
+    (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY as string | undefined)?.trim() ||
+    ''
+  );
+}
+
+/**
+ * Shared fetch helper: makes the actual HTTP call to an Edge Function URL,
+ * parses the response, and throws structured errors on failure.
+ */
+async function fetchEdgeFunction<T>(
+  url: string,
+  method: string,
+  headers: Record<string, string>,
+  body: Record<string, unknown> | undefined,
+): Promise<T> {
+  const hasBody = body !== undefined;
+  if (hasBody) headers['Content-Type'] = 'application/json';
+
+  try {
+    const fetchController = new AbortController();
+    const fetchTimeoutId = setTimeout(() => fetchController.abort(), API_TIMEOUTS.DEFAULT);
+
+    const fetchResult = fetch(url, {
+      method,
+      headers,
+      body: hasBody ? JSON.stringify(body) : undefined,
+      signal: fetchController.signal,
+    });
+
+    const response = await Promise.resolve(fetchResult).finally(() => clearTimeout(fetchTimeoutId));
+
+    let parsedBody: any = null;
+    const responseText = await response.text();
+    if (responseText) {
+      try { parsedBody = JSON.parse(responseText); } catch { /* non-JSON */ }
+    }
+
+    if (!response.ok) {
+      const status = response.status;
+      const errorMsgFromBody = (parsedBody && (parsedBody.error || parsedBody.message)) || responseText;
+      const errorMsg = errorMsgFromBody ? String(errorMsgFromBody) : `HTTP ${status}`;
+      throw { type: 'api_error', code: String(status), message: `Request failed (${status}): ${errorMsg}` };
+    }
+
+    return parsedBody as T;
+  } catch (err: any) {
+    // Re-throw structured errors so callers receive the correct code.
+    if (err && (err.type === 'api_error' || err.type === 'network_error')) throw err;
+    // Raw network-level failure (offline, DNS, AbortError).
+    const message = getNetworkErrorMessage(err as Error);
+    throw { type: 'network_error', code: 'NETWORK_ERROR', message };
+  }
 }
 
 async function invokePayments<T>(
   subPath: string,
   options: InvokePaymentsOptions = {}
 ): Promise<T> {
-  const supabaseClient = supabase as any;
+  const url = `${API_BASE_URL}/${subPath}`;
+  const method = options.method ?? 'POST';
 
-  // Preferred path: Supabase Edge Function invocation when available.
+  // ── Preferred path: direct fetch with explicit auth headers ─────────────────
+  //
+  // WHY we do not use supabase.functions.invoke() here:
+  //
+  // functions.invoke() calls supabase.auth.getSession() internally before
+  // making the HTTP request. In React Native, when a 401 (wrong-project JWT)
+  // triggers an explicit token refresh at the same time as the supabase-js
+  // auto-refresh timer fires, both callers compete for the supabase-js internal
+  // session lock. The lock blocks indefinitely, getSession() never resolves, and
+  // the HTTP request is never sent — so the Edge Function sees no request at all
+  // (confirmed: zero logs in Supabase dashboard for the timed-out calls).
+  // The 15 s client timer then fires from the Promise.race, giving the misleading
+  // impression of a slow Edge Function when the function was never invoked.
+  //
+  // Fix: obtain the session ourselves (with a 5 s guard that re-uses the
+  // supabase-js client but races against a timeout), then issue the HTTP request
+  // directly. This completely bypasses the lock contention because we hold the
+  // token in hand before functions.invoke would even try to read it.
+  //
+  // getSupabaseAnonKey() is required by the Supabase gateway alongside the user JWT.
+  // It is always present in staging/prod (EXPO_PUBLIC_SUPABASE_ANON_KEY env var).
+  // In local dev without Supabase we fall through to functions.invoke() below.
+  const supabaseAnonKey = getSupabaseAnonKey();
+  if (supabaseAnonKey) {
+    let token: string | undefined;
+
+    if (options.accessToken) {
+      // Caller already has a fresh token — use it directly and skip getSession().
+      // This avoids the supabase-js internal session lock entirely, preventing
+      // the 5 s TIMEOUT that fires when concurrent auth events (e.g. token
+      // refresh + existing session read) hold the lock simultaneously.
+      token = options.accessToken;
+    } else {
+      try {
+        const sessionResult = await Promise.race([
+          supabase.auth.getSession() as Promise<{ data: { session: { access_token: string } | null }; error: unknown }>,
+          new Promise<never>((_, reject) =>
+            setTimeout(
+              () => reject({ type: 'network_error', code: 'TIMEOUT', message: `getSession() timed out (5000ms) — possible auth lock contention` }),
+              5000
+            )
+          ),
+        ]);
+        token = sessionResult.data?.session?.access_token;
+      } catch (sessionErr: any) {
+        // getSession() hung for 5 s — log a warning and proceed without a token
+        // so the Edge Function receives the request (it will respond with 401
+        // which the auth recovery path in the caller handles gracefully).
+        // Previously this threw immediately, converting a lock-contention delay
+        // into a hard failure before the network call was ever attempted.
+        if (sessionErr?.code === 'TIMEOUT') {
+          logger.warning('[invokePayments] getSession() timed out — proceeding without token; Edge Function may return 401.', { subPath });
+        }
+        // Any other session error (no session, storage failure) — proceed without token.
+      }
+    }
+
+    const headers: Record<string, string> = {
+      ...(options.headers ?? {}),
+      apikey: supabaseAnonKey,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+
+    return fetchEdgeFunction<T>(url, method, headers, options.body);
+  }
+
+  // ── Fallback: supabase.functions.invoke() ────────────────────────────────────
+  // Used when SUPABASE_ANON_KEY is absent (local dev / unit tests that stub
+  // the supabase client and don't configure real Supabase env vars).
+  const supabaseClient = supabase as any;
   if (
     supabaseClient &&
     supabaseClient.functions &&
@@ -51,10 +199,20 @@ async function invokePayments<T>(
       method: options.method ?? 'POST',
       body: options.body,
     };
-    if (options.headers) {
-      invokeOptions.headers = options.headers;
-    }
-    const { data, error } = await supabaseClient.functions.invoke(subPath, invokeOptions);
+    const mergedHeaders: Record<string, string> = { ...(options.headers ?? {}) };
+    if (options.accessToken) mergedHeaders['Authorization'] = `Bearer ${options.accessToken}`;
+    if (Object.keys(mergedHeaders).length > 0) invokeOptions.headers = mergedHeaders;
+
+    const invokeResult = await Promise.race<{ data: unknown; error: unknown }>([
+      supabaseClient.functions.invoke(subPath, invokeOptions),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject({ type: 'network_error', code: 'TIMEOUT', message: `Edge Function request timed out (${API_TIMEOUTS.DEFAULT}ms)` }),
+          API_TIMEOUTS.DEFAULT
+        )
+      ),
+    ]);
+    const { data, error } = invokeResult;
     if (error) {
       const status: number = (error as any).context?.status ?? 0;
       let errorMsg = '';
@@ -70,50 +228,8 @@ async function invokePayments<T>(
     return data as T;
   }
 
-  // Fallback path: direct HTTP call to legacy API_BASE_URL endpoint.
-  // subPath already includes the 'payments/' prefix (e.g. 'payments/methods'),
-  // so concatenate directly to avoid a duplicate '/payments/' segment.
-  const url = `${API_BASE_URL}/${subPath}`;
-  const method = options.method ?? 'POST';
-  const hasBody = options.body !== undefined;
-  const headers: Record<string, string> = { ...(options.headers ?? {}) };
-  if (hasBody) {
-    headers['Content-Type'] = 'application/json';
-  }
-
-  try {
-    const response = await fetch(url, {
-      method,
-      headers,
-      body: hasBody ? JSON.stringify(options.body) : undefined,
-    });
-
-    let parsedBody: any = null;
-    const responseText = await response.text();
-    if (responseText) {
-      try {
-        parsedBody = JSON.parse(responseText);
-      } catch {
-        // Non-JSON response; leave parsedBody as null and use raw text in message.
-      }
-    }
-
-    if (!response.ok) {
-      const status = response.status;
-      const errorMsgFromBody =
-        (parsedBody && (parsedBody.error || parsedBody.message)) || responseText;
-      const errorMsg = errorMsgFromBody ? String(errorMsgFromBody) : `HTTP ${status}`;
-      throw { type: 'api_error', code: String(status), message: `Request failed (${status}): ${errorMsg}` };
-    }
-
-    return parsedBody as T;
-  } catch (err: any) {
-    // Re-throw structured errors from above.
-    if (err && err.type === 'api_error') throw err;
-    // Network-level failure (e.g. offline, DNS).
-    const message = getNetworkErrorMessage(err as Error);
-    throw { type: 'network_error', code: 'NETWORK_ERROR', message };
-  }
+  // ── Last resort: unauthenticated fetch (legacy Node server) ──────────────────
+  return fetchEdgeFunction<T>(url, method, { ...(options.headers ?? {}) }, options.body);
 }
 
 export interface StripePaymentMethod {
@@ -385,21 +501,16 @@ class StripeService {
         };
       }
       
-      // Call backend Edge Function via supabase.functions.invoke() which always
-      // uses the freshest session token from auth.getSession() internally.
-      const invokeOptions: InvokePaymentsOptions = {
-        body: {
-          amountCents: Math.round(amount * 100),
-          currency,
-          metadata: { purpose: 'wallet_deposit' },
-        },
-      };
-      if (authToken) {
-        invokeOptions.headers = { Authorization: `Bearer ${authToken}` };
-      }
       const { clientSecret, paymentIntentId } = await invokePayments<{ clientSecret: string; paymentIntentId: string }>(
         'payments/create-payment-intent',
-        invokeOptions
+        {
+          body: {
+            amountCents: Math.round(amount * 100),
+            currency,
+            metadata: { purpose: 'wallet_deposit' },
+          },
+          ...(authToken ? { accessToken: authToken } : {}),
+        }
       );
       
       const paymentIntent: StripePaymentIntent = {
@@ -637,11 +748,11 @@ class StripeService {
       }
 
       // Use the payments Edge Function via invokePayments.
-      // supabase.functions.invoke() reads the token from auth.getSession() directly
-      // (in-memory cache), not from React state — guaranteeing the freshest token.
+      // Pass the caller-provided authToken directly so invokePayments can skip
+      // the internal getSession() call and avoid supabase-js lock contention.
       const fnData = await invokePayments<{ paymentMethods: unknown[] }>(
         'payments/methods',
-        { method: 'GET' }
+        { method: 'GET', accessToken: authToken }
       );
 
       return (fnData?.paymentMethods || []).map((pm: unknown) => {
@@ -742,7 +853,7 @@ class StripeService {
         throw new Error('Authentication required to remove payment method');
       }
 
-      await invokePayments(`payments/methods/${paymentMethodId}`, { method: 'DELETE' });
+      await invokePayments(`payments/methods/${paymentMethodId}`, { method: 'DELETE', accessToken: authToken });
     } catch (error) {
       logger.error('[StripeService] Error detaching payment method:', { error });
       throw this.handleStripeError(error);
@@ -765,6 +876,7 @@ class StripeService {
       try {
         rawJson = await invokePayments<Record<string, unknown>>('payments/methods', {
           body: { paymentMethodId } as Record<string, unknown>,
+          ...(authToken ? { accessToken: authToken } : {}),
         });
       } catch (parseErr: unknown) {
         // Log unexpected (unstructured) errors before re-throwing so we preserve
@@ -1461,7 +1573,10 @@ class StripeService {
 
       const { clientSecret, setupIntentId } = await invokePayments<{ clientSecret: string; setupIntentId: string }>(
         'payments/create-setup-intent',
-        { body: { usage: 'off_session' } as Record<string, unknown> }
+        {
+          body: { usage: 'off_session' } as Record<string, unknown>,
+          ...(authToken ? { accessToken: authToken } : {}),
+        }
       );
 
       const setupIntent: StripeSetupIntent = {
@@ -1909,6 +2024,13 @@ class StripeService {
     const errorMessage = error.message || error.toString();
     
     // Handle network and timeout errors with user-friendly messages
+    // Distinguish our own infra timeouts (TIMEOUT code) from a browser/OS-level
+    // TimeoutError so we don't blame the user's connection when the real cause
+    // is an Edge Function that isn't deployed or a paused Supabase project.
+    if ((error as any)?.code === 'TIMEOUT' || (error as any)?.type === 'network_error' && errorMessage.includes('timed out')) {
+      return 'Payment service is temporarily unavailable. Please try again later.';
+    }
+
     if (error.name === 'TimeoutError' || errorMessage.includes('timed out') || errorMessage.includes('timeout')) {
       return 'Connection timed out. Please check your internet connection and try again.';
     }

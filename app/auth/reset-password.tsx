@@ -1,12 +1,19 @@
 "use client"
 import { MaterialIcons } from '@expo/vector-icons'
 import { BrandingLogo } from 'components/ui/branding-logo'
-import { Button } from 'components/ui/button'
 import { Label } from 'components/ui/label'
 import { useRouter } from 'expo-router'
 import { requestPasswordReset } from 'lib/services/auth-service'
-import { useState } from 'react'
+import { isValidEmail } from 'lib/utils/password-validation'
+import { useCallback, useEffect, useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
+
+/** Seconds to wait between reset requests */
+const RESEND_COOLDOWN_SECONDS = 60
+/** Maximum reset attempts before temporary lockout */
+const MAX_RESET_ATTEMPTS = 5
+/** Lockout duration in seconds after exceeding max attempts */
+const LOCKOUT_DURATION_SECONDS = 300 // 5 minutes
 
 export default function ResetPasswordRoute() { return <ResetPasswordScreen /> }
 
@@ -19,14 +26,44 @@ export function ResetPasswordScreen() {
   const [loading, setLoading] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
 
-  const validateEmail = (email: string): boolean => {
+  // Cooldown timer state
+  const [resendCooldown, setResendCooldown] = useState(0)
+
+  // Attempt tracking state
+  const [resetAttempts, setResetAttempts] = useState(0)
+  const [lockoutUntil, setLockoutUntil] = useState<number | null>(null)
+
+  // Cooldown countdown effect
+  useEffect(() => {
+    if (resendCooldown <= 0) return
+    const timer = setTimeout(() => {
+      setResendCooldown(prev => prev - 1)
+    }, 1000)
+    return () => clearTimeout(timer)
+  }, [resendCooldown])
+
+  const isLockedOut = useCallback((): boolean => {
+    if (!lockoutUntil) return false
+    if (Date.now() < lockoutUntil) return true
+    // Lockout expired — reset
+    setLockoutUntil(null)
+    setResetAttempts(0)
+    return false
+  }, [lockoutUntil])
+
+  const lockoutMessage = useCallback((): string => {
+    const remainingSec = Math.ceil(((lockoutUntil ?? 0) - Date.now()) / 1000)
+    const remainingMin = Math.ceil(remainingSec / 60)
+    return `Too many attempts. Please try again in ${remainingMin} minute${remainingMin !== 1 ? 's' : ''}.`
+  }, [lockoutUntil])
+
+  const validateEmail = (value: string): boolean => {
     setFieldError(null)
-    if (!email || email.trim().length === 0) {
+    if (!value || value.trim().length === 0) {
       setFieldError('Email is required')
       return false
     }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(email)) {
+    if (!isValidEmail(value)) {
       setFieldError('Please enter a valid email address')
       return false
     }
@@ -37,9 +74,33 @@ export function ResetPasswordScreen() {
     setMessage(null)
     setError(null)
     setFieldError(null)
-    
+
+    // Check lockout
+    if (isLockedOut()) {
+      setError(lockoutMessage())
+      return
+    }
+
+    // Check cooldown
+    if (resendCooldown > 0) {
+      setError(`Please wait ${resendCooldown} seconds before requesting another reset link.`)
+      return
+    }
+
     if (!validateEmail(email)) return
-    
+
+    // Track attempt
+    const newAttempts = resetAttempts + 1
+    setResetAttempts(newAttempts)
+
+    if (newAttempts >= MAX_RESET_ATTEMPTS) {
+      const lockout = Date.now() + LOCKOUT_DURATION_SECONDS * 1000
+      setLockoutUntil(lockout)
+      setError(`Too many attempts. Please try again in ${Math.ceil(LOCKOUT_DURATION_SECONDS / 60)} minutes.`)
+      console.warn('[reset-password] Lockout triggered', { attempts: newAttempts })
+      return
+    }
+
     try {
       setLoading(true)
       
@@ -48,12 +109,12 @@ export function ResetPasswordScreen() {
       if (result.success) {
         setMessage(result.message)
         setEmailSent(true)
+        setResendCooldown(RESEND_COOLDOWN_SECONDS)
       } else if (result.error === 'rate_limited') {
         setError(result.message)
       } else {
-        // For security, show success even if email doesn't exist
-        setMessage(result.message)
-        setEmailSent(true)
+        // Actual failure (e.g. unexpected error) — show the error message
+        setError(result.message)
       }
     } catch (e) {
       setError('An unexpected error occurred. Please try again.')
@@ -64,6 +125,7 @@ export function ResetPasswordScreen() {
   }
 
   const handleResend = () => {
+    if (resendCooldown > 0 || isLockedOut()) return
     setEmailSent(false)
     setMessage(null)
     handleReset()
@@ -154,23 +216,27 @@ export function ResetPasswordScreen() {
             {emailSent ? (
               <View className="gap-3">
                 {/* Open Email App */}
-                <Button onPress={() => {
-                  // This is a placeholder - in production, use expo-mail-composer
-                }} className="w-full">
-                  <View className="flex-row items-center justify-center">
-                    <MaterialIcons name="email" size={20} color="#fff" style={{ marginRight: 8 }} />
-                    <Text className="text-white font-medium">Open Email App</Text>
-                  </View>
-                </Button>
+                <TouchableOpacity
+                  onPress={() => {
+                    // This is a placeholder - in production, use expo-mail-composer
+                  }}
+                  className="w-full bg-emerald-600 rounded-lg py-3 items-center"
+                >
+                  <Text className="text-white font-medium">Open Email App</Text>
+                </TouchableOpacity>
 
                 {/* Resend Email */}
                 <TouchableOpacity 
                   onPress={handleResend} 
-                  disabled={loading}
+                  disabled={loading || resendCooldown > 0 || isLockedOut()}
                   className="py-3 items-center"
                 >
                   {loading ? (
                     <ActivityIndicator color="#fff" />
+                  ) : resendCooldown > 0 ? (
+                    <Text className="text-white/50 text-sm">
+                      Resend available in {resendCooldown}s
+                    </Text>
                   ) : (
                     <Text className="text-white/80 text-sm">
                       Didn
@@ -193,18 +259,21 @@ export function ResetPasswordScreen() {
                 </View>
               </View>
             ) : (
-              <Button disabled={loading} onPress={handleReset} className="w-full">
-                <View className="flex-row items-center justify-center">
-                  {loading ? (
-                    <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />
-                  ) : (
-                    <MaterialIcons name="send" size={20} color="#fff" style={{ marginRight: 8 }} />
-                  )}
-                  <Text className="text-white font-medium">
-                    {loading ? 'Sending...' : 'Send Reset Link'}
-                  </Text>
-                </View>
-              </Button>
+              <TouchableOpacity
+                disabled={loading || resendCooldown > 0 || isLockedOut()}
+                onPress={handleReset}
+                className={`w-full rounded-lg py-3 items-center ${
+                  loading || resendCooldown > 0 || isLockedOut()
+                    ? 'bg-emerald-600/50'
+                    : 'bg-emerald-600'
+                }`}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text className="text-white font-medium">Send Reset Link</Text>
+                )}
+              </TouchableOpacity>
             )}
 
             {/* Back to Sign In */}

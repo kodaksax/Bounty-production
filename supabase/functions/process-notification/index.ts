@@ -1,9 +1,51 @@
 // Supabase Edge Function: process-notification
 // POST { id: '<outbox-uuid>' }
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { createMessages } from './message'
-import { normalizeRecipients } from './recipients'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+// Inlined from ./message (local imports are not supported by the Supabase bundler)
+function createExpoMessage(to: string, opts: { title?: string; body?: string; data?: any; sound?: string } = {}) {
+  const { title = '', body = '', data = {}, sound = 'default' } = opts
+  return { to, title, body, data, sound }
+}
+function createMessages(tokens: string[], opts?: { title?: string; body?: string; data?: any; sound?: string }) {
+  return (tokens || []).map(t => createExpoMessage(t, opts))
+}
+
+// Inlined from ./recipients
+function normalizeRecipients(raw: any): string[] {
+  let recipients: string[] = []
+  try {
+    if (raw == null) {
+      recipients = []
+    } else if (Array.isArray(raw)) {
+      recipients = raw.filter((r: any) => typeof r === 'string' && r.trim()).map((s: string) => s.trim())
+    } else if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) {
+          recipients = parsed.filter((r: any) => typeof r === 'string' && r.trim()).map((s: string) => s.trim())
+        } else if (typeof parsed === 'string' && parsed.trim()) {
+          recipients = [parsed.trim()]
+        }
+      } catch (_e) {
+        if (raw.trim()) recipients = [raw.trim()]
+      }
+    } else if (typeof raw === 'object') {
+      if (Array.isArray((raw as any).ids)) {
+        recipients = (raw as any).ids.filter((r: any) => typeof r === 'string' && r.trim()).map((s: string) => s.trim())
+      } else {
+        const values = Object.values(raw as Record<string, unknown>)
+        recipients = values
+          .filter((v) => typeof v === 'string' && (v as string).trim())
+          .map((v) => (v as string).trim())
+      }
+    }
+  } catch (_e) {
+    recipients = []
+  }
+  return recipients
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

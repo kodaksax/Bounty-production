@@ -48,6 +48,7 @@
     "node_modules",
     "**/.history/**",
     "**/.git/**",
+    "supabase/functions/**",
     "**/__tests__/**",
     "**/*.test.*",
     "**/*.spec.*",

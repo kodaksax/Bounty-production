@@ -84,6 +84,13 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
   };
 
   const loadPaymentMethods = async () => {
+    // Bail early when the JWT has been confirmed structurally invalid (wrong
+    // Supabase project, missing secrets) after a refresh has already been
+    // attempted. Without this guard, clearError() at the top of the try block
+    // would wipe the error state every tap, making a new network call each time
+    // and infinitely incrementing consecutiveJwtFailuresRef.
+    if (consecutiveJwtFailuresRef.current > 1) return;
+
     try {
       setIsLoading(true);
       clearError();

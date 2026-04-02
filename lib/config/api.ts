@@ -18,12 +18,16 @@ function fromExtra(key: string): string {
 // derive from EXPO_PUBLIC_SUPABASE_URL so wallet/payments route to Edge
 // Functions automatically without extra configuration.
 // Format: https://<project-ref>.supabase.co/functions/v1  (no trailing slash)
-// Falls back to Constants.expoConfig.extra when process.env inlining is absent.
-const explicitFunctionsUrl = (process.env.EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL as string | undefined)?.trim()
-  || fromExtra('EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL')
+//
+// Priority: Constants.expoConfig.extra (set by app.config.js at server-start time
+// using the correct env file with override:true) BEFORE Metro-baked process.env.
+// This prevents a base .env file's stale values from shadowing .env.staging when
+// running `expo start` with APP_ENV=staging.
+const explicitFunctionsUrl = fromExtra('EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL')
+  || (process.env.EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL as string | undefined)?.trim()
   || ''
-const supabaseBaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL as string | undefined)?.trim()
-  || fromExtra('EXPO_PUBLIC_SUPABASE_URL')
+const supabaseBaseUrl = fromExtra('EXPO_PUBLIC_SUPABASE_URL')
+  || (process.env.EXPO_PUBLIC_SUPABASE_URL as string | undefined)?.trim()
   || ''
 const derivedFunctionsUrl = supabaseBaseUrl ? `${supabaseBaseUrl.replace(/\/+$/, '')}/functions/v1` : ''
 const supabaseFunctionsUrl = (explicitFunctionsUrl || derivedFunctionsUrl).replace(/\/+$/, '')
