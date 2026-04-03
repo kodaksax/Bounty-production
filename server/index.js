@@ -447,6 +447,28 @@ app.get('/payments/methods', apiLimiter, authenticateUser, async (req, res) => {
       .single();
 
     if (!profile?.stripe_customer_id) {
+      // Fallback: check the payment_methods DB table populated by webhook
+      const { data: dbMethods } = await supabase
+        .from('payment_methods')
+        .select('stripe_payment_method_id, type, card_brand, card_last4, card_exp_month, card_exp_year, created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (dbMethods && dbMethods.length > 0) {
+        const methods = dbMethods.map(pm => ({
+          id: pm.stripe_payment_method_id,
+          type: pm.type || 'card',
+          card: {
+            brand: pm.card_brand || 'unknown',
+            last4: pm.card_last4 || '****',
+            exp_month: pm.card_exp_month || 0,
+            exp_year: pm.card_exp_year || 0,
+          },
+          created: pm.created_at ? Math.floor(new Date(pm.created_at).getTime() / 1000) : Math.floor(Date.now() / 1000),
+        }));
+        return res.json({ paymentMethods: methods });
+      }
+
       return res.json({ paymentMethods: [] });
     }
 

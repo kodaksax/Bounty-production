@@ -141,6 +141,21 @@ async function resolveStripeCustomerForUser(params: {
 
   if (upsertError) {
     console.error('[payments] Failed to upsert profile while saving stripe_customer_id', { userId, upsertError })
+    // Fallback: try a targeted update of just stripe_customer_id.
+    // The full upsert may fail due to email uniqueness constraints or other column conflicts.
+    try {
+      const { error: fallbackError } = await withDbTimeout(supabaseAdmin
+        .from('profiles')
+        .update({ stripe_customer_id: customerId })
+        .eq('id', userId))
+      if (fallbackError) {
+        console.error('[payments] Fallback update of stripe_customer_id also failed', { userId, fallbackError })
+      } else {
+        console.log('[payments] Fallback update of stripe_customer_id succeeded', { userId, customerId })
+      }
+    } catch (fallbackErr) {
+      console.error('[payments] Fallback stripe_customer_id update threw', { userId, fallbackErr })
+    }
   }
 
   return { customerId }
@@ -282,8 +297,32 @@ Deno.serve(async (req: Request) => {
         .eq('id', userId)
         .single())
 
-      // If we don't have a customer yet, just return an empty list.
+      // If we don't have a stripe_customer_id yet, fall back to the payment_methods
+      // table which is populated by the setup_intent.succeeded webhook. This handles
+      // the race condition where the profile upsert during create-setup-intent fails
+      // but the webhook later saves the payment method details to the DB.
       if (!profile?.stripe_customer_id) {
+        const { data: dbMethods } = await withDbTimeout(supabaseAdmin
+          .from('payment_methods')
+          .select('stripe_payment_method_id, type, card_brand, card_last4, card_exp_month, card_exp_year, created_at')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false }))
+
+        if (dbMethods && dbMethods.length > 0) {
+          const methods = dbMethods.map((pm: any) => ({
+            id: pm.stripe_payment_method_id,
+            type: pm.type || 'card',
+            card: {
+              brand: pm.card_brand ?? 'unknown',
+              last4: pm.card_last4 ?? '****',
+              exp_month: pm.card_exp_month ?? 0,
+              exp_year: pm.card_exp_year ?? 0,
+            },
+            created: pm.created_at ? Math.floor(new Date(pm.created_at).getTime() / 1000) : Math.floor(Date.now() / 1000),
+          }))
+          return jsonResponse({ paymentMethods: methods })
+        }
+
         return jsonResponse({ paymentMethods: [] })
       }
 
