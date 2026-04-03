@@ -38,11 +38,17 @@ async function postReadyViaEdgeFunction(bountyId: string, hunterId: string): Pro
     throw new Error('Missing access token for edge function request')
   }
 
+  const anonKey =
+    (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY as string | undefined)?.trim() ||
+    (process.env.SUPABASE_ANON_KEY as string | undefined)?.trim() ||
+    ''
+
   const response = await fetch(`${API_BASE_URL}/completion/ready`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${accessToken}`,
+      ...(anonKey ? { apikey: anonKey } : {}),
     },
     body: JSON.stringify({ bounty_id: bountyId, hunter_id: hunterId }),
   })

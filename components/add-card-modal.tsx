@@ -6,6 +6,7 @@ import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, S
 import { useAuthContext } from "../hooks/use-auth-context"
 import { stripeService } from "../lib/services/stripe-service"
 import { useStripe } from "../lib/stripe-context"
+import { supabase } from "../lib/supabase"
 import { theme } from "../lib/theme"
 import PaymentElementWrapper from "./payment-element-wrapper"
 
@@ -133,11 +134,31 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
           tokenIsStale ? undefined : (session?.access_token || undefined)
         )
       } catch (firstErr: any) {
-        // On 401 (expired/invalid token), attempt a session refresh and retry once
-        // using no explicit token so invokePayments fetches a fresh one internally.
-        if (firstErr?.code === '401' && attemptRefresh) {
-          await attemptRefresh()
-          setupIntent = await stripeService.createSetupIntent(undefined)
+        // On 401 (expired/invalid token), refresh the session and retry once.
+        // Use refreshSession() directly and take the token from its result —
+        // getSession() can return a stale cached token from the supabase-js
+        // internal session lock, while refreshSession() makes a real server
+        // call and returns the guaranteed-fresh token.
+        if (firstErr?.code === '401') {
+          const { data: refreshData } = await supabase.auth.refreshSession()
+          const freshToken = refreshData?.session?.access_token
+          if (!freshToken) {
+            // Refresh failed or no session — fall back to manual form
+            console.warn('[AddCardModal] Token refresh returned no session, falling back to manual form')
+            setPaymentElementFailed(true)
+            return
+          }
+          try {
+            setupIntent = await stripeService.createSetupIntent(freshToken)
+          } catch (retryErr: any) {
+            // Second 401 even with a fresh token — the edge function may be
+            // temporarily unavailable (cold start, Supabase auth service hiccup).
+            // Silently fall back to the manual card form rather than surfacing a
+            // confusing "Error" alert to a user who is clearly authenticated.
+            console.warn('[AddCardModal] Setup intent failed after token refresh, falling back to manual form', retryErr)
+            setPaymentElementFailed(true)
+            return
+          }
         } else {
           throw firstErr
         }

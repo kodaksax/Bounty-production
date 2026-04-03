@@ -42,7 +42,14 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
   const [paymentMethods, setPaymentMethods] = useState<StripePaymentMethod[]>([]);
   const { session, isLoading: isAuthLoading, isAuthStale, attemptRefresh } = useAuthContext();
 
-  const clearError = () => setError(null);
+  const clearError = () => {
+    setError(null);
+    // Reset the consecutive-401 counter so that a user-initiated retry (e.g.
+    // opening PaymentMethodsModal, pressing Retry) gets a fresh attempt.
+    // This is safe because clearError() is only called from explicit UI actions,
+    // not from the automatic token-change effect that could cause a refresh loop.
+    consecutiveJwtFailuresRef.current = 0;
+  };
 
   const initialize = async () => {
     if (isInitialized) return;
@@ -88,6 +95,9 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
     // consecutive 401s even after the service-layer internal retry with a fresh
     // token). Without this guard clearError() would wipe the displayed error
     // on every call, triggering another doomed network round-trip.
+    // NOTE: consecutiveJwtFailuresRef is reset by clearError() (called from
+    // PaymentMethodsModal on open and on manual retry) so the user can always
+    // explicitly retry without signing out.
     if (consecutiveJwtFailuresRef.current > 2) return;
 
     try {

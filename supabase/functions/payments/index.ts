@@ -187,7 +187,16 @@ Deno.serve(async (req: Request) => {
   }
   const { data: { user }, error: authError } = authResult
   if (authError || !user) {
-    console.warn('[payments edge fn] invalid or expired token', authError || 'no user')
+    // Log structured details so Supabase function logs show the exact failure reason.
+    // Common causes: wrong SUPABASE_URL/SERVICE_ROLE_KEY secret, auth service cold
+    // start, or a token from a different Supabase project.
+    console.warn('[payments edge fn] invalid or expired token', JSON.stringify({
+      hasUser: !!user,
+      errorName: authError?.name,
+      errorMessage: (authError as any)?.message,
+      errorStatus: (authError as any)?.status,
+      errorCode: (authError as any)?.code,
+    }))
     return jsonResponse({ error: 'Authentication required. Please sign in to continue.' }, 401)
   }
   const userId = user.id
