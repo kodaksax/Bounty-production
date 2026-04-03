@@ -8,13 +8,13 @@ import { logger } from '../utils/error-logger';
 import { getNetworkErrorMessage } from '../utils/network-connectivity';
 import { analyticsService } from './analytics-service';
 import {
-  checkDuplicatePayment,
-  completePaymentAttempt,
-  generateIdempotencyKey,
-  logPaymentError,
-  parsePaymentError,
-  recordPaymentAttempt,
-  withPaymentRetry,
+    checkDuplicatePayment,
+    completePaymentAttempt,
+    generateIdempotencyKey,
+    logPaymentError,
+    parsePaymentError,
+    recordPaymentAttempt,
+    withPaymentRetry,
 } from './payment-error-handler';
 import { performanceService } from './performance-service';
 
@@ -39,10 +39,6 @@ interface InvokePaymentsOptions {
   accessToken?: string;
 }
 
-// Read from Constants.expoConfig.extra FIRST (set by app.config.js with the correct
-// env-specific dotenv file loaded via override:true) before the Metro-baked process.env.
-// This prevents a base .env file's anon key from shadowing the correct .env.staging key
-// when running `expo start` with APP_ENV=staging.
 function getExtraValue(key: string): string {
   try {
     const extra = Constants.expoConfig?.extra as Record<string, unknown> | undefined;
@@ -56,11 +52,17 @@ function getExtraValue(key: string): string {
 // Read dynamically (not as a module-level constant) so that the test environment
 // can control routing by setting/clearing process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
 // in beforeAll/afterAll without needing to re-load the module.
+//
+// Resolution order matches lib/config.ts (process.env first, Constants.expoConfig.extra
+// last) so this function returns the same key as the Supabase client and wallet context.
+// Previously Constants.expoConfig.extra was checked first, which could return a stale or
+// wrong-project key baked into an older build manifest, causing the Supabase gateway to
+// reject requests with "Invalid JWT" before they reached the edge function.
 function getSupabaseAnonKey(): string {
   return (
-    getExtraValue('EXPO_PUBLIC_SUPABASE_ANON_KEY') ||
     (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY as string | undefined)?.trim() ||
     (process.env.SUPABASE_ANON_KEY as string | undefined)?.trim() ||
+    getExtraValue('EXPO_PUBLIC_SUPABASE_ANON_KEY') ||
     ''
   );
 }
@@ -200,9 +202,22 @@ async function invokePayments<T>(
           tokenSub = decoded.sub;
         }
         const nowSec = Math.floor(Date.now() / 1000);
+        // Extract the project ref from the anon key JWT (`ref` claim) to verify
+        // it matches the target URL project ref. A mismatch means the gateway will
+        // reject with "Invalid JWT" before reaching the edge function.
+        let anonKeyRef: string | undefined;
+        try {
+          const ak = supabaseAnonKey;
+          if (ak) {
+            const [, ap] = ak.split('.')
+            const ad = JSON.parse(atob(ap.replace(/-/g, '+').replace(/_/g, '/')))
+            anonKeyRef = ad.ref
+          }
+        } catch { /* ignore */ }
         console.log(`[invokePayments] ${subPath}`, {
           hasToken,
           hasAnonKey,
+          anonKeyRef,
           tokenSource: options.accessToken ? 'caller' : 'getSession',
           tokenExpired: tokenExp ? tokenExp < nowSec : 'no-token',
           tokenExpiresIn: tokenExp ? tokenExp - nowSec : undefined,
