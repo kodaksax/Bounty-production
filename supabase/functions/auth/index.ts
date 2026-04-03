@@ -43,80 +43,94 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // POST /auth/register — public (no auth required)
   // ──────────────────────────────────────────
   if (req.method === 'POST' && subPath === '/register') {
-    const body = await req.json().catch(() => ({})) as {
-      email?: string; username?: string; password?: string
-    }
-    const { email, username, password } = body
-
-    if (!email || !username || !password) {
-      return jsonResponse({ error: 'email, username, and password are required' }, 400)
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/
-    if (!emailRegex.test(email)) return jsonResponse({ error: 'Invalid email' }, 400)
-    if (!/^[a-zA-Z0-9_]{3,24}$/.test(username)) {
-      return jsonResponse({ error: 'Invalid username format' }, 400)
-    }
-    if (password.length < 6) return jsonResponse({ error: 'Password too short (min 6)' }, 400)
-
-    const normalizedEmail = email.trim().toLowerCase()
-    const normalizedUsername = username.trim()
-
-    // Check for existing email
-    const { data: existingEmail } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('email', normalizedEmail)
-      .maybeSingle()
-    if (existingEmail) return jsonResponse({ error: 'Email already registered' }, 409)
-
-    // Check for existing username
-    const { data: existingUsername } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('username', normalizedUsername)
-      .maybeSingle()
-    if (existingUsername) return jsonResponse({ error: 'Username already taken' }, 409)
-
-    const { data, error } = await supabase.auth.admin.createUser({
-      email: normalizedEmail,
-      password,
-      email_confirm: true,
-      user_metadata: { username: normalizedUsername },
-    })
-
-    if (error) {
-      console.error('[auth/register] supabase createUser error', error)
-      const msg = error.message?.toLowerCase() ?? ''
-      if (msg.includes('already registered') || msg.includes('already exists')) {
-        return jsonResponse({ error: 'Email already registered' }, 409)
+    try {
+      const body = await req.json().catch(() => ({})) as {
+        email?: string; username?: string; password?: string
       }
-      return jsonResponse({ error: error.message || 'Failed to create account' }, 400)
-    }
+      const { email, username, password } = body
 
-    if (!data?.user?.id) {
-      return jsonResponse({ error: 'User creation failed' }, 500)
-    }
+      if (!email || !username || !password) {
+        return jsonResponse({ error: 'email, username, and password are required' }, 400)
+      }
 
-    const userId = data.user.id
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .upsert(
-        { id: userId, username: normalizedUsername, email: normalizedEmail, balance: 0, onboarding_completed: false },
-        { onConflict: 'id' },
-      )
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/
+      if (!emailRegex.test(email)) return jsonResponse({ error: 'Invalid email' }, 400)
+      if (!/^[a-zA-Z0-9_]{3,24}$/.test(username)) {
+        return jsonResponse({ error: 'Invalid username format' }, 400)
+      }
+      if (password.length < 6) return jsonResponse({ error: 'Password too short (min 6)' }, 400)
 
-    if (profileError) {
-      console.error('[auth/register] profile upsert error, rolling back user:', profileError.message)
-      // Clean up the partially-created auth user to avoid inconsistent state
-      await supabase.auth.admin.deleteUser(userId).catch((e: unknown) => {
-        console.error('[auth/register] failed to rollback auth user:', (e as Error).message)
+      const normalizedEmail = email.trim().toLowerCase()
+      const normalizedUsername = username.trim()
+
+      // Check for existing email
+      const { data: existingEmail, error: emailCheckError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', normalizedEmail)
+        .maybeSingle()
+      if (emailCheckError) {
+        console.error('[auth/register] email lookup error:', emailCheckError.message)
+        return jsonResponse({ error: 'Unable to complete registration. Please try again.' }, 500)
+      }
+      if (existingEmail) return jsonResponse({ error: 'Email already registered' }, 409)
+
+      // Check for existing username
+      const { data: existingUsername, error: usernameCheckError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('username', normalizedUsername)
+        .maybeSingle()
+      if (usernameCheckError) {
+        console.error('[auth/register] username lookup error:', usernameCheckError.message)
+        return jsonResponse({ error: 'Unable to complete registration. Please try again.' }, 500)
+      }
+      if (existingUsername) return jsonResponse({ error: 'Username already taken' }, 409)
+
+      const { data, error } = await supabase.auth.admin.createUser({
+        email: normalizedEmail,
+        password,
+        email_confirm: true,
+        user_metadata: { username: normalizedUsername },
       })
-      return jsonResponse({ error: 'Failed to create user profile' }, 500)
-    }
 
-    console.log('[auth/register] success', { userId })
-    return jsonResponse({ success: true, userId, email: normalizedEmail, username: normalizedUsername }, 201)
+      if (error) {
+        console.error('[auth/register] supabase createUser error', error)
+        const msg = error.message?.toLowerCase() ?? ''
+        if (msg.includes('already registered') || msg.includes('already exists')) {
+          return jsonResponse({ error: 'Email already registered' }, 409)
+        }
+        return jsonResponse({ error: error.message || 'Failed to create account' }, 400)
+      }
+
+      if (!data?.user?.id) {
+        return jsonResponse({ error: 'User creation failed' }, 500)
+      }
+
+      const userId = data.user.id
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert(
+          { id: userId, username: normalizedUsername, email: normalizedEmail, balance: 0, onboarding_completed: false },
+          { onConflict: 'id' },
+        )
+
+      if (profileError) {
+        console.error('[auth/register] profile upsert error, rolling back user:', profileError.message)
+        // Clean up the partially-created auth user to avoid inconsistent state
+        await supabase.auth.admin.deleteUser(userId).catch((e: unknown) => {
+          console.error('[auth/register] failed to rollback auth user:', (e as Error).message)
+        })
+        return jsonResponse({ error: 'Failed to create user profile. Please try again.' }, 500)
+      }
+
+      console.log('[auth/register] success', { userId })
+      return jsonResponse({ success: true, userId, email: normalizedEmail, username: normalizedUsername }, 201)
+    } catch (e: unknown) {
+      const err = e as { message?: string }
+      console.error('[auth/register] unexpected error:', err.message ?? e)
+      return jsonResponse({ error: 'Registration failed. Please try again or contact support.' }, 500)
+    }
   }
 
   // ──────────────────────────────────────────

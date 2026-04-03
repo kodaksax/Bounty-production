@@ -161,6 +161,23 @@ export function parseAuthError(error: any, correlationId?: string): AuthError {
     recoveryAction = 'contact_support';
     retryable = false;
   }
+  // Catch-all for generic server/internal errors — never expose raw technical
+  // messages (e.g. "Internal", "Internal Server Error") to end users.
+  else if (
+    message.toLowerCase() === 'internal' ||
+    message.toLowerCase().includes('internal server error') ||
+    message.toLowerCase().includes('unexpected error')
+  ) {
+    category = 'unknown';
+    userMessage = 'Something went wrong on our end. Please try again in a moment.';
+    recoveryAction = 'retry';
+    retryable = true;
+  }
+
+  // For any remaining unknown errors, avoid surfacing raw technical messages.
+  if (category === 'unknown') {
+    userMessage = 'An unexpected error occurred. Please try again.';
+  }
 
   return {
     category,

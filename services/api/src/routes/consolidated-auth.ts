@@ -11,7 +11,9 @@ import { z } from 'zod';
 import { config } from '../config';
 import { asyncHandler, AuthenticationError, ExternalServiceError, ValidationError } from '../middleware/error-handler';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/unified-auth';
+import { createStripeCustomerForNewUser } from '../services/consolidated-payment-service';
 import { Database } from '../types/database.types';
+import { waitForProfile } from '../utils/wait-for-profile';
 import { toJsonSchema } from '../utils/zod-json';
 
 /**
@@ -201,6 +203,36 @@ async function handleUserRegistration(
       { userId, email: body.email, username },
       `${logPrefix} successful`
     );
+
+    // Eager Stripe customer creation – fire-and-forget so it never blocks signup.
+    // Guarded by a feature flag; lazy creation at first payment is the fallback.
+    if (config.stripe.createCustomerAtSignup) {
+      waitForProfile(userId, 3000)
+        .then((profile) => {
+          if (!profile) {
+            request.log.warn(
+              { userId },
+              `${logPrefix} profile not ready – skipping eager Stripe customer creation`
+            );
+            return;
+          }
+          return createStripeCustomerForNewUser(userId, body.email);
+        })
+        .then((customerId) => {
+          if (customerId) {
+            request.log.info(
+              { userId, customerId },
+              `${logPrefix} Stripe customer created at signup`
+            );
+          }
+        })
+        .catch((error) => {
+          request.log.error(
+            { userId, error },
+            `${logPrefix} failed to create Stripe customer at signup (will fall back to lazy creation on first payment)`
+          );
+        });
+    }
 
     reply.code(201).send({
       success: true,

@@ -267,7 +267,6 @@ Deno.serve(async (req: Request) => {
                 error: fallbackErr,
               })
             }
-            })
           }
         }
 
