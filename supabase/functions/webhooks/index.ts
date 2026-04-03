@@ -163,7 +163,7 @@ Deno.serve(async (req: Request) => {
 
   try {
     // Log event for tracking — upsert on stripe_event_id to safely handle retries.
-    // Use enhanced tracking fields (status, retry_count) from the webhook tracking migration.
+    // Use enhanced tracking fields (status) from the webhook tracking migration.
     await supabase.from('stripe_events').upsert(
       {
         stripe_event_id: event.id,
@@ -373,7 +373,10 @@ Deno.serve(async (req: Request) => {
       case 'setup_intent.setup_failed': {
         const setupIntent = event.data.object as Stripe.SetupIntent
         const userId = setupIntent.metadata?.user_id
-        const failError = (setupIntent as unknown as { last_setup_error?: { code?: string; message?: string } }).last_setup_error
+        // Stripe SetupIntent includes last_setup_error when the setup fails
+        const failError = (setupIntent as Stripe.SetupIntent & {
+          last_setup_error?: { code?: string; message?: string }
+        }).last_setup_error
 
         console.warn(`[webhooks] SetupIntent failed: ${setupIntent.id} for user ${userId}`, {
           errorCode: failError?.code,

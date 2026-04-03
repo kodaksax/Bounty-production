@@ -48,7 +48,7 @@ export interface StripeEvent {
   processed_at?: string | null
   event_data?: Record<string, unknown> | null
   created_at: string
-  status?: string | null
+  status?: 'processing' | 'processed' | 'failed' | null
   retry_count?: number | null
   last_error?: string | null
   last_retry_at?: string | null
