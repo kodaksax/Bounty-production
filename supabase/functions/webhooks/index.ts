@@ -2,6 +2,20 @@
 // Handles POST /webhooks/stripe — Stripe webhook event processing.
 // This is the most critical function to migrate as it processes payments
 // and must verify Stripe's webhook signature.
+//
+// Events handled:
+//   payment_intent.succeeded      – record deposit + update balance
+//   payment_intent.payment_failed – log failure details
+//   payment_intent.requires_action– log 3DS challenge
+//   payment_intent.canceled       – log cancellation
+//   setup_intent.succeeded        – save payment method to DB
+//   setup_intent.setup_failed     – log setup failure
+//   charge.refunded               – record refund + reverse balance
+//   charge.dispute.created        – log dispute + notify user
+//   charge.dispute.closed         – log resolution
+//   transfer.created / paid / failed
+//   account.updated               – track Connect onboarding
+//   payout.paid / failed          – notify hunter
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import Stripe from 'https://esm.sh/stripe@14?target=deno&no-check'
@@ -18,6 +32,26 @@ function jsonResponse(data: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   })
+}
+
+/**
+ * Attempt an RPC call with one automatic retry.
+ * If both attempts fail the last error is thrown so Stripe can retry the webhook.
+ */
+async function rpcWithRetry(
+  supabase: ReturnType<typeof createClient>,
+  rpcName: string,
+  params: Record<string, unknown>,
+  context: string,
+) {
+  const { error } = await supabase.rpc(rpcName, params)
+  if (!error) return
+  console.warn(`[webhooks] ${context} – first attempt failed, retrying`, { error })
+  const { error: retryError } = await supabase.rpc(rpcName, params)
+  if (retryError) {
+    console.error(`[webhooks] ${context} – retry also failed, letting Stripe retry`, { retryError })
+    throw retryError
+  }
 }
 
 Deno.serve(async (req: Request) => {
@@ -128,13 +162,15 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    // Log event for tracking — upsert on stripe_event_id to safely handle retries
+    // Log event for tracking — upsert on stripe_event_id to safely handle retries.
+    // Use enhanced tracking fields (status, retry_count) from the webhook tracking migration.
     await supabase.from('stripe_events').upsert(
       {
         stripe_event_id: event.id,
         event_type: event.type,
         event_data: event.data.object,
         processed: false,
+        status: 'processing',
       },
       { onConflict: 'stripe_event_id' },
     )
@@ -145,7 +181,29 @@ Deno.serve(async (req: Request) => {
         const userId = paymentIntent.metadata?.user_id
 
         if (!userId) {
-          console.error('[webhooks] Missing user_id in payment intent metadata')
+          console.error('[webhooks] Missing user_id in payment intent metadata', {
+            paymentIntentId: paymentIntent.id,
+          })
+          await supabase
+            .from('stripe_events')
+            .update({
+              status: 'failed',
+              last_error: 'Missing user_id in payment intent metadata',
+            })
+            .eq('stripe_event_id', event.id)
+          break
+        }
+
+        // Idempotency: check if a transaction with this stripe_payment_intent_id
+        // already exists to prevent double-crediting on webhook retries.
+        const { data: existingTx } = await supabase
+          .from('wallet_transactions')
+          .select('id')
+          .eq('stripe_payment_intent_id', paymentIntent.id)
+          .maybeSingle()
+
+        if (existingTx) {
+          console.log(`[webhooks] Transaction already exists for PaymentIntent ${paymentIntent.id}, skipping`)
           break
         }
 
@@ -164,31 +222,22 @@ Deno.serve(async (req: Request) => {
           .single()
 
         if (txError) {
+          // Handle unique constraint violation gracefully (concurrent webhook delivery)
+          const errMsg = (txError as { message?: string })?.message ?? ''
+          if (/unique|duplicate|constraint/i.test(errMsg)) {
+            console.log(`[webhooks] Duplicate transaction insert for PaymentIntent ${paymentIntent.id}, skipping`)
+            break
+          }
           console.error('[webhooks] Error creating transaction:', txError)
           throw txError
         }
 
-        const { error: balanceError } = await supabase.rpc('update_balance', {
-          p_user_id: userId,
-          p_amount: paymentIntent.amount / 100,
-        })
-
-        if (balanceError) {
-          // Retry once
-          const { error: retryError } = await supabase.rpc('update_balance', {
-            p_user_id: userId,
-            p_amount: paymentIntent.amount / 100,
-          })
-          if (retryError) {
-            console.error('[webhooks] Atomic balance update failed after retry — letting Stripe retry', {
-              user_id: userId,
-              amount: paymentIntent.amount / 100,
-              error: retryError,
-            })
-            // Throw so the webhook returns 500 and Stripe will retry delivery
-            throw retryError
-          }
-        }
+        await rpcWithRetry(
+          supabase,
+          'update_balance',
+          { p_user_id: userId, p_amount: paymentIntent.amount / 100 },
+          `balance update for payment_intent.succeeded ${paymentIntent.id}`,
+        )
 
         console.log(`[webhooks] Transaction created: ${transaction.id}, balance updated for user ${userId}`)
         break
@@ -207,9 +256,30 @@ Deno.serve(async (req: Request) => {
           .update({
             processed: true,
             processed_at: new Date().toISOString(),
+            status: 'processed',
             event_data: {
               ...(event.data.object as object),
               _processed_notes: `Payment failed: ${error?.code}`,
+            },
+          })
+          .eq('stripe_event_id', event.id)
+        break
+      }
+
+      case 'payment_intent.canceled': {
+        const paymentIntent = event.data.object as Stripe.PaymentIntent
+        const userId = paymentIntent.metadata?.user_id
+        console.log(`[webhooks] PaymentIntent canceled: ${paymentIntent.id} for user ${userId}`)
+
+        await supabase
+          .from('stripe_events')
+          .update({
+            processed: true,
+            processed_at: new Date().toISOString(),
+            status: 'processed',
+            event_data: {
+              ...(event.data.object as object),
+              _processed_notes: 'Payment intent canceled',
             },
           })
           .eq('stripe_event_id', event.id)
@@ -222,6 +292,109 @@ Deno.serve(async (req: Request) => {
         break
       }
 
+      case 'setup_intent.succeeded': {
+        const setupIntent = event.data.object as Stripe.SetupIntent
+        const userId = setupIntent.metadata?.user_id
+        const paymentMethodId = typeof setupIntent.payment_method === 'string'
+          ? setupIntent.payment_method
+          : (setupIntent.payment_method as { id?: string } | null)?.id
+
+        console.log(`[webhooks] SetupIntent succeeded: ${setupIntent.id} for user ${userId}`)
+
+        if (!userId) {
+          console.error('[webhooks] Missing user_id in setup intent metadata', {
+            setupIntentId: setupIntent.id,
+          })
+          await supabase
+            .from('stripe_events')
+            .update({
+              status: 'failed',
+              last_error: 'Missing user_id in setup intent metadata',
+            })
+            .eq('stripe_event_id', event.id)
+          break
+        }
+
+        if (!paymentMethodId) {
+          console.error('[webhooks] Missing payment_method in setup intent', {
+            setupIntentId: setupIntent.id,
+          })
+          await supabase
+            .from('stripe_events')
+            .update({
+              status: 'failed',
+              last_error: 'Missing payment_method in setup intent',
+            })
+            .eq('stripe_event_id', event.id)
+          break
+        }
+
+        // Retrieve full payment method details from Stripe
+        let pm: Stripe.PaymentMethod
+        try {
+          pm = await stripe.paymentMethods.retrieve(paymentMethodId)
+        } catch (stripeErr) {
+          console.error('[webhooks] Failed to retrieve payment method from Stripe', {
+            paymentMethodId,
+            error: stripeErr,
+          })
+          throw stripeErr
+        }
+
+        // Upsert into payment_methods table (idempotent on stripe_payment_method_id)
+        const { error: upsertError } = await supabase
+          .from('payment_methods')
+          .upsert(
+            {
+              user_id: userId,
+              stripe_payment_method_id: pm.id,
+              type: pm.type ?? 'card',
+              card_brand: pm.card?.brand ?? null,
+              card_last4: pm.card?.last4 ?? null,
+              card_exp_month: pm.card?.exp_month ?? null,
+              card_exp_year: pm.card?.exp_year ?? null,
+            },
+            { onConflict: 'stripe_payment_method_id' },
+          )
+
+        if (upsertError) {
+          console.error('[webhooks] Failed to upsert payment method', {
+            userId,
+            paymentMethodId: pm.id,
+            error: upsertError,
+          })
+          throw upsertError
+        }
+
+        console.log(`[webhooks] Payment method ${pm.id} saved for user ${userId}`)
+        break
+      }
+
+      case 'setup_intent.setup_failed': {
+        const setupIntent = event.data.object as Stripe.SetupIntent
+        const userId = setupIntent.metadata?.user_id
+        const failError = (setupIntent as unknown as { last_setup_error?: { code?: string; message?: string } }).last_setup_error
+
+        console.warn(`[webhooks] SetupIntent failed: ${setupIntent.id} for user ${userId}`, {
+          errorCode: failError?.code,
+          errorMessage: failError?.message,
+        })
+
+        await supabase
+          .from('stripe_events')
+          .update({
+            processed: true,
+            processed_at: new Date().toISOString(),
+            status: 'processed',
+            event_data: {
+              ...(event.data.object as object),
+              _processed_notes: `Setup failed: ${failError?.code ?? 'unknown'}`,
+            },
+          })
+          .eq('stripe_event_id', event.id)
+        break
+      }
+
       case 'charge.refunded': {
         const charge = event.data.object as Stripe.Charge
         const paymentIntentId = charge.payment_intent as string
@@ -230,7 +403,7 @@ Deno.serve(async (req: Request) => {
           .from('wallet_transactions')
           .select('user_id, amount')
           .eq('stripe_payment_intent_id', paymentIntentId)
-          .single()
+          .maybeSingle()
 
         if (originalTx) {
           const origTx = originalTx as Pick<WalletTransaction, 'user_id' | 'amount'>
@@ -241,28 +414,71 @@ Deno.serve(async (req: Request) => {
             description: 'Payment refunded',
             status: 'completed',
             stripe_charge_id: charge.id,
-            // charge.refunds.data[0].reason gives the reason for the first refund
             metadata: { refund_reason: charge.refunds?.data?.[0]?.reason ?? null },
           })
 
-          const { error: rpcError } = await supabase.rpc('update_balance', {
-            p_user_id: origTx.user_id,
-            p_amount: -(charge.amount_refunded / 100),
-          })
+          await rpcWithRetry(
+            supabase,
+            'update_balance',
+            { p_user_id: origTx.user_id, p_amount: -(charge.amount_refunded / 100) },
+            `balance decrement for charge.refunded ${charge.id}`,
+          )
 
-          if (rpcError) {
-            const { error: retryError } = await supabase.rpc('update_balance', {
-              p_user_id: origTx.user_id,
-              p_amount: -(charge.amount_refunded / 100),
-            })
-            if (retryError) {
-              console.error('[webhooks] Atomic balance decrement for refund failed — letting Stripe retry')
-              throw retryError
+          console.log(`[webhooks] Refund processed for user ${origTx.user_id}`)
+        } else {
+          console.warn(`[webhooks] No original transaction found for refund, paymentIntentId: ${paymentIntentId}`)
+        }
+        break
+      }
+
+      case 'charge.dispute.created': {
+        const dispute = event.data.object as Stripe.Dispute
+        const chargeId = typeof dispute.charge === 'string' ? dispute.charge : dispute.charge?.id
+        console.warn(`[webhooks] Dispute created: ${dispute.id} for charge ${chargeId}, amount: $${dispute.amount / 100}`)
+
+        // Look up the original transaction to find the affected user
+        if (chargeId) {
+          const { data: originalTx } = await supabase
+            .from('wallet_transactions')
+            .select('user_id')
+            .eq('stripe_charge_id', chargeId)
+            .maybeSingle()
+
+          // Also try by payment_intent if charge lookup fails
+          let affectedUserId = (originalTx as { user_id?: string } | null)?.user_id
+          if (!affectedUserId && dispute.payment_intent) {
+            const piId = typeof dispute.payment_intent === 'string'
+              ? dispute.payment_intent
+              : dispute.payment_intent?.id
+            if (piId) {
+              const { data: piTx } = await supabase
+                .from('wallet_transactions')
+                .select('user_id')
+                .eq('stripe_payment_intent_id', piId)
+                .maybeSingle()
+              affectedUserId = (piTx as { user_id?: string } | null)?.user_id
             }
           }
 
-          console.log(`[webhooks] Refund processed for user ${origTx.user_id}`)
+          if (affectedUserId) {
+            await supabase.from('notifications').insert({
+              user_id: affectedUserId,
+              type: 'payment',
+              title: 'Payment Dispute Received',
+              body: `A dispute of $${(dispute.amount / 100).toFixed(2)} has been filed against a payment. Our team is reviewing this.`,
+              data: { disputeId: dispute.id, chargeId, reason: dispute.reason },
+            })
+            console.log(`[webhooks] Notified user ${affectedUserId} of dispute ${dispute.id}`)
+          } else {
+            console.warn(`[webhooks] Could not find user for disputed charge ${chargeId}`)
+          }
         }
+        break
+      }
+
+      case 'charge.dispute.closed': {
+        const dispute = event.data.object as Stripe.Dispute
+        console.log(`[webhooks] Dispute closed: ${dispute.id}, status: ${dispute.status}`)
         break
       }
 
@@ -310,7 +526,6 @@ Deno.serve(async (req: Request) => {
             status: 'failed',
             metadata: {
               transfer_status: 'failed',
-              // Stripe Transfer objects expose failure_code on the Transfer type
               failure_reason: (transfer as Stripe.Transfer & { failure_code?: string }).failure_code,
               retry_count: 0,
             },
@@ -323,20 +538,14 @@ Deno.serve(async (req: Request) => {
           const txRow = tx as WalletTransaction
           const refundAmount = Math.abs(txRow.amount)
           const txUserId = txRow.user_id
-          const { error: rpcError } = await supabase.rpc('update_balance', {
-            p_user_id: txUserId,
-            p_amount: refundAmount,
-          })
-          if (rpcError) {
-            const { error: retryError } = await supabase.rpc('update_balance', {
-              p_user_id: txUserId,
-              p_amount: refundAmount,
-            })
-            if (retryError) {
-              console.error('[webhooks] Atomic balance update for transfer refund failed — letting Stripe retry')
-              throw retryError
-            }
-          }
+
+          await rpcWithRetry(
+            supabase,
+            'update_balance',
+            { p_user_id: txUserId, p_amount: refundAmount },
+            `balance refund for transfer.failed ${transfer.id}`,
+          )
+
           console.log(`[webhooks] Refunded $${refundAmount} to user ${txUserId} for failed transfer`)
         }
         break
@@ -464,13 +673,32 @@ Deno.serve(async (req: Request) => {
     // Mark event as processed
     await supabase
       .from('stripe_events')
-      .update({ processed: true, processed_at: new Date().toISOString() })
+      .update({
+        processed: true,
+        processed_at: new Date().toISOString(),
+        status: 'processed',
+      })
       .eq('stripe_event_id', event.id)
 
     return jsonResponse({ received: true })
   } catch (error: unknown) {
     const err = error as { message?: string }
     console.error('[webhooks] Error processing event:', err)
+
+    // Update event tracking with failure details for monitoring / DLQ
+    try {
+      await supabase
+        .from('stripe_events')
+        .update({
+          status: 'failed',
+          last_error: err.message ?? 'Unknown processing error',
+          last_retry_at: new Date().toISOString(),
+        })
+        .eq('stripe_event_id', event!.id)
+    } catch {
+      // Best-effort; don't mask the original error
+    }
+
     return jsonResponse({ error: 'Webhook processing failed' }, 500)
   }
 

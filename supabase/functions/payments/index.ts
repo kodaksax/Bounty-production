@@ -325,8 +325,31 @@ Deno.serve(async (req: Request) => {
         .eq('id', userId)
         .single())
 
-      // If we don't have a customer yet, just return an empty list.
+      // If we don't have a Stripe customer yet, fall back to the payment_methods
+      // DB table. The webhook for setup_intent.succeeded may have saved payment
+      // methods even when the profile upsert for stripe_customer_id failed.
       if (!profile?.stripe_customer_id) {
+        const { data: dbMethods } = await withDbTimeout(supabaseAdmin
+          .from('payment_methods')
+          .select('stripe_payment_method_id, type, card_brand, card_last4, card_exp_month, card_exp_year, created_at')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false }))
+
+        if (dbMethods && dbMethods.length > 0) {
+          const methods = dbMethods.map((pm: Record<string, unknown>) => ({
+            id: pm.stripe_payment_method_id,
+            type: pm.type ?? 'card',
+            card: {
+              brand: pm.card_brand ?? 'unknown',
+              last4: pm.card_last4 ?? '****',
+              exp_month: pm.card_exp_month ?? 0,
+              exp_year: pm.card_exp_year ?? 0,
+            },
+            created: pm.created_at ? Math.floor(new Date(pm.created_at as string).getTime() / 1000) : 0,
+          }))
+          return jsonResponse({ paymentMethods: methods })
+        }
+
         return jsonResponse({ paymentMethods: [] })
       }
 
@@ -366,6 +389,28 @@ Deno.serve(async (req: Request) => {
               .eq('id', userId))
           } catch (updateErr) {
             console.error('[payments] Failed to clear stale stripe_customer_id', { userId, updateErr })
+          }
+
+          // Fall back to DB-stored payment methods before returning empty
+          const { data: dbMethods } = await withDbTimeout(supabaseAdmin
+            .from('payment_methods')
+            .select('stripe_payment_method_id, type, card_brand, card_last4, card_exp_month, card_exp_year, created_at')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false }))
+
+          if (dbMethods && dbMethods.length > 0) {
+            const methods = dbMethods.map((pm: Record<string, unknown>) => ({
+              id: pm.stripe_payment_method_id,
+              type: pm.type ?? 'card',
+              card: {
+                brand: pm.card_brand ?? 'unknown',
+                last4: pm.card_last4 ?? '****',
+                exp_month: pm.card_exp_month ?? 0,
+                exp_year: pm.card_exp_year ?? 0,
+              },
+              created: pm.created_at ? Math.floor(new Date(pm.created_at as string).getTime() / 1000) : 0,
+            }))
+            return jsonResponse({ paymentMethods: methods })
           }
 
           return jsonResponse({ paymentMethods: [] })

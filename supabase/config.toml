@@ -98,3 +98,9 @@ enable_confirmations = false
 enabled = true
 # issuer = "https://<project-ref>.supabase.co/auth/v1"
 # audience = "authenticated"
+
+# Stripe sends webhook requests without a Supabase JWT.
+# The webhooks function verifies the Stripe-Signature header instead.
+# Deploy with: supabase functions deploy webhooks --no-verify-jwt
+[functions.webhooks]
+verify_jwt = false
