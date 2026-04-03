@@ -290,9 +290,9 @@ The `APP_URL` secret (set in §5.2) controls Stripe Connect onboarding URLs:
 - **Refresh URL:** `https://app.bountyfinger.net/wallet/connect/refresh`
 
 These are used in:
-- `supabase/functions/connect/index.ts` (lines 98–99)
-- `server/index.js` (lines 1134–1135)
-- `services/api/src/config/index.ts` (line 274)
+- `supabase/functions/connect/index.ts` — `createAccountLink()` call (search for `return_url` / `refresh_url`)
+- `server/index.js` — Express Stripe Connect route (search for `return_url` / `refresh_url`)
+- `services/api/src/config/index.ts` — `app` config key (search for `APP_URL`)
 
 Update `APP_URL` in all server environments:
 
@@ -351,7 +351,7 @@ Update the following in `app.json`:
       ]
     },
     "extra": {
-      "API_BASE_URL": "https://app.bountyfinger.net"
+      "API_BASE_URL": "https://api.bountyfinger.net"
     }
   }
 }

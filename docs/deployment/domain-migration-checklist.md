@@ -157,7 +157,7 @@ curl -s https://api.bountyfinger.net/health | jq .status
 
 - [ ] Update `app.json` — associatedDomains: add `applinks:app.bountyfinger.net`, `applinks:*.bountyfinger.net`
 - [ ] Update `app.json` — Android intent filter host: `app.bountyfinger.net`
-- [ ] Update `app.json` — `extra.API_BASE_URL`: `https://app.bountyfinger.net`
+- [ ] Update `app.json` — `extra.API_BASE_URL`: `https://api.bountyfinger.net`
 - [ ] Update `eas.json` — preview `EXPO_PUBLIC_API_URL`: `https://api-staging.bountyfinger.net`
 - [ ] Set EAS secrets:
   ```bash
