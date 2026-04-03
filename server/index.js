@@ -457,12 +457,12 @@ app.get('/payments/methods', apiLimiter, authenticateUser, async (req, res) => {
       if (dbMethods && dbMethods.length > 0) {
         const methods = dbMethods.map(pm => ({
           id: pm.stripe_payment_method_id,
-          type: pm.type || 'card',
+          type: pm.type ?? 'card',
           card: {
-            brand: pm.card_brand || 'unknown',
-            last4: pm.card_last4 || '****',
-            exp_month: pm.card_exp_month || 0,
-            exp_year: pm.card_exp_year || 0,
+            brand: pm.card_brand ?? 'unknown',
+            last4: pm.card_last4 ?? '****',
+            exp_month: pm.card_exp_month ?? 0,
+            exp_year: pm.card_exp_year ?? 0,
           },
           created: pm.created_at ? Math.floor(new Date(pm.created_at).getTime() / 1000) : Math.floor(Date.now() / 1000),
         }));

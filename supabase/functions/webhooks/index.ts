@@ -244,10 +244,29 @@ Deno.serve(async (req: Request) => {
             .eq('id', setupUserId)
             .is('stripe_customer_id', null)
           if (profileUpdateError) {
-            console.error('[webhooks] Failed to update stripe_customer_id on profile', {
+            console.error('[webhooks] Failed to update stripe_customer_id on profile (conditional)', {
               userId: setupUserId,
               customerId: setupCustomerId,
               error: profileUpdateError,
+            })
+            // Fallback: unconditional update (may overwrite existing value, acceptable for recovery)
+            try {
+              const { error: fallbackError } = await supabase
+                .from('profiles')
+                .update({ stripe_customer_id: setupCustomerId })
+                .eq('id', setupUserId)
+              if (fallbackError) {
+                console.error('[webhooks] Fallback stripe_customer_id update also failed', {
+                  userId: setupUserId,
+                  error: fallbackError,
+                })
+              }
+            } catch (fallbackErr) {
+              console.error('[webhooks] Fallback stripe_customer_id update threw', {
+                userId: setupUserId,
+                error: fallbackErr,
+              })
+            }
             })
           }
         }
