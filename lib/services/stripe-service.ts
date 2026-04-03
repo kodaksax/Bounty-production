@@ -8,13 +8,13 @@ import { logger } from '../utils/error-logger';
 import { getNetworkErrorMessage } from '../utils/network-connectivity';
 import { analyticsService } from './analytics-service';
 import {
-    checkDuplicatePayment,
-    completePaymentAttempt,
-    generateIdempotencyKey,
-    logPaymentError,
-    parsePaymentError,
-    recordPaymentAttempt,
-    withPaymentRetry,
+  checkDuplicatePayment,
+  completePaymentAttempt,
+  generateIdempotencyKey,
+  logPaymentError,
+  parsePaymentError,
+  recordPaymentAttempt,
+  withPaymentRetry,
 } from './payment-error-handler';
 import { performanceService } from './performance-service';
 
@@ -60,6 +60,7 @@ function getSupabaseAnonKey(): string {
   return (
     getExtraValue('EXPO_PUBLIC_SUPABASE_ANON_KEY') ||
     (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY as string | undefined)?.trim() ||
+    (process.env.SUPABASE_ANON_KEY as string | undefined)?.trim() ||
     ''
   );
 }
@@ -182,6 +183,35 @@ async function invokePayments<T>(
       apikey: supabaseAnonKey,
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
+
+    // Diagnostic logging to help trace persistent 401s
+    if (__DEV__) {
+      try {
+        const hasToken = !!token;
+        const hasAnonKey = !!supabaseAnonKey;
+        let tokenExp: number | undefined;
+        let tokenIss: string | undefined;
+        let tokenSub: string | undefined;
+        if (token) {
+          const [, payload] = token.split('.');
+          const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+          tokenExp = decoded.exp;
+          tokenIss = decoded.iss;
+          tokenSub = decoded.sub;
+        }
+        const nowSec = Math.floor(Date.now() / 1000);
+        console.log(`[invokePayments] ${subPath}`, {
+          hasToken,
+          hasAnonKey,
+          tokenSource: options.accessToken ? 'caller' : 'getSession',
+          tokenExpired: tokenExp ? tokenExp < nowSec : 'no-token',
+          tokenExpiresIn: tokenExp ? tokenExp - nowSec : undefined,
+          tokenIss,
+          tokenSub,
+          url,
+        });
+      } catch { /* ignore diagnostic errors */ }
+    }
 
     return fetchEdgeFunction<T>(url, method, headers, options.body);
   }
@@ -779,27 +809,27 @@ class StripeService {
         if (!is401) throw firstErr;
 
         // 401: the React-state token is stale (server-side expiry or clock-skew).
-        // The Supabase client may have already auto-refreshed internally and hold
-        // a fresher token that hasn't propagated to React state yet.  Fetch it
-        // directly and retry once — this resolves the issue without triggering
-        // any React state changes that would cause a refresh loop.
+        // Use refreshSession() instead of getSession() — getSession() can return
+        // the same stale cached token from the supabase-js internal session lock,
+        // while refreshSession() makes a real server call and returns the fresh
+        // token directly in the result.
         logger.warning('[StripeService] 401 on payment methods — retrying with fresh session token.', {});
         let freshToken: string | undefined;
         try {
-          const sessionResult = await Promise.race([
-            supabase.auth.getSession() as Promise<{ data: { session: { access_token: string } | null }; error: unknown }>,
+          const refreshResult = await Promise.race([
+            supabase.auth.refreshSession() as Promise<{ data: { session: { access_token: string } | null }; error: unknown }>,
             new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error('getSession timeout')), 4000)
+              setTimeout(() => reject(new Error('refreshSession timeout')), 5000)
             ),
           ]);
-          freshToken = sessionResult.data?.session?.access_token;
+          freshToken = refreshResult.data?.session?.access_token;
         } catch {
-          // getSession() timed out or errored — propagate the original 401
+          // refreshSession() timed out or errored — propagate the original 401
           throw firstErr;
         }
 
-        if (!freshToken || freshToken === authToken) {
-          // Same token or no session — a retry would not help; propagate the 401
+        if (!freshToken) {
+          // No session after refresh — propagate the 401
           throw firstErr;
         }
 

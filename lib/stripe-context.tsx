@@ -42,7 +42,14 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
   const [paymentMethods, setPaymentMethods] = useState<StripePaymentMethod[]>([]);
   const { session, isLoading: isAuthLoading, isAuthStale, attemptRefresh } = useAuthContext();
 
-  const clearError = () => setError(null);
+  const clearError = () => {
+    setError(null);
+    // Reset the consecutive-401 counter so that a user-initiated retry (e.g.
+    // opening PaymentMethodsModal, pressing Retry) gets a fresh attempt.
+    // This is safe because clearError() is only called from explicit UI actions,
+    // not from the automatic token-change effect that could cause a refresh loop.
+    consecutiveJwtFailuresRef.current = 0;
+  };
 
   const initialize = async () => {
     if (isInitialized) return;
@@ -88,11 +95,21 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
     // consecutive 401s even after the service-layer internal retry with a fresh
     // token). Without this guard clearError() would wipe the displayed error
     // on every call, triggering another doomed network round-trip.
+    // NOTE: consecutiveJwtFailuresRef is reset by clearError() (called from
+    // PaymentMethodsModal on open and on manual retry) so the user can always
+    // explicitly retry without signing out.
     if (consecutiveJwtFailuresRef.current > 2) return;
 
     try {
       setIsLoading(true);
-      clearError();
+      // Clear the displayed error but do NOT reset the 401 counter here.
+      // clearError() resets consecutiveJwtFailuresRef which would make the
+      // "more than 2 consecutive 401s" guard unreachable — every call would
+      // reset the counter to 0 before the guard check on the next call.
+      // The counter is intentionally only reset on success (below) or by
+      // explicit user actions that call clearError() (e.g. opening the
+      // PaymentMethodsModal, pressing Retry).
+      setError(null);
 
       const methods = await stripeService.listPaymentMethods(session?.access_token);
       consecutiveJwtFailuresRef.current = 0; // reset on success
@@ -103,16 +120,6 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
       // here means the service layer already attempted one internal retry with
       // a freshly-fetched session token and it still failed.  The session is
       // genuinely expired or revoked.
-      //
-      // Strategy: suppress the error and wait for the Supabase client's own
-      // auto-refresh cycle to issue a new access token.  When that happens,
-      // session.access_token changes, which re-triggers the token-change effect
-      // and automatically retries loadPaymentMethods with the new token.
-      //
-      // IMPORTANT: do NOT call attemptRefresh() here.  Doing so creates a
-      // cascade where each refresh produces a new token → the token-change
-      // effect fires again → loadPaymentMethods() is called → 401 again →
-      // another refresh → infinite loop with isLoading perpetually true.
       const errObj = err as Record<string, unknown>;
       const is401AuthError =
         errObj?.code === '401' ||
@@ -124,11 +131,13 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
           // permanently invalid. Surface an actionable error and stop retrying.
           logger.warning('[StripeContext] Repeated 401s — session may be permanently invalid.', { error: err });
           setError('Session error loading payment methods. Please sign out and sign in again.');
-          return;
+        } else {
+          console.warn('[StripeContext] 401 loading payment methods — will retry on next token refresh.');
         }
-        // Transient — suppress; the auth provider will refresh naturally.
-        console.warn('[StripeContext] 401 loading payment methods — suppressed; waiting for auth auto-refresh.');
-        return;
+        // Always throw on 401 so callers with retry logic (e.g.
+        // refreshPaymentMethodsWithRetry) know the call failed and can
+        // retry instead of silently treating it as success.
+        throw err;
       }
       // Improve error messaging for network issues using centralized utility
       const errorMessage = getNetworkErrorMessage(err);

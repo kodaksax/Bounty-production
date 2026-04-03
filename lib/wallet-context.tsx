@@ -120,6 +120,22 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     setIsLoading(true);
     try {
+      // Diagnostic logging to help trace persistent 401s on wallet calls
+      if (__DEV__) {
+        try {
+          const [, payload] = accessToken.split('.');
+          const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+          const nowSec = Math.floor(Date.now() / 1000);
+          console.log('[wallet] refreshFromApi token info', {
+            tokenExpired: decoded.exp < nowSec,
+            tokenExpiresIn: decoded.exp - nowSec,
+            tokenIss: decoded.iss,
+            tokenSub: decoded.sub,
+            hasAnonKey: !!config.supabase.anonKey,
+          });
+        } catch { /* ignore diagnostic errors */ }
+      }
+
       // Fetch balance from API with timeout and retry
       const balanceResponse = await fetchWithTimeout(`${API_BASE_URL}/wallet/balance`, {
         headers: {

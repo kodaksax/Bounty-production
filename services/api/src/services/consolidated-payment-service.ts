@@ -8,9 +8,9 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
 import { config } from '../config';
 import {
-    ExternalServiceError,
-    handleStripeError,
-    ValidationError,
+  ExternalServiceError,
+  handleStripeError,
+  ValidationError,
 } from '../middleware/error-handler';
 import { logger } from './logger';
 
@@ -107,9 +107,87 @@ export interface PaymentMethodResult {
 }
 
 /**
- * Get or create Stripe customer for user
+ * Create Stripe customer for new user at signup.
+ * This is the eager-creation path – call it after the profile row exists.
+ * On any error it logs and returns null so the caller can fall back to lazy
+ * creation at first-payment time without breaking signup.
+ *
+ * @param userId - User ID
+ * @param email - User email (optional; Stripe supports metadata-only customers)
+ * @returns Customer ID or null if creation failed
+ */
+export async function createStripeCustomerForNewUser(
+  userId: string,
+  email?: string,
+  // When true (default) swallow errors and return null so callers can
+  // fire-and-forget this during signup without failing the flow. When
+  // false, rethrow the underlying error so callers (e.g. payment flow)
+  // can handle Stripe errors precisely.
+  suppressErrors: boolean = true
+): Promise<string | null> {
+  const admin = getSupabaseAdmin();
+
+  try {
+    const customer = await stripe.customers.create(
+      {
+        // Only pass email when we actually have a non-empty value – Stripe
+        // supports metadata-only customers and an empty string is invalid.
+        ...(email ? { email } : {}),
+        // Keep metadata deterministic so Stripe retries for the same
+        // idempotency key do not fail due to parameter mismatch.
+        metadata: {
+          user_id: userId,
+        },
+      },
+      { idempotencyKey: `customer_signup_${userId}` }
+    );
+
+    // Persist the customer ID so subsequent calls find it immediately
+    const { error: updateError } = await admin
+      .from('profiles')
+      .update({ stripe_customer_id: customer.id })
+      .eq('id', userId);
+
+    if (updateError) {
+      logger.error(
+        { userId, customerId: customer.id, error: updateError },
+        '[PaymentService] createStripeCustomerForNewUser: failed to save customer ID to profile'
+      );
+      // Still return the ID – the customer was created in Stripe successfully
+    }
+
+    logger.info(
+      { userId, customerId: customer.id },
+      '[PaymentService] createStripeCustomerForNewUser: Stripe customer created'
+    );
+
+    return customer.id;
+  } catch (error) {
+    logger.error(
+      { userId, error },
+      '[PaymentService] createStripeCustomerForNewUser: failed to create Stripe customer'
+    );
+
+    if (!suppressErrors) {
+      // Propagate the original error so callers can classify/handle it
+      // (e.g. convert Stripe errors via handleStripeError).
+      throw error;
+    }
+
+    return null;
+  }
+}
+
+/**
+ * Get or create Stripe customer for user.
  * Reads/writes stripe_customer_id from the profiles table.
  * This is the DB-backed implementation; use this instead of any in-memory cache.
+ *
+ * Fast path: if the profile already has a stripe_customer_id (set at signup
+ * when the eager-creation flag is enabled), return it immediately.
+ * Slow / lazy path: customer is created here during the first payment if the
+ * profile does not yet have one (preserves existing behaviour when the flag is
+ * disabled or eager creation failed at signup).
  *
  * Email is included when available but is NOT required – Stripe supports
  * creating customers without one, and the profile trigger only stores
@@ -134,40 +212,36 @@ export async function getOrCreateStripeCustomer(
     });
   }
   
-  // Return existing customer ID if present
+  // Fast path: return existing customer ID if present (eager creation already ran)
   if (profile?.stripe_customer_id) {
     return profile.stripe_customer_id;
   }
-  
+
+  // Lazy path: customer not yet created – create it now during first payment
+  logger.info(
+    { userId },
+    '[PaymentService] getOrCreateStripeCustomer: no stripe_customer_id found; creating customer during payment (lazy path)'
+  );
+
   // Resolve email: prefer explicit arg, then profile column (may be NULL)
   const customerEmail = email || profile?.email || undefined;
-  
+
   try {
-    const customer = await stripe.customers.create({
-      // Only include email when we actually have one – Stripe supports
-      // metadata-only customers and profiles.email is not always populated.
-      ...(customerEmail ? { email: customerEmail } : {}),
-      metadata: { user_id: userId },
-    });
-    
-    // Save customer ID to profile
-    const { error: updateError } = await admin
-      .from('profiles')
-      .update({ stripe_customer_id: customer.id })
-      .eq('id', userId);
-    
-    if (updateError) {
-      // Log error but don't fail - customer was created successfully
-      logger.warn(
-        { error: updateError },
-        '[PaymentService] Failed to save customer ID to profile'
-      );
+    const customerId = await createStripeCustomerForNewUser(
+      userId,
+      customerEmail,
+      false
+    );
+    if (customerId) {
+      return customerId;
     }
-    
-    return customer.id;
   } catch (error) {
     throw handleStripeError(error);
   }
+
+  // createStripeCustomerForNewUser already logged the error; surface it as a
+  // hard failure here because the payment cannot proceed without a customer.
+  throw new ExternalServiceError('Stripe', 'Failed to create Stripe customer for user');
 }
 
 /**

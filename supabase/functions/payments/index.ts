@@ -124,15 +124,17 @@ async function resolveStripeCustomerForUser(params: {
   })
   customerId = customer.id
 
-  const profilePatch: Record<string, unknown> = {
-    id: userId,
-    email: resolvedEmail,
+  // Use .update() instead of .upsert() to save the stripe_customer_id.
+  // The profile already exists (fetched above via .maybeSingle()). Using
+  // .upsert() with { onConflict: 'id' } generates an INSERT whose missing
+  // NOT NULL columns (e.g. username) cause a constraint violation BEFORE
+  // the ON CONFLICT clause fires — so the customer ID never gets saved.
+  const updatePatch: Record<string, unknown> = {
     stripe_customer_id: customerId,
   }
-
-  if (!profile?.username) {
-    profilePatch.username = deriveUsernameFromEmail(resolvedEmail, userId)
-    profilePatch.balance = 0
+  // Back-fill email on the profile if it's currently NULL
+  if (!profile?.email && resolvedEmail) {
+    updatePatch.email = resolvedEmail
   }
 
   const { error: upsertError } = await withDbTimeout(supabaseAdmin
@@ -202,7 +204,16 @@ Deno.serve(async (req: Request) => {
   }
   const { data: { user }, error: authError } = authResult
   if (authError || !user) {
-    console.warn('[payments edge fn] invalid or expired token', authError || 'no user')
+    // Log structured details so Supabase function logs show the exact failure reason.
+    // Common causes: wrong SUPABASE_URL/SERVICE_ROLE_KEY secret, auth service cold
+    // start, or a token from a different Supabase project.
+    console.warn('[payments edge fn] invalid or expired token', JSON.stringify({
+      hasUser: !!user,
+      errorName: authError?.name,
+      errorMessage: (authError as any)?.message,
+      errorStatus: (authError as any)?.status,
+      errorCode: (authError as any)?.code,
+    }))
     return jsonResponse({ error: 'Authentication required. Please sign in to continue.' }, 401)
   }
   const userId = user.id
@@ -283,6 +294,10 @@ Deno.serve(async (req: Request) => {
       const setupIntent = await stripe.setupIntents.create({
         customer: customerId,
         usage: 'off_session',
+        automatic_payment_methods: {
+          enabled: true,
+          allow_redirects: 'never',
+        },
         metadata: { user_id: userId },
       })
 
