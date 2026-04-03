@@ -94,7 +94,23 @@ enable_confirmations = false
 
 [functions]
 
-[functions.verify_jwt]
-enabled = true
-# issuer = "https://<project-ref>.supabase.co/auth/v1"
-# audience = "authenticated"
+# ── Per-function JWT verification overrides ──────────────────────────────────
+# By default the Supabase gateway verifies JWTs before requests reach the
+# function.  Functions that perform their OWN auth (via supabaseAdmin.auth
+# .getUser(token)) or that receive external webhooks should disable gateway
+# verification so valid user tokens aren't rejected by the gateway layer.
+#
+# NOTE: The old `[functions.verify_jwt]` section was a mis-configuration —
+# TOML parses that as a function named "verify_jwt", not a global setting.
+# Per-function overrides below are the correct approach.
+
+# payments: handles its own auth via supabaseAdmin.auth.getUser(token).
+# Without this override the Supabase gateway can reject valid user JWTs
+# with "Invalid JWT" (observed in staging), preventing all payment operations.
+[functions.payments]
+verify_jwt = false
+
+# webhooks: receives events from Stripe (not from authenticated users),
+# so it must NOT require a Supabase JWT.
+[functions.webhooks]
+verify_jwt = false

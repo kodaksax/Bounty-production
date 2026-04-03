@@ -8,7 +8,16 @@
 //   DELETE /payments/methods/:id
 //   POST   /payments/confirm
 
+// Local type shims so `tsc --noEmit` (Node tooling) doesn't error on Deno
+// runtime imports and globals. These are intentionally loose (`any`) so
+// the function can be type-checked in the repo without pulling runtime
+// dependencies into the monorepo's TypeScript build.
+declare const Deno: any
+
+// Imports are URL-based (Deno/ESM). Silence tsc for local typechecking.
+// @ts-ignore: Allow runtime URL import for Deno/edge function.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+// @ts-ignore: Allow runtime URL import for Deno/edge function.
 import Stripe from 'https://esm.sh/stripe@14?target=deno&no-check'
 
 const corsHeaders = {
@@ -73,11 +82,14 @@ async function resolveStripeCustomerForUser(params: {
 }) {
   const { supabaseAdmin, stripe, userId, userEmail } = params
 
-  const { data: profile, error: profileError } = await withDbTimeout(supabaseAdmin
+  const profileRes = await withDbTimeout(supabaseAdmin
     .from('profiles')
     .select('id, stripe_customer_id, email, username')
     .eq('id', userId)
-    .maybeSingle())
+    .maybeSingle()) as any
+
+  const profile = profileRes?.data
+  const profileError = profileRes?.error
 
   if (profileError) {
     console.error('[payments] Failed to fetch profile during customer resolution', { userId, profileError })
@@ -136,40 +148,31 @@ async function resolveStripeCustomerForUser(params: {
   if (!profile?.email && resolvedEmail) {
     updatePatch.email = resolvedEmail
   }
+  // Save stripe_customer_id and any backfilled email to the existing profile row.
+  // Use an UPDATE against the known profile `id` to avoid INSERT/ON CONFLICT
+  // behavior which can fail when NOT NULL columns are missing.
+  const saveRes = await withDbTimeout(supabaseAdmin
+    .from('profiles')
+    .update(updatePatch)
+    .eq('id', userId)) as any
+  const saveError = saveRes?.error
 
-  if (profile) {
-    // Profile exists — simple UPDATE by id
-    const { error: updateError } = await withDbTimeout(supabaseAdmin
-      .from('profiles')
-      .update(updatePatch)
-      .eq('id', userId))
-
-    if (updateError) {
-      console.error('[payments] Failed to save stripe_customer_id via update', { userId, updateError })
-      return {
-        error: 'Your payment profile was created but could not be saved. Please try again.',
-        status: 502,
+  if (saveError) {
+    console.error('[payments] Failed to update profile while saving stripe_customer_id', { userId, saveError })
+    // Fallback: try a targeted update of just stripe_customer_id.
+    try {
+      const fallbackRes = await withDbTimeout(supabaseAdmin
+        .from('profiles')
+        .update({ stripe_customer_id: customerId })
+        .eq('id', userId)) as any
+      const fallbackError = fallbackRes?.error
+      if (fallbackError) {
+        console.error('[payments] Fallback update of stripe_customer_id also failed', { userId, fallbackError })
+      } else {
+        console.log('[payments] Fallback update of stripe_customer_id succeeded', { userId, customerId })
       }
-    }
-  } else {
-    // No profile row yet (edge case: auth user exists but profile was never created).
-    // Use INSERT with all required NOT NULL fields.
-    const { error: insertError } = await withDbTimeout(supabaseAdmin
-      .from('profiles')
-      .insert({
-        id: userId,
-        email: resolvedEmail,
-        username: deriveUsernameFromEmail(resolvedEmail, userId),
-        stripe_customer_id: customerId,
-        balance: 0,
-      }))
-
-    if (insertError) {
-      console.error('[payments] Failed to insert profile with stripe_customer_id', { userId, insertError })
-      return {
-        error: 'Your payment profile was created but could not be saved. Please try again.',
-        status: 502,
-      }
+    } catch (fallbackErr) {
+      console.error('[payments] Fallback stripe_customer_id update threw', { userId, fallbackErr })
     }
   }
 
@@ -215,7 +218,7 @@ Deno.serve(async (req: Request) => {
     }
     throw e
   }
-  const { data: { user }, error: authError } = authResult
+  const { data: { user }, error: authError } = authResult as any
   if (authError || !user) {
     // Log structured details so Supabase function logs show the exact failure reason.
     // Common causes: wrong SUPABASE_URL/SERVICE_ROLE_KEY secret, auth service cold
@@ -319,14 +322,42 @@ Deno.serve(async (req: Request) => {
 
     // GET /payments/methods
     if (req.method === 'GET' && subPath === '/methods') {
-      const { data: profile } = await withDbTimeout(supabaseAdmin
+      const profileRes = await withDbTimeout(supabaseAdmin
         .from('profiles')
         .select('stripe_customer_id')
         .eq('id', userId)
-        .single())
+        .single()) as any
 
-      // If we don't have a customer yet, just return an empty list.
+      const profile = profileRes?.data
+
+      // If we don't have a stripe_customer_id yet, fall back to the payment_methods
+      // table which is populated by the setup_intent.succeeded webhook. This handles
+      // the race condition where the profile upsert during create-setup-intent fails
+      // but the webhook later saves the payment method details to the DB.
       if (!profile?.stripe_customer_id) {
+        const dbMethodsRes = await withDbTimeout(supabaseAdmin
+          .from('payment_methods')
+          .select('stripe_payment_method_id, type, card_brand, card_last4, card_exp_month, card_exp_year, created_at')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })) as any
+
+        const dbMethods = dbMethodsRes?.data
+
+        if (dbMethods && dbMethods.length > 0) {
+          const methods = dbMethods.map((pm: any) => ({
+            id: pm.stripe_payment_method_id,
+            type: pm.type || 'card',
+            card: {
+              brand: pm.card_brand ?? 'unknown',
+              last4: pm.card_last4 ?? '****',
+              exp_month: pm.card_exp_month ?? 0,
+              exp_year: pm.card_exp_year ?? 0,
+            },
+            created: pm.created_at ? Math.floor(new Date(pm.created_at).getTime() / 1000) : Math.floor(Date.now() / 1000),
+          }))
+          return jsonResponse({ paymentMethods: methods })
+        }
+
         return jsonResponse({ paymentMethods: [] })
       }
 
@@ -419,11 +450,14 @@ Deno.serve(async (req: Request) => {
     if (req.method === 'DELETE' && subPath.startsWith('/methods/')) {
       const paymentMethodId = subPath.split('/methods/')[1]
 
-      const { data: profile } = await withDbTimeout(supabaseAdmin
+
+      const profileRes = await withDbTimeout(supabaseAdmin
         .from('profiles')
         .select('stripe_customer_id')
         .eq('id', userId)
-        .single())
+        .single()) as any
+
+      const profile = profileRes?.data
 
       if (!profile?.stripe_customer_id) {
         return jsonResponse({ error: 'No payment methods found' }, 404)

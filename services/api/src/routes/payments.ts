@@ -287,6 +287,30 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
       const customerId = await getStripeCustomerId(request.userId);
 
       if (!customerId) {
+        // Fallback: check the payment_methods DB table populated by webhook
+        const admin = getSupabaseAdmin();
+        const { data: dbMethods } = await admin
+          .from('payment_methods')
+          .select('stripe_payment_method_id, type, card_brand, card_last4, card_exp_month, card_exp_year, created_at')
+          .eq('user_id', request.userId)
+          .order('created_at', { ascending: false });
+
+        if (dbMethods && dbMethods.length > 0) {
+          return {
+            paymentMethods: dbMethods.map((pm: any) => ({
+              id: pm.stripe_payment_method_id,
+              type: pm.type || 'card',
+              card: {
+                brand: pm.card_brand ?? 'unknown',
+                last4: pm.card_last4 ?? '****',
+                exp_month: pm.card_exp_month ?? 0,
+                exp_year: pm.card_exp_year ?? 0,
+              },
+              created: pm.created_at ? Math.floor(new Date(pm.created_at).getTime() / 1000) : Math.floor(Date.now() / 1000),
+            })),
+          };
+        }
+
         return { paymentMethods: [] };
       }
 
@@ -890,6 +914,25 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
             userId,
             paymentMethodId,
           }, '[payments] SetupIntent succeeded — saving payment method');
+
+          // Ensure stripe_customer_id is saved on the profile.
+          // This is critical because GET /payments/methods relies on
+          // stripe_customer_id to fetch payment methods from Stripe.
+          const setupCustomerId = typeof setupIntent.customer === 'string'
+            ? setupIntent.customer
+            : (setupIntent.customer as { id: string } | null)?.id;
+          if (userId && setupCustomerId) {
+            const admin = getSupabaseAdmin();
+            const { error: profileSyncError } = await admin
+              .from('profiles')
+              .update({ stripe_customer_id: setupCustomerId })
+              .eq('id', userId)
+              .is('stripe_customer_id', null);
+            if (profileSyncError) {
+              logger.error({ err: profileSyncError.message, userId, customerId: setupCustomerId },
+                '[payments] Failed to sync stripe_customer_id from setup_intent.succeeded');
+            }
+          }
 
           if (userId && paymentMethodId) {
             try {

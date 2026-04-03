@@ -222,6 +222,117 @@ Deno.serve(async (req: Request) => {
         break
       }
 
+      case 'setup_intent.succeeded': {
+        const setupIntent = event.data.object as Stripe.SetupIntent
+        const setupUserId = setupIntent.metadata?.user_id
+        const setupPaymentMethodId = typeof setupIntent.payment_method === 'string'
+          ? setupIntent.payment_method
+          : (setupIntent.payment_method as Stripe.PaymentMethod | null)?.id
+
+        console.log(`[webhooks] SetupIntent succeeded: ${setupIntent.id} for user ${setupUserId}`)
+
+        // Ensure the stripe_customer_id is saved on the profile.
+        // This is critical because the GET /payments/methods endpoint relies on
+        // stripe_customer_id to fetch payment methods from Stripe.
+        const setupCustomerId = typeof setupIntent.customer === 'string'
+          ? setupIntent.customer
+          : (setupIntent.customer as Stripe.Customer | null)?.id
+        if (setupUserId && setupCustomerId) {
+          const { error: profileUpdateError } = await supabase
+            .from('profiles')
+            .update({ stripe_customer_id: setupCustomerId })
+            .eq('id', setupUserId)
+            .is('stripe_customer_id', null)
+          if (profileUpdateError) {
+            console.error('[webhooks] Failed to update stripe_customer_id on profile (conditional)', {
+              userId: setupUserId,
+              customerId: setupCustomerId,
+              error: profileUpdateError,
+            })
+            // Fallback: unconditional update (may overwrite existing value, acceptable for recovery)
+            try {
+              const { error: fallbackError } = await supabase
+                .from('profiles')
+                .update({ stripe_customer_id: setupCustomerId })
+                .eq('id', setupUserId)
+              if (fallbackError) {
+                console.error('[webhooks] Fallback stripe_customer_id update also failed', {
+                  userId: setupUserId,
+                  error: fallbackError,
+                })
+              }
+            } catch (fallbackErr) {
+              console.error('[webhooks] Fallback stripe_customer_id update threw', {
+                userId: setupUserId,
+                error: fallbackErr,
+              })
+            }
+          }
+        }
+
+        if (setupUserId && setupPaymentMethodId) {
+          try {
+            // Retrieve full payment method details from Stripe
+            const pm = await stripe.paymentMethods.retrieve(setupPaymentMethodId)
+
+            // Upsert into payment_methods table so the method is available for future charges
+            const { error: upsertError } = await supabase
+              .from('payment_methods')
+              .upsert({
+                user_id: setupUserId,
+                stripe_payment_method_id: pm.id,
+                type: pm.type,
+                card_brand: pm.card?.brand ?? null,
+                card_last4: pm.card?.last4 ?? null,
+                card_exp_month: pm.card?.exp_month ?? null,
+                card_exp_year: pm.card?.exp_year ?? null,
+              }, { onConflict: 'stripe_payment_method_id' })
+
+            if (upsertError) {
+              console.error('[webhooks] Failed to upsert payment method after setup_intent.succeeded', {
+                userId: setupUserId,
+                paymentMethodId: setupPaymentMethodId,
+                error: upsertError,
+              })
+            } else {
+              console.log(`[webhooks] Payment method ${setupPaymentMethodId} saved for user ${setupUserId}`)
+            }
+          } catch (pmErr: any) {
+            console.error('[webhooks] Error retrieving/saving payment method after setup_intent.succeeded', {
+              userId: setupUserId,
+              paymentMethodId: setupPaymentMethodId,
+              error: pmErr?.message,
+            })
+          }
+        } else {
+          console.warn('[webhooks] setup_intent.succeeded missing user_id or payment_method — skipping DB upsert', {
+            setupIntentId: setupIntent.id,
+            userId: setupUserId,
+            paymentMethodId: setupPaymentMethodId,
+          })
+        }
+        break
+      }
+
+      case 'setup_intent.setup_failed': {
+        const failedSetupIntent = event.data.object as Stripe.SetupIntent
+        const failedSetupError = failedSetupIntent.last_setup_error
+        console.log(`[webhooks] SetupIntent failed: ${failedSetupIntent.id}, reason: ${failedSetupError?.code} - ${failedSetupError?.message}`)
+
+        await supabase
+          .from('stripe_events')
+          .update({
+            processed: true,
+            processed_at: new Date().toISOString(),
+            event_data: {
+              ...(event.data.object as object),
+              _processed_notes: `Setup failed: ${failedSetupError?.code}`,
+            },
+          })
+          .eq('stripe_event_id', event.id)
+        break
+      }
+
       case 'charge.refunded': {
         const charge = event.data.object as Stripe.Charge
         const paymentIntentId = charge.payment_intent as string

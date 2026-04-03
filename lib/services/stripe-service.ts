@@ -8,13 +8,13 @@ import { logger } from '../utils/error-logger';
 import { getNetworkErrorMessage } from '../utils/network-connectivity';
 import { analyticsService } from './analytics-service';
 import {
-  checkDuplicatePayment,
-  completePaymentAttempt,
-  generateIdempotencyKey,
-  logPaymentError,
-  parsePaymentError,
-  recordPaymentAttempt,
-  withPaymentRetry,
+    checkDuplicatePayment,
+    completePaymentAttempt,
+    generateIdempotencyKey,
+    logPaymentError,
+    parsePaymentError,
+    recordPaymentAttempt,
+    withPaymentRetry,
 } from './payment-error-handler';
 import { performanceService } from './performance-service';
 
@@ -39,10 +39,6 @@ interface InvokePaymentsOptions {
   accessToken?: string;
 }
 
-// Read from Constants.expoConfig.extra FIRST (set by app.config.js with the correct
-// env-specific dotenv file loaded via override:true) before the Metro-baked process.env.
-// This prevents a base .env file's anon key from shadowing the correct .env.staging key
-// when running `expo start` with APP_ENV=staging.
 function getExtraValue(key: string): string {
   try {
     const extra = Constants.expoConfig?.extra as Record<string, unknown> | undefined;
@@ -56,11 +52,17 @@ function getExtraValue(key: string): string {
 // Read dynamically (not as a module-level constant) so that the test environment
 // can control routing by setting/clearing process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
 // in beforeAll/afterAll without needing to re-load the module.
+//
+// Resolution order matches lib/config.ts (process.env first, Constants.expoConfig.extra
+// last) so this function returns the same key as the Supabase client and wallet context.
+// Previously Constants.expoConfig.extra was checked first, which could return a stale or
+// wrong-project key baked into an older build manifest, causing the Supabase gateway to
+// reject requests with "Invalid JWT" before they reached the edge function.
 function getSupabaseAnonKey(): string {
   return (
-    getExtraValue('EXPO_PUBLIC_SUPABASE_ANON_KEY') ||
     (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY as string | undefined)?.trim() ||
     (process.env.SUPABASE_ANON_KEY as string | undefined)?.trim() ||
+    getExtraValue('EXPO_PUBLIC_SUPABASE_ANON_KEY') ||
     ''
   );
 }
@@ -200,9 +202,22 @@ async function invokePayments<T>(
           tokenSub = decoded.sub;
         }
         const nowSec = Math.floor(Date.now() / 1000);
+        // Extract the project ref from the anon key JWT (`ref` claim) to verify
+        // it matches the target URL project ref. A mismatch means the gateway will
+        // reject with "Invalid JWT" before reaching the edge function.
+        let anonKeyRef: string | undefined;
+        try {
+          const ak = supabaseAnonKey;
+          if (ak) {
+            const [, ap] = ak.split('.')
+            const ad = JSON.parse(atob(ap.replace(/-/g, '+').replace(/_/g, '/')))
+            anonKeyRef = ad.ref
+          }
+        } catch { /* ignore */ }
         console.log(`[invokePayments] ${subPath}`, {
           hasToken,
           hasAnonKey,
+          anonKeyRef,
           tokenSource: options.accessToken ? 'caller' : 'getSession',
           tokenExpired: tokenExp ? tokenExp < nowSec : 'no-token',
           tokenExpiresIn: tokenExp ? tokenExp - nowSec : undefined,
@@ -849,9 +864,56 @@ class StripeService {
       const _is401AuthError =
         _err && _err.type === 'api_error' && String(_err.code) === '401';
       if (_is401AuthError) {
-        logger.warning('[StripeService] 401 on payment methods (after retry) — session may be expired.', { error });
+        logger.warning('[StripeService] 401 on payment methods (after retry) — trying direct DB fallback.', { error });
       } else {
-        logger.error('[StripeService] Error fetching payment methods:', { error });
+        logger.error('[StripeService] Error fetching payment methods via Edge Function:', { error });
+      }
+
+      // ── Direct DB fallback ───────────────────────────────────────────────
+      // When the Edge Function call fails (e.g. 401 "Invalid JWT" from the
+      // Supabase gateway, cold-start timeout, or network issue), try querying
+      // the payment_methods table directly via PostgREST.  The Supabase JS
+      // client manages its own auth token internally (via refreshSession),
+      // which may succeed even when the React-state token passed to the Edge
+      // Function was stale.  The payment_methods table has RLS policies that
+      // allow users to SELECT their own rows (auth.uid() = user_id).
+      try {
+        interface PaymentMethodRow {
+          stripe_payment_method_id: string | null;
+          type: string | null;
+          card_brand: string | null;
+          card_last4: string | null;
+          card_exp_month: number | null;
+          card_exp_year: number | null;
+          created_at: string | null;
+        }
+        const { data: dbMethods, error: dbError } = await supabase
+          .from('payment_methods')
+          .select('stripe_payment_method_id, type, card_brand, card_last4, card_exp_month, card_exp_year, created_at')
+          .order('created_at', { ascending: false });
+
+        if (!dbError && dbMethods && dbMethods.length > 0) {
+          logger.info('[StripeService] Direct DB fallback returned payment methods.', { count: dbMethods.length });
+          return (dbMethods as PaymentMethodRow[]).map((pm) => ({
+            id: pm.stripe_payment_method_id ?? '',
+            type: 'card' as const,
+            card: {
+              brand: pm.card_brand ?? 'unknown',
+              last4: pm.card_last4 ?? '****',
+              exp_month: pm.card_exp_month ?? 0,
+              exp_year: pm.card_exp_year ?? 0,
+            },
+            created: pm.created_at
+              ? Math.floor(new Date(pm.created_at).getTime() / 1000)
+              : Math.floor(Date.now() / 1000),
+          }));
+        }
+        // DB returned no rows — fall through to throw the original error
+        if (dbError) {
+          logger.warning('[StripeService] Direct DB fallback also failed.', { dbError });
+        }
+      } catch (dbFallbackErr) {
+        logger.warning('[StripeService] Direct DB fallback threw.', { error: dbFallbackErr });
       }
 
       // Use proper typing for enhanced error with dynamic properties
