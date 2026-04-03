@@ -82,6 +82,19 @@ describe('createStripeCustomerForNewUser', () => {
     );
   });
 
+  it('omits email from Stripe create call when email is undefined', async () => {
+    const customerId = 'cus_no_email';
+    mockCustomersCreate.mockResolvedValue({ id: customerId });
+    buildSupabaseMock();
+
+    const result = await createStripeCustomerForNewUser('user-no-email');
+
+    expect(result).toBe(customerId);
+    // email key must not appear in the create call
+    const callArgs = mockCustomersCreate.mock.calls[0][0];
+    expect(callArgs).not.toHaveProperty('email');
+  });
+
   it('saves the customer ID to the profile after creation', async () => {
     const customerId = 'cus_test_456';
     mockCustomersCreate.mockResolvedValue({ id: customerId });

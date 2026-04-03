@@ -113,19 +113,21 @@ export interface PaymentMethodResult {
  * creation at first-payment time without breaking signup.
  *
  * @param userId - User ID
- * @param email - User email
+ * @param email - User email (optional; Stripe supports metadata-only customers)
  * @returns Customer ID or null if creation failed
  */
 export async function createStripeCustomerForNewUser(
   userId: string,
-  email: string
+  email?: string
 ): Promise<string | null> {
   const admin = getSupabaseAdmin();
 
   try {
     const customer = await stripe.customers.create(
       {
-        email,
+        // Only pass email when we actually have a non-empty value – Stripe
+        // supports metadata-only customers and an empty string is invalid.
+        ...(email ? { email } : {}),
         metadata: {
           user_id: userId,
           created_at_signup: 'true',
@@ -204,7 +206,7 @@ export async function getOrCreateStripeCustomer(
   }
 
   // Lazy path: customer not yet created – create it now during first payment
-  logger.warn(
+  logger.info(
     { userId },
     '[PaymentService] getOrCreateStripeCustomer: no stripe_customer_id found; creating customer during payment (lazy path)'
   );
@@ -212,7 +214,7 @@ export async function getOrCreateStripeCustomer(
   // Resolve email: prefer explicit arg, then profile column (may be NULL)
   const customerEmail = email || profile?.email || undefined;
 
-  const customerId = await createStripeCustomerForNewUser(userId, customerEmail ?? '');
+  const customerId = await createStripeCustomerForNewUser(userId, customerEmail);
   if (customerId) {
     return customerId;
   }

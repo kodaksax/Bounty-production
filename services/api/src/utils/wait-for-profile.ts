@@ -33,7 +33,7 @@ export async function waitForProfile(
 ): Promise<Record<string, any> | null> {
   const admin = getAdmin();
   const deadline = Date.now() + maxWaitMs;
-  const pollIntervalMs = 100;
+  const pollIntervalMs = 200;
 
   while (Date.now() < deadline) {
     const { data: profile, error } = await admin

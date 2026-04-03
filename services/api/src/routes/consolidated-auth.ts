@@ -229,7 +229,7 @@ async function handleUserRegistration(
         .catch((error) => {
           request.log.error(
             { userId, error },
-            `${logPrefix} failed to create Stripe customer at signup`
+            `${logPrefix} failed to create Stripe customer at signup (will fall back to lazy creation on first payment)`
           );
         });
     }
