@@ -124,23 +124,53 @@ async function resolveStripeCustomerForUser(params: {
   })
   customerId = customer.id
 
-  const profilePatch: Record<string, unknown> = {
-    id: userId,
-    email: resolvedEmail,
+  // Use .update() instead of .upsert() to save the stripe_customer_id.
+  // The profile already exists (fetched above via .maybeSingle()). Using
+  // .upsert() with { onConflict: 'id' } generates an INSERT whose missing
+  // NOT NULL columns (e.g. username) cause a constraint violation BEFORE
+  // the ON CONFLICT clause fires — so the customer ID never gets saved.
+  const updatePatch: Record<string, unknown> = {
     stripe_customer_id: customerId,
   }
-
-  if (!profile?.username) {
-    profilePatch.username = deriveUsernameFromEmail(resolvedEmail, userId)
-    profilePatch.balance = 0
+  // Back-fill email on the profile if it's currently NULL
+  if (!profile?.email && resolvedEmail) {
+    updatePatch.email = resolvedEmail
   }
 
-  const { error: upsertError } = await withDbTimeout(supabaseAdmin
-    .from('profiles')
-    .upsert(profilePatch, { onConflict: 'id' }))
+  if (profile) {
+    // Profile exists — simple UPDATE by id
+    const { error: updateError } = await withDbTimeout(supabaseAdmin
+      .from('profiles')
+      .update(updatePatch)
+      .eq('id', userId))
 
-  if (upsertError) {
-    console.error('[payments] Failed to upsert profile while saving stripe_customer_id', { userId, upsertError })
+    if (updateError) {
+      console.error('[payments] Failed to save stripe_customer_id via update', { userId, updateError })
+      return {
+        error: 'Your payment profile was created but could not be saved. Please try again.',
+        status: 502,
+      }
+    }
+  } else {
+    // No profile row yet (edge case: auth user exists but profile was never created).
+    // Use INSERT with all required NOT NULL fields.
+    const { error: insertError } = await withDbTimeout(supabaseAdmin
+      .from('profiles')
+      .insert({
+        id: userId,
+        email: resolvedEmail,
+        username: deriveUsernameFromEmail(resolvedEmail, userId),
+        stripe_customer_id: customerId,
+        balance: 0,
+      }))
+
+    if (insertError) {
+      console.error('[payments] Failed to insert profile with stripe_customer_id', { userId, insertError })
+      return {
+        error: 'Your payment profile was created but could not be saved. Please try again.',
+        status: 502,
+      }
+    }
   }
 
   return { customerId }
@@ -277,6 +307,10 @@ Deno.serve(async (req: Request) => {
       const setupIntent = await stripe.setupIntents.create({
         customer: customerId,
         usage: 'off_session',
+        automatic_payment_methods: {
+          enabled: true,
+          allow_redirects: 'never',
+        },
         metadata: { user_id: userId },
       })
 

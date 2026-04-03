@@ -166,6 +166,18 @@ export function SignUpForm() {
           return
         }
 
+        // 5xx or generic "Internal" errors from the server/edge runtime should
+        // not be shown verbatim — surface a friendly, actionable message instead.
+        if (
+          registerRes.status >= 500 ||
+          String(backendMessage).toLowerCase() === 'internal' ||
+          String(backendMessage).toLowerCase().includes('internal server error')
+        ) {
+          console.error('[sign-up] Server error during registration', { correlationId, backendMessage, status: registerRes.status })
+          setAuthError('Something went wrong on our end. Please try again in a moment.')
+          return
+        }
+
         setAuthError(backendMessage)
         return
       }

@@ -102,7 +102,14 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
 
     try {
       setIsLoading(true);
-      clearError();
+      // Clear the displayed error but do NOT reset the 401 counter here.
+      // clearError() resets consecutiveJwtFailuresRef which would make the
+      // "more than 2 consecutive 401s" guard unreachable — every call would
+      // reset the counter to 0 before the guard check on the next call.
+      // The counter is intentionally only reset on success (below) or by
+      // explicit user actions that call clearError() (e.g. opening the
+      // PaymentMethodsModal, pressing Retry).
+      setError(null);
 
       const methods = await stripeService.listPaymentMethods(session?.access_token);
       consecutiveJwtFailuresRef.current = 0; // reset on success
@@ -113,16 +120,6 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
       // here means the service layer already attempted one internal retry with
       // a freshly-fetched session token and it still failed.  The session is
       // genuinely expired or revoked.
-      //
-      // Strategy: suppress the error and wait for the Supabase client's own
-      // auto-refresh cycle to issue a new access token.  When that happens,
-      // session.access_token changes, which re-triggers the token-change effect
-      // and automatically retries loadPaymentMethods with the new token.
-      //
-      // IMPORTANT: do NOT call attemptRefresh() here.  Doing so creates a
-      // cascade where each refresh produces a new token → the token-change
-      // effect fires again → loadPaymentMethods() is called → 401 again →
-      // another refresh → infinite loop with isLoading perpetually true.
       const errObj = err as Record<string, unknown>;
       const is401AuthError =
         errObj?.code === '401' ||
@@ -134,11 +131,13 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
           // permanently invalid. Surface an actionable error and stop retrying.
           logger.warning('[StripeContext] Repeated 401s — session may be permanently invalid.', { error: err });
           setError('Session error loading payment methods. Please sign out and sign in again.');
-          return;
+        } else {
+          console.warn('[StripeContext] 401 loading payment methods — will retry on next token refresh.');
         }
-        // Transient — suppress; the auth provider will refresh naturally.
-        console.warn('[StripeContext] 401 loading payment methods — suppressed; waiting for auth auto-refresh.');
-        return;
+        // Always throw on 401 so callers with retry logic (e.g.
+        // refreshPaymentMethodsWithRetry) know the call failed and can
+        // retry instead of silently treating it as success.
+        throw err;
       }
       // Improve error messaging for network issues using centralized utility
       const errorMessage = getNetworkErrorMessage(err);
