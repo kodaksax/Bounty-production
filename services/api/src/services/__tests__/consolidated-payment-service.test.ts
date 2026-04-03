@@ -50,7 +50,7 @@ function buildSupabaseMock(updateError: any = null) {
 describe('createStripeCustomerForNewUser', () => {
   let createStripeCustomerForNewUser: (
     userId: string,
-    email: string
+    email?: string
   ) => Promise<string | null>;
 
   beforeEach(() => {
@@ -59,7 +59,7 @@ describe('createStripeCustomerForNewUser', () => {
     // Re-require to pick up fresh module state with cleared mocks
     createStripeCustomerForNewUser =
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      require('../../services/consolidated-payment-service').createStripeCustomerForNewUser;
+      require('../consolidated-payment-service').createStripeCustomerForNewUser;
   });
 
   it('creates a Stripe customer with the correct metadata', async () => {
@@ -75,7 +75,6 @@ describe('createStripeCustomerForNewUser', () => {
         email: 'test@example.com',
         metadata: expect.objectContaining({
           user_id: 'user-1',
-          created_at_signup: 'true',
         }),
       }),
       expect.objectContaining({ idempotencyKey: 'customer_signup_user-1' })

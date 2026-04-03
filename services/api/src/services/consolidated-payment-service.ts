@@ -128,10 +128,10 @@ export async function createStripeCustomerForNewUser(
         // Only pass email when we actually have a non-empty value – Stripe
         // supports metadata-only customers and an empty string is invalid.
         ...(email ? { email } : {}),
+        // Keep metadata deterministic so Stripe retries for the same
+        // idempotency key do not fail due to parameter mismatch.
         metadata: {
           user_id: userId,
-          created_at_signup: 'true',
-          created_at: new Date().toISOString(),
         },
       },
       { idempotencyKey: `customer_signup_${userId}` }
@@ -153,7 +153,7 @@ export async function createStripeCustomerForNewUser(
 
     logger.info(
       { userId, customerId: customer.id },
-      '[PaymentService] createStripeCustomerForNewUser: Stripe customer created at signup'
+      '[PaymentService] createStripeCustomerForNewUser: Stripe customer created'
     );
 
     return customer.id;
@@ -214,9 +214,13 @@ export async function getOrCreateStripeCustomer(
   // Resolve email: prefer explicit arg, then profile column (may be NULL)
   const customerEmail = email || profile?.email || undefined;
 
-  const customerId = await createStripeCustomerForNewUser(userId, customerEmail);
-  if (customerId) {
-    return customerId;
+  try {
+    const customerId = await createStripeCustomerForNewUser(userId, customerEmail);
+    if (customerId) {
+      return customerId;
+    }
+  } catch (error) {
+    throw handleStripeError(error);
   }
 
   // createStripeCustomerForNewUser already logged the error; surface it as a

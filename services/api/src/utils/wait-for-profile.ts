@@ -9,7 +9,9 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { config } from '../config';
 import { logger } from '../services/logger';
 
-// Lazy Supabase admin singleton (avoids requiring service key at module load time)
+// Supabase admin client singleton – created on the first call to waitForProfile
+// rather than at module load time, so that test code can mock @supabase/supabase-js
+// before any client instance is constructed.
 let _admin: SupabaseClient<any> | null = null;
 
 function getAdmin(): SupabaseClient<any> {
