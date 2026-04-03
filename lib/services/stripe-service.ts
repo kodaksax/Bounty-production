@@ -863,6 +863,15 @@ class StripeService {
       // Function was stale.  The payment_methods table has RLS policies that
       // allow users to SELECT their own rows (auth.uid() = user_id).
       try {
+        interface PaymentMethodRow {
+          stripe_payment_method_id: string | null;
+          type: string | null;
+          card_brand: string | null;
+          card_last4: string | null;
+          card_exp_month: number | null;
+          card_exp_year: number | null;
+          created_at: string | null;
+        }
         const { data: dbMethods, error: dbError } = await supabase
           .from('payment_methods')
           .select('stripe_payment_method_id, type, card_brand, card_last4, card_exp_month, card_exp_year, created_at')
@@ -870,17 +879,17 @@ class StripeService {
 
         if (!dbError && dbMethods && dbMethods.length > 0) {
           logger.info('[StripeService] Direct DB fallback returned payment methods.', { count: dbMethods.length });
-          return dbMethods.map((pm: Record<string, unknown>) => ({
-            id: (pm.stripe_payment_method_id as string) || '',
+          return (dbMethods as PaymentMethodRow[]).map((pm) => ({
+            id: pm.stripe_payment_method_id ?? '',
             type: 'card' as const,
             card: {
-              brand: ((pm.card_brand as string) ?? 'unknown'),
-              last4: ((pm.card_last4 as string) ?? '****'),
-              exp_month: ((pm.card_exp_month as number) ?? 0),
-              exp_year: ((pm.card_exp_year as number) ?? 0),
+              brand: pm.card_brand ?? 'unknown',
+              last4: pm.card_last4 ?? '****',
+              exp_month: pm.card_exp_month ?? 0,
+              exp_year: pm.card_exp_year ?? 0,
             },
             created: pm.created_at
-              ? Math.floor(new Date(pm.created_at as string).getTime() / 1000)
+              ? Math.floor(new Date(pm.created_at).getTime() / 1000)
               : Math.floor(Date.now() / 1000),
           }));
         }
