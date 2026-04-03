@@ -98,3 +98,14 @@ enable_confirmations = false
 enabled = true
 # issuer = "https://<project-ref>.supabase.co/auth/v1"
 # audience = "authenticated"
+
+# ── Per-function overrides ───────────────────────────────────────────────────
+# The webhooks function receives events from Stripe (not from authenticated
+# users), so it must NOT require a Supabase JWT. Without this override the
+# Supabase gateway rejects Stripe webhook POST requests with "Invalid JWT"
+# and the setup_intent.succeeded handler never fires.
+#
+# IMPORTANT: When deploying, also pass --no-verify-jwt for the webhooks function:
+#   supabase functions deploy webhooks --no-verify-jwt
+[functions.webhooks]
+verify_jwt = false

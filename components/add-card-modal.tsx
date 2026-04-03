@@ -51,12 +51,13 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
 
   // Refresh payment methods with retry logic
   // Let Stripe SDK and network stack handle timeouts naturally
-  const refreshPaymentMethodsWithRetry = async (totalAttempts = 3, baseDelayMs = 600): Promise<void> => {
+  // Returns true when at least one successful load completes, false otherwise.
+  const refreshPaymentMethodsWithRetry = async (totalAttempts = 3, baseDelayMs = 600): Promise<boolean> => {
     let lastErr: any
     for (let attempt = 0; attempt < totalAttempts; attempt++) {
       try {
         await loadPaymentMethods()
-        return
+        return true
       } catch (e) {
         lastErr = e
         // Skip backoff after the last attempt
@@ -69,6 +70,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
     }
     // Swallow final error but log for diagnostics
     console.warn('[AddCardModal] loadPaymentMethods failed after all attempts:', lastErr)
+    return false
   }
 
   // Determine if native Stripe SDK is available; prefer Payment Element when available
@@ -205,9 +207,13 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
     // Brief delay to allow Stripe's backend to make the new payment method available
     await new Promise(r => setTimeout(r, 500))
     // Refresh payment methods after successful save
-    await refreshPaymentMethodsWithRetry(3, 1000)
+    const loaded = await refreshPaymentMethodsWithRetry(3, 1000)
 
-    Alert.alert('Success', 'Payment method added successfully!', [
+    const message = loaded
+      ? 'Payment method added successfully!'
+      : 'Payment method saved with Stripe. It may take a moment to appear in your wallet.'
+
+    Alert.alert('Success', message, [
       {
         text: 'OK',
         onPress: () => {

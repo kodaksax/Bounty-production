@@ -849,9 +849,47 @@ class StripeService {
       const _is401AuthError =
         _err && _err.type === 'api_error' && String(_err.code) === '401';
       if (_is401AuthError) {
-        logger.warning('[StripeService] 401 on payment methods (after retry) — session may be expired.', { error });
+        logger.warning('[StripeService] 401 on payment methods (after retry) — trying direct DB fallback.', { error });
       } else {
-        logger.error('[StripeService] Error fetching payment methods:', { error });
+        logger.error('[StripeService] Error fetching payment methods via Edge Function:', { error });
+      }
+
+      // ── Direct DB fallback ───────────────────────────────────────────────
+      // When the Edge Function call fails (e.g. 401 "Invalid JWT" from the
+      // Supabase gateway, cold-start timeout, or network issue), try querying
+      // the payment_methods table directly via PostgREST.  The Supabase JS
+      // client manages its own auth token internally (via refreshSession),
+      // which may succeed even when the React-state token passed to the Edge
+      // Function was stale.  The payment_methods table has RLS policies that
+      // allow users to SELECT their own rows (auth.uid() = user_id).
+      try {
+        const { data: dbMethods, error: dbError } = await supabase
+          .from('payment_methods')
+          .select('stripe_payment_method_id, type, card_brand, card_last4, card_exp_month, card_exp_year, created_at')
+          .order('created_at', { ascending: false });
+
+        if (!dbError && dbMethods && dbMethods.length > 0) {
+          logger.info('[StripeService] Direct DB fallback returned payment methods.', { count: dbMethods.length });
+          return dbMethods.map((pm: Record<string, unknown>) => ({
+            id: (pm.stripe_payment_method_id as string) || '',
+            type: 'card' as const,
+            card: {
+              brand: ((pm.card_brand as string) ?? 'unknown'),
+              last4: ((pm.card_last4 as string) ?? '****'),
+              exp_month: ((pm.card_exp_month as number) ?? 0),
+              exp_year: ((pm.card_exp_year as number) ?? 0),
+            },
+            created: pm.created_at
+              ? Math.floor(new Date(pm.created_at as string).getTime() / 1000)
+              : Math.floor(Date.now() / 1000),
+          }));
+        }
+        // DB returned no rows — fall through to throw the original error
+        if (dbError) {
+          logger.warning('[StripeService] Direct DB fallback also failed.', { dbError });
+        }
+      } catch (dbFallbackErr) {
+        logger.warning('[StripeService] Direct DB fallback threw.', { error: dbFallbackErr });
       }
 
       // Use proper typing for enhanced error with dynamic properties
