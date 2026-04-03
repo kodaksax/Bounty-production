@@ -8,9 +8,9 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
 import { config } from '../config';
 import {
-    ExternalServiceError,
-    handleStripeError,
-    ValidationError,
+  ExternalServiceError,
+  handleStripeError,
+  ValidationError,
 } from '../middleware/error-handler';
 import { logger } from './logger';
 
@@ -118,7 +118,12 @@ export interface PaymentMethodResult {
  */
 export async function createStripeCustomerForNewUser(
   userId: string,
-  email?: string
+  email?: string,
+  // When true (default) swallow errors and return null so callers can
+  // fire-and-forget this during signup without failing the flow. When
+  // false, rethrow the underlying error so callers (e.g. payment flow)
+  // can handle Stripe errors precisely.
+  suppressErrors: boolean = true
 ): Promise<string | null> {
   const admin = getSupabaseAdmin();
 
@@ -162,6 +167,13 @@ export async function createStripeCustomerForNewUser(
       { userId, error },
       '[PaymentService] createStripeCustomerForNewUser: failed to create Stripe customer'
     );
+
+    if (!suppressErrors) {
+      // Propagate the original error so callers can classify/handle it
+      // (e.g. convert Stripe errors via handleStripeError).
+      throw error;
+    }
+
     return null;
   }
 }
@@ -215,7 +227,11 @@ export async function getOrCreateStripeCustomer(
   const customerEmail = email || profile?.email || undefined;
 
   try {
-    const customerId = await createStripeCustomerForNewUser(userId, customerEmail);
+    const customerId = await createStripeCustomerForNewUser(
+      userId,
+      customerEmail,
+      false
+    );
     if (customerId) {
       return customerId;
     }
