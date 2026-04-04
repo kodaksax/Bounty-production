@@ -131,6 +131,82 @@ This was a bug where the error message "Failed to fetch payment methods: ..." wa
 
 ---
 
+## Production 401 Errors — Setup Intent / Payment Methods
+
+### Symptom
+
+The `create-setup-intent` or `payments/methods` call returns a 401 error in the production environment, while staging and development work correctly. Terminal logs show:
+
+```
+[invokePayments] payments/create-setup-intent {"anonKeyRef": "projectA", ..., "url": "https://projectB.supabase.co/functions/v1/payments/create-setup-intent"}
+```
+
+Notice the **project ref mismatch**: `anonKeyRef` is from one Supabase project, but the URL targets a different project.
+
+### Root Cause
+
+The Supabase gateway validates that the JWT (auth token) and `apikey` (anon key) belong to the same Supabase project as the URL. If any of these point to different projects, the gateway rejects the request with 401 before the Edge Function is ever invoked.
+
+This mismatch can occur when:
+1. **EAS secrets are inconsistent** — `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` are set from different projects.
+2. **OTA update changed config** — An EAS Update pushed new `expoConfig.extra` values but the Metro-inlined `process.env` values from the native build are different.
+3. **Stale `.env.production` file** — A committed or cached env file overrides the EAS secret values at build time.
+
+### How to Fix
+
+#### 1. Verify EAS secrets are consistent
+
+All three values below **must be from the same Supabase project**:
+
+```bash
+# Check current secrets
+eas secret:list
+
+# Set/update secrets (replace <project-ref> with your production Supabase project ref)
+eas secret:create --scope project --name EXPO_PUBLIC_SUPABASE_URL \
+  --value "https://<project-ref>.supabase.co" --type string --force
+
+eas secret:create --scope project --name EXPO_PUBLIC_SUPABASE_ANON_KEY \
+  --value "<anon-key-from-same-project>" --type string --force
+
+# Optional but recommended — explicit Edge Functions URL
+eas secret:create --scope project --name EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL \
+  --value "https://<project-ref>.supabase.co/functions/v1" --type string --force
+```
+
+#### 2. Trigger a new production build
+
+After updating secrets, create a new EAS build so the values are baked into the native bundle:
+
+```bash
+eas build --platform all --profile production
+```
+
+#### 3. Verify after deployment
+
+Check the runtime logs for the mismatch warning. With the fix applied, a mismatch now produces an always-on warning (not just in `__DEV__`):
+
+```
+[invokePayments] ⚠️ PROJECT MISMATCH: anon key is for project "X" but URL targets "Y"
+```
+
+If you see this warning, the secrets are still inconsistent. Re-check step 1.
+
+#### 4. Deploy Edge Functions to the correct project
+
+Ensure Edge Functions are deployed to the **same** Supabase project referenced by your EAS secrets:
+
+```bash
+# Link to the correct project
+supabase link --project-ref <project-ref>
+
+# Deploy
+supabase functions deploy payments
+supabase functions deploy webhooks --no-verify-jwt
+```
+
+---
+
 ## Running Unit Tests
 
 ```bash

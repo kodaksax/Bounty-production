@@ -186,7 +186,38 @@ async function invokePayments<T>(
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
 
-    // Diagnostic logging to help trace persistent 401s
+    // ── Project-ref mismatch detection (always-on, not just __DEV__) ───────
+    // Extract the project ref from the anon key and the URL. If they differ,
+    // the Supabase gateway will reject the JWT with 401 before the Edge
+    // Function is even invoked. This is the primary diagnostic for the
+    // "setup intent 401" production bug.
+    try {
+      let anonKeyRef: string | undefined;
+      if (supabaseAnonKey) {
+        const [, ap] = supabaseAnonKey.split('.');
+        const ad = JSON.parse(atob(ap.replace(/-/g, '+').replace(/_/g, '/')));
+        anonKeyRef = ad.ref;
+      }
+      // Extract project ref from URL: https://<ref>.supabase.co/...
+      let urlRef: string | undefined;
+      try {
+        const urlHost = new URL(url).hostname;
+        if (urlHost.endsWith('.supabase.co')) {
+          urlRef = urlHost.split('.')[0];
+        }
+      } catch { /* ignore */ }
+
+      if (anonKeyRef && urlRef && anonKeyRef !== urlRef) {
+        // This is a critical configuration error — always log even in production
+        logger.warning(
+          `[invokePayments] ⚠️ PROJECT MISMATCH: anon key is for project "${anonKeyRef}" but URL targets "${urlRef}". ` +
+          `This WILL cause 401 errors. Check EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY are from the same Supabase project.`,
+          { subPath, anonKeyRef, urlRef }
+        );
+      }
+    } catch { /* ignore diagnostic errors */ }
+
+    // Detailed diagnostic logging (dev only — verbose info for debugging)
     if (__DEV__) {
       try {
         const hasToken = !!token;
@@ -202,9 +233,6 @@ async function invokePayments<T>(
           tokenSub = decoded.sub;
         }
         const nowSec = Math.floor(Date.now() / 1000);
-        // Extract the project ref from the anon key JWT (`ref` claim) to verify
-        // it matches the target URL project ref. A mismatch means the gateway will
-        // reject with "Invalid JWT" before reaching the edge function.
         let anonKeyRef: string | undefined;
         try {
           const ak = supabaseAnonKey;

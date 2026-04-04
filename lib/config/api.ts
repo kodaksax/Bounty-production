@@ -19,18 +19,42 @@ function fromExtra(key: string): string {
 // Functions automatically without extra configuration.
 // Format: https://<project-ref>.supabase.co/functions/v1  (no trailing slash)
 //
-// Priority: Constants.expoConfig.extra (set by app.config.js at server-start time
-// using the correct env file with override:true) BEFORE Metro-baked process.env.
-// This prevents a base .env file's stale values from shadowing .env.staging when
-// running `expo start` with APP_ENV=staging.
-const explicitFunctionsUrl = fromExtra('EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL')
-  || (process.env.EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL as string | undefined)?.trim()
+// Resolution order: process.env FIRST, then Constants.expoConfig.extra.
+// This MUST match lib/config.ts's resolution order (which configures the
+// Supabase auth client) to guarantee the Edge Function URL always targets
+// the same Supabase project as the auth session. A mismatch causes 401
+// errors because the Supabase gateway rejects JWTs issued by a different project.
+//
+// NOTE: In earlier versions expoConfig.extra was checked first to handle
+// .env file shadowing in dev, but this caused production 401s when an OTA
+// update or env-file mismatch made the two sources disagree. Matching the
+// resolution order of lib/config.ts is the correct fix — both modules now
+// agree on which Supabase project to use.
+const explicitFunctionsUrl = (process.env.EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL as string | undefined)?.trim()
+  || fromExtra('EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL')
   || ''
-const supabaseBaseUrl = fromExtra('EXPO_PUBLIC_SUPABASE_URL')
-  || (process.env.EXPO_PUBLIC_SUPABASE_URL as string | undefined)?.trim()
+const supabaseBaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL as string | undefined)?.trim()
+  || fromExtra('EXPO_PUBLIC_SUPABASE_URL')
   || ''
 const derivedFunctionsUrl = supabaseBaseUrl ? `${supabaseBaseUrl.replace(/\/+$/, '')}/functions/v1` : ''
 const supabaseFunctionsUrl = (explicitFunctionsUrl || derivedFunctionsUrl).replace(/\/+$/, '')
+
+// ── Mismatch detection ─────────────────────────────────────────────────────
+// Log a warning if expoConfig.extra and process.env disagree on the Supabase
+// URL. This is the root cause of production 401 errors when process.env
+// (used by lib/config.ts for auth) points to project A but expoConfig.extra
+// (previously used here) points to project B.
+try {
+  const envUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL as string | undefined)?.trim() || ''
+  const extraUrl = fromExtra('EXPO_PUBLIC_SUPABASE_URL') || ''
+  if (envUrl && extraUrl && envUrl !== extraUrl) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[API Config] ⚠️ Supabase URL mismatch detected: process.env="${envUrl.substring(0, 50)}" vs expoConfig.extra="${extraUrl.substring(0, 50)}". ` +
+      `Using process.env to match auth client. This may indicate stale OTA config or env file conflict.`
+    )
+  }
+} catch { /* ignore diagnostic errors */ }
 
 // Preferred environment variables (Expo public envs are bundled to client)
 const preferred = (process.env.EXPO_PUBLIC_API_BASE_URL as string | undefined)
