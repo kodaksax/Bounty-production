@@ -48,9 +48,12 @@ try {
   const envUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL as string | undefined)?.trim() || ''
   const extraUrl = fromExtra('EXPO_PUBLIC_SUPABASE_URL') || ''
   if (envUrl && extraUrl && envUrl !== extraUrl) {
+    // Extract project refs (hostname before .supabase.co) for clear diagnostics
+    const envRef = (() => { try { return new URL(envUrl).hostname.split('.')[0]; } catch { return envUrl.substring(0, 50); } })()
+    const extraRef = (() => { try { return new URL(extraUrl).hostname.split('.')[0]; } catch { return extraUrl.substring(0, 50); } })()
     // eslint-disable-next-line no-console
     console.warn(
-      `[API Config] ⚠️ Supabase URL mismatch detected: process.env="${envUrl.substring(0, 50)}" vs expoConfig.extra="${extraUrl.substring(0, 50)}". ` +
+      `[API Config] ⚠️ Supabase URL mismatch detected: process.env project="${envRef}" vs expoConfig.extra project="${extraRef}". ` +
       `Using process.env to match auth client. This may indicate stale OTA config or env file conflict.`
     )
   }

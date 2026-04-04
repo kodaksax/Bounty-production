@@ -194,18 +194,22 @@ async function invokePayments<T>(
     try {
       let anonKeyRef: string | undefined;
       if (supabaseAnonKey) {
-        const [, ap] = supabaseAnonKey.split('.');
-        const ad = JSON.parse(atob(ap.replace(/-/g, '+').replace(/_/g, '/')));
-        anonKeyRef = ad.ref;
+        const parts = supabaseAnonKey.split('.');
+        if (parts.length >= 2 && parts[1]) {
+          const ad = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+          anonKeyRef = ad.ref;
+        }
       }
       // Extract project ref from URL: https://<ref>.supabase.co/...
+      // Supabase URLs always use <ref>.supabase.co (no extra subdomains).
       let urlRef: string | undefined;
       try {
         const urlHost = new URL(url).hostname;
-        if (urlHost.endsWith('.supabase.co')) {
-          urlRef = urlHost.split('.')[0];
+        const dotParts = urlHost.split('.');
+        if (dotParts.length >= 3 && dotParts.slice(-2).join('.') === 'supabase.co') {
+          urlRef = dotParts.slice(0, -2).join('.');
         }
-      } catch { /* ignore */ }
+      } catch { /* ignore malformed URL */ }
 
       if (anonKeyRef && urlRef && anonKeyRef !== urlRef) {
         // This is a critical configuration error — always log even in production
