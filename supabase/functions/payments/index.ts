@@ -95,6 +95,18 @@ async function resolveStripeCustomerForUser(params: {
     console.error('[payments] Failed to fetch profile during customer resolution', { userId, profileError })
   }
 
+  // Guard: if the profile row is genuinely missing (no error, just no row), bail out
+  // early so we never create a Stripe customer we cannot persist. An .update() against
+  // a non-existent row silently affects zero rows and returns no error — the customer
+  // would be orphaned and would multiply on every subsequent call.
+  if (!profile && !profileError) {
+    console.error('[payments] Profile row not found for user; cannot resolve Stripe customer', { userId })
+    return {
+      error: 'User profile not found. Please complete your profile setup and try again.',
+      status: 404,
+    }
+  }
+
   let customerId = profile?.stripe_customer_id ?? null
   if (customerId) {
     try {
