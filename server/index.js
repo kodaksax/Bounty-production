@@ -1340,8 +1340,38 @@ app.get('/wallet/balance', apiLimiter, authenticateUser, async (req, res) => {
       return res.status(500).json({ error: 'Failed to fetch balance' });
     }
 
+    let balance = profile?.balance || 0;
+
+    // Cross-check: when cached balance is 0, derive from completed transactions.
+    // wallet_transactions stores signed amounts (negative for debits), so we
+    // sum them directly instead of applying direction based on type.
+    if (balance === 0) {
+      const { data: txRows } = await supabase
+        .from('wallet_transactions')
+        .select('amount')
+        .eq('user_id', userId)
+        .eq('status', 'completed');
+
+      if (txRows && txRows.length > 0) {
+        let derived = 0;
+        for (const tx of txRows) {
+          derived += Number(tx.amount) || 0;
+        }
+        if (derived > 0) {
+          balance = derived;
+          // Reconcile (fire-and-forget)
+          supabase
+            .from('profiles')
+            .update({ balance: derived, updated_at: new Date().toISOString() })
+            .eq('id', userId)
+            .then(() => console.log('[Wallet] Reconciled stale profile balance', { userId, derived }))
+            .catch((err) => console.warn('[Wallet] Failed to reconcile cached balance', { userId, err }));
+        }
+      }
+    }
+
     res.json({
-      balance: profile?.balance || 0,
+      balance,
       currency: 'USD',
     });
 
@@ -1596,4 +1626,13 @@ if (require.main === module) {
   startServer();
 }
 
-module.exports = { app, startServer, getServer: () => server };
+module.exports = {
+  app,
+  startServer,
+  getServer: () => server,
+  // Export sanitizers for unit tests
+  sanitizeText,
+  sanitizeNumber,
+  sanitizeNonNegativeNumber,
+  sanitizePositiveNumber,
+};

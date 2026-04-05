@@ -67,7 +67,37 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ error: 'Failed to fetch balance' }, 500)
       }
 
-      return jsonResponse({ balance: (profile as Profile | null)?.balance ?? 0, currency: 'USD' })
+      let balance = (profile as Profile | null)?.balance ?? 0
+
+      // Cross-check: when cached balance is 0, derive from completed
+      // transactions. wallet_transactions stores signed amounts (negative for
+      // debits), so we sum them directly instead of applying direction by type.
+      if (balance === 0) {
+        const { data: txRows } = await supabase
+          .from('wallet_transactions')
+          .select('amount')
+          .eq('user_id', userId)
+          .eq('status', 'completed')
+
+        if (txRows && txRows.length > 0) {
+          let derived = 0
+          for (const tx of txRows as { amount: number }[]) {
+            derived += Number(tx.amount) || 0
+          }
+          if (derived > 0) {
+            balance = derived
+            // Reconcile (fire-and-forget)
+            supabase
+              .from('profiles')
+              .update({ balance: derived, updated_at: new Date().toISOString() })
+              .eq('id', userId)
+              .then(() => console.log('[wallet] Reconciled stale profile balance', userId, derived))
+              .catch((err: unknown) => console.warn('[wallet] Failed to reconcile cached balance', userId, err))
+          }
+        }
+      }
+
+      return jsonResponse({ balance, currency: 'USD' })
     }
 
     // GET /wallet/transactions

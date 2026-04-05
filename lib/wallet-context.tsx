@@ -157,9 +157,12 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         // Mode), so persist(resolvedBalance) could run before the updater executes
         // and end up persisting the wrong value.
         const now = Date.now();
+        // Use a 5-minute window (up from 60s) to cover slow webhook processing
+        // and, critically, persisted timestamps that survive cold restarts.
+        const OPTIMISTIC_WINDOW_MS = 5 * 60 * 1000;
         const hasRecentOptimisticDeposit =
           lastOptimisticDepositRef.current !== null &&
-          now - lastOptimisticDepositRef.current < 60_000;
+          now - lastOptimisticDepositRef.current < OPTIMISTIC_WINDOW_MS;
 
         const currentBalance = balanceRef.current;
 
@@ -169,6 +172,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         if (!hasRecentOptimisticDeposit || currentBalance <= apiBalance) {
           lastOptimisticDepositRef.current = null;
+          // Clear persisted timestamp so future cold starts don't use a stale guard
+          setSecureJSON(SecureKeys.WALLET_LAST_DEPOSIT_TS, null).catch((e) => {
+            console.error('[wallet] Failed to clear deposit timestamp', e);
+          });
         }
 
         setBalance(resolvedBalance);
@@ -248,6 +255,15 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         await persist(INITIAL_BALANCE);
       }
 
+      // Restore last optimistic deposit timestamp so the guard survives cold
+      // restarts.  Without this the ref is always null after a restart and
+      // refreshFromApi would unconditionally overwrite the locally-persisted
+      // balance with the (potentially stale) API balance.
+      const storedDepositTs = await getSecureJSON<number>(SecureKeys.WALLET_LAST_DEPOSIT_TS);
+      if (typeof storedDepositTs === 'number' && storedDepositTs > 0) {
+        lastOptimisticDepositRef.current = storedDepositTs;
+      }
+
       // Load transactions from SecureStore
       const storedTx = await getSecureJSON<any[]>(SecureKeys.WALLET_TRANSACTIONS);
       if (storedTx && Array.isArray(storedTx)) {
@@ -286,10 +302,12 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           await Promise.all([
             setSecureJSON(SecureKeys.WALLET_BALANCE, INITIAL_BALANCE),
             setSecureJSON(SecureKeys.WALLET_TRANSACTIONS, []),
+            setSecureJSON(SecureKeys.WALLET_LAST_DEPOSIT_TS, null),
           ]);
         } catch (err) {
           console.error('[wallet] Error clearing data on sign-out:', err);
         }
+        lastOptimisticDepositRef.current = null;
         setBalance(INITIAL_BALANCE);
         setTransactions([]);
       }
@@ -334,6 +352,11 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return next;
     });
     lastOptimisticDepositRef.current = Date.now();
+    // Persist the timestamp so the optimistic guard survives cold restarts.
+    // Fire-and-forget; the in-memory ref is already set above.
+    setSecureJSON(SecureKeys.WALLET_LAST_DEPOSIT_TS, Date.now()).catch((e) => {
+      console.error('[wallet] Failed to persist deposit timestamp', e);
+    });
     await logTransaction({
       type: 'deposit',
       amount: amount, // inflow positive

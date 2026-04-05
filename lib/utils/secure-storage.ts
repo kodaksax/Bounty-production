@@ -25,6 +25,7 @@ const SECURE_OPTS: SecureStore.SecureStoreOptions | undefined =
 const SENSITIVE_KEYS = new Set([
   '@bountyexpo:secure:wallet_balance',
   '@bountyexpo:secure:wallet_transactions',
+  '@bountyexpo:secure:wallet_last_deposit_ts',
   '@bountyexpo:secure:payment_token',
 ]);
 
@@ -284,6 +285,7 @@ export const SecureKeys = {
   // Wallet
   WALLET_BALANCE: '@bountyexpo:secure:wallet_balance',
   WALLET_TRANSACTIONS: '@bountyexpo:secure:wallet_transactions',
+  WALLET_LAST_DEPOSIT_TS: '@bountyexpo:secure:wallet_last_deposit_ts',
   
   // Privacy & Security Settings
   PRIVACY_SETTINGS: '@bountyexpo:secure:privacy_settings',
