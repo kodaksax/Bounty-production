@@ -1626,4 +1626,13 @@ if (require.main === module) {
   startServer();
 }
 
-module.exports = { app, startServer, getServer: () => server };
+module.exports = {
+  app,
+  startServer,
+  getServer: () => server,
+  // Export sanitizers for unit tests
+  sanitizeText,
+  sanitizeNumber,
+  sanitizeNonNegativeNumber,
+  sanitizePositiveNumber,
+};
