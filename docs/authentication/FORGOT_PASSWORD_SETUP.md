@@ -20,16 +20,16 @@ Complete guide for configuring the forgot-password / reset-password flow in BOUN
 
 ## Overview
 
-The forgot-password flow allows users to request a password reset link via email, click the link to open the app, and set a new password. The flow is built on Supabase Auth and uses deep links to route users back into the mobile app.
+The forgot-password flow allows users to request a password reset link via email, click the link to open the app, and set a new password. The flow is built on Supabase Auth and uses universal links to route users back into the mobile app. When the link is opened on a desktop browser or a device without the app installed, a web-based password update page (hosted on GitHub Pages) handles the flow as a fallback.
 
 ### Flow Summary
 
 ```
 User taps "Forgot?" → enters email → taps "Send Reset Link"
   → Supabase sends reset email → user clicks link
-  → app opens auth/callback → session established
-  → redirects to update-password screen → user sets new password
-  → password updated → user signs in
+  → Mobile: app opens auth/callback → session established → update-password screen
+  → Desktop/Web: bountyfinder.app/auth/callback page loads → web password form
+  → user sets new password → password updated → user signs in
 ```
 
 ### Key Files
@@ -42,6 +42,8 @@ User taps "Forgot?" → enters email → taps "Send Reset Link"
 | `lib/services/auth-service.ts` | Service layer: `requestPasswordReset()`, `updatePassword()`, `verifyResetToken()` |
 | `lib/utils/password-validation.ts` | Password strength checking, email validation |
 | `lib/config/app.ts` | Deep link scheme configuration |
+| `docs/auth/callback/index.html` | Web fallback: callback + password update form (GitHub Pages) |
+| `docs/auth/update-password/index.html` | Web fallback: informational landing page |
 
 ---
 
@@ -60,10 +62,22 @@ User taps "Forgot?" → enters email → taps "Send Reset Link"
                                                └──────┬───────────┘
                                                        │ clicks link
                                                        ▼
-┌─────────────────┐     ┌────────────────┐     ┌──────────────────┐
-│ update-password  │◀────│  auth/callback  │◀────│  Deep Link /     │
-│   (screen)       │     │  (screen)       │     │  Universal Link  │
-└─────────────────┘     └────────────────┘     └──────────────────┘
+                                               ┌──────────────────┐
+                                               │ bountyfinder.app │
+                                               │ /auth/callback   │
+                                               └──────┬───────────┘
+                                      ┌───────────────┤
+                                      ▼               ▼
+                               ┌──────────┐   ┌───────────────────┐
+                               │ Mobile   │   │ Desktop / Web     │
+                               │ (app     │   │ (GitHub Pages     │
+                               │  opens)  │   │  password form)   │
+                               └────┬─────┘   └───────────────────┘
+                                    ▼
+┌─────────────────┐     ┌────────────────┐
+│ update-password  │◀────│  auth/callback  │
+│   (screen)       │     │  (screen)       │
+└─────────────────┘     └────────────────┘
 ```
 
 ---
@@ -83,10 +97,13 @@ The following environment variables are relevant to the forgot-password flow. Se
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `EXPO_PUBLIC_AUTH_REDIRECT_URL` | Override the redirect URL in reset emails | `bountyexpo-workspace://auth/callback` |
+| `EXPO_PUBLIC_AUTH_REDIRECT_URL` | Override the redirect URL in reset emails | `https://bountyfinder.app/auth/callback` |
 | `EXPO_PUBLIC_DEEP_LINK_SCHEME` | App deep link scheme | `bountyexpo-workspace` |
 
-> **Note:** The deep link scheme is configured in `lib/config/app.ts` and defaults to `bountyexpo-workspace`.
+> **Note:** The default redirect URL is `https://bountyfinder.app/auth/callback` (a web URL).
+> This ensures reset links work on both mobile (the OS opens the app via universal links)
+> and desktop browsers (a web-based password form loads on GitHub Pages).
+> The deep link scheme is configured in `lib/config/app.ts` and defaults to `bountyexpo-workspace`.
 
 ---
 
@@ -179,6 +196,53 @@ Configured in `app.json`:
 Both platforms also support the `bountyexpo-workspace://` custom scheme, which
 Expo Router resolves directly. This is set in `app.json` → `scheme` and in
 `lib/config/app.ts`.
+
+---
+
+## Web Fallback (GitHub Pages)
+
+When a user opens the password reset link on a desktop browser or a device
+without the app installed, the link lands on a web-based password update page
+hosted via GitHub Pages at `https://bountyfinder.app/auth/callback`.
+
+### How It Works
+
+1. **Reset email redirect** points to `https://bountyfinder.app/auth/callback`
+   (a universal link / web URL).
+2. **On mobile** (with the app installed), the OS intercepts the universal link
+   and opens the app directly — the existing in-app callback flow takes over.
+3. **On desktop / web**, the browser loads `docs/auth/callback/index.html` which:
+   - Extracts the auth tokens from the URL hash fragment.
+   - Attempts to open the mobile app via deep link (for edge cases).
+   - After a short timeout, displays an inline password update form.
+   - Uses the Supabase JS client (CDN) to set the session and update the password.
+
+### Setup
+
+The web pages are auto-deployed from the `docs/` directory to GitHub Pages
+(see `.github/workflows/deploy-pages.yml`).
+
+**Required one-time configuration:**
+
+Edit `docs/auth/callback/index.html` and replace the placeholder credentials
+at the top of the `<script>` block:
+
+```javascript
+var SUPABASE_URL  = 'REPLACE_WITH_SUPABASE_URL';   // e.g. https://abc123.supabase.co
+var SUPABASE_ANON = 'REPLACE_WITH_SUPABASE_ANON_KEY'; // your Supabase anon/public key
+```
+
+> **Note:** The anon key is a public value designed for client-side use — it is
+> safe to include in the HTML.  The web page enforces the same password
+> requirements as the mobile app (min 8 chars, uppercase, lowercase, number,
+> special character).
+
+### Files
+
+| File | URL | Purpose |
+|------|-----|---------|
+| `docs/auth/callback/index.html` | `bountyfinder.app/auth/callback` | Token exchange + password update form |
+| `docs/auth/update-password/index.html` | `bountyfinder.app/auth/update-password` | Informational landing page |
 
 ---
 
