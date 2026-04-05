@@ -101,3 +101,5 @@ temp/
 # Local editor/history artifacts
 .history/
 /supabase/.temp/
+# Generated docs config (created during deploy) - do not commit
+docs/auth/callback/config.json

@@ -247,11 +247,33 @@
         'use strict';
 
         // ──────────────────────────────────────────────────────────────
-        // CONFIGURATION — replace with your actual Supabase credentials.
-        // These are public (anon) values safe for client-side use.
-        // ──────────────────────────────────────────────────────────────
-        var SUPABASE_URL  = window.__SUPABASE_URL__  || 'REPLACE_WITH_SUPABASE_URL';
-        var SUPABASE_ANON = window.__SUPABASE_ANON__ || 'REPLACE_WITH_SUPABASE_ANON_KEY';
+        // CONFIGURATION — Supabase credentials.
+        // For security, do NOT hardcode credentials in tracked files.
+        // Recommended: generate `config.json` at build/deploy time from
+        // environment variables (see `scripts/generate-docs-config.js`),
+        // or set `window.__SUPABASE_URL__` / `window.__SUPABASE_ANON__`
+        // when serving this file.
+        var SUPABASE_URL  = window.__SUPABASE_URL__  || null;
+        var SUPABASE_ANON = window.__SUPABASE_ANON__ || null;
+
+        // Attempt to load a generated `config.json` (created at deploy time)
+        // located in the same directory as this HTML file.
+        function loadDocsConfig() {
+            return fetch('config.json', { cache: 'no-store' })
+                .then(function(res) { if (!res.ok) return {}; return res.json(); })
+                .catch(function() { return {}; });
+        }
+
+        // Initialize configured flag; we'll set it once the generated config (if any) loads.
+        var SUPABASE_CONFIGURED = false;
+
+        // Start loading generated config immediately so it's available before the
+        // timeout below decides whether to show the web form fallback.
+        loadDocsConfig().then(function(cfg) {
+            if (cfg.SUPABASE_URL) SUPABASE_URL = SUPABASE_URL || cfg.SUPABASE_URL;
+            if (cfg.SUPABASE_ANON) SUPABASE_ANON = SUPABASE_ANON || cfg.SUPABASE_ANON;
+            SUPABASE_CONFIGURED = !!(SUPABASE_URL && SUPABASE_ANON);
+        });
 
         // Deep link scheme for the mobile app
         var APP_SCHEME = 'bountyexpo-workspace';
@@ -365,7 +387,7 @@
         } catch (e) { /* Ignore deep link errors */ }
 
         // After a timeout, show the web form as fallback
-        var SUPABASE_CONFIGURED = SUPABASE_URL !== 'REPLACE_WITH_SUPABASE_URL' && SUPABASE_ANON !== 'REPLACE_WITH_SUPABASE_ANON_KEY';
+        var SUPABASE_CONFIGURED = !!(SUPABASE_URL && SUPABASE_ANON);
 
         setTimeout(function() {
             hide('state-loading');
