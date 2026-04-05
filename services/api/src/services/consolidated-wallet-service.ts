@@ -127,14 +127,13 @@ export interface TransactionsResult {
   offset: number;
 }
 
-// Transaction types that add to the user's balance
-const INFLOW_TYPES = ['deposit', 'release', 'refund', 'bounty_received'];
-// Transaction types that subtract from the user's balance
-const OUTFLOW_TYPES = ['withdrawal', 'escrow', 'bounty_posted'];
-
 /**
  * Compute the authoritative balance by summing completed wallet_transactions.
  * Used as a cross-check / fallback when profiles.balance might be stale.
+ *
+ * wallet_transactions stores **signed** amounts: deposits/releases/refunds are
+ * positive, escrows/withdrawals are negative. We therefore sum them directly
+ * instead of applying direction based on type, which would double-negate debits.
  */
 async function deriveBalanceFromTransactions(
   admin: SupabaseClient<any>,
@@ -142,7 +141,7 @@ async function deriveBalanceFromTransactions(
 ): Promise<number> {
   const { data: transactions, error } = await admin
     .from('wallet_transactions')
-    .select('type, amount')
+    .select('amount')
     .eq('user_id', userId)
     .eq('status', 'completed');
 
@@ -150,12 +149,7 @@ async function deriveBalanceFromTransactions(
 
   let balance = 0;
   for (const tx of transactions) {
-    const amt = Number(tx.amount) || 0;
-    if (INFLOW_TYPES.includes(tx.type)) {
-      balance += amt;
-    } else if (OUTFLOW_TYPES.includes(tx.type)) {
-      balance -= amt;
-    }
+    balance += Number(tx.amount) || 0;
   }
   return balance;
 }

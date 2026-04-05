@@ -1342,24 +1342,20 @@ app.get('/wallet/balance', apiLimiter, authenticateUser, async (req, res) => {
 
     let balance = profile?.balance || 0;
 
-    // Cross-check: when cached balance is 0, derive from completed transactions
-    // to catch stale profiles.balance (e.g. deposit webhook created the tx but
-    // the profile update was lost).
+    // Cross-check: when cached balance is 0, derive from completed transactions.
+    // wallet_transactions stores signed amounts (negative for debits), so we
+    // sum them directly instead of applying direction based on type.
     if (balance === 0) {
-      const INFLOW = ['deposit', 'release', 'refund', 'bounty_received'];
-      const OUTFLOW = ['withdrawal', 'escrow', 'bounty_posted'];
       const { data: txRows } = await supabase
         .from('wallet_transactions')
-        .select('type, amount')
+        .select('amount')
         .eq('user_id', userId)
         .eq('status', 'completed');
 
       if (txRows && txRows.length > 0) {
         let derived = 0;
         for (const tx of txRows) {
-          const amt = Number(tx.amount) || 0;
-          if (INFLOW.includes(tx.type)) derived += amt;
-          else if (OUTFLOW.includes(tx.type)) derived -= amt;
+          derived += Number(tx.amount) || 0;
         }
         if (derived > 0) {
           balance = derived;
