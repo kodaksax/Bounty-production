@@ -1366,10 +1366,10 @@ app.get('/wallet/balance', apiLimiter, authenticateUser, async (req, res) => {
           // Reconcile (fire-and-forget)
           supabase
             .from('profiles')
-            .update({ balance: derived })
+            .update({ balance: derived, updated_at: new Date().toISOString() })
             .eq('id', userId)
-            .then(() => {})
-            .catch(() => {});
+            .then(() => console.log('[Wallet] Reconciled stale profile balance', { userId, derived }))
+            .catch((err) => console.warn('[Wallet] Failed to reconcile cached balance', { userId, err }));
         }
       }
     }

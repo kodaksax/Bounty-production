@@ -93,10 +93,10 @@ Deno.serve(async (req: Request) => {
             // Reconcile (fire-and-forget)
             supabase
               .from('profiles')
-              .update({ balance: derived })
+              .update({ balance: derived, updated_at: new Date().toISOString() })
               .eq('id', userId)
-              .then(() => {})
-              .catch(() => {})
+              .then(() => console.log('[wallet] Reconciled stale profile balance', userId, derived))
+              .catch((err: unknown) => console.warn('[wallet] Failed to reconcile cached balance', userId, err))
           }
         }
       }

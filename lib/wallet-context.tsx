@@ -173,7 +173,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (!hasRecentOptimisticDeposit || currentBalance <= apiBalance) {
           lastOptimisticDepositRef.current = null;
           // Clear persisted timestamp so future cold starts don't use a stale guard
-          setSecureJSON(SecureKeys.WALLET_LAST_DEPOSIT_TS, null).catch(() => {});
+          setSecureJSON(SecureKeys.WALLET_LAST_DEPOSIT_TS, null).catch((e) => {
+            console.error('[wallet] Failed to clear deposit timestamp', e);
+          });
         }
 
         setBalance(resolvedBalance);
@@ -352,7 +354,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     lastOptimisticDepositRef.current = Date.now();
     // Persist the timestamp so the optimistic guard survives cold restarts.
     // Fire-and-forget; the in-memory ref is already set above.
-    setSecureJSON(SecureKeys.WALLET_LAST_DEPOSIT_TS, Date.now()).catch(() => {});
+    setSecureJSON(SecureKeys.WALLET_LAST_DEPOSIT_TS, Date.now()).catch((e) => {
+      console.error('[wallet] Failed to persist deposit timestamp', e);
+    });
     await logTransaction({
       type: 'deposit',
       amount: amount, // inflow positive

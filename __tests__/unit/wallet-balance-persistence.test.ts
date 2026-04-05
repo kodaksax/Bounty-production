@@ -102,13 +102,13 @@ describe('Wallet balance persistence', () => {
       const now = Date.now();
       const OPTIMISTIC_WINDOW_MS = 5 * 60 * 1000;
       const hasRecentDeposit =
-        restoredTs !== null && now - restoredTs! < OPTIMISTIC_WINDOW_MS;
+        restoredTs !== null && now - (restoredTs as number) < OPTIMISTIC_WINDOW_MS;
       expect(hasRecentDeposit).toBe(true);
 
       // Simulated API balance = 0 (server hasn't caught up)
       const apiBalance = 0;
       const resolvedBalance =
-        hasRecentDeposit && restoredBalance! > apiBalance
+        hasRecentDeposit && (restoredBalance as number) > apiBalance
           ? restoredBalance
           : apiBalance;
 
@@ -127,12 +127,12 @@ describe('Wallet balance persistence', () => {
       const now = Date.now();
       const OPTIMISTIC_WINDOW_MS = 5 * 60 * 1000;
       const hasRecentDeposit =
-        restoredTs !== null && now - restoredTs! < OPTIMISTIC_WINDOW_MS;
+        restoredTs !== null && now - (restoredTs as number) < OPTIMISTIC_WINDOW_MS;
 
       // API now returns the correct $100 balance
       const apiBalance = 100;
       const resolvedBalance =
-        hasRecentDeposit && restoredBalance! > apiBalance
+        hasRecentDeposit && (restoredBalance as number) > apiBalance
           ? restoredBalance
           : apiBalance;
 
@@ -140,7 +140,7 @@ describe('Wallet balance persistence', () => {
       expect(resolvedBalance).toBe(100);
 
       // Guard should be cleared
-      const shouldClearGuard = !hasRecentDeposit || restoredBalance! <= apiBalance;
+      const shouldClearGuard = !hasRecentDeposit || (restoredBalance as number) <= apiBalance;
       expect(shouldClearGuard).toBe(true);
     });
 
@@ -156,14 +156,14 @@ describe('Wallet balance persistence', () => {
       const now = Date.now();
       const OPTIMISTIC_WINDOW_MS = 5 * 60 * 1000;
       const hasRecentDeposit =
-        restoredTs !== null && now - restoredTs! < OPTIMISTIC_WINDOW_MS;
+        restoredTs !== null && now - (restoredTs as number) < OPTIMISTIC_WINDOW_MS;
 
       expect(hasRecentDeposit).toBe(false);
 
       // API balance is 0 but guard is expired → uses API
       const apiBalance = 0;
       const resolvedBalance =
-        hasRecentDeposit && restoredBalance! > apiBalance
+        hasRecentDeposit && (restoredBalance as number) > apiBalance
           ? restoredBalance
           : apiBalance;
 
