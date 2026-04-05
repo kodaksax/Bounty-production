@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BOUNTYExpo — Update Password</title>
+    <meta name="robots" content="noindex, nofollow">
+    <style>
+        /* Minimal self-contained styles — emerald theme matching the app */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background-color: #047857; min-height: 100vh; color: #fff;
+            display: flex; justify-content: center; padding: 24px 16px;
+        }
+        .container { max-width: 440px; width: 100%; }
+        header { text-align: center; padding: 20px 0 10px; }
+        header h1 { font-size: 2rem; }
+        .subtitle { color: rgba(255,255,255,0.8); font-size: 1rem; margin-top: 4px; }
+        .auth-card {
+            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 12px; padding: 32px 24px; text-align: center; margin-top: 24px;
+        }
+        .auth-card p { color: rgba(255,255,255,0.8); margin-bottom: 16px; line-height: 1.5; }
+        .icon-circle { width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; font-size: 2.5rem; }
+        .auth-title { font-size: 1.4rem; font-weight: 700; margin-bottom: 8px; }
+
+        .info-box { background: rgba(255,255,255,0.08); border-radius: 8px; padding: 16px; margin-top: 24px; text-align: left; }
+        .info-box p { color: rgba(255,255,255,0.6); font-size: 0.9rem; line-height: 1.6; }
+        .info-box strong { color: rgba(255,255,255,0.85); }
+
+        .btn-primary {
+            display: block; width: 100%; padding: 14px; border-radius: 8px; border: none;
+            background: #059669; color: #fff; font-size: 1rem; font-weight: 600;
+            cursor: pointer; text-align: center; text-decoration: none; margin-top: 16px;
+            transition: background 0.2s;
+        }
+        .btn-primary:hover { background: #047857; }
+        footer { text-align: center; padding: 24px 0; color: rgba(255,255,255,0.4); font-size: 0.85rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎯 BOUNTYExpo</h1>
+            <p class="subtitle">Update Password</p>
+        </header>
+
+        <div class="auth-card">
+            <div class="icon-circle" style="background:rgba(255,255,255,0.12);">🔒</div>
+            <div class="auth-title">Update Your Password</div>
+            <p>To update your password, please use the reset link sent to your email. That link will bring you to a secure form where you can set a new password.</p>
+            <p>If you haven't requested a reset link yet, open the BOUNTYExpo app and tap <strong>"Forgot Password?"</strong> on the sign-in screen.</p>
+
+            <a href="bountyexpo-workspace://auth/reset-password" class="btn-primary">Open App</a>
+
+            <div class="info-box">
+                <p><strong>How it works:</strong></p>
+                <p>1. Open the BOUNTYExpo app and tap "Forgot Password?"<br>
+                   2. Enter your email and tap "Send Reset Link"<br>
+                   3. Check your email and click the reset link<br>
+                   4. The link opens a secure page where you set a new password</p>
+                <p style="margin-top:12px"><strong>Having trouble?</strong> Contact us at <a href="mailto:Support@bountyfinder.app" style="color:#6ee7b7;">Support@bountyfinder.app</a></p>
+            </div>
+        </div>
+
+        <footer>
+            <p>&copy; 2025 Bounty Finder. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <script>
+    // If this page was loaded with auth tokens in the URL hash (redirected from Supabase),
+    // redirect to the callback page which handles the full flow.
+    (function() {
+        var hash = window.location.hash;
+        if (hash && (hash.indexOf('access_token') !== -1 || hash.indexOf('token') !== -1)) {
+            window.location.replace('/auth/callback/' + hash);
+        }
+    })();
+    </script>
+</body>
+</html>
