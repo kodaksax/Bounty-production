@@ -110,6 +110,21 @@ enable_confirmations = false
 [functions.payments]
 verify_jwt = false
 
+# wallet: handles its own auth via supabase.auth.getUser(token).
+# Without this override the Supabase gateway can reject valid user JWTs
+# before the function is reached, causing GET /wallet/balance and
+# GET /wallet/transactions to return 401 errors.
+[functions.wallet]
+verify_jwt = false
+
+# completion: handles its own auth via supabaseAdmin.auth.getUser(token).
+[functions.completion]
+verify_jwt = false
+
+# connect: handles its own auth via supabase.auth.getUser(token).
+[functions.connect]
+verify_jwt = false
+
 # webhooks: receives events from Stripe (not from authenticated users),
 # so it must NOT require a Supabase JWT.
 [functions.webhooks]
