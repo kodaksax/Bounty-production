@@ -1340,8 +1340,42 @@ app.get('/wallet/balance', apiLimiter, authenticateUser, async (req, res) => {
       return res.status(500).json({ error: 'Failed to fetch balance' });
     }
 
+    let balance = profile?.balance || 0;
+
+    // Cross-check: when cached balance is 0, derive from completed transactions
+    // to catch stale profiles.balance (e.g. deposit webhook created the tx but
+    // the profile update was lost).
+    if (balance === 0) {
+      const INFLOW = ['deposit', 'release', 'refund', 'bounty_received'];
+      const OUTFLOW = ['withdrawal', 'escrow', 'bounty_posted'];
+      const { data: txRows } = await supabase
+        .from('wallet_transactions')
+        .select('type, amount')
+        .eq('user_id', userId)
+        .eq('status', 'completed');
+
+      if (txRows && txRows.length > 0) {
+        let derived = 0;
+        for (const tx of txRows) {
+          const amt = Number(tx.amount) || 0;
+          if (INFLOW.includes(tx.type)) derived += amt;
+          else if (OUTFLOW.includes(tx.type)) derived -= amt;
+        }
+        if (derived > 0) {
+          balance = derived;
+          // Reconcile (fire-and-forget)
+          supabase
+            .from('profiles')
+            .update({ balance: derived })
+            .eq('id', userId)
+            .then(() => {})
+            .catch(() => {});
+        }
+      }
+    }
+
     res.json({
-      balance: profile?.balance || 0,
+      balance,
       currency: 'USD',
     });
 

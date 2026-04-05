@@ -67,7 +67,41 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ error: 'Failed to fetch balance' }, 500)
       }
 
-      return jsonResponse({ balance: (profile as Profile | null)?.balance ?? 0, currency: 'USD' })
+      let balance = (profile as Profile | null)?.balance ?? 0
+
+      // Cross-check: when cached balance is 0, derive from completed
+      // transactions so stale profiles.balance doesn't report $0 when the
+      // user actually has funds.
+      if (balance === 0) {
+        const INFLOW = ['deposit', 'release', 'refund', 'bounty_received']
+        const OUTFLOW = ['withdrawal', 'escrow', 'bounty_posted']
+        const { data: txRows } = await supabase
+          .from('wallet_transactions')
+          .select('type, amount')
+          .eq('user_id', userId)
+          .eq('status', 'completed')
+
+        if (txRows && txRows.length > 0) {
+          let derived = 0
+          for (const tx of txRows as { type: string; amount: number }[]) {
+            const amt = Number(tx.amount) || 0
+            if (INFLOW.includes(tx.type)) derived += amt
+            else if (OUTFLOW.includes(tx.type)) derived -= amt
+          }
+          if (derived > 0) {
+            balance = derived
+            // Reconcile (fire-and-forget)
+            supabase
+              .from('profiles')
+              .update({ balance: derived })
+              .eq('id', userId)
+              .then(() => {})
+              .catch(() => {})
+          }
+        }
+      }
+
+      return jsonResponse({ balance, currency: 'USD' })
     }
 
     // GET /wallet/transactions

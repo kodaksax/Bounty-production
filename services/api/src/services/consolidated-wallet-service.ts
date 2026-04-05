@@ -127,6 +127,39 @@ export interface TransactionsResult {
   offset: number;
 }
 
+// Transaction types that add to the user's balance
+const INFLOW_TYPES = ['deposit', 'release', 'refund', 'bounty_received'];
+// Transaction types that subtract from the user's balance
+const OUTFLOW_TYPES = ['withdrawal', 'escrow', 'bounty_posted'];
+
+/**
+ * Compute the authoritative balance by summing completed wallet_transactions.
+ * Used as a cross-check / fallback when profiles.balance might be stale.
+ */
+async function deriveBalanceFromTransactions(
+  admin: SupabaseClient<any>,
+  userId: string,
+): Promise<number> {
+  const { data: transactions, error } = await admin
+    .from('wallet_transactions')
+    .select('type, amount')
+    .eq('user_id', userId)
+    .eq('status', 'completed');
+
+  if (error || !transactions) return 0;
+
+  let balance = 0;
+  for (const tx of transactions) {
+    const amt = Number(tx.amount) || 0;
+    if (INFLOW_TYPES.includes(tx.type)) {
+      balance += amt;
+    } else if (OUTFLOW_TYPES.includes(tx.type)) {
+      balance -= amt;
+    }
+  }
+  return balance;
+}
+
 /**
  * Get user's current wallet balance
  * @param userId - User ID
@@ -150,8 +183,33 @@ export async function getBalance(userId: string): Promise<BalanceResult> {
     });
   }
 
+  let balance = profile?.balance || 0;
+
+  // Cross-check: when the cached profile balance is 0, compute the
+  // authoritative balance from wallet_transactions.  This catches cases
+  // where a deposit webhook created a transaction but profiles.balance
+  // was not updated (e.g. race condition, partial failure, or a code path
+  // that inserts into wallet_transactions without updating profiles).
+  if (balance === 0) {
+    const derivedBalance = await deriveBalanceFromTransactions(admin, userId);
+    if (derivedBalance > 0) {
+      balance = derivedBalance;
+      // Reconcile the stale cached value (fire-and-forget)
+      Promise.resolve(
+        admin
+          .from('profiles')
+          .update({ balance: derivedBalance, updated_at: new Date().toISOString() })
+          .eq('id', userId)
+      ).then(() => {
+        logger.info({ userId, derivedBalance }, '[WalletService] Reconciled stale profile balance');
+      }).catch((err: unknown) => {
+        logger.warn({ userId, derivedBalance, err }, '[WalletService] Failed to reconcile cached balance');
+      });
+    }
+  }
+
   return {
-    balance: profile?.balance || 0,
+    balance,
     currency: 'USD',
     user_id: userId,
   };
