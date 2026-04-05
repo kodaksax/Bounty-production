@@ -70,6 +70,8 @@ coverage/
 tests/load/results/
 *.summary.json
 *.html
+# Allow HTML files in docs/ (GitHub Pages)
+!docs/**/*.html
 
 # Logs
 *.log

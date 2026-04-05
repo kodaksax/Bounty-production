@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BOUNTYExpo — Password Reset</title>
+    <link rel="stylesheet" href="../../styles.css">
+    <style>
+        /* Auth-specific overrides */
+        body { background-color: #047857; min-height: 100vh; }
+        .container { background-color: #047857; box-shadow: none; max-width: 480px; }
+        header { border-bottom: none; padding-bottom: 10px; }
+        header h1 { color: #fff; }
+        .subtitle { color: rgba(255,255,255,0.8); }
+        footer { border-top-color: rgba(255,255,255,0.2); }
+        footer p { color: rgba(255,255,255,0.5); }
+
+        .auth-card {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 12px;
+            padding: 32px 24px;
+            text-align: center;
+            color: #fff;
+        }
+        .auth-card p { color: rgba(255,255,255,0.8); margin-bottom: 16px; }
+        .icon-circle {
+            width: 80px; height: 80px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 20px;
+            font-size: 2.5rem;
+        }
+        .icon-circle.loading { background: rgba(255,255,255,0.15); }
+        .icon-circle.success { background: rgba(52,211,153,0.3); }
+        .icon-circle.error   { background: rgba(248,113,113,0.25); }
+        .auth-title { font-size: 1.5rem; font-weight: 700; margin-bottom: 8px; color: #fff; }
+
+        .spinner {
+            width: 36px; height: 36px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Form controls */
+        .form-group { text-align: left; margin-bottom: 16px; }
+        .form-group label { display: block; color: rgba(255,255,255,0.8); font-size: 0.9rem; margin-bottom: 6px; }
+        .input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        .input-wrapper input {
+            width: 100%;
+            padding: 12px 44px 12px 16px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.25);
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .input-wrapper input::placeholder { color: rgba(255,255,255,0.4); }
+        .input-wrapper input:focus { border-color: rgba(167,243,208,0.6); }
+        .input-wrapper input.input-error { border-color: #f87171; }
+        .toggle-pw {
+            position: absolute; right: 12px;
+            background: none; border: none; color: rgba(255,255,255,0.6);
+            cursor: pointer; font-size: 1.2rem; padding: 4px;
+        }
+        .toggle-pw:hover { color: rgba(255,255,255,0.9); }
+        .field-error { color: #fca5a5; font-size: 0.82rem; margin-top: 4px; }
+        .field-success { color: #6ee7b7; font-size: 0.82rem; margin-top: 4px; }
+
+        /* Strength bar */
+        .strength-bar-bg {
+            height: 6px; border-radius: 3px;
+            background: rgba(255,255,255,0.15);
+            overflow: hidden; margin-top: 8px;
+        }
+        .strength-bar-fill {
+            height: 100%; border-radius: 3px;
+            transition: width 0.3s, background-color 0.3s;
+        }
+        .strength-label { font-size: 0.78rem; margin-top: 4px; text-transform: capitalize; }
+
+        .requirements-box {
+            background: rgba(255,255,255,0.08);
+            border-radius: 8px;
+            padding: 12px 14px;
+            margin-top: 10px;
+            text-align: left;
+        }
+        .requirements-box .req-title { color: rgba(255,255,255,0.5); font-size: 0.78rem; margin-bottom: 6px; }
+        .req-item { font-size: 0.82rem; margin-bottom: 3px; display: flex; align-items: center; gap: 6px; }
+        .req-item.met { color: #6ee7b7; }
+        .req-item.unmet { color: rgba(255,255,255,0.4); }
+
+        /* Buttons */
+        .btn-primary {
+            display: block; width: 100%;
+            padding: 14px; border-radius: 8px; border: none;
+            background: #059669; color: #fff;
+            font-size: 1rem; font-weight: 600;
+            cursor: pointer; transition: background 0.2s;
+            text-align: center;
+        }
+        .btn-primary:hover:not(:disabled) { background: #047857; }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-secondary {
+            display: block; width: 100%;
+            padding: 12px; border-radius: 8px;
+            background: transparent;
+            border: 2px solid rgba(167,243,208,0.5);
+            color: #a7f3d0; font-size: 0.95rem; font-weight: 600;
+            cursor: pointer; text-decoration: none;
+            text-align: center; margin-top: 12px;
+            transition: background 0.2s;
+        }
+        .btn-secondary:hover { background: rgba(255,255,255,0.05); }
+        .text-link { color: rgba(255,255,255,0.6); font-size: 0.88rem; margin-top: 16px; cursor: pointer; text-decoration: underline; background: none; border: none; }
+
+        .alert-box {
+            background: rgba(248,113,113,0.15);
+            border: 1px solid rgba(248,113,113,0.4);
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            text-align: left;
+            color: #fca5a5;
+            font-size: 0.9rem;
+        }
+
+        .tips-box {
+            background: rgba(255,255,255,0.08);
+            border-radius: 8px;
+            padding: 14px 16px;
+            margin-top: 24px;
+            text-align: left;
+        }
+        .tips-box .tips-title { color: rgba(255,255,255,0.5); font-size: 0.82rem; font-weight: 600; margin-bottom: 6px; }
+        .tips-box ul { color: rgba(255,255,255,0.45); font-size: 0.82rem; list-style: none; padding: 0; margin: 0; }
+        .tips-box li::before { content: "• "; }
+        .tips-box li { margin-bottom: 2px; }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎯 BOUNTYExpo</h1>
+            <p class="subtitle">Password Reset</p>
+        </header>
+
+        <main>
+            <!-- Loading state -->
+            <div id="state-loading" class="auth-card">
+                <div class="icon-circle loading"><div class="spinner"></div></div>
+                <div class="auth-title">Processing Reset Link…</div>
+                <p>Attempting to open the BOUNTYExpo app. If it doesn't open, a form will appear below.</p>
+            </div>
+
+            <!-- Update password form -->
+            <div id="state-form" class="auth-card hidden">
+                <div class="icon-circle loading" style="background:rgba(255,255,255,0.12);">🔒</div>
+                <div class="auth-title">Create New Password</div>
+                <p>Enter a strong password to secure your account.</p>
+
+                <div id="form-error" class="alert-box hidden"></div>
+
+                <form id="pw-form" autocomplete="off" novalidate>
+                    <div class="form-group">
+                        <label for="password">New Password</label>
+                        <div class="input-wrapper">
+                            <input id="password" type="password" placeholder="Enter new password" autocomplete="new-password">
+                            <button type="button" class="toggle-pw" data-target="password" aria-label="Toggle password visibility">👁</button>
+                        </div>
+                        <div id="password-error" class="field-error hidden"></div>
+                        <!-- Strength indicator -->
+                        <div id="strength-section" class="hidden">
+                            <div class="strength-bar-bg"><div id="strength-fill" class="strength-bar-fill"></div></div>
+                            <div id="strength-label" class="strength-label"></div>
+                            <div class="requirements-box">
+                                <div class="req-title">Password must have:</div>
+                                <div id="requirements-list"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="confirm-password">Confirm Password</label>
+                        <div class="input-wrapper">
+                            <input id="confirm-password" type="password" placeholder="Confirm new password" autocomplete="new-password">
+                            <button type="button" class="toggle-pw" data-target="confirm-password" aria-label="Toggle password visibility">👁</button>
+                        </div>
+                        <div id="confirm-error" class="field-error hidden"></div>
+                        <div id="match-indicator" class="hidden"></div>
+                    </div>
+                    <button id="submit-btn" type="submit" class="btn-primary" disabled>Update Password</button>
+                </form>
+
+                <div class="tips-box">
+                    <div class="tips-title">🔑 Password Tips</div>
+                    <ul>
+                        <li>Use a unique password not used on other sites</li>
+                        <li>Consider using a password manager</li>
+                        <li>Avoid personal information like names or birthdays</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Success state -->
+            <div id="state-success" class="auth-card hidden">
+                <div class="icon-circle success">✅</div>
+                <div class="auth-title">Password Updated!</div>
+                <p>Your password has been successfully updated. You can now sign in with your new password.</p>
+                <a href="bountyexpo-workspace://auth/sign-in-form" class="btn-primary" style="text-decoration:none;">Open App &amp; Sign In</a>
+                <p style="margin-top:14px; font-size:0.85rem; color:rgba(255,255,255,0.5);">
+                    If the app doesn't open, open the BOUNTYExpo app on your device and sign in with your new password.
+                </p>
+            </div>
+
+            <!-- Error state -->
+            <div id="state-error" class="auth-card hidden">
+                <div class="icon-circle error">❌</div>
+                <div class="auth-title" id="error-title">Invalid Reset Link</div>
+                <p id="error-message">This password reset link is invalid or has expired. Please request a new one from the app.</p>
+                <a href="bountyexpo-workspace://auth/reset-password" class="btn-secondary" style="text-decoration:none;">Open App to Request New Link</a>
+                <p style="margin-top:14px; font-size:0.85rem; color:rgba(255,255,255,0.5);">
+                    If the app doesn't open, launch the BOUNTYExpo app and tap "Forgot Password?" on the sign-in screen.
+                </p>
+            </div>
+        </main>
+
+        <footer>
+            <p>&copy; 2025 Bounty Finder. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <!-- Supabase JS client (CDN) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script>
+    (function () {
+        'use strict';
+
+        // ──────────────────────────────────────────────────────────────
+        // CONFIGURATION — replace with your actual Supabase credentials.
+        // These are public (anon) values safe for client-side use.
+        // ──────────────────────────────────────────────────────────────
+        var SUPABASE_URL  = window.__SUPABASE_URL__  || 'REPLACE_WITH_SUPABASE_URL';
+        var SUPABASE_ANON = window.__SUPABASE_ANON__ || 'REPLACE_WITH_SUPABASE_ANON_KEY';
+
+        // Deep link scheme for the mobile app
+        var APP_SCHEME = 'bountyexpo-workspace';
+
+        // ──────────────────────────────────────────────────────────────
+        // DOM helpers
+        // ──────────────────────────────────────────────────────────────
+        function show(id)  { document.getElementById(id).classList.remove('hidden'); }
+        function hide(id)  { document.getElementById(id).classList.add('hidden'); }
+        function el(id)    { return document.getElementById(id); }
+
+        // ──────────────────────────────────────────────────────────────
+        // Password validation (mirrors lib/utils/password-validation.ts)
+        // ──────────────────────────────────────────────────────────────
+        var REQUIREMENTS = [
+            { id: 'length',    label: 'At least 8 characters',            test: function(p){ return p.length >= 8; } },
+            { id: 'uppercase', label: 'One uppercase letter (A-Z)',       test: function(p){ return /[A-Z]/.test(p); } },
+            { id: 'lowercase', label: 'One lowercase letter (a-z)',       test: function(p){ return /[a-z]/.test(p); } },
+            { id: 'number',    label: 'One number (0-9)',                 test: function(p){ return /\d/.test(p); } },
+            { id: 'special',   label: 'One special character (@$!%*?&)',  test: function(p){ return /[@$!%*?&]/.test(p); } },
+        ];
+
+        function checkRequirements(pw) {
+            return REQUIREMENTS.map(function(r) {
+                return { id: r.id, label: r.label, met: r.test(pw) };
+            });
+        }
+
+        function allMet(reqs) { return reqs.every(function(r){ return r.met; }); }
+
+        function strengthLevel(pw) {
+            if (!pw) return { score: 0, level: 'very-weak' };
+            var met = checkRequirements(pw).filter(function(r){ return r.met; }).length;
+            var score = met;
+            if (pw.length >= 12) score += 0.5;
+            if (pw.length >= 16) score += 0.5;
+            if (/^[a-zA-Z]+$/.test(pw)) score -= 0.5;
+            if (/^[0-9]+$/.test(pw)) score -= 1;
+            var common = [/^123456/i, /password/i, /qwerty/i, /abc123/i, /letmein/i, /welcome/i];
+            for (var i = 0; i < common.length; i++) { if (common[i].test(pw)) { score -= 1; break; } }
+            if (/(.)\1{2,}/.test(pw)) score -= 0.5;
+            score = Math.max(0, Math.min(4, Math.round(score)));
+            var levels = ['very-weak','weak','fair','strong','very-strong'];
+            return { score: score, level: levels[score] };
+        }
+
+        var STRENGTH_COLORS = {
+            'very-weak':'#ef4444','weak':'#f97316','fair':'#eab308','strong':'#22c55e','very-strong':'#059669'
+        };
+
+        // ──────────────────────────────────────────────────────────────
+        // Parse tokens from URL hash fragment
+        // Supabase redirects with: #access_token=...&refresh_token=...&type=recovery
+        // ──────────────────────────────────────────────────────────────
+        function parseHash() {
+            var hash = window.location.hash.substring(1);
+            if (!hash) return {};
+            var params = {};
+            hash.split('&').forEach(function(part) {
+                var kv = part.split('=');
+                if (kv.length === 2) params[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1]);
+            });
+            return params;
+        }
+
+        function parseQuery() {
+            var search = window.location.search.substring(1);
+            if (!search) return {};
+            var params = {};
+            search.split('&').forEach(function(part) {
+                var kv = part.split('=');
+                if (kv.length === 2) params[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1]);
+            });
+            return params;
+        }
+
+        // ──────────────────────────────────────────────────────────────
+        // Main logic
+        // ──────────────────────────────────────────────────────────────
+        var hashParams  = parseHash();
+        var queryParams = parseQuery();
+
+        var accessToken  = hashParams.access_token  || queryParams.access_token  || '';
+        var refreshToken = hashParams.refresh_token || queryParams.refresh_token || '';
+        var tokenHash    = hashParams.token         || queryParams.token         || '';
+        var callbackType = hashParams.type          || queryParams.type          || '';
+
+        var hasTokens = (accessToken && refreshToken) || tokenHash;
+
+        // If this is not a recovery callback, show error
+        if (!hasTokens) {
+            hide('state-loading');
+            show('state-error');
+            return;
+        }
+
+        // Attempt to open the mobile app via deep link
+        var deepLinkUrl = APP_SCHEME + '://auth/callback' + window.location.hash;
+        if (tokenHash && !accessToken) {
+            deepLinkUrl = APP_SCHEME + '://auth/callback?token=' + encodeURIComponent(tokenHash) + '&type=' + encodeURIComponent(callbackType || 'recovery');
+        }
+
+        // Try opening the app (will work on mobile if app is installed)
+        var appOpened = false;
+        try {
+            var iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = deepLinkUrl;
+            document.body.appendChild(iframe);
+            setTimeout(function() { document.body.removeChild(iframe); }, 2000);
+        } catch (e) { /* Ignore deep link errors */ }
+
+        // After a timeout, show the web form as fallback
+        var SUPABASE_CONFIGURED = SUPABASE_URL !== 'REPLACE_WITH_SUPABASE_URL' && SUPABASE_ANON !== 'REPLACE_WITH_SUPABASE_ANON_KEY';
+
+        setTimeout(function() {
+            hide('state-loading');
+
+            if (!SUPABASE_CONFIGURED) {
+                // Supabase not configured — show a helpful message
+                el('error-title').textContent = 'Web Reset Not Configured';
+                el('error-message').textContent = 'The web-based password reset is not configured yet. Please open this link on your phone with the BOUNTYExpo app installed, or contact support.';
+                show('state-error');
+                return;
+            }
+
+            initForm();
+        }, 2500);
+
+        // ──────────────────────────────────────────────────────────────
+        // Form initialisation (only when Supabase is configured)
+        // ──────────────────────────────────────────────────────────────
+        function initForm() {
+            show('state-form');
+            var supabase;
+            try {
+                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+            } catch (err) {
+                el('error-title').textContent = 'Configuration Error';
+                el('error-message').textContent = 'Unable to initialise authentication. Please try again later.';
+                hide('state-form');
+                show('state-error');
+                return;
+            }
+
+            // Establish session from tokens
+            var sessionReady = false;
+
+            if (accessToken && refreshToken) {
+                supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+                    .then(function(res) {
+                        if (res.error) {
+                            showFormError('Session expired or invalid. Please request a new reset link.');
+                        } else {
+                            sessionReady = true;
+                        }
+                    });
+            } else if (tokenHash) {
+                supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'recovery' })
+                    .then(function(res) {
+                        if (res.error) {
+                            showFormError('This reset link has expired or already been used. Please request a new one.');
+                        } else {
+                            sessionReady = true;
+                        }
+                    });
+            }
+
+            // Wire up toggle-password buttons
+            document.querySelectorAll('.toggle-pw').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var target = document.getElementById(btn.dataset.target);
+                    var isPw = target.type === 'password';
+                    target.type = isPw ? 'text' : 'password';
+                    btn.textContent = isPw ? '🙈' : '👁';
+                });
+            });
+
+            var pwInput      = el('password');
+            var confirmInput = el('confirm-password');
+            var submitBtn    = el('submit-btn');
+
+            // Real-time validation
+            pwInput.addEventListener('input', function() {
+                var pw = pwInput.value;
+                var reqs = checkRequirements(pw);
+                var str  = strengthLevel(pw);
+
+                if (pw.length > 0) {
+                    show('strength-section');
+                    // Strength bar
+                    var fill = el('strength-fill');
+                    var pct = Math.max(5, (str.score / 4) * 100);
+                    fill.style.width = pct + '%';
+                    fill.style.backgroundColor = STRENGTH_COLORS[str.level] || '#6b7280';
+                    el('strength-label').textContent = str.level.replace('-', ' ');
+                    el('strength-label').style.color = STRENGTH_COLORS[str.level] || '#6b7280';
+
+                    // Requirements list
+                    var listHtml = '';
+                    reqs.forEach(function(r) {
+                        var cls = r.met ? 'met' : 'unmet';
+                        var icon = r.met ? '✓' : '○';
+                        listHtml += '<div class="req-item ' + cls + '">' + icon + ' ' + r.label + '</div>';
+                    });
+                    el('requirements-list').innerHTML = listHtml;
+                } else {
+                    hide('strength-section');
+                }
+                updateSubmitState(reqs);
+            });
+
+            confirmInput.addEventListener('input', function() {
+                var pw = pwInput.value;
+                var cp = confirmInput.value;
+                var indicator = el('match-indicator');
+                if (cp.length > 0 && pw.length > 0) {
+                    indicator.classList.remove('hidden');
+                    if (pw === cp) {
+                        indicator.className = 'field-success';
+                        indicator.textContent = '✓ Passwords match';
+                    } else {
+                        indicator.className = 'field-error';
+                        indicator.textContent = '✗ Passwords do not match';
+                    }
+                } else {
+                    indicator.classList.add('hidden');
+                }
+                updateSubmitState(checkRequirements(pw));
+            });
+
+            function updateSubmitState(reqs) {
+                var valid = allMet(reqs) && pwInput.value === confirmInput.value && pwInput.value.length > 0;
+                submitBtn.disabled = !valid;
+            }
+
+            function showFormError(msg) {
+                el('form-error').textContent = msg;
+                show('form-error');
+            }
+
+            // Submit handler
+            el('pw-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                hide('form-error');
+                el('password-error').classList.add('hidden');
+                el('confirm-error').classList.add('hidden');
+
+                var pw = pwInput.value;
+                var cp = confirmInput.value;
+
+                // Validate
+                if (pw.length < 8) {
+                    el('password-error').textContent = 'Password must be at least 8 characters';
+                    el('password-error').classList.remove('hidden');
+                    return;
+                }
+                if (pw.length > 128) {
+                    el('password-error').textContent = 'Password must not exceed 128 characters';
+                    el('password-error').classList.remove('hidden');
+                    return;
+                }
+                if (!allMet(checkRequirements(pw))) {
+                    el('password-error').textContent = 'Password does not meet all requirements';
+                    el('password-error').classList.remove('hidden');
+                    return;
+                }
+                if (pw !== cp) {
+                    el('confirm-error').textContent = 'Passwords do not match';
+                    el('confirm-error').classList.remove('hidden');
+                    return;
+                }
+
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Updating Password…';
+
+                supabase.auth.updateUser({ password: pw })
+                    .then(function(res) {
+                        if (res.error) {
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = 'Update Password';
+                            var msg = res.error.message || 'Failed to update password.';
+                            if (msg.includes('same password') || msg.includes('different password')) {
+                                msg = 'New password must be different from your current password.';
+                            } else if (msg.includes('session') || msg.includes('token') || msg.includes('expired')) {
+                                msg = 'Your session has expired. Please request a new reset link.';
+                            }
+                            showFormError(msg);
+                        } else {
+                            hide('state-form');
+                            show('state-success');
+                        }
+                    })
+                    .catch(function() {
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = 'Update Password';
+                        showFormError('An unexpected error occurred. Please try again.');
+                    });
+            });
+        }
+    })();
+    </script>
+</body>
+</html>

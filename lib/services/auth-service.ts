@@ -5,7 +5,6 @@
 
 import { supabase } from '../supabase';
 import { Platform } from 'react-native';
-import { DEEP_LINK_PREFIX } from '../config/app';
 import { generateCorrelationId } from '../utils/auth-errors';
 import { isValidEmail, validateNewPassword } from '../utils/password-validation';
 import { deviceService } from './device-service';
@@ -171,12 +170,14 @@ export async function requestPasswordReset(
       }
     }
 
-    // Use environment variable for redirect URL, with fallback
-    // Must use the correct app scheme (bountyexpo-workspace) and route through
-    // the auth callback screen which establishes the session before redirecting
+    // Use environment variable for redirect URL, with fallback to web URL.
+    // The web URL (bountyfinder.app) works on both mobile (via universal links
+    // the OS opens the app) and desktop (loads a web-based password reset form).
+    // This replaces the custom-scheme-only approach so users who open the
+    // reset email on a desktop browser get a working password update page.
     const resetRedirectUrl = redirectTo ||
       process.env.EXPO_PUBLIC_AUTH_REDIRECT_URL ||
-      `${DEEP_LINK_PREFIX}auth/callback`
+      'https://bountyfinder.app/auth/callback'
 
     const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
       redirectTo: resetRedirectUrl,
