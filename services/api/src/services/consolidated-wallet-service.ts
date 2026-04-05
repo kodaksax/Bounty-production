@@ -188,14 +188,21 @@ export async function getBalance(userId: string): Promise<BalanceResult> {
     const derivedBalance = await deriveBalanceFromTransactions(admin, userId);
     if (derivedBalance > 0) {
       balance = derivedBalance;
-      // Reconcile the stale cached value (fire-and-forget)
+      // Reconcile the stale cached value (fire-and-forget).
+      // Wrap in Promise.resolve() to get a full Promise with .catch() support.
+      // The Supabase update resolves with { data, error } rather than rejecting
+      // on DB errors, so we must check the error field inside .then().
       Promise.resolve(
         admin
           .from('profiles')
           .update({ balance: derivedBalance, updated_at: new Date().toISOString() })
           .eq('id', userId)
-      ).then(() => {
-        logger.info({ userId, derivedBalance }, '[WalletService] Reconciled stale profile balance');
+      ).then(({ error: reconcileErr }: { error: any }) => {
+        if (reconcileErr) {
+          logger.warn({ userId, derivedBalance, err: reconcileErr }, '[WalletService] Failed to reconcile cached balance');
+        } else {
+          logger.info({ userId, derivedBalance }, '[WalletService] Reconciled stale profile balance');
+        }
       }).catch((err: unknown) => {
         logger.warn({ userId, derivedBalance, err }, '[WalletService] Failed to reconcile cached balance');
       });
