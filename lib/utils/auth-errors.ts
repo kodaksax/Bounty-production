@@ -370,8 +370,13 @@ export function generateCorrelationId(prefix: string = 'auth'): string {
   // Try Node.js crypto first (prefer high-entropy UUID when available)
   try {
     if (typeof process !== 'undefined' && process?.versions?.node) {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const nodeCrypto = require('crypto');
+      // Use a runtime require via eval to avoid Metro/RN bundler static
+      // resolution of Node core modules (which breaks iOS bundling).
+      // eslint-disable-next-line no-eval
+      const nodeRequire = eval("typeof require === 'function' ? require : undefined") as
+        | ((id: string) => any)
+        | undefined;
+      const nodeCrypto = nodeRequire ? nodeRequire('crypto') : undefined;
       if (nodeCrypto && typeof nodeCrypto.randomUUID === 'function') {
         return `${prefix}_${nodeCrypto.randomUUID()}`;
       }
