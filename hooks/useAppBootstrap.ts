@@ -15,8 +15,10 @@
  *                      route to without any further async work.
  *
  * Key guarantees:
- * - The hook never transitions from "loading" to "authenticated" until BOTH
- *   the profile AND the local AsyncStorage fallback flag have been checked.
+ * - The hook never transitions from "loading" to "authenticated" until the
+ *   profile has been checked and onboarding is fully resolved: either the
+ *   profile indicates completion OR the local AsyncStorage fallback flag has
+ *   been checked.
  * - Once resolved for a given session it will not re-run (idempotent per
  *   session), so profile subscription updates don't cause a second check.
  * - A session change (sign-out / different account sign-in) resets the state
