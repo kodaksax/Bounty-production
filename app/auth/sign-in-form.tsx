@@ -271,10 +271,17 @@ export function SignInForm() {
       } catch (err: any) {
         console.error('[sign-in] Sign-in error:', err, { correlationId })
 
-        // Parse error using centralized handler
-        const authError = parseAuthError(err, correlationId);
+        // If this is already a user-facing Error thrown intentionally above
+        // (e.g. from the auth-error handler, MFA block, or lockout check),
+        // re-throw it directly.  Calling parseAuthError on an already-processed
+        // message would incorrectly map it to "An unexpected error occurred."
+        if (err instanceof Error) {
+          throw err
+        }
 
-        // Throw with user-friendly message
+        // For raw non-Error objects (e.g. unexpected Supabase API responses),
+        // sanitize before surfacing to the user.
+        const authError = parseAuthError(err, correlationId);
         throw new Error(authError.userMessage)
       }
     },
