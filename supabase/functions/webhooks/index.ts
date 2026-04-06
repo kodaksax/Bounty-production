@@ -149,48 +149,41 @@ Deno.serve(async (req: Request) => {
           break
         }
 
-        const { data: transaction, error: txError } = await supabase
-          .from('wallet_transactions')
-          .insert({
-            user_id: userId,
-            type: 'deposit',
-            amount: paymentIntent.amount / 100,
-            description: 'Wallet deposit via Stripe',
-            status: 'completed',
-            stripe_payment_intent_id: paymentIntent.id,
-            metadata: paymentIntent.metadata,
-          })
-          .select()
-          .single()
-
-        if (txError) {
-          console.error('[webhooks] Error creating transaction:', txError)
-          throw txError
+        // Only process wallet deposits — skip all other payment intents
+        if (paymentIntent.metadata?.purpose !== 'wallet_deposit') {
+          console.log(`[webhooks] PaymentIntent ${paymentIntent.id} purpose="${paymentIntent.metadata?.purpose}" — not a wallet_deposit, skipping`)
+          break
         }
 
-        const { error: balanceError } = await supabase.rpc('update_balance', {
+        const amountDollars = paymentIntent.amount / 100
+
+        // Use the atomic apply_deposit RPC which:
+        //  1. Inserts the wallet_transaction (idempotent via stripe_payment_intent_id UNIQUE)
+        //  2. Updates profiles.balance in the same DB transaction
+        // This prevents the race condition where a partial failure would leave
+        // the transaction inserted but profiles.balance unchanged on retries.
+        const { data: applyRes, error: applyErr } = await supabase.rpc('apply_deposit', {
           p_user_id: userId,
-          p_amount: paymentIntent.amount / 100,
+          p_amount: amountDollars,
+          p_payment_intent_id: paymentIntent.id,
+          p_metadata: paymentIntent.metadata ?? {},
         })
 
-        if (balanceError) {
-          // Retry once
-          const { error: retryError } = await supabase.rpc('update_balance', {
-            p_user_id: userId,
-            p_amount: paymentIntent.amount / 100,
+        if (applyErr) {
+          console.error('[webhooks] apply_deposit RPC failed — letting Stripe retry', {
+            user_id: userId,
+            amount: amountDollars,
+            error: applyErr,
           })
-          if (retryError) {
-            console.error('[webhooks] Atomic balance update failed after retry — letting Stripe retry', {
-              user_id: userId,
-              amount: paymentIntent.amount / 100,
-              error: retryError,
-            })
-            // Throw so the webhook returns 500 and Stripe will retry delivery
-            throw retryError
-          }
+          throw applyErr
         }
 
-        console.log(`[webhooks] Transaction created: ${transaction.id}, balance updated for user ${userId}`)
+        const appliedRow = applyRes != null ? (Array.isArray(applyRes) ? applyRes[0] : applyRes) : null
+        if (appliedRow?.applied) {
+          console.log(`[webhooks] Deposit applied via apply_deposit, tx_id=${appliedRow.tx_id} for user ${userId}`)
+        } else {
+          console.log(`[webhooks] apply_deposit no-op (already processed) for intent ${paymentIntent.id}`)
+        }
         break
       }
 

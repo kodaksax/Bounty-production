@@ -502,7 +502,44 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ error: 'Not authorized to confirm this payment' }, 403)
       }
 
-      if (paymentIntent.status === 'succeeded' || paymentIntent.status === 'processing') {
+      // Helper: atomically record a wallet deposit when a wallet_deposit PaymentIntent
+      // has succeeded. Uses the apply_deposit RPC which is idempotent by
+      // stripe_payment_intent_id — safe to call even if the webhook already ran.
+      const recordDepositIfNeeded = async (intent: typeof paymentIntent) => {
+        if (intent.metadata?.purpose !== 'wallet_deposit') return
+        const amountDollars = intent.amount / 100
+        const { data: applyRes, error: applyErr } = await withDbTimeout(
+          supabaseAdmin.rpc('apply_deposit', {
+            p_user_id: userId,
+            p_amount: amountDollars,
+            p_payment_intent_id: intent.id,
+            p_metadata: intent.metadata ?? {},
+          })
+        ) as any
+        if (applyErr) {
+          console.error('[payments/confirm] apply_deposit RPC failed', { userId, intentId: intent.id, applyErr })
+          // Throw so the outer handler returns 500 — the client must retry rather
+          // than receiving a success response when the balance was not recorded.
+          throw applyErr
+        }
+        const appliedRow = applyRes != null ? (Array.isArray(applyRes) ? applyRes[0] : applyRes) : null
+        if (appliedRow?.applied) {
+          console.log('[payments/confirm] Deposit applied', { userId, intentId: intent.id, amountDollars, txId: appliedRow.tx_id })
+        } else {
+          console.log('[payments/confirm] Deposit already recorded (idempotent no-op)', { userId, intentId: intent.id })
+        }
+      }
+
+      // If already succeeded, record deposit atomically then return
+      if (paymentIntent.status === 'succeeded') {
+        await recordDepositIfNeeded(paymentIntent)
+        return jsonResponse({ success: true, status: paymentIntent.status, paymentIntentId: paymentIntent.id })
+      }
+
+      // If processing, return current status without crediting — the payment has
+      // not yet settled and may still fail. The webhook will apply the deposit
+      // once the intent transitions to succeeded.
+      if (paymentIntent.status === 'processing') {
         return jsonResponse({ success: true, status: paymentIntent.status, paymentIntentId: paymentIntent.id })
       }
 
@@ -524,6 +561,10 @@ Deno.serve(async (req: Request) => {
           clientSecret: confirmedIntent.client_secret,
           nextAction: confirmedIntent.next_action,
         })
+      }
+
+      if (confirmedIntent.status === 'succeeded') {
+        await recordDepositIfNeeded(confirmedIntent)
       }
 
       return jsonResponse({
