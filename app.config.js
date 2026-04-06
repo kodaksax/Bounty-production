@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const dotenv = require('dotenv');
+const { withAppBuildGradle } = require('@expo/config-plugins');
 
 // Environment resolution order:
 // 1) APP_ENV (primary source of truth for this app)
@@ -67,7 +68,7 @@ const ENV_ICONS = {
 const envIcon = ENV_ICONS[APP_ENV]; // undefined for production → app.json default
 
 module.exports = ({ config }) => {
-  return {
+  let result = {
     ...config,
     // Override icon for dev/preview builds when an env-specific asset exists.
     ...(envIcon ? { icon: envIcon } : {}),
@@ -107,4 +108,19 @@ module.exports = ({ config }) => {
         process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || (config.extra && config.extra.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY) || null,
     },
   };
+
+  // Disable Android release lint checks to prevent Maven Central rate-limit
+  // failures (HTTP 429) during generateReleaseLintModel tasks, which download
+  // lint-only JARs not needed for AAB/APK output.
+  result = withAppBuildGradle(result, (c) => {
+    if (!c.modResults.contents.includes('checkReleaseBuilds')) {
+      c.modResults.contents = c.modResults.contents.replace(
+        /android\s*\{/,
+        'android {\n    lintOptions { checkReleaseBuilds false }\n'
+      );
+    }
+    return c;
+  });
+
+  return result;
 };
