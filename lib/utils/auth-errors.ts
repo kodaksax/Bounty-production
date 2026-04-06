@@ -174,8 +174,12 @@ export function parseAuthError(error: any, correlationId?: string): AuthError {
     retryable = true;
   }
 
-  // For any remaining unknown errors, avoid surfacing raw technical messages.
-  if (category === 'unknown') {
+  // For any remaining unknown errors where a sanitized message was not already
+  // set above, avoid surfacing raw technical messages to the end user.
+  // We only override when userMessage is still equal to the raw error message,
+  // which means the branches above did not already assign a safe, human-readable
+  // message for the 'unknown' category (e.g. the internal-server-error branch).
+  if (category === 'unknown' && userMessage === message) {
     userMessage = 'An unexpected error occurred. Please try again.';
   }
 
