@@ -6,6 +6,8 @@ import { cn } from "lib/utils"
 import { useEffect, useState } from "react"
 import { ActivityIndicator, Alert, Platform, Text, TouchableOpacity, View } from "react-native"
 import { useAuthContext } from '../hooks/use-auth-context'
+import { config } from '../lib/config'
+import { API_BASE_URL } from '../lib/config/api'
 import { applePayService } from '../lib/services/apple-pay-service'
 import { useStripe } from '../lib/stripe-context'
 import { getPaymentErrorMessage, getUserFriendlyError } from '../lib/utils/error-messages'
@@ -16,6 +18,40 @@ import { PaymentMethodsModal } from './payment-methods-modal'
 interface AddMoneyScreenProps {
   onBack?: () => void
   onAddMoney?: (amount: number) => void
+}
+
+// Helper to persist a deposit to the server. Extracted to avoid duplicated logic
+async function persistDeposit(paymentIntentId: string | undefined, amount: number, accessToken?: string, source?: string) {
+  if (!paymentIntentId || !accessToken) return
+  try {
+    const res = await fetch(`${API_BASE_URL}/wallet/deposit`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        ...(config.supabase.anonKey ? { apikey: config.supabase.anonKey } : {}),
+      },
+      body: JSON.stringify({ amount, paymentIntentId }),
+    })
+
+    if (!res.ok) {
+      let bodyText = ''
+      try {
+        const contentType = res.headers.get('content-type') || ''
+        if (contentType.includes('application/json')) {
+          const data = await res.json()
+          bodyText = JSON.stringify(data)
+        } else {
+          bodyText = await res.text()
+        }
+      } catch (e) {
+        bodyText = '<unable to read response body>'
+      }
+      console.warn(`[AddMoney] Persist ${source ? `${source} ` : ''}deposit responded with ${res.status} ${res.statusText}:`, bodyText)
+    }
+  } catch (e) {
+    console.warn(`[AddMoney] Failed to persist ${source ? `${source} ` : ''}deposit to server:`, e)
+  }
 }
 
 export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
@@ -97,6 +133,12 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
             title: 'Added Money via Stripe',
             status: 'completed'
           })
+
+          // Persist the deposit to the DB immediately (don't wait for the webhook).
+          // apply_deposit is idempotent on paymentIntentId, so a later webhook
+          // delivery is a safe no-op. This ensures profiles.balance is durable
+          // and survives sign-out / cold restart.
+          await persistDeposit(result.paymentIntentId, numAmount, session?.access_token, 'Stripe')
 
           // Sync balance from server so Supabase is the source of truth
           try {
@@ -181,6 +223,9 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
           title: 'Added Money via Apple Pay',
           status: 'completed',
         })
+
+        // Persist the deposit to the DB immediately (don't wait for the webhook).
+        await persistDeposit(result.paymentIntentId, numAmount, session?.access_token, 'Apple Pay')
 
         // Sync balance from server so Supabase is the source of truth
         try {

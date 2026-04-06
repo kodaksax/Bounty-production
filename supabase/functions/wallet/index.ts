@@ -1,16 +1,17 @@
 // Supabase Edge Function: wallet
 // Handles wallet routes previously served by the Node/Express server.
 // Routes:
-//   GET /wallet/balance
-//   GET /wallet/transactions
+//   GET  /wallet/balance
+//   GET  /wallet/transactions
+//   POST /wallet/deposit   (client-initiated deposit after Stripe payment confirmation)
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import type { Profile, WalletTransaction } from '../_shared/types.ts'
+import type { ApplyDepositResult, Profile, WalletTransaction } from '../_shared/types.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 }
 
 function jsonResponse(data: unknown, status = 200) {
@@ -20,12 +21,22 @@ function jsonResponse(data: unknown, status = 200) {
   })
 }
 
+function isApplyDepositResult(obj: unknown): obj is ApplyDepositResult {
+  if (typeof obj !== 'object' || obj === null) return false
+  const o = obj as Record<string, unknown>
+  return typeof o.applied === 'boolean'
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
-  if (req.method !== 'GET') {
+  // Single outer try/catch ensures ALL errors—including those thrown by the
+  // authentication step—are caught and returned as a JSON response instead of
+  // propagating to Deno's default handler (which returns text/plain; 500).
+  try {
+  if (req.method !== 'GET' && req.method !== 'POST') {
     return jsonResponse({ error: 'Method not allowed' }, 405)
   }
 
@@ -46,14 +57,95 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: 'Authentication required. Please sign in to continue.' }, 401)
   }
   const token = authHeader.substring(7)
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-  if (authError || !user) {
-    console.warn('[wallet edge fn] invalid or expired token', authError || 'no user')
-    return jsonResponse({ error: 'Authentication required. Please sign in to continue.' }, 401)
+
+  let userId: string
+  try {
+    const { data, error: authError } = await supabase.auth.getUser(token)
+    if (authError || !data?.user) {
+      console.warn('[wallet edge fn] invalid or expired token', authError || 'no user')
+      return jsonResponse({ error: 'Authentication required. Please sign in to continue.' }, 401)
+    }
+    userId = data.user.id
+  } catch (authException: unknown) {
+    const msg = (authException instanceof Error ? authException.message : String(authException))
+    console.error('[wallet edge fn] getUser threw unexpectedly:', msg)
+    return jsonResponse({ error: 'Authentication service unavailable. Please try again.' }, 503)
   }
-  const userId = user.id
 
   try {
+    // POST /wallet/deposit — client-initiated deposit after Stripe payment confirmation.
+    // Called immediately after processPayment() succeeds on the client so that
+    // profiles.balance is updated durably without relying solely on the webhook.
+    // Uses the apply_deposit RPC which is idempotent on stripe_payment_intent_id,
+    // so a concurrent webhook delivery results in a safe no-op.
+    if (req.method === 'POST' && subPath === '/deposit') {
+      let body: { amount?: unknown; paymentIntentId?: unknown }
+      try {
+        body = await req.json()
+      } catch {
+        return jsonResponse({ error: 'Invalid JSON body' }, 400)
+      }
+
+      const amount = typeof body.amount === 'number' ? body.amount : Number(body.amount)
+      const paymentIntentId = typeof body.paymentIntentId === 'string' ? body.paymentIntentId.trim() : ''
+
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return jsonResponse({ error: 'Invalid amount' }, 400)
+      }
+      if (!paymentIntentId) {
+        return jsonResponse({ error: 'paymentIntentId is required' }, 400)
+      }
+
+      // Call the atomic apply_deposit function which:
+      //   1. Inserts the wallet_transaction (ON CONFLICT DO NOTHING for idempotency)
+      //   2. Updates profiles.balance atomically
+      // Returns { applied: boolean, tx_id: UUID }
+      const { data: applyRes, error: applyErr } = await supabase.rpc('apply_deposit', {
+        p_user_id: userId,
+        p_amount: amount,
+        p_payment_intent_id: paymentIntentId,
+        p_metadata: {
+          payment_intent_id: paymentIntentId,
+          created_via: 'client_post_payment',
+        },
+      })
+
+      if (applyErr) {
+        console.error('[wallet] apply_deposit error:', applyErr)
+        return jsonResponse({ error: 'Failed to record deposit' }, 500)
+      }
+
+      // Normalize possible shapes: RPC may return an object or an array with a single row.
+      let applied = false
+      let tx_id: string | null = null
+      const candidate = Array.isArray(applyRes) ? (applyRes[0] as unknown) : (applyRes as unknown)
+      if (isApplyDepositResult(candidate)) {
+        applied = candidate.applied
+        tx_id = (candidate as any).tx_id ?? null
+      } else if (candidate && typeof (candidate as any).applied === 'boolean') {
+        applied = Boolean((candidate as any).applied)
+        tx_id = (candidate as any).tx_id ?? null
+      } else {
+        console.warn('[wallet] apply_deposit returned unexpected shape', applyRes)
+      }
+
+      // Fetch updated balance to return to client
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('balance')
+        .eq('id', userId)
+        .single()
+
+      if (profileError) {
+        console.error('[wallet] failed to fetch updated balance after deposit:', profileError)
+        return jsonResponse({ success: applied, tx_id, balance: null, warning: 'Deposit recorded, but failed to fetch updated balance' }, 500)
+      }
+
+      const newBalance = (profileData as Profile | null)?.balance ?? (applied ? amount : 0)
+
+      return jsonResponse({ success: applied, tx_id, balance: newBalance })
+    }
+
     // GET /wallet/balance
     if (subPath === '/balance') {
       const { data: profile, error } = await supabase
@@ -140,5 +232,11 @@ Deno.serve(async (req: Request) => {
     const err = error as { message?: string }
     console.error('[wallet edge fn] Error:', err)
     return jsonResponse({ error: err.message ?? 'Internal server error' }, 500)
+  }
+
+  } catch (outerError: unknown) {
+    const err = outerError as { message?: string }
+    console.error('[wallet edge fn] Outer unhandled error:', err)
+    return jsonResponse({ error: 'Internal server error' }, 500)
   }
 })

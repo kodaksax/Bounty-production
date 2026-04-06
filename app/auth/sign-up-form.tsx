@@ -124,7 +124,9 @@ export function SignUpForm() {
         return
       }
       const anonKey = config.supabase.anonKey
-      const registerRes = await fetch(`${API_BASE_URL}/auth/register`, {
+      const registerEndpoint = `${API_BASE_URL}/auth/register`
+      console.log('[sign-up] POST', registerEndpoint, { correlationId })
+      const registerRes = await fetch(registerEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -139,6 +141,16 @@ export function SignUpForm() {
         let parsed: any = null
         try { parsed = text ? JSON.parse(text) : null } catch {}
         const backendMessage = parsed?.error || parsed?.message || text || registerRes.statusText || 'Failed to create account'
+
+        // Always log the full response details for debugging — visible in Expo metro logs
+        console.error('[sign-up] Registration request failed', {
+          correlationId,
+          status: registerRes.status,
+          statusText: registerRes.statusText,
+          url: registerEndpoint,
+          rawBody: text,
+          parsedError: backendMessage,
+        })
 
         if (registerRes.status === 409) {
           const errLower = String(backendMessage).toLowerCase()
@@ -166,14 +178,31 @@ export function SignUpForm() {
           return
         }
 
-        // 5xx or generic "Internal" errors from the server/edge runtime should
-        // not be shown verbatim — surface a friendly, actionable message instead.
+        // Supabase Edge Runtime returns 404 when the Function is not deployed or the URL is wrong
+        if (registerRes.status === 404) {
+          console.error('[sign-up] Registration endpoint not found — check API_BASE_URL and edge function deployment', {
+            correlationId, url: registerEndpoint,
+          })
+          setAuthError('Sign-up service is temporarily unavailable. Please try again later.')
+          return
+        }
+
+        // 5xx or explicit "internal server error" messages from the edge runtime
+        // should not be shown verbatim — surface a friendly, actionable message.
+        // Avoid masking messages that merely start with "internal"
+        // (e.g. "internal validation failed").
+        const msgLower = String(backendMessage).toLowerCase()
+        const isInternalServerError =
+          msgLower === 'internal server error' ||
+          msgLower.includes('internal server error') ||
+          msgLower === 'internal_server_error' ||
+          msgLower.includes('internal_server_error')
         if (
           registerRes.status >= 500 ||
-          String(backendMessage).toLowerCase() === 'internal' ||
-          String(backendMessage).toLowerCase().includes('internal server error')
+          isInternalServerError ||
+          msgLower === 'error' ||
+          msgLower.includes('unexpected error')
         ) {
-          console.error('[sign-up] Server error during registration', { correlationId, backendMessage, status: registerRes.status })
           setAuthError('Something went wrong on our end. Please try again in a moment.')
           return
         }

@@ -244,6 +244,15 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, [persist, persistTransactions]);
 
+  // Keep a stable ref to `refreshFromApi` so subscription callbacks can call
+  // the latest implementation without forcing the auth-state effect to
+  // re-subscribe if the function identity changes.
+  const refreshFromApiRef = useRef<(accessToken?: string) => Promise<void> | undefined>(refreshFromApi);
+
+  useEffect(() => {
+    refreshFromApiRef.current = refreshFromApi;
+  }, [refreshFromApi]);
+
   const refresh = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -292,9 +301,11 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     init();
   }, []); // Only run once on mount, not on every refresh change
 
-  // Clear wallet data when the user signs out to prevent data leaks between users
+  // Clear wallet data when the user signs out to prevent data leaks between users.
+  // Re-fetch authoritative balance when the user signs back in (covers the case
+  // where the session expired, SIGNED_OUT wiped local data, and the user re-auths).
   useEffect(() => {
-    const ret = supabase.auth.onAuthStateChange(async (event) => {
+    const ret = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT') {
         // Persist the cleared state first so that if a new user signs in before
         // the component re-initialises, SecureStore reflects the blank slate.
@@ -310,6 +321,23 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         lastOptimisticDepositRef.current = null;
         setBalance(INITIAL_BALANCE);
         setTransactions([]);
+      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        // Re-fetch authoritative balance from the server whenever the user
+        // signs in (or their token is silently refreshed). This is the primary
+        // recovery path after session expiry: SIGNED_OUT wipes local state →
+        // user re-authenticates → SIGNED_IN triggers this sync so the real
+        // server-side balance is restored without requiring a manual navigation
+        // to the Wallet screen.
+        const token = session?.access_token;
+        if (token) {
+          try {
+            // Call the latest memoized implementation via ref so we don't
+            // force the effect to re-run when the function identity changes.
+            await refreshFromApiRef.current?.(token);
+          } catch (err) {
+            console.error('[wallet] Error syncing balance after sign-in:', err);
+          }
+        }
       }
     });
 
@@ -324,7 +352,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         // Swallow unsubscribe errors - best effort cleanup
       }
     };
-  }, []);
+  }, []); // run once on mount; uses refreshFromApiRef to invoke the latest implementation
 
   const logTransaction = useCallback(async (tx: Omit<WalletTransactionRecord, 'id' | 'date'> & { date?: Date }) => {
     const record: WalletTransactionRecord = {

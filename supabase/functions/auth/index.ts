@@ -25,13 +25,19 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   const url = new URL(req.url)
-  const pathParts = url.pathname.split('/auth')
-  const subPath = pathParts.length > 1 ? pathParts[1] : '/'
+  // Derive the sub-path after the function name (/auth) regardless of whether
+  // Supabase prefixes the pathname with /functions/v1 or not.
+  // e.g. "/functions/v1/auth/register" → "/register"
+  //      "/auth/register"               → "/register"
+  const authIdx = url.pathname.lastIndexOf('/auth')
+  const subPath = authIdx !== -1 ? url.pathname.slice(authIdx + 5) || '/' : '/'
+
+  console.log('[auth] incoming', { method: req.method, pathname: url.pathname, subPath })
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   if (!supabaseUrl || !serviceRoleKey) {
-    console.error('[auth] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY')
+    console.error('[auth] Missing env vars: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY')
     return jsonResponse({ error: 'Server configuration error' }, 500)
   }
 
@@ -70,7 +76,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         .eq('email', normalizedEmail)
         .maybeSingle()
       if (emailCheckError) {
-        console.error('[auth/register] email lookup error:', emailCheckError.message)
+        console.error('[auth/register] email lookup error:', emailCheckError.message, emailCheckError.code)
         return jsonResponse({ error: 'Unable to complete registration. Please try again.' }, 500)
       }
       if (existingEmail) return jsonResponse({ error: 'Email already registered' }, 409)
@@ -82,11 +88,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
         .eq('username', normalizedUsername)
         .maybeSingle()
       if (usernameCheckError) {
-        console.error('[auth/register] username lookup error:', usernameCheckError.message)
+        console.error('[auth/register] username lookup error:', usernameCheckError.message, usernameCheckError.code)
         return jsonResponse({ error: 'Unable to complete registration. Please try again.' }, 500)
       }
       if (existingUsername) return jsonResponse({ error: 'Username already taken' }, 409)
 
+      console.log('[auth/register] creating auth user', { email: normalizedEmail, username: normalizedUsername })
       const { data, error } = await supabase.auth.admin.createUser({
         email: normalizedEmail,
         password,
@@ -95,7 +102,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
       })
 
       if (error) {
-        console.error('[auth/register] supabase createUser error', error)
+        console.error('[auth/register] supabase createUser error', {
+          message: error.message,
+          status: error.status,
+          code: (error as any).code,
+        })
         const msg = error.message?.toLowerCase() ?? ''
         if (msg.includes('already registered') || msg.includes('already exists')) {
           return jsonResponse({ error: 'Email already registered' }, 409)
@@ -104,10 +115,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }
 
       if (!data?.user?.id) {
+        console.error('[auth/register] no user id returned from supabase — data:', JSON.stringify(data))
         return jsonResponse({ error: 'User creation failed' }, 500)
       }
 
       const userId = data.user.id
+      console.log('[auth/register] auth user created, upserting profile', { userId })
       const { error: profileError } = await supabase
         .from('profiles')
         .upsert(
@@ -116,7 +129,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
         )
 
       if (profileError) {
-        console.error('[auth/register] profile upsert error, rolling back user:', profileError.message)
+        console.error('[auth/register] profile upsert error — rolling back auth user:', {
+          message: profileError.message,
+          code: profileError.code,
+          details: profileError.details,
+          hint: profileError.hint,
+          userId,
+        })
         // Clean up the partially-created auth user to avoid inconsistent state
         await supabase.auth.admin.deleteUser(userId).catch((e: unknown) => {
           console.error('[auth/register] failed to rollback auth user:', (e as Error).message)

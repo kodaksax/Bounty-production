@@ -24,3 +24,8 @@ export interface WalletTransaction {
   metadata?: Record<string, unknown> | null
   created_at: string
 }
+
+export interface ApplyDepositResult {
+  applied: boolean
+  tx_id?: string | null
+}

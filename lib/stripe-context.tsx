@@ -15,7 +15,7 @@ interface StripeContextType {
   createPaymentMethod: (cardData: CreatePaymentMethodData) => Promise<StripePaymentMethod>;
   loadPaymentMethods: () => Promise<void>;
   removePaymentMethod: (paymentMethodId: string) => Promise<void>;
-  processPayment: (amount: number, paymentMethodId?: string) => Promise<{ success: boolean; error?: string }>;
+  processPayment: (amount: number, paymentMethodId?: string) => Promise<{ success: boolean; paymentIntentId?: string; error?: string }>;
   processPaymentSecure: (amount: number, options?: { userId?: string; purpose?: string }) => Promise<{ success: boolean; error?: string }>;
   createSetupIntent: () => Promise<StripeSetupIntent | null>;
   clearError: () => void;
@@ -168,7 +168,7 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
     }
   };
 
-  const processPayment = async (amount: number, paymentMethodId?: string): Promise<{ success: boolean; error?: string }> => {
+  const processPayment = async (amount: number, paymentMethodId?: string): Promise<{ success: boolean; paymentIntentId?: string; error?: string }> => {
     try {
       setIsLoading(true);
       clearError();
@@ -194,7 +194,7 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
       const confirmedIntent = await stripeService.confirmPayment(paymentIntent.client_secret, pmId, session.access_token);
       
       if (confirmedIntent.status === 'succeeded') {
-        return { success: true };
+        return { success: true, paymentIntentId: paymentIntent.id };
       } else {
         return { 
           success: false, 
