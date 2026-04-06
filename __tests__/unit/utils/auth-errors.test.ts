@@ -161,7 +161,7 @@ describe('parseAuthError', () => {
   });
 
   describe('network errors', () => {
-    it('categorises network errors correctly', () => {
+    it('categorizes network errors correctly', () => {
       const result = parseAuthError({ message: 'Network request failed' });
       expect(result.category).toBe('network_error');
       expect(result.retryable).toBe(true);
@@ -169,7 +169,7 @@ describe('parseAuthError', () => {
   });
 
   describe('timeout errors', () => {
-    it('categorises AbortError as timeout', () => {
+    it('categorizes AbortError as timeout', () => {
       const err = { name: 'AbortError', message: 'The operation was aborted' };
       const result = parseAuthError(err);
       expect(result.category).toBe('timeout_error');
