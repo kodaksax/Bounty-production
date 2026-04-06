@@ -518,8 +518,9 @@ Deno.serve(async (req: Request) => {
         ) as any
         if (applyErr) {
           console.error('[payments/confirm] apply_deposit RPC failed', { userId, intentId: intent.id, applyErr })
-          // Non-fatal: webhook will still run; log but do not block the response
-          return
+          // Throw so the outer handler returns 500 — the client must retry rather
+          // than receiving a success response when the balance was not recorded.
+          throw applyErr
         }
         const appliedRow = applyRes != null ? (Array.isArray(applyRes) ? applyRes[0] : applyRes) : null
         if (appliedRow?.applied) {
@@ -529,8 +530,16 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      if (paymentIntent.status === 'succeeded' || paymentIntent.status === 'processing') {
+      // If already succeeded, record deposit atomically then return
+      if (paymentIntent.status === 'succeeded') {
         await recordDepositIfNeeded(paymentIntent)
+        return jsonResponse({ success: true, status: paymentIntent.status, paymentIntentId: paymentIntent.id })
+      }
+
+      // If processing, return current status without crediting — the payment has
+      // not yet settled and may still fail. The webhook will apply the deposit
+      // once the intent transitions to succeeded.
+      if (paymentIntent.status === 'processing') {
         return jsonResponse({ success: true, status: paymentIntent.status, paymentIntentId: paymentIntent.id })
       }
 
