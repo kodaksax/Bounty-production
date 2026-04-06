@@ -1,10 +1,29 @@
 // lib/services/sentry-init.ts - Sentry initialization for error tracking
 import type { Integration } from '@sentry/types';
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 
 // Sentry configuration
 const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN;
 const ENVIRONMENT = process.env.NODE_ENV || 'development';
+
+/**
+ * Returns true when the native Sentry SDK should be enabled.
+ *
+ * @sentry/react-native ≤7.11.0 bundles a Sentry Cocoa SDK that crashes on
+ * iOS 26+ (EXC_BAD_ACCESS in SentrySDKInternal startWithOptions:, offset 608,
+ * address 0x10 — a null-pointer deref introduced by a breaking iOS 26 change).
+ * Until the package is upgraded to a version that ships a compatible Cocoa SDK,
+ * we disable native-SDK initialisation on iOS 26+ so the app does not crash at
+ * launch.  JS-layer error reporting (breadcrumbs, JS exceptions, etc.) continues
+ * to work with enableNative: false.
+ */
+function shouldEnableNative(): boolean {
+  if (Platform.OS !== 'ios') return true;
+  const iosVersion = parseInt(String(Platform.Version), 10);
+  // Disable native Sentry on iOS 26+ to avoid the SentrySDKInternal crash.
+  return iosVersion < 26;
+}
 
 /**
  * Initialize Sentry for error tracking
@@ -88,14 +107,18 @@ export function initializeSentry() {
       tracesSampleRate: ENVIRONMENT === 'production' ? 0.2 : 1.0,
       // Set release version
       release: Constants.expoConfig?.version || '1.0.0',
-      // Dist can be used to distinguish builds
-      dist: Constants.expoConfig?.extra?.eas?.projectId,
+      // dist should be the build number (e.g. "30"), not the EAS project ID.
+      dist: Constants.expoConfig?.ios?.buildNumber
+        ?? Constants.expoConfig?.android?.versionCode?.toString()
+        ?? undefined,
       // Enable automatic session tracking
       enableAutoSessionTracking: true,
       // Sessions close after app is 10 seconds in the background
       sessionTrackingIntervalMillis: 10000,
-      // Enable native crash reporting
-      enableNative: true,
+      // Guard against native SDK crash on iOS 26+ (SentrySDKInternal SIGSEGV).
+      // enableNative: false keeps JS-layer reporting while skipping the Cocoa
+      // SDK initialisation that crashes on iOS 26 in @sentry/react-native 7.x.
+      enableNative: shouldEnableNative(),
       // Enable automatic breadcrumbs
       enableAutoPerformanceTracing: true,
       // Debug mode in development
