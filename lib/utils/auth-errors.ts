@@ -343,17 +343,22 @@ export function getBackoffDelay(attempt: number, baseDelay: number = 1000): numb
  * Uses crypto.getRandomValues when available, falls back to counter-based approach
  */
 function generateSecureRandom(length: number = 6): string {
-  // Check if crypto is available (browser/Node.js)
-  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
-    const bytes = new Uint8Array(length);
-    crypto.getRandomValues(bytes);
-    // Convert bytes to base-36 string
-    return Array.from(bytes, (b) => (b % 36).toString(36)).join('');
+  // Prefer Web Crypto where available (browsers and Node >= 18 webcrypto)
+  try {
+    const gw: any = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : undefined);
+    if (gw && gw.crypto && typeof gw.crypto.getRandomValues === 'function') {
+      const bytes = new Uint8Array(length);
+      gw.crypto.getRandomValues(bytes);
+      return Array.from(bytes, (b) => (b % 36).toString(36)).join('');
+    }
+  } catch (_) {
+    // ignore and fallthrough to other strategies
   }
-  
-  // Fallback: Use timestamp + counter for uniqueness without Math.random()
+
+  // Fallback: timestamp + Math.random for environments without crypto
   const timestamp = Date.now().toString(36);
-  return timestamp.slice(-length);
+  const rnd = Math.random().toString(36).slice(2, 2 + length);
+  return (timestamp + rnd).slice(-length);
 }
 
 /**
@@ -362,9 +367,43 @@ function generateSecureRandom(length: number = 6): string {
  * Uses cryptographically secure random when available
  */
 export function generateCorrelationId(prefix: string = 'auth'): string {
+  // Try Node.js crypto first (prefer high-entropy UUID when available)
+  try {
+    if (typeof process !== 'undefined' && process?.versions?.node) {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const nodeCrypto = require('crypto');
+      if (nodeCrypto && typeof nodeCrypto.randomUUID === 'function') {
+        return `${prefix}_${nodeCrypto.randomUUID()}`;
+      }
+      if (nodeCrypto && typeof nodeCrypto.randomBytes === 'function') {
+        return `${prefix}_${nodeCrypto.randomBytes(8).toString('hex')}`;
+      }
+    }
+  } catch (_) {
+    // ignore and try web crypto / fallbacks
+  }
+
+  // Web Crypto (browser or Node webcrypto)
+  try {
+    const gw: any = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : undefined);
+    if (gw && gw.crypto) {
+      if (typeof gw.crypto.randomUUID === 'function') {
+        return `${prefix}_${gw.crypto.randomUUID()}`;
+      }
+      if (typeof gw.crypto.getRandomValues === 'function') {
+        const bytes = new Uint8Array(8);
+        gw.crypto.getRandomValues(bytes);
+        return `${prefix}_${Array.from(bytes).map((b: number) => b.toString(16).padStart(2, '0')).join('')}`;
+      }
+    }
+  } catch (_) {
+    // ignore
+  }
+
+  // Final fallback: timestamp + random string
   const timestamp = Date.now().toString(36);
-  const random = generateSecureRandom(6);
-  return `${prefix}_${timestamp}_${random}`;
+  const rand = Math.random().toString(36).slice(2, 10);
+  return `${prefix}_${timestamp}_${rand}`;
 }
 
 /**
