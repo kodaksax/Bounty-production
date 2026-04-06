@@ -502,7 +502,35 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ error: 'Not authorized to confirm this payment' }, 403)
       }
 
+      // Helper: atomically record a wallet deposit when a wallet_deposit PaymentIntent
+      // has succeeded. Uses the apply_deposit RPC which is idempotent by
+      // stripe_payment_intent_id — safe to call even if the webhook already ran.
+      const recordDepositIfNeeded = async (intent: typeof paymentIntent) => {
+        if (intent.metadata?.purpose !== 'wallet_deposit') return
+        const amountDollars = intent.amount / 100
+        const { data: applyRes, error: applyErr } = await withDbTimeout(
+          supabaseAdmin.rpc('apply_deposit', {
+            p_user_id: userId,
+            p_amount: amountDollars,
+            p_payment_intent_id: intent.id,
+            p_metadata: intent.metadata ?? {},
+          })
+        ) as any
+        if (applyErr) {
+          console.error('[payments/confirm] apply_deposit RPC failed', { userId, intentId: intent.id, applyErr })
+          // Non-fatal: webhook will still run; log but do not block the response
+          return
+        }
+        const appliedRow = applyRes != null ? (Array.isArray(applyRes) ? applyRes[0] : applyRes) : null
+        if (appliedRow?.applied) {
+          console.log('[payments/confirm] Deposit applied', { userId, intentId: intent.id, amountDollars, txId: appliedRow.tx_id })
+        } else {
+          console.log('[payments/confirm] Deposit already recorded (idempotent no-op)', { userId, intentId: intent.id })
+        }
+      }
+
       if (paymentIntent.status === 'succeeded' || paymentIntent.status === 'processing') {
+        await recordDepositIfNeeded(paymentIntent)
         return jsonResponse({ success: true, status: paymentIntent.status, paymentIntentId: paymentIntent.id })
       }
 
@@ -524,6 +552,10 @@ Deno.serve(async (req: Request) => {
           clientSecret: confirmedIntent.client_secret,
           nextAction: confirmedIntent.next_action,
         })
+      }
+
+      if (confirmedIntent.status === 'succeeded') {
+        await recordDepositIfNeeded(confirmedIntent)
       }
 
       return jsonResponse({
