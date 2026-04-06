@@ -1,46 +1,45 @@
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { Href } from "expo-router"
 import { useRouter } from "expo-router"
 import { useEffect, useRef } from "react"
 import { ActivityIndicator, Text, View } from "react-native"
 import 'react-native-get-random-values'; // must run before using tweetnacl
 import { useAuthContext } from "../hooks/use-auth-context"
+import { useAppBootstrap } from "../hooks/useAppBootstrap"
 import { ROUTES } from "../lib/routes"
-import { authProfileService } from '../lib/services/auth-profile-service'
-import { getOnboardingCompleteKey } from "../lib/storage/onboarding"
 import { SignInForm } from "./auth/sign-in-form"
 import { markInitialNavigationDone } from './initial-navigation/initialNavigation'
 
 /**
  * Root Index - Auth Gate
- * 
- * This component checks authentication state and routes accordingly:
- * - If logged in with complete profile: redirect to main app
- * - If logged in but needs onboarding: redirect to onboarding
- * - If not logged in: show sign-in form
- * 
- * IMPORTANT: This acts as the authentication gate for the entire app.
- * On cold start, we ensure proper initialization before allowing navigation.
+ *
+ * Consumes the `useAppBootstrap` hook which resolves all async state (auth,
+ * profile, local AsyncStorage flag) inside its own "loading" phase.  By the
+ * time bootstrap.status transitions out of "loading" the correct destination
+ * is already known, so navigation is synchronous and the wrong screen is
+ * never rendered — eliminating the onboarding screen flash.
+ *
+ * State machine handled here:
+ *   loading        → show splash / loading spinner
+ *   unauthenticated → show sign-in form
+ *   authenticated  → immediately navigate to main app or onboarding
+ *
+ * Password recovery is checked before the onboarding route since it is a
+ * special override that should always take precedence.
  */
 export default function Index() {
-  const { session, isLoading, profile, isPasswordRecovery } = useAuthContext()
+  const bootstrap = useAppBootstrap()
+  const { isPasswordRecovery } = useAuthContext()
   const router = useRouter()
-  const latestSessionIdRef = useRef<string | null>(null)
   const hasNavigatedRef = useRef(false)
-  
-  // Debug logging for initial render (captures state at mount time only)
+
+  // Debug logging on mount (development only)
   useEffect(() => {
     if (__DEV__) {
-      console.log('[index] Component mounted, auth state:', {
-        isLoading,
-        hasSession: Boolean(session),
-        hasProfile: Boolean(profile),
-        sessionId: session?.user?.id
-      })
+      console.log('[index] Component mounted')
     }
   }, [])
 
-  // Reset navigation ref on unmount to ensure clean state if component remounts
+  // Reset navigation guard on unmount so a remount starts fresh.
   useEffect(() => {
     return () => {
       hasNavigatedRef.current = false
@@ -48,190 +47,62 @@ export default function Index() {
   }, [])
 
   useEffect(() => {
-    let isActive = true
+    // Prevent double-navigation across re-renders.
+    if (hasNavigatedRef.current) return
 
-    // Track the latest session id for this effect run
-    latestSessionIdRef.current = session?.user?.id ?? null
-    const startingSessionId = latestSessionIdRef.current
+    // Still resolving auth or onboarding state — do nothing yet.
+    if (bootstrap.status === 'loading') return
 
-    // Wait for auth state to be determined
-    // IMPORTANT: Don't navigate until isLoading is false to prevent race conditions
-    if (isLoading) {
-      if (__DEV__) {
-        console.log('[index] Auth still loading, waiting...')
-      }
-      return () => {
-        isActive = false
-      }
-    }
-
-    // If user is in password recovery mode, route to the update-password screen
-    // (this happens when the app receives a PASSWORD_RECOVERY event from Supabase)
+    // Password recovery takes precedence over all routing decisions.
     if (isPasswordRecovery) {
-      if (!isActive || hasNavigatedRef.current) return () => { isActive = false }
       hasNavigatedRef.current = true
+      if (__DEV__) {
+        console.log('[index] Password recovery mode — routing to update-password')
+      }
       router.replace(ROUTES.AUTH.UPDATE_PASSWORD as Href)
       try { markInitialNavigationDone() } catch {}
-      return () => { isActive = false }
+      return
     }
 
-    // If user is authenticated, check their profile status
-    if (session?.user) {
-      const userId = session.user.id
+    // Unauthenticated — nothing to navigate; render sign-in form below.
+    if (bootstrap.status === 'unauthenticated') return
 
-      // Wrap navigation in an async function so we can await the AsyncStorage check
-      // without blocking the useEffect return value.
-      const navigate = async () => {
-        try {
-          if (!isActive || latestSessionIdRef.current !== startingSessionId) return
+    // Authenticated — onboardingComplete is already known (resolved by the
+    // hook), so this navigation is synchronous with no further async work.
+    hasNavigatedRef.current = true
+    const dest = bootstrap.onboardingComplete
+      ? ROUTES.TABS.BOUNTY_APP
+      : '/onboarding'
 
-          // Prevent multiple navigations
-          if (hasNavigatedRef.current) {
-            if (__DEV__) {
-              console.log('[index] Already navigated, skipping')
-            }
-            return
-          }
-
-          // Check if user needs to complete onboarding
-          // This happens when auth user exists but no profile is found, OR
-          // profile fetch failed (null) — treat as needing onboarding to avoid
-          // landing in the main app with no profile data (causes "Profile not found" errors)
-          if (profile == null || profile?.needs_onboarding === true || profile?.onboarding_completed === false) {
-            // Before redirecting to onboarding, check the per-user AsyncStorage flag.
-            // When the Supabase write in done.tsx fails (e.g. bad network), the local
-            // flag is the only reliable indicator that onboarding was completed.
-            // bounty-app.tsx applies the same fallback so the user is never redirected
-            // back to onboarding once they reach the main screen.
-            let localOnboardingDone = false
-            try {
-              const val = await AsyncStorage.getItem(getOnboardingCompleteKey(userId))
-              localOnboardingDone = val === 'true'
-            } catch (storageError) {
-              if (__DEV__) {
-                console.warn('[index] AsyncStorage check failed, defaulting to onboarding:', storageError)
-              }
-            }
-
-            // Re-check guards after the async operation
-            if (!isActive || latestSessionIdRef.current !== startingSessionId || hasNavigatedRef.current) return
-
-            if (localOnboardingDone) {
-              // Local flag says onboarding was completed — but verify the profile row
-              // actually exists in Supabase before trusting it. A missing profile row
-              // causes cascading null-access failures throughout the main app.
-              let profileExists = false
-              try {
-                const fetchedProfile = await authProfileService.getProfileById(userId, { bypassCache: true })
-                profileExists = fetchedProfile != null
-              } catch (profileCheckError) {
-                if (__DEV__) {
-                  console.warn('[index] Profile existence check failed, defaulting to onboarding:', profileCheckError)
-                }
-              }
-
-              // Re-check guards after the async operation
-              if (!isActive || latestSessionIdRef.current !== startingSessionId || hasNavigatedRef.current) return
-
-              if (!profileExists) {
-                // Profile row missing — local flag is stale. Force onboarding.
-                if (__DEV__) {
-                  console.log('[index] Local flag set but profile row missing — forcing onboarding')
-                }
-                hasNavigatedRef.current = true
-                router.replace('/onboarding')
-                try { markInitialNavigationDone() } catch {}
-                return
-              }
-
-              if (__DEV__) {
-                console.log('[index] Profile confirmed + local flag set — going to main app')
-              }
-              hasNavigatedRef.current = true
-              router.replace(ROUTES.TABS.BOUNTY_APP)
-              try {
-                markInitialNavigationDone()
-              } catch (error) {
-                if (__DEV__) {
-                  console.warn('[index] markInitialNavigationDone failed after main app navigation:', error)
-                }
-              }
-            } else {
-              if (__DEV__) {
-                console.log('[index] User needs onboarding, redirecting to onboarding flow')
-              }
-              hasNavigatedRef.current = true
-              router.replace('/onboarding')
-              try {
-                markInitialNavigationDone()
-              } catch (error) {
-                if (__DEV__) {
-                  console.warn('[index] markInitialNavigationDone failed after onboarding navigation:', error)
-                }
-              }
-            }
-          } else {
-            if (__DEV__) {
-              console.log('[index] Authenticated with complete profile, redirecting to main app')
-            }
-            hasNavigatedRef.current = true
-            router.replace(ROUTES.TABS.BOUNTY_APP)
-            try {
-              markInitialNavigationDone()
-            } catch (error) {
-              if (__DEV__) {
-                console.warn('[index] markInitialNavigationDone failed after main app navigation:', error)
-              }
-            }
-          }
-        } catch (navError) {
-          console.error('[index] Navigation error:', navError)
-        }
-      }
-
-      navigate()
-    } else {
-      // No session: user should see sign-in form
-      // Reset navigation flag to allow navigation after sign-in
-      hasNavigatedRef.current = false
-      // No session found, showing sign-in form
-    }
-
-    return () => {
-      isActive = false
-    }
-  }, [session, isLoading, profile, isPasswordRecovery, router])
-
-  // Show loading spinner while checking authentication state
-  // CRITICAL: This prevents any content flash before auth is determined
-  if (isLoading) {
     if (__DEV__) {
-      console.log('[index] Rendering loading state')
+      console.log('[index] Routing decision:', {
+        onboardingComplete: bootstrap.onboardingComplete,
+        dest,
+      })
+    }
+
+    router.replace(dest as Href)
+    try { markInitialNavigationDone() } catch {}
+  }, [bootstrap, isPasswordRecovery, router])
+
+  // Loading or authenticated (redirecting) — show spinner, never wrong screen.
+  if (bootstrap.status === 'loading' || bootstrap.status === 'authenticated') {
+    if (__DEV__) {
+      console.log('[index] Rendering loading/redirecting state:', bootstrap.status)
     }
     return (
       <View className="flex-1 items-center justify-center bg-emerald-800">
         <ActivityIndicator size="large" color="#10b981" />
-        <Text className="text-white mt-4 text-base">Loading...</Text>
+        <Text className="text-white mt-4 text-base">
+          {bootstrap.status === 'authenticated' ? 'Redirecting...' : 'Loading...'}
+        </Text>
       </View>
     )
   }
 
-  // If not authenticated, show sign-in form
-  if (!session) {
-    if (__DEV__) {
-      console.log('[index] Rendering sign-in form')
-    }
-    return <SignInForm />
-  }
-
-  // While redirecting, show loading spinner
+  // Unauthenticated — show sign-in form.
   if (__DEV__) {
-    console.log('[index] Rendering redirecting state')
+    console.log('[index] Rendering sign-in form')
   }
-  return (
-    <View className="flex-1 items-center justify-center bg-emerald-800">
-      <ActivityIndicator size="large" color="#10b981" />
-      <Text className="text-white mt-4 text-base">Redirecting...</Text>
-    </View>
-  )
+  return <SignInForm />
 }
