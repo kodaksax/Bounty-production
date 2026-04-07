@@ -4,7 +4,7 @@
 // and must verify Stripe's webhook signature.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import Stripe from 'https://esm.sh/stripe@14?target=deno&no-check'
+import Stripe from 'npm:stripe@14'
 import type { WalletTransaction } from '../_shared/types.ts'
 
 const corsHeaders = {
@@ -41,7 +41,7 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: 'Webhook not configured' }, 500)
   }
 
-  const stripe = new Stripe(stripeKey, { apiVersion: '2023-10-16' })
+  const stripe = new Stripe(stripeKey, { apiVersion: '2023-10-16', httpClient: Stripe.createFetchHttpClient() })
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
