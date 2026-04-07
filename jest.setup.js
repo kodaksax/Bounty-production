@@ -282,6 +282,17 @@ jest.mock('expo-modules-core', () => ({
   NativeModulesProxy: {},
 }));
 
+// Mock expo-application
+jest.mock('expo-application', () => ({
+  nativeBuildVersion: '1',
+  nativeApplicationVersion: '1.0.0',
+  applicationId: 'com.test.bountyexpo',
+  applicationName: 'BountyExpo',
+  getInstallationTimeAsync: jest.fn().mockResolvedValue(new Date()),
+  getLastUpdateTimeAsync: jest.fn().mockResolvedValue(new Date()),
+  getIosIdForVendorAsync: jest.fn().mockResolvedValue('test-vendor-id'),
+}));
+
 // Mock expo-file-system (including legacy export)
 jest.mock('expo-file-system', () => ({
   documentDirectory: '/mock/documents/',
