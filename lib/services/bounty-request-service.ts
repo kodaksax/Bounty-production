@@ -1,7 +1,7 @@
 import type { Bounty, BountyRequest, Profile } from "lib/services/database.types"
 import { isSupabaseConfigured, supabase } from 'lib/supabase'
-import { getApiBase } from 'lib/utils/dev-host'
 import { MIN_ESCROW_CENTS } from 'lib/utils/bounty-validation'
+import { getApiBase } from 'lib/utils/dev-host'
 import { logger } from "lib/utils/error-logger"
 import { paymentService } from './payment-service'
 
@@ -11,10 +11,14 @@ export type BountyRequestWithDetails = BountyRequest & {
 }
 
 // API Configuration
-// Prefer explicit API base from env. In development, prefer a runtime-derived
-// base (Expo debugger host, emulator fallback, etc.) to avoid "localhost"
-// mismatches when running on device/emulator.
-const API_BASE_URL = process.env.API_BASE_URL || (typeof __DEV__ !== 'undefined' && __DEV__ ? getApiBase() : 'http://localhost:3001');
+// EXPO_PUBLIC_* vars are the only ones Metro inlines into the bundle. A bare
+// API_BASE_URL (no prefix) is never available at runtime and would always
+// fall through to the localhost default, breaking calls on device/emulator.
+// In development, derive the address from the Expo debugger host so it works
+// on a physical device over LAN.
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL
+  || process.env.EXPO_PUBLIC_API_BASE_URL
+  || (typeof __DEV__ !== 'undefined' && __DEV__ ? getApiBase() : 'http://localhost:3001');
 
 export const bountyRequestService = {
   /**
