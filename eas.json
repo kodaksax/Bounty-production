@@ -58,20 +58,12 @@
         "resourceClass": "large"
       },
       "cache": {
-        "key": "expo-55-hermesv1-rn083-v2"
+        "key": "expo-55-hermesv1-rn083-v2-production"
       },
       "env": {
         "APP_ENV": "production",
         "EXPO_PUBLIC_ENVIRONMENT": "production",
-        "EXPO_PUBLIC_API_URL": "${EXPO_PUBLIC_API_URL}",
-        "EXPO_PUBLIC_SUPABASE_URL": "${EXPO_PUBLIC_SUPABASE_URL}",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "${EXPO_PUBLIC_SUPABASE_ANON_KEY}",
-        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "${EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY}",
-        "EXPO_PUBLIC_GOOGLE_PLACES_API_KEY": "${EXPO_PUBLIC_GOOGLE_PLACES_API_KEY}",
-        "EXPO_PUBLIC_MIXPANEL_TOKEN": "${EXPO_PUBLIC_MIXPANEL_TOKEN}",
-        "EXPO_PUBLIC_SENTRY_DSN": "${EXPO_PUBLIC_SENTRY_DSN}",
-        "EXPO_PUBLIC_SENTRY_DEBUG": "false",
-        "EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID": "${EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID}"
+        "EXPO_PUBLIC_SENTRY_DEBUG": "false"
       }
     }
   },

@@ -22,14 +22,27 @@ if (!process.env.APP_ENV && process.env.EAS_BUILD_PROFILE === 'production') {
 
 const envFile = path.resolve(process.cwd(), `.env.${APP_ENV}`);
 
+// In EAS cloud builds, environment variables are already injected by EAS from
+// the dashboard / secrets — using override:true would let a stale .env file
+// silently clobber them. For local development we still want the env-specific
+// file to win over any base .env that Expo's built-in loader may have already
+// processed, so we keep override:true only when NOT running on EAS servers.
+// `EAS_BUILD` / `EAS_BUILD_PLATFORM` are used here as a heuristic for an
+// EAS-managed build environment, primarily EAS cloud builds where env vars are
+// injected by the build service. They may also appear in other EAS contexts,
+// but local app development should generally not set them, which is why we
+// still allow local `.env` files to override when neither variable is present.
+const isEasBuild = !!(process.env.EAS_BUILD || process.env.EAS_BUILD_PLATFORM);
+const dotenvOverride = !isEasBuild;
+
 if (fs.existsSync(envFile)) {
-  // override: true ensures this env file wins over any .env/.env.local already
-  // loaded by Expo's built-in env loader before app.config.js runs.
   // quiet: true suppresses dotenv v17 stdout logging that would corrupt JSON
   // output when tools like expo-doctor or expo install --check parse stdout.
-  dotenv.config({ path: envFile, override: true, quiet: true });
-} else if (fs.existsSync(path.resolve(process.cwd(), '.env'))) {
-  dotenv.config({ override: true, quiet: true });
+  dotenv.config({ path: envFile, override: dotenvOverride, quiet: true });
+} else if (!isEasBuild && fs.existsSync(path.resolve(process.cwd(), '.env'))) {
+  // Skip the generic .env fallback entirely during EAS builds so no local file
+  // can bleed into a cloud build.
+  dotenv.config({ override: false, quiet: true });
 }
 
 // Guard against localhost URLs being baked into a production build.

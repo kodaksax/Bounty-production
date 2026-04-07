@@ -286,6 +286,7 @@ Deno.serve(async (req: Request) => {
       const customerId = customerResult.customerId
 
       const sanitizedMetadata: Record<string, string> = {}
+      if (metadata.purpose) sanitizedMetadata.purpose = sanitizeText(metadata.purpose)
       if (metadata.bounty_id) sanitizedMetadata.bounty_id = sanitizeText(metadata.bounty_id)
       if (metadata.description) sanitizedMetadata.description = sanitizeText(metadata.description)
 

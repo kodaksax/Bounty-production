@@ -20,21 +20,28 @@ interface AddMoneyScreenProps {
   onAddMoney?: (amount: number) => void
 }
 
-// Helper to persist a deposit to the server. Extracted to avoid duplicated logic
-async function persistDeposit(paymentIntentId: string | undefined, amount: number, accessToken?: string, source?: string) {
-  if (!paymentIntentId || !accessToken) return
-  try {
-    const res = await fetch(`${API_BASE_URL}/wallet/deposit`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-        ...(config.supabase.anonKey ? { apikey: config.supabase.anonKey } : {}),
-      },
-      body: JSON.stringify({ amount, paymentIntentId }),
-    })
+// Helper to persist a deposit to the server. Extracted to avoid duplicated logic.
+// Retries up to 3 times with exponential back-off so transient network blips
+// don't silently drop the server-side balance update.
+async function persistDeposit(paymentIntentId: string | undefined, amount: number, accessToken?: string, source?: string): Promise<boolean> {
+  if (!paymentIntentId || !accessToken) return false
+  const MAX_RETRIES = 3
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/wallet/deposit`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+          ...(config.supabase.anonKey ? { apikey: config.supabase.anonKey } : {}),
+        },
+        body: JSON.stringify({ amount, paymentIntentId }),
+      })
 
-    if (!res.ok) {
+      if (res.ok) {
+        return true
+      }
+
       let bodyText = ''
       try {
         const contentType = res.headers.get('content-type') || ''
@@ -47,11 +54,21 @@ async function persistDeposit(paymentIntentId: string | undefined, amount: numbe
       } catch (e) {
         bodyText = '<unable to read response body>'
       }
-      console.warn(`[AddMoney] Persist ${source ? `${source} ` : ''}deposit responded with ${res.status} ${res.statusText}:`, bodyText)
+      console.warn(`[AddMoney] Persist ${source ? `${source} ` : ''}deposit attempt ${attempt}/${MAX_RETRIES} responded with ${res.status} ${res.statusText}:`, bodyText)
+
+      // Don't retry on 4xx client errors (except 408/429) — they won't succeed
+      if (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429) {
+        return false
+      }
+    } catch (e) {
+      console.warn(`[AddMoney] Persist ${source ? `${source} ` : ''}deposit attempt ${attempt}/${MAX_RETRIES} failed:`, e)
     }
-  } catch (e) {
-    console.warn(`[AddMoney] Failed to persist ${source ? `${source} ` : ''}deposit to server:`, e)
+    // Exponential back-off: 1s, 2s, 4s
+    if (attempt < MAX_RETRIES) {
+      await new Promise(r => setTimeout(r, 1000 * 2 ** (attempt - 1)))
+    }
   }
+  return false
 }
 
 export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
@@ -138,7 +155,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
           // apply_deposit is idempotent on paymentIntentId, so a later webhook
           // delivery is a safe no-op. This ensures profiles.balance is durable
           // and survives sign-out / cold restart.
-          await persistDeposit(result.paymentIntentId, numAmount, session?.access_token, 'Stripe')
+          const persisted = await persistDeposit(result.paymentIntentId, numAmount, session?.access_token, 'Stripe')
 
           // Sync balance from server so Supabase is the source of truth
           try {
@@ -150,10 +167,13 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
             console.warn('[AddMoney] Failed to sync balance from server after deposit:', syncErr)
           }
 
-          // Show success message
+          // Show success message (warn if server persistence failed)
+          const successMsg = persisted
+            ? `$${numAmount.toFixed(2)} has been added to your wallet.`
+            : `$${numAmount.toFixed(2)} has been added to your wallet.\n\nNote: There was a temporary issue syncing with the server. Your balance will update automatically shortly.`
           Alert.alert(
             'Success!',
-            `$${numAmount.toFixed(2)} has been added to your wallet.`,
+            successMsg,
             [{
               text: 'OK',
               onPress: () => {
@@ -225,7 +245,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
         })
 
         // Persist the deposit to the DB immediately (don't wait for the webhook).
-        await persistDeposit(result.paymentIntentId, numAmount, session?.access_token, 'Apple Pay')
+        const persisted = await persistDeposit(result.paymentIntentId, numAmount, session?.access_token, 'Apple Pay')
 
         // Sync balance from server so Supabase is the source of truth
         try {
@@ -237,9 +257,12 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
           console.warn('[AddMoney] Failed to sync balance from server after Apple Pay deposit:', syncErr)
         }
 
+        const applePayMsg = persisted
+          ? `$${numAmount.toFixed(2)} has been added to your wallet via Apple Pay.`
+          : `$${numAmount.toFixed(2)} has been added to your wallet via Apple Pay.\n\nNote: There was a temporary issue syncing with the server. Your balance will update automatically shortly.`
         Alert.alert(
           'Success!',
-          `$${numAmount.toFixed(2)} has been added to your wallet via Apple Pay.`,
+          applePayMsg,
           [
             {
               text: 'OK',
