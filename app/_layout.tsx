@@ -109,46 +109,46 @@ const LayoutContent = () => {
 
   return (
     <RootFrame bgColor={color}>
-      <NetworkProvider>
-        <AuthProvider>
-            <SessionMonitorGate />
-            <AdminProvider>
-              <StripeProvider>
-                <WalletProvider>
-                  <NotificationProvider>
-                    <WebSocketProvider>
-                      <ErrorBoundary
-                        onError={(error, errorInfo) => {
-                          // Add custom breadcrumb for additional context (do not capture exception again)
-                          try {
-                            if (Sentry && typeof Sentry.addBreadcrumb === 'function') {
-                              Sentry.addBreadcrumb({
-                                category: 'root_layout',
-                                message: 'Error caught in root layout',
-                                level: 'error',
-                                data: {
-                                  componentStack: errorInfo.componentStack,
-                                },
-                              });
-                            }
-                          } catch {
-                            // ignore
-                          }
-                        }}
-                      >
+      <ErrorBoundary
+        onError={(error, errorInfo) => {
+          // Add custom breadcrumb for additional context (do not capture exception again)
+          try {
+            if (Sentry && typeof Sentry.addBreadcrumb === 'function') {
+              Sentry.addBreadcrumb({
+                category: 'root_layout',
+                message: 'Error caught in root layout',
+                level: 'error',
+                data: {
+                  componentStack: errorInfo.componentStack,
+                },
+              });
+            }
+          } catch {
+            // ignore
+          }
+        }}
+      >
+        <NetworkProvider>
+          <AuthProvider>
+              <SessionMonitorGate />
+              <AdminProvider>
+                <StripeProvider>
+                  <WalletProvider>
+                    <NotificationProvider>
+                      <WebSocketProvider>
                         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
                           <View style={styles.inner}>
                             <Slot />
                           </View>
                         </ThemeProvider>
-                      </ErrorBoundary>
-                    </WebSocketProvider>
-                  </NotificationProvider>
-                </WalletProvider>
-              </StripeProvider>
-            </AdminProvider>
-          </AuthProvider>
-      </NetworkProvider>
+                      </WebSocketProvider>
+                    </NotificationProvider>
+                  </WalletProvider>
+                </StripeProvider>
+              </AdminProvider>
+            </AuthProvider>
+        </NetworkProvider>
+      </ErrorBoundary>
     </RootFrame>
   );
 };
@@ -300,15 +300,15 @@ const styles = StyleSheet.create({
   gestureRoot: { flex: 1 },
 });
 
-let WrappedRoot = RootLayout;
-try {
-  if (Sentry && typeof Sentry.wrap === 'function') {
-    WrappedRoot = Sentry.wrap(RootLayout);
-  }
-} catch (e) {
-  // ignore; fall back to unwrapped root
-  // eslint-disable-next-line no-console
-  console.error('[Sentry] wrap failed at module-eval:', e);
-}
+// Sentry.wrap() is intentionally NOT used here.
+// In Expo Router apps, Sentry.wrap() adds TouchEventBoundary / ProfilerComponent /
+// FeedbackFormProvider around the root component. These wrappers can crash during
+// rendering when:
+//   a) Sentry.init() was skipped (iOS 26+ guard) leaving native state uninitialized
+//   b) @sentry/react-native has a React 19 incompatibility
+// Because the wrapped component IS the root export, no ErrorBoundary exists above it
+// to catch these render-time failures → blank white screen on TestFlight.
+// Sentry still captures errors/breadcrumbs via initializeSentry() + the ErrorBoundary
+// onError callback + the global error handlers in lib/error-handling.ts.
 
-export default WrappedRoot;
+export default RootLayout;
