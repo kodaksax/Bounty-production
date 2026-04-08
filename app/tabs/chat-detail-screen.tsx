@@ -11,7 +11,6 @@ import { MessageBubble } from "../../components/MessageBubble"
 import { PinnedMessageHeader } from "../../components/PinnedMessageHeader"
 import { ReportModal } from "../../components/ReportModal"
 import { TypingIndicator } from "../../components/TypingIndicator"
-import { CompactOfflineBanner } from '../../components/offline-mode-banner'
 import { useAttachmentUpload } from '../../hooks/use-attachment-upload'
 import { useMessages } from "../../hooks/useMessages"
 import { useNormalizedProfile } from "../../hooks/useNormalizedProfile"
@@ -19,7 +18,7 @@ import { useTypingIndicator } from "../../hooks/useSocketStub"
 import { useValidUserId } from '../../hooks/useValidUserId'
 import { generateInitials } from "../../lib/services/supabase-messaging"
 import type { Conversation, Message } from "../../lib/types"
-
+ 
 interface ChatDetailScreenProps {
   conversation: Conversation
   onBack?: () => void
@@ -52,16 +51,16 @@ export function ChatDetailScreen({
   const typingUsersRef = useTypingIndicator(conversation.id)
   const insets = useSafeAreaInsets()
   // Use a slightly larger offset to guarantee composer is above BottomNav
-  const BOTTOM_NAV_OFFSET = Math.max(96, (insets.bottom || 0) + 12) // height of BottomNav (ensure safe area)
-  
+  const BOTTOM_NAV_OFFSET = Math.max(96, (insets.bottom || 0) + 12)
+
   // Get the other participant's ID (not the current user) for 1:1 chats
   const otherUserId = !conversation.isGroup && conversation.participantIds
     ? conversation.participantIds.find(id => id !== currentUserId)
     : null
-  
+
   // Fetch the other user's profile for 1:1 chats
   const { profile: otherUserProfile } = useNormalizedProfile(otherUserId || undefined)
-  
+
   // Use profile data if available for 1:1 chats
   const displayName = !conversation.isGroup && otherUserProfile?.username 
     ? otherUserProfile.username 
@@ -69,22 +68,20 @@ export function ChatDetailScreen({
   const avatarUrl = !conversation.isGroup && otherUserProfile?.avatar 
     ? otherUserProfile.avatar 
     : conversation.avatar
-  
+
   // Generate initials for fallback
   const initials = generateInitials(
     otherUserProfile?.username,
     otherUserProfile?.name
-  );
+  )
 
   const handleSendMessage = async (text: string, mediaUrl?: string | null) => {
     await sendMessage(text, mediaUrl)
-    // Scroll to bottom after sending
     setTimeout(() => {
       listRef.current?.scrollToEnd({ animated: true })
     }, 100)
   }
 
-  // Attachment upload hook
   const { pickAttachment, isPicking, isUploading } = useAttachmentUpload({
     bucket: 'bounty-attachments',
     allowsMultiple: false,
@@ -95,15 +92,12 @@ export function ChatDetailScreen({
       const uploaded = await pickAttachment()
       if (!uploaded || uploaded.length === 0) return
       const att = uploaded[0]
-      // Preserve the raw input so we can restore it on failure
       const previousInput = inputText
       const textToSend = previousInput.trim()
       try {
         await handleSendMessage(textToSend, att.remoteUri || att.uri)
-        // Clear the input only after successful send
         setInputText('')
       } catch (err) {
-        // Restore the previous input if send failed
         setInputText(previousInput)
         throw err
       }
@@ -168,12 +162,11 @@ export function ChatDetailScreen({
   const renderFooter = () => {
     const isTyping = typingUsersRef.current && typingUsersRef.current.size > 0
     if (!isTyping) return null
-
     return <TypingIndicator userName={conversation.name} />
   }
 
   const getItemLayout = (_: any, index: number) => ({
-    length: 80, // Approximate message height
+    length: 80,
     offset: 80 * index,
     index,
   })
@@ -182,44 +175,38 @@ export function ChatDetailScreen({
   const trimmedInputText = inputText.trim()
 
   return (
-    <View className="flex flex-col min-h-screen bg-emerald-600 text-white" style={{ paddingBottom: Math.max(insets.bottom || 0, BOTTOM_NAV_OFFSET + 8) }}>
-      {/* Compact offline indicator for chat */}
-      <CompactOfflineBanner />
+    <View style={[styles.container, { paddingBottom: Math.max(insets.bottom || 0, BOTTOM_NAV_OFFSET + 8) }]}>
       {/* Header */}
-      <View
-        className="p-4 pt-8 pb-2 flex-row items-center justify-between border-b"
-        style={{ borderBottomColor: '#047857' }}
-      >
-        <View className="flex-row items-center flex-1">
-          <TouchableOpacity onPress={onBack} className="mr-3">
-            <MaterialIcons name="arrow-back" size={24} color="#fffef5" />
+      <View style={styles.header}>
+        <View style={styles.headerInner}>
+          <TouchableOpacity onPress={onBack} style={styles.backButton}>
+            <MaterialIcons name="arrow-back" size={24} color="#064E3B" />
           </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={() => {
               if (otherUserId && !conversation.isGroup) {
                 router.push(`/profile/${otherUserId}`)
               }
             }}
             disabled={!otherUserId || conversation.isGroup}
-            className="flex-row items-center flex-1"
+            style={styles.headerProfile}
           >
-            <Avatar className="h-10 w-10 mr-3">
+            <Avatar style={styles.headerAvatar}>
               <AvatarImage src={avatarUrl || "/placeholder.svg?height=40&width=40"} alt={displayName} />
-              <AvatarFallback className="bg-emerald-700 text-emerald-200">
-                {initials}
+              <AvatarFallback style={styles.avatarFallback}>
+                <Text style={styles.avatarFallbackText}>{initials}</Text>
               </AvatarFallback>
             </Avatar>
             <View>
-              <Text className="font-medium">{displayName}</Text>
+              <Text style={styles.headerName}>{displayName}</Text>
               {conversation.isGroup && (
-                <Text className="text-xs text-emerald-300">
+                <Text style={styles.headerSubtext}>
                   {conversation.participantIds?.length || 0} members
                 </Text>
               )}
             </View>
           </TouchableOpacity>
         </View>
-        {/* Call and video icons removed — functionality not implemented */}
       </View>
 
       {/* Pinned Message Header */}
@@ -233,8 +220,8 @@ export function ChatDetailScreen({
 
       {/* Error banner */}
       {error && (
-        <View className="mx-4 mt-2 p-3 bg-red-500/20 border border-red-500 rounded">
-          <Text className="text-sm text-red-100">{error}</Text>
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorText}>{error}</Text>
         </View>
       )}
 
@@ -245,8 +232,8 @@ export function ChatDetailScreen({
         keyboardVerticalOffset={BOTTOM_NAV_OFFSET}
       >
         {loading ? (
-          <View className="flex-1 items-center justify-center">
-            <ActivityIndicator size="large" color="#ffffff" />
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#059669" />
           </View>
         ) : (
           <View style={{ flex: 1 }}>
@@ -279,9 +266,9 @@ export function ChatDetailScreen({
                   accessibilityLabel="Add attachment"
                 >
                   {isPicking || isUploading ? (
-                    <ActivityIndicator size="small" color="#d1fae5" />
+                    <ActivityIndicator size="small" color="#059669" />
                   ) : (
-                    <MaterialIcons name="attach-file" size={20} color="#d1fae5" />
+                    <MaterialIcons name="attach-file" size={20} color="#6B7280" />
                   )}
                 </TouchableOpacity>
                 <TextInput
@@ -289,7 +276,7 @@ export function ChatDetailScreen({
                   value={inputText}
                   onChangeText={setInputText}
                   placeholder="Type a message..."
-                  placeholderTextColor="rgba(209,250,229,0.5)"
+                  placeholderTextColor="#9CA3AF"
                   multiline
                   accessibilityLabel="Message input field"
                   accessibilityHint="Enter your message to send"
@@ -302,16 +289,14 @@ export function ChatDetailScreen({
                     const textToSend = previousInput.trim()
                     try {
                       await handleSendMessage(textToSend)
-                      // Clear input only after successful send
                       setInputText('')
                     } catch (err) {
-                      // Restore input on failure
                       setInputText(previousInput)
                     }
                   }}
                   disabled={!trimmedInputText}
                 >
-                  <MaterialIcons name="send" size={20} color="#d1fae5" />
+                  <MaterialIcons name="send" size={20} color="#059669" />
                 </TouchableOpacity>
               </View>
             </View>
@@ -344,11 +329,82 @@ export function ChatDetailScreen({
   )
 }
 
-export default ChatDetailScreen;
+export default ChatDetailScreen
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  header: {
+    backgroundColor: '#FFFFFF',
+    paddingTop: 48,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  headerInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  backButton: {
+    marginRight: 12,
+  },
+  headerProfile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  headerAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 12,
+  },
+  avatarFallback: {
+    backgroundColor: '#D1FAE5',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarFallbackText: {
+    color: '#064E3B',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  headerName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  headerSubtext: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 1,
+  },
+  errorBanner: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    padding: 12,
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: 8,
+  },
+  errorText: {
+    fontSize: 13,
+    color: '#991B1B',
+  },
   keyboardAvoidingContainer: {
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   messageList: {
     paddingHorizontal: 12,
@@ -357,23 +413,23 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     padding: 12,
-    backgroundColor: '#059669', // emerald-600
+    backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: '#047857', // emerald-700
+    borderTopColor: '#E5E7EB',
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    backgroundColor: 'rgba(6, 95, 70, 0.6)',
+    backgroundColor: '#F9FAFB',
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
+    borderColor: '#E5E7EB',
   },
   inlineTextInput: {
     flex: 1,
-    color: '#ffffff',
+    color: '#111827',
     fontSize: 15,
     maxHeight: 100,
     paddingTop: 4,
