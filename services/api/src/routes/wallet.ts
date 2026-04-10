@@ -32,7 +32,7 @@ const withdrawSchema = z.object({
 
 const transferSchema = z.object({
   amount: z.number().min(MIN_WITHDRAWAL_AMOUNT, `Minimum transfer is $${MIN_WITHDRAWAL_AMOUNT}.00`),
-  currency: z.string().toLowerCase().optional().default('usd'),
+  currency: z.literal('usd').optional().default('usd'),
   idempotencyKey: z.string().optional(),
 });
 
@@ -389,11 +389,13 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
       //  - deducts profiles.balance via the update_balance RPC (prevents overdraft)
       //  - creates the Stripe transfer
       //  - marks the transaction completed (or failed + rollback on error)
+      // Pass idempotencyKey as-is (possibly undefined) so createWithdrawal applies
+      // its own deterministic fallback, ensuring retries are safe without a client key.
       const transaction = await ConsolidatedWalletService.createWithdrawal(
         request.userId as string,
         amount,
         status.stripeAccountId,
-        idempotencyKey || `withdraw_${request.userId}_${Date.now()}`
+        idempotencyKey
       );
 
       // Fetch the authoritative post-deduction balance from Supabase.

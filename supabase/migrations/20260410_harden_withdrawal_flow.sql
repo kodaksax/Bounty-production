@@ -8,10 +8,11 @@ DO $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.table_constraints
-    WHERE table_name = 'profiles'
+    WHERE table_schema = 'public'
+      AND table_name = 'profiles'
       AND constraint_name = 'check_balance_non_negative'
   ) THEN
-    ALTER TABLE profiles
+    ALTER TABLE public.profiles
       ADD CONSTRAINT check_balance_non_negative CHECK (balance >= 0);
   END IF;
 END;

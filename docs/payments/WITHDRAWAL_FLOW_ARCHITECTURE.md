@@ -48,7 +48,9 @@ routing numbers. All sensitive operations run server-side.
 
 The `/connect/transfer` endpoint:
 
-1. **Schema validation** — `transferSchema` enforces `amount >= 10` (USD) and `currency = 'usd'`.
+1. **Schema validation** — `transferSchema` enforces `amount >= 10` (USD) and `currency` must
+   be the literal `'usd'` (defaults to `'usd'` when omitted; non-USD values are rejected with a
+   validation error).
 2. **Idempotency check** — incoming `idempotencyKey` is looked up in the in-process cache; a
    `409 Conflict` is returned for duplicates.
 3. **Connect account verification** — Stripe Connect status is fetched; 400 is returned if
@@ -69,8 +71,13 @@ callbacks:
 | `transfer.created` | Log; no balance change needed (already deducted at request time) |
 | `transfer.paid` | Optionally update transaction metadata with confirmation timestamp |
 | `payout.paid` | Clear `profiles.payout_failed_at`; log success |
-| `payout.failed` | Set `profiles.payout_failed_at = NOW()` for support follow-up; optionally re-credit balance and mark transaction `failed` |
-| `transfer.reversed` | Re-credit balance; mark transaction `failed`; alert support |
+| `payout.failed` | Set `profiles.payout_failed_at = NOW()` and trigger support follow-up/notification; does **not** currently re-credit balance or mark the related transaction `failed` |
+| `transfer.reversed` | Not currently handled by the webhook function; any balance re-credit / transaction failure workflow must be handled manually until implemented |
+
+> **Current limitation:** webhook-driven ledger rollback is not currently performed for
+> `payout.failed` or `transfer.reversed`. The wallet balance is deducted at withdrawal request
+> time, so these events require manual operational review unless and until compensating logic
+> is added to the webhook handler.
 
 > The webhooks Edge Function is deployed with `--no-verify-jwt` because Stripe does not send
 > a Supabase JWT. Webhook signatures are verified using `STRIPE_WEBHOOK_SECRET`.
