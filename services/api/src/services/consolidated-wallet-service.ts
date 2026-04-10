@@ -523,7 +523,10 @@ export async function createWithdrawal(
   const amountKey = amount.toFixed(2).replace(/\./g, '');
   const effectiveIdempotencyKey = idempotencyKey || `withdrawal_${userId}_${amountKey}_${destination.slice(-4)}`;
 
-  // Create pending transaction (balance not yet deducted)
+  // Create pending transaction (balance not yet deducted).
+  // The unique partial index idx_wallet_tx_one_pending_withdrawal prevents
+  // more than one pending withdrawal per user, guarding against race
+  // conditions where the client submits two requests in rapid succession.
   const { data: transaction, error: txError } = await admin
     .from('wallet_transactions')
     .insert([{
@@ -541,6 +544,10 @@ export async function createWithdrawal(
     .single();
 
   if (txError) {
+    // Unique index violation means a withdrawal is already in-flight for this user.
+    if (txError.code === '23505') {
+      throw new ConflictError('A withdrawal is already in progress. Please wait for it to complete before initiating a new one.');
+    }
     throw new ExternalServiceError('Supabase', 'Failed to create withdrawal transaction', {
       error: txError.message,
     });

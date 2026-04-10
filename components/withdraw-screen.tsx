@@ -5,6 +5,7 @@ import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TextIn
 import { useAuthContext } from '../hooks/use-auth-context';
 import { useEmailVerification } from '../hooks/use-email-verification';
 import { API_BASE_URL } from '../lib/config/api';
+import { MIN_WITHDRAWAL_AMOUNT } from '../lib/constants';
 import { useStripe } from '../lib/stripe-context';
 import { theme } from '../lib/theme';
 import { useWallet } from '../lib/wallet-context';
@@ -199,6 +200,11 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
       return;
     }
 
+    if (withdrawalAmount < MIN_WITHDRAWAL_AMOUNT) {
+      Alert.alert('Minimum Withdrawal', `The minimum withdrawal amount is $${MIN_WITHDRAWAL_AMOUNT.toFixed(2)}.`);
+      return;
+    }
+
     if (withdrawalAmount > balance) {
       Alert.alert('Insufficient Balance', 'You cannot withdraw more than your current balance.');
       return;
@@ -236,6 +242,10 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
       }
 
       if (hasBankAccount) {
+        // Generate a per-tap idempotency key so duplicate taps or network
+        // retries do not create duplicate payout transactions on the server.
+        const idempotencyKey = `withdraw_${session.user?.id ?? 'u'}_${Date.now()}`;
+
         // Use Stripe Connect transfer to bank account
         const response = await fetch(`${API_BASE_URL}/connect/transfer`, {
           method: 'POST',
@@ -245,7 +255,8 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
           },
           body: JSON.stringify({
             amount: withdrawalAmount,
-            currency: 'usd'
+            currency: 'usd',
+            idempotencyKey,
           })
         });
 

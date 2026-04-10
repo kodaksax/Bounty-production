@@ -1,6 +1,5 @@
 import { eq } from 'drizzle-orm';
 import { FastifyInstance } from 'fastify';
-import Stripe from 'stripe';
 import { z } from 'zod';
 import { db } from '../db/connection';
 import { bounties } from '../db/schema';
@@ -13,8 +12,6 @@ import {
     storeIdempotencyKey
 } from '../services/idempotency-service';
 import { stripeConnectService } from '../services/stripe-connect-service';
-import { walletService } from '../services/wallet-service';
-import { calculateUserBalance } from '../utils/wallet-utils';
 
 /**
  * Validation schemas for wallet operations
@@ -25,15 +22,17 @@ const depositSchema = z.object({
   idempotencyKey: z.string().optional(),
 });
 
+const MIN_WITHDRAWAL_AMOUNT = 10; // USD – keep in sync with lib/constants.ts MIN_WITHDRAWAL_AMOUNT in the mobile app
+
 const withdrawSchema = z.object({
-  amount: z.number().min(1, 'Minimum withdrawal is $1.00'),
+  amount: z.number().min(MIN_WITHDRAWAL_AMOUNT, `Minimum withdrawal is $${MIN_WITHDRAWAL_AMOUNT}.00`),
   destination: z.string().optional(), // Now optional if service has a default logic, but usually needed
   idempotencyKey: z.string().optional(),
 });
 
 const transferSchema = z.object({
-  amount: z.number().min(1, 'Minimum transfer is $1.00'),
-  currency: z.string().toLowerCase().optional().default('usd'),
+  amount: z.number().min(MIN_WITHDRAWAL_AMOUNT, `Minimum transfer is $${MIN_WITHDRAWAL_AMOUNT}.00`),
+  currency: z.literal('usd').optional().default('usd'),
   idempotencyKey: z.string().optional(),
 });
 
@@ -45,15 +44,6 @@ const escrowSchema = z.object({
 });
 
 export async function registerWalletRoutes(fastify: FastifyInstance) {
-  const stripeKey = process.env.STRIPE_SECRET_KEY || '';
-  let stripe: Stripe | null = null;
-
-  if (stripeKey) {
-    stripe = new Stripe(stripeKey, {
-      apiVersion: '2026-02-25.clover',
-    });
-  }
-
   /**
    * Get user's wallet balance
    */
@@ -342,6 +332,16 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
 
   /**
    * Process Stripe Connect transfer (withdrawal payout)
+   *
+   * This endpoint delegates to ConsolidatedWalletService.createWithdrawal which:
+   *  1. Verifies the Stripe Connect account is ready for payouts.
+   *  2. Creates a *pending* wallet_transaction in Supabase.
+   *  3. Atomically deducts the balance via the update_balance Supabase RPC
+   *     (raises an error if the resulting balance would be negative, preventing
+   *     overdrafts and race-conditions between concurrent withdrawal requests).
+   *  4. Creates the Stripe Transfer with an idempotency key so retries are safe.
+   *  5. Updates the transaction to *completed* (or *failed* on error, rolling
+   *     back the balance deduction).
    */
   fastify.post('/connect/transfer', {
     preHandler: authMiddleware
@@ -355,7 +355,6 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
 
       const body = transferSchema.parse(request.body);
 
-      const { currency = 'usd' } = body;
       amount = body.amount;
       idempotencyKey = body.idempotencyKey;
 
@@ -370,76 +369,48 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         await storeIdempotencyKey(idempotencyKey);
       }
 
-      // Check balance
-      const balanceCents = await calculateUserBalance(request.userId);
-      const amountCents = Math.round(amount * 100);
-      if (balanceCents < amountCents) {
-        return reply.code(400).send({ error: 'Insufficient balance' });
-      }
-
-      // Check Connect account
+      // Verify Connect account is ready for payouts *before* any DB writes.
       const status = await stripeConnectService.getConnectStatus(request.userId as string);
       if (!status.hasStripeAccount || !status.payoutsEnabled) {
+        if (idempotencyKey) await removeIdempotencyKey(idempotencyKey);
         return reply.code(400).send({
           error: 'Stripe Connect account not ready for payouts',
           requiresOnboarding: true,
         });
       }
 
-      // Create withdrawal transaction
-      const transaction = await walletService.createTransaction({
-        user_id: request.userId as string,
-        type: 'withdrawal',
-        amount: amount,
-      });
-
-      let transferId = `tr_mock_${Date.now()}`;
-
-      // Process Stripe transfer
-      if (stripe && status.stripeAccountId) {
-        // Narrow types for TypeScript: capture into local non-optional constants
-        const destinationAcc: string = status.stripeAccountId;
-        const userIdStr: string = request.userId as string;
-
-        try {
-          const { withStripeIdempotency } = await import('../services/stripe-safeguards');
-          const transfer = await withStripeIdempotency(
-            idempotencyKey || `withdraw_${transaction.id}`,
-            async (opts: any = {}) => stripe!.transfers.create({
-              amount: amountCents,
-              currency,
-              destination: destinationAcc,
-              metadata: {
-                user_id: userIdStr,
-                transaction_id: transaction.id,
-                type: 'withdrawal',
-              },
-            }, opts)
-          );
-          transferId = transfer.id;
-          console.log(`✅ Created Stripe transfer ${transfer.id} for $${amount}`);
-        } catch (stripeError) {
-          console.error('Stripe transfer error:', stripeError);
-          // Return error but transaction is recorded
-          return reply.code(500).send({
-            error: 'Failed to process Stripe transfer. Please contact support.',
-            transactionId: transaction.id,
-          });
-        }
+      if (!status.stripeAccountId) {
+        if (idempotencyKey) await removeIdempotencyKey(idempotencyKey);
+        return reply.code(400).send({ error: 'No withdrawal destination configured' });
       }
 
-      const newBalance = (balanceCents - amountCents) / 100;
+      // Delegate to ConsolidatedWalletService which atomically:
+      //  - records a pending transaction in Supabase wallet_transactions
+      //  - deducts profiles.balance via the update_balance RPC (prevents overdraft)
+      //  - creates the Stripe transfer
+      //  - marks the transaction completed (or failed + rollback on error)
+      // Pass idempotencyKey as-is (possibly undefined) so createWithdrawal applies
+      // its own deterministic fallback, ensuring retries are safe without a client key.
+      const transaction = await ConsolidatedWalletService.createWithdrawal(
+        request.userId as string,
+        amount,
+        status.stripeAccountId,
+        idempotencyKey
+      );
+
+      // Fetch the authoritative post-deduction balance from Supabase.
+      const { balance: newBalance } = await ConsolidatedWalletService.getBalance(request.userId as string);
 
       return {
         success: true,
-        transferId,
+        transferId: transaction.stripe_transfer_id,
         transactionId: transaction.id,
         amount,
         newBalance,
         estimatedArrival: '1-2 business days',
         message: `Transfer of $${amount.toFixed(2)} has been initiated.`,
       };
-    } catch (error) {
+    } catch (error: any) {
       logErrorWithContext(request, error, {
         operation: 'process_transfer',
         userId: request.userId,
@@ -448,6 +419,14 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
 
       if (idempotencyKey) {
         await removeIdempotencyKey(idempotencyKey);
+      }
+
+      // Surface well-known error codes to the client with actionable messages.
+      if (error?.name === 'ValidationError') {
+        return reply.code(400).send({ error: error.message });
+      }
+      if (error?.name === 'ConflictError') {
+        return reply.code(409).send({ error: error.message, code: 'conflict' });
       }
 
       return reply.code(500).send({
