@@ -17,7 +17,8 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 export default function AuthIndex() {
   const router = useRouter();
-  const params = useLocalSearchParams<Record<string, string>>();
+  // Use default typing so values are correctly typed as string | string[].
+  const params = useLocalSearchParams<Record<string, string | string[]>>();
   // Guard so we only redirect once, even if params reference changes on re-renders.
   const redirected = useRef(false);
 
@@ -25,14 +26,16 @@ export default function AuthIndex() {
     if (redirected.current) return;
     redirected.current = true;
 
-    // Build a query string from every param that was supplied so the
-    // callback screen receives the same tokens / type that Supabase sent.
-    const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== '');
-    const qs = entries
-      .map(
-        ([k, v]) =>
-          `${encodeURIComponent(k)}=${encodeURIComponent(Array.isArray(v) ? v[0] : v)}`,
-      )
+    // Normalize each param to a single non-empty string, then build the query
+    // string so the callback screen receives the same tokens / type Supabase sent.
+    const qs = Object.entries(params)
+      .map(([k, v]): [string, string] => {
+        // Pick the first element when the router hands us an array.
+        const normalized = Array.isArray(v) ? v[0] : v;
+        return [k, normalized ?? ''];
+      })
+      .filter(([, v]) => v !== '')
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
       .join('&');
 
     const target: Href = qs ? (`/auth/callback?${qs}` as Href) : '/auth/callback';
