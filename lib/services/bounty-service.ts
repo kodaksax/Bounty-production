@@ -85,13 +85,22 @@ const DAILY_BOUNTY_LIMIT = 10;  // Maximum bounties a user can create per day
 const MIN_TITLE_LENGTH_FOR_DUPLICATE_CHECK = 10;  // Minimum title length for substring matching
 
 /**
- * Escape special ILIKE wildcard characters in a user-supplied query string.
- * In PostgreSQL ILIKE patterns, `%` matches any sequence, `_` matches any single
- * character, and `\` is the default escape character.  If these are present in
- * user input they produce unintended wildcard matches.
+ * Escape a user-supplied query string before embedding it in a Supabase/PostgREST
+ * `.or(...)` filter that uses `ILIKE`.
+ *
+ * This value needs to be safe in two syntactic contexts:
+ * 1. PostgreSQL `ILIKE` patterns, where `%`, `_`, and `\` are special.
+ * 2. PostgREST logic strings, where `,`, `(`, and `)` can change filter parsing
+ *    (e.g. a query containing a comma would split the filter into two conditions).
  */
 function escapeIlike(input: string): string {
-  return input.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
+  return input
+    .replace(/\\/g, '\\\\')
+    .replace(/%/g, '\\%')
+    .replace(/_/g, '\\_')
+    .replace(/,/g, '\\,')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)')
 }
 
 export const bountyService = {
@@ -430,9 +439,9 @@ export const bountyService = {
         }
 
         if (filters.skills && filters.skills.length > 0) {
-          // Search in skills_required field
-          const skillsPattern = filters.skills.join('|')
-          query = query.or(filters.skills.map(s => `skills_required.ilike.%${s}%`).join(','))
+          // Search in skills_required field — escape each skill to prevent wildcard
+          // and PostgREST delimiter injection before building the OR expression.
+          query = query.or(filters.skills.map(s => `skills_required.ilike.%${escapeIlike(s)}%`).join(','))
         }
 
         // Apply sorting

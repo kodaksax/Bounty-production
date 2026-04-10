@@ -101,11 +101,13 @@ export function sanitizeRichText(input: string | null | undefined): string {
   
   // Strip HTML tags iteratively to handle nested/obfuscated patterns like
   // <<script>script>alert(1)<</script>/script> (CodeQL: js/incomplete-multi-character-sanitization).
+  // Only match tokens that begin with a letter or `/letter` so plain text containing
+  // bare angle brackets (e.g. "a < b" or "arr[0] > 0") is preserved.
   let current = input;
   let previous: string;
   do {
     previous = current;
-    current = current.replace(/<[^>]*>/g, '');
+    current = current.replace(/<\/?[A-Za-z][^>]*>/g, '');
   } while (current !== previous);
 
   return sanitizeText(current);
