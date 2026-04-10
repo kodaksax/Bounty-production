@@ -393,7 +393,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
         request.userId as string,
         amount,
         status.stripeAccountId,
-        idempotencyKey || `transfer_${request.userId}_${Date.now()}`
+        idempotencyKey || `withdraw_${request.userId}_${Date.now()}`
       );
 
       // Fetch the authoritative post-deduction balance from Supabase.

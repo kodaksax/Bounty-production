@@ -190,10 +190,10 @@ Combined, these two guards prevent overdrafts even under concurrent requests.
 
 ## Minimum withdrawal amount
 
-The platform minimum is **$10.00 USD**. This threshold is defined in:
+The platform minimum is **$10.00 USD**. This threshold is defined in two places:
 
-- `services/api/src/routes/wallet.ts` → `MIN_WITHDRAWAL_AMOUNT = 10`
-- `components/withdraw-with-bank-screen.tsx` → `MIN_WITHDRAWAL_AMOUNT = 10`
-- `components/withdraw-screen.tsx` → `MIN_WITHDRAWAL_AMOUNT = 10`
+- `lib/constants.ts` → `MIN_WITHDRAWAL_AMOUNT` — imported by all mobile UI components
+- `services/api/src/routes/wallet.ts` → `MIN_WITHDRAWAL_AMOUNT` — server-side schema validation
 
-If the threshold needs to change, update all three locations.
+The server keeps its own copy because it cannot import from the mobile `lib/` directory.
+**Keep both values in sync** when changing the threshold.
