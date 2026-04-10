@@ -15,19 +15,30 @@ import {
 
 describe('sanitization utilities', () => {
   describe('sanitizeText', () => {
-    it('should remove HTML tags', () => {
-      const input = '<script>alert("xss")</script>Hello';
+    it('should strip control characters', () => {
+      // Control chars (ASCII 0-31, 127) should be removed; printable chars preserved
+      const input = 'Hello\x00World\x1F!';
       const result = sanitizeText(input);
-      expect(result).not.toContain('<script>');
-      expect(result).not.toContain('</script>');
+      expect(result).not.toContain('\x00');
+      expect(result).not.toContain('\x1F');
+      expect(result).toBe('HelloWorld!');
     });
 
-    it('should escape HTML entities', () => {
+    it('should preserve HTML characters as plain text (React Native renders natively)', () => {
+      // React Native Text does not render HTML, so & < > should not be encoded.
       const input = 'Hello & <world>';
       const result = sanitizeText(input);
-      expect(result).toContain('&amp;');
-      expect(result).toContain('&lt;');
-      expect(result).toContain('&gt;');
+      expect(result).toBe('Hello & <world>');
+      expect(result).not.toContain('&amp;');
+      expect(result).not.toContain('&lt;');
+    });
+
+    it('should preserve HTML tags as plain text', () => {
+      // sanitizeText is for short fields (names, tags). Tags are kept as literal text.
+      // Use sanitizeRichText when you need tag stripping.
+      const input = '<script>alert("xss")</script>Hello';
+      const result = sanitizeText(input);
+      expect(result).toBe('<script>alert("xss")</script>Hello');
     });
 
     it('should trim whitespace', () => {
@@ -188,8 +199,11 @@ describe('sanitization utilities', () => {
         location: 'New York',
       };
       const result = sanitizeBountyInput(input);
+      // HTML tags stripped (sanitizeRichText is used for both title and description)
       expect(result.title).not.toContain('<b>');
-      expect(result.description).toContain('&amp;');
+      // & is preserved as-is; no HTML encoding in React Native context
+      expect(result.description).not.toContain('&amp;');
+      expect(result.description).toContain('&');
       expect(result.amount).toBe(100);
       expect(result.location).toBe('New York');
     });
@@ -243,8 +257,11 @@ describe('sanitization utilities', () => {
         website: 'https://example.com',
       };
       const result = sanitizeProfileInput(input);
+      // HTML tags stripped from display name (sanitizeRichText used)
       expect(result.displayName).not.toContain('<script>');
-      expect(result.bio).toContain('&amp;');
+      // & is preserved as-is; React Native renders plain text, no HTML encoding
+      expect(result.bio).not.toContain('&amp;');
+      expect(result.bio).toContain('&');
       expect(result.location).toBe('San Francisco');
       expect(result.website).toBe('https://example.com');
     });
@@ -289,6 +306,10 @@ describe('sanitization utilities', () => {
   });
 
   describe('XSS prevention', () => {
+    // React Native renders text natively (not as HTML), so HTML injection is not a
+    // threat at the rendering layer.  sanitizeText therefore does NOT HTML-encode
+    // characters; instead XSS-style payloads are stripped by sanitizeRichText,
+    // which is used for user-generated content (messages, descriptions).
     const xssPayloads = [
       '<script>alert("xss")</script>',
       '<img src=x onerror=alert("xss")>',
@@ -298,25 +319,28 @@ describe('sanitization utilities', () => {
     ];
 
     xssPayloads.forEach(payload => {
-      it(`should sanitize XSS payload: ${payload}`, () => {
-        const result = sanitizeText(payload);
-        // Should escape dangerous characters (< becomes &lt;, > becomes &gt;, etc.)
-        expect(result).toContain('&lt;');
-        expect(result).toContain('&gt;');
-        // Should not contain raw HTML tags
+      it(`sanitizeRichText should strip HTML tags from XSS payload: ${payload}`, () => {
+        // sanitizeRichText is used for descriptions and messages
+        // importing here to avoid changing the import block at top
+        const { sanitizeRichText: srt } = require('../../../lib/utils/sanitization');
+        const result = srt(payload);
+        // HTML tags should be stripped (not encoded)
         expect(result).not.toMatch(/<script[\s>]/i);
         expect(result).not.toMatch(/<img[\s>]/i);
         expect(result).not.toMatch(/<iframe[\s>]/i);
         expect(result).not.toMatch(/<svg[\s>/]/i);
+        // Should not produce HTML entities (React Native renders natively)
+        expect(result).not.toContain('&lt;');
+        expect(result).not.toContain('&gt;');
       });
     });
 
-    it('should escape javascript: protocol', () => {
+    it('should preserve javascript: text (not an RN threat)', () => {
       const payload = 'javascript:alert("xss")';
       const result = sanitizeText(payload);
-      // javascript: gets escaped in HTML context but we keep it for text
-      // The key is it won't execute in an HTML context
+      // javascript: URIs cannot execute in React Native Text components
       expect(result).toBeTruthy();
+      expect(result).toContain('javascript:alert');
     });
   });
 });

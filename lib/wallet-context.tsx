@@ -68,6 +68,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [isLoading, setIsLoading] = useState(true);
   const [transactions, setTransactions] = useState<WalletTransactionRecord[]>([]);
   const lastOptimisticDepositRef = useRef<number | null>(null);
+  // Tracks whether the WalletProvider is still mounted so async callbacks
+  // (refresh, refreshFromApi) can skip setState calls after unmount.
+  const mountedRef = useRef(true);
 
   const persist = useCallback(async (value: number) => {
     try {
@@ -118,6 +121,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return;
     }
 
+    if (!mountedRef.current) return;
     setIsLoading(true);
     try {
       // Diagnostic logging to help trace persistent 401s on wallet calls
@@ -147,7 +151,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         retries: 2,
       });
 
-      if (balanceResponse.ok) {
+      if (balanceResponse.ok && mountedRef.current) {
         const balanceData = await balanceResponse.json();
         const apiBalance = typeof balanceData.balance === 'number' ? balanceData.balance : 0;
 
@@ -178,12 +182,14 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           });
         }
 
-        setBalance(resolvedBalance);
+        if (mountedRef.current) {
+          setBalance(resolvedBalance);
 
-        try {
-          await persist(resolvedBalance);
-        } catch (persistError) {
-          console.error('[wallet] Failed to persist balance', persistError);
+          try {
+            await persist(resolvedBalance);
+          } catch (persistError) {
+            console.error('[wallet] Failed to persist balance', persistError);
+          }
         }
       }
 
@@ -201,7 +207,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // Transaction types that represent outflow (money leaving the user's wallet)
       const OUTFLOW_TYPES = ['escrow', 'withdrawal', 'bounty_posted'];
 
-      if (txResponse.ok) {
+      if (txResponse.ok && mountedRef.current) {
         const txData = await txResponse.json();
         if (txData.transactions && Array.isArray(txData.transactions)) {
           // Map API transactions to local format
@@ -225,14 +231,16 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           // against the latest state, not a potentially stale closed-over snapshot.
           // This also makes refreshFromApi safe to call from the mount effect
           // whose dependency array is [] (initial closure has transactions = []).
-          setTransactions(prev => {
-            const apiTxIds = new Set(mappedTransactions.map(tx => tx.id));
-            const localOnlyTx = prev.filter(tx => !apiTxIds.has(tx.id));
-            const mergedTransactions = [...mappedTransactions, ...localOnlyTx];
-            mergedTransactions.sort((a, b) => b.date.getTime() - a.date.getTime());
-            persistTransactions(mergedTransactions); // fire-and-forget inside updater
-            return mergedTransactions;
-          });
+          if (mountedRef.current) {
+            setTransactions(prev => {
+              const apiTxIds = new Set(mappedTransactions.map(tx => tx.id));
+              const localOnlyTx = prev.filter(tx => !apiTxIds.has(tx.id));
+              const mergedTransactions = [...mappedTransactions, ...localOnlyTx];
+              mergedTransactions.sort((a, b) => b.date.getTime() - a.date.getTime());
+              persistTransactions(mergedTransactions); // fire-and-forget inside updater
+              return mergedTransactions;
+            });
+          }
         }
       }
     } catch (error) {
@@ -240,7 +248,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       console.error('[wallet] Error refreshing from API:', errorMessage, error);
       // Fall back to local data
     } finally {
-      setIsLoading(false);
+      if (mountedRef.current) setIsLoading(false);
     }
   }, [persist, persistTransactions]);
 
@@ -254,12 +262,13 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [refreshFromApi]);
 
   const refresh = useCallback(async () => {
+    if (!mountedRef.current) return;
     setIsLoading(true);
     try {
       // Load balance from SecureStore
       const storedBalance = await getSecureJSON<number>(SecureKeys.WALLET_BALANCE);
       if (storedBalance !== null) {
-        setBalance(storedBalance);
+        if (mountedRef.current) setBalance(storedBalance);
       } else {
         await persist(INITIAL_BALANCE);
       }
@@ -275,23 +284,25 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       // Load transactions from SecureStore
       const storedTx = await getSecureJSON<any[]>(SecureKeys.WALLET_TRANSACTIONS);
-      if (storedTx && Array.isArray(storedTx)) {
+      if (storedTx && Array.isArray(storedTx) && mountedRef.current) {
         setTransactions(storedTx.map(t => ({ ...t, date: new Date(t.date) })));
       }
     } catch (error) {
       console.error('[wallet] Error refreshing from storage:', error);
     }
-    setIsLoading(false);
+    if (mountedRef.current) setIsLoading(false);
   }, [persist]);
 
-  useEffect(() => { 
+  useEffect(() => {
+    mountedRef.current = true;
     const init = async () => {
       await refresh();
       // After loading the SecureStore cache, sync from the API so the server
       // is the authoritative source of truth for balance and transactions.
+      if (!mountedRef.current) return;
       try {
         const token = await getAccessToken();
-        if (token) {
+        if (token && mountedRef.current) {
           await refreshFromApi(token);
         }
       } catch (err) {
@@ -299,6 +310,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     };
     init();
+    return () => { mountedRef.current = false; };
   }, []); // Only run once on mount, not on every refresh change
 
   // Clear wallet data when the user signs out to prevent data leaks between users.

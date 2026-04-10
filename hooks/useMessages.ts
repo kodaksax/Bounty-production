@@ -44,20 +44,21 @@ export function useMessages(conversationId: string): UseMessagesResult {
   };
 
   const sendMessage = async (text: string, mediaUrl?: string | null) => {
+    // Declare tempMessage before the try block so it's accessible in catch
+    const tempMessage: Message = {
+      id: `temp-${Date.now()}`,
+      conversationId,
+      senderId: currentUserId,
+      text,
+      mediaUrl: mediaUrl ?? undefined,
+      createdAt: new Date().toISOString(),
+      status: 'sending',
+    };
+
     try {
       setError(null);
       
       // Optimistic update - add message immediately
-      const tempMessage: Message = {
-        id: `temp-${Date.now()}`,
-        conversationId,
-        senderId: currentUserId,
-        text,
-        mediaUrl: mediaUrl ?? undefined,
-        createdAt: new Date().toISOString(),
-        status: 'sending',
-      };
-      
       setMessages(prev => [...prev, tempMessage]);
 
       // Send to Supabase
@@ -69,8 +70,8 @@ export function useMessages(conversationId: string): UseMessagesResult {
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send message');
-      // Remove failed temp message
-      setMessages(prev => prev.filter(m => !m.id.startsWith('temp-')));
+      // Remove only the specific failed temp message, not all pending ones
+      setMessages(prev => prev.filter(m => m.id !== tempMessage.id));
     }
   };
 
