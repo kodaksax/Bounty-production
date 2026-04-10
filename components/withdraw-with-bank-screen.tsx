@@ -10,7 +10,9 @@ import { AddBankAccountModal } from './add-bank-account-modal';
 import { EmailVerificationBanner } from './ui/email-verification-banner';
 
 
-interface BankAccount {
+const MIN_WITHDRAWAL_AMOUNT = 10; // USD – must match server-side MIN_WITHDRAWAL_AMOUNT
+
+
   id: string;
   accountHolderName: string;
   last4: string;
@@ -168,6 +170,11 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
       return;
     }
 
+    if (amount < MIN_WITHDRAWAL_AMOUNT) {
+      Alert.alert('Minimum Withdrawal', `The minimum withdrawal amount is $${MIN_WITHDRAWAL_AMOUNT.toFixed(2)}.`);
+      return;
+    }
+
     if (amount > balance) {
       Alert.alert('Insufficient Balance', 'You cannot withdraw more than your current balance.');
       return;
@@ -211,6 +218,10 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
         throw new Error('Not authenticated. Please sign in again.');
       }
 
+      // Generate a per-tap idempotency key so duplicate taps or network
+      // retries do not create duplicate payout transactions on the server.
+      const idempotencyKey = `withdraw_${session.user?.id ?? 'u'}_${Date.now()}`;
+
       const response = await fetch(`${API_BASE_URL}/connect/transfer`, {
         method: 'POST',
         headers: {
@@ -219,7 +230,8 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
         },
         body: JSON.stringify({
           amount,
-          currency: 'usd'
+          currency: 'usd',
+          idempotencyKey,
         })
       });
 
