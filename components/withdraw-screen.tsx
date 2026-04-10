@@ -5,13 +5,12 @@ import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TextIn
 import { useAuthContext } from '../hooks/use-auth-context';
 import { useEmailVerification } from '../hooks/use-email-verification';
 import { API_BASE_URL } from '../lib/config/api';
+import { MIN_WITHDRAWAL_AMOUNT } from '../lib/constants';
 import { useStripe } from '../lib/stripe-context';
 import { theme } from '../lib/theme';
 import { useWallet } from '../lib/wallet-context';
 import { EmailVerificationBanner } from './ui/email-verification-banner';
 
-
-const MIN_WITHDRAWAL_AMOUNT = 10; // USD – must match server-side MIN_WITHDRAWAL_AMOUNT
 
 interface BankAccount {
   id: string;

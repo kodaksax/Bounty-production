@@ -22,7 +22,7 @@ const depositSchema = z.object({
   idempotencyKey: z.string().optional(),
 });
 
-const MIN_WITHDRAWAL_AMOUNT = 10; // USD – platform minimum payout threshold
+const MIN_WITHDRAWAL_AMOUNT = 10; // USD – keep in sync with lib/constants.ts MIN_WITHDRAWAL_AMOUNT in the mobile app
 
 const withdrawSchema = z.object({
   amount: z.number().min(MIN_WITHDRAWAL_AMOUNT, `Minimum withdrawal is $${MIN_WITHDRAWAL_AMOUNT}.00`),
