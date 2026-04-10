@@ -84,6 +84,16 @@ function logOnce(key: string, level: 'error' | 'warn', message: string, meta?: a
 const DAILY_BOUNTY_LIMIT = 10;  // Maximum bounties a user can create per day
 const MIN_TITLE_LENGTH_FOR_DUPLICATE_CHECK = 10;  // Minimum title length for substring matching
 
+/**
+ * Escape special ILIKE wildcard characters in a user-supplied query string.
+ * In PostgreSQL ILIKE patterns, `%` matches any sequence, `_` matches any single
+ * character, and `\` is the default escape character.  If these are present in
+ * user input they produce unintended wildcard matches.
+ */
+function escapeIlike(input: string): string {
+  return input.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
+}
+
 export const bountyService = {
   /**
    * Get a bounty by ID
@@ -285,6 +295,9 @@ export const bountyService = {
         // We'll attempt using ilike on both title & description for broad match.
         const limit = options?.limit ?? 20
         const offset = options?.offset ?? 0
+        // Escape ILIKE wildcards so user input like "50%" or "a_b" doesn't create
+        // unintended SQL pattern matches.
+        const qEscaped = escapeIlike(q)
         let sbQuery = supabase
           .from('bounties')
           .select(`
@@ -295,7 +308,7 @@ export const bountyService = {
             )
           `)
           .eq('status', 'open')
-          .or(`title.ilike.%${q}%,description.ilike.%${q}%`)
+          .or(`title.ilike.%${qEscaped}%,description.ilike.%${qEscaped}%`)
           .order('created_at', { ascending: false })
           .range(offset, offset + limit - 1)
 
@@ -309,7 +322,7 @@ export const bountyService = {
               .from('bounties')
               .select('*')
               .eq('status', 'open')
-              .or(`title.ilike.%${q}%,description.ilike.%${q}%`)
+              .or(`title.ilike.%${qEscaped}%,description.ilike.%${qEscaped}%`)
               .order('created_at', { ascending: false })
               .range(offset, offset + limit - 1)
 
@@ -392,11 +405,12 @@ export const bountyService = {
         }
 
         if (filters.keywords) {
-          query = query.or(`title.ilike.%${filters.keywords}%,description.ilike.%${filters.keywords}%`)
+          const kw = escapeIlike(filters.keywords)
+          query = query.or(`title.ilike.%${kw}%,description.ilike.%${kw}%`)
         }
 
         if (filters.location) {
-          query = query.ilike('location', `%${filters.location}%`)
+          query = query.ilike('location', `%${escapeIlike(filters.location)}%`)
         }
 
         if (filters.minAmount !== undefined) {
@@ -457,12 +471,13 @@ export const bountyService = {
             }
 
             if (filters.keywords) {
-              queryNoJoin = queryNoJoin.or(`title.ilike.%${filters.keywords}%,description.ilike.%${filters.keywords}%`)
+              const kw = escapeIlike(filters.keywords)
+              queryNoJoin = queryNoJoin.or(`title.ilike.%${kw}%,description.ilike.%${kw}%`)
             }
 
             // Apply other filters...
             if (filters.location) {
-              queryNoJoin = queryNoJoin.ilike('location', `%${filters.location}%`)
+              queryNoJoin = queryNoJoin.ilike('location', `%${escapeIlike(filters.location)}%`)
             }
 
             if (filters.minAmount !== undefined) {

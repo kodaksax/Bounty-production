@@ -13,15 +13,6 @@ function stripLow(input: string): string {
   return input.replace(/[\x00-\x1F\x7F]/g, '');
 }
 
-function escapeHtml(input: string): string {
-  return input
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/\"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
 function normalizeEmail(email: string): string | null {
   if (!email) return null;
   // Basic normalization: trim and lowercase. Avoid aggressive normalization.
@@ -55,16 +46,15 @@ function isURL(input: string, opts?: { protocols?: string[]; require_protocol?: 
 
 /**
  * Sanitize plain text input
- * Removes any HTML tags and dangerous characters
+ * Removes control characters and trims whitespace.
+ * Does NOT HTML-encode entities because React Native renders text natively;
+ * encoding would display literal `&lt;` instead of `<` in Text components.
  */
 export function sanitizeText(input: string | null | undefined): string {
   if (!input) return '';
   
   // Remove low/control characters
   let sanitized = stripLow(input);
-
-  // Escape HTML entities
-  sanitized = escapeHtml(sanitized);
   
   // Trim whitespace
   sanitized = sanitized.trim();
@@ -102,16 +92,23 @@ export function sanitizeURL(url: string | null | undefined): string {
 }
 
 /**
- * Sanitize rich text (for bounty descriptions, messages with formatting)
- * Note: For now, we escape HTML. In the future, we can integrate a
- * whitelist-based HTML sanitizer like DOMPurify if rich text is needed.
+ * Sanitize rich text (for bounty descriptions, messages with formatting).
+ * Strips HTML tags so raw markup is not stored or displayed, but does NOT
+ * HTML-encode surviving characters — React Native renders text natively.
  */
 export function sanitizeRichText(input: string | null | undefined): string {
   if (!input) return '';
   
-  // For now, treat as plain text and escape HTML
-  // TODO (Post-Launch): If rich text support is needed, integrate DOMPurify or similar
-  return sanitizeText(input);
+  // Strip HTML tags iteratively to handle nested/obfuscated patterns like
+  // <<script>script>alert(1)<</script>/script> (CodeQL: js/incomplete-multi-character-sanitization).
+  let current = input;
+  let previous: string;
+  do {
+    previous = current;
+    current = current.replace(/<[^>]*>/g, '');
+  } while (current !== previous);
+
+  return sanitizeText(current);
 }
 
 /**
@@ -174,7 +171,7 @@ export interface SanitizedBounty {
 
 export function sanitizeBountyInput(input: BountyInput): SanitizedBounty {
   const sanitized: SanitizedBounty = {
-    title: sanitizeText(input.title),
+    title: sanitizeRichText(input.title),
     description: sanitizeRichText(input.description),
   };
   
@@ -200,14 +197,17 @@ export function sanitizeBountyInput(input: BountyInput): SanitizedBounty {
 }
 
 /**
- * Sanitize message text before sending
+ * Sanitize message text before sending.
+ * Strips HTML markup (tags are removed so `<b>bold</b>` becomes `bold`)
+ * and validates length. Does NOT HTML-encode surviving characters because
+ * React Native Text components render plain strings, not HTML.
  */
 export function sanitizeMessage(text: string | null | undefined): string {
   if (!text) {
     throw new Error('Message text is required');
   }
   
-  const sanitized = sanitizeText(text);
+  const sanitized = sanitizeRichText(text);
   
   if (!sanitized || sanitized.length === 0) {
     throw new Error('Message cannot be empty');
@@ -241,7 +241,7 @@ export function sanitizeProfileInput(input: ProfileInput): SanitizedProfile {
   const sanitized: SanitizedProfile = {};
   
   if (input.displayName) {
-    sanitized.displayName = sanitizeText(input.displayName);
+    sanitized.displayName = sanitizeRichText(input.displayName);
     if (sanitized.displayName.length > 100) {
       throw new Error('Display name is too long (max 100 characters)');
     }

@@ -284,14 +284,16 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setIsLoading(false);
   }, [persist]);
 
-  useEffect(() => { 
+  useEffect(() => {
+    let mounted = true;
     const init = async () => {
       await refresh();
       // After loading the SecureStore cache, sync from the API so the server
       // is the authoritative source of truth for balance and transactions.
+      if (!mounted) return;
       try {
         const token = await getAccessToken();
-        if (token) {
+        if (token && mounted) {
           await refreshFromApi(token);
         }
       } catch (err) {
@@ -299,6 +301,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     };
     init();
+    return () => { mounted = false; };
   }, []); // Only run once on mount, not on every refresh change
 
   // Clear wallet data when the user signs out to prevent data leaks between users.
