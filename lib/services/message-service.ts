@@ -1,15 +1,19 @@
 import NetInfo from '@react-native-community/netinfo';
+import {
+  decryptMessage,
+  encryptMessage,
+  type EncryptedMessage,
+} from '../security/encryption-utils';
+import { supabase } from '../supabase';
 import type { Conversation, FullConversation, Message } from '../types';
 import { getCurrentUserId } from '../utils/data-utils';
 import { sanitizeMessage } from '../utils/sanitization';
+import { analyticsService } from './analytics-service';
+import { e2eKeyService } from './e2e-key-service';
 import * as messagingService from './messaging';
 import { logClientError, logClientInfo } from './monitoring';
 import { offlineQueueService } from './offline-queue-service';
 import * as supabaseMessaging from './supabase-messaging';
-import { analyticsService } from './analytics-service';
-import { encryptMessage, decryptMessage, type EncryptedMessage } from '../security/encryption-utils';
-import { e2eKeyService } from './e2e-key-service';
-import { supabase } from '../supabase';
 
 function tryParseEncryptedPayload(text: string): EncryptedMessage | null {
   try {
@@ -54,7 +58,7 @@ export const messageService = {
     };
 
     return Promise.all(
-      messages.map(async (msg) => {
+      messages.map(async msg => {
         const payload = tryParseEncryptedPayload(msg.text);
         if (!payload) return msg;
 
@@ -105,7 +109,7 @@ export const messageService = {
     try {
       const conversation = await messagingService.getConversation(conversationId);
       const participantIds = conversation?.participantIds ?? [];
-      const recipientId = participantIds.find((id) => id !== userId);
+      const recipientId = participantIds.find(id => id !== userId);
 
       if (recipientId && participantIds.length === 2) {
         const [recipientPublicKey, senderKeys] = await Promise.all([
@@ -114,7 +118,11 @@ export const messageService = {
         ]);
 
         if (recipientPublicKey && senderKeys) {
-          const encrypted = await encryptMessage(sanitizedText, recipientPublicKey, senderKeys.privateKey);
+          const encrypted = await encryptMessage(
+            sanitizedText,
+            recipientPublicKey,
+            senderKeys.privateKey
+          );
           finalText = JSON.stringify(encrypted);
           isEncrypted = true;
           console.log('[sendMessage] Message encrypted successfully');
@@ -128,7 +136,11 @@ export const messageService = {
     } catch (encErr) {
       encryptionWarning = 'Encryption failed — message sent as plaintext';
       console.error('[sendMessage] Encryption error:', encErr);
-      try { logClientError('E2E encryption failed, falling back to plaintext', { err: encErr }); } catch { /* ignore */ }
+      try {
+        logClientError('E2E encryption failed, falling back to plaintext', { err: encErr });
+      } catch {
+        /* ignore */
+      }
     }
 
     const netState = await NetInfo.fetch();
@@ -197,7 +209,12 @@ export const messageService = {
     await messagingService.markAsRead(conversationId, userId);
   },
 
-  createConversation: async (participantIds: string[], name: string, isGroup: boolean = false, bountyId?: string): Promise<Conversation> => {
+  createConversation: async (
+    participantIds: string[],
+    name: string,
+    isGroup: boolean = false,
+    bountyId?: string
+  ): Promise<Conversation> => {
     const userId = getCurrentUserId();
     const allParticipants = participantIds.includes(userId)
       ? participantIds
@@ -205,7 +222,11 @@ export const messageService = {
     return messagingService.createConversation(allParticipants, name, isGroup, bountyId);
   },
 
-  getOrCreateConversation: async (participantIds: string[], name: string, bountyId?: string): Promise<Conversation> => {
+  getOrCreateConversation: async (
+    participantIds: string[],
+    name: string,
+    bountyId?: string
+  ): Promise<Conversation> => {
     const userId = getCurrentUserId();
     const allParticipants = participantIds.includes(userId)
       ? participantIds
@@ -215,7 +236,11 @@ export const messageService = {
       const otherUserId = allParticipants.find(id => id !== userId);
       if (otherUserId) {
         try {
-          const conversation = await supabaseMessaging.getOrCreateConversation(userId, otherUserId, bountyId);
+          const conversation = await supabaseMessaging.getOrCreateConversation(
+            userId,
+            otherUserId,
+            bountyId
+          );
           logClientInfo('Got/created 1:1 conversation via Supabase', {
             conversationId: conversation.id,
             otherUserId,
@@ -229,12 +254,20 @@ export const messageService = {
           });
           return conversation;
         } catch (supabaseErr) {
-          try { logClientError('Supabase getOrCreateConversation failed', { err: supabaseErr }); } catch { /* ignore */ }
+          try {
+            logClientError('Supabase getOrCreateConversation failed', { err: supabaseErr });
+          } catch {
+            /* ignore */
+          }
         }
       }
     }
 
-    const conversation = await messagingService.getOrCreateConversation(allParticipants, name, bountyId);
+    const conversation = await messagingService.getOrCreateConversation(
+      allParticipants,
+      name,
+      bountyId
+    );
     await analyticsService.trackEvent('conversation_started', {
       conversationId: conversation.id,
       participantCount: allParticipants.length,
@@ -256,7 +289,10 @@ export const messageService = {
     return null;
   },
 
-  reportMessage: async (messageId: string, reason?: string): Promise<{ success: boolean; error?: string }> => {
+  reportMessage: async (
+    messageId: string,
+    reason?: string
+  ): Promise<{ success: boolean; error?: string }> => {
     const allMessages = await messagingService.getMessages('').catch(() => [] as any[]);
     const message = allMessages.find(m => m.id === messageId);
     if (!message) {
@@ -270,11 +306,17 @@ export const messageService = {
     const message = allMessages.find((m: any) => m.id === messageId);
     if (message) {
       message.status = status;
-      await messagingService.sendMessage(message.conversationId, message.text, message.senderId).catch(() => {});
+      await messagingService
+        .sendMessage(message.conversationId, message.text, message.senderId)
+        .catch(() => {});
     }
   },
 
-  processQueuedMessage: async (conversationId: string, text: string, senderId: string): Promise<Message> => {
+  processQueuedMessage: async (
+    conversationId: string,
+    text: string,
+    senderId: string
+  ): Promise<Message> => {
     return messagingService.sendMessage(conversationId, text, senderId);
   },
 
@@ -329,7 +371,7 @@ export const messageService = {
       if (!convs?.length) return [];
 
       return Promise.all(
-        convs.map(async (conv) => ({
+        convs.map(async conv => ({
           id: conv.id,
           realConversationId: conv.id,
           bountyId: conv.bounty_id ?? undefined,
@@ -349,9 +391,7 @@ export const messageService = {
     }
   },
 
-  async getFullConversationWithUser(
-    otherUserId: string
-  ): Promise<FullConversation | null> {
+  async getFullConversationWithUser(otherUserId: string): Promise<FullConversation | null> {
     const currentUserId = getCurrentUserId();
     if (!currentUserId || !otherUserId || currentUserId === otherUserId) return null;
 
@@ -365,7 +405,7 @@ export const messageService = {
       if (myError) throw myError;
       if (!myParticipations?.length) return null;
 
-      const myConversationIds = myParticipations.map((p) => p.conversation_id);
+      const myConversationIds = myParticipations.map(p => p.conversation_id);
 
       const { data: sharedParticipations, error: sharedError } = await supabase
         .from('conversation_participants')
@@ -377,7 +417,7 @@ export const messageService = {
       if (sharedError) throw sharedError;
       if (!sharedParticipations?.length) return null;
 
-      const sharedConversationIds = sharedParticipations.map((p) => p.conversation_id);
+      const sharedConversationIds = sharedParticipations.map(p => p.conversation_id);
 
       const { data: messagesData, error: messagesError } = await supabase
         .from('messages')
@@ -402,7 +442,7 @@ export const messageService = {
 
       const fullConversation: FullConversation = {
         id: `full-${currentUserId}-${otherUserId}`,
-        realConversationId: sharedConversationIds[1],
+        realConversationId: sharedConversationIds[0],
         isGroup: false,
         name: 'Conversation',
         participantIds: [currentUserId, otherUserId],
