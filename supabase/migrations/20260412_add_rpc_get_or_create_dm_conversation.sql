@@ -98,12 +98,14 @@ BEGIN
 
   -- ── Existing conversation found ──────────────────────────────────────────
   IF v_conversation_id IS NOT NULL THEN
-    -- If the other user had previously soft-deleted their view of this
-    -- conversation, reactivate it so they can see new messages.
+    -- Reactivate both participant records if either user had previously
+    -- soft-deleted their view of this conversation.  Using IN() covers the
+    -- case where p_user_id itself had a deleted_at set (e.g. they deleted the
+    -- chat and are now re-opening it via the other user's profile).
     UPDATE conversation_participants
     SET    deleted_at = NULL
     WHERE  conversation_id = v_conversation_id
-      AND  user_id         = p_other_user_id
+      AND  user_id IN (p_user_id, p_other_user_id)
       AND  deleted_at IS NOT NULL;
 
     RETURN v_conversation_id;
