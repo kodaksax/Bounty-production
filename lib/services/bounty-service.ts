@@ -6,6 +6,9 @@ import { logger } from "lib/utils/error-logger";
 import { getReachableApiBaseUrl } from 'lib/utils/network';
 import { offlineQueueService } from './offline-queue-service';
 
+// UUID validation pattern used to guard PostgREST OR filter strings against injection.
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // Lazy-load wsAdapter to avoid circular dependencies
 // Type for wsAdapter interface
 interface WsAdapter {
@@ -574,7 +577,13 @@ export const bountyService = {
         // `poster_id` is a denormalized alias added later; some rows may have only one or both.
         // Use an OR filter to match either so that all bounties are found regardless of which
         // column was populated when the bounty was created.
-        if (options?.userId) query = (query as any).or(`user_id.eq.${options.userId},poster_id.eq.${options.userId}`)
+        // userId must be a valid UUID to prevent injection in the PostgREST filter string.
+        if (options?.userId && UUID_PATTERN.test(options.userId)) {
+          query = (query as any).or(`user_id.eq.${options.userId},poster_id.eq.${options.userId}`)
+        } else if (options?.userId) {
+          // Fallback to safe parameterized equality check when not a UUID (should not happen in practice)
+          query = query.eq('user_id', options.userId)
+        }
         if (options?.workType) query = query.eq('work_type', options.workType)
         if (!options?.includeArchived) query = query.neq('status', 'archived')
 
@@ -590,7 +599,11 @@ export const bountyService = {
             // Fetch without join then attach profiles
             let qNoJoin: any = supabase.from('bounties').select('*').order('created_at', { ascending: false })
             if (options?.status) qNoJoin = qNoJoin.eq('status', options.status)
-              if (options?.userId) qNoJoin = (qNoJoin as any).or(`user_id.eq.${options.userId},poster_id.eq.${options.userId}`)
+              if (options?.userId && UUID_PATTERN.test(options.userId)) {
+              qNoJoin = (qNoJoin as any).or(`user_id.eq.${options.userId},poster_id.eq.${options.userId}`)
+            } else if (options?.userId) {
+              qNoJoin = qNoJoin.eq('user_id', options.userId)
+            }
             if (options?.workType) qNoJoin = qNoJoin.eq('work_type', options.workType)
             if (!options?.includeArchived) qNoJoin = qNoJoin.neq('status', 'archived')
             qNoJoin = qNoJoin.range(offset, offset + limit - 1)

@@ -780,6 +780,11 @@ export const bountyRequestService = {
         if (result) {
           let bountyTransitioned = false;
           try {
+            // Note: the original code also had `.is('accepted_by', null)` here, but that was
+            // the root cause of the bug: when the `accepted_by` column was absent from the DB
+            // schema cache (PGRST204), the entire update failed silently, leaving the bounty at
+            // 'open'.  The `.eq('status', 'open')` check already prevents double-acceptance
+            // (the second concurrent update would match 0 rows and return null below).
             const { data: updatedRows, error: bountyUpdateError } = await supabase
               .from('bounties')
               .update({
