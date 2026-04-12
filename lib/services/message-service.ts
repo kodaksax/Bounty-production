@@ -255,7 +255,16 @@ export const messageService = {
           return conversation;
         } catch (supabaseErr) {
           try {
-            logClientError('Supabase getOrCreateConversation failed', { err: supabaseErr });
+            const supMsg = String(
+              (supabaseErr && (supabaseErr as any).message) || supabaseErr || ''
+            );
+            const supCode = (supabaseErr && (supabaseErr as any).code) || null;
+            // If the RPC is missing (PGRST202 / "Could not find the function"),
+            // fallback is already implemented below — avoid logging as an error
+            // so it doesn't spam monitoring while migrations are applied.
+            if (!supMsg.includes('Could not find the function') && supCode !== 'PGRST202') {
+              logClientError('Supabase getOrCreateConversation failed', { err: supabaseErr });
+            }
           } catch {
             /* ignore */
           }
