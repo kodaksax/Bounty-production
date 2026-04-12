@@ -70,11 +70,11 @@ jest.mock('../../../lib/services/e2e-key-service', () => ({
   },
 }));
 
-import { messageService } from '../../../lib/services/message-service';
-import * as supabaseMessaging from '../../../lib/services/supabase-messaging';
-import * as localMessaging from '../../../lib/services/messaging';
 import * as encryptionUtils from '../../../lib/security/encryption-utils';
 import { e2eKeyService } from '../../../lib/services/e2e-key-service';
+import { messageService } from '../../../lib/services/message-service';
+import * as localMessaging from '../../../lib/services/messaging';
+import * as supabaseMessaging from '../../../lib/services/supabase-messaging';
 
 const mockSupabaseMessaging = supabaseMessaging as jest.Mocked<typeof supabaseMessaging>;
 const mockLocalMessaging = localMessaging as jest.Mocked<typeof localMessaging>;
@@ -98,10 +98,7 @@ describe('Message Service - Conversation Deduplication', () => {
 
       mockSupabaseMessaging.getOrCreateConversation.mockResolvedValue(existingConversation);
 
-      const result = await messageService.getOrCreateConversation(
-        ['other-user-id'],
-        'Test User'
-      );
+      const result = await messageService.getOrCreateConversation(['other-user-id'], 'Test User');
 
       // Verify Supabase getOrCreateConversation was called (which checks for existing convos)
       expect(mockSupabaseMessaging.getOrCreateConversation).toHaveBeenCalledWith(
@@ -126,15 +123,9 @@ describe('Message Service - Conversation Deduplication', () => {
       mockSupabaseMessaging.getOrCreateConversation.mockResolvedValue(existingConversation);
 
       // Call getOrCreateConversation multiple times with same participants
-      const result1 = await messageService.getOrCreateConversation(
-        ['other-user-id'],
-        'Other User'
-      );
-      
-      const result2 = await messageService.getOrCreateConversation(
-        ['other-user-id'],
-        'Other User'
-      );
+      const result1 = await messageService.getOrCreateConversation(['other-user-id'], 'Other User');
+
+      const result2 = await messageService.getOrCreateConversation(['other-user-id'], 'Other User');
 
       // Both calls should return the same conversation ID
       expect(result1.id).toBe('existing-1:1-conversation');
@@ -153,11 +144,7 @@ describe('Message Service - Conversation Deduplication', () => {
 
       mockSupabaseMessaging.getOrCreateConversation.mockResolvedValue(conversation);
 
-      await messageService.getOrCreateConversation(
-        ['poster-id'],
-        'Poster',
-        'bounty-123'
-      );
+      await messageService.getOrCreateConversation(['poster-id'], 'Poster', 'bounty-123');
 
       expect(mockSupabaseMessaging.getOrCreateConversation).toHaveBeenCalledWith(
         'current-user-id',
@@ -167,9 +154,7 @@ describe('Message Service - Conversation Deduplication', () => {
     });
 
     it('should fall back to local messaging when Supabase fails', async () => {
-      mockSupabaseMessaging.getOrCreateConversation.mockRejectedValue(
-        new Error('Supabase error')
-      );
+      mockSupabaseMessaging.getOrCreateConversation.mockRejectedValue(new Error('Supabase error'));
 
       const localConversation = {
         id: 'local-conv-id',
@@ -181,10 +166,7 @@ describe('Message Service - Conversation Deduplication', () => {
 
       mockLocalMessaging.getOrCreateConversation.mockResolvedValue(localConversation);
 
-      const result = await messageService.getOrCreateConversation(
-        ['other-user-id'],
-        'User'
-      );
+      const result = await messageService.getOrCreateConversation(['other-user-id'], 'User');
 
       // Verify local fallback was used
       expect(mockLocalMessaging.getOrCreateConversation).toHaveBeenCalled();
@@ -213,6 +195,154 @@ describe('Message Service - Conversation Deduplication', () => {
       expect(mockSupabaseMessaging.getOrCreateConversation).not.toHaveBeenCalled();
       expect(result.id).toBe('group-conv-id');
     });
+  });
+});
+
+describe('Misc Message Service behaviors', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.restoreAllMocks();
+  });
+
+  it('should queue message when offline', async () => {
+    mockLocalMessaging.getConversation.mockResolvedValue({
+      id: 'conv-offline',
+      participantIds: ['current-user-id', 'recipient-id'],
+      updatedAt: new Date().toISOString(),
+    } as any);
+
+    const NetInfo = require('@react-native-community/netinfo');
+    NetInfo.fetch.mockResolvedValueOnce({ isConnected: false });
+
+    const offlineQueue = require('../../../lib/services/offline-queue-service');
+
+    const res = await messageService.sendMessage('conv-offline', 'Offline message');
+
+    expect(offlineQueue.offlineQueueService.enqueue).toHaveBeenCalledWith(
+      'message',
+      expect.objectContaining({
+        conversationId: 'conv-offline',
+        senderId: 'current-user-id',
+        tempId: expect.stringMatching(/^temp-/),
+        text: expect.any(String),
+      })
+    );
+
+    expect(res.message.status).toBe('sending');
+  });
+
+  it('returns error when sanitizeMessage throws', async () => {
+    const sanit = require('../../../lib/utils/sanitization');
+    jest.spyOn(sanit, 'sanitizeMessage').mockImplementationOnce(() => {
+      throw new Error('bad input');
+    });
+
+    const result = await messageService.sendMessage('conv-1', 'x');
+    expect(result.error).toBe('bad input');
+  });
+
+  it('markAsRead calls messagingService.markAsRead with userId', async () => {
+    const messaging = require('../../../lib/services/messaging');
+    await messageService.markAsRead('conv-1');
+    expect(messaging.markAsRead).toHaveBeenCalledWith('conv-1', 'current-user-id');
+  });
+
+  it('getAllConversationsWithUser filters conversations by participant', async () => {
+    mockLocalMessaging.listConversations.mockResolvedValue([
+      { id: 'a', participantIds: ['current-user-id', 'other'] },
+      { id: 'b', participantIds: ['current-user-id'] },
+    ] as any);
+
+    const result = await messageService.getAllConversationsWithUser('other');
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('a');
+  });
+
+  it('getAllMessagesWithUser aggregates and sorts messages from multiple convos', async () => {
+    jest
+      .spyOn(messageService, 'getAllConversationsWithUser')
+      .mockResolvedValue([{ id: 'c1' }, { id: 'c2' }] as any);
+
+    jest.spyOn(messageService, 'getMessages').mockImplementation(async convId => {
+      if (convId === 'c1')
+        return [
+          {
+            id: 'm1',
+            conversationId: 'c1',
+            senderId: 'u1',
+            text: 'a',
+            createdAt: '2024-01-02T00:00:00',
+          } as any,
+        ];
+      return [
+        {
+          id: 'm2',
+          conversationId: 'c2',
+          senderId: 'u2',
+          text: 'b',
+          createdAt: '2023-12-31T23:00:00',
+        } as any,
+      ];
+    });
+
+    const result = await messageService.getAllMessagesWithUser('other');
+    expect(result.map(m => m.id)).toEqual(['m2', 'm1']);
+  });
+
+  it('reportMessage returns not found when message absent', async () => {
+    mockLocalMessaging.getMessages.mockResolvedValue([]);
+    const res = await messageService.reportMessage('not-found');
+    expect(res.success).toBe(false);
+    expect(res.error).toBe('Message not found');
+  });
+
+  it('reportMessage returns success when message present', async () => {
+    mockLocalMessaging.getMessages.mockResolvedValue([
+      {
+        id: 'msg-123',
+        conversationId: 'c1',
+        senderId: 'u1',
+        text: 'ok',
+        createdAt: new Date().toISOString(),
+      } as any,
+    ]);
+    const res = await messageService.reportMessage('msg-123');
+    expect(res.success).toBe(true);
+  });
+
+  it('updateMessageStatus calls sendMessage when message exists', async () => {
+    mockLocalMessaging.getMessages.mockResolvedValue([
+      {
+        id: 'm1',
+        conversationId: 'c1',
+        senderId: 's1',
+        text: 'hi',
+        createdAt: new Date().toISOString(),
+      } as any,
+    ]);
+    mockLocalMessaging.sendMessage.mockResolvedValue({} as any);
+    await messageService.updateMessageStatus('m1', 'delivered');
+    expect(mockLocalMessaging.sendMessage).toHaveBeenCalledWith('c1', 'hi', 's1');
+  });
+
+  it('updateMessageStatus does nothing when message missing', async () => {
+    mockLocalMessaging.getMessages.mockResolvedValue([]);
+    await messageService.updateMessageStatus('nope', 'read');
+    expect(mockLocalMessaging.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('getConversations forwards current user id', async () => {
+    mockLocalMessaging.listConversations.mockResolvedValue([{ id: 'x' }] as any);
+    const res = await messageService.getConversations();
+    expect(mockLocalMessaging.listConversations).toHaveBeenCalledWith('current-user-id');
+    expect(res).toHaveLength(1);
+  });
+
+  it('getConversation forwards id', async () => {
+    mockLocalMessaging.getConversation.mockResolvedValue({ id: 'conv-99' } as any);
+    const res = await messageService.getConversation('conv-99');
+    expect(mockLocalMessaging.getConversation).toHaveBeenCalledWith('conv-99');
+    expect(res.id).toBe('conv-99');
   });
 });
 
@@ -408,7 +538,7 @@ describe('Message Service - E2E Encryption', () => {
       const encryptedPayload = JSON.stringify({
         ciphertext: 'abc',
         nonce: 'def',
-        senderPublicKey: 'my-pub',          // current user is sender
+        senderPublicKey: 'my-pub', // current user is sender
         recipientPublicKey: 'recipient-pub', // peer key needed for own-message decryption
         version: '2.0',
       });
