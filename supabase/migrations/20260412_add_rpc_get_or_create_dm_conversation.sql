@@ -81,20 +81,20 @@ BEGIN
   -- Serialize all concurrent DM creation attempts for this user pair.
   PERFORM pg_advisory_xact_lock(v_lock_key);
 
-  -- Look for an existing 1:1 conversation that both users actively participate
-  -- in (deleted_at IS NULL on both sides).
-  SELECT cp1.conversation_id INTO v_conversation_id
-  FROM   conversation_participants cp1
-  JOIN   conversation_participants cp2
-         ON  cp2.conversation_id = cp1.conversation_id
-         AND cp2.user_id         = p_other_user_id
-         AND cp2.deleted_at IS NULL
-  JOIN   conversations c
-         ON  c.id       = cp1.conversation_id
-         AND c.is_group = false
-  WHERE  cp1.user_id    = p_user_id
-    AND  cp1.deleted_at IS NULL
-  LIMIT  1;
+    -- Look for an existing 1:1 conversation that includes both users' participant
+    -- rows. Allow the caller's participant row to be soft-deleted so we can
+    -- reactivate it below instead of creating a duplicate conversation.
+    SELECT cp1.conversation_id INTO v_conversation_id
+    FROM   conversation_participants cp1
+    JOIN   conversation_participants cp2
+      ON  cp2.conversation_id = cp1.conversation_id
+      AND cp2.user_id         = p_other_user_id
+      AND cp2.deleted_at IS NULL
+    JOIN   conversations c
+      ON  c.id       = cp1.conversation_id
+      AND c.is_group = false
+    WHERE  cp1.user_id = p_user_id
+    LIMIT  1;
 
   -- ── Existing conversation found ──────────────────────────────────────────
   IF v_conversation_id IS NOT NULL THEN
