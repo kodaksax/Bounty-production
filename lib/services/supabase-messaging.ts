@@ -1,10 +1,10 @@
 /**
  * supabase-messaging.ts - Supabase Realtime messaging service
- * 
+ *
  * Provides Supabase-backed messaging with Realtime subscriptions,
  * local caching via AsyncStorage for offline/fast boot, and
  * support for 1:1 conversations with soft delete.
- * 
+ *
  * Key features:
  * - Realtime message and conversation updates via Supabase subscriptions
  * - Local message cache (AsyncStorage) for fast boot and offline support
@@ -87,11 +87,9 @@ async function loadCachedMessages(conversationId: string): Promise<Message[]> {
  */
 export function getProfileAvatarUrl(avatarPath?: string | null): string | undefined {
   if (!avatarPath) return undefined;
-  
-  const { data } = supabase.storage
-    .from('Profilepictures')
-    .getPublicUrl(avatarPath);
-  
+
+  const { data } = supabase.storage.from('Profilepictures').getPublicUrl(avatarPath);
+
   return data?.publicUrl;
 }
 
@@ -106,11 +104,11 @@ export function generateInitials(username?: string, fullName?: string): string {
     }
     return fullName.substring(0, 2).toUpperCase();
   }
-  
+
   if (username) {
     return username.substring(0, 2).toUpperCase();
   }
-  
+
   return '??';
 }
 
@@ -173,15 +171,26 @@ export async function fetchConversations(userId: string): Promise<Conversation[]
 
     // Guard against empty otherUserIds to avoid generating an invalid `IN ()` clause
     let profiles:
-      | { id: string; username?: string | null; full_name?: string | null; avatar?: string | null }[]
+      | {
+          id: string;
+          username?: string | null;
+          display_name?: string | null;
+          avatar?: string | null;
+        }[]
       | null = null;
 
     if (otherUserIds.size > 0) {
+      // Schema note: `profiles.full_name` was renamed to `profiles.display_name`
+      // in a Supabase migration, and messaging now reads `display_name`
+      // intentionally to match the canonical profile schema. If you are working
+      // against an older local/staging database, make sure that migration has
+      // been applied before debugging missing names here; pre-migration rows may
+      // still have data in `full_name` only until the schema/data migration is run.
       const { data, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, username, full_name, avatar')
+        .select('id, username, display_name, avatar')
         .in('id', Array.from(otherUserIds));
-      
+
       if (profilesError) throw profilesError;
       profiles = data ?? [];
     } else {
@@ -214,7 +223,7 @@ export async function fetchConversations(userId: string): Promise<Conversation[]
     const unreadCountsPromises = conversations.map(async conv => {
       const participantRecord = participants.find(p => p.conversation_id === conv.id);
       const lastReadAt = participantRecord?.last_read_at;
-      
+
       if (!lastReadAt) {
         return { conversationId: conv.id, count: 0 };
       }
@@ -225,29 +234,27 @@ export async function fetchConversations(userId: string): Promise<Conversation[]
         .eq('conversation_id', conv.id)
         .gt('created_at', lastReadAt)
         .neq('sender_id', userId);
-      
+
       return { conversationId: conv.id, count: count || 0 };
     });
 
     const unreadCountsResults = await Promise.all(unreadCountsPromises);
-    const unreadCountMap = new Map(
-      unreadCountsResults.map(r => [r.conversationId, r.count])
-    );
+    const unreadCountMap = new Map(unreadCountsResults.map(r => [r.conversationId, r.count]));
 
     // Now build enriched conversations using the batched data
     const enrichedConversations: Conversation[] = conversations.map(conv => {
       const participantIds = participantsByConversation.get(conv.id) || [];
-      
+
       // For 1:1 chats, get the other user's profile
       let name = 'Unknown';
       let avatar: string | undefined;
-      
+
       if (!conv.is_group && participantIds.length === 2) {
         const otherUserId = participantIds.find(id => id !== userId);
         if (otherUserId) {
           const profile = profileMap.get(otherUserId);
           if (profile) {
-            name = profile.username || profile.full_name || 'Unknown';
+            name = profile.username || profile.display_name || 'Unknown';
             avatar = getProfileAvatarUrl(profile.avatar);
           }
         }
@@ -345,11 +352,7 @@ export async function sendMessage(
 
     for (const fields of attemptFields) {
       try {
-        const { data, error } = await supabase
-          .from('messages')
-          .insert(fields)
-          .select()
-          .single();
+        const { data, error } = await supabase.from('messages').insert(fields).select().single();
 
         if (error) throw error;
         inserted = data;
@@ -358,7 +361,10 @@ export async function sendMessage(
         lastError = err;
         // If error indicates missing column for the attempted field, continue to next
         const msg = String((err && (err as any).message) || err);
-        if (msg.includes("Could not find the 'text' column") || msg.includes('column') && msg.includes('does not exist')) {
+        if (
+          msg.includes("Could not find the 'text' column") ||
+          (msg.includes('column') && msg.includes('does not exist'))
+        ) {
           // try next candidate
           continue;
         }
@@ -369,11 +375,18 @@ export async function sendMessage(
 
     if (!inserted) {
       // All attempts failed; log and throw the last error
-      try { logClientError('Error sending message via supabase: all insert variants failed', { err: lastError, conversationId, senderId }) } catch {}
+      try {
+        logClientError('Error sending message via supabase: all insert variants failed', {
+          err: lastError,
+          conversationId,
+          senderId,
+        });
+      } catch {}
       throw lastError || new Error('Failed to insert message (unknown reason)');
     }
 
-    const resolvedText = inserted.text ?? inserted.body ?? inserted.message ?? inserted.content ?? '';
+    const resolvedText =
+      inserted.text ?? inserted.body ?? inserted.message ?? inserted.content ?? '';
 
     const message: Message = {
       id: inserted.id,
@@ -390,7 +403,9 @@ export async function sendMessage(
     return message;
   } catch (error) {
     console.error('Error sending message:', error);
-    try { logClientError('Error sending message', { err: error, conversationId, senderId }) } catch {}
+    try {
+      logClientError('Error sending message', { err: error, conversationId, senderId });
+    } catch {}
     throw error;
   }
 }
@@ -466,7 +481,11 @@ export async function createConversation(
 
     if (!conversation) {
       try {
-        logClientError('Supabase createConversation failed', { err: lastError, participantIds, bountyId });
+        logClientError('Supabase createConversation failed', {
+          err: lastError,
+          participantIds,
+          bountyId,
+        });
       } catch {}
       throw lastError || new Error('Unable to create conversation');
     }
@@ -478,7 +497,7 @@ export async function createConversation(
       conversation_id: conversation.id,
       user_id: resolvedCreatorId,
     };
-    
+
     const otherParticipantRecords = ensureCreatorIncluded
       .filter(userId => userId !== resolvedCreatorId)
       .map(userId => ({
@@ -496,11 +515,11 @@ export async function createConversation(
       .insert(allParticipantRecords);
 
     if (participantsError) {
-      logClientError('Failed to add participants to conversation', { 
-        err: participantsError, 
+      logClientError('Failed to add participants to conversation', {
+        err: participantsError,
         conversationId: conversation.id,
         creatorId: resolvedCreatorId,
-        participantCount: allParticipantRecords.length 
+        participantCount: allParticipantRecords.length,
       });
       throw participantsError;
     }
@@ -512,13 +531,13 @@ export async function createConversation(
     if (!isGroup && participantIds.length === 2) {
       const { data: profiles } = await supabase
         .from('profiles')
-        .select('id, username, full_name, avatar')
+        .select('id, username, display_name, avatar')
         .in('id', participantIds);
 
       if (profiles && profiles.length > 0) {
         // Get the first profile (could be either user)
         const profile = profiles[0];
-        name = profile.username || profile.full_name || 'Unknown';
+        name = profile.username || profile.display_name || 'Unknown';
         avatar = getProfileAvatarUrl(profile.avatar);
       }
     }
@@ -641,12 +660,9 @@ export async function markAsRead(conversationId: string, userId: string): Promis
 /**
  * Subscribe to realtime updates for conversations
  */
-export function subscribeToConversations(
-  userId: string,
-  onUpdate: () => void
-): RealtimeChannel {
+export function subscribeToConversations(userId: string, onUpdate: () => void): RealtimeChannel {
   const channelName = `conversations:${userId}`;
-  
+
   // Check if already subscribed
   if (subscriptions.has(channelName)) {
     const existing = subscriptions.get(channelName);
@@ -692,7 +708,7 @@ export function subscribeToMessages(
   onUpdate: (message?: Message) => void
 ): RealtimeChannel {
   const channelName = `messages:${conversationId}`;
-  
+
   // Check if already subscribed
   if (subscriptions.has(channelName)) {
     const existing = subscriptions.get(channelName);
@@ -709,7 +725,7 @@ export function subscribeToMessages(
         table: 'messages',
         filter: `conversation_id=eq.${conversationId}`,
       },
-      (payload) => {
+      payload => {
         const message: Message = {
           id: payload.new.id,
           conversationId: payload.new.conversation_id,
