@@ -773,9 +773,13 @@ export const bountyService = {
         } catch (e) {
           // ignore and continue
         }
-        normalized.poster_id = normalized.poster_id || normalized.user_id || undefined
-        // Remove legacy user_id to avoid inserting into a column that may not exist
-        if (Object.prototype.hasOwnProperty.call(normalized, 'user_id')) delete normalized.user_id
+        // Ensure both legacy (`user_id`) and modern (`poster_id`) id fields are populated
+        // This covers deployments with either schema and prevents NOT NULL insertion errors.
+        const idVal = normalized.poster_id || normalized.user_id || undefined
+        if (idVal) {
+          normalized.poster_id = idVal
+          normalized.user_id = idVal
+        }
 
         // Attempt to fetch poster's username from profiles so we can satisfy NOT NULL
         // constraints on the Supabase/Postgres side. If this fails, fall back to a

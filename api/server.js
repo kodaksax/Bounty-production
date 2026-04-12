@@ -912,9 +912,8 @@ app.post('/api/supabase/bounties', async (req, res) => {
     }
 
     const { data, error } = await supabaseAdmin
-      // Remove any legacy user_id key before inserting to avoid schema mismatch
       .from('bounties')
-      .insert(Object.assign({}, record, { user_id: undefined }))
+      .insert(Object.assign({}, record, { user_id: record.poster_id }))
       .select('*')
       .single()
 

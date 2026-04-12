@@ -1,15 +1,16 @@
 // Jest setup file for global test configuration
 
 
-// Mock environment variables for tests
-process.env.SUPABASE_URL = 'https://test.supabase.co';
-process.env.SUPABASE_ANON_KEY = 'test-anon-key';
-process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
-process.env.STRIPE_SECRET_KEY = 'sk_test_mock_key';
-process.env.STRIPE_PUBLISHABLE_KEY = 'pk_test_mock_key';
-process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_test_mock_key';
-process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY = 'test-api-key-12345';
-process.env.NODE_ENV = 'test';
+// Prefer environment variables for secrets; fall back to safe placeholders
+// This avoids embedding sensitive-ish strings directly in a tracked file.
+process.env.SUPABASE_URL = process.env.SUPABASE_URL || 'https://test.supabase.co';
+process.env.SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'test-anon-key';
+process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'test-service-role-key';
+process.env.STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || 'test-stripe-secret';
+process.env.STRIPE_PUBLISHABLE_KEY = process.env.STRIPE_PUBLISHABLE_KEY || 'test-stripe-pub';
+process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || 'test-stripe-pub';
+process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY || 'test-api-key-12345';
+process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 
 // Define __DEV__ global for React Native code
 global.__DEV__ = true;
@@ -280,6 +281,17 @@ jest.mock('expo-modules-core', () => ({
   },
   requireNativeModule: jest.fn(() => ({})),
   NativeModulesProxy: {},
+}));
+
+// Mock expo-application
+jest.mock('expo-application', () => ({
+  nativeBuildVersion: '1',
+  nativeApplicationVersion: '1.0.0',
+  applicationId: 'com.test.bountyexpo',
+  applicationName: 'BountyExpo',
+  getInstallationTimeAsync: jest.fn().mockResolvedValue(new Date()),
+  getLastUpdateTimeAsync: jest.fn().mockResolvedValue(new Date()),
+  getIosIdForVendorAsync: jest.fn().mockResolvedValue('test-vendor-id'),
 }));
 
 // Mock expo-file-system (including legacy export)

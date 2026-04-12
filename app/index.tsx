@@ -1,13 +1,13 @@
-import type { Href } from "expo-router"
-import { useRouter } from "expo-router"
-import { useEffect, useRef } from "react"
-import { ActivityIndicator, Text, View } from "react-native"
+import type { Href } from "expo-router";
+import { useRouter } from "expo-router";
+import { useEffect, useRef } from "react";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import 'react-native-get-random-values'; // must run before using tweetnacl
-import { useAuthContext } from "../hooks/use-auth-context"
-import { useAppBootstrap } from "../hooks/useAppBootstrap"
-import { ROUTES } from "../lib/routes"
-import { SignInForm } from "./auth/sign-in-form"
-import { markInitialNavigationDone } from './initial-navigation/initialNavigation'
+import { useAuthContext } from "../hooks/use-auth-context";
+import { useAppBootstrap } from "../hooks/useAppBootstrap";
+import { ROUTES } from "../lib/routes";
+import { SignInForm } from "./auth/sign-in-form";
+import { markInitialNavigationDone } from './initial-navigation/initialNavigation';
 
 /**
  * Root Index - Auth Gate
@@ -86,14 +86,16 @@ export default function Index() {
   }, [bootstrap, isPasswordRecovery, router])
 
   // Loading or authenticated (redirecting) — show spinner, never wrong screen.
+  // Use inline StyleSheet styles (not NativeWind className) so the screen is
+  // visible even when the CSS-interop runtime fails to process global.css.
   if (bootstrap.status === 'loading' || bootstrap.status === 'authenticated') {
     if (__DEV__) {
       console.log('[index] Rendering loading/redirecting state:', bootstrap.status)
     }
     return (
-      <View className="flex-1 items-center justify-center bg-emerald-800">
+      <View style={indexStyles.loadingContainer}>
         <ActivityIndicator size="large" color="#10b981" />
-        <Text className="text-white mt-4 text-base">
+        <Text style={indexStyles.loadingText}>
           {bootstrap.status === 'authenticated' ? 'Redirecting...' : 'Loading...'}
         </Text>
       </View>
@@ -106,3 +108,17 @@ export default function Index() {
   }
   return <SignInForm />
 }
+
+const indexStyles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#065f46', // emerald-800
+  },
+  loadingText: {
+    color: '#ffffff',
+    marginTop: 16,
+    fontSize: 16,
+  },
+});
