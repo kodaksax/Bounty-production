@@ -419,10 +419,26 @@ export const messageService = {
 
       const sharedConversationIds = sharedParticipations.map(p => p.conversation_id);
 
+      // Only consider non-group (1:1) conversations between the two users.
+      // If we don't filter here, a shared group chat could be selected
+      // and become the `realConversationId`, causing direct messages to
+      // be sent into the group by mistake.
+      const { data: nonGroupConvs, error: convsError } = await supabase
+        .from('conversations')
+        .select('id, updated_at')
+        .in('id', sharedConversationIds)
+        .eq('is_group', false)
+        .order('updated_at', { ascending: false });
+
+      if (convsError) throw convsError;
+      if (!nonGroupConvs?.length) return null;
+
+      const nonGroupIds = nonGroupConvs.map((c: any) => c.id);
+
       const { data: messagesData, error: messagesError } = await supabase
         .from('messages')
         .select('*')
-        .in('conversation_id', sharedConversationIds)
+        .in('conversation_id', nonGroupIds)
         .order('created_at', { ascending: true });
 
       if (messagesError) throw messagesError;
@@ -440,9 +456,12 @@ export const messageService = {
         isPinned: msg.is_pinned ?? false,
       }));
 
+      // Choose the most recently-updated non-group conversation as the real target
+      const realConversationId = nonGroupConvs[0].id;
+
       const fullConversation: FullConversation = {
         id: `full-${currentUserId}-${otherUserId}`,
-        realConversationId: sharedConversationIds[0],
+        realConversationId,
         isGroup: false,
         name: 'Conversation',
         participantIds: [currentUserId, otherUserId],
