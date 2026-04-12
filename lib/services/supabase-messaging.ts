@@ -525,59 +525,67 @@ export async function createConversation(
 }
 
 /**
- * Get or create a 1:1 conversation (prevents duplicates)
+ * Get or create a 1:1 conversation — single source of truth.
+ *
+ * Delegates to the `rpc_get_or_create_dm_conversation` SECURITY DEFINER
+ * function which acquires a transaction-scoped advisory lock keyed on the
+ * canonical (sorted) user pair before checking for an existing thread.
+ * This makes the lookup + optional insert atomic, eliminating the race
+ * condition that could produce duplicate DM threads when two clients call
+ * this method concurrently for the same user pair.
  */
 export async function getOrCreateConversation(
   userId: string,
   otherUserId: string,
   bountyId?: string
 ): Promise<Conversation> {
-  try {
-    // Check if a 1:1 conversation already exists between these users
-    const { data: existingParticipants } = await supabase
-      .from('conversation_participants')
-      .select('conversation_id')
-      .eq('user_id', userId)
-      .is('deleted_at', null);
+  // Sanitize bountyId — route params can stringify undefined as the literal "undefined"
+  const safeBountyId =
+    bountyId && bountyId !== 'undefined' && UUID_RE.test(bountyId) ? bountyId : null;
 
-    if (existingParticipants && existingParticipants.length > 0) {
-      const conversationIds = existingParticipants.map(p => p.conversation_id);
-
-      // Check if any of these conversations includes the other user
-      for (const convId of conversationIds) {
-        const { data: otherUserParticipant } = await supabase
-          .from('conversation_participants')
-          .select('user_id')
-          .eq('conversation_id', convId)
-          .eq('user_id', otherUserId)
-          .is('deleted_at', null)
-          .single();
-
-        if (otherUserParticipant) {
-          // Found existing conversation, check if it's 1:1
-          const { data: conversation } = await supabase
-            .from('conversations')
-            .select('*')
-            .eq('id', convId)
-            .eq('is_group', false)
-            .single();
-
-          if (conversation) {
-            // Fetch conversation details
-            const conversations = await fetchConversations(userId);
-            const found = conversations.find(c => c.id === convId);
-            if (found) return found;
-          }
-        }
-      }
+  const { data: conversationId, error: rpcError } = await supabase.rpc(
+    'rpc_get_or_create_dm_conversation',
+    {
+      p_user_id: userId,
+      p_other_user_id: otherUserId,
+      p_bounty_id: safeBountyId,
     }
+  );
 
-    // No existing 1:1 conversation found, create new one
-    return await createConversation([userId, otherUserId], false, bountyId, userId);
-  } catch (error) {
-    console.error('Error in getOrCreateConversation:', error);
-    throw error;
+  if (rpcError) {
+    try {
+      logClientError('rpc_get_or_create_dm_conversation failed', {
+        err: rpcError,
+        userId,
+        otherUserId,
+        bountyId,
+      });
+    } catch {
+      /* ignore secondary logging failure */
+    }
+    throw rpcError;
   }
+
+  if (!conversationId) {
+    throw new Error('rpc_get_or_create_dm_conversation returned no conversation ID');
+  }
+
+  // Fetch enriched conversation details from the local fetch helper so the
+  // returned shape is consistent with the rest of the application.
+  const conversations = await fetchConversations(userId);
+  const found = conversations.find(c => c.id === conversationId);
+  if (found) return found;
+
+  // Fallback: build a minimal Conversation from the bare ID so callers are
+  // never left without a usable object even if fetchConversations is slow or
+  // returns a stale cache that doesn't yet include the new conversation.
+  return {
+    id: conversationId,
+    isGroup: false,
+    name: 'Conversation',
+    bountyId: safeBountyId ?? undefined,
+    participantIds: [userId, otherUserId],
+  };
 }
 
 /**
