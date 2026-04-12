@@ -1,7 +1,7 @@
 'use client';
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { useConversations } from '../../../hooks/useConversations';
 import { ChatDetailScreen } from '../chat-detail-screen';
@@ -15,11 +15,17 @@ export default function ConversationRoute() {
   );
   const [loading, setLoading] = useState(!conversation);
 
+  const triedRefreshRef = useRef(false);
+
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        if (!conversation && conversationId) {
+        // Only attempt a refresh once per conversationId to avoid refresh ->
+        // conversations state change -> re-run loops when the conversation
+        // is still not found.
+        if (!conversation && conversationId && !triedRefreshRef.current) {
+          triedRefreshRef.current = true;
           const updated = await refresh(); // fetch the latest list and receive fresh data
           const list = Array.isArray(updated) ? updated : conversations;
           const found = list.find(c => c.id === conversationId);
@@ -34,7 +40,19 @@ export default function ConversationRoute() {
     return () => {
       mounted = false;
     };
-  }, [conversationId, conversation, conversations, refresh]);
+  }, [conversationId, refresh]);
+
+  // If the conversations list is updated elsewhere, pick up the matching
+  // conversation without triggering another refresh call.
+  useEffect(() => {
+    if (!conversation && conversationId) {
+      const found = conversations.find(c => c.id === conversationId);
+      if (found) {
+        setConversation(found);
+        setLoading(false);
+      }
+    }
+  }, [conversations, conversationId]);
 
   if (loading) {
     return (
