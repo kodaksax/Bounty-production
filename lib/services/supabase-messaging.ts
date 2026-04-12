@@ -292,7 +292,13 @@ export async function fetchConversations(userId: string): Promise<Conversation[]
 /**
  * Fetch messages for a conversation from Supabase
  */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export async function fetchMessages(conversationId: string): Promise<Message[]> {
+  // Guard: local/fake conv IDs (e.g. "conv-*") are not valid Supabase UUIDs
+  if (!conversationId || !UUID_RE.test(conversationId)) {
+    return [];
+  }
   try {
     const { data: messages, error } = await supabase
       .from('messages')
@@ -441,88 +447,45 @@ export async function createConversation(
       ? participantIds
       : [...participantIds, resolvedCreatorId];
 
-    // Create conversation
-    const attemptedRows = [
+    // Sanitize bountyId — route params can stringify undefined as the literal "undefined"
+    const safeBountyId =
+      bountyId && bountyId !== 'undefined' && UUID_RE.test(bountyId) ? bountyId : null;
+
+    // Use rpc_create_conversation (SECURITY DEFINER) — bypasses RLS on both
+    // conversations and conversation_participants, and creates participants atomically.
+    const { data: newConversationId, error: rpcError } = await supabase.rpc(
+      'rpc_create_conversation',
       {
-        is_group: isGroup,
-        bounty_id: bountyId,
-        created_by: resolvedCreatorId,
-      },
-      {
-        is_group: isGroup,
-        bounty_id: bountyId,
-      },
-    ];
-
-    let conversation: any = null;
-    let lastError: any = null;
-
-    for (const payload of attemptedRows) {
-      try {
-        const { data, error } = await supabase
-          .from('conversations')
-          .insert(payload)
-          .select()
-          .single();
-
-        if (error) throw error;
-        conversation = data;
-        break;
-      } catch (err) {
-        lastError = err;
-        const msg = String((err as any)?.message || err);
-        if (msg.includes('created_by')) {
-          // Retry without created_by if column missing in older schemas
-          continue;
-        }
-        break;
+        p_bounty_id: safeBountyId,
+        p_name: '',
+        p_participant_ids: ensureCreatorIncluded,
       }
-    }
+    );
 
-    if (!conversation) {
+    if (rpcError) {
       try {
         logClientError('Supabase createConversation failed', {
-          err: lastError,
+          err: rpcError,
           participantIds,
           bountyId,
         });
       } catch {}
-      throw lastError || new Error('Unable to create conversation');
+      throw rpcError;
     }
 
-    // Add participants
-    // Ensure creator is added first (they pass RLS check with user_id = auth.uid())
-    // This helps ensure the conversation's created_by field is properly set for RLS checks
-    const creatorRecord = {
-      conversation_id: conversation.id,
-      user_id: resolvedCreatorId,
-    };
-
-    const otherParticipantRecords = ensureCreatorIncluded
-      .filter(userId => userId !== resolvedCreatorId)
-      .map(userId => ({
-        conversation_id: conversation.id,
-        user_id: userId,
-      }));
-
-    // Insert creator first, then others
-    // Creator always passes RLS (user_id = auth.uid())
-    // Others now pass RLS because can_manage_conversation() returns true (created_by = auth.uid())
-    const allParticipantRecords = [creatorRecord, ...otherParticipantRecords];
-
-    const { error: participantsError } = await supabase
-      .from('conversation_participants')
-      .insert(allParticipantRecords);
-
-    if (participantsError) {
-      logClientError('Failed to add participants to conversation', {
-        err: participantsError,
-        conversationId: conversation.id,
-        creatorId: resolvedCreatorId,
-        participantCount: allParticipantRecords.length,
-      });
-      throw participantsError;
+    if (!newConversationId) {
+      throw new Error('Unable to create conversation: no ID returned from RPC');
     }
+
+    // Fetch the row the RPC just created so we can return full Conversation shape
+    const { data: conversationRow, error: fetchConvError } = await supabase
+      .from('conversations')
+      .select('*')
+      .eq('id', newConversationId)
+      .single();
+
+    if (fetchConvError) throw fetchConvError;
+    const conversation = conversationRow;
 
     // For 1:1 chats, get the other user's info
     let name = 'New Conversation';

@@ -26,7 +26,14 @@ export function useMessages(conversationId: string): UseMessagesResult {
   const [pinnedMessage, setPinnedMessage] = useState<Message | null>(null);
   const currentUserId = getCurrentUserId();
 
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
   const fetchMessages = async () => {
+    // Skip Supabase for local/fake conversation IDs (e.g. "conv-*")
+    if (!conversationId || !UUID_RE.test(conversationId)) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
@@ -46,7 +53,7 @@ export function useMessages(conversationId: string): UseMessagesResult {
   const sendMessage = async (text: string, mediaUrl?: string | null) => {
     try {
       setError(null);
-      
+
       // Optimistic update - add message immediately
       const tempMessage: Message = {
         id: `temp-${Date.now()}`,
@@ -57,16 +64,19 @@ export function useMessages(conversationId: string): UseMessagesResult {
         createdAt: new Date().toISOString(),
         status: 'sending',
       };
-      
+
       setMessages(prev => [...prev, tempMessage]);
 
       // Send to Supabase
-      const message = await supabaseMessaging.sendMessage(conversationId, text, currentUserId, mediaUrl ?? null);
-      
-      // Replace temp message with real one
-      setMessages(prev => 
-        prev.map(m => m.id === tempMessage.id ? message : m)
+      const message = await supabaseMessaging.sendMessage(
+        conversationId,
+        text,
+        currentUserId,
+        mediaUrl ?? null
       );
+
+      // Replace temp message with real one
+      setMessages(prev => prev.map(m => (m.id === tempMessage.id ? message : m)));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send message');
       // Remove failed temp message
@@ -126,26 +136,23 @@ export function useMessages(conversationId: string): UseMessagesResult {
       await fetchMessages();
 
       // Subscribe to Realtime updates
-      subscription = supabaseMessaging.subscribeToMessages(
-        conversationId,
-        (newMessage) => {
-          if (newMessage) {
-            // Add new message if it's not from current user (avoid duplicates from optimistic updates)
-            if (newMessage.senderId !== currentUserId) {
-              setMessages(prev => {
-                // Check if message already exists
-                if (prev.some(m => m.id === newMessage.id)) {
-                  return prev;
-                }
-                return [...prev, newMessage];
-              });
-            }
-          } else {
-            // Refetch on update
-            fetchMessages();
+      subscription = supabaseMessaging.subscribeToMessages(conversationId, newMessage => {
+        if (newMessage) {
+          // Add new message if it's not from current user (avoid duplicates from optimistic updates)
+          if (newMessage.senderId !== currentUserId) {
+            setMessages(prev => {
+              // Check if message already exists
+              if (prev.some(m => m.id === newMessage.id)) {
+                return prev;
+              }
+              return [...prev, newMessage];
+            });
           }
+        } else {
+          // Refetch on update
+          fetchMessages();
         }
-      );
+      });
     };
 
     init();
