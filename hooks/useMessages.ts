@@ -1,6 +1,7 @@
 import { RealtimeChannel } from '@supabase/supabase-js';
 import * as Clipboard from 'expo-clipboard';
 import { useEffect, useState } from 'react';
+import { messageService } from '../lib/services/message-service';
 import * as supabaseMessaging from '../lib/services/supabase-messaging';
 import type { Message } from '../lib/types';
 import { getCurrentUserId } from '../lib/utils/data-utils';
@@ -67,7 +68,26 @@ export function useMessages(conversationId: string): UseMessagesResult {
 
       setMessages(prev => [...prev, tempMessage]);
 
-      // Send to Supabase
+      // If this is a local/fallback conversation ID (e.g. "conv-..."),
+      // avoid calling Supabase (which expects a UUID) and use the
+      // local `messageService` instead to persist the message locally.
+      if (!UUID_RE.test(conversationId)) {
+        try {
+          const result = await messageService.sendMessage(conversationId, text, currentUserId);
+          // `messageService.sendMessage` returns an object with `message`
+          // but also some call sites may return the Message directly; handle both.
+          const sentMessage: Message =
+            result && (result as any).message ? (result as any).message : (result as any);
+          setMessages(prev => prev.map(m => (m.id === tempMessage.id ? sentMessage : m)));
+          return;
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Failed to send message (local)');
+          setMessages(prev => prev.filter(m => !m.id.startsWith('temp-')));
+          return;
+        }
+      }
+
+      // Send to Supabase for canonical conversations (UUIDs)
       const message = await supabaseMessaging.sendMessage(
         conversationId,
         text,
