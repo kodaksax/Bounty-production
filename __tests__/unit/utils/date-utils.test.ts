@@ -7,7 +7,8 @@ import { formatDate, formatRelativeTime, formatDateForGrouping, formatTime } fro
 describe('Date Utils', () => {
   // Use fake timers to ensure consistent test behavior
   beforeAll(() => {
-    jest.useFakeTimers();
+    // Use Jest's modern fake timers so `setSystemTime` is supported
+    jest.useFakeTimers('modern');
     jest.setSystemTime(new Date('2024-01-15T14:30:00'));
   });
 
