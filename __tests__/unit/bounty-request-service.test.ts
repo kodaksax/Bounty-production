@@ -21,7 +21,15 @@ describe('bountyRequestService (unit)', () => {
     return chain
   }
 
-  // Note: create() duplicate-insert behaviour covered elsewhere; keep focused test on acceptRequest
+  // Shared rpc mock that simulates the fn_accept_bounty_request RPC function
+  // not being available (PGRST202), which triggers the sequential fallback path.
+  // Tests that specifically want to test the RPC path can override this.
+  function makeRpcNotFoundMock() {
+    return jest.fn().mockResolvedValue({
+      data: null,
+      error: { code: 'PGRST202', message: 'Could not find the function fn_accept_bounty_request' },
+    })
+  }
 
   test('acceptRequest creates escrow and updates bounty payment intent when escrow succeeds', async () => {
     // Mock logger
@@ -39,6 +47,7 @@ describe('bountyRequestService (unit)', () => {
     jest.doMock('../../lib/supabase', () => ({
       isSupabaseConfigured: true,
       supabase: {
+        rpc: makeRpcNotFoundMock(),
         from: jest.fn((table: string) => {
           if (table === 'bounties') return bountyUpdateChain
           if (table === 'bounty_requests') return rejectChain
@@ -82,6 +91,7 @@ describe('bountyRequestService (unit)', () => {
     jest.doMock('../../lib/supabase', () => ({
       isSupabaseConfigured: true,
       supabase: {
+        rpc: makeRpcNotFoundMock(),
         from: jest.fn((table: string) => {
           if (table === 'bounties') return bountyUpdateChain
           if (table === 'bounty_requests') return rejectChain
@@ -126,6 +136,7 @@ describe('bountyRequestService (unit)', () => {
     jest.doMock('../../lib/supabase', () => ({
       isSupabaseConfigured: true,
       supabase: {
+        rpc: makeRpcNotFoundMock(),
         from: jest.fn((table: string) => {
           if (table === 'bounties') return bountyUpdateChain
           if (table === 'bounty_requests') return rollbackChain
@@ -145,7 +156,7 @@ describe('bountyRequestService (unit)', () => {
     expect(result).toBeNull()
     // Should have logged an error about the race condition
     expect(loggerError).toHaveBeenCalledWith(
-      'Bounty already accepted or no longer open, reverting request to pending',
+      'Fallback: bounty already accepted or no longer open',
       expect.objectContaining({ requestId: 'r1', bountyId: 'b1' })
     )
     // Should have attempted to roll back the request status to pending

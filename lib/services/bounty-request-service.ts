@@ -703,96 +703,161 @@ export const bountyRequestService = {
       });
     }
 
-    // If using Supabase client, perform update and create escrow client-side as before.
+    // If using Supabase client, use the atomic SECURITY DEFINER RPC to transition
+    // both bounty_requests and bounties in a single round-trip, bypassing RLS.
+    // This avoids a race condition where the direct client-side update to `bounties`
+    // could fail silently (due to RLS or a missing accepted_by column) causing the
+    // bounty to stay permanently at 'open' and the request to bounce back to 'pending'.
     if (isSupabaseConfigured) {
-      const result = await this.updateStatus(requestId, "accepted");
+      let result: BountyRequest | null = null;
 
-      if (result) {
-        // Transition the bounty from 'open' → 'in_progress' and record accepted_by.
-        // Without this the bounty stays 'open' even though the request is 'accepted',
-        // which causes the hunter's In Progress view to never show the bounty as in_progress.
-        let bountyTransitioned = false;
-        try {
-          const { data: updatedRows, error: bountyUpdateError } = await supabase
-            .from('bounties')
-            .update({
-              status: 'in_progress',
-              accepted_by: result.hunter_id,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', String(result.bounty_id))
-            .eq('status', 'open') // optimistic lock: only transition if still open
-            .is('accepted_by', null) // prevent race: only if not already accepted
-            .select();
+      // Try the atomic SECURITY DEFINER function first (preferred path).
+      try {
+        const { data: rpcData, error: rpcError } = await supabase.rpc(
+          'fn_accept_bounty_request',
+          { p_request_id: String(requestId) }
+        );
 
-          if (bountyUpdateError) {
-            logger.error('Failed to transition bounty to in_progress', { requestId, bountyId: result.bounty_id, error: bountyUpdateError });
-          } else if (!updatedRows || updatedRows.length === 0) {
-            // Bounty was already accepted by another request – roll back the request
-            logger.error('Bounty already accepted or no longer open, reverting request to pending', { requestId, bountyId: result.bounty_id });
+        if (rpcError) {
+          // Map known exception messages to structured HTTP-like status codes so
+          // the caller (useAcceptRequest) can present meaningful alerts.
+          const msg = rpcError.message || '';
+          if (msg.includes('request_not_found')) {
+            const err = new Error('Request not found');
+            (err as any).status = 404;
+            throw err;
+          }
+          if (msg.includes('request_not_pending') || msg.includes('bounty_not_open')) {
+            const err = new Error('Bounty or request is no longer in the expected state');
+            (err as any).status = 409;
+            throw err;
+          }
+          throw new Error(msg || 'fn_accept_bounty_request failed');
+        }
+
+        // rpcData is an array of rows: [{ bounty: {...}, accepted_request: {...} }]
+        const row = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+        const acceptedRequestJson = (row as any)?.accepted_request;
+        if (!acceptedRequestJson) {
+          logger.error('fn_accept_bounty_request returned no accepted_request data', { requestId, rpcData });
+          return null;
+        }
+
+        // The JSON may be a plain object (already parsed by the JS driver) or a string
+        result = (typeof acceptedRequestJson === 'string'
+          ? JSON.parse(acceptedRequestJson)
+          : acceptedRequestJson) as BountyRequest;
+
+      } catch (rpcErr: any) {
+        // If the RPC itself is unavailable (e.g. function not yet deployed in this env),
+        // fall back to the direct sequential update path.
+        const isNotFound =
+          rpcErr?.code === 'PGRST202' ||
+          (rpcErr?.message || '').includes('Could not find the function') ||
+          (rpcErr?.message || '').includes('rpc.fn_accept_bounty_request') ||
+          (rpcErr?.message || '').includes('fn_accept_bounty_request');
+        const isConflict = (rpcErr as any)?.status === 409;
+        const isNotFoundRequest = (rpcErr as any)?.status === 404;
+
+        if (isConflict || isNotFoundRequest) {
+          // Structured error from fn – re-throw to caller
+          throw rpcErr;
+        }
+
+        if (!isNotFound) {
+          // Unexpected RPC error – re-throw so caller shows "Accept Failed" alert
+          throw rpcErr;
+        }
+
+        // RPC function not deployed – fall back to sequential client-side updates.
+        logger.warning('fn_accept_bounty_request not available, falling back to sequential updates', {
+          requestId,
+          error: rpcErr?.message,
+        });
+
+        result = await this.updateStatus(requestId, 'accepted');
+
+        if (result) {
+          let bountyTransitioned = false;
+          try {
+            const { data: updatedRows, error: bountyUpdateError } = await supabase
+              .from('bounties')
+              .update({
+                status: 'in_progress',
+                accepted_by: result.hunter_id,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', String(result.bounty_id))
+              .eq('status', 'open')
+              .select();
+
+            if (bountyUpdateError) {
+              logger.error('Fallback: failed to transition bounty to in_progress', { requestId, bountyId: result.bounty_id, error: bountyUpdateError });
+            } else if (!updatedRows || updatedRows.length === 0) {
+              logger.error('Fallback: bounty already accepted or no longer open', { requestId, bountyId: result.bounty_id });
+              await supabase
+                .from('bounty_requests')
+                .update({ status: 'pending', updated_at: new Date().toISOString() })
+                .eq('id', String(requestId))
+                .eq('status', 'accepted');
+              return null;
+            } else {
+              bountyTransitioned = true;
+            }
+          } catch (statusErr) {
+            logger.error('Fallback: error transitioning bounty', { requestId, error: statusErr instanceof Error ? statusErr.message : String(statusErr) });
+          }
+
+          // Reject other pending requests for this bounty
+          try {
             await supabase
               .from('bounty_requests')
-              .update({ status: 'pending', updated_at: new Date().toISOString() })
-              .eq('id', String(requestId))
-              .eq('status', 'accepted');
-            return null;
-          } else {
-            bountyTransitioned = true;
+              .update({ status: 'rejected', updated_at: new Date().toISOString() })
+              .eq('bounty_id', String(result.bounty_id))
+              .neq('id', String(requestId))
+              .eq('status', 'pending');
+          } catch (rejectErr) {
+            logger.error('Fallback: error rejecting competing requests', { requestId, error: rejectErr instanceof Error ? (rejectErr as Error).message : String(rejectErr) });
           }
-        } catch (statusErr) {
-          logger.error('Error transitioning bounty to in_progress after accepting request', { requestId, bountyId: result.bounty_id, error: statusErr instanceof Error ? statusErr.message : String(statusErr) });
-        }
 
-        // Reject other pending requests for this bounty so only one hunter is accepted
-        try {
-          const { error: rejectOthersError } = await supabase
-            .from('bounty_requests')
-            .update({ status: 'rejected', updated_at: new Date().toISOString() })
-            .eq('bounty_id', String(result.bounty_id))
-            .neq('id', String(requestId))
-            .eq('status', 'pending');
-
-          if (rejectOthersError) {
-            logger.error('Failed to reject other pending requests', { requestId, bountyId: result.bounty_id, error: rejectOthersError });
-          }
-        } catch (rejectErr) {
-          logger.error('Error rejecting competing requests', { requestId, bountyId: result.bounty_id, error: rejectErr instanceof Error ? rejectErr.message : String(rejectErr) });
-        }
-
-        // Only attempt escrow creation if the bounty transition succeeded.
-        // This prevents orphaned escrows when the bounty was already claimed.
-        if (bountyTransitioned) {
-          try {
-            const bountyData = await this.getBountyForRequest(result.bounty_id);
-            if (bountyData && !bountyData.is_for_honor && bountyData.amount > 0) {
-              // Validate amount meets minimum escrow threshold before calling the server
-              if (bountyData.amount < MIN_ESCROW_CENTS / 100) {
-                logger.error('Bounty amount below minimum for escrow', { bountyId: result.bounty_id, amount: bountyData.amount });
-              } else {
-                const escrowResult = await paymentService.createEscrow({
-                  bountyId: String(result.bounty_id),
-                  amount: bountyData.amount,
-                  posterId: bountyData.user_id || bountyData.poster_id,
-                  hunterId: result.hunter_id,
-                  userId: bountyData.user_id || bountyData.poster_id,
-                });
-
-                if (escrowResult.success && escrowResult.escrowId) {
-                  try {
-                    await this.updateBountyPaymentIntent(result.bounty_id, escrowResult.escrowId);
-                  } catch (updateError) {
-                    logger.error('Failed to update bounty with payment_intent_id', { bountyId: result.bounty_id, escrowId: escrowResult.escrowId, error: updateError });
-                  }
-                } else if (!escrowResult.success) {
-                  logger.error('Failed to create escrow for accepted bounty request', { requestId, bountyId: result.bounty_id, error: escrowResult.error });
-                }
-              }
-            }
-          } catch (error) {
-            logger.error('Error creating escrow after accepting bounty request', { requestId, error: error instanceof Error ? error.message : String(error) });
+          if (!bountyTransitioned) {
+            return result; // Return accepted request even if bounty update was uncertain
           }
         }
       }
+
+      if (!result) return null;
+
+      // Create escrow for paid bounties (best-effort; does not block acceptance)
+      try {
+        const bountyData = await this.getBountyForRequest(result.bounty_id);
+        if (bountyData && !bountyData.is_for_honor && bountyData.amount > 0) {
+          if (bountyData.amount < MIN_ESCROW_CENTS / 100) {
+            logger.error('Bounty amount below minimum for escrow', { bountyId: result.bounty_id, amount: bountyData.amount });
+          } else {
+            const escrowResult = await paymentService.createEscrow({
+              bountyId: String(result.bounty_id),
+              amount: bountyData.amount,
+              posterId: bountyData.user_id || bountyData.poster_id,
+              hunterId: result.hunter_id,
+              userId: bountyData.user_id || bountyData.poster_id,
+            });
+
+            if (escrowResult.success && escrowResult.escrowId) {
+              try {
+                await this.updateBountyPaymentIntent(result.bounty_id, escrowResult.escrowId);
+              } catch (updateError) {
+                logger.error('Failed to update bounty with payment_intent_id', { bountyId: result.bounty_id, escrowId: escrowResult.escrowId, error: updateError });
+              }
+            } else if (!escrowResult.success) {
+              logger.error('Failed to create escrow for accepted bounty request', { requestId, bountyId: result.bounty_id, error: escrowResult.error });
+            }
+          }
+        }
+      } catch (error) {
+        logger.error('Error creating escrow after accepting bounty request', { requestId, error: error instanceof Error ? error.message : String(error) });
+      }
+
       return result;
     }
 

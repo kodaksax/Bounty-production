@@ -570,7 +570,11 @@ export const bountyService = {
           .order('created_at', { ascending: false })
 
         if (options?.status) query = query.eq('status', options.status)
-        if (options?.userId) query = query.eq('poster_id', options.userId)
+        // The bounties table uses `user_id` as the canonical poster column (baseline schema).
+        // `poster_id` is a denormalized alias added later; some rows may have only one or both.
+        // Use an OR filter to match either so that all bounties are found regardless of which
+        // column was populated when the bounty was created.
+        if (options?.userId) query = (query as any).or(`user_id.eq.${options.userId},poster_id.eq.${options.userId}`)
         if (options?.workType) query = query.eq('work_type', options.workType)
         if (!options?.includeArchived) query = query.neq('status', 'archived')
 
@@ -586,7 +590,7 @@ export const bountyService = {
             // Fetch without join then attach profiles
             let qNoJoin: any = supabase.from('bounties').select('*').order('created_at', { ascending: false })
             if (options?.status) qNoJoin = qNoJoin.eq('status', options.status)
-              if (options?.userId) qNoJoin = qNoJoin.eq('poster_id', options.userId)
+              if (options?.userId) qNoJoin = (qNoJoin as any).or(`user_id.eq.${options.userId},poster_id.eq.${options.userId}`)
             if (options?.workType) qNoJoin = qNoJoin.eq('work_type', options.workType)
             if (!options?.includeArchived) qNoJoin = qNoJoin.neq('status', 'archived')
             qNoJoin = qNoJoin.range(offset, offset + limit - 1)

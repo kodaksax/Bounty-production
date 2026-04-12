@@ -129,6 +129,18 @@ export function useAcceptRequest({
         return
       }
 
+      // Guard: acceptRequest can return null when the server determines the bounty
+      // was already accepted or is no longer in an acceptable state (e.g. the
+      // optimistic lock check failed).  Without this guard the code would continue
+      // as if the acceptance succeeded, create a spurious conversation, show a
+      // false-positive "Request Accepted" alert, and then reload from the DB –
+      // which still shows the bounty as 'open'.
+      if (!result) {
+        Alert.alert('Conflict', 'This bounty was already accepted or is no longer available. Refreshing…')
+        await Promise.allSettled([loadMyBounties(), loadInProgress(), loadRequestsForMyBounties(myBounties)])
+        return
+      }
+
       // Fetch authoritative bounty object (server performed the transition atomically)
       const bountyId = (request.bounty as any)?.id ?? (request as any)?.bounty_id
       let bountyObj: Bounty | null = (request.bounty as unknown as Bounty) ?? null
