@@ -9,20 +9,33 @@ import {
   formatTime,
 } from '../../../lib/utils/date-utils';
 
+// Epoch shared by the whole suite so it can be referenced before beforeAll.
+const FIXED_NOW = new Date('2024-01-15T14:30:00').getTime();
+
 describe('Date Utils', () => {
-  // Use fake timers to ensure consistent test behavior
+  // Set up a deterministic clock without relying on setSystemTime / getEpoch,
+  // which fails in some @sinonjs/fake-timers versions.
   beforeAll(() => {
-    // Use Jest's modern fake timers so `setSystemTime` is supported
-    jest.useFakeTimers('modern');
-    jest.setSystemTime(new Date('2024-01-15T14:30:00'));
+    try {
+      // Jest 27+ / @sinonjs/fake-timers 8+: pass `now` at construction time.
+      // This avoids the post-construction setSystemTime call that triggers the
+      // getEpoch error in certain legacy fake-timers environments.
+      jest.useFakeTimers({ now: FIXED_NOW });
+    } catch {
+      // Fallback for environments that do not support the `now` option:
+      // activate fake timers (so setTimeout etc. are controlled) and pin
+      // Date.now via a plain spy.
+      jest.useFakeTimers();
+      jest.spyOn(Date, 'now').mockReturnValue(FIXED_NOW);
+    }
   });
 
   afterAll(() => {
     jest.useRealTimers();
   });
 
-  // Fixed date for consistent testing
-  const fixedDate = new Date('2024-01-15T14:30:00');
+  // Fixed date for consistent testing — derived from the shared FIXED_NOW epoch.
+  const fixedDate = new Date(FIXED_NOW);
   let todayDate: Date;
   let yesterdayDate: Date;
   const oldDate = new Date('2023-12-01T10:00:00');
