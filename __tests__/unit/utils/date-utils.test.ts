@@ -2,7 +2,12 @@
  * Unit tests for Date Utilities
  */
 
-import { formatDate, formatRelativeTime, formatDateForGrouping, formatTime } from '../../../lib/utils/date-utils';
+import {
+  formatDate,
+  formatDateForGrouping,
+  formatRelativeTime,
+  formatTime,
+} from '../../../lib/utils/date-utils';
 
 describe('Date Utils', () => {
   // Use fake timers to ensure consistent test behavior
@@ -29,12 +34,12 @@ describe('Date Utils', () => {
   });
 
   describe('formatDate', () => {
-    it('should format today\'s date with time', () => {
+    it("should format today's date with time", () => {
       const result = formatDate(todayDate);
       expect(result).toMatch(/^Today, \d{1,2}:\d{2} (AM|PM)$/);
     });
 
-    it('should format yesterday\'s date with time', () => {
+    it("should format yesterday's date with time", () => {
       const result = formatDate(yesterdayDate);
       expect(result).toMatch(/^Yesterday, \d{1,2}:\d{2} (AM|PM)$/);
     });
