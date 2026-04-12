@@ -108,10 +108,10 @@ export const messageService = {
 
     try {
       const conversation = await messagingService.getConversation(conversationId);
-      const participantIds = conversation?.participantIds ?? [];
-      const recipientId = participantIds.find(id => id !== userId);
+      const convoParticipantIds = conversation?.participantIds ?? participantIds ?? [];
+      const recipientId = convoParticipantIds.find(id => id !== userId);
 
-      if (recipientId && participantIds.length === 2) {
+      if (recipientId && convoParticipantIds.length === 2) {
         const [recipientPublicKey, senderKeys] = await Promise.all([
           e2eKeyService.getRecipientPublicKey(recipientId),
           e2eKeyService.getOrGenerateKeyPair(userId),
