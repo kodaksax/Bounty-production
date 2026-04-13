@@ -16,14 +16,14 @@ import type { PortfolioItem } from 'lib/types';
 import { normalizeAuthProfile, type NormalizedProfile } from 'lib/utils/normalize-profile';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Modal,
-    Pressable,
-    ScrollView,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { showReportAlert } from './ReportModal';
 import { ReputationScoreCompact } from './ui/reputation-score';
@@ -137,7 +137,10 @@ export function EnhancedProfileSection({
   // loading/creating the conversation internally.
   const handleMessagePress = () => {
     if (!resolvedUserId || resolvedUserId === 'current-user') return;
-    router.push(`/tabs/messenger/user/${resolvedUserId}`);
+    router.push({
+      pathname: `/tabs/messenger/user/[userId]`,
+      params: { userId: String(resolvedUserId) },
+    });
   };
 
   // Double guard: respect the isOwnProfile prop AND verify the resolved id
