@@ -6,6 +6,10 @@ import * as supabaseMessaging from '../lib/services/supabase-messaging';
 import type { Message } from '../lib/types';
 import { getCurrentUserId } from '../lib/utils/data-utils';
 
+// Module-level counter so concurrent sendMessage calls always get unique IDs,
+// even when Date.now() returns the same millisecond value.
+let _tempCounter = 0;
+
 interface UseMessagesResult {
   messages: Message[];
   loading: boolean;
@@ -58,7 +62,7 @@ export function useMessages(conversationId: string): UseMessagesResult {
 
       // Optimistic update - add message immediately
       tempMessage = {
-        id: `temp-${Date.now()}`,
+        id: `temp-${Date.now()}-${++_tempCounter}`,
         conversationId,
         senderId: currentUserId,
         text,
