@@ -1,4 +1,4 @@
-import { MessengerScreen } from "app/tabs/messenger-screen"
+import { MessengerScreen } from "./messenger-screen"
 import { PostingsScreen } from "app/tabs/postings-screen"
 import { ProfileScreen } from "app/tabs/profile-screen"
 import { WalletScreen } from "app/tabs/wallet-screen"

@@ -10,7 +10,7 @@ export interface UseCachedDataResult<T> {
   isLoading: boolean;
   isValidating: boolean;
   error: Error | null;
-  refetch: () => Promise<void>;
+  refetch: () => Promise<T | null>;
   setData: (data: T) => void;
   isStale: boolean;
   isOffline: boolean;
@@ -33,30 +33,33 @@ export function useCachedData<T>(
   const [isStale, setIsStale] = useState(false);
   const [isOffline, setIsOffline] = useState(!cachedDataService.getOnlineStatus());
 
-  const fetchData = useCallback(async (forceRefresh = false) => {
-    if (!enabled) return;
+  const fetchData = useCallback(
+    async (forceRefresh = false) => {
+      if (!enabled) return;
 
-    try {
-      setIsLoading(true);
-      setError(null);
-      setIsOffline(!cachedDataService.getOnlineStatus());
+      try {
+        setIsLoading(true);
+        setError(null);
+        setIsOffline(!cachedDataService.getOnlineStatus());
 
-      const result = await cachedDataService.fetchWithCache(
-        key,
-        fetchFn,
-        { ...cacheOptions, forceRefresh }
-      );
+        const result = await cachedDataService.fetchWithCache(key, fetchFn, {
+          ...cacheOptions,
+          forceRefresh,
+        });
 
-      setData(result);
-      setIsStale(false);
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to fetch data');
-      setError(error);
-      logger.error('useCachedData error', { key, error });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [key, fetchFn, enabled, JSON.stringify(cacheOptions)]);
+        setData(result);
+        setIsStale(false);
+        return result;
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error('Failed to fetch data');
+        setError(error);
+        logger.error('useCachedData error', { key, error });
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [key, fetchFn, enabled, JSON.stringify(cacheOptions)]
+  );
 
   // Initial fetch
   useEffect(() => {
@@ -67,7 +70,7 @@ export function useCachedData<T>(
   useEffect(() => {
     if (!enabled) return;
 
-    const unsubscribe = cachedDataService.onRevalidated(key, (newData) => {
+    const unsubscribe = cachedDataService.onRevalidated(key, newData => {
       setData(newData);
       setIsValidating(false);
     });
@@ -79,7 +82,6 @@ export function useCachedData<T>(
           setIsValidating(false);
         })
       : () => {};
-
 
     return () => {
       unsubscribe();
@@ -96,28 +98,30 @@ export function useCachedData<T>(
       return;
     }
 
-    const unsubscribeForeground = (cachedDataService as any).onForeground(async (eventKey: string, meta: any) => {
-      try {
-        if (eventKey !== key) return;
+    const unsubscribeForeground = (cachedDataService as any).onForeground(
+      async (eventKey: string, meta: any) => {
+        try {
+          if (eventKey !== key) return;
 
-        if (!meta || typeof meta.age !== 'number') return;
+          if (!meta || typeof meta.age !== 'number') return;
 
-        // Mark stale if age exceeds threshold
-        if (meta.age > FOREGROUND_STALE_THRESHOLD_MS) {
-          setIsStale(true);
+          // Mark stale if age exceeds threshold
+          if (meta.age > FOREGROUND_STALE_THRESHOLD_MS) {
+            setIsStale(true);
 
-          // If we're online, automatically revalidate
-          const online = cachedDataService.getOnlineStatus();
-          if (online) {
-            setIsValidating(true);
-            await fetchData(true);
-            setIsStale(false);
+            // If we're online, automatically revalidate
+            const online = cachedDataService.getOnlineStatus();
+            if (online) {
+              setIsValidating(true);
+              await fetchData(true);
+              setIsStale(false);
+            }
           }
+        } catch (err) {
+          logger.error('Error handling foreground revalidation', { key, error: err });
         }
-      } catch (err) {
-        logger.error('Error handling foreground revalidation', { key, error: err });
       }
-    });
+    );
 
     return () => {
       unsubscribeForeground();
@@ -133,20 +137,24 @@ export function useCachedData<T>(
 
     // Register interval for test cleanup
     if (process.env.NODE_ENV === 'test') {
-      const _i = interval as any
+      const _i = interval as any;
       if (typeof _i?.unref === 'function') {
-        try { _i.unref(); } catch { /* ignore */ }
+        try {
+          _i.unref();
+        } catch {
+          /* ignore */
+        }
       }
-      ;(globalThis as any).__BACKGROUND_INTERVALS = (globalThis as any).__BACKGROUND_INTERVALS || []
-      ;(globalThis as any).__BACKGROUND_INTERVALS.push(interval)
+      (globalThis as any).__BACKGROUND_INTERVALS = (globalThis as any).__BACKGROUND_INTERVALS || [];
+      (globalThis as any).__BACKGROUND_INTERVALS.push(interval);
     }
 
     return () => clearInterval(interval);
   }, []);
 
-  const refetch = useCallback(() => {
+  const refetch = useCallback((): Promise<T | null> => {
     setIsValidating(true);
-    return fetchData(true);
+    return fetchData(true) as Promise<T | null>;
   }, [fetchData]);
 
   return {

@@ -1,6 +1,5 @@
 import { StepperHeader } from 'app/components/StepperHeader';
 import { useBountyDraft } from 'app/hooks/useBountyDraft';
-import { useAuthContext } from 'hooks/use-auth-context';
 import { StepCompensation } from 'app/screens/CreateBounty/StepCompensation';
 import { StepDetails } from 'app/screens/CreateBounty/StepDetails';
 import { StepLocation } from 'app/screens/CreateBounty/StepLocation';
@@ -9,6 +8,7 @@ import { StepTitle } from 'app/screens/CreateBounty/StepTitle';
 import { bountyService } from 'app/services/bountyService';
 import { ErrorBanner } from 'components/error-banner';
 import { EmailVerificationBanner } from 'components/ui/email-verification-banner';
+import { useAuthContext } from 'hooks/use-auth-context';
 import { useEmailVerification } from 'hooks/use-email-verification';
 import { useBackHandler } from 'hooks/useBackHandler';
 import { useFormSubmission } from 'hooks/useFormSubmission';
@@ -117,9 +117,10 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
       debounceMs: 1000,
       onError: (error) => {
         const userError = getUserFriendlyError(error);
+        // Always log the raw error so it appears in Metro/device logs regardless of platform
+        console.error('[CreateBounty] bounty_create failed:', error?.message ?? error);
         if (Platform.OS === 'web') {
           // Error is already surfaced via the ErrorBanner component below
-          console.error('Bounty post error:', error);
         } else {
           Alert.alert(
             userError.title,

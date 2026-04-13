@@ -94,7 +94,7 @@ export function sanitizeErrorMessage(error: any): string {
   
   // Check if message contains technical details
   if (containsTechnicalDetails(message)) {
-    return 'An Aunexpected error occurred. Please try again or contact support if the problem persists.';
+    return 'An unexpected error occurred. Please try again or contact support if the problem persists.';
   }
   
   return message;

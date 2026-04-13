@@ -13,7 +13,7 @@ interface UseConversationsResult {
   isValidating: boolean;
   isStale?: boolean;
   error: string | null;
-  refresh: () => Promise<void>;
+  refresh: () => Promise<Conversation[] | null>;
   markAsRead: (conversationId: string) => Promise<void>;
   deleteConversation: (conversationId: string) => Promise<void>;
   totalUnreadCount: number;
@@ -22,10 +22,12 @@ interface UseConversationsResult {
 export function useConversations(): UseConversationsResult {
   const currentUserId = getCurrentUserId();
   // Check if we have a valid authenticated user (not the fallback ID)
-  const hasValidUser = !!(currentUserId && currentUserId !== '00000000-0000-0000-0000-000000000001');
+  const hasValidUser = !!(
+    currentUserId && currentUserId !== '00000000-0000-0000-0000-000000000001'
+  );
 
-  const cacheKey = useMemo(() =>
-    hasValidUser ? CACHE_KEYS.CONVERSATIONS_LIST : 'conversations_guest',
+  const cacheKey = useMemo(
+    () => (hasValidUser ? CACHE_KEYS.CONVERSATIONS_LIST : 'conversations_guest'),
     [hasValidUser]
   );
 
@@ -60,18 +62,14 @@ export function useConversations(): UseConversationsResult {
     }
   }, [fetchError]);
 
-  const fetchConversations = useCallback(async () => {
-    await refetch();
+  const fetchConversations = useCallback(async (): Promise<Conversation[] | null> => {
+    return refetch();
   }, [refetch]);
 
   const markAsRead = async (conversationId: string) => {
     // Optimistic update
     setConversations(prev =>
-      prev.map(conv =>
-        conv.id === conversationId
-          ? { ...conv, unread: 0 }
-          : conv
-      )
+      prev.map(conv => (conv.id === conversationId ? { ...conv, unread: 0 } : conv))
     );
 
     try {
@@ -95,8 +93,8 @@ export function useConversations(): UseConversationsResult {
     }
   };
 
-  const refresh = async () => {
-    await fetchConversations();
+  const refresh = async (): Promise<Conversation[] | null> => {
+    return fetchConversations();
   };
 
   useEffect(() => {
@@ -113,13 +111,12 @@ export function useConversations(): UseConversationsResult {
       }
 
       // Subscribe to Realtime updates
-      subscription = supabaseMessaging.subscribeToConversations(
-        currentUserId,
-        () => {
-          // Refetch conversations on any update (SWR will update UI)
-          refetch().catch(err => logger.error('Error refetching conversations on notification', { error: err }));
-        }
-      );
+      subscription = supabaseMessaging.subscribeToConversations(currentUserId, () => {
+        // Refetch conversations on any update (SWR will update UI)
+        refetch().catch(err =>
+          logger.error('Error refetching conversations on notification', { error: err })
+        );
+      });
     };
 
     init();

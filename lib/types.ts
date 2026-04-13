@@ -178,7 +178,7 @@ export interface PortfolioItem {
  */
 export interface Message {
   id: string;
-  conversationId: string;
+  conversationId?: string;
   senderId: string;
   text: string;
   createdAt: string;
@@ -227,8 +227,13 @@ export interface Conversation {
   avatar?: string;
   lastMessage?: string;
   updatedAt?: string;
-  participantIds?: string[];
+  participantIds: string[]; // ✅ make required (important)
   unread?: number;
+}
+
+export interface FullConversation extends Conversation {
+  messages: Message[];
+  realConversationId: string,
 }
 
 /**

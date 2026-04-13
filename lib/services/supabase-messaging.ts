@@ -1,10 +1,10 @@
 /**
  * supabase-messaging.ts - Supabase Realtime messaging service
- * 
+ *
  * Provides Supabase-backed messaging with Realtime subscriptions,
  * local caching via AsyncStorage for offline/fast boot, and
  * support for 1:1 conversations with soft delete.
- * 
+ *
  * Key features:
  * - Realtime message and conversation updates via Supabase subscriptions
  * - Local message cache (AsyncStorage) for fast boot and offline support
@@ -87,11 +87,9 @@ async function loadCachedMessages(conversationId: string): Promise<Message[]> {
  */
 export function getProfileAvatarUrl(avatarPath?: string | null): string | undefined {
   if (!avatarPath) return undefined;
-  
-  const { data } = supabase.storage
-    .from('Profilepictures')
-    .getPublicUrl(avatarPath);
-  
+
+  const { data } = supabase.storage.from('Profilepictures').getPublicUrl(avatarPath);
+
   return data?.publicUrl;
 }
 
@@ -106,11 +104,11 @@ export function generateInitials(username?: string, fullName?: string): string {
     }
     return fullName.substring(0, 2).toUpperCase();
   }
-  
+
   if (username) {
     return username.substring(0, 2).toUpperCase();
   }
-  
+
   return '??';
 }
 
@@ -173,15 +171,26 @@ export async function fetchConversations(userId: string): Promise<Conversation[]
 
     // Guard against empty otherUserIds to avoid generating an invalid `IN ()` clause
     let profiles:
-      | { id: string; username?: string | null; full_name?: string | null; avatar?: string | null }[]
+      | {
+          id: string;
+          username?: string | null;
+          display_name?: string | null;
+          avatar?: string | null;
+        }[]
       | null = null;
 
     if (otherUserIds.size > 0) {
+      // Schema note: `profiles.full_name` was renamed to `profiles.display_name`
+      // in a Supabase migration, and messaging now reads `display_name`
+      // intentionally to match the canonical profile schema. If you are working
+      // against an older local/staging database, make sure that migration has
+      // been applied before debugging missing names here; pre-migration rows may
+      // still have data in `full_name` only until the schema/data migration is run.
       const { data, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, username, full_name, avatar')
+        .select('id, username, display_name, avatar')
         .in('id', Array.from(otherUserIds));
-      
+
       if (profilesError) throw profilesError;
       profiles = data ?? [];
     } else {
@@ -214,7 +223,7 @@ export async function fetchConversations(userId: string): Promise<Conversation[]
     const unreadCountsPromises = conversations.map(async conv => {
       const participantRecord = participants.find(p => p.conversation_id === conv.id);
       const lastReadAt = participantRecord?.last_read_at;
-      
+
       if (!lastReadAt) {
         return { conversationId: conv.id, count: 0 };
       }
@@ -225,29 +234,27 @@ export async function fetchConversations(userId: string): Promise<Conversation[]
         .eq('conversation_id', conv.id)
         .gt('created_at', lastReadAt)
         .neq('sender_id', userId);
-      
+
       return { conversationId: conv.id, count: count || 0 };
     });
 
     const unreadCountsResults = await Promise.all(unreadCountsPromises);
-    const unreadCountMap = new Map(
-      unreadCountsResults.map(r => [r.conversationId, r.count])
-    );
+    const unreadCountMap = new Map(unreadCountsResults.map(r => [r.conversationId, r.count]));
 
     // Now build enriched conversations using the batched data
     const enrichedConversations: Conversation[] = conversations.map(conv => {
       const participantIds = participantsByConversation.get(conv.id) || [];
-      
+
       // For 1:1 chats, get the other user's profile
       let name = 'Unknown';
       let avatar: string | undefined;
-      
+
       if (!conv.is_group && participantIds.length === 2) {
         const otherUserId = participantIds.find(id => id !== userId);
         if (otherUserId) {
           const profile = profileMap.get(otherUserId);
           if (profile) {
-            name = profile.username || profile.full_name || 'Unknown';
+            name = profile.username || profile.display_name || 'Unknown';
             avatar = getProfileAvatarUrl(profile.avatar);
           }
         }
@@ -285,7 +292,13 @@ export async function fetchConversations(userId: string): Promise<Conversation[]
 /**
  * Fetch messages for a conversation from Supabase
  */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export async function fetchMessages(conversationId: string): Promise<Message[]> {
+  // Guard: local/fake conv IDs (e.g. "conv-*") are not valid Supabase UUIDs
+  if (!conversationId || !UUID_RE.test(conversationId)) {
+    return [];
+  }
   try {
     const { data: messages, error } = await supabase
       .from('messages')
@@ -345,11 +358,7 @@ export async function sendMessage(
 
     for (const fields of attemptFields) {
       try {
-        const { data, error } = await supabase
-          .from('messages')
-          .insert(fields)
-          .select()
-          .single();
+        const { data, error } = await supabase.from('messages').insert(fields).select().single();
 
         if (error) throw error;
         inserted = data;
@@ -358,7 +367,10 @@ export async function sendMessage(
         lastError = err;
         // If error indicates missing column for the attempted field, continue to next
         const msg = String((err && (err as any).message) || err);
-        if (msg.includes("Could not find the 'text' column") || msg.includes('column') && msg.includes('does not exist')) {
+        if (
+          msg.includes("Could not find the 'text' column") ||
+          (msg.includes('column') && msg.includes('does not exist'))
+        ) {
           // try next candidate
           continue;
         }
@@ -369,11 +381,18 @@ export async function sendMessage(
 
     if (!inserted) {
       // All attempts failed; log and throw the last error
-      try { logClientError('Error sending message via supabase: all insert variants failed', { err: lastError, conversationId, senderId }) } catch {}
+      try {
+        logClientError('Error sending message via supabase: all insert variants failed', {
+          err: lastError,
+          conversationId,
+          senderId,
+        });
+      } catch {}
       throw lastError || new Error('Failed to insert message (unknown reason)');
     }
 
-    const resolvedText = inserted.text ?? inserted.body ?? inserted.message ?? inserted.content ?? '';
+    const resolvedText =
+      inserted.text ?? inserted.body ?? inserted.message ?? inserted.content ?? '';
 
     const message: Message = {
       id: inserted.id,
@@ -390,7 +409,9 @@ export async function sendMessage(
     return message;
   } catch (error) {
     console.error('Error sending message:', error);
-    try { logClientError('Error sending message', { err: error, conversationId, senderId }) } catch {}
+    try {
+      logClientError('Error sending message', { err: error, conversationId, senderId });
+    } catch {}
     throw error;
   }
 }
@@ -426,84 +447,45 @@ export async function createConversation(
       ? participantIds
       : [...participantIds, resolvedCreatorId];
 
-    // Create conversation
-    const attemptedRows = [
+    // Sanitize bountyId — route params can stringify undefined as the literal "undefined"
+    const safeBountyId =
+      bountyId && bountyId !== 'undefined' && UUID_RE.test(bountyId) ? bountyId : null;
+
+    // Use rpc_create_conversation (SECURITY DEFINER) — bypasses RLS on both
+    // conversations and conversation_participants, and creates participants atomically.
+    const { data: newConversationId, error: rpcError } = await supabase.rpc(
+      'rpc_create_conversation',
       {
-        is_group: isGroup,
-        bounty_id: bountyId,
-        created_by: resolvedCreatorId,
-      },
-      {
-        is_group: isGroup,
-        bounty_id: bountyId,
-      },
-    ];
-
-    let conversation: any = null;
-    let lastError: any = null;
-
-    for (const payload of attemptedRows) {
-      try {
-        const { data, error } = await supabase
-          .from('conversations')
-          .insert(payload)
-          .select()
-          .single();
-
-        if (error) throw error;
-        conversation = data;
-        break;
-      } catch (err) {
-        lastError = err;
-        const msg = String((err as any)?.message || err);
-        if (msg.includes('created_by')) {
-          // Retry without created_by if column missing in older schemas
-          continue;
-        }
-        break;
+        p_bounty_id: safeBountyId,
+        p_name: '',
+        p_participant_ids: ensureCreatorIncluded,
       }
-    }
+    );
 
-    if (!conversation) {
+    if (rpcError) {
       try {
-        logClientError('Supabase createConversation failed', { err: lastError, participantIds, bountyId });
+        logClientError('Supabase createConversation failed', {
+          err: rpcError,
+          participantIds,
+          bountyId,
+        });
       } catch {}
-      throw lastError || new Error('Unable to create conversation');
+      throw rpcError;
     }
 
-    // Add participants
-    // Ensure creator is added first (they pass RLS check with user_id = auth.uid())
-    // This helps ensure the conversation's created_by field is properly set for RLS checks
-    const creatorRecord = {
-      conversation_id: conversation.id,
-      user_id: resolvedCreatorId,
-    };
-    
-    const otherParticipantRecords = ensureCreatorIncluded
-      .filter(userId => userId !== resolvedCreatorId)
-      .map(userId => ({
-        conversation_id: conversation.id,
-        user_id: userId,
-      }));
-
-    // Insert creator first, then others
-    // Creator always passes RLS (user_id = auth.uid())
-    // Others now pass RLS because can_manage_conversation() returns true (created_by = auth.uid())
-    const allParticipantRecords = [creatorRecord, ...otherParticipantRecords];
-
-    const { error: participantsError } = await supabase
-      .from('conversation_participants')
-      .insert(allParticipantRecords);
-
-    if (participantsError) {
-      logClientError('Failed to add participants to conversation', { 
-        err: participantsError, 
-        conversationId: conversation.id,
-        creatorId: resolvedCreatorId,
-        participantCount: allParticipantRecords.length 
-      });
-      throw participantsError;
+    if (!newConversationId) {
+      throw new Error('Unable to create conversation: no ID returned from RPC');
     }
+
+    // Fetch the row the RPC just created so we can return full Conversation shape
+    const { data: conversationRow, error: fetchConvError } = await supabase
+      .from('conversations')
+      .select('*')
+      .eq('id', newConversationId)
+      .single();
+
+    if (fetchConvError) throw fetchConvError;
+    const conversation = conversationRow;
 
     // For 1:1 chats, get the other user's info
     let name = 'New Conversation';
@@ -512,13 +494,13 @@ export async function createConversation(
     if (!isGroup && participantIds.length === 2) {
       const { data: profiles } = await supabase
         .from('profiles')
-        .select('id, username, full_name, avatar')
+        .select('id, username, display_name, avatar')
         .in('id', participantIds);
 
       if (profiles && profiles.length > 0) {
         // Get the first profile (could be either user)
         const profile = profiles[0];
-        name = profile.username || profile.full_name || 'Unknown';
+        name = profile.username || profile.display_name || 'Unknown';
         avatar = getProfileAvatarUrl(profile.avatar);
       }
     }
@@ -543,59 +525,67 @@ export async function createConversation(
 }
 
 /**
- * Get or create a 1:1 conversation (prevents duplicates)
+ * Get or create a 1:1 conversation — single source of truth.
+ *
+ * Delegates to the `rpc_get_or_create_dm_conversation` SECURITY DEFINER
+ * function which acquires a transaction-scoped advisory lock keyed on the
+ * canonical (sorted) user pair before checking for an existing thread.
+ * This makes the lookup + optional insert atomic, eliminating the race
+ * condition that could produce duplicate DM threads when two clients call
+ * this method concurrently for the same user pair.
  */
 export async function getOrCreateConversation(
   userId: string,
   otherUserId: string,
   bountyId?: string
 ): Promise<Conversation> {
-  try {
-    // Check if a 1:1 conversation already exists between these users
-    const { data: existingParticipants } = await supabase
-      .from('conversation_participants')
-      .select('conversation_id')
-      .eq('user_id', userId)
-      .is('deleted_at', null);
+  // Sanitize bountyId — route params can stringify undefined as the literal "undefined"
+  const safeBountyId =
+    bountyId && bountyId !== 'undefined' && UUID_RE.test(bountyId) ? bountyId : null;
 
-    if (existingParticipants && existingParticipants.length > 0) {
-      const conversationIds = existingParticipants.map(p => p.conversation_id);
-
-      // Check if any of these conversations includes the other user
-      for (const convId of conversationIds) {
-        const { data: otherUserParticipant } = await supabase
-          .from('conversation_participants')
-          .select('user_id')
-          .eq('conversation_id', convId)
-          .eq('user_id', otherUserId)
-          .is('deleted_at', null)
-          .single();
-
-        if (otherUserParticipant) {
-          // Found existing conversation, check if it's 1:1
-          const { data: conversation } = await supabase
-            .from('conversations')
-            .select('*')
-            .eq('id', convId)
-            .eq('is_group', false)
-            .single();
-
-          if (conversation) {
-            // Fetch conversation details
-            const conversations = await fetchConversations(userId);
-            const found = conversations.find(c => c.id === convId);
-            if (found) return found;
-          }
-        }
-      }
+  const { data: conversationId, error: rpcError } = await supabase.rpc(
+    'rpc_get_or_create_dm_conversation',
+    {
+      p_user_id: userId,
+      p_other_user_id: otherUserId,
+      p_bounty_id: safeBountyId,
     }
+  );
 
-    // No existing 1:1 conversation found, create new one
-    return await createConversation([userId, otherUserId], false, bountyId, userId);
-  } catch (error) {
-    console.error('Error in getOrCreateConversation:', error);
-    throw error;
+  if (rpcError) {
+    try {
+      logClientError('rpc_get_or_create_dm_conversation failed', {
+        err: rpcError,
+        userId,
+        otherUserId,
+        bountyId,
+      });
+    } catch {
+      /* ignore secondary logging failure */
+    }
+    throw rpcError;
   }
+
+  if (!conversationId) {
+    throw new Error('rpc_get_or_create_dm_conversation returned no conversation ID');
+  }
+
+  // Fetch enriched conversation details from the local fetch helper so the
+  // returned shape is consistent with the rest of the application.
+  const conversations = await fetchConversations(userId);
+  const found = conversations.find(c => c.id === conversationId);
+  if (found) return found;
+
+  // Fallback: build a minimal Conversation from the bare ID so callers are
+  // never left without a usable object even if fetchConversations is slow or
+  // returns a stale cache that doesn't yet include the new conversation.
+  return {
+    id: conversationId,
+    isGroup: false,
+    name: 'Conversation',
+    bountyId: safeBountyId ?? undefined,
+    participantIds: [userId, otherUserId],
+  };
 }
 
 /**
@@ -641,12 +631,9 @@ export async function markAsRead(conversationId: string, userId: string): Promis
 /**
  * Subscribe to realtime updates for conversations
  */
-export function subscribeToConversations(
-  userId: string,
-  onUpdate: () => void
-): RealtimeChannel {
+export function subscribeToConversations(userId: string, onUpdate: () => void): RealtimeChannel {
   const channelName = `conversations:${userId}`;
-  
+
   // Check if already subscribed
   if (subscriptions.has(channelName)) {
     const existing = subscriptions.get(channelName);
@@ -692,7 +679,7 @@ export function subscribeToMessages(
   onUpdate: (message?: Message) => void
 ): RealtimeChannel {
   const channelName = `messages:${conversationId}`;
-  
+
   // Check if already subscribed
   if (subscriptions.has(channelName)) {
     const existing = subscriptions.get(channelName);
@@ -709,7 +696,7 @@ export function subscribeToMessages(
         table: 'messages',
         filter: `conversation_id=eq.${conversationId}`,
       },
-      (payload) => {
+      payload => {
         const message: Message = {
           id: payload.new.id,
           conversationId: payload.new.conversation_id,
