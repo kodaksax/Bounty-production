@@ -624,6 +624,41 @@ describe('Consolidated Wallet Service', () => {
       await expect(svc.createWithdrawal('u1', 5000, 'acct_x')).rejects.toThrow('Stripe error');
     });
 
+    it('flags transaction with needs_balance_refund when rollback fails after Stripe error', async () => {
+      const pendingTx = {
+        id: 'tx_rollback_fail',
+        user_id: 'u1',
+        type: 'withdrawal',
+        amount: -5000,
+        metadata: {},
+      };
+      // rpcResults[0]: deduction succeeds via RPC
+      // rpcResults[1]: rollback RPC returns PGRST202 (function not found) → triggers optimistic fallback
+      // fromResults[2]: profiles select in fallback returns a DB error → updateBalance throws
+      // fromResults[3]: fire-and-forget needs_balance_refund flag update
+      const admin = makeAdmin(
+        [
+          { data: pendingTx, error: null }, // insert pending tx
+          { error: null }, // mark failed
+          { data: null, error: { message: 'DB unavailable', code: '500' } }, // profiles select in fallback → throws
+          { error: null }, // needs_balance_refund flag update (fire-and-forget)
+        ],
+        [
+          { data: null, error: null }, // updateBalance deduction — succeeds
+          { data: null, error: { code: 'PGRST202', message: 'function not found' } }, // updateBalance rollback — triggers fallback
+        ]
+      );
+      mockStripeTransfersCreate.mockRejectedValueOnce(new Error('Stripe transfer error'));
+      const svc = buildService(admin);
+      await expect(svc.createWithdrawal('u1', 5000, 'acct_x')).rejects.toThrow(
+        'Stripe transfer error'
+      );
+      // Allow fire-and-forget flag update to settle
+      await new Promise<void>(resolve => setImmediate(resolve));
+      // The flag update is the 4th from() call
+      expect(admin.from).toHaveBeenCalledTimes(4);
+    });
+
     it('does not roll back balance when error is Insufficient balance', async () => {
       const pendingTx = {
         id: 'tx_nsf',

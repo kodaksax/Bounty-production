@@ -1,6 +1,16 @@
-import { MaterialIcons } from "@expo/vector-icons";
-import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { MaterialIcons } from '@expo/vector-icons';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Linking,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import { useAuthContext } from '../hooks/use-auth-context';
 import { useEmailVerification } from '../hooks/use-email-verification';
 import { API_BASE_URL } from '../lib/config/api';
@@ -9,7 +19,6 @@ import { theme } from '../lib/theme';
 import { useWallet } from '../lib/wallet-context';
 import { AddBankAccountModal } from './add-bank-account-modal';
 import { EmailVerificationBanner } from './ui/email-verification-banner';
-
 
 interface BankAccount {
   id: string;
@@ -26,13 +35,16 @@ interface WithdrawWithBankScreenProps {
   balance?: number;
 }
 
-export function WithdrawWithBankScreen({ onBack, balance: propBalance }: WithdrawWithBankScreenProps) {
-  const [withdrawalAmount, setWithdrawalAmount] = useState<string>("");
+export function WithdrawWithBankScreen({
+  onBack,
+  balance: propBalance,
+}: WithdrawWithBankScreenProps) {
+  const [withdrawalAmount, setWithdrawalAmount] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [hasConnectedAccount, setHasConnectedAccount] = useState(false);
   const [isOnboarding, setIsOnboarding] = useState(false);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
-  const [selectedBankAccount, setSelectedBankAccount] = useState<string>("");
+  const [selectedBankAccount, setSelectedBankAccount] = useState<string>('');
   const [isLoadingAccounts, setIsLoadingAccounts] = useState(false);
   const [showAddBankAccount, setShowAddBankAccount] = useState(false);
 
@@ -42,6 +54,13 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
 
   const balance = propBalance ?? walletBalance;
 
+  // Stable idempotency key for this withdrawal attempt.  Generated once on
+  // mount so that retries (e.g. network failure) reuse the same key, letting
+  // the server return the cached Stripe response instead of creating a
+  // duplicate transfer.  Regenerated to a fresh value after a successful
+  // withdrawal so the next withdrawal gets its own unique key.
+  const idempotencyKeyRef = useRef(`withdraw_${session?.user?.id ?? 'u'}_${Date.now()}`);
+
   const loadConnectStatus = useCallback(async () => {
     if (!session?.access_token) return;
 
@@ -50,8 +69,8 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        }
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
 
       if (response.ok) {
@@ -71,8 +90,8 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
       const response = await fetch(`${API_BASE_URL}/connect/bank-accounts`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-        }
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
 
       if (response.ok) {
@@ -112,12 +131,12 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
           returnUrl: 'bountyexpo://wallet/connect/return',
-          refreshUrl: 'bountyexpo://wallet/connect/refresh'
-        })
+          refreshUrl: 'bountyexpo://wallet/connect/refresh',
+        }),
       });
 
       if (!response.ok) {
@@ -170,7 +189,10 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
     }
 
     if (amount < MIN_WITHDRAWAL_AMOUNT) {
-      Alert.alert('Minimum Withdrawal', `The minimum withdrawal amount is $${MIN_WITHDRAWAL_AMOUNT.toFixed(2)}.`);
+      Alert.alert(
+        'Minimum Withdrawal',
+        `The minimum withdrawal amount is $${MIN_WITHDRAWAL_AMOUNT.toFixed(2)}.`
+      );
       return;
     }
 
@@ -186,7 +208,7 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
         'To withdraw funds, you need to complete Stripe Connect onboarding first.',
         [
           { text: 'Complete Onboarding', onPress: handleConnectOnboarding },
-          { text: 'Cancel', style: 'cancel' }
+          { text: 'Cancel', style: 'cancel' },
         ]
       );
       return;
@@ -194,14 +216,10 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
 
     // Check bank account selection
     if (bankAccounts.length === 0) {
-      Alert.alert(
-        'Bank Account Required',
-        'Please add a bank account to receive withdrawals.',
-        [
-          { text: 'Add Bank Account', onPress: () => setShowAddBankAccount(true) },
-          { text: 'Cancel', style: 'cancel' }
-        ]
-      );
+      Alert.alert('Bank Account Required', 'Please add a bank account to receive withdrawals.', [
+        { text: 'Add Bank Account', onPress: () => setShowAddBankAccount(true) },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
       return;
     }
 
@@ -217,21 +235,19 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
         throw new Error('Not authenticated. Please sign in again.');
       }
 
-      // Generate a per-tap idempotency key so duplicate taps or network
-      // retries do not create duplicate payout transactions on the server.
-      const idempotencyKey = `withdraw_${session.user?.id ?? 'u'}_${Date.now()}`;
+      const idempotencyKey = idempotencyKeyRef.current;
 
       const response = await fetch(`${API_BASE_URL}/connect/transfer`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
           amount,
           currency: 'usd',
           idempotencyKey,
-        })
+        }),
       });
 
       if (!response.ok) {
@@ -243,6 +259,9 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
 
       // Refresh wallet balance
       await refresh();
+
+      // Rotate the idempotency key so the next withdrawal gets a fresh key.
+      idempotencyKeyRef.current = `withdraw_${session?.user?.id ?? 'u'}_${Date.now()}`;
 
       // Show success
       Alert.alert(
@@ -272,40 +291,33 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
   };
 
   const handleRemoveBankAccount = async (bankAccountId: string) => {
-    Alert.alert(
-      'Remove Bank Account',
-      'Are you sure you want to remove this bank account?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const response = await fetch(
-                `${API_BASE_URL}/connect/bank-accounts/${bankAccountId}`,
-                {
-                  method: 'DELETE',
-                  headers: {
-                    'Authorization': `Bearer ${session?.access_token}`,
-                  }
-                }
-              );
+    Alert.alert('Remove Bank Account', 'Are you sure you want to remove this bank account?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const response = await fetch(`${API_BASE_URL}/connect/bank-accounts/${bankAccountId}`, {
+              method: 'DELETE',
+              headers: {
+                Authorization: `Bearer ${session?.access_token}`,
+              },
+            });
 
-              if (response.ok) {
-                await loadBankAccounts();
-                Alert.alert('Success', 'Bank account removed successfully');
-              } else {
-                throw new Error('Failed to remove bank account');
-              }
-            } catch (error) {
-              console.error('Error removing bank account:', error);
-              Alert.alert('Error', 'Failed to remove bank account');
+            if (response.ok) {
+              await loadBankAccounts();
+              Alert.alert('Success', 'Bank account removed successfully');
+            } else {
+              throw new Error('Failed to remove bank account');
             }
+          } catch (error) {
+            console.error('Error removing bank account:', error);
+            Alert.alert('Error', 'Failed to remove bank account');
           }
-        }
-      ]
-    );
+        },
+      },
+    ]);
   };
 
   if (showAddBankAccount) {
@@ -320,9 +332,7 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
   return (
     <View style={styles.container}>
       {/* Email Verification Banner */}
-      {!isEmailVerified && (
-        <EmailVerificationBanner email={userEmail} />
-      )}
+      {!isEmailVerified && <EmailVerificationBanner email={userEmail} />}
 
       {/* Header */}
       <View style={styles.header}>
@@ -428,12 +438,12 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
               </TouchableOpacity>
             </View>
           ) : (
-            bankAccounts.map((account) => (
+            bankAccounts.map(account => (
               <TouchableOpacity
                 key={account.id}
                 style={[
                   styles.bankAccountCard,
-                  selectedBankAccount === account.id && styles.bankAccountCardSelected
+                  selectedBankAccount === account.id && styles.bankAccountCardSelected,
                 ]}
                 onPress={() => setSelectedBankAccount(account.id)}
                 accessibilityLabel={`${account.bankName || 'Bank Account'} ending in ${account.last4}, ${account.accountType}, status ${account.status}${account.default ? ', default account' : ''}${selectedBankAccount === account.id ? ', selected' : ''}`}
@@ -444,7 +454,11 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
                   {selectedBankAccount === account.id ? (
                     <MaterialIcons name="radio-button-checked" size={24} color="#10b981" />
                   ) : (
-                    <MaterialIcons name="radio-button-unchecked" size={24} color="rgba(255,255,255,0.4)" />
+                    <MaterialIcons
+                      name="radio-button-unchecked"
+                      size={24}
+                      color="rgba(255,255,255,0.4)"
+                    />
                   )}
                 </View>
                 <View style={styles.bankAccountInfo}>
@@ -457,7 +471,8 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
                     )}
                   </View>
                   <Text style={styles.bankAccountDetails}>
-                    {account.accountType.charAt(0).toUpperCase() + account.accountType.slice(1)} ••••{account.last4}
+                    {account.accountType.charAt(0).toUpperCase() + account.accountType.slice(1)}{' '}
+                    ••••{account.last4}
                   </Text>
                   <Text style={styles.bankAccountStatus}>Status: {account.status}</Text>
                 </View>
@@ -505,7 +520,8 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
         <View style={styles.infoCard}>
           <MaterialIcons name="info-outline" size={20} color="#10b981" />
           <Text style={styles.infoText}>
-            Withdrawals typically arrive in 1-2 business days. There are no fees for standard bank transfers.
+            Withdrawals typically arrive in 1-2 business days. There are no fees for standard bank
+            transfers.
           </Text>
         </View>
       </ScrollView>
@@ -530,12 +546,22 @@ export function WithdrawWithBankScreen({ onBack, balance: propBalance }: Withdra
               parseFloat(withdrawalAmount) <= 0 ||
               bankAccounts.length === 0 ||
               !selectedBankAccount) &&
-            styles.withdrawButtonDisabled
+              styles.withdrawButtonDisabled,
           ]}
-          accessibilityLabel={withdrawalAmount ? `Withdraw $${parseFloat(withdrawalAmount).toFixed(2)}` : 'Withdraw funds'}
+          accessibilityLabel={
+            withdrawalAmount
+              ? `Withdraw $${parseFloat(withdrawalAmount).toFixed(2)}`
+              : 'Withdraw funds'
+          }
           accessibilityRole="button"
           accessibilityState={{
-            disabled: isProcessing || !hasConnectedAccount || !withdrawalAmount || parseFloat(withdrawalAmount) <= 0 || bankAccounts.length === 0 || !selectedBankAccount
+            disabled:
+              isProcessing ||
+              !hasConnectedAccount ||
+              !withdrawalAmount ||
+              parseFloat(withdrawalAmount) <= 0 ||
+              bankAccounts.length === 0 ||
+              !selectedBankAccount,
           }}
         >
           {isProcessing ? (
