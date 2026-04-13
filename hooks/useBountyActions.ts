@@ -1,8 +1,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { BountyService } from '../lib/services/bountyService';
-import { BountyStatus } from '../lib/types';
 import { useBountyUpdates } from './useBountyUpdates';
 import { Alert } from 'react-native';
+
+type BountyStatus = 'open' | 'in_progress' | 'completed' | 'archived';
 
 export function useBountyActions() {
   const queryClient = useQueryClient();
