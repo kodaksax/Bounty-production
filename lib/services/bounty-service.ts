@@ -644,8 +644,6 @@ export const bountyService = {
           // Fallback to safe parameterized equality check when not a UUID (should not happen in practice)
           query = query.eq('user_id', options.userId)
         }
-        if (options?.status) query = query.eq('status', options.status);
-        if (options?.userId) query = query.eq('poster_id', options.userId);
         if (options?.workType) query = query.eq('work_type', options.workType);
         if (!options?.includeArchived) query = query.neq('status', 'archived');
 
@@ -664,7 +662,11 @@ export const bountyService = {
               .select('*')
               .order('created_at', { ascending: false });
             if (options?.status) qNoJoin = qNoJoin.eq('status', options.status);
-            if (options?.userId) qNoJoin = qNoJoin.eq('poster_id', options.userId);
+            if (options?.userId && UUID_PATTERN.test(options.userId)) {
+              qNoJoin = (qNoJoin as any).or(`user_id.eq.${options.userId},poster_id.eq.${options.userId}`)
+            } else if (options?.userId) {
+              qNoJoin = qNoJoin.eq('user_id', options.userId)
+            }
             if (options?.workType) qNoJoin = qNoJoin.eq('work_type', options.workType);
             if (!options?.includeArchived) qNoJoin = qNoJoin.neq('status', 'archived');
             qNoJoin = qNoJoin.range(offset, offset + limit - 1);
@@ -672,7 +674,13 @@ export const bountyService = {
             const { data: dataNoJoin, error: rawErr } = await qNoJoin;
             if (rawErr) throw new Error((rawErr as any)?.message ?? JSON.stringify(rawErr));
             const merged = await attachProfilesToBounties(dataNoJoin || []);
-            return (merged || []).map((i: any) => ({ ...i, user_id: i.poster_id })) as Bounty[];
+            // Normalise: use the non-null poster identity (user_id is canonical; poster_id is alias).
+            // Do NOT clobber user_id with poster_id when poster_id is NULL (legacy rows).
+            return (merged || []).map((i: any) => ({
+              ...i,
+              poster_id: i.poster_id ?? i.user_id,
+              user_id: i.user_id ?? i.poster_id,
+            })) as Bounty[];
           }
           throw new Error(msg);
         }

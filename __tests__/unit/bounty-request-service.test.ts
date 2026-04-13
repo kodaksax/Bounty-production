@@ -164,4 +164,130 @@ describe('bountyRequestService (unit)', () => {
       expect.objectContaining({ status: 'pending' })
     )
   })
+
+  test('acceptRequest returns null and rolls back when bounty update returns a DB error', async () => {
+    const loggerError = jest.fn()
+    jest.doMock('../../lib/utils/error-logger', () => ({
+      logger: { error: loggerError, warning: jest.fn(), info: jest.fn() },
+    }))
+    jest.doMock('../../lib/services/payment-service', () => ({
+      paymentService: { createEscrow: jest.fn() },
+    }))
+
+    // Bounty update returns a DB error
+    const bountyUpdateChain = makeChainBuilder({ data: null, error: { message: 'permission denied for table bounties' } })
+    const rollbackChain = makeChainBuilder({ data: null, error: null })
+
+    jest.doMock('../../lib/supabase', () => ({
+      isSupabaseConfigured: true,
+      supabase: {
+        rpc: makeRpcNotFoundMock(),
+        from: jest.fn((table: string) => {
+          if (table === 'bounties') return bountyUpdateChain
+          if (table === 'bounty_requests') return rollbackChain
+          return makeChainBuilder({ data: null, error: null })
+        }),
+      },
+    }))
+
+    const svcModule = require('../../lib/services/bounty-request-service')
+    const svc = svcModule.bountyRequestService
+
+    jest.spyOn(svc, 'updateStatus').mockResolvedValue({ id: 'r1', bounty_id: 'b1', hunter_id: 'h1' })
+
+    const result = await svc.acceptRequest('r1')
+
+    expect(result).toBeNull()
+    expect(loggerError).toHaveBeenCalledWith(
+      'Fallback: failed to transition bounty to in_progress',
+      expect.objectContaining({ requestId: 'r1', bountyId: 'b1' })
+    )
+    // Should have rolled back the request to pending
+    expect(rollbackChain.update).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'pending' })
+    )
+  })
+
+  test('acceptRequest succeeds via RPC path and parses accepted_request from response', async () => {
+    const loggerError = jest.fn()
+    jest.doMock('../../lib/utils/error-logger', () => ({
+      logger: { error: loggerError, warning: jest.fn(), info: jest.fn() },
+    }))
+    const createEscrow = jest.fn().mockResolvedValue({ success: false })
+    jest.doMock('../../lib/services/payment-service', () => ({ paymentService: { createEscrow } }))
+
+    const acceptedRequest = { id: 'r1', bounty_id: 'b1', hunter_id: 'h1', status: 'accepted' }
+
+    jest.doMock('../../lib/supabase', () => ({
+      isSupabaseConfigured: true,
+      supabase: {
+        // RPC succeeds: returns accepted_request in the first row
+        rpc: jest.fn().mockResolvedValue({
+          data: [{ bounty: { id: 'b1', status: 'in_progress' }, accepted_request: acceptedRequest }],
+          error: null,
+        }),
+        from: jest.fn(() => makeChainBuilder({ data: null, error: null })),
+      },
+    }))
+
+    const svcModule = require('../../lib/services/bounty-request-service')
+    const svc = svcModule.bountyRequestService
+
+    // Mock getById (pre-check) to return a pending request so the check passes cleanly
+    jest.spyOn(svc, 'getById').mockResolvedValue({ id: 'r1', bounty_id: 'b1', hunter_id: 'h1', status: 'pending' })
+    jest.spyOn(svc, 'getBountyForRequest').mockResolvedValue({ id: 'b1', is_for_honor: true, amount: 0, user_id: 'poster1' })
+    jest.spyOn(svc, 'updateBountyPaymentIntent').mockResolvedValue(undefined)
+
+    const result = await svc.acceptRequest('r1')
+
+    expect(result).toEqual(acceptedRequest)
+    // Should not have logged any errors (warnings from pre-check are ok, but errors indicate a problem)
+    expect(loggerError).not.toHaveBeenCalled()
+  })
+
+  test('acceptRequest throws structured 409 when RPC raises request_not_pending error', async () => {
+    jest.doMock('../../lib/utils/error-logger', () => ({
+      logger: { error: jest.fn(), warning: jest.fn(), info: jest.fn() },
+    }))
+    jest.doMock('../../lib/services/payment-service', () => ({ paymentService: { createEscrow: jest.fn() } }))
+
+    jest.doMock('../../lib/supabase', () => ({
+      isSupabaseConfigured: true,
+      supabase: {
+        rpc: jest.fn().mockResolvedValue({
+          data: null,
+          error: { message: 'request_not_pending: bounty_not_open', code: 'P0001' },
+        }),
+        from: jest.fn(() => makeChainBuilder({ data: null, error: null })),
+      },
+    }))
+
+    const svcModule = require('../../lib/services/bounty-request-service')
+    const svc = svcModule.bountyRequestService
+
+    await expect(svc.acceptRequest('r1')).rejects.toMatchObject({ status: 409 })
+  })
+
+  test('acceptRequest throws structured 404 when RPC raises request_not_found error', async () => {
+    jest.doMock('../../lib/utils/error-logger', () => ({
+      logger: { error: jest.fn(), warning: jest.fn(), info: jest.fn() },
+    }))
+    jest.doMock('../../lib/services/payment-service', () => ({ paymentService: { createEscrow: jest.fn() } }))
+
+    jest.doMock('../../lib/supabase', () => ({
+      isSupabaseConfigured: true,
+      supabase: {
+        rpc: jest.fn().mockResolvedValue({
+          data: null,
+          error: { message: 'request_not_found', code: 'P0001' },
+        }),
+        from: jest.fn(() => makeChainBuilder({ data: null, error: null })),
+      },
+    }))
+
+    const svcModule = require('../../lib/services/bounty-request-service')
+    const svc = svcModule.bountyRequestService
+
+    await expect(svc.acceptRequest('r1')).rejects.toMatchObject({ status: 404 })
+  })
 })
