@@ -128,7 +128,7 @@ export const bountyService = {
           const msg = (error as any)?.message ?? JSON.stringify(error);
           logger.error('Supabase getById error', { error });
           if (/Could not find a relationship between 'bounties' and 'profiles'/.test(msg)) {
-            // Fetch bounty without join and then attach profile
+            // Fetch bounty without join, normalise id fields, then attach profile
             const { data: raw, error: rawErr } = await supabase
               .from('bounties')
               .select('*')
@@ -136,8 +136,20 @@ export const bountyService = {
               .single();
 
             if (rawErr) throw new Error((rawErr as any)?.message ?? JSON.stringify(rawErr));
-            const withProfile = await attachProfilesToBounties([raw]);
-            return (withProfile[0] as unknown as Bounty) ?? null;
+            const normalizedRaw = {
+              ...raw,
+              poster_id: (raw as any).poster_id ?? (raw as any).user_id,
+              user_id: (raw as any).user_id ?? (raw as any).poster_id,
+            };
+            const withProfile = await attachProfilesToBounties([normalizedRaw]);
+            const item = (withProfile[0] as any) ?? null;
+            if (!item) return null;
+            return {
+              ...item,
+              poster_id: item.poster_id ?? item.user_id,
+              user_id: item.user_id ?? item.poster_id,
+              profiles: undefined,
+            } as Bounty;
           }
           throw new Error(msg);
         }
@@ -349,7 +361,7 @@ export const bountyService = {
           const msg = (error as any)?.message ?? JSON.stringify(error);
           logger.error('Supabase search error', { error, query: q });
           if (/Could not find a relationship between 'bounties' and 'profiles'/.test(msg)) {
-            // Query without join then attach profiles
+            // Query without join then attach profiles (normalise ids first so poster_id is present)
             const qPatternNoJoin = `%${qEscaped}%`;
             const qQuotedNoJoin = quotePostgrestValue(qPatternNoJoin);
             const { data: dataNoJoin, error: rawErr } = await supabase
@@ -361,8 +373,13 @@ export const bountyService = {
               .range(offset, offset + limit - 1);
 
             if (rawErr) throw new Error((rawErr as any)?.message ?? JSON.stringify(rawErr));
-            const merged = await attachProfilesToBounties(dataNoJoin || []);
-            return merged as Bounty[];
+            const normalized = (dataNoJoin || []).map((it: any) => ({
+              ...it,
+              poster_id: it.poster_id ?? it.user_id,
+              user_id: it.user_id ?? it.poster_id,
+            }));
+            const merged = await attachProfilesToBounties(normalized);
+            return (merged || []).map((i: any) => ({ ...i, profiles: undefined })) as Bounty[];
           }
           throw new Error(msg);
         }
@@ -564,8 +581,13 @@ export const bountyService = {
 
             const { data: dataNoJoin, error: rawErr } = await queryNoJoin;
             if (rawErr) throw new Error((rawErr as any)?.message ?? JSON.stringify(rawErr));
-            const merged = await attachProfilesToBounties(dataNoJoin || []);
-            return merged as Bounty[];
+            const normalized = (dataNoJoin || []).map((it: any) => ({
+              ...it,
+              poster_id: it.poster_id ?? it.user_id,
+              user_id: it.user_id ?? it.poster_id,
+            }));
+            const merged = await attachProfilesToBounties(normalized);
+            return (merged || []).map((i: any) => ({ ...i, profiles: undefined })) as Bounty[];
           }
           throw new Error(msg);
         }
@@ -632,17 +654,17 @@ export const bountyService = {
           )
           .order('created_at', { ascending: false });
 
-        if (options?.status) query = query.eq('status', options.status)
+        if (options?.status) query = query.eq('status', options.status);
         // The bounties table uses `user_id` as the canonical poster column (baseline schema).
         // `poster_id` is a denormalized alias added later; some rows may have only one or both.
         // Use an OR filter to match either so that all bounties are found regardless of which
         // column was populated when the bounty was created.
         // userId must be a valid UUID to prevent injection in the PostgREST filter string.
         if (options?.userId && UUID_PATTERN.test(options.userId)) {
-          query = (query as any).or(`user_id.eq.${options.userId},poster_id.eq.${options.userId}`)
+          query = (query as any).or(`user_id.eq.${options.userId},poster_id.eq.${options.userId}`);
         } else if (options?.userId) {
           // Fallback to safe parameterized equality check when not a UUID (should not happen in practice)
-          query = query.eq('user_id', options.userId)
+          query = query.eq('user_id', options.userId);
         }
         if (options?.workType) query = query.eq('work_type', options.workType);
         if (!options?.includeArchived) query = query.neq('status', 'archived');
@@ -663,9 +685,11 @@ export const bountyService = {
               .order('created_at', { ascending: false });
             if (options?.status) qNoJoin = qNoJoin.eq('status', options.status);
             if (options?.userId && UUID_PATTERN.test(options.userId)) {
-              qNoJoin = (qNoJoin as any).or(`user_id.eq.${options.userId},poster_id.eq.${options.userId}`)
+              qNoJoin = (qNoJoin as any).or(
+                `user_id.eq.${options.userId},poster_id.eq.${options.userId}`
+              );
             } else if (options?.userId) {
-              qNoJoin = qNoJoin.eq('user_id', options.userId)
+              qNoJoin = qNoJoin.eq('user_id', options.userId);
             }
             if (options?.workType) qNoJoin = qNoJoin.eq('work_type', options.workType);
             if (!options?.includeArchived) qNoJoin = qNoJoin.neq('status', 'archived');
@@ -673,14 +697,13 @@ export const bountyService = {
 
             const { data: dataNoJoin, error: rawErr } = await qNoJoin;
             if (rawErr) throw new Error((rawErr as any)?.message ?? JSON.stringify(rawErr));
-            const merged = await attachProfilesToBounties(dataNoJoin || []);
-            // Normalise: use the non-null poster identity (user_id is canonical; poster_id is alias).
-            // Do NOT clobber user_id with poster_id when poster_id is NULL (legacy rows).
-            return (merged || []).map((i: any) => ({
-              ...i,
-              poster_id: i.poster_id ?? i.user_id,
-              user_id: i.user_id ?? i.poster_id,
-            })) as Bounty[];
+            const normalized = (dataNoJoin || []).map((it: any) => ({
+              ...it,
+              poster_id: it.poster_id ?? it.user_id,
+              user_id: it.user_id ?? it.poster_id,
+            }));
+            const merged = await attachProfilesToBounties(normalized);
+            return (merged || []).map((i: any) => ({ ...i, profiles: undefined })) as Bounty[];
           }
           throw new Error(msg);
         }

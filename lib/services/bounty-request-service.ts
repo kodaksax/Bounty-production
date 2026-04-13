@@ -884,12 +884,11 @@ export const bountyRequestService = {
             throw err;
           }
           // The fn_accept_bounty_request PL/pgSQL function can raise 'bounty_not_found'.
-          // The Edge Function maps this to a 409 Conflict; mirror that behaviour
-          // here so the client receives a structured status and shows a
-          // user-friendly message instead of a generic failure.
+          // This indicates the referenced bounty no longer exists and should be
+          // surfaced as a 404 Not Found to callers (not a 409 Conflict).
           if (msg.includes('bounty_not_found')) {
             const err = new Error('Bounty not found');
-            (err as any).status = 409;
+            (err as any).status = 404;
             (err as any).code = (rpcError as any)?.code;
             (err as any).rpc = rpcError;
             throw err;
@@ -980,7 +979,11 @@ export const bountyRequestService = {
               // A DB error means the request is in `accepted` while the bounty remains `open`.
               // Roll back the request to `pending` so the state is self-consistent and the
               // poster can retry the acceptance without manual intervention.
-              logger.error('Fallback: failed to transition bounty to in_progress', { requestId, bountyId: result.bounty_id, error: bountyUpdateError });
+              logger.error('Fallback: failed to transition bounty to in_progress', {
+                requestId,
+                bountyId: result.bounty_id,
+                error: bountyUpdateError,
+              });
               try {
                 await supabase
                   .from('bounty_requests')
@@ -988,7 +991,10 @@ export const bountyRequestService = {
                   .eq('id', String(requestId))
                   .eq('status', 'accepted');
               } catch (rollbackErr) {
-                logger.error('Fallback: rollback of request status also failed', { requestId, error: rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr) });
+                logger.error('Fallback: rollback of request status also failed', {
+                  requestId,
+                  error: rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr),
+                });
               }
               return null;
             } else if (!updatedRows || updatedRows.length === 0) {
@@ -1012,13 +1018,20 @@ export const bountyRequestService = {
                   .neq('id', String(requestId))
                   .eq('status', 'pending');
               } catch (rejectErr) {
-                logger.error('Fallback: error rejecting competing requests', { requestId, error: rejectErr instanceof Error ? (rejectErr as Error).message : String(rejectErr) });
+                logger.error('Fallback: error rejecting competing requests', {
+                  requestId,
+                  error:
+                    rejectErr instanceof Error ? (rejectErr as Error).message : String(rejectErr),
+                });
               }
             }
           } catch (statusErr) {
             // Unexpected exception during the bounty update itself. The request is already
             // in 'accepted'. Best-effort rollback and return null to let the caller retry.
-            logger.error('Fallback: error transitioning bounty', { requestId, error: statusErr instanceof Error ? statusErr.message : String(statusErr) });
+            logger.error('Fallback: error transitioning bounty', {
+              requestId,
+              error: statusErr instanceof Error ? statusErr.message : String(statusErr),
+            });
             try {
               await supabase
                 .from('bounty_requests')
@@ -1026,7 +1039,10 @@ export const bountyRequestService = {
                 .eq('id', String(requestId))
                 .eq('status', 'accepted');
             } catch (rollbackErr2) {
-              logger.error('Fallback: rollback after exception also failed', { requestId, error: rollbackErr2 instanceof Error ? rollbackErr2.message : String(rollbackErr2) });
+              logger.error('Fallback: rollback after exception also failed', {
+                requestId,
+                error: rollbackErr2 instanceof Error ? rollbackErr2.message : String(rollbackErr2),
+              });
             }
             return null;
           }
