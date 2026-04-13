@@ -1,3 +1,4 @@
+import { escapeIlike, quotePostgrestValue } from 'lib/utils/postgrest-utils';
 import { isSupabaseConfigured, supabase } from '../supabase';
 import type { SearchResult, UserProfile, UserSearchFilters } from '../types';
 import { logger } from '../utils/error-logger';
@@ -22,16 +23,14 @@ export const userSearchService = {
       const limit = filters.limit ?? 20;
       const offset = filters.offset ?? 0;
 
-      let query = supabase
-        .from('profiles')
-        .select('*', { count: 'exact' });
+      let query = supabase.from('profiles').select('*', { count: 'exact' });
 
       // Apply keyword search on username, name, bio
       if (filters.keywords) {
-        const keyword = filters.keywords.trim();
-        query = query.or(
-          `username.ilike.%${keyword}%,email.ilike.%${keyword}%,about.ilike.%${keyword}%`
-        );
+        const keyword = escapeIlike(filters.keywords.trim());
+        const pattern = `%${keyword}%`;
+        const quoted = quotePostgrestValue(pattern);
+        query = query.or(`username.ilike.${quoted},email.ilike.${quoted},about.ilike.${quoted}`);
       }
 
       // Location filter
@@ -44,7 +43,7 @@ export const userSearchService = {
       // Skills filter - search in about/bio for skills
       if (filters.skills && filters.skills.length > 0) {
         const skillsConditions = filters.skills
-          .map(skill => `about.ilike.%${skill}%`)
+          .map(skill => `about.ilike.${quotePostgrestValue(`%${escapeIlike(skill)}%`)}`)
           .join(',');
         query = query.or(skillsConditions);
       }
