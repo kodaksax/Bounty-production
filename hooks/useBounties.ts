@@ -67,7 +67,7 @@ export function useBounties(options: UseBountiesOptions = {}): BountiesState & B
 
   // SWR-based data fetching
   const cacheKey = useMemo(() =>
-    userId ? `bounties_user_${userId}_${status || 'all'} ` : CACHE_KEYS.BOUNTIES_LIST + (status ? `_${status} ` : ''),
+    userId ? `bounties_user_${userId}_${status || 'all'}` : CACHE_KEYS.BOUNTIES_LIST + (status ? `_${status}` : ''),
     [userId, status]
   );
 

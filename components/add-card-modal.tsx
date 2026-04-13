@@ -51,13 +51,12 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
 
   // Refresh payment methods with retry logic
   // Let Stripe SDK and network stack handle timeouts naturally
-  // Returns true when at least one successful load completes, false otherwise.
-  const refreshPaymentMethodsWithRetry = async (totalAttempts = 3, baseDelayMs = 600): Promise<boolean> => {
+  const refreshPaymentMethodsWithRetry = async (totalAttempts = 3, baseDelayMs = 600): Promise<void> => {
     let lastErr: any
     for (let attempt = 0; attempt < totalAttempts; attempt++) {
       try {
         await loadPaymentMethods()
-        return true
+        return
       } catch (e) {
         lastErr = e
         // Skip backoff after the last attempt
@@ -70,7 +69,6 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
     }
     // Swallow final error but log for diagnostics
     console.warn('[AddCardModal] loadPaymentMethods failed after all attempts:', lastErr)
-    return false
   }
 
   // Determine if native Stripe SDK is available; prefer Payment Element when available
@@ -115,6 +113,12 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
   }, [shouldUsePaymentElement, paymentElementFailed, isAuthLoading, isAuthStale, session?.access_token])
 
   const createSetupIntent = async () => {
+    console.log('Session before createSetupIntent:', {
+      hasSession: !!session,
+      hasToken: !!session?.access_token,
+      expiresAt: session?.expires_at,
+    });
+    
     if (!session?.access_token) {
       Alert.alert('Error', 'Please sign in to add a payment method')
       return
@@ -207,13 +211,9 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
     // Brief delay to allow Stripe's backend to make the new payment method available
     await new Promise(r => setTimeout(r, 500))
     // Refresh payment methods after successful save
-    const loaded = await refreshPaymentMethodsWithRetry(3, 1000)
+    await refreshPaymentMethodsWithRetry(3, 1000)
 
-    const message = loaded
-      ? 'Payment method added successfully!'
-      : 'Payment method saved with Stripe. It may take a moment to appear in your wallet.'
-
-    Alert.alert('Success', message, [
+    Alert.alert('Success', 'Payment method added successfully!', [
       {
         text: 'OK',
         onPress: () => {

@@ -3,7 +3,7 @@
  * Provides consistent error responses and logging across all endpoints
  */
 
-import { FastifyRequest, FastifyReply, FastifyError } from 'fastify';
+import { FastifyError, FastifyReply, FastifyRequest } from 'fastify';
 
 /**
  * Standard error response format
@@ -45,7 +45,7 @@ export class AppError extends Error {
     public readonly isOperational: boolean = true
   ) {
     super(message);
-    this.name = 'AppError';
+    this.name = this.constructor.name;
     Error.captureStackTrace(this, this.constructor);
   }
 }
@@ -55,37 +55,19 @@ export class AppError extends Error {
  */
 export class AuthenticationError extends AppError {
   constructor(message: string = 'Authentication required', details?: any) {
-    super(
-      message,
-      401,
-      'AUTHENTICATION_REQUIRED',
-      ErrorCategory.AUTHENTICATION,
-      details
-    );
+    super(message, 401, 'AUTHENTICATION_REQUIRED', ErrorCategory.AUTHENTICATION, details);
   }
 }
 
 export class AuthorizationError extends AppError {
   constructor(message: string = 'Access denied', details?: any) {
-    super(
-      message,
-      403,
-      'AUTHORIZATION_FAILED',
-      ErrorCategory.AUTHORIZATION,
-      details
-    );
+    super(message, 403, 'AUTHORIZATION_FAILED', ErrorCategory.AUTHORIZATION, details);
   }
 }
 
 export class ValidationError extends AppError {
   constructor(message: string, details?: any) {
-    super(
-      message,
-      400,
-      'VALIDATION_ERROR',
-      ErrorCategory.VALIDATION,
-      details
-    );
+    super(message, 400, 'VALIDATION_ERROR', ErrorCategory.VALIDATION, details);
   }
 }
 
@@ -103,25 +85,13 @@ export class NotFoundError extends AppError {
 
 export class ConflictError extends AppError {
   constructor(message: string, details?: any) {
-    super(
-      message,
-      409,
-      'CONFLICT',
-      ErrorCategory.CONFLICT,
-      details
-    );
+    super(message, 409, 'CONFLICT', ErrorCategory.CONFLICT, details);
   }
 }
 
 export class RateLimitError extends AppError {
   constructor(message: string = 'Too many requests', retryAfter?: number) {
-    super(
-      message,
-      429,
-      'RATE_LIMIT_EXCEEDED',
-      ErrorCategory.RATE_LIMIT,
-      { retryAfter }
-    );
+    super(message, 429, 'RATE_LIMIT_EXCEEDED', ErrorCategory.RATE_LIMIT, { retryAfter });
   }
 }
 
@@ -153,12 +123,9 @@ export class DatabaseError extends AppError {
 /**
  * Format error response
  */
-function formatErrorResponse(
-  error: AppError | Error,
-  request: FastifyRequest
-): ErrorResponse {
+function formatErrorResponse(error: AppError | Error, request: FastifyRequest): ErrorResponse {
   const isAppError = error instanceof AppError;
-  
+
   return {
     error: isAppError ? error.name : 'Internal Server Error',
     message: error.message,
@@ -185,10 +152,7 @@ function shouldLogAsError(error: AppError | Error): boolean {
 /**
  * Log error with appropriate level and context
  */
-function logError(
-  error: AppError | Error,
-  request: FastifyRequest
-): void {
+function logError(error: AppError | Error, request: FastifyRequest): void {
   const logContext = {
     error: {
       message: error.message,
@@ -202,7 +166,7 @@ function logError(
       userId: (request as any).userId,
     },
   };
-  
+
   if (shouldLogAsError(error)) {
     request.log.error(logContext, 'Request error');
   } else {
@@ -221,7 +185,7 @@ export function errorHandler(
 ): void {
   // Log the error
   logError(error, request);
-  
+
   // Determine status code
   let statusCode = 500;
   if (error instanceof AppError) {
@@ -229,10 +193,10 @@ export function errorHandler(
   } else if ('statusCode' in error && typeof error.statusCode === 'number') {
     statusCode = error.statusCode;
   }
-  
+
   // Format error response
   const errorResponse = formatErrorResponse(error, request);
-  
+
   // Send response
   reply.code(statusCode).send(errorResponse);
 }
@@ -260,18 +224,18 @@ export function asyncHandler<T = any>(
  */
 export function sanitizeError(error: any): any {
   if (!error || typeof error !== 'object') return {};
-  
+
   const sanitized: any = {};
-  
+
   // Safe fields to include
   const safeFields = ['message', 'code', 'field', 'constraint', 'value'];
-  
+
   for (const key of safeFields) {
     if (key in error) {
       sanitized[key] = error[key];
     }
   }
-  
+
   return sanitized;
 }
 
@@ -285,10 +249,10 @@ export function handleZodError(error: any): ValidationError {
       message: issue.message,
       code: issue.code,
     }));
-    
+
     return new ValidationError('Validation failed', { issues });
   }
-  
+
   return new ValidationError('Validation failed');
 }
 
@@ -298,29 +262,33 @@ export function handleZodError(error: any): ValidationError {
 export function handleDatabaseError(error: any): AppError {
   // PostgreSQL error codes
   const pgErrorCodes: Record<string, () => AppError> = {
-    '23505': () => new ConflictError('Duplicate entry', {
-      constraint: error.constraint,
-      detail: error.detail,
-    }),
-    '23503': () => new ValidationError('Foreign key constraint violation', {
-      constraint: error.constraint,
-      detail: error.detail,
-    }),
-    '23502': () => new ValidationError('Not null constraint violation', {
-      column: error.column,
-      detail: error.detail,
-    }),
-    '22001': () => new ValidationError('Value too long', {
-      column: error.column,
-      detail: error.detail,
-    }),
+    '23505': () =>
+      new ConflictError('Duplicate entry', {
+        constraint: error.constraint,
+        detail: error.detail,
+      }),
+    '23503': () =>
+      new ValidationError('Foreign key constraint violation', {
+        constraint: error.constraint,
+        detail: error.detail,
+      }),
+    '23502': () =>
+      new ValidationError('Not null constraint violation', {
+        column: error.column,
+        detail: error.detail,
+      }),
+    '22001': () =>
+      new ValidationError('Value too long', {
+        column: error.column,
+        detail: error.detail,
+      }),
   };
-  
+
   const code = error.code?.toString();
   if (code && pgErrorCodes[code]) {
     return pgErrorCodes[code]();
   }
-  
+
   // Generic database error
   return new DatabaseError(error.message, {
     code: error.code,
@@ -332,42 +300,54 @@ export function handleDatabaseError(error: any): AppError {
  * Handle Stripe errors
  */
 export function handleStripeError(error: any): AppError {
-  const type = error.type;
-  
-  switch (type) {
-    case 'StripeCardError':
-      return new ValidationError(error.message, {
-        code: error.code,
-        declineCode: error.decline_code,
-      });
-    
-    case 'StripeRateLimitError':
-      return new RateLimitError('Too many requests to payment processor');
-    
-    case 'StripeInvalidRequestError':
-      return new ValidationError(error.message, {
-        code: error.code,
-        param: error.param,
-      });
-    
-    case 'StripeAPIError':
-      return new ExternalServiceError('Stripe', error.message, {
-        code: error.code,
-      });
-    
-    case 'StripeConnectionError':
-      return new ExternalServiceError('Stripe', 'Connection failed', {
-        message: error.message,
-      });
-    
-    case 'StripeAuthenticationError':
-      return new ExternalServiceError('Stripe', 'Authentication failed', {
-        message: error.message,
-      });
-    
-    default:
-      return new ExternalServiceError('Stripe', error.message);
+  // Preserve already-mapped application errors (ValidationError, ConflictError, etc.)
+  if (error instanceof AppError) {
+    return error;
   }
+
+  const type = error?.type;
+
+  if (typeof type === 'string' && type.startsWith('Stripe')) {
+    switch (type) {
+      case 'StripeCardError':
+        return new ValidationError(error.message, {
+          code: error.code,
+          declineCode: error.decline_code,
+        });
+
+      case 'StripeRateLimitError':
+        return new RateLimitError('Too many requests to payment processor');
+
+      case 'StripeInvalidRequestError':
+        return new ValidationError(error.message, {
+          code: error.code,
+          param: error.param,
+        });
+
+      case 'StripeAPIError':
+        return new ExternalServiceError('Stripe', error.message, {
+          code: error.code,
+        });
+
+      case 'StripeConnectionError':
+        return new ExternalServiceError('Stripe', 'Connection failed', {
+          message: error.message,
+        });
+
+      case 'StripeAuthenticationError':
+        return new ExternalServiceError('Stripe', 'Authentication failed', {
+          message: error.message,
+        });
+
+      default:
+        return new ExternalServiceError('Stripe', error.message);
+    }
+  }
+
+  // Not a Stripe error: wrap unknown non-AppError errors as external service errors
+  return new ExternalServiceError('Stripe', error?.message || String(error), {
+    raw: sanitizeError(error),
+  });
 }
 
 /**
@@ -379,17 +359,17 @@ export function handleSupabaseError(error: any): AppError {
       message: error.message,
     });
   }
-  
+
   if (error.message?.includes('Row Level Security')) {
     return new AuthorizationError('Access denied', {
       message: error.message,
     });
   }
-  
+
   if (error.code === 'PGRST116') {
     return new NotFoundError('Resource', undefined);
   }
-  
+
   return new ExternalServiceError('Supabase', error.message, {
     code: error.code,
     details: error.details,
@@ -404,31 +384,31 @@ export function handleError(error: any): AppError {
   if (error instanceof AppError) {
     return error;
   }
-  
+
   // Zod validation error
   if (error.name === 'ZodError') {
     return handleZodError(error);
   }
-  
+
   // Database error
   if (error.code && typeof error.code === 'string') {
     if (error.code.startsWith('23') || error.code.startsWith('22')) {
       return handleDatabaseError(error);
     }
   }
-  
+
   // Stripe error
   if (error.type && typeof error.type === 'string' && error.type.startsWith('Stripe')) {
     return handleStripeError(error);
   }
-  
+
   // Supabase error
   if (error.message && typeof error.message === 'string') {
     if (error.message.includes('JWT') || error.message.includes('Supabase')) {
       return handleSupabaseError(error);
     }
   }
-  
+
   // Generic error
   return new AppError(
     error.message || 'An unexpected error occurred',

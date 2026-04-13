@@ -3,31 +3,15 @@
   "compilerOptions": {
     "strict": true,
     "baseUrl": ".",
-    "typeRoots": [
-      "./types",
-      "./node_modules/@types"
-    ],
+    "typeRoots": ["./types", "./node_modules/@types"],
     "paths": {
-      "@/*": [
-        "components/*"
-      ],
-      "@bountyexpo/domain-types": [
-        "packages/domain-types/src/index.ts"
-      ],
-      "@bountyexpo/domain-types/*": [
-        "packages/domain-types/src/*"
-      ]
+      "@/*": ["components/*"],
+      "@bountyexpo/domain-types": ["packages/domain-types/src/index.ts"],
+      "@bountyexpo/domain-types/*": ["packages/domain-types/src/*"]
     },
     "jsx": "react-jsx",
-    "lib": [
-      "ES2021",
-      "DOM",
-      "DOM.Iterable"
-    ],
-    "types": [
-      "node",
-      "jest"
-    ],
+    "lib": ["ES2021", "DOM", "DOM.Iterable"],
+    "types": ["node", "jest"],
     "target": "ES2021",
     "module": "ESNext",
     "moduleResolution": "bundler",
@@ -37,13 +21,7 @@
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": [
-    "**/*.ts",
-    "**/*.tsx",
-    ".expo/types/**/*.ts",
-    "expo-env.d.ts",
-    "nativewind-env.d.ts"
-  ],
+  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts", "nativewind-env.d.ts"],
   "exclude": [
     "node_modules",
     "**/.history/**",

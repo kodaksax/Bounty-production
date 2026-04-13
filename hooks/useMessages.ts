@@ -1,9 +1,14 @@
 import { RealtimeChannel } from '@supabase/supabase-js';
 import * as Clipboard from 'expo-clipboard';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { messageService } from '../lib/services/message-service';
 import * as supabaseMessaging from '../lib/services/supabase-messaging';
 import type { Message } from '../lib/types';
 import { getCurrentUserId } from '../lib/utils/data-utils';
+
+// Module-level counter so concurrent sendMessage calls always get unique IDs,
+// even when Date.now() returns the same millisecond value.
+let _tempCounter = 0;
 
 interface UseMessagesResult {
   messages: Message[];
@@ -26,7 +31,14 @@ export function useMessages(conversationId: string): UseMessagesResult {
   const [pinnedMessage, setPinnedMessage] = useState<Message | null>(null);
   const currentUserId = getCurrentUserId();
 
-  const fetchMessages = async () => {
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  const fetchMessages = useCallback(async () => {
+    // Skip Supabase for local/fake conversation IDs (e.g. "conv-*")
+    if (!conversationId || !UUID_RE.test(conversationId)) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
@@ -41,15 +53,16 @@ export function useMessages(conversationId: string): UseMessagesResult {
     } finally {
       setLoading(false);
     }
-  };
+  }, [conversationId]);
 
   const sendMessage = async (text: string, mediaUrl?: string | null) => {
+    let tempMessage: Message | undefined;
     try {
       setError(null);
-      
+
       // Optimistic update - add message immediately
-      const tempMessage: Message = {
-        id: `temp-${Date.now()}`,
+      tempMessage = {
+        id: `temp-${Date.now()}-${++_tempCounter}`,
         conversationId,
         senderId: currentUserId,
         text,
@@ -57,20 +70,48 @@ export function useMessages(conversationId: string): UseMessagesResult {
         createdAt: new Date().toISOString(),
         status: 'sending',
       };
-      
-      setMessages(prev => [...prev, tempMessage]);
 
-      // Send to Supabase
-      const message = await supabaseMessaging.sendMessage(conversationId, text, currentUserId, mediaUrl ?? null);
-      
-      // Replace temp message with real one
-      setMessages(prev => 
-        prev.map(m => m.id === tempMessage.id ? message : m)
+      setMessages(prev => [...prev, tempMessage!]);
+
+      // If this is a local/fallback conversation ID (e.g. "conv-..."),
+      // avoid calling Supabase (which expects a UUID) and use the
+      // local `messageService` instead to persist the message locally.
+      if (!UUID_RE.test(conversationId)) {
+        try {
+          const result = await messageService.sendMessage(conversationId, text, currentUserId);
+          // `messageService.sendMessage` returns an object with `message`
+          // but also some call sites may return the Message directly; handle both.
+          const sentMessage: Message =
+            result && (result as any).message ? (result as any).message : (result as any);
+          setMessages(prev => prev.map(m => (m.id === tempMessage!.id ? sentMessage : m)));
+          return;
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Failed to send message (local)');
+          if (tempMessage) {
+            const tempId = tempMessage.id;
+            setMessages(prev => prev.filter(m => m.id !== tempId));
+          }
+          return;
+        }
+      }
+
+      // Send to Supabase for canonical conversations (UUIDs)
+      const message = await supabaseMessaging.sendMessage(
+        conversationId,
+        text,
+        currentUserId,
+        mediaUrl ?? null
       );
+
+      // Replace temp message with real one
+      setMessages(prev => prev.map(m => (m.id === tempMessage!.id ? message : m)));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send message');
-      // Remove failed temp message
-      setMessages(prev => prev.filter(m => !m.id.startsWith('temp-')));
+      // Remove only the specific failed temp message, not all pending ones
+      if (tempMessage) {
+        const tempId = tempMessage.id;
+        setMessages(prev => prev.filter(m => m.id !== tempId));
+      }
     }
   };
 
@@ -126,26 +167,23 @@ export function useMessages(conversationId: string): UseMessagesResult {
       await fetchMessages();
 
       // Subscribe to Realtime updates
-      subscription = supabaseMessaging.subscribeToMessages(
-        conversationId,
-        (newMessage) => {
-          if (newMessage) {
-            // Add new message if it's not from current user (avoid duplicates from optimistic updates)
-            if (newMessage.senderId !== currentUserId) {
-              setMessages(prev => {
-                // Check if message already exists
-                if (prev.some(m => m.id === newMessage.id)) {
-                  return prev;
-                }
-                return [...prev, newMessage];
-              });
-            }
-          } else {
-            // Refetch on update
-            fetchMessages();
+      subscription = supabaseMessaging.subscribeToMessages(conversationId, newMessage => {
+        if (newMessage) {
+          // Add new message if it's not from current user (avoid duplicates from optimistic updates)
+          if (newMessage.senderId !== currentUserId) {
+            setMessages(prev => {
+              // Check if message already exists
+              if (prev.some(m => m.id === newMessage.id)) {
+                return prev;
+              }
+              return [...prev, newMessage];
+            });
           }
+        } else {
+          // Refetch on update
+          fetchMessages();
         }
-      );
+      });
     };
 
     init();
@@ -156,7 +194,7 @@ export function useMessages(conversationId: string): UseMessagesResult {
         supabaseMessaging.unsubscribe(`messages:${conversationId}`);
       }
     };
-  }, [conversationId]);
+  }, [conversationId, currentUserId, fetchMessages]);
 
   return {
     messages,
