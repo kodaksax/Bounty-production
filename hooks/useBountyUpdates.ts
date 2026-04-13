@@ -1,7 +1,13 @@
 import { useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useQueryClient } from '@tanstack/react-query';
-import { Bounty } from '../lib/types';
+
+interface Bounty {
+  id: string;
+  status?: string;
+  updated_at?: string;
+  [key: string]: any;
+}
 
 export function useBountyUpdates() {
   const queryClient = useQueryClient();
