@@ -201,18 +201,55 @@ export class ReconciliationCronService {
           try {
             const refundAmount: number =
               tx.metadata?.needs_balance_refund_amount ?? Math.abs(tx.amount);
-            await updateBalance(tx.user_id, refundAmount);
-            // Clear flag after successful restore to prevent a duplicate refund on the next run.
-            await admin
+            const appliedAt = new Date().toISOString();
+
+            // Clear the flag FIRST (conditional on it still being true) before touching
+            // the balance. This acts as an optimistic lock: two concurrent cron runs cannot
+            // both process the same transaction, and a crash after this point cannot cause a
+            // double-credit on re-run.  If updateBalance then fails we re-set the flag so
+            // the next run will retry.
+            const { error: claimErr, count: claimCount } = await admin
               .from('wallet_transactions')
               .update({
                 metadata: {
                   ...tx.metadata,
                   needs_balance_refund: false,
-                  balance_refund_applied_at: new Date().toISOString(),
+                  balance_refund_applied_at: appliedAt,
                 },
               })
-              .eq('id', tx.id);
+              .eq('id', tx.id)
+              .filter('metadata->>needs_balance_refund', 'eq', 'true')
+              .select('id', { count: 'exact', head: true });
+
+            if (claimErr) {
+              throw new Error(`Failed to claim refund flag: ${claimErr.message}`);
+            }
+            if (!claimCount) {
+              // Another cron run already claimed this transaction; skip.
+              logger.info(
+                { txId: tx.id },
+                '[reconciliation] Refund flag already cleared by another run, skipping'
+              );
+              continue;
+            }
+
+            try {
+              await updateBalance(tx.user_id, refundAmount);
+            } catch (balanceErr) {
+              // Balance update failed — re-set the flag so the next run will retry.
+              await admin
+                .from('wallet_transactions')
+                .update({
+                  metadata: {
+                    ...tx.metadata,
+                    needs_balance_refund: true,
+                    balance_refund_applied_at: null,
+                  },
+                })
+                .eq('id', tx.id);
+              throw balanceErr;
+            }
+
             logger.info(
               { txId: tx.id, userId: tx.user_id, amount: refundAmount },
               '[reconciliation] Restored user balance for failed withdrawal rollback'

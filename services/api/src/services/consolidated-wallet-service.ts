@@ -660,25 +660,36 @@ export async function createWithdrawal(
         // Flag the transaction so the reconciliation cron can detect and restore
         // the deducted balance automatically. This prevents funds from being
         // permanently locked if both the Stripe transfer and balance rollback fail.
-        admin
-          .from('wallet_transactions')
-          .update({
-            metadata: {
-              ...transaction.metadata,
-              needs_balance_refund: true,
-              needs_balance_refund_amount: amount,
-              rollback_failed_at: new Date().toISOString(),
+        try {
+          const { error: flagError }: { error: any } = (await admin
+            .from('wallet_transactions')
+            .update({
+              metadata: {
+                ...transaction.metadata,
+                needs_balance_refund: true,
+                needs_balance_refund_amount: amount,
+                rollback_failed_at: new Date().toISOString(),
+              },
+            })
+            .eq('id', transaction.id)) as any;
+
+          if (flagError) {
+            logger.error(
+              { userId, transactionId: transaction.id, amount, error: flagError },
+              '[WalletService] CRITICAL: Failed to flag transaction for balance refund - manual intervention required'
+            );
+          }
+        } catch (flagErr) {
+          logger.error(
+            {
+              userId,
+              transactionId: transaction.id,
+              amount,
+              error: flagErr instanceof Error ? flagErr.message : String(flagErr),
             },
-          })
-          .eq('id', transaction.id)
-          .then(({ error: flagError }: { error: any }) => {
-            if (flagError) {
-              logger.error(
-                { userId, transactionId: transaction.id, amount, error: flagError },
-                '[WalletService] CRITICAL: Failed to flag transaction for balance refund - manual intervention required'
-              );
-            }
-          });
+            '[WalletService] CRITICAL: Failed to flag transaction for balance refund - manual intervention required'
+          );
+        }
       }
     }
 
