@@ -1,10 +1,14 @@
 import { RealtimeChannel } from '@supabase/supabase-js';
 import * as Clipboard from 'expo-clipboard';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { messageService } from '../lib/services/message-service';
 import * as supabaseMessaging from '../lib/services/supabase-messaging';
 import type { Message } from '../lib/types';
 import { getCurrentUserId } from '../lib/utils/data-utils';
+
+// Module-level counter so concurrent sendMessage calls always get unique IDs,
+// even when Date.now() returns the same millisecond value.
+let _tempCounter = 0;
 
 interface UseMessagesResult {
   messages: Message[];
@@ -29,7 +33,7 @@ export function useMessages(conversationId: string): UseMessagesResult {
 
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-  const fetchMessages = async () => {
+  const fetchMessages = useCallback(async () => {
     // Skip Supabase for local/fake conversation IDs (e.g. "conv-*")
     if (!conversationId || !UUID_RE.test(conversationId)) {
       setLoading(false);
@@ -49,15 +53,16 @@ export function useMessages(conversationId: string): UseMessagesResult {
     } finally {
       setLoading(false);
     }
-  };
+  }, [conversationId]);
 
   const sendMessage = async (text: string, mediaUrl?: string | null) => {
+    let tempMessage: Message | undefined;
     try {
       setError(null);
 
       // Optimistic update - add message immediately
-      const tempMessage: Message = {
-        id: `temp-${Date.now()}`,
+      tempMessage = {
+        id: `temp-${Date.now()}-${++_tempCounter}`,
         conversationId,
         senderId: currentUserId,
         text,
@@ -66,7 +71,7 @@ export function useMessages(conversationId: string): UseMessagesResult {
         status: 'sending',
       };
 
-      setMessages(prev => [...prev, tempMessage]);
+      setMessages(prev => [...prev, tempMessage!]);
 
       // If this is a local/fallback conversation ID (e.g. "conv-..."),
       // avoid calling Supabase (which expects a UUID) and use the
@@ -78,11 +83,14 @@ export function useMessages(conversationId: string): UseMessagesResult {
           // but also some call sites may return the Message directly; handle both.
           const sentMessage: Message =
             result && (result as any).message ? (result as any).message : (result as any);
-          setMessages(prev => prev.map(m => (m.id === tempMessage.id ? sentMessage : m)));
+          setMessages(prev => prev.map(m => (m.id === tempMessage!.id ? sentMessage : m)));
           return;
         } catch (err) {
           setError(err instanceof Error ? err.message : 'Failed to send message (local)');
-          setMessages(prev => prev.filter(m => !m.id.startsWith('temp-')));
+          if (tempMessage) {
+            const tempId = tempMessage.id;
+            setMessages(prev => prev.filter(m => m.id !== tempId));
+          }
           return;
         }
       }
@@ -96,11 +104,14 @@ export function useMessages(conversationId: string): UseMessagesResult {
       );
 
       // Replace temp message with real one
-      setMessages(prev => prev.map(m => (m.id === tempMessage.id ? message : m)));
+      setMessages(prev => prev.map(m => (m.id === tempMessage!.id ? message : m)));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send message');
-      // Remove failed temp message
-      setMessages(prev => prev.filter(m => !m.id.startsWith('temp-')));
+      // Remove only the specific failed temp message, not all pending ones
+      if (tempMessage) {
+        const tempId = tempMessage.id;
+        setMessages(prev => prev.filter(m => m.id !== tempId));
+      }
     }
   };
 
@@ -183,7 +194,7 @@ export function useMessages(conversationId: string): UseMessagesResult {
         supabaseMessaging.unsubscribe(`messages:${conversationId}`);
       }
     };
-  }, [conversationId]);
+  }, [conversationId, currentUserId, fetchMessages]);
 
   return {
     messages,
