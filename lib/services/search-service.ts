@@ -16,11 +16,30 @@ const SEARCH_FILTERS_KEY = '@bountyexpo:last_search_filters';
 
 // Common skills for autocomplete suggestions
 const COMMON_SKILLS = [
-  'React', 'React Native', 'JavaScript', 'TypeScript', 'Node.js',
-  'Python', 'Java', 'Swift', 'Kotlin', 'Go',
-  'Design', 'UI/UX', 'Graphic Design', 'Writing', 'Marketing',
-  'Data Entry', 'Customer Support', 'Photography', 'Video Editing',
-  'Translation', 'Research', 'Virtual Assistant', 'SEO', 'Social Media',
+  'React',
+  'React Native',
+  'JavaScript',
+  'TypeScript',
+  'Node.js',
+  'Python',
+  'Java',
+  'Swift',
+  'Kotlin',
+  'Go',
+  'Design',
+  'UI/UX',
+  'Graphic Design',
+  'Writing',
+  'Marketing',
+  'Data Entry',
+  'Customer Support',
+  'Photography',
+  'Video Editing',
+  'Translation',
+  'Research',
+  'Virtual Assistant',
+  'SEO',
+  'Social Media',
 ];
 
 export const searchService = {
@@ -52,7 +71,7 @@ export const searchService = {
 
       // Search users
       const userResults = await userSearchService.getUserSuggestions(q, 3);
-      userResults.forEach((user) => {
+      userResults.forEach(user => {
         suggestions.push({
           id: `user_${user.id}`,
           type: 'user',
@@ -63,10 +82,11 @@ export const searchService = {
       });
 
       // Search skills
-      const matchingSkills = COMMON_SKILLS
-        .filter((skill) => skill.toLowerCase().includes(q))
-        .slice(0, 2);
-      matchingSkills.forEach((skill) => {
+      const matchingSkills = COMMON_SKILLS.filter(skill => skill.toLowerCase().includes(q)).slice(
+        0,
+        2
+      );
+      matchingSkills.forEach(skill => {
         suggestions.push({
           id: `skill_${skill}`,
           type: 'skill',
@@ -98,13 +118,15 @@ export const searchService = {
 
       const { data: bounties, error } = await supabase
         .from('bounties')
-        .select(`
+        .select(
+          `
           *,
-          profiles!bounties_profiles_fkey (
+          profiles!bounties_poster_id_fkey (
             username,
             avatar
           )
-        `)
+        `
+        )
         .eq('status', 'open')
         .gte('created_at', sevenDaysAgo.toISOString())
         .order('created_at', { ascending: false })
@@ -135,11 +157,16 @@ export const searchService = {
               .eq('status', 'accepted');
 
             const acceptedIds = new Set((acceptedReqs || []).map((r: any) => String(r.bounty_id)));
-            const filtered = (bountiesNoJoin || []).filter((b: any) => !acceptedIds.has(String(b.id)));
+            const filtered = (bountiesNoJoin || []).filter(
+              (b: any) => !acceptedIds.has(String(b.id))
+            );
             return this.calculateTrendingScores(filtered, limit);
           }
         } catch (innerErr) {
-          logger.warning('Failed to filter trending bounties by accepted requests (fallback branch)', { error: innerErr });
+          logger.warning(
+            'Failed to filter trending bounties by accepted requests (fallback branch)',
+            { error: innerErr }
+          );
         }
 
         return this.calculateTrendingScores(bountiesNoJoin || [], limit);
@@ -160,7 +187,9 @@ export const searchService = {
           return this.calculateTrendingScores(filtered, limit);
         }
       } catch (innerErr) {
-        logger.warning('Failed to filter trending bounties by accepted requests', { error: innerErr });
+        logger.warning('Failed to filter trending bounties by accepted requests', {
+          error: innerErr,
+        });
       }
 
       return this.calculateTrendingScores(bounties || [], limit);
@@ -177,7 +206,7 @@ export const searchService = {
   calculateTrendingScores(bounties: any[], limit: number): TrendingBounty[] {
     const now = Date.now();
 
-    const scored = bounties.map((bounty) => {
+    const scored = bounties.map(bounty => {
       const createdAt = new Date(bounty.created_at).getTime();
       const ageHours = (now - createdAt) / (1000 * 60 * 60);
 
@@ -215,9 +244,7 @@ export const searchService = {
     });
 
     // Sort by trending score and return top results
-    return scored
-      .sort((a, b) => b.trendingScore - a.trendingScore)
-      .slice(0, limit);
+    return scored.sort((a, b) => b.trendingScore - a.trendingScore).slice(0, limit);
   },
 
   /**
@@ -232,7 +259,7 @@ export const searchService = {
     alertsEnabled: boolean = true
   ): Promise<SavedSearch> {
     const savedSearches = await this.getSavedSearches(userId);
-    
+
     // Generate a more robust ID to avoid collisions
     const randomPart = Math.random().toString(36).substring(2, 10);
     const newSearch: SavedSearch = {
@@ -247,10 +274,7 @@ export const searchService = {
     };
 
     savedSearches.push(newSearch);
-    await AsyncStorage.setItem(
-      `${SAVED_SEARCHES_KEY}_${userId}`,
-      JSON.stringify(savedSearches)
-    );
+    await AsyncStorage.setItem(`${SAVED_SEARCHES_KEY}_${userId}`, JSON.stringify(savedSearches));
 
     return newSearch;
   },
@@ -275,11 +299,8 @@ export const searchService = {
   async deleteSavedSearch(userId: string, searchId: string): Promise<boolean> {
     try {
       const savedSearches = await this.getSavedSearches(userId);
-      const filtered = savedSearches.filter((s) => s.id !== searchId);
-      await AsyncStorage.setItem(
-        `${SAVED_SEARCHES_KEY}_${userId}`,
-        JSON.stringify(filtered)
-      );
+      const filtered = savedSearches.filter(s => s.id !== searchId);
+      await AsyncStorage.setItem(`${SAVED_SEARCHES_KEY}_${userId}`, JSON.stringify(filtered));
       return true;
     } catch (error) {
       logger.error('deleteSavedSearch failed', { userId, searchId, error });
@@ -290,14 +311,10 @@ export const searchService = {
   /**
    * Toggle alerts for a saved search
    */
-  async toggleSearchAlerts(
-    userId: string,
-    searchId: string,
-    enabled: boolean
-  ): Promise<boolean> {
+  async toggleSearchAlerts(userId: string, searchId: string, enabled: boolean): Promise<boolean> {
     try {
       const savedSearches = await this.getSavedSearches(userId);
-      const search = savedSearches.find((s) => s.id === searchId);
+      const search = savedSearches.find(s => s.id === searchId);
       if (search) {
         search.alertsEnabled = enabled;
         await AsyncStorage.setItem(
@@ -347,11 +364,11 @@ export const searchService = {
   ): Promise<{ searchId: string; name: string; count: number }[]> {
     try {
       const savedSearches = await this.getSavedSearches(userId);
-      const alertSearches = savedSearches.filter((s) => s.alertsEnabled && s.type === 'bounty');
+      const alertSearches = savedSearches.filter(s => s.alertsEnabled && s.type === 'bounty');
 
       const results: { searchId: string; name: string; count: number }[] = [];
       const nowISOString = new Date().toISOString();
-      const updatedSearches = savedSearches.map((search) => {
+      const updatedSearches = savedSearches.map(search => {
         if (search.alertsEnabled && search.type === 'bounty') {
           const lastNotified = search.lastNotifiedAt
             ? new Date(search.lastNotifiedAt)
@@ -359,7 +376,7 @@ export const searchService = {
 
           // Search for bounties created after last notification
           const filters = {
-            ...(search.filters as BountySearchFilters || {}),
+            ...((search.filters as BountySearchFilters) || {}),
             keywords: search.query || undefined,
             status: ['open'],
             limit: 10,
@@ -388,21 +405,19 @@ export const searchService = {
               count: newBounties.length,
             });
             // Replace with updated lastNotifiedAt
-            updatedSearches[i] = { ...entry, search: { ...entry.search, lastNotifiedAt: nowISOString } };
+            updatedSearches[i] = {
+              ...entry,
+              search: { ...entry.search, lastNotifiedAt: nowISOString },
+            };
           }
         }
       }
 
       // Build the final array to save
-      const searchesToSave = updatedSearches.map((entry) =>
-        entry.search
-      );
+      const searchesToSave = updatedSearches.map(entry => entry.search);
 
       // Save updated searches with new lastNotifiedAt times
-      await AsyncStorage.setItem(
-        `${SAVED_SEARCHES_KEY}_${userId}`,
-        JSON.stringify(searchesToSave)
-      );
+      await AsyncStorage.setItem(`${SAVED_SEARCHES_KEY}_${userId}`, JSON.stringify(searchesToSave));
 
       return results;
     } catch (error) {

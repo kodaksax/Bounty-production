@@ -39,21 +39,56 @@ BEGIN
   END IF;
 END $$;
 
--- Add poster_id column (denormalized from user_id) if missing
+-- Add poster_id column (denormalized from user_id) if missing.
+-- Use an explicit FK constraint name so PostgREST has exactly one named relationship
+-- between bounties.poster_id and profiles.id.
 DO $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'bounties' AND column_name = 'poster_id'
   ) THEN
-    ALTER TABLE public.bounties ADD COLUMN poster_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL;
+    ALTER TABLE public.bounties
+      ADD COLUMN poster_id uuid,
+      ADD CONSTRAINT bounties_poster_id_fkey
+        FOREIGN KEY (poster_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
   END IF;
 END $$;
 
--- Backfill poster_id from user_id for rows where it is NULL
-UPDATE public.bounties
-  SET poster_id = user_id
-  WHERE poster_id IS NULL AND user_id IS NOT NULL;
+-- Drop the old unnamed/generic fkey on poster_id if it still exists alongside
+-- bounties_poster_id_fkey, which would cause PGRST201 ambiguous-relationship errors.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE constraint_schema = 'public'
+      AND table_name = 'bounties'
+      AND constraint_name = 'bounties_profiles_fkey'
+      AND constraint_type = 'FOREIGN KEY'
+  ) AND EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE constraint_schema = 'public'
+      AND table_name = 'bounties'
+      AND constraint_name = 'bounties_poster_id_fkey'
+      AND constraint_type = 'FOREIGN KEY'
+  ) THEN
+    ALTER TABLE public.bounties DROP CONSTRAINT IF EXISTS bounties_profiles_fkey;
+  END IF;
+END $$;
+
+-- Backfill poster_id from user_id for rows where it is NULL.
+-- Guard against environments where user_id column no longer exists.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'bounties' AND column_name = 'user_id'
+  ) THEN
+    UPDATE public.bounties
+      SET poster_id = user_id
+      WHERE poster_id IS NULL AND user_id IS NOT NULL;
+  END IF;
+END $$;
 
 -- ============================================================================
 -- 2. Expand bounties.status CHECK constraint to include all app-level values
@@ -116,21 +151,19 @@ CREATE POLICY "Users can create bounties"
   FOR INSERT
   TO authenticated
   WITH CHECK (
-    auth.uid() = user_id
-    OR auth.uid() = poster_id
+    auth.uid() = poster_id
   );
 
 -- UPDATE: the bounty poster can update their own bounty.
---   Uses COALESCE so it works whether the row has poster_id, user_id, or both.
 CREATE POLICY "Owners can update their own bounties"
   ON public.bounties
   FOR UPDATE
   TO authenticated
   USING (
-    auth.uid() = COALESCE(poster_id, user_id)
+    auth.uid() = poster_id
   )
   WITH CHECK (
-    auth.uid() = COALESCE(poster_id, user_id)
+    auth.uid() = poster_id
   );
 
 -- DELETE: the bounty poster can delete their own bounty.
@@ -139,7 +172,7 @@ CREATE POLICY "Owners can delete their own bounties"
   FOR DELETE
   TO authenticated
   USING (
-    auth.uid() = COALESCE(poster_id, user_id)
+    auth.uid() = poster_id
   );
 
 -- ============================================================================

@@ -30,8 +30,9 @@ CREATE INDEX IF NOT EXISTS idx_bounties_status_created_at
 ON bounties(status, created_at DESC);
 
 -- Composite index for user's bounties filtered by status
-CREATE INDEX IF NOT EXISTS idx_bounties_user_id_status 
-ON bounties(user_id, status);
+-- Note: column is poster_id in the production schema (user_id was the original baseline name).
+CREATE INDEX IF NOT EXISTS idx_bounties_poster_id_status 
+ON bounties(poster_id, status);
 
 -- Index for hunter's accepted bounties
 CREATE INDEX IF NOT EXISTS idx_bounties_hunter_id 
