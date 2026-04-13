@@ -1122,19 +1122,68 @@ export const bountyRequestService = {
         throw err;
       }
 
-      // On success, fetch the accepted request to return it (authoritative state)
-      const acceptedReq = await this.getById(requestId as any);
-
-      // Post-acceptance verification: confirm the request actually transitioned to 'accepted'
-      if (acceptedReq && acceptedReq.status !== 'accepted') {
-        logger.error(
-          'Post-acceptance verification failed: request did not transition to accepted',
-          {
-            requestId,
-            actualStatus: acceptedReq.status,
+      // On success, prefer the atomic function's response as authoritative instead
+      // of immediately hitting the GET endpoint. The edge function returns the
+      // RPC rows (bounty, accepted_request) in its body so parsing that avoids a
+      // follow-up GET which can fail due to transient network issues and falsely
+      // indicate a conflict to the caller.
+      let acceptedReq: BountyRequest | null = null;
+      try {
+        const body = await res.json().catch(() => null);
+        if (body && body.data) {
+          const row = Array.isArray(body.data) ? body.data[0] : body.data;
+          const acceptedRequestJson =
+            (row as any)?.accepted_request ?? (row as any)?.acceptedRequest ?? row;
+          if (acceptedRequestJson) {
+            acceptedReq =
+              typeof acceptedRequestJson === 'string'
+                ? JSON.parse(acceptedRequestJson)
+                : acceptedRequestJson;
           }
+        }
+      } catch (parseErr) {
+        logger.warning('Could not parse accept function response', {
+          requestId,
+          error: parseErr instanceof Error ? parseErr.message : String(parseErr),
+        });
+      }
+
+      // Fallback: if the function response didn't include the accepted request,
+      // try fetching it. If that fetch fails (transient network), swallow the
+      // error and proceed because the edge function already returned success.
+      if (!acceptedReq) {
+        try {
+          const fetched = await this.getById(requestId as any);
+          if (fetched) acceptedReq = fetched;
+        } catch (fetchErr) {
+          logger.warning('Post-acceptance getById failed; proceeding with API success', {
+            requestId,
+            error: fetchErr instanceof Error ? fetchErr.message : String(fetchErr),
+          });
+        }
+      }
+
+      // Post-acceptance verification: if we were able to retrieve an accepted
+      // request and it isn't in the 'accepted' state, treat as a conflict. If
+      // we couldn't obtain the accepted request but the edge function returned
+      // success, proceed (best-effort) to avoid surfacing a false conflict to
+      // the user when verification fails due to transient network errors.
+      if (acceptedReq) {
+        if (acceptedReq.status !== 'accepted') {
+          logger.error(
+            'Post-acceptance verification failed: request did not transition to accepted',
+            {
+              requestId,
+              actualStatus: acceptedReq.status,
+            }
+          );
+          return null;
+        }
+      } else {
+        logger.warning(
+          'Accept function returned success but accepted request data unavailable; proceeding',
+          { requestId }
         );
-        return null;
       }
 
       // Create escrow if needed using authoritative bounty data

@@ -106,7 +106,7 @@ describe('bountyService', () => {
 
   it('addAttachmentToBounty merges attachments and updates via Supabase', async () => {
     // Spy on internal getById to return an existing bounty with attachments_json string
-    jest
+    const spyGet = jest
       .spyOn(bountyService, 'getById')
       .mockResolvedValue({ id: 3, attachments_json: JSON.stringify(['old']) } as any);
 
@@ -121,6 +121,7 @@ describe('bountyService', () => {
 
     const ok = await bountyService.addAttachmentToBounty(3, { file: 'new' });
     expect(ok).toBe(true);
+    spyGet.mockRestore();
   });
 
   it('create throws when title validation fails', async () => {
@@ -144,7 +145,9 @@ describe('bountyService', () => {
   });
 
   it('updateStatus notifies websocket when connected', async () => {
-    jest.spyOn(bountyService, 'update').mockResolvedValue({ id: 5, status: 'completed' } as any);
+    const spyUpdate = jest
+      .spyOn(bountyService, 'update')
+      .mockResolvedValue({ id: 5, status: 'completed' } as any);
     (wsAdapter.isConnected as jest.Mock).mockReturnValue(true);
 
     const res = await bountyService.updateStatus(5, 'completed');
@@ -153,6 +156,7 @@ describe('bountyService', () => {
       'bounty.status',
       expect.objectContaining({ id: 5, status: 'completed' })
     );
+    spyUpdate.mockRestore();
   });
 
   it('delete returns true when Supabase delete succeeds', async () => {
@@ -161,5 +165,198 @@ describe('bountyService', () => {
     }));
     const ok = await bountyService.delete(10);
     expect(ok).toBe(true);
+  });
+
+  it('search returns empty for blank query', async () => {
+    const res = await bountyService.search('   ');
+    expect(res).toEqual([]);
+  });
+
+  it('search returns flattened bounties when Supabase returns data with profiles', async () => {
+    supabase.from.mockImplementationOnce(() => ({
+      select: jest.fn(() => ({
+        eq: jest.fn(() => ({
+          or: jest.fn(() => ({
+            order: jest.fn(() => ({
+              range: jest.fn(() =>
+                Promise.resolve({
+                  data: [{ id: 7, user_id: 'u7', profiles: { username: 'sam', avatar: 'a' } }],
+                  error: null,
+                })
+              ),
+            })),
+          })),
+        })),
+      })),
+    }));
+
+    const results = await bountyService.search('term');
+    expect(results).toHaveLength(1);
+    expect(results[0].username).toBe('sam');
+    expect(results[0].poster_avatar).toBe('a');
+  });
+
+  it('search falls back and attaches profiles when join missing', async () => {
+    // 1st call: initial select with join -> relationship error
+    supabase.from
+      .mockImplementationOnce(() => ({
+        select: jest.fn(() => ({
+          eq: jest.fn(() => ({
+            or: jest.fn(() => ({
+              order: jest.fn(() => ({
+                range: jest.fn(() =>
+                  Promise.resolve({
+                    data: null,
+                    error: {
+                      message: "Could not find a relationship between 'bounties' and 'profiles'",
+                    },
+                  })
+                ),
+              })),
+            })),
+          })),
+        })),
+      }))
+      // 2nd call: raw bounty fetch (no join)
+      .mockImplementationOnce(() => ({
+        select: jest.fn(() => ({
+          eq: jest.fn(() => ({
+            or: jest.fn(() => ({
+              order: jest.fn(() => ({
+                range: jest.fn(() =>
+                  Promise.resolve({ data: [{ id: 8, poster_id: 'p2' }], error: null })
+                ),
+              })),
+            })),
+          })),
+        })),
+      }))
+      // 3rd call: profiles fetch
+      .mockImplementationOnce(() => ({
+        select: jest.fn(() => ({
+          in: jest.fn(() =>
+            Promise.resolve({ data: [{ id: 'p2', username: 'z', avatar: 'zz' }], error: null })
+          ),
+        })),
+      }));
+
+    const res = await bountyService.search('x');
+    expect(res).toHaveLength(1);
+    expect(res[0].username).toBe('z');
+    expect(res[0].poster_avatar).toBe('zz');
+  });
+
+  it('addAttachmentToBounty falls back to API when Supabase update fails', async () => {
+    const spyGet2 = jest
+      .spyOn(bountyService, 'getById')
+      .mockResolvedValue({ id: 9, attachments_json: JSON.stringify([]) } as any);
+
+    supabase.from.mockImplementationOnce(() => ({
+      update: jest.fn(() => ({
+        eq: jest.fn(() => ({
+          select: jest.fn(() =>
+            Promise.resolve({ data: null, error: { message: 'update failed' } })
+          ),
+        })),
+      })),
+    }));
+
+    const realFetch = global.fetch;
+    // Mock API fallback to succeed
+    (global as any).fetch = jest.fn().mockResolvedValue({ ok: true });
+
+    const ok = await bountyService.addAttachmentToBounty(9, { file: 'new2' });
+    expect((global as any).fetch).toHaveBeenCalled();
+    expect(ok).toBe(true);
+
+    // restore
+    (global as any).fetch = realFetch;
+    spyGet2.mockRestore();
+  });
+
+  it('create inserts via Supabase when possible', async () => {
+    (validateTitle as jest.Mock).mockReturnValue(null);
+    (NetInfo.fetch as jest.Mock).mockResolvedValue({ isConnected: true });
+
+    // 1: rate limit count check
+    supabase.from
+      .mockImplementationOnce(() => ({
+        select: jest.fn(() => ({
+          eq: jest.fn(() => ({ gte: jest.fn(() => Promise.resolve({ count: 0, error: null })) })),
+        })),
+      }))
+      // 2: duplicate check
+      .mockImplementationOnce(() => ({
+        select: jest.fn(() => ({
+          eq: jest.fn(() => ({ gte: jest.fn(() => Promise.resolve({ data: [], error: null })) })),
+        })),
+      }))
+      // 3: profile lookup
+      .mockImplementationOnce(() => ({
+        select: jest.fn(() => ({
+          eq: jest.fn(() => ({
+            maybeSingle: jest.fn(() =>
+              Promise.resolve({ data: { username: 'puser' }, error: null })
+            ),
+          })),
+        })),
+      }))
+      // 4: insert
+      .mockImplementationOnce(() => ({
+        insert: jest.fn(() => ({
+          select: jest.fn(() => ({
+            single: jest.fn(() =>
+              Promise.resolve({ data: { id: 100, title: 'created' }, error: null })
+            ),
+          })),
+        })),
+      }));
+
+    const created = await bountyService.create({
+      title: 'test create',
+      poster_id: 'poster-1',
+    } as any);
+    expect(created).not.toBeNull();
+    expect((created as any).id).toBe(100);
+  });
+
+  it('update returns bounty when Supabase update succeeds', async () => {
+    supabase.from.mockImplementationOnce(() => ({
+      update: jest.fn(() => ({
+        eq: jest.fn(() => ({
+          select: jest.fn(() => ({
+            single: jest.fn(() =>
+              Promise.resolve({ data: { id: 42, title: 'updated' }, error: null })
+            ),
+          })),
+        })),
+      })),
+    }));
+
+    const res = await bountyService.update(42, { title: 'updated' });
+    expect(res).not.toBeNull();
+    expect((res as any).id).toBe(42);
+  });
+
+  it('delete returns false when Supabase delete errors', async () => {
+    supabase.from.mockImplementationOnce(() => ({
+      delete: jest.fn(() => ({
+        eq: jest.fn(() => Promise.resolve({ error: { message: 'boom' } })),
+      })),
+    }));
+    const ok = await bountyService.delete(11);
+    expect(ok).toBe(false);
+  });
+
+  it('updateStatus does not send when websocket is disconnected', async () => {
+    const spyUpdate2 = jest
+      .spyOn(bountyService, 'update')
+      .mockResolvedValue({ id: 15, status: 'in_progress' } as any);
+    (wsAdapter.isConnected as jest.Mock).mockReturnValue(false);
+
+    const res = await bountyService.updateStatus(15, 'in_progress');
+    expect(res).not.toBeNull();
+    expect(wsAdapter.send).not.toHaveBeenCalled();
+    spyUpdate2.mockRestore();
   });
 });
