@@ -751,11 +751,13 @@ export const bountyRequestService = {
       } catch (rpcErr: any) {
         // If the RPC itself is unavailable (e.g. function not yet deployed in this env),
         // fall back to the direct sequential update path.
+        // Limit "not deployed" detection to the specific PostgREST PGRST202 code and its
+        // corresponding message string. Any other error message that happens to contain the
+        // function name (e.g. a permission or validation error) should be re-thrown so the
+        // caller receives the real error rather than silently running the fallback path.
         const isNotFound =
           rpcErr?.code === 'PGRST202' ||
-          (rpcErr?.message || '').includes('Could not find the function') ||
-          (rpcErr?.message || '').includes('rpc.fn_accept_bounty_request') ||
-          (rpcErr?.message || '').includes('fn_accept_bounty_request');
+          (rpcErr?.message || '').includes('Could not find the function');
         const isConflict = (rpcErr as any)?.status === 409;
         const isNotFoundRequest = (rpcErr as any)?.status === 404;
 
@@ -778,7 +780,6 @@ export const bountyRequestService = {
         result = await this.updateStatus(requestId, 'accepted');
 
         if (result) {
-          let bountyTransitioned = false;
           try {
             // Note: the original code also had `.is('accepted_by', null)` here, but that was
             // the root cause of the bug: when the `accepted_by` column was absent from the DB
@@ -797,7 +798,20 @@ export const bountyRequestService = {
               .select();
 
             if (bountyUpdateError) {
+              // A DB error means the request is in `accepted` while the bounty remains `open`.
+              // Roll back the request to `pending` so the state is self-consistent and the
+              // poster can retry the acceptance without manual intervention.
               logger.error('Fallback: failed to transition bounty to in_progress', { requestId, bountyId: result.bounty_id, error: bountyUpdateError });
+              try {
+                await supabase
+                  .from('bounty_requests')
+                  .update({ status: 'pending', updated_at: new Date().toISOString() })
+                  .eq('id', String(requestId))
+                  .eq('status', 'accepted');
+              } catch (rollbackErr) {
+                logger.error('Fallback: rollback of request status also failed', { requestId, error: rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr) });
+              }
+              return null;
             } else if (!updatedRows || updatedRows.length === 0) {
               logger.error('Fallback: bounty already accepted or no longer open', { requestId, bountyId: result.bounty_id });
               await supabase
@@ -807,26 +821,32 @@ export const bountyRequestService = {
                 .eq('status', 'accepted');
               return null;
             } else {
-              bountyTransitioned = true;
+              // Bounty transitioned successfully — reject competing requests.
+              try {
+                await supabase
+                  .from('bounty_requests')
+                  .update({ status: 'rejected', updated_at: new Date().toISOString() })
+                  .eq('bounty_id', String(result.bounty_id))
+                  .neq('id', String(requestId))
+                  .eq('status', 'pending');
+              } catch (rejectErr) {
+                logger.error('Fallback: error rejecting competing requests', { requestId, error: rejectErr instanceof Error ? (rejectErr as Error).message : String(rejectErr) });
+              }
             }
           } catch (statusErr) {
+            // Unexpected exception during the bounty update itself. The request is already
+            // in 'accepted'. Best-effort rollback and return null to let the caller retry.
             logger.error('Fallback: error transitioning bounty', { requestId, error: statusErr instanceof Error ? statusErr.message : String(statusErr) });
-          }
-
-          // Reject other pending requests for this bounty
-          try {
-            await supabase
-              .from('bounty_requests')
-              .update({ status: 'rejected', updated_at: new Date().toISOString() })
-              .eq('bounty_id', String(result.bounty_id))
-              .neq('id', String(requestId))
-              .eq('status', 'pending');
-          } catch (rejectErr) {
-            logger.error('Fallback: error rejecting competing requests', { requestId, error: rejectErr instanceof Error ? (rejectErr as Error).message : String(rejectErr) });
-          }
-
-          if (!bountyTransitioned) {
-            return result; // Return accepted request even if bounty update was uncertain
+            try {
+              await supabase
+                .from('bounty_requests')
+                .update({ status: 'pending', updated_at: new Date().toISOString() })
+                .eq('id', String(requestId))
+                .eq('status', 'accepted');
+            } catch (rollbackErr2) {
+              logger.error('Fallback: rollback after exception also failed', { requestId, error: rollbackErr2 instanceof Error ? rollbackErr2.message : String(rollbackErr2) });
+            }
+            return null;
           }
         }
       }
