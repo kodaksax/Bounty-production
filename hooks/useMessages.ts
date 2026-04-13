@@ -83,7 +83,10 @@ export function useMessages(conversationId: string): UseMessagesResult {
           return;
         } catch (err) {
           setError(err instanceof Error ? err.message : 'Failed to send message (local)');
-          setMessages(prev => prev.filter(m => !m.id.startsWith('temp-')));
+          if (tempMessage) {
+            const tempId = tempMessage.id;
+            setMessages(prev => prev.filter(m => m.id !== tempId));
+          }
           return;
         }
       }

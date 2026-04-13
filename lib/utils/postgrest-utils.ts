@@ -6,11 +6,14 @@
  * like `50%` or `a_b` doesn't create unintended pattern matches.
  */
 export function escapeIlike(input: string): string {
-  return String(input)
-    .replace(/\\/g, '\\\\')
-    .replace(/\"/g, '\\\"')
-    .replace(/%/g, '\\%')
-    .replace(/_/g, '\\_');
+  return (
+    String(input)
+      .replace(/\\/g, '\\\\')
+      // Do not escape double quotes here. Quoting/escaping for PostgREST
+      // textual filters is the responsibility of `quotePostgrestValue` below.
+      .replace(/%/g, '\\%')
+      .replace(/_/g, '\\_')
+  );
 }
 
 /**
