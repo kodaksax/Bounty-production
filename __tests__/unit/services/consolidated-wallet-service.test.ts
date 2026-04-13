@@ -12,7 +12,7 @@ jest.mock('@supabase/supabase-js', () => ({ createClient: jest.fn() }));
 
 jest.mock('../../../services/api/src/config', () => ({
   config: {
-    stripe: { secretKey: 'sk_test_mock_key', platformFeePercent: 5 },
+    stripe: { secretKey: process.env.STRIPE_TEST_KEY, platformFeePercent: 5 },
     supabase: { url: 'https://test.supabase.co', serviceRoleKey: 'test-key' },
   },
 }));

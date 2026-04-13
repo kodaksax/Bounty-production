@@ -208,7 +208,7 @@ export class ReconciliationCronService {
             // both process the same transaction, and a crash after this point cannot cause a
             // double-credit on re-run.  If updateBalance then fails we re-set the flag so
             // the next run will retry.
-            const { error: claimErr, count: claimCount } = await admin
+            const { data: claimData, error: claimErr } = await admin
               .from('wallet_transactions')
               .update({
                 metadata: {
@@ -219,13 +219,14 @@ export class ReconciliationCronService {
               })
               .eq('id', tx.id)
               .filter('metadata->>needs_balance_refund', 'eq', 'true')
-              .select('id', { count: 'exact', head: true });
+              .select('id');
 
             if (claimErr) {
               throw new Error(`Failed to claim refund flag: ${claimErr.message}`);
             }
-            if (!claimCount) {
-              // Another cron run already claimed this transaction; skip.
+
+            // If no rows were returned, the flag was already cleared by another run.
+            if (!claimData || (Array.isArray(claimData) && claimData.length === 0)) {
               logger.info(
                 { txId: tx.id },
                 '[reconciliation] Refund flag already cleared by another run, skipping'
