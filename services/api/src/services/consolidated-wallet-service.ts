@@ -1,7 +1,7 @@
 /**
  * Consolidated Wallet Service
  * Phase 3.1 - Backend consolidation project
- * 
+ *
  * Handles all wallet operations including:
  * - Balance queries
  * - Transaction history
@@ -30,16 +30,12 @@ let supabaseAdmin: SupabaseClient<any> | null = null;
 
 function getSupabaseAdmin(): SupabaseClient<any> {
   if (!supabaseAdmin) {
-    supabaseAdmin = createClient<any>(
-      config.supabase.url,
-      config.supabase.serviceRoleKey,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      }
-    );
+    supabaseAdmin = createClient<any>(config.supabase.url, config.supabase.serviceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
   }
   return supabaseAdmin;
 }
@@ -137,7 +133,7 @@ export interface TransactionsResult {
  */
 async function deriveBalanceFromTransactions(
   admin: SupabaseClient<any>,
-  userId: string,
+  userId: string
 ): Promise<number> {
   const { data: transactions, error } = await admin
     .from('wallet_transactions')
@@ -197,15 +193,26 @@ export async function getBalance(userId: string): Promise<BalanceResult> {
           .from('profiles')
           .update({ balance: derivedBalance, updated_at: new Date().toISOString() })
           .eq('id', userId)
-      ).then(({ error: reconcileErr }: { error: any }) => {
-        if (reconcileErr) {
-          logger.warn({ userId, derivedBalance, err: reconcileErr }, '[WalletService] Failed to reconcile cached balance');
-        } else {
-          logger.info({ userId, derivedBalance }, '[WalletService] Reconciled stale profile balance');
-        }
-      }).catch((err: unknown) => {
-        logger.warn({ userId, derivedBalance, err }, '[WalletService] Failed to reconcile cached balance');
-      });
+      )
+        .then(({ error: reconcileErr }: { error: any }) => {
+          if (reconcileErr) {
+            logger.warn(
+              { userId, derivedBalance, err: reconcileErr },
+              '[WalletService] Failed to reconcile cached balance'
+            );
+          } else {
+            logger.info(
+              { userId, derivedBalance },
+              '[WalletService] Reconciled stale profile balance'
+            );
+          }
+        })
+        .catch((err: unknown) => {
+          logger.warn(
+            { userId, derivedBalance, err },
+            '[WalletService] Failed to reconcile cached balance'
+          );
+        });
     }
   }
 
@@ -228,15 +235,7 @@ export async function getTransactions(
 ): Promise<TransactionsResult> {
   const admin = getSupabaseAdmin();
 
-  const {
-    type,
-    status,
-    bounty_id,
-    start_date,
-    end_date,
-    limit = 50,
-    offset = 0,
-  } = filters;
+  const { type, status, bounty_id, start_date, end_date, limit = 50, offset = 0 } = filters;
 
   // Build query
   let query = admin
@@ -262,9 +261,7 @@ export async function getTransactions(
   }
 
   // Apply sorting and pagination
-  query = query
-    .order('created_at', { ascending: false })
-    .range(offset, offset + limit - 1);
+  query = query.order('created_at', { ascending: false }).range(offset, offset + limit - 1);
 
   const { data: transactions, error, count } = await query;
 
@@ -332,11 +329,14 @@ export async function createDeposit(
     .maybeSingle();
 
   if (existingTx) {
-    logger.warn({
-      paymentIntentId,
-      userId,
-      existingTransactionId: existingTx.id
-    }, '[WalletService] Duplicate deposit detected, returning existing transaction');
+    logger.warn(
+      {
+        paymentIntentId,
+        userId,
+        existingTransactionId: existingTx.id,
+      },
+      '[WalletService] Duplicate deposit detected, returning existing transaction'
+    );
 
     // Return existing transaction - fetch with error handling
     const { data: transaction, error: fetchError } = await admin
@@ -347,10 +347,13 @@ export async function createDeposit(
 
     if (fetchError || !transaction) {
       // If transaction was deleted between checks, log and continue to create new one
-      logger.warn({
-        existingTransactionId: existingTx.id,
-        error: fetchError
-      }, '[WalletService] Existing transaction not found, creating new one');
+      logger.warn(
+        {
+          existingTransactionId: existingTx.id,
+          error: fetchError,
+        },
+        '[WalletService] Existing transaction not found, creating new one'
+      );
     } else {
       return toWalletTransaction(transaction);
     }
@@ -384,7 +387,8 @@ export async function createDeposit(
   // success instead of a 500.
   const applyRow = Array.isArray(applyRes) && applyRes.length ? applyRes[0] : applyRes;
   const applied = !!(applyRow && (applyRow as any).applied);
-  const appliedTxId: string | null = applyRow && (applyRow as any).tx_id ? String((applyRow as any).tx_id) : null;
+  const appliedTxId: string | null =
+    applyRow && (applyRow as any).tx_id ? String((applyRow as any).tx_id) : null;
 
   try {
     const tx = await getTransactionByPaymentIntent(paymentIntentId);
@@ -400,11 +404,17 @@ export async function createDeposit(
 
       if (txById) return toWalletTransaction(txById);
       if (txByIdErr) {
-        logger.warn({ appliedTxId, paymentIntentId, userId, error: txByIdErr }, '[WalletService] Failed to fetch transaction by id after apply_deposit');
+        logger.warn(
+          { appliedTxId, paymentIntentId, userId, error: txByIdErr },
+          '[WalletService] Failed to fetch transaction by id after apply_deposit'
+        );
       }
     }
   } catch (e: any) {
-    logger.warn({ paymentIntentId, userId, error: e instanceof Error ? e.message : String(e) }, '[WalletService] Non-fatal: failed to fetch transaction after apply_deposit');
+    logger.warn(
+      { paymentIntentId, userId, error: e instanceof Error ? e.message : String(e) },
+      '[WalletService] Non-fatal: failed to fetch transaction after apply_deposit'
+    );
   }
 
   // If RPC indicated the deposit was applied (or returned a tx id), return a
@@ -437,26 +447,32 @@ export async function createDeposit(
   try {
     const { data: transaction, error: txError } = await admin
       .from('wallet_transactions')
-      .insert([{
-        user_id: userId,
-        type: 'deposit',
-        amount,
-        description: `Deposit via Stripe`,
-        status: 'completed',
-        stripe_payment_intent_id: paymentIntentId,
-        metadata: {
-          payment_intent_id: paymentIntentId,
-          created_via: 'service_fallback',
-          idempotency_key: effectiveIdempotencyKey,
+      .insert([
+        {
+          user_id: userId,
+          type: 'deposit',
+          amount,
+          description: `Deposit via Stripe`,
+          status: 'completed',
+          stripe_payment_intent_id: paymentIntentId,
+          metadata: {
+            payment_intent_id: paymentIntentId,
+            created_via: 'service_fallback',
+            idempotency_key: effectiveIdempotencyKey,
+          },
         },
-      }])
+      ])
       .select()
       .single();
 
     if (txError) {
-      throw new ExternalServiceError('Supabase', 'Failed to create deposit transaction (fallback)', {
-        error: txError.message,
-      });
+      throw new ExternalServiceError(
+        'Supabase',
+        'Failed to create deposit transaction (fallback)',
+        {
+          error: txError.message,
+        }
+      );
     }
 
     // Update user balance atomically as fallback
@@ -521,26 +537,38 @@ export async function createWithdrawal(
   // Generate deterministic idempotency key from transaction details
   // Note: Use fixed-point representation for amount to ensure consistency
   const amountKey = amount.toFixed(2).replace(/\./g, '');
-  const effectiveIdempotencyKey = idempotencyKey || `withdrawal_${userId}_${amountKey}_${destination.slice(-4)}`;
+  const effectiveIdempotencyKey =
+    idempotencyKey || `withdrawal_${userId}_${amountKey}_${destination.slice(-4)}`;
 
-  // Create pending transaction (balance not yet deducted)
+  // Create pending transaction (balance not yet deducted).
+  // The unique partial index idx_wallet_tx_one_pending_withdrawal prevents
+  // more than one pending withdrawal per user, guarding against race
+  // conditions where the client submits two requests in rapid succession.
   const { data: transaction, error: txError } = await admin
     .from('wallet_transactions')
-    .insert([{
-      user_id: userId,
-      type: 'withdrawal',
-      amount: -amount, // Negative for debit
-      description: `Withdrawal to account ending in ${destination.slice(-4)}`,
-      status: 'pending',
-      stripe_connect_account_id: destination,
-      metadata: {
-        idempotency_key: effectiveIdempotencyKey,
+    .insert([
+      {
+        user_id: userId,
+        type: 'withdrawal',
+        amount: -amount, // Negative for debit
+        description: `Withdrawal to account ending in ${destination.slice(-4)}`,
+        status: 'pending',
+        stripe_connect_account_id: destination,
+        metadata: {
+          idempotency_key: effectiveIdempotencyKey,
+        },
       },
-    }])
+    ])
     .select()
     .single();
 
   if (txError) {
+    // Unique index violation means a withdrawal is already in-flight for this user.
+    if (txError.code === '23505') {
+      throw new ConflictError(
+        'A withdrawal is already in progress. Please wait for it to complete before initiating a new one.'
+      );
+    }
     throw new ExternalServiceError('Supabase', 'Failed to create withdrawal transaction', {
       error: txError.message,
     });
@@ -561,9 +589,8 @@ export async function createWithdrawal(
       },
     };
 
-    const transfer = await withStripeIdempotency(
-      effectiveIdempotencyKey,
-      async (opts: any = {}) => stripe.transfers.create(transferParams, opts)
+    const transfer = await withStripeIdempotency(effectiveIdempotencyKey, async (opts: any = {}) =>
+      stripe.transfers.create(transferParams, opts)
     );
 
     // Update transaction with transfer ID and mark as completed
@@ -581,11 +608,14 @@ export async function createWithdrawal(
       .eq('id', transaction.id);
 
     if (updateError) {
-      logger.error({
-        transactionId: transaction.id,
-        transferId: transfer.id,
-        error: updateError
-      }, '[WalletService] Failed to update transaction with transfer ID');
+      logger.error(
+        {
+          transactionId: transaction.id,
+          transferId: transfer.id,
+          error: updateError,
+        },
+        '[WalletService] Failed to update transaction with transfer ID'
+      );
     }
 
     return toWalletTransaction({
@@ -599,16 +629,16 @@ export async function createWithdrawal(
 
     // Best-effort: mark transaction as failed
     try {
-      await admin
-        .from('wallet_transactions')
-        .update({ status: 'failed' })
-        .eq('id', transaction.id);
+      await admin.from('wallet_transactions').update({ status: 'failed' }).eq('id', transaction.id);
     } catch (txUpdateError) {
-      logger.error({
-        userId,
-        transactionId: transaction.id,
-        error: txUpdateError instanceof Error ? txUpdateError.message : String(txUpdateError),
-      }, '[WalletService] Failed to mark withdrawal transaction as failed');
+      logger.error(
+        {
+          userId,
+          transactionId: transaction.id,
+          error: txUpdateError instanceof Error ? txUpdateError.message : String(txUpdateError),
+        },
+        '[WalletService] Failed to mark withdrawal transaction as failed'
+      );
     }
 
     // Best-effort: refund the balance (rollback)
@@ -617,12 +647,49 @@ export async function createWithdrawal(
       try {
         await updateBalance(userId, amount);
       } catch (rollbackError) {
-        logger.error({
-          userId,
-          transactionId: transaction.id,
-          amount,
-          error: rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
-        }, '[WalletService] CRITICAL: Failed to rollback user balance after withdrawal failure');
+        logger.error(
+          {
+            userId,
+            transactionId: transaction.id,
+            amount,
+            error: rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
+          },
+          '[WalletService] CRITICAL: Failed to rollback user balance after withdrawal failure'
+        );
+
+        // Flag the transaction so the reconciliation cron can detect and restore
+        // the deducted balance automatically. This prevents funds from being
+        // permanently locked if both the Stripe transfer and balance rollback fail.
+        try {
+          const { error: flagError }: { error: any } = (await admin
+            .from('wallet_transactions')
+            .update({
+              metadata: {
+                ...transaction.metadata,
+                needs_balance_refund: true,
+                needs_balance_refund_amount: amount,
+                rollback_failed_at: new Date().toISOString(),
+              },
+            })
+            .eq('id', transaction.id)) as any;
+
+          if (flagError) {
+            logger.error(
+              { userId, transactionId: transaction.id, amount, error: flagError },
+              '[WalletService] CRITICAL: Failed to flag transaction for balance refund - manual intervention required'
+            );
+          }
+        } catch (flagErr) {
+          logger.error(
+            {
+              userId,
+              transactionId: transaction.id,
+              amount,
+              error: flagErr instanceof Error ? flagErr.message : String(flagErr),
+            },
+            '[WalletService] CRITICAL: Failed to flag transaction for balance refund - manual intervention required'
+          );
+        }
       }
     }
 
@@ -670,19 +737,21 @@ export async function createEscrow(
   // Create escrow transaction
   const { data: transaction, error: txError } = await admin
     .from('wallet_transactions')
-    .insert([{
-      user_id: posterId,
-      bounty_id: bountyId,
-      type: 'escrow',
-      amount: -amount, // Negative for debit
-      description: `Escrow for bounty ${bountyId}`,
-      status: 'completed',
-      metadata: {
+    .insert([
+      {
+        user_id: posterId,
         bounty_id: bountyId,
-        escrowed_at: new Date().toISOString(),
-        idempotency_key: effectiveIdempotencyKey,
+        type: 'escrow',
+        amount: -amount, // Negative for debit
+        description: `Escrow for bounty ${bountyId}`,
+        status: 'completed',
+        metadata: {
+          bounty_id: bountyId,
+          escrowed_at: new Date().toISOString(),
+          idempotency_key: effectiveIdempotencyKey,
+        },
       },
-    }])
+    ])
     .select()
     .single();
 
@@ -726,7 +795,9 @@ export async function releaseEscrow(
     .maybeSingle();
 
   if (existingRelease) {
-    throw new ConflictError(`Escrow already ${existingRelease.type === 'release' ? 'released' : 'refunded'} for this bounty`);
+    throw new ConflictError(
+      `Escrow already ${existingRelease.type === 'release' ? 'released' : 'refunded'} for this bounty`
+    );
   }
 
   // Find the escrow transaction
@@ -752,21 +823,23 @@ export async function releaseEscrow(
   // Record release transaction for hunter
   const { data: transaction, error: txError } = await admin
     .from('wallet_transactions')
-    .insert([{
-      user_id: hunterId,
-      bounty_id: bountyId,
-      type: 'release',
-      amount: hunterAmount, // Positive for credit
-      description: `Payment for bounty ${bountyId}`,
-      status: 'completed',
-      metadata: {
+    .insert([
+      {
+        user_id: hunterId,
         bounty_id: bountyId,
-        escrow_transaction_id: escrowTx.id,
-        platform_fee: platformFee,
-        released_at: new Date().toISOString(),
-        idempotency_key: effectiveIdempotencyKey,
+        type: 'release',
+        amount: hunterAmount, // Positive for credit
+        description: `Payment for bounty ${bountyId}`,
+        status: 'completed',
+        metadata: {
+          bounty_id: bountyId,
+          escrow_transaction_id: escrowTx.id,
+          platform_fee: platformFee,
+          released_at: new Date().toISOString(),
+          idempotency_key: effectiveIdempotencyKey,
+        },
       },
-    }])
+    ])
     .select()
     .single();
 
@@ -801,15 +874,19 @@ export async function releaseEscrow(
     if (profile?.stripe_connect_account_id) {
       const transfer = await withStripeIdempotency(
         `tr_${effectiveIdempotencyKey}`,
-        async (opts: any = {}) => stripe.transfers.create({
-          amount: Math.round(hunterAmount * 100),
-          currency: 'usd',
-          destination: profile.stripe_connect_account_id,
-          metadata: {
-            bounty_id: bountyId,
-            transaction_id: transaction.id,
-          },
-        }, opts)
+        async (opts: any = {}) =>
+          stripe.transfers.create(
+            {
+              amount: Math.round(hunterAmount * 100),
+              currency: 'usd',
+              destination: profile.stripe_connect_account_id,
+              metadata: {
+                bounty_id: bountyId,
+                transaction_id: transaction.id,
+              },
+            },
+            opts
+          )
       );
 
       // Update transaction with transfer ID
@@ -819,11 +896,14 @@ export async function releaseEscrow(
         .eq('id', transaction.id);
     }
   } catch (stripeError) {
-    logger.error({
-      error: stripeError,
-      bountyId,
-      hunterId
-    }, '[WalletService] Stripe transfer failed during escrow release');
+    logger.error(
+      {
+        error: stripeError,
+        bountyId,
+        hunterId,
+      },
+      '[WalletService] Stripe transfer failed during escrow release'
+    );
     // We don't throw here as the balance and ledger are already updated
   }
 
@@ -860,7 +940,9 @@ export async function refundEscrow(
     .maybeSingle();
 
   if (existingRelease) {
-    throw new ConflictError(`Escrow already ${existingRelease.type === 'release' ? 'released' : 'refunded'} for this bounty`);
+    throw new ConflictError(
+      `Escrow already ${existingRelease.type === 'release' ? 'released' : 'refunded'} for this bounty`
+    );
   }
 
   // Find the escrow transaction
@@ -881,21 +963,23 @@ export async function refundEscrow(
   // Create refund transaction
   const { data: transaction, error: txError } = await admin
     .from('wallet_transactions')
-    .insert([{
-      user_id: posterId,
-      bounty_id: bountyId,
-      type: 'refund',
-      amount, // Positive for credit
-      description: `Refund for bounty ${bountyId}: ${reason}`,
-      status: 'completed',
-      metadata: {
+    .insert([
+      {
+        user_id: posterId,
         bounty_id: bountyId,
-        escrow_transaction_id: escrowTx.id,
-        reason,
-        refunded_at: new Date().toISOString(),
-        idempotency_key: effectiveIdempotencyKey,
+        type: 'refund',
+        amount, // Positive for credit
+        description: `Refund for bounty ${bountyId}: ${reason}`,
+        status: 'completed',
+        metadata: {
+          bounty_id: bountyId,
+          escrow_transaction_id: escrowTx.id,
+          reason,
+          refunded_at: new Date().toISOString(),
+          idempotency_key: effectiveIdempotencyKey,
+        },
       },
-    }])
+    ])
     .select()
     .single();
 
@@ -996,12 +1080,14 @@ export async function updateBalance(userId: string, amount: number): Promise<voi
           // ConflictError: apply retry policy with backoff
           retries++;
           if (retries >= MAX_RETRIES) {
-            throw new ConflictError('Balance changed during update after multiple retries, please try again');
+            throw new ConflictError(
+              'Balance changed during update after multiple retries, please try again'
+            );
           }
 
           // Wait before retry with reasonable exponential backoff (100ms, 200ms, 400ms)
           const delayMs = Math.min(1000, 100 * Math.pow(2, retries - 1));
-          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          await new Promise(resolve => setTimeout(resolve, delayMs));
         }
       }
     } else {
@@ -1044,13 +1130,15 @@ async function recordPlatformFeeWithClient(
   admin: ReturnType<typeof getSupabaseAdmin>,
   input: PlatformFeeInput
 ): Promise<void> {
-  const { error } = await admin.from('platform_ledger').insert([{
-    bounty_id: input.bountyId,
-    amount: input.amount,
-    fee_type: 'platform_fee',
-    description: input.description ?? `Platform fee for bounty ${input.bountyId}`,
-    metadata: input.metadata ?? {},
-  }]);
+  const { error } = await admin.from('platform_ledger').insert([
+    {
+      bounty_id: input.bountyId,
+      amount: input.amount,
+      fee_type: 'platform_fee',
+      description: input.description ?? `Platform fee for bounty ${input.bountyId}`,
+      metadata: input.metadata ?? {},
+    },
+  ]);
 
   if (error) {
     // Log but do not throw — a fee recording failure should not roll back the hunter payment.

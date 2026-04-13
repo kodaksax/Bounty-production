@@ -1,8 +1,9 @@
-import * as cron from 'node-cron';
 import { createClient } from '@supabase/supabase-js';
+import * as cron from 'node-cron';
+import { backendAnalytics } from './analytics';
+import { updateBalance } from './consolidated-wallet-service';
 const { stripe } = require('./consolidated-payment-service');
 const { logger } = require('./logger');
-import { backendAnalytics } from './analytics';
 
 /**
  * Reconciliation Cron
@@ -30,16 +31,26 @@ export class ReconciliationCronService {
     this.task = cron.schedule(schedule, async () => {
       try {
         await this.runOnce();
-        try { backendAnalytics.trackEvent('system', 'reconciliation_run', { schedule }); } catch (e) { /* ignore */ }
+        try {
+          backendAnalytics.trackEvent('system', 'reconciliation_run', { schedule });
+        } catch (e) {
+          /* ignore */
+        }
       } catch (err) {
         logger.error({ err }, '[reconciliation] Unexpected error during reconciliation run');
       }
     });
 
     // Run immediately once on start
-    this.runOnce().catch((err) => {
+    this.runOnce().catch(err => {
       logger.error({ err }, '[reconciliation] Initial run failed');
-      try { backendAnalytics.trackEvent('system', 'reconciliation_initial_failed', { error: err instanceof Error ? err.message : String(err) }); } catch (e) { /* ignore */ }
+      try {
+        backendAnalytics.trackEvent('system', 'reconciliation_initial_failed', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      } catch (e) {
+        /* ignore */
+      }
     });
   }
 
@@ -60,7 +71,7 @@ export class ReconciliationCronService {
     }
 
     const admin = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { autoRefreshToken: false, persistSession: false }
+      auth: { autoRefreshToken: false, persistSession: false },
     });
 
     // Reconcile Stripe Transfers
@@ -82,16 +93,31 @@ export class ReconciliationCronService {
             const s = transfer.status;
 
             if (s === 'paid' || s === 'succeeded') {
-              await admin.from('wallet_transactions').update({ status: 'completed' }).eq('id', tx.id);
-              logger.info({ txId: tx.id, transferId }, '[reconciliation] Marked transfer transaction completed');
+              await admin
+                .from('wallet_transactions')
+                .update({ status: 'completed' })
+                .eq('id', tx.id);
+              logger.info(
+                { txId: tx.id, transferId },
+                '[reconciliation] Marked transfer transaction completed'
+              );
             } else if (s === 'failed' || s === 'canceled') {
               await admin.from('wallet_transactions').update({ status: 'failed' }).eq('id', tx.id);
-              logger.warn({ txId: tx.id, transferId, stripeStatus: s }, '[reconciliation] Marked transfer transaction failed');
+              logger.warn(
+                { txId: tx.id, transferId, stripeStatus: s },
+                '[reconciliation] Marked transfer transaction failed'
+              );
             } else {
-              logger.debug({ txId: tx.id, transferId, stripeStatus: s }, '[reconciliation] Transfer in non-terminal state');
+              logger.debug(
+                { txId: tx.id, transferId, stripeStatus: s },
+                '[reconciliation] Transfer in non-terminal state'
+              );
             }
           } catch (err) {
-            logger.error({ err, txId: tx.id }, '[reconciliation] Error reconciling transfer transaction');
+            logger.error(
+              { err, txId: tx.id },
+              '[reconciliation] Error reconciling transfer transaction'
+            );
           }
         }
       }
@@ -109,7 +135,10 @@ export class ReconciliationCronService {
         .limit(200);
 
       if (piErr) {
-        logger.error({ error: piErr }, '[reconciliation] Failed to fetch payment intent transactions');
+        logger.error(
+          { error: piErr },
+          '[reconciliation] Failed to fetch payment intent transactions'
+        );
       } else if (pendingIntents && pendingIntents.length) {
         for (const tx of pendingIntents) {
           try {
@@ -118,21 +147,133 @@ export class ReconciliationCronService {
             const s = pi.status;
 
             if (s === 'succeeded') {
-              await admin.from('wallet_transactions').update({ status: 'completed' }).eq('id', tx.id);
-              logger.info({ txId: tx.id, paymentIntent: piId }, '[reconciliation] Marked payment intent transaction completed');
+              await admin
+                .from('wallet_transactions')
+                .update({ status: 'completed' })
+                .eq('id', tx.id);
+              logger.info(
+                { txId: tx.id, paymentIntent: piId },
+                '[reconciliation] Marked payment intent transaction completed'
+              );
             } else if (s === 'canceled' || s === 'requires_payment_method') {
               await admin.from('wallet_transactions').update({ status: 'failed' }).eq('id', tx.id);
-              logger.warn({ txId: tx.id, paymentIntent: piId, stripeStatus: s }, '[reconciliation] Marked payment intent transaction failed');
+              logger.warn(
+                { txId: tx.id, paymentIntent: piId, stripeStatus: s },
+                '[reconciliation] Marked payment intent transaction failed'
+              );
             } else {
-              logger.debug({ txId: tx.id, paymentIntent: piId, stripeStatus: s }, '[reconciliation] PaymentIntent in non-terminal state');
+              logger.debug(
+                { txId: tx.id, paymentIntent: piId, stripeStatus: s },
+                '[reconciliation] PaymentIntent in non-terminal state'
+              );
             }
           } catch (err) {
-            logger.error({ err, txId: tx.id }, '[reconciliation] Error reconciling payment intent transaction');
+            logger.error(
+              { err, txId: tx.id },
+              '[reconciliation] Error reconciling payment intent transaction'
+            );
           }
         }
       }
     } catch (err) {
       logger.error({ err }, '[reconciliation] Error during payment intent reconciliation loop');
+    }
+
+    // Restore balance for failed withdrawals where the rollback itself failed.
+    // These are flagged with needs_balance_refund=true in their metadata by the
+    // wallet service when updateBalance throws during the catch block.
+    try {
+      const { data: orphanedTxs, error: orphanErr } = await admin
+        .from('wallet_transactions')
+        .select('*')
+        .eq('type', 'withdrawal')
+        .eq('status', 'failed')
+        .filter('metadata->>needs_balance_refund', 'eq', 'true')
+        .limit(100);
+
+      if (orphanErr) {
+        logger.error(
+          { error: orphanErr },
+          '[reconciliation] Failed to fetch failed withdrawals needing balance refund'
+        );
+      } else if (orphanedTxs && orphanedTxs.length) {
+        for (const tx of orphanedTxs) {
+          try {
+            const refundAmount: number =
+              tx.metadata?.needs_balance_refund_amount ?? Math.abs(tx.amount);
+            const appliedAt = new Date().toISOString();
+
+            // Clear the flag FIRST (conditional on it still being true) before touching
+            // the balance. This acts as an optimistic lock: two concurrent cron runs cannot
+            // both process the same transaction, and a crash after this point cannot cause a
+            // double-credit on re-run.  If updateBalance then fails we re-set the flag so
+            // the next run will retry.
+            const { data: claimData, error: claimErr } = await admin
+              .from('wallet_transactions')
+              .update({
+                metadata: {
+                  ...tx.metadata,
+                  needs_balance_refund: false,
+                  balance_refund_applied_at: appliedAt,
+                },
+              })
+              .eq('id', tx.id)
+              .filter('metadata->>needs_balance_refund', 'eq', 'true')
+              .select('id');
+
+            if (claimErr) {
+              throw new Error(`Failed to claim refund flag: ${claimErr.message}`);
+            }
+
+            // If no rows were returned, the flag was already cleared by another run.
+            if (!claimData || (Array.isArray(claimData) && claimData.length === 0)) {
+              logger.info(
+                { txId: tx.id },
+                '[reconciliation] Refund flag already cleared by another run, skipping'
+              );
+              continue;
+            }
+
+            try {
+              await updateBalance(tx.user_id, refundAmount);
+            } catch (balanceErr) {
+              // Balance update failed — re-set the flag so the next run will retry.
+              await admin
+                .from('wallet_transactions')
+                .update({
+                  metadata: {
+                    ...tx.metadata,
+                    needs_balance_refund: true,
+                    balance_refund_applied_at: null,
+                  },
+                })
+                .eq('id', tx.id);
+              throw balanceErr;
+            }
+
+            logger.info(
+              { txId: tx.id, userId: tx.user_id, amount: refundAmount },
+              '[reconciliation] Restored user balance for failed withdrawal rollback'
+            );
+            try {
+              backendAnalytics.trackEvent('system', 'reconciliation_balance_refund', {
+                txId: tx.id,
+                userId: tx.user_id,
+                amount: refundAmount,
+              });
+            } catch (e) {
+              /* ignore */
+            }
+          } catch (err) {
+            logger.error(
+              { err, txId: tx.id },
+              '[reconciliation] Error restoring balance for failed withdrawal'
+            );
+          }
+        }
+      }
+    } catch (err) {
+      logger.error({ err }, '[reconciliation] Error during balance refund recovery loop');
     }
   }
 }

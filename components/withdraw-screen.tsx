@@ -1,15 +1,25 @@
-import { MaterialIcons } from "@expo/vector-icons";
+import { MaterialIcons } from '@expo/vector-icons';
 import { BrandingLogo } from 'components/ui/branding-logo';
-import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Linking,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import { useAuthContext } from '../hooks/use-auth-context';
 import { useEmailVerification } from '../hooks/use-email-verification';
 import { API_BASE_URL } from '../lib/config/api';
+import { MIN_WITHDRAWAL_AMOUNT } from '../lib/constants';
 import { useStripe } from '../lib/stripe-context';
 import { theme } from '../lib/theme';
 import { useWallet } from '../lib/wallet-context';
 import { EmailVerificationBanner } from './ui/email-verification-banner';
-
 
 interface BankAccount {
   id: string;
@@ -26,11 +36,11 @@ interface WithdrawScreenProps {
 }
 
 export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenProps) {
-  const [selectedMethod, setSelectedMethod] = useState<string>("");
+  const [selectedMethod, setSelectedMethod] = useState<string>('');
   const [withdrawalAmount, setWithdrawalAmount] = useState<number>(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [hasConnectedAccount, setHasConnectedAccount] = useState(false);
-  const [connectedAccountId, setConnectedAccountId] = useState<string>("");
+  const [connectedAccountId, setConnectedAccountId] = useState<string>('');
   const [hasBankAccount, setHasBankAccount] = useState(false);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [isOnboarding, setIsOnboarding] = useState(false);
@@ -43,6 +53,10 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
 
   // Use prop balance if provided, otherwise use wallet context balance
   const balance = propBalance ?? walletBalance;
+
+  // Stable idempotency key — fixed for the lifetime of this withdrawal attempt
+  // so retries reuse the same key.  Rotated after a successful withdrawal.
+  const idempotencyKeyRef = useRef(`withdraw_${session?.user?.id ?? 'u'}_${Date.now()}`);
 
   // Set default selected method when payment methods load
   useEffect(() => {
@@ -74,8 +88,8 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        }
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
 
       if (response.ok) {
@@ -98,8 +112,8 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        }
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
 
       if (response.ok) {
@@ -127,12 +141,12 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
           returnUrl: 'bountyexpo://wallet/connect/return',
-          refreshUrl: 'bountyexpo://wallet/connect/refresh'
-        })
+          refreshUrl: 'bountyexpo://wallet/connect/refresh',
+        }),
       });
 
       if (!response.ok) {
@@ -164,18 +178,25 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
       // Check for common Stripe Connect issues
       if (error.message?.includes('account already exists')) {
         errorTitle = 'Account Already Exists';
-        errorMessage = 'You already have a Stripe Connect account. Please contact support if you need to update your banking details.';
-      } else if (error.message?.includes('not configured') || error.message?.includes('STRIPE_SECRET_KEY')) {
+        errorMessage =
+          'You already have a Stripe Connect account. Please contact support if you need to update your banking details.';
+      } else if (
+        error.message?.includes('not configured') ||
+        error.message?.includes('STRIPE_SECRET_KEY')
+      ) {
         errorTitle = 'Service Unavailable';
-        errorMessage = 'Stripe Connect is not configured on this server. Please contact support to enable withdrawals.';
+        errorMessage =
+          'Stripe Connect is not configured on this server. Please contact support to enable withdrawals.';
       } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
         errorTitle = 'Network Error';
-        errorMessage = 'Unable to connect to the payment service. Please check your internet connection and try again.';
+        errorMessage =
+          'Unable to connect to the payment service. Please check your internet connection and try again.';
       }
 
       Alert.alert(
         errorTitle,
-        errorMessage + '\n\nIf this problem persists, please contact support at support@bountyexpo.com',
+        errorMessage +
+          '\n\nIf this problem persists, please contact support at support@bountyexpo.com',
         [{ text: 'OK' }]
       );
     } finally {
@@ -199,6 +220,14 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
       return;
     }
 
+    if (withdrawalAmount < MIN_WITHDRAWAL_AMOUNT) {
+      Alert.alert(
+        'Minimum Withdrawal',
+        `The minimum withdrawal amount is $${MIN_WITHDRAWAL_AMOUNT.toFixed(2)}.`
+      );
+      return;
+    }
+
     if (withdrawalAmount > balance) {
       Alert.alert('Insufficient Balance', 'You cannot withdraw more than your current balance.');
       return;
@@ -209,9 +238,7 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
       Alert.alert(
         'Bank Account Required',
         'To withdraw funds, you need to add a bank account to your Stripe Connect account.\n\nThis ensures fast and secure withdrawals.',
-        [
-          { text: 'OK' }
-        ]
+        [{ text: 'OK' }]
       );
       return;
     }
@@ -222,7 +249,7 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
         'To withdraw funds, you need to:\n\n1. Complete Stripe Connect onboarding\n2. Add a bank account\n\nThis ensures fast and secure withdrawals.',
         [
           { text: 'Get Started', onPress: handleConnectOnboarding },
-          { text: 'Cancel', style: 'cancel' }
+          { text: 'Cancel', style: 'cancel' },
         ]
       );
       return;
@@ -236,17 +263,20 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
       }
 
       if (hasBankAccount) {
+        const idempotencyKey = idempotencyKeyRef.current;
+
         // Use Stripe Connect transfer to bank account
         const response = await fetch(`${API_BASE_URL}/connect/transfer`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
+            Authorization: `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({
             amount: withdrawalAmount,
-            currency: 'usd'
-          })
+            currency: 'usd',
+            idempotencyKey,
+          }),
         });
 
         if (!response.ok) {
@@ -259,18 +289,23 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
         // Refresh wallet to get updated balance from API
         await refresh();
 
+        // Rotate key so the next withdrawal gets a fresh idempotency key.
+        idempotencyKeyRef.current = `withdraw_${session?.user?.id ?? 'u'}_${Date.now()}`;
+
         // Show success message
         Alert.alert(
           'Withdrawal Initiated',
-          message || `Transfer of $${withdrawalAmount.toFixed(2)} has been initiated to your bank account.\n\nEstimated arrival: 1-2 business days\n\nTransfer ID: ${transferId}`,
+          message ||
+            `Transfer of $${withdrawalAmount.toFixed(2)} has been initiated to your bank account.\n\nEstimated arrival: 1-2 business days\n\nTransfer ID: ${transferId}`,
           [{ text: 'OK', onPress: onBack }]
         );
       } else {
         // Use payment method (card refund - requires original payment)
         const success = await withdraw(withdrawalAmount, {
-          method: paymentMethods.find(pm => pm.id === selectedMethod)?.card.brand.toUpperCase() || 'Card',
+          method:
+            paymentMethods.find(pm => pm.id === selectedMethod)?.card.brand.toUpperCase() || 'Card',
           title: 'Withdrawal to Payment Method',
-          status: 'completed'
+          status: 'completed',
         });
 
         if (success) {
@@ -285,11 +320,9 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
       }
     } catch (error: any) {
       console.error('Withdrawal error:', error);
-      Alert.alert(
-        'Error',
-        error.message || 'Failed to process withdrawal. Please try again.',
-        [{ text: 'OK' }]
-      );
+      Alert.alert('Error', error.message || 'Failed to process withdrawal. Please try again.', [
+        { text: 'OK' },
+      ]);
     } finally {
       setIsProcessing(false);
     }
@@ -298,9 +331,7 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
   return (
     <View style={styles.container}>
       {/* Email Verification Banner */}
-      {!isEmailVerified && (
-        <EmailVerificationBanner email={userEmail} />
-      )}
+      {!isEmailVerified && <EmailVerificationBanner email={userEmail} />}
 
       {/* Header */}
       <View style={styles.header}>
@@ -332,7 +363,7 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
         <TextInput
           style={styles.amountInput}
           keyboardType="numeric"
-          value={withdrawalAmount ? withdrawalAmount.toString() : ""}
+          value={withdrawalAmount ? withdrawalAmount.toString() : ''}
           onChangeText={text => {
             const val = parseFloat(text);
             setWithdrawalAmount(Math.min(balance, Math.max(0, isNaN(val) ? 0 : val)));
@@ -357,7 +388,8 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.methodName}>
-                    Primary bank account {bankAccounts[0]?.last4 ? `(****${bankAccounts[0].last4})` : ''}
+                    Primary bank account{' '}
+                    {bankAccounts[0]?.last4 ? `(****${bankAccounts[0].last4})` : ''}
                   </Text>
                   <Text style={styles.methodDetails}>
                     {bankAccounts[0]?.verified ? 'Verified • ' : 'Pending verification • '}
@@ -365,8 +397,9 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
                   </Text>
                   {(bankAccounts?.length ?? 0) > 1 && (
                     <Text style={styles.methodDetails}>
-                      {`+ ${(bankAccounts?.length ?? 0) - 1} additional linked bank ${((bankAccounts?.length ?? 0) - 1) === 1 ? 'account' : 'accounts'
-                        } in Stripe. Payouts go to your default account.`}
+                      {`+ ${(bankAccounts?.length ?? 0) - 1} additional linked bank ${
+                        (bankAccounts?.length ?? 0) - 1 === 1 ? 'account' : 'accounts'
+                      } in Stripe. Payouts go to your default account.`}
                     </Text>
                   )}
                 </View>
@@ -428,11 +461,13 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.methodName}>No Payment Methods</Text>
-                <Text style={styles.methodDetails}>Add a payment method first to withdraw funds</Text>
+                <Text style={styles.methodDetails}>
+                  Add a payment method first to withdraw funds
+                </Text>
               </View>
             </View>
           ) : (
-            paymentMethods.map((method) => (
+            paymentMethods.map(method => (
               <TouchableOpacity
                 key={method.id}
                 style={[
@@ -449,11 +484,14 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
                     {method.card.brand.toUpperCase()} •••• {method.card.last4}
                   </Text>
                   <Text style={styles.methodDetails}>
-                    Expires {method.card.exp_month.toString().padStart(2, '0')}/{method.card.exp_year}
+                    Expires {method.card.exp_month.toString().padStart(2, '0')}/
+                    {method.card.exp_year}
                   </Text>
                 </View>
                 <View style={styles.methodCheckCircle}>
-                  {selectedMethod === method.id && <MaterialIcons name="check" size={16} color="#34d399" />}
+                  {selectedMethod === method.id && (
+                    <MaterialIcons name="check" size={16} color="#34d399" />
+                  )}
                 </View>
               </TouchableOpacity>
             ))
@@ -467,8 +505,7 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
             <View style={{ flex: 1 }}>
               <Text style={styles.methodName}>Processing Times</Text>
               <Text style={styles.methodDetails}>
-                • Bank transfers: 1-3 business days{'\n'}
-                • Card refunds: 5-10 business days{'\n'}
+                • Bank transfers: 1-3 business days{'\n'}• Card refunds: 5-10 business days{'\n'}
                 Withdrawals are processed securely through Stripe
               </Text>
             </View>
@@ -492,15 +529,12 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
               <Text style={styles.bottomButtonText}>Processing...</Text>
             </View>
           ) : (
-            <Text style={styles.bottomButtonText}>
-              Withdraw ${withdrawalAmount.toFixed(2)}
-            </Text>
+            <Text style={styles.bottomButtonText}>Withdraw ${withdrawalAmount.toFixed(2)}</Text>
           )}
         </TouchableOpacity>
       </View>
     </View>
   );
-
 }
 
 const styles = StyleSheet.create({
