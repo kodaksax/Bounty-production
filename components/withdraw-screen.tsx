@@ -15,6 +15,7 @@ import {
 import { useAuthContext } from '../hooks/use-auth-context';
 import { useEmailVerification } from '../hooks/use-email-verification';
 import { API_BASE_URL } from '../lib/config/api';
+import { CONNECT_REFRESH_URL, CONNECT_RETURN_URL } from '../lib/config/app';
 import { MIN_WITHDRAWAL_AMOUNT } from '../lib/constants';
 import { useStripe } from '../lib/stripe-context';
 import { theme } from '../lib/theme';
@@ -144,8 +145,8 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
           Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          returnUrl: 'bountyexpo://wallet/connect/return',
-          refreshUrl: 'bountyexpo://wallet/connect/refresh',
+          returnUrl: CONNECT_RETURN_URL,
+          refreshUrl: CONNECT_REFRESH_URL,
         }),
       });
 
