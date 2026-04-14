@@ -1149,7 +1149,7 @@ export async function withdrawBalance(userId: string, amount: number): Promise<v
       );
       throw new ExternalServiceError(
         'Supabase',
-        'Secure withdrawal is temporarily unavailable. Please retry after wallet migrations are fully deployed.',
+        'Withdrawal is temporarily unavailable. Please try again in a few moments or contact support if the issue persists.',
         { error: rpcError.message }
       );
     }
