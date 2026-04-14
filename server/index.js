@@ -1089,13 +1089,19 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
               `[Webhook] Transfer ${transfer.id} permanently failed after ${newRetryCount} attempts for user ${tx.user_id}. Manual review required.`
             );
             // Notify the user
-            await supabase.from('notifications').insert({
+            const { error: notifError } = await supabase.from('notifications').insert({
               user_id: tx.user_id,
               type: 'payment',
               title: 'Withdrawal Failed',
               body: 'Your withdrawal could not be completed after multiple attempts. Please contact support.',
               data: { transferId: transfer.id, retry_count: newRetryCount },
             });
+            if (notifError) {
+              console.error('[Webhook] Failed to insert permanently_failed notification', {
+                userId: tx.user_id,
+                error: notifError,
+              });
+            }
           } else {
             // Refund the amount back to user's wallet for failed withdrawal
             // Use atomic RPC if available, with fallback
@@ -1139,7 +1145,7 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
             }
 
             console.log(
-              `[Webhook] Refunded $${refundAmount} to user ${tx.user_id} for failed transfer (retry ${newRetryCount}/${MAX_TRANSFER_RETRIES - 1})`
+              `[Webhook] Refunded $${refundAmount} to user ${tx.user_id} for failed transfer (retry ${newRetryCount}/${MAX_TRANSFER_RETRIES})`
             );
           }
         }

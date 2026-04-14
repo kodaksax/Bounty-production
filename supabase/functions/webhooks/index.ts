@@ -458,7 +458,7 @@ Deno.serve(async (req: Request) => {
           .select('metadata')
           .eq('stripe_transfer_id', transfer.id)
           .maybeSingle();
-        const currentRetries = (existingTx?.metadata as any)?.retry_count ?? 0;
+        const currentRetries = (existingTx?.metadata as { retry_count?: number } | null)?.retry_count ?? 0;
         const newRetryCount = currentRetries + 1;
         const permanentlyFailed = newRetryCount >= MAX_TRANSFER_RETRIES;
 
@@ -520,7 +520,7 @@ Deno.serve(async (req: Request) => {
               }
             }
             console.log(
-              `[webhooks] Refunded $${refundAmount} to user ${txUserId} for failed transfer (retry ${newRetryCount}/${MAX_TRANSFER_RETRIES - 1})`
+              `[webhooks] Refunded $${refundAmount} to user ${txUserId} for failed transfer (retry ${newRetryCount}/${MAX_TRANSFER_RETRIES})`
             );
           }
         }
