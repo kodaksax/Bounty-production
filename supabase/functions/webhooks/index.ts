@@ -574,11 +574,21 @@ Deno.serve(async (req: Request) => {
         // Look up the original wallet transaction to find the poster
         let disputeUserId: string | null = null
         if (disputePaymentIntentId) {
-          const { data: origTx } = await supabase
+          const { data: origTx, error: origTxError } = await supabase
             .from('wallet_transactions')
             .select('user_id')
             .eq('stripe_payment_intent_id', disputePaymentIntentId)
             .maybeSingle()
+
+          if (origTxError) {
+            console.error('[webhooks] charge.dispute.created: failed to look up originating wallet_transaction', {
+              dispute_id: dispute.id,
+              stripe_payment_intent_id: disputePaymentIntentId,
+              error: origTxError,
+            })
+            throw origTxError
+          }
+
           disputeUserId = (origTx as { user_id: string } | null)?.user_id ?? null
         }
 
@@ -678,73 +688,137 @@ Deno.serve(async (req: Request) => {
           throw resolveError
         }
 
-        const closedUserId = (resolvedDispute as { initiator_id: string } | null)?.initiator_id ?? null
+        let closedUserId = (resolvedDispute as { initiator_id: string } | null)?.initiator_id ?? null
 
         if (!closedUserId) {
-          // Fall back to wallet_transaction lookup if the dispute row was never created (rare)
-          console.warn(`[webhooks] charge.dispute.closed: no bounty_disputes row for dispute ${closedDispute.id} — skipping balance/wallet ops`)
-          break
+          // Fallback: look up the user via wallet_transactions when no bounty_disputes row
+          // exists (e.g. charge.dispute.created was never processed, or row was deleted).
+          const { data: closedWalletTx, error: closedWalletTxError } = await supabase
+            .from('wallet_transactions')
+            .select('user_id')
+            .eq('stripe_payment_intent_id', closedPaymentIntentId ?? '')
+            .maybeSingle()
+
+          if (closedWalletTxError) {
+            console.error('[webhooks] charge.dispute.closed: failed wallet_transactions fallback lookup', {
+              dispute_id: closedDispute.id,
+              error: closedWalletTxError,
+            })
+            throw closedWalletTxError
+          }
+
+          closedUserId = (closedWalletTx as Pick<WalletTransaction, 'user_id'> | null)?.user_id ?? null
+
+          if (!closedUserId) {
+            console.warn(`[webhooks] charge.dispute.closed: no bounty_disputes or wallet_transactions row for dispute ${closedDispute.id} — skipping balance/wallet ops`)
+            break
+          }
+
+          console.warn(`[webhooks] charge.dispute.closed: recovered user ${closedUserId} from wallet_transactions for dispute ${closedDispute.id}`)
         }
 
         if (disputeWon) {
-          // Platform won — unfreeze wallet
-          const { error: unfreezeError } = await supabase
-            .from('profiles')
-            .update({ balance_frozen: false })
-            .eq('id', closedUserId)
+          // Platform won — only unfreeze the wallet when there are no other open Stripe disputes
+          const { count: remainingOpenCount, error: remainingOpenError } = await supabase
+            .from('bounty_disputes')
+            .select('id', { count: 'exact', head: true })
+            .eq('initiator_id', closedUserId)
+            .eq('status', 'stripe_dispute')
 
-          if (unfreezeError) {
-            console.error('[webhooks] charge.dispute.closed (won): failed to unfreeze wallet', {
+          if (remainingOpenError) {
+            console.error('[webhooks] charge.dispute.closed (won): failed to check remaining open disputes', {
               user_id: closedUserId,
-              error: unfreezeError,
+              error: remainingOpenError,
             })
-            throw unfreezeError
+            throw remainingOpenError
           }
-          console.log(`[webhooks] charge.dispute.closed (won): wallet unfrozen for user ${closedUserId}`)
+
+          if ((remainingOpenCount ?? 0) === 0) {
+            const { error: unfreezeError } = await supabase
+              .from('profiles')
+              .update({ balance_frozen: false })
+              .eq('id', closedUserId)
+
+            if (unfreezeError) {
+              console.error('[webhooks] charge.dispute.closed (won): failed to unfreeze wallet', {
+                user_id: closedUserId,
+                error: unfreezeError,
+              })
+              throw unfreezeError
+            }
+            console.log(`[webhooks] charge.dispute.closed (won): wallet unfrozen for user ${closedUserId}`)
+          } else {
+            console.log(`[webhooks] charge.dispute.closed (won): wallet remains frozen for user ${closedUserId} due to ${remainingOpenCount} remaining open Stripe dispute(s)`)
+          }
         } else {
           // Platform lost — deduct the disputed amount.
           // balance_frozen remains true (set during charge.dispute.created) intentionally:
           // the account should stay restricted until a manual admin review clears it.
-          // Insert a negative wallet_transaction of type 'dispute_loss'
-          const { error: txError } = await supabase.from('wallet_transactions').insert({
-            user_id: closedUserId,
-            type: 'dispute_loss',
-            amount: -closedAmountDollars,
-            description: `Chargeback dispute lost (${closedDispute.id})`,
-            status: 'completed',
-            metadata: {
+
+          // Guard this path for webhook retries/timeouts by checking whether we've
+          // already recorded the dispute-loss transaction for this Stripe dispute.
+          const { data: existingDisputeLossTx, error: existingDisputeLossTxError } = await supabase
+            .from('wallet_transactions')
+            .select('id')
+            .eq('user_id', closedUserId)
+            .eq('type', 'dispute_loss')
+            .eq('status', 'completed')
+            .eq('metadata->>stripe_dispute_id', closedDispute.id)
+            .maybeSingle()
+
+          if (existingDisputeLossTxError) {
+            console.error('[webhooks] charge.dispute.closed (lost): failed to check existing dispute_loss transaction', {
+              user_id: closedUserId,
               stripe_dispute_id: closedDispute.id,
-              stripe_payment_intent_id: closedPaymentIntentId,
-            },
-          })
-
-          if (txError) {
-            console.error('[webhooks] charge.dispute.closed (lost): failed to insert dispute_loss transaction', {
-              user_id: closedUserId,
-              error: txError,
+              error: existingDisputeLossTxError,
             })
-            throw txError
+            throw existingDisputeLossTxError
           }
 
-          // Deduct from profiles.balance (non-negative constraint will guard against going below 0)
-          const { error: balanceError } = await supabase.rpc('update_balance', {
-            p_user_id: closedUserId,
-            p_amount: -closedAmountDollars,
-          })
-
-          if (balanceError) {
-            // This can happen when the user's balance is already 0 (e.g. funds were
-            // withdrawn before the freeze took effect). Log a clear diagnostic message
-            // so support can investigate and apply a manual correction if needed.
-            console.error('[webhooks] charge.dispute.closed (lost): balance deduction failed — user may have insufficient funds to cover the dispute. Manual review required.', {
+          if (existingDisputeLossTx) {
+            console.log(`[webhooks] charge.dispute.closed (lost): dispute_loss already recorded for dispute ${closedDispute.id}; skipping duplicate deduction for user ${closedUserId}`)
+          } else {
+            // Insert a negative wallet_transaction of type 'dispute_loss'
+            const { error: txError } = await supabase.from('wallet_transactions').insert({
               user_id: closedUserId,
+              type: 'dispute_loss',
               amount: -closedAmountDollars,
-              error: balanceError,
+              description: `Chargeback dispute lost (${closedDispute.id})`,
+              status: 'completed',
+              metadata: {
+                stripe_dispute_id: closedDispute.id,
+                stripe_payment_intent_id: closedPaymentIntentId,
+              },
             })
-            throw balanceError
-          }
 
-          console.log(`[webhooks] charge.dispute.closed (lost): deducted $${closedAmountDollars} from user ${closedUserId}`)
+            if (txError) {
+              console.error('[webhooks] charge.dispute.closed (lost): failed to insert dispute_loss transaction', {
+                user_id: closedUserId,
+                error: txError,
+              })
+              throw txError
+            }
+
+            // Deduct from profiles.balance (non-negative constraint will guard against going below 0)
+            const { error: balanceError } = await supabase.rpc('update_balance', {
+              p_user_id: closedUserId,
+              p_amount: -closedAmountDollars,
+            })
+
+            if (balanceError) {
+              // This can happen when the user's balance is already 0 (e.g. funds were
+              // withdrawn before the freeze took effect). Log a clear diagnostic message
+              // so support can investigate and apply a manual correction if needed.
+              console.error('[webhooks] charge.dispute.closed (lost): balance deduction failed — user may have insufficient funds to cover the dispute. Manual review required.', {
+                user_id: closedUserId,
+                amount: -closedAmountDollars,
+                error: balanceError,
+              })
+              throw balanceError
+            }
+
+            console.log(`[webhooks] charge.dispute.closed (lost): deducted $${closedAmountDollars} from user ${closedUserId}`)
+          }
         }
 
         // Notify the poster of the outcome
