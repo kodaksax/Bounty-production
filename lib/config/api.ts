@@ -95,7 +95,7 @@ try {
  * it falls back to the generic API base URL so developers can still test locally.
  */
 export function getFinancialApiUrl(): string {
-  if (supabaseFunctionsUrl) return supabaseFunctionsUrl
+  if (supabaseFunctionsUrl) return supabaseFunctionsUrl;
 
   // Warn in dev: financial routes should always target Edge Functions in
   // staging/production to avoid silent dual-surface routing.
@@ -112,7 +112,7 @@ export function getFinancialApiUrl(): string {
   } catch {}
 
   // Local-dev fallback only — not used in staging/production.
-  return getApiBaseUrl()
+  return getApiBaseUrl();
 }
 
 // Pre-resolved constant for modules that prefer a simple import.
