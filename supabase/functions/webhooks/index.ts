@@ -653,27 +653,80 @@ Deno.serve(async (req: Request) => {
           break;
         }
 
-        // Upsert into bounty_disputes (idempotent via stripe_dispute_id unique index)
-        const { error: upsertDisputeError } = await supabase.from('bounty_disputes').upsert(
-          {
-            initiator_id: disputeUserId,
-            reason: `Stripe chargeback dispute opened (${dispute.id})`,
-            status: 'stripe_dispute',
-            stripe_dispute_id: dispute.id,
-            stripe_payment_intent_id: disputePaymentIntentId,
-            // 'cancellation' is the closest available dispute_stage value for a Stripe
-            // chargeback, which arrives outside the normal in-app dispute flow.
-            dispute_stage: 'cancellation',
-          },
-          { onConflict: 'stripe_dispute_id' }
-        );
+        // Insert or update bounty_disputes for this Stripe dispute.
+        // Avoid using Supabase/PostgREST `upsert` with `onConflict` because the
+        // underlying index is a partial unique index (WHERE stripe_dispute_id IS NOT NULL)
+        // which PostgREST cannot express in its generated ON CONFLICT clause.
+        const disputeRow = {
+          initiator_id: disputeUserId,
+          reason: `Stripe chargeback dispute opened (${dispute.id})`,
+          status: 'stripe_dispute',
+          stripe_dispute_id: dispute.id,
+          stripe_payment_intent_id: disputePaymentIntentId,
+          // 'cancellation' is the closest available dispute_stage value for a Stripe
+          // chargeback, which arrives outside the normal in-app dispute flow.
+          dispute_stage: 'cancellation',
+        } as any;
 
-        if (upsertDisputeError) {
-          console.error('[webhooks] charge.dispute.created: failed to upsert bounty_disputes', {
+        // First try to find an existing row by stripe_dispute_id
+        const { data: existingDispute, error: selectDisputeError } = await supabase
+          .from('bounty_disputes')
+          .select('id')
+          .eq('stripe_dispute_id', dispute.id)
+          .maybeSingle();
+
+        if (selectDisputeError) {
+          console.error('[webhooks] charge.dispute.created: failed to query bounty_disputes', {
             dispute_id: dispute.id,
-            error: upsertDisputeError,
+            error: selectDisputeError,
           });
-          throw upsertDisputeError;
+          throw selectDisputeError;
+        }
+
+        if (existingDispute && (existingDispute as any).id) {
+          const { error: updateErr } = await supabase
+            .from('bounty_disputes')
+            .update(disputeRow)
+            .eq('id', (existingDispute as any).id);
+
+          if (updateErr) {
+            console.error('[webhooks] charge.dispute.created: failed to update bounty_disputes', {
+              dispute_id: dispute.id,
+              error: updateErr,
+            });
+            throw updateErr;
+          }
+        } else {
+          // No existing row; try to insert. If an insert race causes a unique violation,
+          // fall back to updating by stripe_dispute_id.
+          const { error: insertErr } = await supabase.from('bounty_disputes').insert(disputeRow);
+
+          if (insertErr) {
+            console.warn(
+              '[webhooks] charge.dispute.created: insert failed, attempting update fallback',
+              {
+                dispute_id: dispute.id,
+                error: insertErr,
+              }
+            );
+
+            const { error: updateFallbackErr } = await supabase
+              .from('bounty_disputes')
+              .update(disputeRow)
+              .eq('stripe_dispute_id', dispute.id);
+
+            if (updateFallbackErr) {
+              console.error(
+                '[webhooks] charge.dispute.created: failed to insert or update bounty_disputes',
+                {
+                  dispute_id: dispute.id,
+                  insert_error: insertErr,
+                  update_error: updateFallbackErr,
+                }
+              );
+              throw updateFallbackErr;
+            }
+          }
         }
 
         // Freeze the poster's wallet so they cannot withdraw disputed funds
@@ -812,10 +865,15 @@ Deno.serve(async (req: Request) => {
           remainingOpenCountNumber = Number(remainingOpenCount ?? 0);
 
           if (remainingOpenCountNumber === 0) {
-            const { error: unfreezeError } = await supabase
-              .from('profiles')
-              .update({ balance_frozen: false })
-              .eq('id', closedUserId);
+            // Atomically unfreeze the profile only when there are no remaining
+            // open Stripe disputes. Perform this in the DB via an RPC so the
+            // check+update is executed server-side (avoids a race between the
+            // count check and the update when concurrent dispute.created
+            // events arrive).
+            const { data: unfreezeRes, error: unfreezeError } = await supabase.rpc(
+              'unfreeze_profile_if_no_open_disputes',
+              { p_user_id: closedUserId }
+            );
 
             if (unfreezeError) {
               console.error('[webhooks] charge.dispute.closed (won): failed to unfreeze wallet', {
@@ -824,10 +882,25 @@ Deno.serve(async (req: Request) => {
               });
               throw unfreezeError;
             }
-            walletActuallyUnfrozen = true;
-            console.log(
-              `[webhooks] charge.dispute.closed (won): wallet unfrozen for user ${closedUserId}`
+
+            // Normalize RPC result to boolean. Depending on the RPC signature
+            // Supabase may return an array or a scalar — be defensive.
+            walletActuallyUnfrozen = Boolean(
+              unfreezeRes &&
+              (Array.isArray(unfreezeRes)
+                ? unfreezeRes[0] === true || Object.values(unfreezeRes[0] as any).includes(true)
+                : unfreezeRes === true)
             );
+
+            if (walletActuallyUnfrozen) {
+              console.log(
+                `[webhooks] charge.dispute.closed (won): wallet unfrozen for user ${closedUserId}`
+              );
+            } else {
+              console.log(
+                `[webhooks] charge.dispute.closed (won): wallet remains frozen for user ${closedUserId} (RPC reported no change)`
+              );
+            }
           } else {
             console.log(
               `[webhooks] charge.dispute.closed (won): wallet remains frozen for user ${closedUserId} due to ${remainingOpenCountNumber} remaining open Stripe dispute(s)`
