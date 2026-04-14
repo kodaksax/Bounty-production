@@ -29,7 +29,10 @@ CREATE OR REPLACE FUNCTION public.apply_dispute_loss_transaction(
   description text,
   status text,
   metadata jsonb
-) LANGUAGE plpgsql SECURITY DEFINER AS $$
+) LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 DECLARE
   v_existing_id uuid;
   v_inserted_id uuid;

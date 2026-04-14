@@ -805,17 +805,32 @@ Deno.serve(async (req: Request) => {
         if (!closedUserId) {
           // Fallback: look up the user via wallet_transactions when no bounty_disputes row
           // exists (e.g. charge.dispute.created was never processed, or row was deleted).
-          const { data: closedWalletTx, error: closedWalletTxError } = await supabase
-            .from('wallet_transactions')
-            .select('user_id')
-            .eq('stripe_payment_intent_id', closedPaymentIntentId ?? '')
-            .maybeSingle();
+          // Prefer lookup by PaymentIntent ID; if that's not available (legacy charge),
+          // fall back to the Stripe charge ID.
+          let closedWalletTx: { user_id?: string } | null = null;
+          let closedWalletTxError: any = null;
+
+          if (closedPaymentIntentId) {
+            ({ data: closedWalletTx, error: closedWalletTxError } = await supabase
+              .from('wallet_transactions')
+              .select('user_id')
+              .eq('stripe_payment_intent_id', closedPaymentIntentId)
+              .maybeSingle());
+          } else if ((closedDispute.charge as string | undefined) != null) {
+            ({ data: closedWalletTx, error: closedWalletTxError } = await supabase
+              .from('wallet_transactions')
+              .select('user_id')
+              .eq('stripe_charge_id', closedDispute.charge as string)
+              .maybeSingle());
+          }
 
           if (closedWalletTxError) {
             console.error(
               '[webhooks] charge.dispute.closed: failed wallet_transactions fallback lookup',
               {
                 dispute_id: closedDispute.id,
+                stripe_payment_intent_id: closedPaymentIntentId ?? null,
+                stripe_charge_id: closedDispute.charge ?? null,
                 error: closedWalletTxError,
               }
             );
