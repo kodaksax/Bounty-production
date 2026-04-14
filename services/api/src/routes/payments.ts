@@ -128,6 +128,9 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
   fastify.post('/payments/create-payment-intent', {
     preHandler: authMiddleware
   }, async (request: AuthenticatedRequest, reply) => {
+    // DEPRECATED: This Fastify route mirrors the canonical Supabase Edge Function.
+    // See docs/SERVER_CONSOLIDATION.md for the migration guide.
+    reply.header('X-Deprecated', 'true');
     let idempotencyKey: string | undefined;
     try {
       const body = createPaymentIntentSchema.parse(request.body);
@@ -222,6 +225,9 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
   fastify.post('/payments/create-setup-intent', {
     preHandler: authMiddleware
   }, async (request: AuthenticatedRequest, reply) => {
+    // DEPRECATED: This Fastify route mirrors the canonical Supabase Edge Function.
+    // See docs/SERVER_CONSOLIDATION.md for the migration guide.
+    reply.header('X-Deprecated', 'true');
     try {
       const { usage = 'off_session' } = request.body as {
         usage?: 'on_session' | 'off_session';
@@ -278,6 +284,9 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
   fastify.get('/payments/methods', {
     preHandler: authMiddleware
   }, async (request: AuthenticatedRequest, reply) => {
+    // DEPRECATED: This Fastify route mirrors the canonical Supabase Edge Function.
+    // See docs/SERVER_CONSOLIDATION.md for the migration guide.
+    reply.header('X-Deprecated', 'true');
     try {
       if (!request.userId) {
         return reply.code(401).send({ error: 'Unauthorized' });
@@ -347,6 +356,9 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
   fastify.delete('/payments/methods/:paymentMethodId', {
     preHandler: authMiddleware
   }, async (request: AuthenticatedRequest, reply) => {
+    // DEPRECATED: This Fastify route mirrors the canonical Supabase Edge Function.
+    // See docs/SERVER_CONSOLIDATION.md for the migration guide.
+    reply.header('X-Deprecated', 'true');
     try {
       const { paymentMethodId } = request.params as { paymentMethodId: string };
 
@@ -383,6 +395,9 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
   fastify.post('/payments/confirm', {
     preHandler: authMiddleware
   }, async (request: AuthenticatedRequest, reply) => {
+    // DEPRECATED: This Fastify route mirrors the canonical Supabase Edge Function.
+    // See docs/SERVER_CONSOLIDATION.md for the migration guide.
+    reply.header('X-Deprecated', 'true');
     try {
       const { paymentIntentId } = request.body as {
         paymentIntentId: string;

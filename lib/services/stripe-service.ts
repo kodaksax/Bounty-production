@@ -1,7 +1,7 @@
 
 // Stripe API types
 import Constants from 'expo-constants';
-import { API_BASE_URL } from '../config/api';
+import { API_BASE_URL, FINANCIAL_API_BASE_URL } from '../config/api';
 import { API_TIMEOUTS } from '../config/network';
 import { supabase } from '../supabase';
 import { logger } from '../utils/error-logger';
@@ -29,7 +29,7 @@ import { performanceService } from './performance-service';
  *
  * When the Supabase client is not fully configured (e.g. in dev/test where a
  * stub client is used and `.functions` is unavailable), this safely falls
- * back to the legacy REST path under `${API_BASE_URL}`.
+ * back to the legacy REST path under `${FINANCIAL_API_BASE_URL}`.
  */
 interface InvokePaymentsOptions {
   method?: string;
@@ -99,6 +99,15 @@ async function fetchEdgeFunction<T>(
       try { parsedBody = JSON.parse(responseText); } catch { /* non-JSON */ }
     }
 
+    if (response.headers.get('X-Deprecated') === 'true') {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[API] Received X-Deprecated header on ${method} ${url} — this server surface is deprecated. ` +
+        'Please ensure EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL is set so requests ' +
+        'route to the Supabase Edge Function.'
+      );
+    }
+
     if (!response.ok) {
       const status = response.status;
       const errorMsgFromBody = (parsedBody && (parsedBody.error || parsedBody.message)) || responseText;
@@ -120,7 +129,7 @@ async function invokePayments<T>(
   subPath: string,
   options: InvokePaymentsOptions = {}
 ): Promise<T> {
-  const url = `${API_BASE_URL}/${subPath}`;
+  const url = `${FINANCIAL_API_BASE_URL}/${subPath}`;
   const method = options.method ?? 'POST';
 
   // ── Preferred path: direct fetch with explicit auth headers ─────────────────

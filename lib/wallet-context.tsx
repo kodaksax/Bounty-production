@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { config } from './config';
-import { API_BASE_URL } from './config/api';
+import { API_BASE_URL, FINANCIAL_API_BASE_URL } from './config/api';
 import { API_TIMEOUTS } from './config/network';
 import { bountyService } from './services/bounty-service';
 import { paymentService } from './services/payment-service';
@@ -141,7 +141,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
 
       // Fetch balance from API with timeout and retry
-      const balanceResponse = await fetchWithTimeout(`${API_BASE_URL}/wallet/balance`, {
+      const balanceResponse = await fetchWithTimeout(`${FINANCIAL_API_BASE_URL}/wallet/balance`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
@@ -150,6 +150,14 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         timeout: API_TIMEOUTS.DEFAULT,
         retries: 2,
       });
+
+      if (balanceResponse.headers?.get?.('X-Deprecated') === 'true') {
+        console.warn(
+          '[API] Received X-Deprecated header on GET /wallet/balance — this server surface is deprecated. ' +
+          'Please ensure EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL is set so requests ' +
+          'route to the Supabase Edge Function.'
+        );
+      }
 
       if (balanceResponse.ok && mountedRef.current) {
         const balanceData = await balanceResponse.json();
@@ -194,7 +202,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
 
       // Fetch transactions from API with timeout and retry
-      const txResponse = await fetchWithTimeout(`${API_BASE_URL}/wallet/transactions?limit=100`, {
+      const txResponse = await fetchWithTimeout(`${FINANCIAL_API_BASE_URL}/wallet/transactions?limit=100`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
@@ -203,6 +211,14 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         timeout: API_TIMEOUTS.DEFAULT,
         retries: 2,
       });
+
+      if (txResponse.headers?.get?.('X-Deprecated') === 'true') {
+        console.warn(
+          '[API] Received X-Deprecated header on GET /wallet/transactions — this server surface is deprecated. ' +
+          'Please ensure EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL is set so requests ' +
+          'route to the Supabase Edge Function.'
+        );
+      }
 
       // Transaction types that represent outflow (money leaving the user's wallet)
       const OUTFLOW_TYPES = ['escrow', 'withdrawal', 'bounty_posted'];
