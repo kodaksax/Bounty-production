@@ -31,10 +31,9 @@ type VerifyStatus = 'loading' | 'success' | 'pending' | 'error';
 export default function ConnectReturnScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { session } = useAuthContext();
+  const { session, isLoading: authLoading } = useAuthContext();
 
   const [status, setStatus] = useState<VerifyStatus>('loading');
-  const [onboarded, setOnboarded] = useState(false);
 
   const verifyOnboarding = useCallback(async () => {
     const token = session?.access_token;
@@ -59,7 +58,6 @@ export default function ConnectReturnScreen() {
 
       const data: { onboarded?: boolean; chargesEnabled?: boolean; payoutsEnabled?: boolean } = await res.json();
       const isOnboarded = !!(data.onboarded ?? (data.chargesEnabled && data.payoutsEnabled));
-      setOnboarded(isOnboarded);
       setStatus(isOnboarded ? 'success' : 'pending');
     } catch (err) {
       console.error('[ConnectReturn] Verification error:', err);
@@ -67,9 +65,12 @@ export default function ConnectReturnScreen() {
     }
   }, [session?.access_token]);
 
+  // Wait for auth to finish hydrating before calling the API.
+  // This prevents a false 'error' state when session is transiently undefined.
   useEffect(() => {
+    if (authLoading) return;
     verifyOnboarding();
-  }, [verifyOnboarding]);
+  }, [authLoading, verifyOnboarding]);
 
   const handleGoToWallet = () => {
     try { markInitialNavigationDone(); } catch { /* ignore */ }
