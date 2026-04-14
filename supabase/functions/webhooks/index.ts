@@ -203,6 +203,106 @@ Deno.serve(async (req: Request) => {
             `[webhooks] apply_deposit no-op (already processed) for intent ${paymentIntent.id}`
           );
         }
+
+        // Enqueue a push notification regardless of whether apply_deposit was a
+        // no-op — Stripe may retry after a partial failure (e.g. the function
+        // crashed after the DB write but before the outbox insert). The upsert on
+        // stripe_payment_intent_id ensures exactly one outbox row per intent.
+        try {
+          const { data: profileRow, error: balanceErr } = await supabase
+            .from('profiles')
+            .select('balance')
+            .eq('id', userId)
+            .maybeSingle();
+
+          if (balanceErr) {
+            console.error('[webhooks] Failed to fetch balance for notification', balanceErr);
+          }
+
+          const rawBalance = profileRow?.balance;
+          const parsedBalance = rawBalance == null ? null : Number(rawBalance);
+          const newBalance: number | null =
+            parsedBalance !== null && Number.isFinite(parsedBalance) ? parsedBalance : null;
+          const amountFormatted = amountDollars.toFixed(2);
+
+          // Perform a safe insert for the outbox row. The DB enforces
+          // uniqueness via a partial unique index on
+          // stripe_payment_intent_id (WHERE stripe_payment_intent_id IS NOT NULL).
+          // PostgREST/Supabase `upsert` cannot express the index predicate, so
+          // use select/insert with a fallback select on unique violation to
+          // avoid silent failures on webhook retries.
+          const { data: existingOutbox, error: selectErr } = await supabase
+            .from('notifications_outbox')
+            .select('id')
+            .eq('stripe_payment_intent_id', paymentIntent.id)
+            .maybeSingle();
+
+          if (selectErr) {
+            console.error(
+              '[webhooks] Failed to query notifications_outbox for existing intent',
+              selectErr
+            );
+          }
+
+          if (existingOutbox && (existingOutbox as any).id) {
+            console.log(
+              `[webhooks] Push notification outbox row already exists for intent ${paymentIntent.id}, outbox_id=${(existingOutbox as any).id}`
+            );
+          } else {
+            const { data: inserted, error: insertErr } = await supabase
+              .from('notifications_outbox')
+              .insert({
+                stripe_payment_intent_id: paymentIntent.id,
+                recipients: [userId],
+                title: 'Deposit Successful',
+                body: `Your deposit of $${amountFormatted} has been credited to your wallet.`,
+                data: { type: 'balance_update', newBalance },
+              })
+              .select('id')
+              .maybeSingle();
+
+            if (insertErr) {
+              console.warn(
+                '[webhooks] notifications_outbox insert failed, attempting select fallback',
+                insertErr
+              );
+
+              // Race condition: another worker may have inserted the row.
+              const { data: recheck, error: recheckErr } = await supabase
+                .from('notifications_outbox')
+                .select('id')
+                .eq('stripe_payment_intent_id', paymentIntent.id)
+                .maybeSingle();
+
+              if (recheckErr) {
+                console.error(
+                  '[webhooks] Failed to re-query notifications_outbox after insert failure',
+                  recheckErr
+                );
+              } else if (recheck && (recheck as any).id) {
+                console.log(
+                  `[webhooks] Push notification outbox row exists after concurrent insert for intent ${paymentIntent.id}, outbox_id=${(recheck as any).id}`
+                );
+              } else {
+                console.error(
+                  '[webhooks] notifications_outbox insert failed and no existing row found',
+                  insertErr
+                );
+              }
+            } else if (inserted && (inserted as any).id) {
+              console.log(
+                `[webhooks] Push notification enqueued for user ${userId}, outbox_id=${(inserted as any).id}`
+              );
+            } else {
+              console.log(
+                `[webhooks] notifications_outbox insert returned no row for intent ${paymentIntent.id}`
+              );
+            }
+          }
+        } catch (notifErr) {
+          // Notification failure must not affect the webhook response
+          console.error('[webhooks] Unexpected error enqueuing deposit notification', notifErr);
+        }
         break;
       }
 
