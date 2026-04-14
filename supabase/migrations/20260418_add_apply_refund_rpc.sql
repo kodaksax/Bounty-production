@@ -18,20 +18,20 @@
 --     (added in 20260417_add_idempotency_guards.sql)
 
 CREATE OR REPLACE FUNCTION public.apply_refund(
-  p_user_id         UUID,
-  p_amount          NUMERIC,        -- negative value; e.g. -10.00 reverses a $10 deposit
+  p_user_id          UUID,
+  p_amount           NUMERIC, -- negative value; e.g. -10.00 reverses a $10 deposit
   p_stripe_refund_id TEXT,
   p_stripe_charge_id TEXT,
-  p_description     TEXT    DEFAULT 'Payment refunded',
-  p_metadata        JSONB   DEFAULT '{}'::jsonb
-) RETURNS TABLE (applied boolean, tx_id UUID) AS $$
+  p_description      TEXT  DEFAULT 'Payment refunded',
+  p_metadata         JSONB DEFAULT '{}'::jsonb
+) RETURNS TABLE (applied BOOLEAN, tx_id UUID) AS $$
 DECLARE
   v_tx_id       UUID;
   v_new_balance NUMERIC;
 BEGIN
-  -- Attempt to insert the refund transaction.  If a row with the same
-  -- stripe_refund_id already exists (partial unique index) the ON CONFLICT
-  -- clause silently suppresses the insert and v_tx_id stays NULL.
+  -- Attempt to insert the refund transaction. If a row with the same
+  -- stripe_refund_id already exists (partial unique index), ON CONFLICT
+  -- suppresses the insert and v_tx_id stays NULL.
   INSERT INTO public.wallet_transactions (
     user_id,
     type,
@@ -60,39 +60,68 @@ BEGIN
   RETURNING id INTO v_tx_id;
 
   IF v_tx_id IS NOT NULL THEN
-    -- Row was freshly inserted; update the balance atomically in the same
-    -- transaction so neither operation can be committed without the other.
+    -- Fresh insert; apply balance change in same transaction.
     UPDATE public.profiles
-    SET    balance    = COALESCE(balance, 0) + p_amount,
-           updated_at = NOW()
-    WHERE  id = p_user_id
+    SET balance = COALESCE(balance, 0) + p_amount,
+        updated_at = NOW()
+    WHERE id = p_user_id
     RETURNING balance INTO v_new_balance;
 
     IF NOT FOUND THEN
       RAISE EXCEPTION 'Profile not found for user %', p_user_id;
     END IF;
 
-    -- Mirror the non-negative guard enforced by the update_balance RPC.
+    -- Guard against negative resulting balance.
     IF v_new_balance < 0 THEN
       RAISE EXCEPTION 'Insufficient funds: new balance would be %', v_new_balance
         USING ERRCODE = '23514';
     END IF;
 
-    RETURN QUERY SELECT true, v_tx_id;
+    RETURN QUERY SELECT TRUE, v_tx_id;
   ELSE
-    -- Duplicate refund ID detected; return applied=false so the caller can
-    -- log the no-op without attempting a second balance update.
-    RETURN QUERY SELECT false, NULL::UUID;
+    -- Existing refund_id found. If it was previously failed, upgrade it
+    -- to completed and apply balance change now.
+    UPDATE public.wallet_transactions
+    SET amount = p_amount,
+        description = p_description,
+        status = 'completed',
+        stripe_charge_id = p_stripe_charge_id,
+        metadata = p_metadata,
+        updated_at = NOW()
+    WHERE stripe_refund_id = p_stripe_refund_id
+      AND status = 'failed'
+    RETURNING id INTO v_tx_id;
+
+    IF v_tx_id IS NOT NULL THEN
+      UPDATE public.profiles
+      SET balance = COALESCE(balance, 0) + p_amount,
+          updated_at = NOW()
+      WHERE id = p_user_id
+      RETURNING balance INTO v_new_balance;
+
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'Profile not found for user %', p_user_id;
+      END IF;
+
+      IF v_new_balance < 0 THEN
+        RAISE EXCEPTION 'Insufficient funds: new balance would be %', v_new_balance
+          USING ERRCODE = '23514';
+      END IF;
+
+      RETURN QUERY SELECT TRUE, v_tx_id;
+    END IF;
+
+    -- True duplicate (already completed elsewhere).
+    RETURN QUERY SELECT FALSE, NULL::UUID;
   END IF;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 GRANT EXECUTE ON FUNCTION public.apply_refund(UUID, NUMERIC, TEXT, TEXT, TEXT, JSONB)
   TO authenticated;
+
 GRANT EXECUTE ON FUNCTION public.apply_refund(UUID, NUMERIC, TEXT, TEXT, TEXT, JSONB)
   TO service_role;
 
 COMMENT ON FUNCTION public.apply_refund(UUID, NUMERIC, TEXT, TEXT, TEXT, JSONB) IS
-  'Atomically inserts a refund wallet_transaction and decrements profiles.balance; '
-  'idempotent by stripe_refund_id. Returns (applied=true, tx_id) on first call, '
-  '(applied=false, NULL) on duplicate Stripe webhook retries.';
+'Atomically inserts a refund wallet_transaction and decrements profiles.balance; idempotent by stripe_refund_id. Returns (applied=true, tx_id) on first call, (applied=false, NULL) on duplicate Stripe webhook retries.';

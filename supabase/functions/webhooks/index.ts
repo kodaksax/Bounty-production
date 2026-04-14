@@ -645,13 +645,19 @@ Deno.serve(async (req: Request) => {
             const { error: insertErr } = await supabase.from('notifications').insert(notifRow);
 
             if (insertErr) {
-              // Insert may fail due to a concurrent insert by a retry; try update fallback
-              const { error: updateFallbackErr } = await supabase
+              // Insert may fail due to a concurrent insert by a retry; try update fallback.
+              // Use `.select().maybeSingle()` so we can detect whether any row was
+              // actually updated. If no row was affected, treat this as an error
+              // so the webhook delivery is retried instead of silently dropping
+              // the notification.
+              const { data: updatedNotif, error: updateFallbackErr } = await supabase
                 .from('notifications')
                 .update(notifRow)
                 .eq('user_id', paidProfile.id)
                 .eq('type', 'payment')
-                .eq('stripe_payout_id', payout.id);
+                .eq('stripe_payout_id', payout.id)
+                .select()
+                .maybeSingle();
 
               if (updateFallbackErr) {
                 console.error('[webhooks] Failed to insert payout.paid notification', {
@@ -660,6 +666,15 @@ Deno.serve(async (req: Request) => {
                   update_error: updateFallbackErr,
                 });
                 throw updateFallbackErr;
+              }
+
+              if (!updatedNotif) {
+                console.error(
+                  '[webhooks] Failed to insert or update payout.paid notification (no rows affected)',
+                  { profileId: paidProfile.id, insert_error: insertErr }
+                );
+                // Throw to let Stripe retry — we don't want to silently lose the notification
+                throw new Error('Failed to insert or update payout.paid notification');
               }
 
               console.log(
@@ -715,12 +730,14 @@ Deno.serve(async (req: Request) => {
             const { error: insertErr } = await supabase.from('notifications').insert(notifRow);
 
             if (insertErr) {
-              const { error: updateFallbackErr } = await supabase
+              const { data: updatedNotif, error: updateFallbackErr } = await supabase
                 .from('notifications')
                 .update(notifRow)
                 .eq('user_id', failedProfile.id)
                 .eq('type', 'payment')
-                .eq('stripe_payout_id', payout.id);
+                .eq('stripe_payout_id', payout.id)
+                .select()
+                .maybeSingle();
 
               if (updateFallbackErr) {
                 console.error('[webhooks] Failed to insert payout.failed notification', {
@@ -729,6 +746,14 @@ Deno.serve(async (req: Request) => {
                   update_error: updateFallbackErr,
                 });
                 throw updateFallbackErr;
+              }
+
+              if (!updatedNotif) {
+                console.error(
+                  '[webhooks] Failed to insert or update payout.failed notification (no rows affected)',
+                  { profileId: failedProfile.id, insert_error: insertErr }
+                );
+                throw new Error('Failed to insert or update payout.failed notification');
               }
 
               console.log(
