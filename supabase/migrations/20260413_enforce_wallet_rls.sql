@@ -53,12 +53,14 @@ CREATE POLICY "wallet_transactions_insert_deny"
 -- Transactions are immutable from the client.
 CREATE POLICY "wallet_transactions_update_deny"
   ON public.wallet_transactions
+  AS RESTRICTIVE
   FOR UPDATE
   USING (false);
 
 -- Transactions must not be deleted by clients.
 CREATE POLICY "wallet_transactions_delete_deny"
   ON public.wallet_transactions
+  AS RESTRICTIVE
   FOR DELETE
   USING (false);
 
@@ -73,6 +75,7 @@ DROP POLICY IF EXISTS "bounty_disputes_delete_deny" ON public.bounty_disputes;
 
 CREATE POLICY "bounty_disputes_delete_deny"
   ON public.bounty_disputes
+  AS RESTRICTIVE
   FOR DELETE
   USING (false);
 
@@ -89,11 +92,13 @@ DROP POLICY IF EXISTS "dispute_evidence_delete_deny" ON public.dispute_evidence;
 -- Evidence is immutable once submitted; only the service role may modify evidence records.
 CREATE POLICY "dispute_evidence_update_deny"
   ON public.dispute_evidence
+  AS RESTRICTIVE
   FOR UPDATE
   USING (false);
 
 CREATE POLICY "dispute_evidence_delete_deny"
   ON public.dispute_evidence
+  AS RESTRICTIVE
   FOR DELETE
   USING (false);
 
@@ -110,6 +115,7 @@ DROP POLICY IF EXISTS "stripe_events_deny_all_clients" ON public.stripe_events;
 -- The service role (webhooks Edge Function) bypasses RLS.
 CREATE POLICY "stripe_events_deny_all_clients"
   ON public.stripe_events
+  AS RESTRICTIVE
   FOR ALL
   USING (false)
   WITH CHECK (false);

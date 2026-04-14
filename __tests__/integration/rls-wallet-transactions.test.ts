@@ -142,14 +142,9 @@ describe('RLS policies — wallet_transactions', () => {
 
     it('Unauthenticated client cannot read wallet_transactions', async () => {
       const { createClient } = await import('@supabase/supabase-js');
-      const anonClient = createClient(
-        process.env.SUPABASE_URL!,
-        process.env.SUPABASE_ANON_KEY!,
-      );
+      const anonClient = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!);
       // No sign-in — anon role
-      const { data, error } = await anonClient
-        .from('wallet_transactions')
-        .select('id');
+      const { data, error } = await anonClient.from('wallet_transactions').select('id');
 
       expect(error).toBeNull();
       expect(data).toHaveLength(0);
@@ -256,7 +251,56 @@ describe('RLS policies — wallet_transactions', () => {
         },
       ];
 
-      expect(policies).toMatchSnapshot();
+      expect(policies).toEqual([
+        {
+          table: 'wallet_transactions',
+          operation: 'SELECT',
+          rule: 'user_id = auth.uid()',
+          allowedBy: 'authenticated',
+        },
+        {
+          table: 'wallet_transactions',
+          operation: 'INSERT',
+          rule: 'false (deny)',
+          allowedBy: 'service_role only',
+        },
+        {
+          table: 'wallet_transactions',
+          operation: 'UPDATE',
+          rule: 'false (deny)',
+          allowedBy: 'service_role only',
+        },
+        {
+          table: 'wallet_transactions',
+          operation: 'DELETE',
+          rule: 'false (deny)',
+          allowedBy: 'service_role only',
+        },
+        {
+          table: 'stripe_events',
+          operation: 'ALL',
+          rule: 'false (deny)',
+          allowedBy: 'service_role only',
+        },
+        {
+          table: 'bounty_disputes',
+          operation: 'DELETE',
+          rule: 'false (deny)',
+          allowedBy: 'service_role only',
+        },
+        {
+          table: 'dispute_evidence',
+          operation: 'UPDATE',
+          rule: 'false (deny)',
+          allowedBy: 'service_role only',
+        },
+        {
+          table: 'dispute_evidence',
+          operation: 'DELETE',
+          rule: 'false (deny)',
+          allowedBy: 'service_role only',
+        },
+      ]);
     });
   }
 });
