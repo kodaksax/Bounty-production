@@ -71,22 +71,27 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
 
     // Register fallback routes that return 501
     fastify.post('/payments/create-payment-intent', async (request, reply) => {
+      reply.header('X-Deprecated', 'true');
       return reply.code(501).send({ error: 'Stripe not configured on this server' });
     });
 
     fastify.post('/payments/create-setup-intent', async (request, reply) => {
+      reply.header('X-Deprecated', 'true');
       return reply.code(501).send({ error: 'Stripe not configured on this server' });
     });
 
     fastify.get('/payments/methods', async (request, reply) => {
+      reply.header('X-Deprecated', 'true');
       return reply.code(501).send({ error: 'Stripe not configured on this server' });
     });
 
     fastify.delete('/payments/methods/:paymentMethodId', async (request, reply) => {
+      reply.header('X-Deprecated', 'true');
       return reply.code(501).send({ error: 'Stripe not configured on this server' });
     });
 
     fastify.post('/payments/confirm', async (request, reply) => {
+      reply.header('X-Deprecated', 'true');
       return reply.code(501).send({ error: 'Stripe not configured on this server' });
     });
 

@@ -27,8 +27,11 @@ different data sources or different fee schedules.
 
 ## Canonical Endpoints
 
-All `/wallet/*` and `/payments/*` routes now have canonical implementations as
-Supabase Edge Functions:
+The following **mirrored** routes (those that exist on more than one server surface)
+have canonical implementations as Supabase Edge Functions. Note that several
+Fastify-only `/wallet/*` routes (`/wallet/escrow`, `/wallet/release`,
+`/wallet/refund`) have **no** Edge Function equivalent and are not part of
+this migration — see the table in the next section.
 
 | Route | Canonical Edge Function | Function Directory |
 |---|---|---|

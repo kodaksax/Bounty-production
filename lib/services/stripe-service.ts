@@ -29,7 +29,9 @@ import { performanceService } from './performance-service';
  *
  * When the Supabase client is not fully configured (e.g. in dev/test where a
  * stub client is used and `.functions` is unavailable), this safely falls
- * back to the legacy REST path under `${FINANCIAL_API_BASE_URL}`.
+ * back to a direct fetch against `${FINANCIAL_API_BASE_URL}`. In local/dev
+ * setups where no Supabase URL is configured, that base URL may point to the
+ * legacy local server; otherwise it remains the configured financial API base.
  */
 interface InvokePaymentsOptions {
   method?: string;

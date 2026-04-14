@@ -1403,7 +1403,8 @@ app.post('/connect/transfer', paymentLimiter, authenticateUser, async (req, res)
 // GET /wallet/balance
 // Returns the user's current wallet balance
 // DEPRECATED: This Express route mirrors the canonical Supabase Edge Function.
-// Set EXPO_PUBLIC_SUPABASE_URL so the mobile client routes here automatically.
+// Setting EXPO_PUBLIC_SUPABASE_URL routes the mobile client to Supabase Edge
+// Functions (derived as <SUPABASE_URL>/functions/v1), not to this handler.
 // See docs/SERVER_CONSOLIDATION.md for the migration guide.
 app.get('/wallet/balance', apiLimiter, authenticateUser, async (req, res) => {
   res.set('X-Deprecated', 'true');

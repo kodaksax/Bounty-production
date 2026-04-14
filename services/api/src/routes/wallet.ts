@@ -169,6 +169,9 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
       preHandler: authMiddleware,
     },
     async (request: AuthenticatedRequest, reply) => {
+      // DEPRECATED: This Fastify route mirrors the canonical Supabase Edge Function.
+      // See docs/SERVER_CONSOLIDATION.md for the migration guide.
+      reply.header('X-Deprecated', 'true');
       let idempotencyKey: string | undefined;
       try {
         const body = depositSchema.parse(request.body);
