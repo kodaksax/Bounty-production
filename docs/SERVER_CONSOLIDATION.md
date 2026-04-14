@@ -8,17 +8,17 @@ Function path that clients must use going forward.
 
 Three server surfaces currently expose identical or near-identical financial routes:
 
-| Route | Express (`server/index.js`) | Fastify (`services/api/`) | Edge Function (`supabase/functions/`) |
-|---|---|---|---|
-| `GET /wallet/balance` | ✅ | ✅ (`services/api/src/routes/wallet.ts`) | ✅ (`supabase/functions/wallet`) |
-| `GET /wallet/transactions` | ✅ | ✅ (`services/api/src/routes/wallet.ts`) | ✅ (`supabase/functions/wallet`) |
-| `POST /wallet/deposit` | — | ✅ (`services/api/src/routes/wallet.ts`) | ✅ (`supabase/functions/wallet`) |
-| `GET /payments/methods` | ✅ | ✅ (`services/api/src/routes/payments.ts`) | ✅ (`supabase/functions/payments`) |
-| `POST /payments/methods` | ✅ | — | ✅ (`supabase/functions/payments`) |
-| `DELETE /payments/methods/:id` | ✅ | ✅ (`services/api/src/routes/payments.ts`) | ✅ (`supabase/functions/payments`) |
-| `POST /payments/create-payment-intent` | ✅ | ✅ (`services/api/src/routes/payments.ts`) | ✅ (`supabase/functions/payments`) |
-| `POST /payments/create-setup-intent` | — | ✅ (`services/api/src/routes/payments.ts`) | ✅ (`supabase/functions/payments`) |
-| `POST /payments/confirm` | ✅ | ✅ (`services/api/src/routes/payments.ts`) | ✅ (`supabase/functions/payments`) |
+| Route                                  | Express (`server/index.js`) | Fastify (`services/api/`)                  | Edge Function (`supabase/functions/`) |
+| -------------------------------------- | --------------------------- | ------------------------------------------ | ------------------------------------- |
+| `GET /wallet/balance`                  | ✅                          | ✅ (`services/api/src/routes/wallet.ts`)   | ✅ (`supabase/functions/wallet`)      |
+| `GET /wallet/transactions`             | ✅                          | ✅ (`services/api/src/routes/wallet.ts`)   | ✅ (`supabase/functions/wallet`)      |
+| `POST /wallet/deposit`                 | —                           | ✅ (`services/api/src/routes/wallet.ts`)   | ✅ (`supabase/functions/wallet`)      |
+| `GET /payments/methods`                | ✅                          | ✅ (`services/api/src/routes/payments.ts`) | ✅ (`supabase/functions/payments`)    |
+| `POST /payments/methods`               | ✅                          | —                                          | ✅ (`supabase/functions/payments`)    |
+| `DELETE /payments/methods/:id`         | ✅                          | ✅ (`services/api/src/routes/payments.ts`) | ✅ (`supabase/functions/payments`)    |
+| `POST /payments/create-payment-intent` | ✅                          | ✅ (`services/api/src/routes/payments.ts`) | ✅ (`supabase/functions/payments`)    |
+| `POST /payments/create-setup-intent`   | —                           | ✅ (`services/api/src/routes/payments.ts`) | ✅ (`supabase/functions/payments`)    |
+| `POST /payments/confirm`               | ✅                          | ✅ (`services/api/src/routes/payments.ts`) | ✅ (`supabase/functions/payments`)    |
 
 The active server is determined at runtime by which `API_BASE_URL` value is resolved
 in `lib/config/api.ts`. A misconfiguration (e.g., stale `EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL`)
@@ -28,32 +28,33 @@ different data sources or different fee schedules.
 ## Canonical Endpoints
 
 The following **mirrored** routes (those that exist on more than one server surface)
-have canonical implementations as Supabase Edge Functions. Note that several
-Fastify-only `/wallet/*` routes (`/wallet/escrow`, `/wallet/release`,
-`/wallet/refund`) have **no** Edge Function equivalent and are not part of
-this migration — see the table in the next section.
+have canonical implementations as Supabase Edge Functions. Note that `/wallet/release`
+still has **no** Edge Function equivalent and remains Fastify-only — see the table in
+the next section.
 
-| Route | Canonical Edge Function | Function Directory |
-|---|---|---|
-| `GET /wallet/balance` | `<SUPABASE_FUNCTIONS_URL>/wallet` | `supabase/functions/wallet/` |
-| `GET /wallet/transactions` | `<SUPABASE_FUNCTIONS_URL>/wallet` | `supabase/functions/wallet/` |
-| `POST /wallet/deposit` | `<SUPABASE_FUNCTIONS_URL>/wallet` | `supabase/functions/wallet/` |
-| `GET /payments/methods` | `<SUPABASE_FUNCTIONS_URL>/payments` | `supabase/functions/payments/` |
-| `POST /payments/methods` | `<SUPABASE_FUNCTIONS_URL>/payments` | `supabase/functions/payments/` |
-| `DELETE /payments/methods/:id` | `<SUPABASE_FUNCTIONS_URL>/payments` | `supabase/functions/payments/` |
+| Route                                  | Canonical Edge Function             | Function Directory             |
+| -------------------------------------- | ----------------------------------- | ------------------------------ |
+| `GET /wallet/balance`                  | `<SUPABASE_FUNCTIONS_URL>/wallet`   | `supabase/functions/wallet/`   |
+| `GET /wallet/transactions`             | `<SUPABASE_FUNCTIONS_URL>/wallet`   | `supabase/functions/wallet/`   |
+| `POST /wallet/deposit`                 | `<SUPABASE_FUNCTIONS_URL>/wallet`   | `supabase/functions/wallet/`   |
+| `POST /wallet/escrow`                  | `<SUPABASE_FUNCTIONS_URL>/wallet`   | `supabase/functions/wallet/`   |
+| `POST /wallet/refund`                  | `<SUPABASE_FUNCTIONS_URL>/wallet`   | `supabase/functions/wallet/`   |
+| `GET /payments/methods`                | `<SUPABASE_FUNCTIONS_URL>/payments` | `supabase/functions/payments/` |
+| `POST /payments/methods`               | `<SUPABASE_FUNCTIONS_URL>/payments` | `supabase/functions/payments/` |
+| `DELETE /payments/methods/:id`         | `<SUPABASE_FUNCTIONS_URL>/payments` | `supabase/functions/payments/` |
 | `POST /payments/create-payment-intent` | `<SUPABASE_FUNCTIONS_URL>/payments` | `supabase/functions/payments/` |
-| `POST /payments/create-setup-intent` | `<SUPABASE_FUNCTIONS_URL>/payments` | `supabase/functions/payments/` |
-| `POST /payments/confirm` | `<SUPABASE_FUNCTIONS_URL>/payments` | `supabase/functions/payments/` |
+| `POST /payments/create-setup-intent`   | `<SUPABASE_FUNCTIONS_URL>/payments` | `supabase/functions/payments/` |
+| `POST /payments/confirm`               | `<SUPABASE_FUNCTIONS_URL>/payments` | `supabase/functions/payments/` |
 
 Routes that exist **only** on Fastify (admin, escrow management) are **not** being
 removed and are not covered by this migration:
 
-| Route | Server | Notes |
-|---|---|---|
-| `POST /payments/escrows` | Fastify | Escrow creation — no Edge Function mirror |
-| `POST /payments/escrows/:escrowId/release` | Fastify | Escrow release — no Edge Function mirror |
-| `POST /payments/bank-accounts` | Fastify | Bank account management |
-| `POST /payments/webhook` | Fastify / Express | Stripe webhook receiver |
+| Route                                      | Server            | Notes                                     |
+| ------------------------------------------ | ----------------- | ----------------------------------------- |
+| `POST /payments/escrows`                   | Fastify           | Escrow creation — no Edge Function mirror |
+| `POST /payments/escrows/:escrowId/release` | Fastify           | Escrow release — no Edge Function mirror  |
+| `POST /payments/bank-accounts`             | Fastify           | Bank account management                   |
+| `POST /payments/webhook`                   | Fastify / Express | Stripe webhook receiver                   |
 
 ## Migration Phases
 
@@ -69,6 +70,7 @@ whenever it receives this header, allowing teams to monitor traffic via log
 aggregation.
 
 Detection in logs:
+
 ```
 [API] Received X-Deprecated header on GET /wallet/balance — this server surface is deprecated. Please ensure EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL is set so requests route to the Supabase Edge Function.
 ```

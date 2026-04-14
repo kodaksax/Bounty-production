@@ -4,239 +4,479 @@
 //   GET  /wallet/balance
 //   GET  /wallet/transactions
 //   POST /wallet/deposit   (client-initiated deposit after Stripe payment confirmation)
+//   POST /wallet/escrow    (hold funds when a bounty is posted)
+//   POST /wallet/refund    (return escrowed funds to poster on cancellation)
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import type { ApplyDepositResult, Profile, WalletTransaction } from '../_shared/types.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import type { ApplyDepositResult, Profile, WalletTransaction } from '../_shared/types.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-}
+};
 
 function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  })
+  });
 }
 
 function isApplyDepositResult(obj: unknown): obj is ApplyDepositResult {
-  if (typeof obj !== 'object' || obj === null) return false
-  const o = obj as Record<string, unknown>
-  return typeof o.applied === 'boolean'
+  if (typeof obj !== 'object' || obj === null) return false;
+  const o = obj as Record<string, unknown>;
+  return typeof o.applied === 'boolean';
 }
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: corsHeaders });
   }
 
   // Single outer try/catch ensures ALL errors—including those thrown by the
   // authentication step—are caught and returned as a JSON response instead of
   // propagating to Deno's default handler (which returns text/plain; 500).
   try {
-  if (req.method !== 'GET' && req.method !== 'POST') {
-    return jsonResponse({ error: 'Method not allowed' }, 405)
-  }
-
-  const url = new URL(req.url)
-  const pathParts = url.pathname.split('/wallet')
-  const subPath = pathParts.length > 1 ? pathParts[1] : '/'
-
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  const supabase = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  })
-
-  // Authenticate user
-  const authHeader = req.headers.get('Authorization')
-  if (!authHeader?.startsWith('Bearer ')) {
-    console.warn('[wallet edge fn] missing Authorization header')
-    return jsonResponse({ error: 'Authentication required. Please sign in to continue.' }, 401)
-  }
-  const token = authHeader.substring(7)
-
-  let userId: string
-  try {
-    const { data, error: authError } = await supabase.auth.getUser(token)
-    if (authError || !data?.user) {
-      console.warn('[wallet edge fn] invalid or expired token', authError || 'no user')
-      return jsonResponse({ error: 'Authentication required. Please sign in to continue.' }, 401)
-    }
-    userId = data.user.id
-  } catch (authException: unknown) {
-    const msg = (authException instanceof Error ? authException.message : String(authException))
-    console.error('[wallet edge fn] getUser threw unexpectedly:', msg)
-    return jsonResponse({ error: 'Authentication service unavailable. Please try again.' }, 503)
-  }
-
-  try {
-    // POST /wallet/deposit — client-initiated deposit after Stripe payment confirmation.
-    // Called immediately after processPayment() succeeds on the client so that
-    // profiles.balance is updated durably without relying solely on the webhook.
-    // Uses the apply_deposit RPC which is idempotent on stripe_payment_intent_id,
-    // so a concurrent webhook delivery results in a safe no-op.
-    if (req.method === 'POST' && subPath === '/deposit') {
-      let body: { amount?: unknown; paymentIntentId?: unknown }
-      try {
-        body = await req.json()
-      } catch {
-        return jsonResponse({ error: 'Invalid JSON body' }, 400)
-      }
-
-      const amount = typeof body.amount === 'number' ? body.amount : Number(body.amount)
-      const paymentIntentId = typeof body.paymentIntentId === 'string' ? body.paymentIntentId.trim() : ''
-
-      if (!Number.isFinite(amount) || amount <= 0) {
-        return jsonResponse({ error: 'Invalid amount' }, 400)
-      }
-      if (!paymentIntentId) {
-        return jsonResponse({ error: 'paymentIntentId is required' }, 400)
-      }
-
-      // Call the atomic apply_deposit function which:
-      //   1. Inserts the wallet_transaction (ON CONFLICT DO NOTHING for idempotency)
-      //   2. Updates profiles.balance atomically
-      // Returns { applied: boolean, tx_id: UUID }
-      const { data: applyRes, error: applyErr } = await supabase.rpc('apply_deposit', {
-        p_user_id: userId,
-        p_amount: amount,
-        p_payment_intent_id: paymentIntentId,
-        p_metadata: {
-          payment_intent_id: paymentIntentId,
-          created_via: 'client_post_payment',
-        },
-      })
-
-      if (applyErr) {
-        console.error('[wallet] apply_deposit error:', applyErr)
-        return jsonResponse({ error: 'Failed to record deposit' }, 500)
-      }
-
-      // Normalize possible shapes: RPC may return an object or an array with a single row.
-      let applied = false
-      let tx_id: string | null = null
-      const candidate = Array.isArray(applyRes) ? (applyRes[0] as unknown) : (applyRes as unknown)
-      if (isApplyDepositResult(candidate)) {
-        applied = candidate.applied
-        tx_id = (candidate as any).tx_id ?? null
-      } else if (candidate && typeof (candidate as any).applied === 'boolean') {
-        applied = Boolean((candidate as any).applied)
-        tx_id = (candidate as any).tx_id ?? null
-      } else {
-        console.warn('[wallet] apply_deposit returned unexpected shape', applyRes)
-      }
-
-      // Fetch updated balance to return to client
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('balance')
-        .eq('id', userId)
-        .single()
-
-      if (profileError) {
-        console.error('[wallet] failed to fetch updated balance after deposit:', profileError)
-        return jsonResponse({ success: applied, tx_id, balance: null, warning: 'Deposit recorded, but failed to fetch updated balance' }, 500)
-      }
-
-      const newBalance = (profileData as Profile | null)?.balance ?? (applied ? amount : 0)
-
-      return jsonResponse({ success: applied, tx_id, balance: newBalance })
+    if (req.method !== 'GET' && req.method !== 'POST') {
+      return jsonResponse({ error: 'Method not allowed' }, 405);
     }
 
-    // GET /wallet/balance
-    if (subPath === '/balance') {
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('balance')
-        .eq('id', userId)
-        .single()
+    const url = new URL(req.url);
+    const pathParts = url.pathname.split('/wallet');
+    const subPath = pathParts.length > 1 ? pathParts[1] : '/';
 
-      if (error) {
-        console.error('[wallet] Error fetching balance:', error)
-        return jsonResponse({ error: 'Failed to fetch balance' }, 500)
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    // Authenticate user
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      console.warn('[wallet edge fn] missing Authorization header');
+      return jsonResponse({ error: 'Authentication required. Please sign in to continue.' }, 401);
+    }
+    const token = authHeader.substring(7);
+
+    let userId: string;
+    try {
+      const { data, error: authError } = await supabase.auth.getUser(token);
+      if (authError || !data?.user) {
+        console.warn('[wallet edge fn] invalid or expired token', authError || 'no user');
+        return jsonResponse({ error: 'Authentication required. Please sign in to continue.' }, 401);
+      }
+      userId = data.user.id;
+    } catch (authException: unknown) {
+      const msg = authException instanceof Error ? authException.message : String(authException);
+      console.error('[wallet edge fn] getUser threw unexpectedly:', msg);
+      return jsonResponse({ error: 'Authentication service unavailable. Please try again.' }, 503);
+    }
+
+    try {
+      // POST /wallet/deposit — client-initiated deposit after Stripe payment confirmation.
+      // Called immediately after processPayment() succeeds on the client so that
+      // profiles.balance is updated durably without relying solely on the webhook.
+      // Uses the apply_deposit RPC which is idempotent on stripe_payment_intent_id,
+      // so a concurrent webhook delivery results in a safe no-op.
+      if (req.method === 'POST' && subPath === '/deposit') {
+        let body: { amount?: unknown; paymentIntentId?: unknown };
+        try {
+          body = await req.json();
+        } catch {
+          return jsonResponse({ error: 'Invalid JSON body' }, 400);
+        }
+
+        const amount = typeof body.amount === 'number' ? body.amount : Number(body.amount);
+        const paymentIntentId =
+          typeof body.paymentIntentId === 'string' ? body.paymentIntentId.trim() : '';
+
+        if (!Number.isFinite(amount) || amount <= 0) {
+          return jsonResponse({ error: 'Invalid amount' }, 400);
+        }
+        if (!paymentIntentId) {
+          return jsonResponse({ error: 'paymentIntentId is required' }, 400);
+        }
+
+        // Call the atomic apply_deposit function which:
+        //   1. Inserts the wallet_transaction (ON CONFLICT DO NOTHING for idempotency)
+        //   2. Updates profiles.balance atomically
+        // Returns { applied: boolean, tx_id: UUID }
+        const { data: applyRes, error: applyErr } = await supabase.rpc('apply_deposit', {
+          p_user_id: userId,
+          p_amount: amount,
+          p_payment_intent_id: paymentIntentId,
+          p_metadata: {
+            payment_intent_id: paymentIntentId,
+            created_via: 'client_post_payment',
+          },
+        });
+
+        if (applyErr) {
+          console.error('[wallet] apply_deposit error:', applyErr);
+          return jsonResponse({ error: 'Failed to record deposit' }, 500);
+        }
+
+        // Normalize possible shapes: RPC may return an object or an array with a single row.
+        let applied = false;
+        let tx_id: string | null = null;
+        const candidate = Array.isArray(applyRes)
+          ? (applyRes[0] as unknown)
+          : (applyRes as unknown);
+        if (isApplyDepositResult(candidate)) {
+          applied = candidate.applied;
+          tx_id = (candidate as any).tx_id ?? null;
+        } else if (candidate && typeof (candidate as any).applied === 'boolean') {
+          applied = Boolean((candidate as any).applied);
+          tx_id = (candidate as any).tx_id ?? null;
+        } else {
+          console.warn('[wallet] apply_deposit returned unexpected shape', applyRes);
+        }
+
+        // Fetch updated balance to return to client
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('balance')
+          .eq('id', userId)
+          .single();
+
+        if (profileError) {
+          console.error('[wallet] failed to fetch updated balance after deposit:', profileError);
+          return jsonResponse(
+            {
+              success: applied,
+              tx_id,
+              balance: null,
+              warning: 'Deposit recorded, but failed to fetch updated balance',
+            },
+            500
+          );
+        }
+
+        const newBalance = (profileData as Profile | null)?.balance ?? (applied ? amount : 0);
+
+        return jsonResponse({ success: applied, tx_id, balance: newBalance });
       }
 
-      let balance = (profile as Profile | null)?.balance ?? 0
+      // GET /wallet/balance
+      if (subPath === '/balance') {
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('balance')
+          .eq('id', userId)
+          .single();
 
-      // Cross-check: when cached balance is 0, derive from completed
-      // transactions. wallet_transactions stores signed amounts (negative for
-      // debits), so we sum them directly instead of applying direction by type.
-      if (balance === 0) {
-        const { data: txRows } = await supabase
-          .from('wallet_transactions')
-          .select('amount')
-          .eq('user_id', userId)
-          .eq('status', 'completed')
+        if (error) {
+          console.error('[wallet] Error fetching balance:', error);
+          return jsonResponse({ error: 'Failed to fetch balance' }, 500);
+        }
 
-        if (txRows && txRows.length > 0) {
-          let derived = 0
-          for (const tx of txRows as { amount: number }[]) {
-            derived += Number(tx.amount) || 0
-          }
-          if (derived > 0) {
-            balance = derived
-            // Reconcile (fire-and-forget)
-            supabase
-              .from('profiles')
-              .update({ balance: derived, updated_at: new Date().toISOString() })
-              .eq('id', userId)
-              .then(() => console.log('[wallet] Reconciled stale profile balance', userId, derived))
-              .catch((err: unknown) => console.warn('[wallet] Failed to reconcile cached balance', userId, err))
+        let balance = (profile as Profile | null)?.balance ?? 0;
+
+        // Cross-check: when cached balance is 0, derive from completed
+        // transactions. wallet_transactions stores signed amounts (negative for
+        // debits), so we sum them directly instead of applying direction by type.
+        if (balance === 0) {
+          const { data: txRows } = await supabase
+            .from('wallet_transactions')
+            .select('amount')
+            .eq('user_id', userId)
+            .eq('status', 'completed');
+
+          if (txRows && txRows.length > 0) {
+            let derived = 0;
+            for (const tx of txRows as { amount: number }[]) {
+              derived += Number(tx.amount) || 0;
+            }
+            if (derived > 0) {
+              balance = derived;
+              // Reconcile (fire-and-forget)
+              supabase
+                .from('profiles')
+                .update({ balance: derived, updated_at: new Date().toISOString() })
+                .eq('id', userId)
+                .then(() =>
+                  console.log('[wallet] Reconciled stale profile balance', userId, derived)
+                )
+                .catch((err: unknown) =>
+                  console.warn('[wallet] Failed to reconcile cached balance', userId, err)
+                );
+            }
           }
         }
+
+        return jsonResponse({ balance, currency: 'USD' });
       }
 
-      return jsonResponse({ balance, currency: 'USD' })
-    }
+      // GET /wallet/transactions
+      if (subPath === '/transactions') {
+        const limitParam = parseInt(url.searchParams.get('limit') ?? '50', 10);
+        const limit = Math.min(Number.isNaN(limitParam) ? 50 : limitParam, 100);
+        const offsetParam = parseInt(url.searchParams.get('offset') ?? '0', 10);
+        const offset = Math.max(Number.isNaN(offsetParam) ? 0 : offsetParam, 0);
 
-    // GET /wallet/transactions
-    if (subPath === '/transactions') {
-      const limitParam = parseInt(url.searchParams.get('limit') ?? '50', 10)
-      const limit = Math.min(Number.isNaN(limitParam) ? 50 : limitParam, 100)
-      const offsetParam = parseInt(url.searchParams.get('offset') ?? '0', 10)
-      const offset = Math.max(Number.isNaN(offsetParam) ? 0 : offsetParam, 0)
+        const { data: transactions, error } = await supabase
+          .from('wallet_transactions')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .range(offset, offset + limit - 1);
 
-      const { data: transactions, error } = await supabase
-        .from('wallet_transactions')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1)
+        if (error) {
+          console.error('[wallet] Error fetching transactions:', error);
+          return jsonResponse({ error: 'Failed to fetch transactions' }, 500);
+        }
 
-      if (error) {
-        console.error('[wallet] Error fetching transactions:', error)
-        return jsonResponse({ error: 'Failed to fetch transactions' }, 500)
+        const formattedTransactions = (transactions ?? []).map((tx: WalletTransaction) => ({
+          id: tx.id,
+          type: tx.type,
+          amount: tx.amount,
+          date: tx.created_at,
+          details: {
+            title: tx.description,
+            method: tx.stripe_payment_intent_id ? 'Stripe' : 'Wallet',
+            status: tx.status ?? 'completed',
+            bounty_id: tx.bounty_id,
+          },
+        }));
+
+        return jsonResponse({ transactions: formattedTransactions });
       }
 
-      const formattedTransactions = (transactions ?? []).map((tx: WalletTransaction) => ({
-        id: tx.id,
-        type: tx.type,
-        amount: tx.amount,
-        date: tx.created_at,
-        details: {
-          title: tx.description,
-          method: tx.stripe_payment_intent_id ? 'Stripe' : 'Wallet',
-          status: tx.status ?? 'completed',
-          bounty_id: tx.bounty_id,
-        },
-      }))
+      // POST /wallet/escrow — hold funds when a bounty is posted.
+      // Mirrors the Fastify-only route that was previously unreachable from the
+      // mobile client in production once EXPO_PUBLIC_SUPABASE_URL is configured
+      // (API_BASE_URL resolves to the Edge Functions URL, not the Fastify server).
+      if (req.method === 'POST' && subPath === '/escrow') {
+        let body: {
+          bountyId?: unknown;
+          amount?: unknown;
+          title?: unknown;
+          idempotencyKey?: unknown;
+        };
+        try {
+          body = await req.json();
+        } catch {
+          return jsonResponse({ error: 'Invalid JSON body' }, 400);
+        }
 
-      return jsonResponse({ transactions: formattedTransactions })
+        const bountyId = typeof body.bountyId === 'string' ? body.bountyId.trim() : '';
+        const amount = typeof body.amount === 'number' ? body.amount : Number(body.amount);
+        const title = typeof body.title === 'string' ? body.title.trim() : undefined;
+        const idempotencyKey =
+          typeof body.idempotencyKey === 'string' ? body.idempotencyKey.trim() : undefined;
+
+        if (!bountyId) return jsonResponse({ error: 'bountyId is required' }, 400);
+        if (!Number.isFinite(amount) || amount <= 0)
+          return jsonResponse({ error: 'Invalid amount' }, 400);
+
+        // Prevent duplicate escrow for the same bounty
+        const { data: existingEscrow } = await supabase
+          .from('wallet_transactions')
+          .select('id')
+          .eq('bounty_id', bountyId)
+          .eq('type', 'escrow')
+          .eq('status', 'completed')
+          .maybeSingle();
+        if (existingEscrow) {
+          return jsonResponse(
+            { error: 'Escrow already exists for this bounty', code: 'duplicate_transaction' },
+            409
+          );
+        }
+
+        // Verify sufficient funds
+        const { data: profileData, error: profileFetchErr } = await supabase
+          .from('profiles')
+          .select('balance')
+          .eq('id', userId)
+          .single();
+        if (profileFetchErr || !profileData)
+          return jsonResponse({ error: 'Failed to fetch balance' }, 500);
+        const currentBalance: number = (profileData as Profile | null)?.balance ?? 0;
+        if (currentBalance < amount) return jsonResponse({ error: 'Insufficient balance' }, 400);
+
+        const effectiveKey = idempotencyKey || `escrow_${bountyId}_${userId}`;
+        const description = title ? `Escrow for bounty: ${title}` : `Escrow for bounty ${bountyId}`;
+
+        // Insert escrow transaction (debit)
+        const { data: txRow, error: txErr } = await supabase
+          .from('wallet_transactions')
+          .insert([
+            {
+              user_id: userId,
+              bounty_id: bountyId,
+              type: 'escrow',
+              amount: -amount,
+              description,
+              status: 'completed',
+              metadata: {
+                bounty_id: bountyId,
+                escrowed_at: new Date().toISOString(),
+                idempotency_key: effectiveKey,
+              },
+            },
+          ])
+          .select()
+          .single();
+        if (txErr) {
+          console.error('[wallet] create escrow tx error:', txErr);
+          return jsonResponse({ error: 'Failed to create escrow transaction' }, 500);
+        }
+
+        // Deduct from balance
+        const newBalance = currentBalance - amount;
+        const { error: balanceErr } = await supabase
+          .from('profiles')
+          .update({ balance: newBalance })
+          .eq('id', userId);
+        if (balanceErr) {
+          console.error('[wallet] balance deduct error after escrow, rolling back tx:', balanceErr);
+          await supabase
+            .from('wallet_transactions')
+            .delete()
+            .eq('id', (txRow as WalletTransaction).id);
+          return jsonResponse({ error: 'Failed to update balance' }, 500);
+        }
+
+        return jsonResponse({
+          success: true,
+          transactionId: (txRow as WalletTransaction).id,
+          amount,
+          newBalance,
+          message: `$${amount.toFixed(2)} held in escrow for bounty.`,
+        });
+      }
+
+      // POST /wallet/refund — return escrowed funds to a poster on cancellation.
+      // Also previously Fastify-only and unreachable in production with Supabase.
+      if (req.method === 'POST' && subPath === '/refund') {
+        let body: { bountyId?: unknown; reason?: unknown; idempotencyKey?: unknown };
+        try {
+          body = await req.json();
+        } catch {
+          return jsonResponse({ error: 'Invalid JSON body' }, 400);
+        }
+
+        const bountyId = typeof body.bountyId === 'string' ? body.bountyId.trim() : '';
+        const reason =
+          typeof body.reason === 'string' && body.reason.trim()
+            ? body.reason.trim()
+            : 'Bounty cancelled';
+        const idempotencyKey =
+          typeof body.idempotencyKey === 'string' ? body.idempotencyKey.trim() : undefined;
+
+        if (!bountyId) return jsonResponse({ error: 'bountyId is required' }, 400);
+
+        // Verify the caller is the bounty creator (uses the DB column name: creator_id)
+        const { data: bountyRow, error: bountyErr } = await supabase
+          .from('bounties')
+          .select('creator_id')
+          .eq('id', bountyId)
+          .single();
+        if (bountyErr || !bountyRow) return jsonResponse({ error: 'Bounty not found' }, 404);
+        if ((bountyRow as { creator_id: string }).creator_id !== userId) {
+          return jsonResponse({ error: 'Unauthorized to refund funds' }, 403);
+        }
+
+        // Prevent double-refund / double-release
+        const { data: existingSettlement } = await supabase
+          .from('wallet_transactions')
+          .select('id, type')
+          .eq('bounty_id', bountyId)
+          .in('type', ['release', 'refund'])
+          .eq('status', 'completed')
+          .maybeSingle();
+        if (existingSettlement) {
+          const verb = (existingSettlement as any).type === 'release' ? 'released' : 'refunded';
+          return jsonResponse(
+            { error: `Escrow already ${verb} for this bounty`, code: 'duplicate_transaction' },
+            409
+          );
+        }
+
+        // Locate the escrow transaction to determine the amount to return
+        const { data: escrowTx, error: escrowErr } = await supabase
+          .from('wallet_transactions')
+          .select('*')
+          .eq('bounty_id', bountyId)
+          .eq('type', 'escrow')
+          .eq('status', 'completed')
+          .single();
+        if (escrowErr || !escrowTx)
+          return jsonResponse({ error: 'Escrow transaction not found' }, 404);
+
+        const refundAmount = Math.abs((escrowTx as WalletTransaction).amount);
+        const effectiveKey = idempotencyKey || `refund_${bountyId}_${userId}`;
+
+        // Insert refund transaction (credit)
+        const { data: refundTxRow, error: refundTxErr } = await supabase
+          .from('wallet_transactions')
+          .insert([
+            {
+              user_id: userId,
+              bounty_id: bountyId,
+              type: 'refund',
+              amount: refundAmount,
+              description: `Refund for bounty ${bountyId}: ${reason}`,
+              status: 'completed',
+              metadata: {
+                bounty_id: bountyId,
+                escrow_transaction_id: (escrowTx as WalletTransaction).id,
+                reason,
+                refunded_at: new Date().toISOString(),
+                idempotency_key: effectiveKey,
+              },
+            },
+          ])
+          .select()
+          .single();
+        if (refundTxErr) {
+          console.error('[wallet] create refund tx error:', refundTxErr);
+          return jsonResponse({ error: 'Failed to create refund transaction' }, 500);
+        }
+
+        // Credit balance
+        const { data: profileData2, error: profileFetchErr2 } = await supabase
+          .from('profiles')
+          .select('balance')
+          .eq('id', userId)
+          .single();
+        const currentBalance2: number = (profileData2 as Profile | null)?.balance ?? 0;
+        const { error: balanceErr2 } = await supabase
+          .from('profiles')
+          .update({ balance: currentBalance2 + refundAmount })
+          .eq('id', userId);
+        if (balanceErr2) {
+          console.error(
+            '[wallet] balance credit error after refund, rolling back tx:',
+            balanceErr2
+          );
+          await supabase
+            .from('wallet_transactions')
+            .delete()
+            .eq('id', (refundTxRow as WalletTransaction).id);
+          return jsonResponse({ error: 'Failed to update balance' }, 500);
+        }
+
+        return jsonResponse({
+          success: true,
+          transactionId: (refundTxRow as WalletTransaction).id,
+          amount: refundAmount,
+          message: `Refund of $${refundAmount.toFixed(2)} processed.`,
+        });
+      }
+
+      return jsonResponse({ error: 'Not found' }, 404);
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      console.error('[wallet edge fn] Error:', err);
+      return jsonResponse({ error: err.message ?? 'Internal server error' }, 500);
     }
-
-    return jsonResponse({ error: 'Not found' }, 404)
-  } catch (error: unknown) {
-    const err = error as { message?: string }
-    console.error('[wallet edge fn] Error:', err)
-    return jsonResponse({ error: err.message ?? 'Internal server error' }, 500)
-  }
-
   } catch (outerError: unknown) {
-    const err = outerError as { message?: string }
-    console.error('[wallet edge fn] Outer unhandled error:', err)
-    return jsonResponse({ error: 'Internal server error' }, 500)
+    const err = outerError as { message?: string };
+    console.error('[wallet edge fn] Outer unhandled error:', err);
+    return jsonResponse({ error: 'Internal server error' }, 500);
   }
-})
+});
