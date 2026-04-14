@@ -376,53 +376,81 @@ Deno.serve(async (req: Request) => {
 
         if (originalTx) {
           const origTx = originalTx as Pick<WalletTransaction, 'user_id' | 'amount'>;
-          // Upsert with ON CONFLICT on stripe_charge_id so Stripe retries are
-          // idempotent — a second delivery of the same charge.refunded event
-          // will skip the insert rather than creating a duplicate refund row.
-          const { data: upsertedRows } = await supabase
-            .from('wallet_transactions')
-            .upsert(
-              {
-                user_id: origTx.user_id,
-                type: 'refund',
-                amount: -(charge.amount_refunded / 100),
-                description: 'Payment refunded',
-                status: 'completed',
-                stripe_charge_id: charge.id,
-                // charge.refunds.data[0].reason gives the reason for the first refund
-                metadata: { refund_reason: charge.refunds?.data?.[0]?.reason ?? null },
-              },
-              { onConflict: 'stripe_charge_id', ignoreDuplicates: true }
-            )
-            .select('user_id');
+          const refunds = charge.refunds?.data ?? [];
 
-          // Only update the balance when the row was actually inserted (not a
-          // duplicate replay). An empty result means ON CONFLICT suppressed it.
-          const wasInserted = Array.isArray(upsertedRows) && upsertedRows.length > 0;
-          if (wasInserted) {
-            const { error: rpcError } = await supabase.rpc('update_balance', {
-              p_user_id: origTx.user_id,
-              p_amount: -(charge.amount_refunded / 100),
-            });
+          if (refunds.length === 0) {
+            console.warn(
+              `[webhooks] charge.refunded received but charge ${charge.id} has no refunds — skipping`
+            );
+          }
 
-            if (rpcError) {
-              const { error: retryError } = await supabase.rpc('update_balance', {
-                p_user_id: origTx.user_id,
-                p_amount: -(charge.amount_refunded / 100),
+          // Process each refund individually so that:
+          //   - Partial/multi-refund charges are correctly recorded (one row per refund)
+          //   - Stripe retries are idempotent via the stripe_refund_id unique index
+          for (const refund of refunds) {
+            const refundAmountDollars = refund.amount / 100;
+
+            // Upsert keyed on stripe_refund_id: ON CONFLICT suppresses duplicate rows
+            // if Stripe re-delivers the event for the same refund.
+            const { data: upsertedRows, error: upsertError } = await supabase
+              .from('wallet_transactions')
+              .upsert(
+                {
+                  user_id: origTx.user_id,
+                  type: 'refund',
+                  amount: -refundAmountDollars,
+                  description: 'Payment refunded',
+                  status: 'completed',
+                  stripe_charge_id: charge.id,
+                  stripe_refund_id: refund.id,
+                  metadata: {
+                    refund_reason: refund.reason ?? null,
+                    refund_id: refund.id,
+                  },
+                },
+                { onConflict: 'stripe_refund_id', ignoreDuplicates: true }
+              )
+              .select('user_id');
+
+            if (upsertError) {
+              console.error('[webhooks] Failed to upsert refund transaction — letting Stripe retry', {
+                refundId: refund.id,
+                chargeId: charge.id,
+                error: upsertError.message,
               });
-              if (retryError) {
-                console.error(
-                  '[webhooks] Atomic balance decrement for refund failed — letting Stripe retry'
-                );
-                throw retryError;
-              }
+              throw upsertError;
             }
 
-            console.log(`[webhooks] Refund processed for user ${origTx.user_id}`);
-          } else {
-            console.log(
-              `[webhooks] charge.refunded duplicate detected for charge ${charge.id} — skipping balance update`
-            );
+            // Only update the balance when the row was actually inserted (not a
+            // duplicate replay). An empty result means ON CONFLICT suppressed it.
+            const wasInserted = Array.isArray(upsertedRows) && upsertedRows.length > 0;
+            if (wasInserted) {
+              const { error: rpcError } = await supabase.rpc('update_balance', {
+                p_user_id: origTx.user_id,
+                p_amount: -refundAmountDollars,
+              });
+
+              if (rpcError) {
+                const { error: retryError } = await supabase.rpc('update_balance', {
+                  p_user_id: origTx.user_id,
+                  p_amount: -refundAmountDollars,
+                });
+                if (retryError) {
+                  console.error(
+                    '[webhooks] Atomic balance decrement for refund failed — letting Stripe retry'
+                  );
+                  throw retryError;
+                }
+              }
+
+              console.log(
+                `[webhooks] Refund ${refund.id} processed for user ${origTx.user_id} ($${refundAmountDollars})`
+              );
+            } else {
+              console.log(
+                `[webhooks] Duplicate refund ${refund.id} detected for charge ${charge.id} — skipping balance update`
+              );
+            }
           }
         }
         break;

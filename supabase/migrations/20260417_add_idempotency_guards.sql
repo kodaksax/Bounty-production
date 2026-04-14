@@ -1,28 +1,44 @@
 -- Migration: Add idempotency guards to charge.refunded and payout event handlers
 -- Created: 2026-04-17
 -- Purpose:
---   1. Add a unique index on wallet_transactions(stripe_charge_id) so the
---      charge.refunded webhook handler can use ON CONFLICT to avoid duplicate
---      refund rows when Stripe retries the event.
+--   1. Add a stripe_refund_id column to wallet_transactions plus a unique
+--      partial index on wallet_transactions(stripe_refund_id) so the
+--      charge.refunded webhook handler can use the Stripe refund ID for
+--      idempotency without blocking legitimate partial/multi-refund rows
+--      that share the same stripe_charge_id.
 --   2. Add a stripe_payout_id column to notifications and a corresponding
 --      unique index on (user_id, type, stripe_payout_id) so payout.paid /
 --      payout.failed webhook handlers can ignore duplicate notification inserts
 --      on Stripe retries.
 
 -- ============================================================
--- 1. wallet_transactions — unique guard on stripe_charge_id
+-- 1. wallet_transactions — refund-level idempotency guard
 -- ============================================================
 
--- A unique partial index lets the webhook upsert use
---   ON CONFLICT (stripe_charge_id) DO NOTHING
--- preventing a second refund transaction row when Stripe retries the
--- charge.refunded event.
-CREATE UNIQUE INDEX IF NOT EXISTS idx_wallet_tx_stripe_charge_id_unique
+-- Store the Stripe refund ID on refund-related wallet transactions so
+-- webhook handlers can deduplicate retries per refund while still allowing
+-- multiple refund rows for the same Stripe charge (partial/multi-refund flows).
+ALTER TABLE public.wallet_transactions
+  ADD COLUMN IF NOT EXISTS stripe_refund_id text;
+
+-- Keep stripe_charge_id indexed for lookup/query performance, but do not
+-- enforce uniqueness because a single charge may have multiple refunds.
+CREATE INDEX IF NOT EXISTS idx_wallet_tx_stripe_charge_id
   ON public.wallet_transactions(stripe_charge_id)
   WHERE stripe_charge_id IS NOT NULL;
 
-COMMENT ON INDEX idx_wallet_tx_stripe_charge_id_unique
-  IS 'Unique index on stripe_charge_id to enforce one wallet transaction per Stripe Charge; enables ON CONFLICT idempotency in the charge.refunded webhook handler';
+COMMENT ON INDEX idx_wallet_tx_stripe_charge_id
+  IS 'Non-unique index on stripe_charge_id for wallet transaction lookups; supports charges with multiple related refund rows';
+
+-- Unique partial index: one wallet transaction per Stripe refund ID.
+-- This enables refund-level idempotency on webhook replay without
+-- preventing legitimate multi-refund flows on the same charge.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_wallet_tx_stripe_refund_id_unique
+  ON public.wallet_transactions(stripe_refund_id)
+  WHERE stripe_refund_id IS NOT NULL;
+
+COMMENT ON INDEX idx_wallet_tx_stripe_refund_id_unique
+  IS 'Unique index on stripe_refund_id to prevent duplicate refund wallet transactions when Stripe retries charge.refunded events';
 
 -- ============================================================
 -- 2. notifications — stripe_payout_id column + dedup index
