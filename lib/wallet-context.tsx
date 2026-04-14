@@ -190,10 +190,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           setBalance(resolvedBalance);
 
           // Update payout failure state from API response
-          const apiPayoutFailedAt = balanceData.payoutFailedAt ?? null;
-          const apiPayoutFailureCode = balanceData.payoutFailureCode ?? null;
-          setPayoutFailed(!!apiPayoutFailedAt);
-          setPayoutFailureCode(apiPayoutFailureCode);
+          setPayoutFailed(!!balanceData.payoutFailedAt);
+          setPayoutFailureCode(
+            typeof balanceData.payoutFailureCode === 'string' ? balanceData.payoutFailureCode : null
+          );
 
           try {
             await persist(resolvedBalance);

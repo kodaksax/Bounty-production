@@ -71,7 +71,7 @@ export function PayoutFailedBanner() {
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
-        throw new Error((errData as any).error || 'Failed to create account update link');
+        throw new Error((errData as { error?: string }).error || 'Failed to create account update link');
       }
 
       const { url } = await response.json();
