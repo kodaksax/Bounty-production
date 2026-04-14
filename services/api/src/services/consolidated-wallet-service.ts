@@ -222,8 +222,8 @@ export async function getBalance(userId: string): Promise<BalanceResult> {
     balance,
     currency: 'USD',
     user_id: userId,
-    payoutFailedAt: (profile as any)?.payout_failed_at ?? null,
-    payoutFailureCode: (profile as any)?.payout_failure_code ?? null,
+    payoutFailedAt: profile?.payout_failed_at ?? null,
+    payoutFailureCode: profile?.payout_failure_code ?? null,
   };
 }
 

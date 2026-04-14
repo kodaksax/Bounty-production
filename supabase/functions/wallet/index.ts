@@ -189,7 +189,7 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      const profileRow = profile as (Profile & { payout_failed_at?: string | null; payout_failure_code?: string | null }) | null
+      const profileRow = profile as Profile | null
       return jsonResponse({
         balance,
         currency: 'USD',

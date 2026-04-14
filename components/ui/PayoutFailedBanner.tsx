@@ -77,13 +77,19 @@ export function PayoutFailedBanner() {
       const { url } = await response.json();
       if (!url) throw new Error('No URL returned from server');
 
-      // Open the Stripe Express Dashboard in an in-app browser
-      await openUrlInBrowser(url);
+      // Open the Stripe Express Dashboard in an in-app browser.
+      // If the user cancels or the browser fails to open, surface the error and
+      // do NOT proceed to verify-onboarding — there's nothing to verify yet.
+      const browserResult = await openUrlInBrowser(url);
+      if (!browserResult.success) {
+        setFixError(browserResult.error || 'Could not open the browser. Please try again.');
+        return;
+      }
 
       // After the browser closes, re-verify onboarding. If payouts are now
       // enabled the server will clear payout_failed_at and the next balance
       // refresh will hide this banner.
-      await fetch(`${API_BASE_URL}/connect/verify-onboarding`, {
+      const verifyResponse = await fetch(`${API_BASE_URL}/connect/verify-onboarding`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
@@ -92,11 +98,26 @@ export function PayoutFailedBanner() {
         },
       });
 
+      if (!verifyResponse.ok) {
+        const verifyErr = await verifyResponse.json().catch(() => ({}));
+        throw new Error(
+          (verifyErr as { error?: string }).error || 'Failed to verify your account status.'
+        );
+      }
+
+      const verifyData = await verifyResponse.json();
+
       // Refresh wallet balance so the context picks up the cleared flag
       await refreshFromApi(session.access_token);
-    } catch (err: any) {
+
+      // If payouts still aren't enabled after the update session, let the user
+      // know they may need to finish their Stripe details.
+      if (!verifyData.payoutsEnabled) {
+        setFixError('Your payment details were saved, but payouts are not yet enabled. Please ensure all required information is complete in Stripe.');
+      }
+    } catch (err: unknown) {
       console.error('[PayoutFailedBanner] Fix payment details error:', err);
-      setFixError(err?.message || 'Something went wrong. Please try again.');
+      setFixError((err instanceof Error ? err.message : null) || 'Something went wrong. Please try again.');
     } finally {
       setIsFixing(false);
     }

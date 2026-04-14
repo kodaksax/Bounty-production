@@ -145,7 +145,15 @@ Deno.serve(async (req: Request) => {
       }
 
       if (Object.keys(profileUpdates).length > 0) {
-        await supabase.from('profiles').update(profileUpdates).eq('id', userId)
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update(profileUpdates)
+          .eq('id', userId)
+
+        if (updateError) {
+          console.error('[connect] Failed to update profile during verify-onboarding', { userId, error: updateError })
+          return jsonResponse({ error: 'Failed to update account status. Please try again.' }, 500)
+        }
       }
 
       return jsonResponse({
