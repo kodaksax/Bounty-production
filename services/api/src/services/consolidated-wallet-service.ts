@@ -111,6 +111,8 @@ export interface BalanceResult {
   balance: number;
   currency: string;
   user_id: string;
+  payoutFailedAt: string | null;
+  payoutFailureCode: string | null;
 }
 
 /**
@@ -160,7 +162,7 @@ export async function getBalance(userId: string): Promise<BalanceResult> {
 
   const { data: profile, error } = await admin
     .from('profiles')
-    .select('balance')
+    .select('balance, payout_failed_at, payout_failure_code')
     .eq('id', userId)
     .single();
 
@@ -220,6 +222,8 @@ export async function getBalance(userId: string): Promise<BalanceResult> {
     balance,
     currency: 'USD',
     user_id: userId,
+    payoutFailedAt: (profile as any)?.payout_failed_at ?? null,
+    payoutFailureCode: (profile as any)?.payout_failure_code ?? null,
   };
 }
 

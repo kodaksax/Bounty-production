@@ -41,6 +41,8 @@ interface WalletContextValue {
   balance: number;
   isLoading: boolean;
   secureStoreAvailable: boolean;
+  payoutFailed: boolean;
+  payoutFailureCode: string | null;
   deposit: (amount: number, meta?: Partial<WalletTransactionRecord['details']>) => Promise<void>;
   withdraw: (amount: number, meta?: Partial<WalletTransactionRecord['details']>) => Promise<boolean>; // false if insufficient
   setBalance: (amount: number) => void;
@@ -67,6 +69,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const balanceRef = useRef<number>(INITIAL_BALANCE);
   const [isLoading, setIsLoading] = useState(true);
   const [transactions, setTransactions] = useState<WalletTransactionRecord[]>([]);
+  const [payoutFailed, setPayoutFailed] = useState<boolean>(false);
+  const [payoutFailureCode, setPayoutFailureCode] = useState<string | null>(null);
   const lastOptimisticDepositRef = useRef<number | null>(null);
   // Tracks whether the WalletProvider is still mounted so async callbacks
   // (refresh, refreshFromApi) can skip setState calls after unmount.
@@ -184,6 +188,12 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         if (mountedRef.current) {
           setBalance(resolvedBalance);
+
+          // Update payout failure state from API response
+          const apiPayoutFailedAt = balanceData.payoutFailedAt ?? null;
+          const apiPayoutFailureCode = balanceData.payoutFailureCode ?? null;
+          setPayoutFailed(!!apiPayoutFailedAt);
+          setPayoutFailureCode(apiPayoutFailureCode);
 
           try {
             await persist(resolvedBalance);
@@ -692,6 +702,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     balance,
     isLoading,
     secureStoreAvailable,
+    payoutFailed,
+    payoutFailureCode,
     deposit,
     withdraw,
     setBalance: (amt: number) => { setBalance(amt); persist(amt); },

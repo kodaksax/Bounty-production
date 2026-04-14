@@ -150,7 +150,7 @@ Deno.serve(async (req: Request) => {
     if (subPath === '/balance') {
       const { data: profile, error } = await supabase
         .from('profiles')
-        .select('balance')
+        .select('balance, payout_failed_at, payout_failure_code')
         .eq('id', userId)
         .single()
 
@@ -189,7 +189,13 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      return jsonResponse({ balance, currency: 'USD' })
+      const profileRow = profile as (Profile & { payout_failed_at?: string | null; payout_failure_code?: string | null }) | null
+      return jsonResponse({
+        balance,
+        currency: 'USD',
+        payoutFailedAt: profileRow?.payout_failed_at ?? null,
+        payoutFailureCode: profileRow?.payout_failure_code ?? null,
+      })
     }
 
     // GET /wallet/transactions

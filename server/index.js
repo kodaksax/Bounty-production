@@ -1393,7 +1393,7 @@ app.get('/wallet/balance', apiLimiter, authenticateUser, async (req, res) => {
 
     const { data: profile, error } = await supabase
       .from('profiles')
-      .select('balance')
+      .select('balance, payout_failed_at, payout_failure_code')
       .eq('id', userId)
       .single();
 
@@ -1439,6 +1439,8 @@ app.get('/wallet/balance', apiLimiter, authenticateUser, async (req, res) => {
     res.json({
       balance,
       currency: 'USD',
+      payoutFailedAt: profile?.payout_failed_at ?? null,
+      payoutFailureCode: profile?.payout_failure_code ?? null,
     });
   } catch (error) {
     console.error('[Wallet] Error:', error);
