@@ -376,41 +376,63 @@ Deno.serve(async (req: Request) => {
 
         if (originalTx) {
           const origTx = originalTx as Pick<WalletTransaction, 'user_id' | 'amount'>;
-          await supabase.from('wallet_transactions').insert({
-            user_id: origTx.user_id,
-            type: 'refund',
-            amount: -(charge.amount_refunded / 100),
-            description: 'Payment refunded',
-            status: 'completed',
-            stripe_charge_id: charge.id,
-            // charge.refunds.data[0].reason gives the reason for the first refund
-            metadata: { refund_reason: charge.refunds?.data?.[0]?.reason ?? null },
-          });
+          // Upsert with ON CONFLICT on stripe_charge_id so Stripe retries are
+          // idempotent — a second delivery of the same charge.refunded event
+          // will skip the insert rather than creating a duplicate refund row.
+          const { data: upsertedRows } = await supabase
+            .from('wallet_transactions')
+            .upsert(
+              {
+                user_id: origTx.user_id,
+                type: 'refund',
+                amount: -(charge.amount_refunded / 100),
+                description: 'Payment refunded',
+                status: 'completed',
+                stripe_charge_id: charge.id,
+                // charge.refunds.data[0].reason gives the reason for the first refund
+                metadata: { refund_reason: charge.refunds?.data?.[0]?.reason ?? null },
+              },
+              { onConflict: 'stripe_charge_id', ignoreDuplicates: true }
+            )
+            .select('user_id');
 
-          const { error: rpcError } = await supabase.rpc('update_balance', {
-            p_user_id: origTx.user_id,
-            p_amount: -(charge.amount_refunded / 100),
-          });
-
-          if (rpcError) {
-            const { error: retryError } = await supabase.rpc('update_balance', {
+          // Only update the balance when the row was actually inserted (not a
+          // duplicate replay). An empty result means ON CONFLICT suppressed it.
+          const wasInserted = Array.isArray(upsertedRows) && upsertedRows.length > 0;
+          if (wasInserted) {
+            const { error: rpcError } = await supabase.rpc('update_balance', {
               p_user_id: origTx.user_id,
               p_amount: -(charge.amount_refunded / 100),
             });
-            if (retryError) {
-              console.error(
-                '[webhooks] Atomic balance decrement for refund failed — letting Stripe retry'
-              );
-              throw retryError;
-            }
-          }
 
-          console.log(`[webhooks] Refund processed for user ${origTx.user_id}`);
+            if (rpcError) {
+              const { error: retryError } = await supabase.rpc('update_balance', {
+                p_user_id: origTx.user_id,
+                p_amount: -(charge.amount_refunded / 100),
+              });
+              if (retryError) {
+                console.error(
+                  '[webhooks] Atomic balance decrement for refund failed — letting Stripe retry'
+                );
+                throw retryError;
+              }
+            }
+
+            console.log(`[webhooks] Refund processed for user ${origTx.user_id}`);
+          } else {
+            console.log(
+              `[webhooks] charge.refunded duplicate detected for charge ${charge.id} — skipping balance update`
+            );
+          }
         }
         break;
       }
 
       case 'transfer.created': {
+        // Replay-safe: this handler performs an UPDATE (not INSERT), so a second
+        // delivery of the same event is a no-op — the row already has
+        // stripe_transfer_id set and the `.is('stripe_transfer_id', null)` filter
+        // will match zero rows, leaving the database unchanged.
         const transfer = event.data.object as Stripe.Transfer;
         console.log(`[webhooks] Transfer created: ${transfer.id}`);
         const transferUserId = transfer.metadata?.user_id;
@@ -529,13 +551,19 @@ Deno.serve(async (req: Request) => {
           }
 
           if (paidProfile) {
-            const { error: notifError } = await supabase.from('notifications').insert({
-              user_id: paidProfile.id,
-              type: 'payment',
-              title: 'Payout Successful',
-              body: `Your payout of $${(payout.amount / 100).toFixed(2)} has been processed and sent to your bank account.`,
-              data: { payoutId: payout.id },
-            });
+            // Upsert with ON CONFLICT on (user_id, type, stripe_payout_id) so Stripe
+            // retries of payout.paid do not create duplicate notifications.
+            const { error: notifError } = await supabase.from('notifications').upsert(
+              {
+                user_id: paidProfile.id,
+                type: 'payment',
+                title: 'Payout Successful',
+                body: `Your payout of $${(payout.amount / 100).toFixed(2)} has been processed and sent to your bank account.`,
+                data: { payoutId: payout.id },
+                stripe_payout_id: payout.id,
+              },
+              { onConflict: 'user_id,type,stripe_payout_id', ignoreDuplicates: true }
+            );
             if (notifError) {
               console.error('[webhooks] Failed to insert payout.paid notification', {
                 profileId: paidProfile.id,
@@ -572,17 +600,23 @@ Deno.serve(async (req: Request) => {
           }
 
           if (failedProfile) {
-            const { error: notifError } = await supabase.from('notifications').insert({
-              user_id: failedProfile.id,
-              type: 'payment',
-              title: 'Payout Failed',
-              body: `Your payout of $${(payout.amount / 100).toFixed(2)} could not be processed. ${payout.failure_message || payout.failure_code || 'Please update your bank account details.'}`,
-              data: {
-                payoutId: payout.id,
-                failureCode: payout.failure_code,
-                failureMessage: payout.failure_message,
+            // Upsert with ON CONFLICT on (user_id, type, stripe_payout_id) so Stripe
+            // retries of payout.failed do not create duplicate notifications.
+            const { error: notifError } = await supabase.from('notifications').upsert(
+              {
+                user_id: failedProfile.id,
+                type: 'payment',
+                title: 'Payout Failed',
+                body: `Your payout of $${(payout.amount / 100).toFixed(2)} could not be processed. ${payout.failure_message || payout.failure_code || 'Please update your bank account details.'}`,
+                data: {
+                  payoutId: payout.id,
+                  failureCode: payout.failure_code,
+                  failureMessage: payout.failure_message,
+                },
+                stripe_payout_id: payout.id,
               },
-            });
+              { onConflict: 'user_id,type,stripe_payout_id', ignoreDuplicates: true }
+            );
             if (notifError) {
               console.error('[webhooks] Failed to insert payout.failed notification', {
                 profileId: failedProfile.id,
