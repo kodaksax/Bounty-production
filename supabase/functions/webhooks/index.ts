@@ -411,12 +411,80 @@ Deno.serve(async (req: Request) => {
             });
 
             if (applyErr) {
-              console.error('[webhooks] apply_refund RPC failed — letting Stripe retry', {
-                refundId: refund.id,
-                chargeId: charge.id,
-                error: applyErr,
-              });
-              throw applyErr;
+              // Detect insufficient-funds errors from the RPC so we can record
+              // a failed refund transaction and avoid letting Stripe retry
+              // indefinitely. This mirrors the dispute.closed handling which
+              // records a failed dispute_loss when the atomic RPC cannot apply
+              // the deduction due to insufficient funds.
+              const errMsg = (applyErr && (applyErr.message || '')).toString();
+              const errCode = (applyErr && (applyErr.code || '')).toString();
+              const insufficientFunds =
+                errCode === '23514' || errMsg.toLowerCase().includes('insufficient funds');
+
+              if (insufficientFunds) {
+                console.warn(
+                  '[webhooks] apply_refund RPC failed due to insufficient funds — recording failed refund transaction',
+                  {
+                    refundId: refund.id,
+                    chargeId: charge.id,
+                    user_id: origTx.user_id,
+                    amount: refundAmountDollars,
+                    error: applyErr,
+                  }
+                );
+
+                try {
+                  const { error: insertErr } = await supabase.from('wallet_transactions').insert({
+                    user_id: origTx.user_id,
+                    type: 'refund',
+                    amount: -refundAmountDollars,
+                    description: `Stripe refund ${refund.id} failed due to insufficient funds`,
+                    status: 'failed',
+                    stripe_refund_id: refund.id,
+                    stripe_charge_id: charge.id,
+                    metadata: {
+                      refund_reason: refund.reason ?? null,
+                      refund_id: refund.id,
+                    },
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                  });
+
+                  if (insertErr) {
+                    // If the insert conflicts (concurrent recording) or fails for
+                    // another reason, log it but do not rethrow — we want to
+                    // return success to Stripe to stop retries.
+                    console.error('[webhooks] Failed to insert failed refund wallet_transaction', {
+                      refundId: refund.id,
+                      chargeId: charge.id,
+                      error: insertErr,
+                    });
+                  } else {
+                    console.log(
+                      `[webhooks] Recorded failed refund wallet_transaction for refund ${refund.id} user ${origTx.user_id}`
+                    );
+                  }
+                } catch (insErr) {
+                  // Defensive: log and continue — do not throw so webhook returns 200
+                  console.error(
+                    '[webhooks] Exception while recording failed refund wallet_transaction',
+                    {
+                      refundId: refund.id,
+                      chargeId: charge.id,
+                      error: insErr,
+                    }
+                  );
+                }
+
+                // Do not rethrow; we've recorded the failure so Stripe can stop retrying.
+              } else {
+                console.error('[webhooks] apply_refund RPC failed — letting Stripe retry', {
+                  refundId: refund.id,
+                  chargeId: charge.id,
+                  error: applyErr,
+                });
+                throw applyErr;
+              }
             }
 
             const appliedRow =
