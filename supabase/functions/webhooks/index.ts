@@ -477,6 +477,9 @@ Deno.serve(async (req: Request) => {
                 }
 
                 // Do not rethrow; we've recorded the failure so Stripe can stop retrying.
+                // Skip further processing for this refund — avoid falling through
+                // to the duplicate-refund logging below which would be misleading.
+                continue;
               } else {
                 console.error('[webhooks] apply_refund RPC failed — letting Stripe retry', {
                   refundId: refund.id,
