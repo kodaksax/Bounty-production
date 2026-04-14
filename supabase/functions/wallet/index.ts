@@ -443,6 +443,14 @@ Deno.serve(async (req: Request) => {
           .select('balance')
           .eq('id', userId)
           .single();
+        if (profileFetchErr2 || !profileData2) {
+          console.error('[wallet] fetch balance error before refund credit:', profileFetchErr2);
+          await supabase
+            .from('wallet_transactions')
+            .delete()
+            .eq('id', (refundTxRow as WalletTransaction).id);
+          return jsonResponse({ error: 'Failed to fetch balance for refund' }, 500);
+        }
         const currentBalance2: number = (profileData2 as Profile | null)?.balance ?? 0;
         const { error: balanceErr2 } = await supabase
           .from('profiles')
