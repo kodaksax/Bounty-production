@@ -558,27 +558,48 @@ Deno.serve(async (req: Request) => {
           }
 
           if (paidProfile) {
-            // Upsert with ON CONFLICT on (user_id, type, stripe_payout_id) so Stripe
-            // retries of payout.paid do not create duplicate notifications.
-            const { error: notifError } = await supabase.from('notifications').upsert(
-              {
-                user_id: paidProfile.id,
-                type: 'payment',
-                title: 'Payout Successful',
-                body: `Your payout of $${(payout.amount / 100).toFixed(2)} has been processed and sent to your bank account.`,
-                data: { payoutId: payout.id },
-                stripe_payout_id: payout.id,
-              },
-              { onConflict: 'user_id,type,stripe_payout_id', ignoreDuplicates: true }
-            );
-            if (notifError) {
-              console.error('[webhooks] Failed to insert payout.paid notification', {
-                profileId: paidProfile.id,
-                error: notifError,
-              });
-              throw notifError;
+            // Insert notification, falling back to an update when the insert
+            // conflicts. We avoid Supabase/PostgREST `.upsert()` here because
+            // the DB uses a partial unique index on (user_id,type,stripe_payout_id)
+            // WHERE stripe_payout_id IS NOT NULL; PostgREST cannot express that
+            // partial constraint in its generated ON CONFLICT clause which would
+            // cause a runtime error. Instead: try insert, then update by the
+            // stripe_payout_id on failure (race-safe).
+            const notifRow = {
+              user_id: paidProfile.id,
+              type: 'payment',
+              title: 'Payout Successful',
+              body: `Your payout of $${(payout.amount / 100).toFixed(2)} has been processed and sent to your bank account.`,
+              data: { payoutId: payout.id },
+              stripe_payout_id: payout.id,
+            };
+
+            const { error: insertErr } = await supabase.from('notifications').insert(notifRow);
+
+            if (insertErr) {
+              // Insert may fail due to a concurrent insert by a retry; try update fallback
+              const { error: updateFallbackErr } = await supabase
+                .from('notifications')
+                .update(notifRow)
+                .eq('user_id', paidProfile.id)
+                .eq('type', 'payment')
+                .eq('stripe_payout_id', payout.id);
+
+              if (updateFallbackErr) {
+                console.error('[webhooks] Failed to insert payout.paid notification', {
+                  profileId: paidProfile.id,
+                  insert_error: insertErr,
+                  update_error: updateFallbackErr,
+                });
+                throw updateFallbackErr;
+              }
+
+              console.log(
+                `[webhooks] Notified hunter ${paidProfile.id} of payout.paid (update fallback)`
+              );
+            } else {
+              console.log(`[webhooks] Notified hunter ${paidProfile.id} of payout.paid`);
             }
-            console.log(`[webhooks] Notified hunter ${paidProfile.id} of payout.paid`);
           } else {
             console.warn(`[webhooks] No profile found for Connect account ${paidAccountId}`);
           }
@@ -607,30 +628,48 @@ Deno.serve(async (req: Request) => {
           }
 
           if (failedProfile) {
-            // Upsert with ON CONFLICT on (user_id, type, stripe_payout_id) so Stripe
-            // retries of payout.failed do not create duplicate notifications.
-            const { error: notifError } = await supabase.from('notifications').upsert(
-              {
-                user_id: failedProfile.id,
-                type: 'payment',
-                title: 'Payout Failed',
-                body: `Your payout of $${(payout.amount / 100).toFixed(2)} could not be processed. ${payout.failure_message || payout.failure_code || 'Please update your bank account details.'}`,
-                data: {
-                  payoutId: payout.id,
-                  failureCode: payout.failure_code,
-                  failureMessage: payout.failure_message,
-                },
-                stripe_payout_id: payout.id,
+            // Insert notification, falling back to an update when the insert
+            // conflicts. Avoid `.upsert()` because the DB uses a partial unique
+            // index on (user_id,type,stripe_payout_id) WHERE stripe_payout_id IS NOT NULL.
+            const notifRow = {
+              user_id: failedProfile.id,
+              type: 'payment',
+              title: 'Payout Failed',
+              body: `Your payout of $${(payout.amount / 100).toFixed(2)} could not be processed. ${payout.failure_message || payout.failure_code || 'Please update your bank account details.'}`,
+              data: {
+                payoutId: payout.id,
+                failureCode: payout.failure_code,
+                failureMessage: payout.failure_message,
               },
-              { onConflict: 'user_id,type,stripe_payout_id', ignoreDuplicates: true }
-            );
-            if (notifError) {
-              console.error('[webhooks] Failed to insert payout.failed notification', {
-                profileId: failedProfile.id,
-                error: notifError,
-              });
-              throw notifError;
+              stripe_payout_id: payout.id,
+            };
+
+            const { error: insertErr } = await supabase.from('notifications').insert(notifRow);
+
+            if (insertErr) {
+              const { error: updateFallbackErr } = await supabase
+                .from('notifications')
+                .update(notifRow)
+                .eq('user_id', failedProfile.id)
+                .eq('type', 'payment')
+                .eq('stripe_payout_id', payout.id);
+
+              if (updateFallbackErr) {
+                console.error('[webhooks] Failed to insert payout.failed notification', {
+                  profileId: failedProfile.id,
+                  insert_error: insertErr,
+                  update_error: updateFallbackErr,
+                });
+                throw updateFallbackErr;
+              }
+
+              console.log(
+                `[webhooks] Notified hunter ${failedProfile.id} of payout.failed (update fallback)`
+              );
+            } else {
+              console.log(`[webhooks] Notified hunter ${failedProfile.id} of payout.failed`);
             }
+
             // Flag the profile so support can follow up
             const { error: payoutFlagError } = await supabase
               .from('profiles')
@@ -643,7 +682,6 @@ Deno.serve(async (req: Request) => {
               });
               throw payoutFlagError;
             }
-            console.log(`[webhooks] Notified hunter ${failedProfile.id} of payout.failed`);
           } else {
             console.warn(`[webhooks] No profile found for Connect account ${failedAccountId}`);
           }
