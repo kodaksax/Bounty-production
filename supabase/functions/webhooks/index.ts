@@ -198,6 +198,52 @@ Deno.serve(async (req: Request) => {
           console.log(
             `[webhooks] Deposit applied via apply_deposit, tx_id=${appliedRow.tx_id} for user ${userId}`
           );
+
+          // Fetch updated balance then send a push notification
+          try {
+            const { data: profileRow, error: balanceErr } = await supabase
+              .from('profiles')
+              .select('balance')
+              .eq('id', userId)
+              .maybeSingle();
+
+            if (balanceErr) {
+              console.error('[webhooks] Failed to fetch balance for notification', balanceErr);
+            }
+
+            const newBalance: number | null = profileRow?.balance ?? null;
+            const amountFormatted = amountDollars.toFixed(2);
+
+            const { data: outboxRow, error: outboxErr } = await supabase
+              .from('notifications_outbox')
+              .insert({
+                recipients: [userId],
+                title: 'Deposit Successful',
+                body: `Your deposit of $${amountFormatted} has been credited to your wallet.`,
+                data: { type: 'balance_update', newBalance },
+              })
+              .select('id')
+              .single();
+
+            if (outboxErr || !outboxRow) {
+              console.error('[webhooks] Failed to insert notifications_outbox row', outboxErr);
+            } else {
+              const { error: invokeErr } = await supabase.functions.invoke(
+                'process-notification',
+                { body: { id: outboxRow.id } }
+              );
+              if (invokeErr) {
+                console.error('[webhooks] process-notification invoke failed', invokeErr);
+              } else {
+                console.log(
+                  `[webhooks] Push notification queued for user ${userId}, outbox_id=${outboxRow.id}`
+                );
+              }
+            }
+          } catch (notifErr) {
+            // Notification failure must not affect the webhook response
+            console.error('[webhooks] Unexpected error sending deposit notification', notifErr);
+          }
         } else {
           console.log(
             `[webhooks] apply_deposit no-op (already processed) for intent ${paymentIntent.id}`
