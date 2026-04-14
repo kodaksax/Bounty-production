@@ -136,6 +136,15 @@ export const disputeService = {
         return null;
       }
 
+      // Place a wallet hold on the poster's balance for the disputed bounty amount.
+      // fn_open_dispute_hold is idempotent and a no-op for honor/zero-amount bounties.
+      try {
+        await (supabase as any).rpc('fn_open_dispute_hold', { p_dispute_id: data.id });
+      } catch (holdErr) {
+        // Log but do not fail dispute creation if the hold RPC fails.
+        logger.error('Error placing dispute wallet hold', { error: holdErr, disputeId: data.id });
+      }
+
       // Only update the cancellation status after dispute was created successfully.
       const { error: updateError } = await supabase
         .from('bounty_cancellations')
@@ -318,7 +327,7 @@ export const disputeService = {
    */
   async updateDisputeStatus(
     disputeId: string,
-    status: 'open' | 'under_review' | 'resolved' | 'closed'
+    status: 'open' | 'under_review' | 'resolved' | 'closed' | 'cancelled' | 'resolved_poster_wins' | 'resolved_hunter_wins'
   ): Promise<boolean> {
     try {
       if (!isSupabaseConfigured) {
@@ -330,6 +339,33 @@ export const disputeService = {
       if (!session?.user?.id || !(await verifyAdminRole())) {
         logger.error('Non-admin attempted to update dispute status', { disputeId, status });
         throw new Error('Unauthorized: admin role required');
+      }
+
+      // For terminal statuses that have a defined hold-release semantic,
+      // delegate to fn_close_dispute_hold which atomically releases the
+      // balance_on_hold AND updates the dispute status in one DB transaction.
+      const terminalStatuses = ['resolved', 'closed', 'cancelled', 'resolved_poster_wins', 'resolved_hunter_wins'];
+      if (terminalStatuses.includes(status)) {
+        const { error: rpcError } = await (supabase as any).rpc('fn_close_dispute_hold', {
+          p_dispute_id: disputeId,
+          p_new_status: status,
+        });
+
+        if (rpcError) {
+          logger.error('Error releasing dispute hold via fn_close_dispute_hold', { rpcError, disputeId, status });
+          // Fall through to plain status update so the dispute is still resolved.
+          const { error } = await supabase
+            .from('bounty_disputes')
+            .update({ status })
+            .eq('id', disputeId);
+
+          if (error) {
+            logger.error('Error updating dispute status (fallback)', { error, disputeId, status });
+            throw error;
+          }
+        }
+
+        return true;
       }
 
       const { error } = await supabase
@@ -427,7 +463,6 @@ export const disputeService = {
       }
 
       const updateData: Record<string, any> = {
-        status: 'resolved',
         resolution,
         resolved_by: resolvedBy,
         resolved_at: new Date().toISOString(),
@@ -437,6 +472,30 @@ export const disputeService = {
         updateData.winner = winner;
       }
 
+      // Map the winner to the new application-level resolution status and
+      // atomically release the balance_on_hold via fn_close_dispute_hold.
+      const resolvedStatus = winner === 'hunter'
+        ? 'resolved_hunter_wins'
+        : winner === 'poster'
+          ? 'resolved_poster_wins'
+          : 'resolved';
+
+      const { error: holdRpcError } = await (supabase as any).rpc('fn_close_dispute_hold', {
+        p_dispute_id: disputeId,
+        p_new_status: resolvedStatus,
+      });
+
+      if (holdRpcError) {
+        // Log and fall through — still apply the full updateData via plain update.
+        logger.error('Error releasing dispute hold via fn_close_dispute_hold', {
+          holdRpcError,
+          disputeId,
+          resolvedStatus,
+        });
+        updateData.status = 'resolved';
+      }
+
+      // Always write the extra metadata fields (resolution text, resolved_by, winner).
       const { error } = await supabase
         .from('bounty_disputes')
         .update(updateData)

@@ -1295,7 +1295,7 @@ app.post('/connect/transfer', paymentLimiter, authenticateUser, async (req, res)
     // Get user profile and check balance
     const { data: profile } = await supabase
       .from('profiles')
-      .select('balance, stripe_connect_account_id, stripe_connect_onboarded_at')
+      .select('balance, balance_on_hold, stripe_connect_account_id, stripe_connect_onboarded_at')
       .eq('id', userId)
       .single();
 
@@ -1307,7 +1307,9 @@ app.post('/connect/transfer', paymentLimiter, authenticateUser, async (req, res)
       return res.status(400).json({ error: 'Stripe Connect account not set up' });
     }
 
-    if (profile.balance < amount) {
+    // Enforce hold: available = balance - balance_on_hold.
+    const available = (profile.balance ?? 0) - (profile.balance_on_hold ?? 0);
+    if (available < amount) {
       return res.status(400).json({ error: 'Insufficient balance' });
     }
 
@@ -1351,11 +1353,11 @@ app.post('/connect/transfer', paymentLimiter, authenticateUser, async (req, res)
       throw txError;
     }
 
-    // Update user balance using parameterized RPC function
-    // This prevents SQL injection by using a stored procedure with proper parameter binding
-    const { data: newBalance, error: balanceError } = await supabase.rpc('update_balance', {
+    // Update user balance using withdraw_balance RPC which enforces the
+    // balance_on_hold constraint (available = balance - balance_on_hold >= amount).
+    const { data: newBalance, error: balanceError } = await supabase.rpc('withdraw_balance', {
       p_user_id: userId,
-      p_amount: -amount, // Negative amount for withdrawal
+      p_amount: amount, // Positive amount; RPC deducts internally
     });
 
     if (balanceError) {

@@ -151,7 +151,7 @@ Deno.serve(async (req: Request) => {
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('balance, stripe_connect_account_id, stripe_connect_onboarded_at')
+        .select('balance, balance_on_hold, stripe_connect_account_id, stripe_connect_onboarded_at')
         .eq('id', userId)
         .single()
 
@@ -164,15 +164,16 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ error: 'Stripe Connect account not set up' }, 400)
       }
 
-      if ((p.balance ?? 0) < amount) {
+      // Enforce hold: available = balance - balance_on_hold.
+      const available = (p.balance ?? 0) - (p.balance_on_hold ?? 0)
+      if (available < amount) {
         return jsonResponse({ error: 'Insufficient balance' }, 400)
       }
 
-      // Deduct balance atomically BEFORE creating the Stripe transfer to avoid
-      // paying out funds without a corresponding balance deduction.
-      const { error: balanceError } = await supabase.rpc('update_balance', {
+      // Deduct balance atomically via withdraw_balance which enforces the hold check.
+      const { error: balanceError } = await supabase.rpc('withdraw_balance', {
         p_user_id: userId,
-        p_amount: -amount,
+        p_amount: amount,
       })
 
       if (balanceError) {
@@ -261,7 +262,7 @@ Deno.serve(async (req: Request) => {
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('stripe_connect_account_id, balance')
+        .select('stripe_connect_account_id, balance, balance_on_hold')
         .eq('id', userId)
         .single()
 
@@ -272,19 +273,21 @@ Deno.serve(async (req: Request) => {
 
       const amount = Math.abs(t.amount)
 
-      if ((p.balance ?? 0) < amount) {
+      // Enforce hold: available = balance - balance_on_hold.
+      const available = (p.balance ?? 0) - (p.balance_on_hold ?? 0)
+      if (available < amount) {
         return jsonResponse({ error: 'Insufficient balance for retry' }, 400)
       }
 
-      const { error: rpcError } = await supabase.rpc('update_balance', {
+      const { error: rpcError } = await supabase.rpc('withdraw_balance', {
         p_user_id: userId,
-        p_amount: -amount,
+        p_amount: amount,
       })
 
       let balanceDeducted = !rpcError
 
       if (rpcError) {
-        console.warn('[connect] update_balance RPC failed, using optimistic locking for transfer retry')
+        console.warn('[connect] withdraw_balance RPC failed, using optimistic locking for transfer retry')
         const { data: updatedProfile, error: updateError } = await supabase
           .from('profiles')
           .update({ balance: (p.balance ?? 0) - amount })
