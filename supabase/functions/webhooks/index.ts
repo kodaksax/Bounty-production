@@ -773,6 +773,10 @@ Deno.serve(async (req: Request) => {
             : ((closedDispute.payment_intent as Stripe.PaymentIntent | null)?.id ?? null);
         const closedAmountDollars = closedDispute.amount / 100;
         const disputeWon = closedDispute.status === 'won';
+        // Track whether the dispute loss was successfully applied to the user's balance.
+        // If we cannot apply the deduction due to insufficient funds, we'll
+        // record a failed transaction so Stripe does not keep retrying the webhook.
+        let disputeLossApplied = true;
 
         console.log(
           `[webhooks] charge.dispute.closed: dispute=${closedDispute.id} status=${closedDispute.status} amount=$${closedAmountDollars}`
@@ -970,20 +974,78 @@ Deno.serve(async (req: Request) => {
             );
 
             if (applyError) {
-              console.error(
-                '[webhooks] charge.dispute.closed (lost): failed to apply dispute_loss transaction atomically',
-                {
-                  user_id: closedUserId,
-                  stripe_dispute_id: closedDispute.id,
-                  error: applyError,
-                }
-              );
-              throw applyError;
-            }
+              // Detect insufficient-funds error from the balance update RPC.
+              const errMsg = (applyError && (applyError.message || '')) as string;
+              const errCode = (applyError && (applyError.code || '')) as string;
+              const insufficientFunds =
+                errCode === '23514' || errMsg.toLowerCase().includes('insufficient funds');
 
-            console.log(
-              `[webhooks] charge.dispute.closed (lost): deducted $${closedAmountDollars} from user ${closedUserId}`
-            );
+              if (insufficientFunds) {
+                disputeLossApplied = false;
+                console.warn(
+                  '[webhooks] charge.dispute.closed (lost): insufficient funds — recording failed dispute_loss transaction for manual review',
+                  {
+                    user_id: closedUserId,
+                    stripe_dispute_id: closedDispute.id,
+                    amount: closedAmountDollars,
+                    error: applyError,
+                  }
+                );
+
+                // Create a record so we don't keep retrying indefinitely.
+                // Use status 'failed' to indicate the deduction couldn't be applied.
+                try {
+                  const { error: insertErr } = await supabase.from('wallet_transactions').insert({
+                    user_id: closedUserId,
+                    type: 'dispute_loss',
+                    amount: -closedAmountDollars,
+                    description: `Chargeback dispute lost (${closedDispute.id}) - failed due to insufficient funds`,
+                    status: 'failed',
+                    metadata: {
+                      stripe_dispute_id: closedDispute.id,
+                      stripe_payment_intent_id: closedPaymentIntentId ?? null,
+                    },
+                  });
+
+                  if (insertErr) {
+                    // Unique index or other DB error — log but don't rethrow so
+                    // the webhook returns 200 to Stripe and stops retrying.
+                    console.error(
+                      '[webhooks] charge.dispute.closed (lost): failed to insert failed dispute_loss transaction',
+                      {
+                        user_id: closedUserId,
+                        stripe_dispute_id: closedDispute.id,
+                        error: insertErr,
+                      }
+                    );
+                  } else {
+                    console.log(
+                      `[webhooks] charge.dispute.closed (lost): recorded failed dispute_loss transaction for user ${closedUserId}`
+                    );
+                  }
+                } catch (insErr) {
+                  // Defensive: log and continue — do not throw to avoid webhook retries.
+                  console.error(
+                    '[webhooks] charge.dispute.closed (lost): exception while recording failed dispute_loss transaction',
+                    { user_id: closedUserId, stripe_dispute_id: closedDispute.id, error: insErr }
+                  );
+                }
+              } else {
+                console.error(
+                  '[webhooks] charge.dispute.closed (lost): failed to apply dispute_loss transaction atomically',
+                  {
+                    user_id: closedUserId,
+                    stripe_dispute_id: closedDispute.id,
+                    error: applyError,
+                  }
+                );
+                throw applyError;
+              }
+            } else {
+              console.log(
+                `[webhooks] charge.dispute.closed (lost): deducted $${closedAmountDollars} from user ${closedUserId}`
+              );
+            }
           }
         }
 
@@ -1002,7 +1064,13 @@ Deno.serve(async (req: Request) => {
               'The payment dispute on your account has been resolved in your favor. Your wallet may still be frozen pending other disputes or review.';
           }
         } else {
-          outcomeMsg = `The payment dispute on your account has been resolved against you. $${closedAmountDollars.toFixed(2)} has been deducted from your wallet.`;
+          if (typeof disputeLossApplied !== 'undefined' && disputeLossApplied === false) {
+            outcomeMsg = `The payment dispute on your account has been resolved against you. We attempted to deduct $${closedAmountDollars.toFixed(
+              2
+            )} from your wallet but the deduction failed due to insufficient funds. The amount remains outstanding; please add funds or contact support.`;
+          } else {
+            outcomeMsg = `The payment dispute on your account has been resolved against you. $${closedAmountDollars.toFixed(2)} has been deducted from your wallet.`;
+          }
         }
 
         const { error: closedNotifError } = await supabase.from('notifications').insert({
