@@ -1,10 +1,10 @@
 -- Migration: Enforce RLS policies on wallet_transactions, bounty_disputes, dispute_evidence, and stripe_events
 -- Created: 2026-04-13
--- Purpose: Close the gap where wallet_transactions had RLS enabled but NO policies, meaning an
---          authenticated client could potentially interact with the table.  Under PostgreSQL, enabling
---          RLS without any permissive policy already denies access to non-superuser roles, BUT the
---          explicit policies below make the intent clear, survive future GRANT changes, and allow
---          users to read only their own transaction rows.
+-- Purpose: Make the intended RLS behavior explicit where wallet_transactions had RLS enabled but
+--          NO policies. Under PostgreSQL, RLS with no applicable permissive policy already denies
+--          access to anon/authenticated client roles, so the gap was not unintended client access;
+--          it was missing explicit documentation of deny intent and a missing SELECT policy to let
+--          users read only their own transaction rows.
 --
 -- Policy summary
 --   wallet_transactions
@@ -42,9 +42,11 @@ CREATE POLICY "wallet_transactions_select_own"
 
 -- Clients must not insert transactions directly.
 -- All writes go through SECURITY DEFINER RPCs (apply_deposit, fn_accept_bounty_request, etc.)
--- or the service-role backend.  The restrictive policy is a belt-and-suspenders guard.
+-- or the service-role backend.  Marked AS RESTRICTIVE so this deny cannot be bypassed by any
+-- future permissive INSERT policy (restrictive policies are AND-ed, permissive are OR-ed).
 CREATE POLICY "wallet_transactions_insert_deny"
   ON public.wallet_transactions
+  AS RESTRICTIVE
   FOR INSERT
   WITH CHECK (false);
 

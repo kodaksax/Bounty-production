@@ -20,7 +20,9 @@ const LIVE_MODE =
   Boolean(process.env.SUPABASE_URL) &&
   Boolean(process.env.SUPABASE_ANON_KEY) &&
   Boolean(process.env.RLS_TEST_USER_A_EMAIL) &&
-  Boolean(process.env.RLS_TEST_USER_B_EMAIL);
+  Boolean(process.env.RLS_TEST_USER_A_PASSWORD) &&
+  Boolean(process.env.RLS_TEST_USER_B_EMAIL) &&
+  Boolean(process.env.RLS_TEST_USER_B_PASSWORD);
 
 // ---------------------------------------------------------------------------
 // MOCK mode helpers

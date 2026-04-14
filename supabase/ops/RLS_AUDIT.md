@@ -47,7 +47,7 @@ RLS was **enabled** but **no policies existed**.  Under PostgreSQL, enabling RLS
 
 - ✅ Service-role backend (bypasses RLS) — full access, as intended.
 - ✅ Anon users — no access.
-- ⚠️ Authenticated users — technically no access due to default-deny, but the intent was **not documented** and could silently break if a `GRANT` were added.  No SELECT policy meant even legitimate users could not read their own transaction history via the JS client.
+- ⚠️ Authenticated users — no access due to default-deny.  The service-role-only intent was **not documented**, and without a SELECT policy even legitimate users could not read their own transaction history via the JS client until explicit per-user access was added.
 
 ### stripe_events — gap analysis
 
@@ -70,11 +70,11 @@ Existing policies cover SELECT and INSERT.  **UPDATE** and **DELETE** policies w
 | Policy name | Command | Rule |
 |---|---|---|
 | `wallet_transactions_select_own` | SELECT | `user_id = auth.uid()` |
-| `wallet_transactions_insert_deny` | INSERT | `WITH CHECK (false)` |
+| `wallet_transactions_insert_deny` | INSERT | `WITH CHECK (false)` (RESTRICTIVE) |
 | `wallet_transactions_update_deny` | UPDATE | `USING (false)` |
 | `wallet_transactions_delete_deny` | DELETE | `USING (false)` |
 
-**Effect:** Authenticated users can only read their own rows.  All writes from the client are rejected with error code `42501`.  The service role (backend APIs, Edge Functions, RPCs with `SECURITY DEFINER`) continues to operate normally.
+**Effect:** Authenticated users can only read their own rows. Client-side writes are denied by policy: `INSERT` attempts fail with an RLS error (error code `42501`) because the policy is `AS RESTRICTIVE`, while `UPDATE`/`DELETE` under `USING (false)` affect 0 rows rather than raising that error. The service role (backend APIs, Edge Functions, RPCs with `SECURITY DEFINER`) continues to operate normally.
 
 ### 3.2 bounty_disputes
 
