@@ -71,6 +71,10 @@ ALTER TABLE public.bounty_disputes
 -- The hold is capped at the poster's current balance to avoid the hold amount
 -- exceeding the balance (which would never allow the hold to be resolved via
 -- balance deduction).
+--
+-- SECURITY: Restricted to service_role only. This function must never be
+-- callable by arbitrary authenticated users as they could hold funds for
+-- disputes they are not party to.
 
 CREATE OR REPLACE FUNCTION public.fn_open_dispute_hold(p_dispute_id UUID)
 RETURNS void
@@ -128,7 +132,12 @@ BEGIN
    WHERE id = v_poster_id
      FOR UPDATE;
 
-  v_hold_amount := LEAST(v_bounty_amount, GREATEST(0, v_poster_balance));
+  IF NOT FOUND THEN
+    -- Poster profile missing; nothing can be safely held.
+    RETURN;
+  END IF;
+
+  v_hold_amount := LEAST(v_bounty_amount, GREATEST(0, COALESCE(v_poster_balance, 0)));
 
   IF v_hold_amount <= 0 THEN
     -- Nothing available to hold (escrow already deducted the full amount).
@@ -149,10 +158,14 @@ $$;
 
 COMMENT ON FUNCTION public.fn_open_dispute_hold(UUID) IS
   'Places a wallet hold on the bounty poster equal to the bounty amount (capped at '
-  'available balance) when a dispute is opened. Idempotent — safe to call more than once.';
+  'available balance) when a dispute is opened. Idempotent — safe to call more than once. '
+  'Restricted to service_role; must be invoked from trusted server-side code only.';
 
+-- Restrict to service_role only; arbitrary authenticated callers must not be
+-- able to place holds on poster wallets for disputes they are not party to.
+REVOKE EXECUTE ON FUNCTION public.fn_open_dispute_hold(UUID) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.fn_open_dispute_hold(UUID) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.fn_open_dispute_hold(UUID) TO service_role;
-GRANT EXECUTE ON FUNCTION public.fn_open_dispute_hold(UUID) TO authenticated;
 
 -- ─── 5. fn_close_dispute_hold ────────────────────────────────────────────────
 -- Releases the wallet hold and updates the dispute status atomically.
@@ -251,10 +264,15 @@ $$;
 COMMENT ON FUNCTION public.fn_close_dispute_hold(UUID, TEXT) IS
   'Releases the wallet hold placed by fn_open_dispute_hold and updates the dispute status '
   'atomically. On resolved_hunter_wins the hold amount is also deducted from the poster''s '
-  'balance. Safe to call for disputes that had no hold (no-op).';
+  'balance. Safe to call for disputes that had no hold (no-op). '
+  'Restricted to service_role; must be invoked from trusted server-side code only.';
 
+-- Restrict to service_role only. Any authenticated caller who knows a dispute UUID
+-- could otherwise trigger balance deductions (resolved_hunter_wins path) against a
+-- poster they are not authorized to affect.
+REVOKE EXECUTE ON FUNCTION public.fn_close_dispute_hold(UUID, TEXT) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.fn_close_dispute_hold(UUID, TEXT) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.fn_close_dispute_hold(UUID, TEXT) TO service_role;
-GRANT EXECUTE ON FUNCTION public.fn_close_dispute_hold(UUID, TEXT) TO authenticated;
 
 -- ─── 6. withdraw_balance RPC ─────────────────────────────────────────────────
 -- Drop-in replacement for the withdrawal path of update_balance(-amount).
@@ -326,8 +344,12 @@ $$;
 
 COMMENT ON FUNCTION public.withdraw_balance(UUID, NUMERIC) IS
   'Atomically withdraws p_amount from a user wallet. Enforces: '
-  '(1) balance_frozen = false, (2) balance - balance_on_hold >= p_amount. '
-  'Use instead of update_balance(-amount) for all withdrawal paths.';
+  '(1) balance_frozen = false (checked inline), (2) balance - balance_on_hold >= p_amount. '
+  'Use instead of update_balance(-amount) for all withdrawal paths. '
+  'Restricted to service_role; withdrawal must always be initiated via trusted server code.';
 
-GRANT EXECUTE ON FUNCTION public.withdraw_balance(UUID, NUMERIC) TO authenticated;
+-- Restrict to service_role only. Authenticated users must not be able to call this
+-- directly with an arbitrary p_user_id, which would allow withdrawing another user's funds.
+REVOKE EXECUTE ON FUNCTION public.withdraw_balance(UUID, NUMERIC) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.withdraw_balance(UUID, NUMERIC) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.withdraw_balance(UUID, NUMERIC) TO service_role;

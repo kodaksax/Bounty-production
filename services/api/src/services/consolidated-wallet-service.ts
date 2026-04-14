@@ -1141,11 +1141,17 @@ export async function withdrawBalance(userId: string, amount: number): Promise<v
     const errorMessage = rpcError.message?.toLowerCase() || '';
 
     if (errorCode === 'PGRST202') {
-      // withdraw_balance RPC not available yet — fall back to updateBalance
-      // (legacy path, lacks the hold check)
-      logger.warn({ userId }, '[WalletService] withdraw_balance RPC not found, falling back to update_balance');
-      await updateBalance(userId, -amount);
-      return;
+      // Fail closed: falling back to update_balance would bypass balance_on_hold
+      // enforcement and reintroduce the exact drain scenario this function prevents.
+      logger.error(
+        { userId, amount, errorCode, error: rpcError.message },
+        '[WalletService] withdraw_balance RPC not found; refusing insecure legacy fallback'
+      );
+      throw new ExternalServiceError(
+        'Supabase',
+        'Secure withdrawal is temporarily unavailable. Please retry after wallet migrations are fully deployed.',
+        { error: rpcError.message }
+      );
     }
 
     if (errorMessage.includes('insufficient') || errorMessage.includes('negative') || errorMessage.includes('available')) {

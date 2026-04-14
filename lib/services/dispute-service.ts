@@ -137,15 +137,37 @@ export const disputeService = {
       }
 
       // Place a wallet hold on the poster's balance for the disputed bounty amount.
-      // fn_open_dispute_hold is idempotent and a no-op for honor/zero-amount bounties.
-      try {
-        await (supabase as any).rpc('fn_open_dispute_hold', { p_dispute_id: data.id });
-      } catch (holdErr) {
-        // Log but do not fail dispute creation if the hold RPC fails.
-        logger.error('Error placing dispute wallet hold', { error: holdErr, disputeId: data.id });
+      // This must succeed; a dispute without an associated hold leaves the poster
+      // free to withdraw the disputed funds, defeating the purpose of this mechanism.
+      const { error: holdError } = await (supabase as any).rpc('fn_open_dispute_hold', {
+        p_dispute_id: data.id,
+      });
+
+      if (holdError) {
+        logger.error('Error placing dispute wallet hold; rolling back dispute creation', {
+          error: holdError,
+          disputeId: data.id,
+        });
+
+        // Roll back the dispute row so we do not leave the system in an unsafe
+        // state where a dispute exists but no hold protects the poster's balance.
+        const { error: rollbackError } = await supabase
+          .from('bounty_disputes')
+          .delete()
+          .eq('id', data.id);
+
+        if (rollbackError) {
+          logger.error('Error rolling back dispute after wallet hold failure', {
+            error: rollbackError,
+            disputeId: data.id,
+          });
+        }
+
+        return null;
       }
 
-      // Only update the cancellation status after dispute was created successfully.
+      // Only update the cancellation status after dispute was created successfully
+      // and the mandatory dispute hold has been placed.
       const { error: updateError } = await supabase
         .from('bounty_cancellations')
         .update({ status: 'disputed' })
@@ -352,17 +374,11 @@ export const disputeService = {
         });
 
         if (rpcError) {
+          // Treat hold-release failure as fatal for terminal transitions: surfacing
+          // this error ensures the admin UI can show that the financial side did not
+          // finalize, rather than silently leaving balance_on_hold stranded.
           logger.error('Error releasing dispute hold via fn_close_dispute_hold', { rpcError, disputeId, status });
-          // Fall through to plain status update so the dispute is still resolved.
-          const { error } = await supabase
-            .from('bounty_disputes')
-            .update({ status })
-            .eq('id', disputeId);
-
-          if (error) {
-            logger.error('Error updating dispute status (fallback)', { error, disputeId, status });
-            throw error;
-          }
+          throw rpcError;
         }
 
         return true;
@@ -486,16 +502,17 @@ export const disputeService = {
       });
 
       if (holdRpcError) {
-        // Log and fall through — still apply the full updateData via plain update.
         logger.error('Error releasing dispute hold via fn_close_dispute_hold', {
           holdRpcError,
           disputeId,
           resolvedStatus,
         });
-        updateData.status = 'resolved';
+        throw holdRpcError;
       }
 
-      // Always write the extra metadata fields (resolution text, resolved_by, winner).
+      updateData.status = resolvedStatus;
+
+      // Write the extra metadata fields (resolution text, resolved_by, winner).
       const { error } = await supabase
         .from('bounty_disputes')
         .update(updateData)
