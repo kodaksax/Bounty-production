@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BOUNTY — Refreshing Onboarding Link</title>
+    <link rel="stylesheet" href="../../../styles.css">
+    <style>
+        body { background-color: #047857; min-height: 100vh; }
+        .container { background-color: #047857; box-shadow: none; max-width: 480px; }
+        header { border-bottom: none; padding-bottom: 10px; }
+        header h1 { color: #fff; }
+        footer { border-top-color: rgba(255,255,255,0.2); }
+        footer p { color: rgba(255,255,255,0.5); }
+
+        .card {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 12px;
+            padding: 32px 24px;
+            text-align: center;
+            color: #fff;
+        }
+        .card p { color: rgba(255,255,255,0.8); margin-bottom: 16px; }
+        .icon-circle {
+            width: 80px; height: 80px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 20px; font-size: 2.5rem;
+        }
+        .icon-circle.loading { background: rgba(255,255,255,0.15); }
+        .icon-circle.warning { background: rgba(251,191,36,0.25); }
+        .card-title { font-size: 1.5rem; font-weight: 700; margin-bottom: 8px; color: #fff; }
+
+        .spinner {
+            width: 36px; height: 36px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>BOUNTY</h1>
+            <p class="subtitle">Marketplace for local work</p>
+        </header>
+        <main>
+            <!-- Loading state -->
+            <div id="state-loading" class="card">
+                <div class="icon-circle loading">
+                    <div class="spinner"></div>
+                </div>
+                <div class="card-title">Refreshing Link</div>
+                <p>Your onboarding link has expired. Returning to the app to generate a new one…</p>
+            </div>
+
+            <!-- Fallback state (shown if deep link fails) -->
+            <div id="state-fallback" class="card hidden">
+                <div class="icon-circle warning">⚠️</div>
+                <div class="card-title">Link Expired</div>
+                <p>Your Stripe onboarding link has expired. Open the BOUNTY app and tap <strong>Continue Setup</strong> to get a fresh link.</p>
+                <a id="open-app-btn" href="bountyexpo-workspace://wallet/connect/refresh" class="btn-primary" style="text-decoration:none; display:inline-block; margin-bottom:12px;">
+                    Open BOUNTY App
+                </a>
+                <p style="font-size:0.85rem; color:rgba(255,255,255,0.5);">
+                    If the button doesn't work, open the BOUNTY app on your device and go to Wallet → Withdraw.
+                </p>
+            </div>
+        </main>
+        <footer>
+            <p>&copy; 2025 Bounty Finder. All rights reserved.</p>
+        </footer>
+    </div>
+    <script>
+    (function () {
+        'use strict';
+
+        var APP_DEEP_LINK = 'bountyexpo-workspace://wallet/connect/refresh';
+
+        function show(id) { document.getElementById(id).classList.remove('hidden'); }
+        function hide(id) { document.getElementById(id).classList.add('hidden'); }
+
+        // Attempt to open the app via custom URL scheme.
+        try {
+            var iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = APP_DEEP_LINK;
+            document.body.appendChild(iframe);
+            setTimeout(function () {
+                try { document.body.removeChild(iframe); } catch (e) { /* ignore */ }
+            }, 2000);
+        } catch (e) { /* ignore */ }
+
+        // After a short delay, show the fallback UI
+        setTimeout(function () {
+            hide('state-loading');
+            show('state-fallback');
+        }, 2500);
+    })();
+    </script>
+</body>
+</html>

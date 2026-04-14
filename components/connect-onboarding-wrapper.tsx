@@ -24,6 +24,7 @@ import {
 } from 'react-native';
 
 import { API_BASE_URL } from '../lib/config/api';
+import { CONNECT_REFRESH_URL, CONNECT_RETURN_URL } from '../lib/config/app';
 import { theme } from '../lib/theme';
 
 
@@ -69,8 +70,8 @@ export function ConnectOnboardingWrapper({
   onComplete,
   onError,
   onCancel,
-  returnUrl = 'bountyexpo://wallet/connect/return',
-  refreshUrl = 'bountyexpo://wallet/connect/refresh',
+  returnUrl = CONNECT_RETURN_URL,
+  refreshUrl = CONNECT_REFRESH_URL,
 }: ConnectOnboardingWrapperProps) {
   const [status, setStatus] = useState<ConnectAccountStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
