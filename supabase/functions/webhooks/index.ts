@@ -198,56 +198,63 @@ Deno.serve(async (req: Request) => {
           console.log(
             `[webhooks] Deposit applied via apply_deposit, tx_id=${appliedRow.tx_id} for user ${userId}`
           );
-
-          // Fetch updated balance then send a push notification
-          try {
-            const { data: profileRow, error: balanceErr } = await supabase
-              .from('profiles')
-              .select('balance')
-              .eq('id', userId)
-              .maybeSingle();
-
-            if (balanceErr) {
-              console.error('[webhooks] Failed to fetch balance for notification', balanceErr);
-            }
-
-            const newBalance: number | null = profileRow?.balance ?? null;
-            const amountFormatted = amountDollars.toFixed(2);
-
-            const { data: outboxRow, error: outboxErr } = await supabase
-              .from('notifications_outbox')
-              .insert({
-                recipients: [userId],
-                title: 'Deposit Successful',
-                body: `Your deposit of $${amountFormatted} has been credited to your wallet.`,
-                data: { type: 'balance_update', newBalance },
-              })
-              .select('id')
-              .single();
-
-            if (outboxErr || !outboxRow) {
-              console.error('[webhooks] Failed to insert notifications_outbox row', outboxErr);
-            } else {
-              const { error: invokeErr } = await supabase.functions.invoke(
-                'process-notification',
-                { body: { id: outboxRow.id } }
-              );
-              if (invokeErr) {
-                console.error('[webhooks] process-notification invoke failed', invokeErr);
-              } else {
-                console.log(
-                  `[webhooks] Push notification queued for user ${userId}, outbox_id=${outboxRow.id}`
-                );
-              }
-            }
-          } catch (notifErr) {
-            // Notification failure must not affect the webhook response
-            console.error('[webhooks] Unexpected error sending deposit notification', notifErr);
-          }
         } else {
           console.log(
             `[webhooks] apply_deposit no-op (already processed) for intent ${paymentIntent.id}`
           );
+        }
+
+        // Enqueue a push notification regardless of whether apply_deposit was a
+        // no-op — Stripe may retry after a partial failure (e.g. the function
+        // crashed after the DB write but before the outbox insert). The upsert on
+        // stripe_payment_intent_id ensures exactly one outbox row per intent.
+        try {
+          const { data: profileRow, error: balanceErr } = await supabase
+            .from('profiles')
+            .select('balance')
+            .eq('id', userId)
+            .maybeSingle();
+
+          if (balanceErr) {
+            console.error('[webhooks] Failed to fetch balance for notification', balanceErr);
+          }
+
+          const rawBalance = profileRow?.balance;
+          const parsedBalance = rawBalance == null ? null : Number(rawBalance);
+          const newBalance: number | null =
+            parsedBalance !== null && Number.isFinite(parsedBalance) ? parsedBalance : null;
+          const amountFormatted = amountDollars.toFixed(2);
+
+          // Upsert so Stripe retries never create duplicate notification rows.
+          const { data: outboxRow, error: outboxErr } = await supabase
+            .from('notifications_outbox')
+            .upsert(
+              {
+                stripe_payment_intent_id: paymentIntent.id,
+                recipients: [userId],
+                title: 'Deposit Successful',
+                body: `Your deposit of $${amountFormatted} has been credited to your wallet.`,
+                data: { type: 'balance_update', newBalance },
+              },
+              { onConflict: 'stripe_payment_intent_id', ignoreDuplicates: true }
+            )
+            .select('id')
+            .maybeSingle();
+
+          if (outboxErr) {
+            console.error('[webhooks] Failed to upsert notifications_outbox row', outboxErr);
+          } else if (outboxRow) {
+            console.log(
+              `[webhooks] Push notification enqueued for user ${userId}, outbox_id=${outboxRow.id}`
+            );
+          } else {
+            console.log(
+              `[webhooks] Push notification outbox row already exists for intent ${paymentIntent.id}, skipping`
+            );
+          }
+        } catch (notifErr) {
+          // Notification failure must not affect the webhook response
+          console.error('[webhooks] Unexpected error enqueuing deposit notification', notifErr);
         }
         break;
       }
