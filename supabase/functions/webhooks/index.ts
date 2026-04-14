@@ -476,41 +476,141 @@ Deno.serve(async (req: Request) => {
 
         if (originalTx) {
           const origTx = originalTx as Pick<WalletTransaction, 'user_id' | 'amount'>;
-          await supabase.from('wallet_transactions').insert({
-            user_id: origTx.user_id,
-            type: 'refund',
-            amount: -(charge.amount_refunded / 100),
-            description: 'Payment refunded',
-            status: 'completed',
-            stripe_charge_id: charge.id,
-            // charge.refunds.data[0].reason gives the reason for the first refund
-            metadata: { refund_reason: charge.refunds?.data?.[0]?.reason ?? null },
-          });
+          const refunds = charge.refunds?.data ?? [];
 
-          const { error: rpcError } = await supabase.rpc('update_balance', {
-            p_user_id: origTx.user_id,
-            p_amount: -(charge.amount_refunded / 100),
-          });
-
-          if (rpcError) {
-            const { error: retryError } = await supabase.rpc('update_balance', {
-              p_user_id: origTx.user_id,
-              p_amount: -(charge.amount_refunded / 100),
-            });
-            if (retryError) {
-              console.error(
-                '[webhooks] Atomic balance decrement for refund failed — letting Stripe retry'
-              );
-              throw retryError;
-            }
+          if (refunds.length === 0) {
+            console.warn(
+              `[webhooks] charge.refunded received but charge ${charge.id} has no refunds — skipping`
+            );
           }
 
-          console.log(`[webhooks] Refund processed for user ${origTx.user_id}`);
+          // Process each refund individually so that:
+          //   - Partial/multi-refund charges are correctly recorded (one row per refund)
+          //   - Stripe retries are idempotent via the stripe_refund_id unique partial index
+          for (const refund of refunds) {
+            const refundAmountDollars = refund.amount / 100;
+
+            // Use the atomic apply_refund RPC which:
+            //  1. Inserts the wallet_transaction (idempotent via stripe_refund_id unique
+            //     partial index — ON CONFLICT DO NOTHING)
+            //  2. Updates profiles.balance in the same DB transaction
+            // This prevents the race condition where a partial failure (insert succeeds
+            // but balance update fails) would leave the refund recorded without the
+            // corresponding balance decrement on a subsequent Stripe retry, because
+            // the ON CONFLICT no-op on retry would have previously skipped the balance
+            // update entirely.
+            const { data: applyRes, error: applyErr } = await supabase.rpc('apply_refund', {
+              p_user_id: origTx.user_id,
+              p_amount: -refundAmountDollars,
+              p_stripe_refund_id: refund.id,
+              p_stripe_charge_id: charge.id,
+              p_metadata: {
+                refund_reason: refund.reason ?? null,
+                refund_id: refund.id,
+              },
+            });
+
+            if (applyErr) {
+              // Detect insufficient-funds errors from the RPC so we can record
+              // a failed refund transaction and avoid letting Stripe retry
+              // indefinitely. This mirrors the dispute.closed handling which
+              // records a failed dispute_loss when the atomic RPC cannot apply
+              // the deduction due to insufficient funds.
+              const errMsg = (applyErr && (applyErr.message || '')).toString();
+              const errCode = (applyErr && (applyErr.code || '')).toString();
+              const insufficientFunds =
+                errCode === '23514' || errMsg.toLowerCase().includes('insufficient funds');
+
+              if (insufficientFunds) {
+                console.warn(
+                  '[webhooks] apply_refund RPC failed due to insufficient funds — recording failed refund transaction',
+                  {
+                    refundId: refund.id,
+                    chargeId: charge.id,
+                    user_id: origTx.user_id,
+                    amount: refundAmountDollars,
+                    error: applyErr,
+                  }
+                );
+
+                try {
+                  const { error: insertErr } = await supabase.from('wallet_transactions').insert({
+                    user_id: origTx.user_id,
+                    type: 'refund',
+                    amount: -refundAmountDollars,
+                    description: `Stripe refund ${refund.id} failed due to insufficient funds`,
+                    status: 'failed',
+                    stripe_refund_id: refund.id,
+                    stripe_charge_id: charge.id,
+                    metadata: {
+                      refund_reason: refund.reason ?? null,
+                      refund_id: refund.id,
+                    },
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                  });
+
+                  if (insertErr) {
+                    // If the insert conflicts (concurrent recording) or fails for
+                    // another reason, log it but do not rethrow — we want to
+                    // return success to Stripe to stop retries.
+                    console.error('[webhooks] Failed to insert failed refund wallet_transaction', {
+                      refundId: refund.id,
+                      chargeId: charge.id,
+                      error: insertErr,
+                    });
+                  } else {
+                    console.log(
+                      `[webhooks] Recorded failed refund wallet_transaction for refund ${refund.id} user ${origTx.user_id}`
+                    );
+                  }
+                } catch (insErr) {
+                  // Defensive: log and continue — do not throw so webhook returns 200
+                  console.error(
+                    '[webhooks] Exception while recording failed refund wallet_transaction',
+                    {
+                      refundId: refund.id,
+                      chargeId: charge.id,
+                      error: insErr,
+                    }
+                  );
+                }
+
+                // Do not rethrow; we've recorded the failure so Stripe can stop retrying.
+                // Skip further processing for this refund — avoid falling through
+                // to the duplicate-refund logging below which would be misleading.
+                continue;
+              } else {
+                console.error('[webhooks] apply_refund RPC failed — letting Stripe retry', {
+                  refundId: refund.id,
+                  chargeId: charge.id,
+                  error: applyErr,
+                });
+                throw applyErr;
+              }
+            }
+
+            const appliedRow =
+              applyRes != null ? (Array.isArray(applyRes) ? applyRes[0] : applyRes) : null;
+            if (appliedRow?.applied) {
+              console.log(
+                `[webhooks] Refund ${refund.id} processed for user ${origTx.user_id} ($${refundAmountDollars}) tx_id=${appliedRow.tx_id}`
+              );
+            } else {
+              console.log(
+                `[webhooks] Duplicate refund ${refund.id} detected for charge ${charge.id} — skipping (already processed)`
+              );
+            }
+          }
         }
         break;
       }
 
       case 'transfer.created': {
+        // Replay-safe: this handler performs an UPDATE (not INSERT), so a second
+        // delivery of the same event is a no-op — the row already has
+        // stripe_transfer_id set and the `.is('stripe_transfer_id', null)` filter
+        // will match zero rows, leaving the database unchanged.
         const transfer = event.data.object as Stripe.Transfer;
         console.log(`[webhooks] Transfer created: ${transfer.id}`);
         const transferUserId = transfer.metadata?.user_id;
@@ -629,21 +729,63 @@ Deno.serve(async (req: Request) => {
           }
 
           if (paidProfile) {
-            const { error: notifError } = await supabase.from('notifications').insert({
+            // Insert notification, falling back to an update when the insert
+            // conflicts. We avoid Supabase/PostgREST `.upsert()` here because
+            // the DB uses a partial unique index on (user_id,type,stripe_payout_id)
+            // WHERE stripe_payout_id IS NOT NULL; PostgREST cannot express that
+            // partial constraint in its generated ON CONFLICT clause which would
+            // cause a runtime error. Instead: try insert, then update by the
+            // stripe_payout_id on failure (race-safe).
+            const notifRow = {
               user_id: paidProfile.id,
               type: 'payment',
               title: 'Payout Successful',
               body: `Your payout of $${(payout.amount / 100).toFixed(2)} has been processed and sent to your bank account.`,
               data: { payoutId: payout.id },
-            });
-            if (notifError) {
-              console.error('[webhooks] Failed to insert payout.paid notification', {
-                profileId: paidProfile.id,
-                error: notifError,
-              });
-              throw notifError;
+              stripe_payout_id: payout.id,
+            };
+
+            const { error: insertErr } = await supabase.from('notifications').insert(notifRow);
+
+            if (insertErr) {
+              // Insert may fail due to a concurrent insert by a retry; try update fallback.
+              // Use `.select().maybeSingle()` so we can detect whether any row was
+              // actually updated. If no row was affected, treat this as an error
+              // so the webhook delivery is retried instead of silently dropping
+              // the notification.
+              const { data: updatedNotif, error: updateFallbackErr } = await supabase
+                .from('notifications')
+                .update(notifRow)
+                .eq('user_id', paidProfile.id)
+                .eq('type', 'payment')
+                .eq('stripe_payout_id', payout.id)
+                .select()
+                .maybeSingle();
+
+              if (updateFallbackErr) {
+                console.error('[webhooks] Failed to insert payout.paid notification', {
+                  profileId: paidProfile.id,
+                  insert_error: insertErr,
+                  update_error: updateFallbackErr,
+                });
+                throw updateFallbackErr;
+              }
+
+              if (!updatedNotif) {
+                console.error(
+                  '[webhooks] Failed to insert or update payout.paid notification (no rows affected)',
+                  { profileId: paidProfile.id, insert_error: insertErr }
+                );
+                // Throw to let Stripe retry — we don't want to silently lose the notification
+                throw new Error('Failed to insert or update payout.paid notification');
+              }
+
+              console.log(
+                `[webhooks] Notified hunter ${paidProfile.id} of payout.paid (update fallback)`
+              );
+            } else {
+              console.log(`[webhooks] Notified hunter ${paidProfile.id} of payout.paid`);
             }
-            console.log(`[webhooks] Notified hunter ${paidProfile.id} of payout.paid`);
           } else {
             console.warn(`[webhooks] No profile found for Connect account ${paidAccountId}`);
           }
@@ -672,7 +814,10 @@ Deno.serve(async (req: Request) => {
           }
 
           if (failedProfile) {
-            const { error: notifError } = await supabase.from('notifications').insert({
+            // Insert notification, falling back to an update when the insert
+            // conflicts. Avoid `.upsert()` because the DB uses a partial unique
+            // index on (user_id,type,stripe_payout_id) WHERE stripe_payout_id IS NOT NULL.
+            const notifRow = {
               user_id: failedProfile.id,
               type: 'payment',
               title: 'Payout Failed',
@@ -682,14 +827,45 @@ Deno.serve(async (req: Request) => {
                 failureCode: payout.failure_code,
                 failureMessage: payout.failure_message,
               },
-            });
-            if (notifError) {
-              console.error('[webhooks] Failed to insert payout.failed notification', {
-                profileId: failedProfile.id,
-                error: notifError,
-              });
-              throw notifError;
+              stripe_payout_id: payout.id,
+            };
+
+            const { error: insertErr } = await supabase.from('notifications').insert(notifRow);
+
+            if (insertErr) {
+              const { data: updatedNotif, error: updateFallbackErr } = await supabase
+                .from('notifications')
+                .update(notifRow)
+                .eq('user_id', failedProfile.id)
+                .eq('type', 'payment')
+                .eq('stripe_payout_id', payout.id)
+                .select()
+                .maybeSingle();
+
+              if (updateFallbackErr) {
+                console.error('[webhooks] Failed to insert payout.failed notification', {
+                  profileId: failedProfile.id,
+                  insert_error: insertErr,
+                  update_error: updateFallbackErr,
+                });
+                throw updateFallbackErr;
+              }
+
+              if (!updatedNotif) {
+                console.error(
+                  '[webhooks] Failed to insert or update payout.failed notification (no rows affected)',
+                  { profileId: failedProfile.id, insert_error: insertErr }
+                );
+                throw new Error('Failed to insert or update payout.failed notification');
+              }
+
+              console.log(
+                `[webhooks] Notified hunter ${failedProfile.id} of payout.failed (update fallback)`
+              );
+            } else {
+              console.log(`[webhooks] Notified hunter ${failedProfile.id} of payout.failed`);
             }
+
             // Flag the profile so support can follow up
             const { error: payoutFlagError } = await supabase
               .from('profiles')
@@ -702,7 +878,6 @@ Deno.serve(async (req: Request) => {
               });
               throw payoutFlagError;
             }
-            console.log(`[webhooks] Notified hunter ${failedProfile.id} of payout.failed`);
           } else {
             console.warn(`[webhooks] No profile found for Connect account ${failedAccountId}`);
           }
