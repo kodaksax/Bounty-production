@@ -14,6 +14,8 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+const MAX_TRANSFER_RETRIES = 3;
+
 function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -448,16 +450,28 @@ Deno.serve(async (req: Request) => {
       case 'transfer.failed': {
         const transfer = event.data.object as Stripe.Transfer;
         console.log(`[webhooks] Transfer failed: ${transfer.id}`);
+
+        // Read the existing retry_count before overwriting so we don't reset
+        // it on each failure event and inadvertently bypass the retry limit.
+        const { data: existingTx } = await supabase
+          .from('wallet_transactions')
+          .select('metadata')
+          .eq('stripe_transfer_id', transfer.id)
+          .maybeSingle();
+        const currentRetries = (existingTx?.metadata as any)?.retry_count ?? 0;
+        const newRetryCount = currentRetries + 1;
+        const permanentlyFailed = newRetryCount >= MAX_TRANSFER_RETRIES;
+
         const { data: tx } = await supabase
           .from('wallet_transactions')
           .update({
-            status: 'failed',
+            status: permanentlyFailed ? 'permanently_failed' : 'failed',
             metadata: {
-              transfer_status: 'failed',
+              transfer_status: permanentlyFailed ? 'permanently_failed' : 'failed',
               // Stripe Transfer objects expose failure_code on the Transfer type
               failure_reason: (transfer as Stripe.Transfer & { failure_code?: string })
                 .failure_code,
-              retry_count: 0,
+              retry_count: newRetryCount,
             },
           })
           .eq('stripe_transfer_id', transfer.id)
@@ -468,25 +482,47 @@ Deno.serve(async (req: Request) => {
           const txRow = tx as WalletTransaction;
           const refundAmount = Math.abs(txRow.amount);
           const txUserId = txRow.user_id;
-          const { error: rpcError } = await supabase.rpc('update_balance', {
-            p_user_id: txUserId,
-            p_amount: refundAmount,
-          });
-          if (rpcError) {
-            const { error: retryError } = await supabase.rpc('update_balance', {
+
+          if (permanentlyFailed) {
+            // Do NOT automatically refund — requires manual review.
+            console.warn(
+              `[webhooks] Transfer ${transfer.id} permanently failed after ${newRetryCount} attempts for user ${txUserId}. Manual review required.`
+            );
+            const { error: notifError } = await supabase.from('notifications').insert({
+              user_id: txUserId,
+              type: 'payment',
+              title: 'Withdrawal Failed',
+              body: 'Your withdrawal could not be completed after multiple attempts. Please contact support.',
+              data: { transferId: transfer.id, retry_count: newRetryCount },
+            });
+            if (notifError) {
+              console.error('[webhooks] Failed to insert permanently_failed notification', {
+                userId: txUserId,
+                error: notifError,
+              });
+              throw notifError;
+            }
+          } else {
+            const { error: rpcError } = await supabase.rpc('update_balance', {
               p_user_id: txUserId,
               p_amount: refundAmount,
             });
-            if (retryError) {
-              console.error(
-                '[webhooks] Atomic balance update for transfer refund failed — letting Stripe retry'
-              );
-              throw retryError;
+            if (rpcError) {
+              const { error: retryError } = await supabase.rpc('update_balance', {
+                p_user_id: txUserId,
+                p_amount: refundAmount,
+              });
+              if (retryError) {
+                console.error(
+                  '[webhooks] Atomic balance update for transfer refund failed — letting Stripe retry'
+                );
+                throw retryError;
+              }
             }
+            console.log(
+              `[webhooks] Refunded $${refundAmount} to user ${txUserId} for failed transfer (retry ${newRetryCount}/${MAX_TRANSFER_RETRIES - 1})`
+            );
           }
-          console.log(
-            `[webhooks] Refunded $${refundAmount} to user ${txUserId} for failed transfer`
-          );
         }
         break;
       }

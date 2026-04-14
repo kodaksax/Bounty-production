@@ -24,6 +24,7 @@ try {
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const MAX_TRANSFER_RETRIES = 3;
 
 // Initialize Supabase client with service role key (bypasses RLS)
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
@@ -1056,15 +1057,25 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
         const transfer = event.data.object;
         console.log(`[Webhook] Transfer failed: ${transfer.id}`);
 
-        // Mark transaction as failed and prepare for retry
+        // Read existing retry_count before overwriting so we don't reset it
+        // on each failure event and bypass the retry limit.
+        const { data: existingTx } = await supabase
+          .from('wallet_transactions')
+          .select('metadata')
+          .eq('stripe_transfer_id', transfer.id)
+          .maybeSingle();
+        const currentRetries = existingTx?.metadata?.retry_count ?? 0;
+        const newRetryCount = currentRetries + 1;
+        const permanentlyFailed = newRetryCount >= MAX_TRANSFER_RETRIES;
+
         const { data: tx } = await supabase
           .from('wallet_transactions')
           .update({
-            status: 'failed',
+            status: permanentlyFailed ? 'permanently_failed' : 'failed',
             metadata: {
-              transfer_status: 'failed',
+              transfer_status: permanentlyFailed ? 'permanently_failed' : 'failed',
               failure_reason: transfer.failure_code,
-              retry_count: 0,
+              retry_count: newRetryCount,
             },
           })
           .eq('stripe_transfer_id', transfer.id)
@@ -1072,52 +1083,65 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
           .single();
 
         if (tx) {
-          // Refund the amount back to user's wallet for failed withdrawal
-          // Use atomic RPC if available, with fallback
-          const refundAmount = Math.abs(tx.amount);
+          if (permanentlyFailed) {
+            // Do NOT automatically refund — requires manual review.
+            console.warn(
+              `[Webhook] Transfer ${transfer.id} permanently failed after ${newRetryCount} attempts for user ${tx.user_id}. Manual review required.`
+            );
+            // Notify the user
+            await supabase.from('notifications').insert({
+              user_id: tx.user_id,
+              type: 'payment',
+              title: 'Withdrawal Failed',
+              body: 'Your withdrawal could not be completed after multiple attempts. Please contact support.',
+              data: { transferId: transfer.id, retry_count: newRetryCount },
+            });
+          } else {
+            // Refund the amount back to user's wallet for failed withdrawal
+            // Use atomic RPC if available, with fallback
+            const refundAmount = Math.abs(tx.amount);
 
-          const { error: rpcError } = await supabase.rpc('increment_balance', {
-            p_user_id: tx.user_id,
-            p_amount: refundAmount,
-          });
-
-          if (rpcError) {
-            // Retry the atomic RPC once in case of transient error
-            const { error: retryError } = await supabase.rpc('increment_balance', {
+            const { error: rpcError } = await supabase.rpc('increment_balance', {
               p_user_id: tx.user_id,
               p_amount: refundAmount,
             });
 
-            if (retryError) {
-              console.error(
-                '[Webhook] Atomic balance update for transfer refund failed after retry. Using non-atomic fallback.',
-                {
-                  user_id: tx.user_id,
-                  refundAmount,
-                  originalError: rpcError,
-                  retryError: retryError,
-                }
-              );
-              // Last resort: non-atomic update to ensure user gets refunded
-              const { data: profile } = await supabase
-                .from('profiles')
-                .select('balance')
-                .eq('id', tx.user_id)
-                .single();
+            if (rpcError) {
+              // Retry the atomic RPC once in case of transient error
+              const { error: retryError } = await supabase.rpc('increment_balance', {
+                p_user_id: tx.user_id,
+                p_amount: refundAmount,
+              });
 
-              const currentBalance = profile?.balance || 0;
-              await supabase
-                .from('profiles')
-                .update({ balance: currentBalance + refundAmount })
-                .eq('id', tx.user_id);
+              if (retryError) {
+                console.error(
+                  '[Webhook] Atomic balance update for transfer refund failed after retry. Using non-atomic fallback.',
+                  {
+                    user_id: tx.user_id,
+                    refundAmount,
+                    originalError: rpcError,
+                    retryError: retryError,
+                  }
+                );
+                // Last resort: non-atomic update to ensure user gets refunded
+                const { data: profile } = await supabase
+                  .from('profiles')
+                  .select('balance')
+                  .eq('id', tx.user_id)
+                  .single();
+
+                const currentBalance = profile?.balance || 0;
+                await supabase
+                  .from('profiles')
+                  .update({ balance: currentBalance + refundAmount })
+                  .eq('id', tx.user_id);
+              }
             }
+
+            console.log(
+              `[Webhook] Refunded $${refundAmount} to user ${tx.user_id} for failed transfer (retry ${newRetryCount}/${MAX_TRANSFER_RETRIES - 1})`
+            );
           }
-
-          console.log(
-            `[Webhook] Refunded $${refundAmount} to user ${tx.user_id} for failed transfer`
-          );
-
-          // Note: User notification should be implemented via notification service when available
         }
         break;
       }
