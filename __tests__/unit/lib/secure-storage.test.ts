@@ -1,5 +1,5 @@
-import AsyncStorage from '@react-native-async-storage/async-storage'
-import * as SecureStore from 'expo-secure-store'
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 
 // Mock both storage modules
 jest.mock('expo-secure-store', () => ({
@@ -7,121 +7,116 @@ jest.mock('expo-secure-store', () => ({
   setItemAsync: jest.fn(),
   deleteItemAsync: jest.fn(),
   AFTER_FIRST_UNLOCK: 'AFTER_FIRST_UNLOCK',
-}))
+}));
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
   setItem: jest.fn(),
   getItem: jest.fn(),
   removeItem: jest.fn(),
-}))
+}));
 
 describe('Secure Storage utilities', () => {
-  const secure = require('../../../lib/utils/secure-storage')
+  const secure = require('../../../lib/utils/secure-storage');
 
   beforeEach(() => {
-    jest.resetModules()
-    jest.clearAllMocks()
+    jest.resetModules();
+    jest.clearAllMocks();
 
     // Default implementations
-    ;(SecureStore.getItemAsync as jest.Mock).mockResolvedValue(null)
-    ;(SecureStore.setItemAsync as jest.Mock).mockResolvedValue(undefined)
-    ;(SecureStore.deleteItemAsync as jest.Mock).mockResolvedValue(undefined)
-
-    ;(AsyncStorage.getItem as jest.Mock).mockResolvedValue(null)
-    ;(AsyncStorage.setItem as jest.Mock).mockResolvedValue(undefined)
-    ;(AsyncStorage.removeItem as jest.Mock).mockResolvedValue(undefined)
-  })
+    (SecureStore.getItemAsync as jest.Mock).mockResolvedValue(null);
+    (SecureStore.setItemAsync as jest.Mock).mockResolvedValue(undefined);
+    (SecureStore.deleteItemAsync as jest.Mock).mockResolvedValue(undefined);
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
+    (AsyncStorage.setItem as jest.Mock).mockResolvedValue(undefined);
+    (AsyncStorage.removeItem as jest.Mock).mockResolvedValue(undefined);
+  });
 
   test('SecureStore available: get/set/delete use SecureStore and do not call AsyncStorage', async () => {
-    const key = secure.SecureKeys.WALLET_BALANCE
+    const key = secure.SecureKeys.WALLET_BALANCE;
 
     // SecureStore returns a value
-    ;(SecureStore.getItemAsync as jest.Mock).mockResolvedValue('42')
+    (SecureStore.getItemAsync as jest.Mock).mockResolvedValue('42');
 
-    const v = await secure.getSecureItem(key)
-    expect(v).toBe('42')
-    expect(SecureStore.getItemAsync).toHaveBeenCalled()
-    expect(AsyncStorage.getItem).not.toHaveBeenCalled()
+    const v = await secure.getSecureItem(key);
+    expect(v).toBe('42');
+    expect(SecureStore.getItemAsync).toHaveBeenCalled();
+    expect(AsyncStorage.getItem).not.toHaveBeenCalled();
 
     // set should use SecureStore
-    await secure.setSecureItem(key, '100')
-    expect(SecureStore.setItemAsync).toHaveBeenCalled()
-    expect(AsyncStorage.setItem).not.toHaveBeenCalled()
+    await secure.setSecureItem(key, '100');
+    expect(SecureStore.setItemAsync).toHaveBeenCalled();
+    expect(AsyncStorage.setItem).not.toHaveBeenCalled();
 
     // delete should remove from SecureStore when present
-    ;(SecureStore.getItemAsync as jest.Mock).mockResolvedValue('100')
-    ;(AsyncStorage.getItem as jest.Mock).mockResolvedValue(null)
-    await secure.deleteSecureItem(key)
-    expect(SecureStore.deleteItemAsync).toHaveBeenCalled()
-    expect(AsyncStorage.removeItem).not.toHaveBeenCalled()
-  })
+    (SecureStore.getItemAsync as jest.Mock).mockResolvedValue('100');
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
+    await secure.deleteSecureItem(key);
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalled();
+    expect(AsyncStorage.removeItem).not.toHaveBeenCalled();
+  });
 
   test('SecureStore unavailable for non-sensitive key: falls back to AsyncStorage', async () => {
-    const key = '@bountyexpo:secure:non_sensitive_key'
+    const key = '@bountyexpo:secure:non_sensitive_key';
 
     // SecureStore throws
-    ;(SecureStore.getItemAsync as jest.Mock).mockRejectedValue(new Error('unavailable'))
-    ;(SecureStore.setItemAsync as jest.Mock).mockRejectedValue(new Error('unavailable'))
+    (SecureStore.getItemAsync as jest.Mock).mockRejectedValue(new Error('unavailable'));
+    (SecureStore.setItemAsync as jest.Mock).mockRejectedValue(new Error('unavailable'));
 
     // AsyncStorage holds the fallback
-    ;(AsyncStorage.getItem as jest.Mock).mockResolvedValue('fallback')
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue('fallback');
 
-    const v = await secure.getSecureItem(key)
-    expect(v).toBe('fallback')
-    expect(SecureStore.getItemAsync).toHaveBeenCalled()
-    expect(AsyncStorage.getItem).toHaveBeenCalled()
+    const v = await secure.getSecureItem(key);
+    expect(v).toBe('fallback');
+    expect(SecureStore.getItemAsync).toHaveBeenCalled();
+    expect(AsyncStorage.getItem).toHaveBeenCalled();
 
     // set should write to AsyncStorage when SecureStore fails
-    await secure.setSecureItem(key, 'abc')
-    expect(AsyncStorage.setItem).toHaveBeenCalled()
+    await secure.setSecureItem(key, 'abc');
+    expect(AsyncStorage.setItem).toHaveBeenCalled();
 
     // delete should remove from AsyncStorage when fallback exists
-    ;(AsyncStorage.getItem as jest.Mock).mockResolvedValue('abc')
-    ;(SecureStore.getItemAsync as jest.Mock).mockRejectedValue(new Error('unavailable'))
-    await secure.deleteSecureItem(key)
-    expect(AsyncStorage.removeItem).toHaveBeenCalled()
-  })
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue('abc');
+    (SecureStore.getItemAsync as jest.Mock).mockRejectedValue(new Error('unavailable'));
+    await secure.deleteSecureItem(key);
+    expect(AsyncStorage.removeItem).toHaveBeenCalled();
+  });
 
   test('SecureStore unavailable for sensitive key: operations throw and do not touch AsyncStorage', async () => {
-    const key = secure.SecureKeys.WALLET_TRANSACTIONS
+    const key = secure.SecureKeys.WALLET_TRANSACTIONS;
 
-    ;(SecureStore.getItemAsync as jest.Mock).mockRejectedValue(new Error('unavailable'))
-    ;(SecureStore.setItemAsync as jest.Mock).mockRejectedValue(new Error('unavailable'))
-    ;(SecureStore.deleteItemAsync as jest.Mock).mockRejectedValue(new Error('unavailable'))
+    (SecureStore.getItemAsync as jest.Mock).mockRejectedValue(new Error('unavailable'));
+    (SecureStore.setItemAsync as jest.Mock).mockRejectedValue(new Error('unavailable'));
+    (SecureStore.deleteItemAsync as jest.Mock).mockRejectedValue(new Error('unavailable'));
 
     // get should throw
-    await expect(secure.getSecureItem(key)).rejects.toThrow('SecureStoreUnavailable')
+    await expect(secure.getSecureItem(key)).rejects.toThrow('SecureStoreUnavailable');
     // set should throw
-    await expect(secure.setSecureItem(key, 'x')).rejects.toThrow('SecureStoreUnavailable')
+    await expect(secure.setSecureItem(key, 'x')).rejects.toThrow('SecureStoreUnavailable');
     // delete should throw
-    await expect(secure.deleteSecureItem(key)).rejects.toThrow('SecureStoreUnavailable')
+    await expect(secure.deleteSecureItem(key)).rejects.toThrow('SecureStoreUnavailable');
 
     // Ensure AsyncStorage was not used for sensitive key
-    expect(AsyncStorage.getItem).not.toHaveBeenCalled()
-    expect(AsyncStorage.setItem).not.toHaveBeenCalled()
-    expect(AsyncStorage.removeItem).not.toHaveBeenCalled()
-  })
-})
+    expect(AsyncStorage.getItem).not.toHaveBeenCalled();
+    expect(AsyncStorage.setItem).not.toHaveBeenCalled();
+    expect(AsyncStorage.removeItem).not.toHaveBeenCalled();
+  });
+});
 
 describe('migrateSecureStorageKeys', () => {
-  // Re-require the module fresh for each test so the module-level state is clean
-  let secure: typeof import('../../../lib/utils/secure-storage')
+  // Require once — no module-level mutable state needs resetting between tests.
+  // Avoid jest.resetModules() here because it causes the re-required module to
+  // receive fresh mock function instances that differ from the top-level
+  // SecureStore / AsyncStorage imports used in assertions.
+  const secure = require('../../../lib/utils/secure-storage');
 
   beforeEach(() => {
-    jest.resetModules()
-    jest.clearAllMocks()
-
-    ;(SecureStore.getItemAsync as jest.Mock).mockResolvedValue(null)
-    ;(SecureStore.setItemAsync as jest.Mock).mockResolvedValue(undefined)
-    ;(SecureStore.deleteItemAsync as jest.Mock).mockResolvedValue(undefined)
-
-    ;(AsyncStorage.getItem as jest.Mock).mockResolvedValue(null)
-    ;(AsyncStorage.setItem as jest.Mock).mockResolvedValue(undefined)
-
-    // Global react-native mock from jest.setup.js defaults Platform.OS to 'ios'.
-    // Re-require so this test's module instance uses the fresh mock registry.
-    secure = require('../../../lib/utils/secure-storage')
-  })
+    jest.clearAllMocks();
+    (SecureStore.getItemAsync as jest.Mock).mockResolvedValue(null);
+    (SecureStore.setItemAsync as jest.Mock).mockResolvedValue(undefined);
+    (SecureStore.deleteItemAsync as jest.Mock).mockResolvedValue(undefined);
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
+    (AsyncStorage.setItem as jest.Mock).mockResolvedValue(undefined);
+  });
 
   test('migrates old colon-containing keys to sanitized keys and deletes the old keys', async () => {
     // sanitizeSecureKey replaces '@' and ':' with '_', so the destination keys
@@ -131,17 +126,17 @@ describe('migrateSecureStorageKeys', () => {
       '@bountyexpo:secure:wallet_transactions': '[{"id":"tx1"}]',
       '@bountyexpo:secure:wallet_last_deposit_ts': '1700000000000',
       '@bountyexpo:secure:payment_token': 'tok_abc',
-    }
+    };
 
     // AsyncStorage has no migration flag yet
-    ;(AsyncStorage.getItem as jest.Mock).mockResolvedValue(null)
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
 
     // SecureStore returns values for old keys, null for anything else
-    ;(SecureStore.getItemAsync as jest.Mock).mockImplementation((key: string) => {
-      return Promise.resolve(oldValues[key] ?? null)
-    })
+    (SecureStore.getItemAsync as jest.Mock).mockImplementation((key: string) => {
+      return Promise.resolve(oldValues[key] ?? null);
+    });
 
-    await secure.migrateSecureStorageKeys()
+    await secure.migrateSecureStorageKeys();
 
     // Each sanitized (new) key should have been written with the correct value.
     // sanitizeSecureKey('@bountyexpo:secure:wallet_balance') -> '_bountyexpo_secure_wallet_balance'
@@ -149,128 +144,135 @@ describe('migrateSecureStorageKeys', () => {
       '_bountyexpo_secure_wallet_balance',
       '100',
       expect.anything()
-    )
+    );
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
       '_bountyexpo_secure_wallet_transactions',
       '[{"id":"tx1"}]',
       expect.anything()
-    )
+    );
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
       '_bountyexpo_secure_wallet_last_deposit_ts',
       '1700000000000',
       expect.anything()
-    )
+    );
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
       '_bountyexpo_secure_payment_token',
       'tok_abc',
       expect.anything()
-    )
+    );
 
     // Each old key should have been deleted
     expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(
       '@bountyexpo:secure:wallet_balance',
       expect.anything()
-    )
+    );
     expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(
       '@bountyexpo:secure:wallet_transactions',
       expect.anything()
-    )
+    );
     expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(
       '@bountyexpo:secure:wallet_last_deposit_ts',
       expect.anything()
-    )
+    );
     expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(
       '@bountyexpo:secure:payment_token',
       expect.anything()
-    )
+    );
 
     // The migration flag should have been set
-    expect(AsyncStorage.setItem).toHaveBeenCalledWith('@bountyexpo:keyMigrationV1Done', 'true')
-  })
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith('@bountyexpo:keyMigrationV1Done', 'true');
+  });
 
   test('does not migrate when the migration flag is already set', async () => {
     // Migration already completed
-    ;(AsyncStorage.getItem as jest.Mock).mockResolvedValue('true')
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue('true');
 
-    await secure.migrateSecureStorageKeys()
+    await secure.migrateSecureStorageKeys();
 
     // SecureStore should not have been touched at all
-    expect(SecureStore.getItemAsync).not.toHaveBeenCalled()
-    expect(SecureStore.setItemAsync).not.toHaveBeenCalled()
-    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled()
-    expect(AsyncStorage.setItem).not.toHaveBeenCalled()
-  })
+    expect(SecureStore.getItemAsync).not.toHaveBeenCalled();
+    expect(SecureStore.setItemAsync).not.toHaveBeenCalled();
+    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
+    expect(AsyncStorage.setItem).not.toHaveBeenCalled();
+  });
 
   test('skips keys that have no old value and still completes migration', async () => {
     // Only wallet_balance has an old value; the others are absent
-    ;(AsyncStorage.getItem as jest.Mock).mockResolvedValue(null)
-    ;(SecureStore.getItemAsync as jest.Mock).mockImplementation((key: string) =>
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
+    (SecureStore.getItemAsync as jest.Mock).mockImplementation((key: string) =>
       Promise.resolve(key === '@bountyexpo:secure:wallet_balance' ? '42' : null)
-    )
+    );
 
-    await secure.migrateSecureStorageKeys()
+    await secure.migrateSecureStorageKeys();
 
     // Only the present key should have been written and deleted
-    expect(SecureStore.setItemAsync).toHaveBeenCalledTimes(1)
+    expect(SecureStore.setItemAsync).toHaveBeenCalledTimes(1);
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
       '_bountyexpo_secure_wallet_balance',
       '42',
       expect.anything()
-    )
-    expect(SecureStore.deleteItemAsync).toHaveBeenCalledTimes(1)
+    );
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledTimes(1);
     expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(
       '@bountyexpo:secure:wallet_balance',
       expect.anything()
-    )
+    );
 
     // Flag should still be set (no errors)
-    expect(AsyncStorage.setItem).toHaveBeenCalledWith('@bountyexpo:keyMigrationV1Done', 'true')
-  })
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith('@bountyexpo:keyMigrationV1Done', 'true');
+  });
 
   test('continues migrating remaining keys when one key fails, but does NOT set the flag', async () => {
-    ;(AsyncStorage.getItem as jest.Mock).mockResolvedValue(null)
-
-    ;(SecureStore.getItemAsync as jest.Mock).mockImplementation((key: string) => {
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
+    (SecureStore.getItemAsync as jest.Mock).mockImplementation((key: string) => {
       // Fail on the first legacy key, succeed on the others
       if (key === '@bountyexpo:secure:wallet_balance') {
-        return Promise.reject(new Error('keychain error'))
+        return Promise.reject(new Error('keychain error'));
       }
-      return Promise.resolve(key === '@bountyexpo:secure:wallet_transactions' ? 'txdata' : null)
-    })
+      return Promise.resolve(key === '@bountyexpo:secure:wallet_transactions' ? 'txdata' : null);
+    });
 
     // Should not throw
-    await expect(secure.migrateSecureStorageKeys()).resolves.toBeUndefined()
+    await expect(secure.migrateSecureStorageKeys()).resolves.toBeUndefined();
 
     // The second key (transactions) should still have been migrated
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
       '_bountyexpo_secure_wallet_transactions',
       'txdata',
       expect.anything()
-    )
+    );
 
     // Flag must NOT be set so the migration retries on the next launch
-    expect(AsyncStorage.setItem).not.toHaveBeenCalled()
-  })
+    expect(AsyncStorage.setItem).not.toHaveBeenCalled();
+  });
 
   test('on non-iOS platforms: sets flag immediately without probing SecureStore', async () => {
     // Override the global react-native mock (Platform.OS = 'ios') with an
     // Android one for this test only. jest.doMock is NOT hoisted so it applies
     // to the next require() after the current resetModules() call.
-    jest.resetModules()
+    jest.resetModules();
     jest.doMock('react-native', () => ({
       Platform: { OS: 'android', select: jest.fn(obj => obj.android || obj.default) },
-    }))
-    const androidSecure = require('../../../lib/utils/secure-storage')
-    ;(AsyncStorage.getItem as jest.Mock).mockResolvedValue(null)
+    }));
+    const androidSecure = require('../../../lib/utils/secure-storage');
 
-    await androidSecure.migrateSecureStorageKeys()
+    // After resetModules the mock module instances are new objects — re-acquire
+    // references so assertions check the same functions the module calls.
+    const SecureStoreFresh = require('expo-secure-store');
+    const AsyncStorageFresh = require('@react-native-async-storage/async-storage');
+    (AsyncStorageFresh.getItem as jest.Mock).mockResolvedValue(null);
+
+    await androidSecure.migrateSecureStorageKeys();
 
     // SecureStore must not be probed on Android
-    expect(SecureStore.getItemAsync).not.toHaveBeenCalled()
-    expect(SecureStore.setItemAsync).not.toHaveBeenCalled()
-    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled()
+    expect(SecureStoreFresh.getItemAsync).not.toHaveBeenCalled();
+    expect(SecureStoreFresh.setItemAsync).not.toHaveBeenCalled();
+    expect(SecureStoreFresh.deleteItemAsync).not.toHaveBeenCalled();
 
     // Flag should be set so subsequent calls skip immediately
-    expect(AsyncStorage.setItem).toHaveBeenCalledWith('@bountyexpo:keyMigrationV1Done', 'true')
-  })
-})
+    expect(AsyncStorageFresh.setItem).toHaveBeenCalledWith(
+      '@bountyexpo:keyMigrationV1Done',
+      'true'
+    );
+  });
+});
