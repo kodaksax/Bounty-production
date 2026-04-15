@@ -17,6 +17,7 @@ Use this checklist to track consolidation progress. Check off items as completed
 ## Phase 2: Core Services Migration 🔄
 
 ### Authentication Routes
+
 - [ ] Create `consolidated-auth.ts`
 - [ ] Migrate POST /auth/register
 - [ ] Migrate POST /auth/sign-in
@@ -29,6 +30,7 @@ Use this checklist to track consolidation progress. Check off items as completed
 - [ ] Update client to use new endpoints
 
 ### Profile Routes
+
 - [ ] Create `consolidated-profiles.ts`
 - [ ] Migrate GET /api/profiles/:id
 - [ ] Migrate GET /api/profile
@@ -39,6 +41,7 @@ Use this checklist to track consolidation progress. Check off items as completed
 - [ ] Update client to use new endpoints
 
 ### Bounty Routes
+
 - [ ] Create `consolidated-bounties.ts`
 - [ ] Migrate GET /api/bounties (with filters)
 - [ ] Migrate GET /api/bounties/:id
@@ -52,6 +55,7 @@ Use this checklist to track consolidation progress. Check off items as completed
 - [ ] Update client to use new endpoints
 
 ### Bounty Request Routes
+
 - [ ] Create `consolidated-bounty-requests.ts`
 - [ ] Migrate GET /api/bounty-requests
 - [ ] Migrate GET /api/bounty-requests/:id
@@ -63,6 +67,7 @@ Use this checklist to track consolidation progress. Check off items as completed
 - [ ] Update client to use new endpoints
 
 ### Integration
+
 - [ ] Update main index.ts with route registrations
 - [ ] Test full core API flow (auth → profile → bounty → request)
 - [ ] Run load tests on core endpoints
@@ -72,6 +77,7 @@ Use this checklist to track consolidation progress. Check off items as completed
 ## Phase 3: Payment & Wallet Consolidation ⏳
 
 ### Wallet Service
+
 - [ ] Create `consolidated-wallet-service.ts`
 - [ ] Implement getBalance
 - [ ] Implement getTransactions
@@ -84,6 +90,7 @@ Use this checklist to track consolidation progress. Check off items as completed
 - [ ] Test all wallet functions
 
 ### Stripe Connect Service
+
 - [ ] Create `consolidated-stripe-connect-service.ts`
 - [ ] Implement createConnectAccount
 - [ ] Implement createAccountLink
@@ -94,23 +101,26 @@ Use this checklist to track consolidation progress. Check off items as completed
 - [ ] Test all Connect functions
 
 ### Apple Pay Routes
+
 - [ ] Create `consolidated-apple-pay.ts`
 - [ ] Migrate POST /apple-pay/payment-intent
 - [ ] Migrate POST /apple-pay/confirm
 - [ ] Test Apple Pay flow
 
 ### Wallet Routes
+
 - [ ] Create `consolidated-wallet.ts`
 - [ ] Migrate GET /wallet/balance
 - [ ] Migrate GET /wallet/transactions
 - [ ] Migrate POST /wallet/deposit
 - [ ] Migrate POST /wallet/withdraw
-- [ ] Migrate POST /wallet/escrow
+- [x] Migrate POST /wallet/escrow
 - [ ] Migrate POST /wallet/release
-- [ ] Migrate POST /wallet/refund
+- [x] Migrate POST /wallet/refund
 - [ ] Test all wallet endpoints
 
 ### Webhook Handler
+
 - [ ] Create `consolidated-webhooks.ts`
 - [ ] Implement signature verification
 - [ ] Implement idempotency checks
@@ -128,6 +138,7 @@ Use this checklist to track consolidation progress. Check off items as completed
 - [ ] Verify atomic balance updates
 
 ### Integration
+
 - [ ] Test end-to-end payment flow
 - [ ] Test end-to-end wallet flow
 - [ ] Test Stripe Connect onboarding
@@ -149,24 +160,28 @@ Use this checklist to track consolidation progress. Check off items as completed
 ## Phase 5: Advanced Features ⏸️
 
 ### Analytics
+
 - [ ] Verify event tracking
 - [ ] Verify aggregation jobs
 - [ ] Verify reporting endpoints
 - [ ] Test analytics flows
 
 ### Notifications
+
 - [ ] Verify push notifications
 - [ ] Verify email notifications
 - [ ] Verify in-app notifications
 - [ ] Test notification flows
 
 ### Admin
+
 - [ ] Verify content moderation
 - [ ] Verify user management
 - [ ] Verify system configuration
 - [ ] Test admin flows
 
 ### Risk Management
+
 - [ ] Verify risk scoring
 - [ ] Verify fraud detection
 - [ ] Verify remediation service
@@ -235,6 +250,7 @@ Use this checklist to track consolidation progress. Check off items as completed
 ## Phase 10: Deployment ⏸️
 
 ### Stage 1: Internal Testing
+
 - [ ] Deploy to staging environment
 - [ ] Run all automated tests
 - [ ] Manual testing of critical flows
@@ -242,6 +258,7 @@ Use this checklist to track consolidation progress. Check off items as completed
 - [ ] Fix any issues found
 
 ### Stage 2: Beta Testing
+
 - [ ] Deploy to 5% of users
 - [ ] Monitor error rates
 - [ ] Monitor response times
@@ -249,6 +266,7 @@ Use this checklist to track consolidation progress. Check off items as completed
 - [ ] Fix any issues
 
 ### Stage 3: Gradual Rollout
+
 - [ ] Increase to 25% of users
 - [ ] Monitor for 24 hours
 - [ ] Increase to 50% of users
@@ -257,6 +275,7 @@ Use this checklist to track consolidation progress. Check off items as completed
 - [ ] Monitor for 1 week
 
 ### Stage 4: Decommission
+
 - [ ] Stop api/server.js
 - [ ] Stop server/index.js
 - [ ] Monitor for issues (1 week)
@@ -267,15 +286,17 @@ Use this checklist to track consolidation progress. Check off items as completed
 ## Success Metrics Tracking
 
 ### Technical Metrics
+
 - [ ] Single backend process: YES/NO
-- [ ] Average response time: _____ ms (target: <200ms)
-- [ ] P95 response time: _____ ms (target: <200ms)
-- [ ] Error rate: _____ % (target: <1%)
-- [ ] Uptime: _____ % (target: >99.9%)
-- [ ] Code reduction: _____ % (target: ~30%)
+- [ ] Average response time: **\_** ms (target: <200ms)
+- [ ] P95 response time: **\_** ms (target: <200ms)
+- [ ] Error rate: **\_** % (target: <1%)
+- [ ] Uptime: **\_** % (target: >99.9%)
+- [ ] Code reduction: **\_** % (target: ~30%)
 
 ### Business Metrics
-- [ ] User-facing disruptions: _____ (target: 0)
+
+- [ ] User-facing disruptions: **\_** (target: 0)
 - [ ] Feature development speed: IMPROVED/SAME/WORSE
 - [ ] Infrastructure costs: REDUCED/SAME/INCREASED
 - [ ] Developer productivity: IMPROVED/SAME/WORSE
@@ -314,6 +335,7 @@ If critical issues occur:
 ## Sign-off
 
 ### Technical Lead
+
 - [ ] Architecture approved
 - [ ] Implementation reviewed
 - [ ] Tests passed
@@ -321,11 +343,13 @@ If critical issues occur:
 - [ ] Security validated
 
 ### Product Owner
+
 - [ ] User experience validated
 - [ ] Business metrics met
 - [ ] Deployment approved
 
 ### DevOps
+
 - [ ] Infrastructure ready
 - [ ] Monitoring configured
 - [ ] Rollback tested
@@ -337,8 +361,8 @@ Use this section for any additional notes, issues encountered, or decisions made
 
 ---
 
-**Started**: _________________
+**Started**: ********\_********
 
-**Completed**: _________________
+**Completed**: ********\_********
 
-**Total Time**: _________________
+**Total Time**: ********\_********
