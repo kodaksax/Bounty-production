@@ -455,11 +455,11 @@ Deno.serve(async (req: Request) => {
         // the retry endpoint (e.g. retry_count, retried_at) and (b) check
         // whether the retry limit has been reached without double-incrementing
         // retry_count (the retry endpoint already does that increment).
-        // IMPORTANT: Also select `id` so the subsequent UPDATE is keyed on the
-        // immutable primary key rather than `stripe_transfer_id`.  A concurrent
-        // retry will overwrite `stripe_transfer_id` with a new Stripe transfer
-        // ID between this read and the update below; using `id` prevents the
-        // update from silently matching zero rows (TOCTOU race → missed refund).
+        // IMPORTANT: Also select `id` so the subsequent UPDATE can be guarded by
+        // both the primary key and the original stripe_transfer_id (optimistic
+        // lock). A concurrent retry will overwrite stripe_transfer_id with a new
+        // Stripe transfer ID; the dual-column guard makes the UPDATE a no-op in
+        // that race rather than corrupting the in-flight retry's 'pending' status.
         const { data: existingTx, error: existingTxError } = await supabase
           .from('wallet_transactions')
           .select('id, metadata')
@@ -487,6 +487,12 @@ Deno.serve(async (req: Request) => {
         const currentRetries = (existingMetadata.retry_count as number | undefined) ?? 0;
         const permanentlyFailed = currentRetries >= MAX_TRANSFER_RETRIES;
 
+        // Use both the primary key AND the original stripe_transfer_id as an
+        // optimistic-lock guard. If /connect/retry-transfer ran between our
+        // SELECT and this UPDATE it will have already replaced stripe_transfer_id
+        // with the new transfer's ID and set status='pending'. The extra
+        // .eq('stripe_transfer_id', transfer.id) makes this UPDATE a no-op in
+        // that case, preventing us from corrupting the in-flight retry's state.
         const { data: tx, error: txUpdateError } = await supabase
           .from('wallet_transactions')
           .update({
@@ -501,8 +507,8 @@ Deno.serve(async (req: Request) => {
                 .failure_code,
             },
           })
-          // Use the primary key — immune to concurrent stripe_transfer_id overwrites.
           .eq('id', existingTx.id)
+          .eq('stripe_transfer_id', transfer.id) // optimistic-lock guard
           .select()
           .single();
 
@@ -515,12 +521,51 @@ Deno.serve(async (req: Request) => {
           throw txUpdateError;
         }
 
+        if (!tx) {
+          // The optimistic-lock guard fired: /connect/retry-transfer replaced
+          // stripe_transfer_id with a new transfer ID between our SELECT and
+          // UPDATE. The in-flight retry's row was intentionally left untouched,
+          // but this failure event has not been reflected and its refund was not
+          // issued. Surface for immediate manual investigation to avoid silent
+          // fund loss.
+          console.error(
+            '[webhooks] CRITICAL: transfer.failed race condition detected. ' +
+              `stripe_transfer_id for transaction ${existingTx.id} was replaced by a retry ` +
+              `between SELECT and UPDATE. Transfer ${transfer.id} failure not recorded and ` +
+              'refund not issued. Manual review required.',
+            { transferId: transfer.id, transactionId: existingTx.id }
+          );
+          break;
+        }
+
         const txRow = tx as WalletTransaction;
         const refundAmount = Math.abs(txRow.amount);
         const txUserId = txRow.user_id;
 
+        // Always refund the debited balance — it was decremented when the transfer was
+        // initiated and must be restored on any permanent or temporary failure, matching
+        // the behaviour of the Express server implementation.
+        const { error: rpcError } = await supabase.rpc('update_balance', {
+          p_user_id: txUserId,
+          p_amount: refundAmount,
+        });
+        if (rpcError) {
+          const { error: retryError } = await supabase.rpc('update_balance', {
+            p_user_id: txUserId,
+            p_amount: refundAmount,
+          });
+          if (retryError) {
+            console.error(
+              '[webhooks] Atomic balance update for transfer refund failed — letting Stripe retry'
+            );
+            throw retryError;
+          }
+        }
+        console.log(
+          `[webhooks] Refunded $${refundAmount} to user ${txUserId} for failed transfer (retries: ${currentRetries}/${MAX_TRANSFER_RETRIES})`
+        );
+
         if (permanentlyFailed) {
-          // Do NOT automatically refund — requires manual review.
           console.warn(
             `[webhooks] Transfer ${transfer.id} permanently failed after ${currentRetries} retries for user ${txUserId}. Manual review required.`
           );
@@ -569,26 +614,6 @@ Deno.serve(async (req: Request) => {
               `[webhooks] Skipping duplicate permanently_failed notification for transfer ${transfer.id} and user ${txUserId}`
             );
           }
-        } else {
-          const { error: rpcError } = await supabase.rpc('update_balance', {
-            p_user_id: txUserId,
-            p_amount: refundAmount,
-          });
-          if (rpcError) {
-            const { error: retryError } = await supabase.rpc('update_balance', {
-              p_user_id: txUserId,
-              p_amount: refundAmount,
-            });
-            if (retryError) {
-              console.error(
-                '[webhooks] Atomic balance update for transfer refund failed — letting Stripe retry'
-              );
-              throw retryError;
-            }
-          }
-          console.log(
-            `[webhooks] Refunded $${refundAmount} to user ${txUserId} for failed transfer (retries: ${currentRetries}/${MAX_TRANSFER_RETRIES})`
-          );
         }
         break;
       }
