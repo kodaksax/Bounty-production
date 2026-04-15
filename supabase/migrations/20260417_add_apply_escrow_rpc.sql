@@ -18,11 +18,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_wallet_tx_one_escrow_per_bounty
 -- 2. RPC: apply_escrow
 --    Atomically:
 --      a. Returns the existing completed escrow row if one exists (idempotent).
---      b. Verifies the caller has sufficient balance via update_balance() —
---         which raises SQLSTATE 23514 on insufficient funds inside the same
---         transaction, rolling everything back.
---      c. Inserts the escrow transaction (ON CONFLICT DO NOTHING for the
---         unique index, as a secondary idempotency guard).
+--      b. Inserts the escrow transaction (ON CONFLICT DO NOTHING for the
+--         unique index, as a secondary idempotency guard).  Returns
+--         applied=false immediately if a conflict is detected — no balance
+--         change has occurred at that point.
+--      c. Deducts the balance via update_balance() only after the INSERT
+--         succeeds.  If update_balance raises SQLSTATE 23514 (insufficient
+--         funds) the whole transaction rolls back, including the INSERT.
 --      d. Returns the new transaction row.
 --
 --    Callers receive a single row.  If `applied` is false the escrow already
@@ -60,13 +62,12 @@ BEGIN
     RETURN;
   END IF;
 
-  -- Atomically deduct the balance.  update_balance raises SQLSTATE 23514
-  -- ('insufficient_funds') if the result would be negative, which aborts
-  -- the whole transaction so no transaction row is ever inserted.
-  v_new_balance := update_balance(p_user_id, -p_amount);
-
-  -- Insert the escrow transaction.  The ON CONFLICT clause protects against
-  -- any extremely tight concurrent race that lands here simultaneously.
+  -- Insert the escrow transaction first.  The ON CONFLICT clause protects
+  -- against any concurrent race that passes the idempotency check above
+  -- simultaneously.  We insert BEFORE touching the balance so that if a
+  -- conflict occurs we return early without any balance change — avoiding the
+  -- bug where update_balance() deducts funds and then the INSERT silently
+  -- no-ops, committing a balance reduction with no corresponding escrow row.
   INSERT INTO public.wallet_transactions (
     user_id, bounty_id, type, amount, description, status, metadata
   ) VALUES (
@@ -77,6 +78,7 @@ BEGIN
 
   IF v_tx_id IS NULL THEN
     -- Another concurrent call won the insert race; treat as duplicate.
+    -- No balance change has occurred yet, so no rollback is needed.
     SELECT id INTO v_tx_id
     FROM public.wallet_transactions
     WHERE bounty_id = p_bounty_id
@@ -86,6 +88,12 @@ BEGIN
     RETURN QUERY SELECT false, v_tx_id, NULL::numeric;
     RETURN;
   END IF;
+
+  -- Deduct the balance only after the INSERT has succeeded.
+  -- update_balance raises SQLSTATE 23514 ('insufficient_funds') if the
+  -- result would be negative, which aborts the whole transaction and
+  -- rolls back the INSERT above — no orphaned escrow row is left behind.
+  v_new_balance := update_balance(p_user_id, -p_amount);
 
   RETURN QUERY SELECT true, v_tx_id, v_new_balance;
 END;

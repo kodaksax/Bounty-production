@@ -368,18 +368,27 @@ Deno.serve(async (req: Request) => {
           return jsonResponse({ error: 'Unauthorized to refund funds' }, 403);
         }
 
-        // Prevent double-refund / double-release
+        // Prevent double-refund / double-release.
+        // Also block on 'pending' records: if a prior attempt credited the user's balance
+        // but failed to promote the transaction to 'completed', the pending row must be
+        // treated as a completed settlement to prevent a retry from double-crediting.
         const { data: existingSettlement } = await supabase
           .from('wallet_transactions')
-          .select('id, type')
+          .select('id, type, status')
           .eq('bounty_id', bountyId)
           .in('type', ['release', 'refund'])
-          .eq('status', 'completed')
+          .in('status', ['completed', 'pending'])
           .maybeSingle();
         if (existingSettlement) {
           const verb = (existingSettlement as any).type === 'release' ? 'released' : 'refunded';
+          const isPending = (existingSettlement as any).status === 'pending';
           return jsonResponse(
-            { error: `Escrow already ${verb} for this bounty`, code: 'duplicate_transaction' },
+            {
+              error: isPending
+                ? `A ${verb} transaction for this bounty is already pending`
+                : `Escrow already ${verb} for this bounty`,
+              code: 'duplicate_transaction',
+            },
             409
           );
         }
