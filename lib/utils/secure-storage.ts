@@ -249,6 +249,63 @@ export async function getJSON<T>(key: string): Promise<T | null> {
   }
 }
 
+// The AsyncStorage flag that records whether the one-time key-format migration
+// has already been completed on this device.
+const KEY_MIGRATION_V1_FLAG = '@bountyexpo:keyMigrationV1Done';
+
+// Mapping from the old colon-containing key names (as they were stored before
+// the sanitization logic was introduced) to the sanitized key names that are
+// used by setSecureItem/getSecureItem today.
+const LEGACY_KEY_MAP: Record<string, string> = {
+  '@bountyexpo:secure:wallet_balance': '@bountyexpo_secure_wallet_balance',
+  '@bountyexpo:secure:wallet_transactions': '@bountyexpo_secure_wallet_transactions',
+  '@bountyexpo:secure:wallet_last_deposit_ts': '@bountyexpo_secure_wallet_last_deposit_ts',
+  '@bountyexpo:secure:payment_token': '@bountyexpo_secure_payment_token',
+};
+
+/**
+ * One-time migration: for devices that stored sensitive wallet keys under the
+ * old colon-containing key names (before sanitization was applied), read each
+ * old key directly from SecureStore, write the value under the new
+ * underscore-sanitized key, and delete the old key.
+ *
+ * A flag in AsyncStorage (`@bountyexpo:keyMigrationV1Done`) prevents this
+ * migration from running more than once per device.
+ */
+export async function migrateSecureStorageKeys(): Promise<void> {
+  try {
+    // Check whether the migration has already been completed on this device.
+    const alreadyDone = await AsyncStorage.getItem(KEY_MIGRATION_V1_FLAG);
+    if (alreadyDone === 'true') {
+      return;
+    }
+
+    for (const [oldKey, newKey] of Object.entries(LEGACY_KEY_MAP)) {
+      try {
+        // Read directly from SecureStore using the legacy colon-containing key.
+        const value = await SecureStore.getItemAsync(oldKey, SECURE_OPTS);
+        if (value !== null && value !== undefined) {
+          // Write under the sanitized key name.
+          await SecureStore.setItemAsync(newKey, value, SECURE_OPTS);
+          // Remove the old key so we don't leave stale data in the Keychain.
+          await SecureStore.deleteItemAsync(oldKey, SECURE_OPTS);
+        }
+      } catch (keyError) {
+        // Log but continue — a failure on one key must not block the others.
+        console.warn(`[SecureStorage] Migration failed for key "${oldKey}":`, keyError);
+      }
+    }
+
+    // Mark migration as done so it never runs again.
+    await AsyncStorage.setItem(KEY_MIGRATION_V1_FLAG, 'true');
+  } catch (error) {
+    // Non-fatal: if the flag check or write fails, the migration may re-run on
+    // the next launch, which is idempotent (existing new-format keys are simply
+    // overwritten with the same value).
+    console.warn('[SecureStorage] migrateSecureStorageKeys error:', error);
+  }
+}
+
 /**
  * Migrate data from AsyncStorage to SecureStore
  * Use this when upgrading existing AsyncStorage keys to secure storage

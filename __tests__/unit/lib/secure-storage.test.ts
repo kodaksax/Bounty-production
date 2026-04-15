@@ -102,3 +102,153 @@ describe('Secure Storage utilities', () => {
     expect(AsyncStorage.removeItem).not.toHaveBeenCalled()
   })
 })
+
+describe('migrateSecureStorageKeys', () => {
+  // Re-require the module fresh for each test so the module-level state is clean
+  let secure: typeof import('../../../lib/utils/secure-storage')
+
+  beforeEach(() => {
+    jest.resetModules()
+    jest.clearAllMocks()
+
+    ;(SecureStore.getItemAsync as jest.Mock).mockResolvedValue(null)
+    ;(SecureStore.setItemAsync as jest.Mock).mockResolvedValue(undefined)
+    ;(SecureStore.deleteItemAsync as jest.Mock).mockResolvedValue(undefined)
+
+    ;(AsyncStorage.getItem as jest.Mock).mockResolvedValue(null)
+    ;(AsyncStorage.setItem as jest.Mock).mockResolvedValue(undefined)
+
+    secure = require('../../../lib/utils/secure-storage')
+  })
+
+  test('migrates old colon-containing keys to sanitized keys and deletes the old keys', async () => {
+    // Simulate old keys existing in SecureStore with the colon-containing names.
+    // getItemAsync is called first with the migration flag (returns null = not done),
+    // then for each legacy key.
+    const oldValues: Record<string, string> = {
+      '@bountyexpo:secure:wallet_balance': '100',
+      '@bountyexpo:secure:wallet_transactions': '[{"id":"tx1"}]',
+      '@bountyexpo:secure:wallet_last_deposit_ts': '1700000000000',
+      '@bountyexpo:secure:payment_token': 'tok_abc',
+    }
+
+    // AsyncStorage has no migration flag yet
+    ;(AsyncStorage.getItem as jest.Mock).mockResolvedValue(null)
+
+    // SecureStore returns values for old keys, null for anything else
+    ;(SecureStore.getItemAsync as jest.Mock).mockImplementation((key: string) => {
+      return Promise.resolve(oldValues[key] ?? null)
+    })
+
+    await secure.migrateSecureStorageKeys()
+
+    // Each sanitized (new) key should have been written with the correct value
+    expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
+      '@bountyexpo_secure_wallet_balance',
+      '100',
+      expect.anything()
+    )
+    expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
+      '@bountyexpo_secure_wallet_transactions',
+      '[{"id":"tx1"}]',
+      expect.anything()
+    )
+    expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
+      '@bountyexpo_secure_wallet_last_deposit_ts',
+      '1700000000000',
+      expect.anything()
+    )
+    expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
+      '@bountyexpo_secure_payment_token',
+      'tok_abc',
+      expect.anything()
+    )
+
+    // Each old key should have been deleted
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(
+      '@bountyexpo:secure:wallet_balance',
+      expect.anything()
+    )
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(
+      '@bountyexpo:secure:wallet_transactions',
+      expect.anything()
+    )
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(
+      '@bountyexpo:secure:wallet_last_deposit_ts',
+      expect.anything()
+    )
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(
+      '@bountyexpo:secure:payment_token',
+      expect.anything()
+    )
+
+    // The migration flag should have been set
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith('@bountyexpo:keyMigrationV1Done', 'true')
+  })
+
+  test('does not migrate when the migration flag is already set', async () => {
+    // Migration already completed
+    ;(AsyncStorage.getItem as jest.Mock).mockResolvedValue('true')
+
+    await secure.migrateSecureStorageKeys()
+
+    // SecureStore should not have been touched at all
+    expect(SecureStore.getItemAsync).not.toHaveBeenCalled()
+    expect(SecureStore.setItemAsync).not.toHaveBeenCalled()
+    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled()
+    expect(AsyncStorage.setItem).not.toHaveBeenCalled()
+  })
+
+  test('skips keys that have no old value and still completes migration', async () => {
+    // Only wallet_balance has an old value; the others are absent
+    ;(AsyncStorage.getItem as jest.Mock).mockResolvedValue(null)
+    ;(SecureStore.getItemAsync as jest.Mock).mockImplementation((key: string) =>
+      Promise.resolve(key === '@bountyexpo:secure:wallet_balance' ? '42' : null)
+    )
+
+    await secure.migrateSecureStorageKeys()
+
+    // Only the present key should have been written and deleted
+    expect(SecureStore.setItemAsync).toHaveBeenCalledTimes(1)
+    expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
+      '@bountyexpo_secure_wallet_balance',
+      '42',
+      expect.anything()
+    )
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledTimes(1)
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(
+      '@bountyexpo:secure:wallet_balance',
+      expect.anything()
+    )
+
+    // Flag should still be set
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith('@bountyexpo:keyMigrationV1Done', 'true')
+  })
+
+  test('continues migrating remaining keys when one key fails', async () => {
+    ;(AsyncStorage.getItem as jest.Mock).mockResolvedValue(null)
+
+    let callCount = 0
+    ;(SecureStore.getItemAsync as jest.Mock).mockImplementation((key: string) => {
+      callCount++
+      // Fail on the first legacy key, succeed on the others
+      if (key === '@bountyexpo:secure:wallet_balance') {
+        return Promise.reject(new Error('keychain error'))
+      }
+      return Promise.resolve(key === '@bountyexpo:secure:wallet_transactions' ? 'txdata' : null)
+    })
+
+    // Should not throw
+    await expect(secure.migrateSecureStorageKeys()).resolves.toBeUndefined()
+
+    // The second key (transactions) should still have been migrated
+    expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
+      '@bountyexpo_secure_wallet_transactions',
+      'txdata',
+      expect.anything()
+    )
+
+    // Flag should still be written
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith('@bountyexpo:keyMigrationV1Done', 'true')
+  })
+})
