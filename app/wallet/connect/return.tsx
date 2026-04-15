@@ -119,7 +119,7 @@ export default function ConnectReturnScreen() {
             </View>
             <Text style={styles.title}>Verification Pending</Text>
             <Text style={styles.description}>
-              Stripe is still reviewing your information. This usually takes a few minutes. You'll be able to withdraw once your account is approved.
+              {"Stripe is still reviewing your information. This usually takes a few minutes. You'll be able to withdraw once your account is approved."}
             </Text>
             <TouchableOpacity style={styles.primaryButton} onPress={handleGoToWallet}>
               <Text style={styles.primaryButtonText}>Go to Wallet</Text>
@@ -140,7 +140,7 @@ export default function ConnectReturnScreen() {
             </View>
             <Text style={styles.title}>Verification Failed</Text>
             <Text style={styles.description}>
-              We couldn't verify your account status. Please try again or check your wallet.
+              {"We couldn't verify your account status. Please try again or check your wallet."}
             </Text>
             <TouchableOpacity style={styles.primaryButton} onPress={handleRetry}>
               <Text style={styles.primaryButtonText}>Try Again</Text>

@@ -48,7 +48,7 @@ export default function ConnectRefreshScreen() {
         <View style={styles.infoBox}>
           <MaterialIcons name="info-outline" size={20} color="#a7f3d0" />
           <Text style={styles.infoText}>
-            This happens automatically after the link's security window closes. It only takes a moment to get a new one.
+            {"This happens automatically after the link's security window closes. It only takes a moment to get a new one."}
           </Text>
         </View>
 
