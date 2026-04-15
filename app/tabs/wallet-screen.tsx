@@ -11,6 +11,7 @@ import { PaymentMethodsModal } from "../../components/payment-methods-modal";
 import { TransactionHistoryScreen } from "../../components/transaction-history-screen";
 import { BrandingLogo } from "../../components/ui/branding-logo";
 import { EmptyState } from "../../components/ui/empty-state";
+import { PayoutFailedBanner } from "../../components/ui/PayoutFailedBanner";
 import { PaymentMethodSkeleton } from "../../components/ui/skeleton-loaders";
 import { WithdrawWithBankScreen } from "../../components/withdraw-with-bank-screen";
 import { useAuthContext } from '../../hooks/use-auth-context';
@@ -101,6 +102,8 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
     <>
       {/* Connection Status Banner - appears at top when offline */}
       <ConnectionStatus showQueueCount={true} />
+      {/* Payout Failed Banner - shown when most recent payout failed */}
+      <PayoutFailedBanner />
       <FlatList<WalletTransactionRecord>
         style={styles.container}
         data={transactions}

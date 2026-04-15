@@ -81,3 +81,40 @@ try {
     console.log('[API Config] Resolved API_BASE_URL:', API_BASE_URL)
   }
 } catch {}
+
+/**
+ * Returns the base URL that must be used for all financial routes
+ * (/wallet/* and /payments/*).
+ *
+ * Unlike `getApiBaseUrl()`, this function **always** prefers the Supabase
+ * Edge Functions URL and never falls back to the legacy Express/Fastify servers
+ * for financial routes. This guarantees consistent data-source selection and
+ * fee-schedule enforcement regardless of other env-var configuration.
+ *
+ * When neither Supabase variable is configured (e.g. local dev without Supabase)
+ * it falls back to the generic API base URL so developers can still test locally.
+ */
+export function getFinancialApiUrl(): string {
+  if (supabaseFunctionsUrl) return supabaseFunctionsUrl;
+
+  // Warn in dev: financial routes should always target Edge Functions in
+  // staging/production to avoid silent dual-surface routing.
+  try {
+    // eslint-disable-next-line no-console
+    if (__DEV__) {
+      console.warn(
+        '[API Config] getFinancialApiUrl: EXPO_PUBLIC_SUPABASE_URL / ' +
+        'EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL is not set. Financial routes ' +
+        'will fall back to the legacy API server. Set one of these variables ' +
+        'to route /wallet/* and /payments/* to Supabase Edge Functions.'
+      )
+    }
+  } catch {}
+
+  // Local-dev fallback only — not used in staging/production.
+  return getApiBaseUrl();
+}
+
+// Pre-resolved constant for modules that prefer a simple import.
+// Always the Edge Functions URL when Supabase is configured.
+export const FINANCIAL_API_BASE_URL = getFinancialApiUrl()

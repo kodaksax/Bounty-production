@@ -132,7 +132,13 @@ describe('Consolidated Wallet Service', () => {
       const admin = makeAdmin([{ data: { balance: 10000 }, error: null }]);
       const svc = buildService(admin);
       const result = await svc.getBalance('user1');
-      expect(result).toEqual({ balance: 10000, currency: 'USD', user_id: 'user1' });
+      expect(result).toEqual({
+        balance: 10000,
+        currency: 'USD',
+        user_id: 'user1',
+        payoutFailedAt: null,
+        payoutFailureCode: null,
+      });
     });
 
     it('throws NotFoundError when profile not found (PGRST116)', async () => {
