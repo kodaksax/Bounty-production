@@ -800,10 +800,13 @@ async function handlePayoutFailed(event: Stripe.Event): Promise<void> {
     payout.failure_message ?? null,
   );
 
-  // Flag the profile so support can follow up
+  // Flag the profile so support can follow up (store failure_code for in-app recovery UI)
   const { error: flagError } = await admin
     .from('profiles')
-    .update({ payout_failed_at: new Date().toISOString() })
+    .update({
+      payout_failed_at: new Date().toISOString(),
+      payout_failure_code: payout.failure_code ?? null,
+    })
     .eq('id', profile.id);
 
   if (flagError) {

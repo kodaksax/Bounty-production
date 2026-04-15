@@ -64,12 +64,14 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
           return reply.code(401).send({ error: 'Unauthorized' });
         }
 
-        const { balance, currency } = await ConsolidatedWalletService.getBalance(request.userId);
+        const { balance, currency, payoutFailedAt, payoutFailureCode } = await ConsolidatedWalletService.getBalance(request.userId);
 
         return {
           balance,
           balanceCents: Math.round(balance * 100),
           currency,
+          payoutFailedAt,
+          payoutFailureCode,
         };
       } catch (error) {
         logErrorWithContext(request, error, {

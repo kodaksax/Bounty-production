@@ -869,7 +869,10 @@ Deno.serve(async (req: Request) => {
             // Flag the profile so support can follow up
             const { error: payoutFlagError } = await supabase
               .from('profiles')
-              .update({ payout_failed_at: new Date().toISOString() })
+              .update({
+                payout_failed_at: new Date().toISOString(),
+                payout_failure_code: payout.failure_code ?? null,
+              })
               .eq('id', failedProfile.id);
             if (payoutFlagError) {
               console.error('[webhooks] Failed to flag profile payout_failed_at', {

@@ -66,7 +66,11 @@ Deno.serve(async (req: Request) => {
     // POST /connect/create-account-link
     if (subPath === '/create-account-link') {
       const body = await req.json()
-      const { returnUrl, refreshUrl } = body
+      const { returnUrl, refreshUrl, type: linkType } = body
+
+      // Supported link types: 'account_onboarding' (default) and 'account_update'
+      const accountLinkType: 'account_onboarding' | 'account_update' =
+        linkType === 'account_update' ? 'account_update' : 'account_onboarding'
 
       const { data: profile } = await supabase
         .from('profiles')
@@ -78,6 +82,10 @@ Deno.serve(async (req: Request) => {
       let accountId = profileRow?.stripe_connect_account_id
 
       if (!accountId) {
+        if (accountLinkType === 'account_update') {
+          // Cannot update an account that doesn't exist yet
+          return jsonResponse({ error: 'No Stripe Connect account found to update. Please complete onboarding first.' }, 400)
+        }
         const account = await stripe.accounts.create({
           type: 'express',
           email: profileRow?.email ?? undefined,
@@ -97,7 +105,7 @@ Deno.serve(async (req: Request) => {
         account: accountId,
         refresh_url: refreshUrl ?? `${appUrl}/wallet/connect/refresh`,
         return_url: returnUrl ?? `${appUrl}/wallet/connect/return`,
-        type: 'account_onboarding',
+        type: accountLinkType,
       })
 
       return jsonResponse({
@@ -111,11 +119,11 @@ Deno.serve(async (req: Request) => {
     if (subPath === '/verify-onboarding') {
       const { data: profile } = await supabase
         .from('profiles')
-        .select('stripe_connect_account_id, stripe_connect_onboarded_at')
+        .select('stripe_connect_account_id, stripe_connect_onboarded_at, payout_failed_at')
         .eq('id', userId)
         .single()
 
-      const profileRow = profile as Profile | null
+      const profileRow = profile as (Profile & { payout_failed_at?: string | null }) | null
       if (!profileRow?.stripe_connect_account_id) {
         return jsonResponse({ onboarded: false })
       }
@@ -123,11 +131,29 @@ Deno.serve(async (req: Request) => {
       const account = await stripe.accounts.retrieve(profileRow.stripe_connect_account_id)
       const onboarded = account.charges_enabled && account.payouts_enabled
 
+      const profileUpdates: Record<string, unknown> = {}
+
       if (onboarded && !profileRow.stripe_connect_onboarded_at) {
-        await supabase
+        profileUpdates.stripe_connect_onboarded_at = new Date().toISOString()
+      }
+
+      // Clear payout_failed_at when payouts are re-enabled so the recovery banner dismisses
+      if (account.payouts_enabled && profileRow.payout_failed_at) {
+        profileUpdates.payout_failed_at = null
+        profileUpdates.payout_failure_code = null
+        console.log(`[connect] Cleared payout_failed_at for user ${userId} — payouts re-enabled`)
+      }
+
+      if (Object.keys(profileUpdates).length > 0) {
+        const { error: updateError } = await supabase
           .from('profiles')
-          .update({ stripe_connect_onboarded_at: new Date().toISOString() })
+          .update(profileUpdates)
           .eq('id', userId)
+
+        if (updateError) {
+          console.error('[connect] Failed to update profile during verify-onboarding', { userId, error: updateError })
+          return jsonResponse({ error: 'Failed to update account status. Please try again.' }, 500)
+        }
       }
 
       return jsonResponse({
@@ -136,6 +162,7 @@ Deno.serve(async (req: Request) => {
         chargesEnabled: account.charges_enabled,
         payoutsEnabled: account.payouts_enabled,
         detailsSubmitted: account.details_submitted,
+        payoutFailedCleared: account.payouts_enabled && !!profileRow.payout_failed_at,
       })
     }
 

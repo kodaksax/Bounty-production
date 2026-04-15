@@ -50,6 +50,10 @@ interface WalletContextValue {
   balance: number;
   isLoading: boolean;
   secureStoreAvailable: boolean;
+  payoutFailed: boolean;
+  payoutFailureCode: string | null;
+  // Clears the payout failure state (used after verify-onboarding succeeds)
+  clearPayoutFailure: () => void;
   deposit: (amount: number, meta?: Partial<WalletTransactionRecord['details']>) => Promise<void>;
   withdraw: (
     amount: number,
@@ -93,6 +97,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const balanceRef = useRef<number>(INITIAL_BALANCE);
   const [isLoading, setIsLoading] = useState(true);
   const [transactions, setTransactions] = useState<WalletTransactionRecord[]>([]);
+  const [payoutFailed, setPayoutFailed] = useState<boolean>(false);
+  const [payoutFailureCode, setPayoutFailureCode] = useState<string | null>(null);
   const lastOptimisticDepositRef = useRef<number | null>(null);
   // Tracks whether the WalletProvider is still mounted so async callbacks
   // (refresh, refreshFromApi) can skip setState calls after unmount.
@@ -221,74 +227,82 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           if (mountedRef.current) {
             setBalance(resolvedBalance);
 
+            // Update payout failure state from API response
+            setPayoutFailed(!!balanceData.payoutFailedAt);
+            setPayoutFailureCode(
+              typeof balanceData.payoutFailureCode === 'string'
+                ? balanceData.payoutFailureCode
+                : null
+            );
+
             try {
               await persist(resolvedBalance);
             } catch (persistError) {
               console.error('[wallet] Failed to persist balance', persistError);
             }
           }
-        }
 
-        // Fetch transactions from API with timeout and retry
-        const txResponse = await fetchWithTimeout(
-          `${FINANCIAL_API_BASE_URL}/wallet/transactions?limit=100`,
-          {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
-              ...(config.supabase.anonKey ? { apikey: config.supabase.anonKey } : {}),
-            },
-            timeout: API_TIMEOUTS.DEFAULT,
-            retries: 2,
-          }
-        );
-
-        if (txResponse.headers?.get?.('X-Deprecated') === 'true') {
-          console.warn(
-            '[API] Received X-Deprecated header on GET /wallet/transactions — this server surface is deprecated. ' +
-              'Please ensure EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL is set so requests ' +
-              'route to the Supabase Edge Function.'
+          // Fetch transactions from API with timeout and retry
+          const txResponse = await fetchWithTimeout(
+            `${FINANCIAL_API_BASE_URL}/wallet/transactions?limit=100`,
+            {
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+                ...(config.supabase.anonKey ? { apikey: config.supabase.anonKey } : {}),
+              },
+              timeout: API_TIMEOUTS.DEFAULT,
+              retries: 2,
+            }
           );
-        }
 
-        // Transaction types that represent outflow (money leaving the user's wallet)
-        const OUTFLOW_TYPES = ['escrow', 'withdrawal', 'bounty_posted'];
-
-        if (txResponse.ok && mountedRef.current) {
-          const txData = await txResponse.json();
-          if (txData.transactions && Array.isArray(txData.transactions)) {
-            // Map API transactions to local format
-            const mappedTransactions: WalletTransactionRecord[] = txData.transactions.map(
-              (tx: any) => ({
-                id: tx.id,
-                type: tx.type as WalletTransactionType,
-                // Use centralized config for transaction sign
-                amount: OUTFLOW_TYPES.includes(tx.type)
-                  ? -Math.abs(tx.amount)
-                  : Math.abs(tx.amount),
-                date: new Date(tx.date),
-                details: {
-                  title: tx.details?.title,
-                  method: tx.details?.method,
-                  status: tx.details?.status,
-                  bounty_id: tx.details?.bounty_id,
-                },
-              })
+          if (txResponse.headers?.get?.('X-Deprecated') === 'true') {
+            console.warn(
+              '[API] Received X-Deprecated header on GET /wallet/transactions — this server surface is deprecated. ' +
+                'Please ensure EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL is set so requests ' +
+                'route to the Supabase Edge Function.'
             );
+          }
 
-            // Merge inside the setTransactions updater so the merge always runs
-            // against the latest state, not a potentially stale closed-over snapshot.
-            // This also makes refreshFromApi safe to call from the mount effect
-            // whose dependency array is [] (initial closure has transactions = []).
-            if (mountedRef.current) {
-              setTransactions(prev => {
-                const apiTxIds = new Set(mappedTransactions.map(tx => tx.id));
-                const localOnlyTx = prev.filter(tx => !apiTxIds.has(tx.id));
-                const mergedTransactions = [...mappedTransactions, ...localOnlyTx];
-                mergedTransactions.sort((a, b) => b.date.getTime() - a.date.getTime());
-                persistTransactions(mergedTransactions); // fire-and-forget inside updater
-                return mergedTransactions;
-              });
+          // Transaction types that represent outflow (money leaving the user's wallet)
+          const OUTFLOW_TYPES = ['escrow', 'withdrawal', 'bounty_posted'];
+
+          if (txResponse.ok && mountedRef.current) {
+            const txData = await txResponse.json();
+            if (txData.transactions && Array.isArray(txData.transactions)) {
+              // Map API transactions to local format
+              const mappedTransactions: WalletTransactionRecord[] = txData.transactions.map(
+                (tx: any) => ({
+                  id: tx.id,
+                  type: tx.type as WalletTransactionType,
+                  // Use centralized config for transaction sign
+                  amount: OUTFLOW_TYPES.includes(tx.type)
+                    ? -Math.abs(tx.amount)
+                    : Math.abs(tx.amount),
+                  date: new Date(tx.date),
+                  details: {
+                    title: tx.details?.title,
+                    method: tx.details?.method,
+                    status: tx.details?.status,
+                    bounty_id: tx.details?.bounty_id,
+                  },
+                })
+              );
+
+              // Merge inside the setTransactions updater so the merge always runs
+              // against the latest state, not a potentially stale closed-over snapshot.
+              // This also makes refreshFromApi safe to call from the mount effect
+              // whose dependency array is [] (initial closure has transactions = []).
+              if (mountedRef.current) {
+                setTransactions(prev => {
+                  const apiTxIds = new Set(mappedTransactions.map(tx => tx.id));
+                  const localOnlyTx = prev.filter(tx => !apiTxIds.has(tx.id));
+                  const mergedTransactions = [...mappedTransactions, ...localOnlyTx];
+                  mergedTransactions.sort((a, b) => b.date.getTime() - a.date.getTime());
+                  persistTransactions(mergedTransactions); // fire-and-forget inside updater
+                  return mergedTransactions;
+                });
+              }
             }
           }
         }
@@ -788,10 +802,24 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     [transactions, persistTransactions, logTransaction, persist, refreshFromApi, getAccessToken]
   );
 
+  // Clear payout failure state (used by UI flows that verify onboarding)
+  const clearPayoutFailure = useCallback(() => {
+    if (!mountedRef.current) return;
+    setPayoutFailed(false);
+    setPayoutFailureCode(null);
+  }, []);
+
   const value: WalletContextValue = {
     balance,
     isLoading,
     secureStoreAvailable,
+    payoutFailed,
+    payoutFailureCode,
+    // Expose an explicit API to allow callers to clear the payout failure flag
+    // when they have independently verified onboarding (prevents transient
+    // network failures from leaving the banner visible after the user fixes
+    // their payment details).
+    clearPayoutFailure,
     deposit,
     withdraw,
     setBalance: (amt: number) => {
