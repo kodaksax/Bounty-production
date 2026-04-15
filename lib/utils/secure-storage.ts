@@ -1,22 +1,21 @@
 /**
  * Secure Storage Utilities
- * 
+ *
  * Provides a unified interface for storing sensitive data using SecureStore
  * and non-sensitive data using AsyncStorage.
- * 
+ *
  * Key principle: Sensitive data (auth tokens, private keys, wallet info) goes to SecureStore,
  * while non-sensitive data (UI preferences, drafts) can use AsyncStorage for better performance.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { requireNativeModule } from 'expo-modules-core';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 // SecureStore options for iOS - ensures background access works
 const SECURE_OPTS: SecureStore.SecureStoreOptions | undefined =
-  Platform.OS === 'ios' 
-    ? { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK } 
-    : undefined;
+  Platform.OS === 'ios' ? { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK } : undefined;
 
 // Explicit list of keys that are considered sensitive. For these keys we
 // MUST NOT silently degrade to AsyncStorage because that would remove
@@ -40,7 +39,9 @@ function sanitizeSecureKey(key: string): string {
   if (!sanitized) throw new Error('Invalid secure storage key');
   if (sanitized !== key) {
     // eslint-disable-next-line no-console
-    console.warn(`[SecureStorage] Sanitized key "${key}" -> "${sanitized}" for SecureStore compatibility.`);
+    console.warn(
+      `[SecureStorage] Sanitized key "${key}" -> "${sanitized}" for SecureStore compatibility.`
+    );
   }
   return sanitized;
 }
@@ -62,17 +63,25 @@ export async function setSecureItem(key: string, value: string): Promise<void> {
     if (SENSITIVE_KEYS.has(key)) {
       const err = new Error('SecureStoreUnavailable');
       // preserve original error on console for diagnostics
-      console.error(`[SecureStorage] SecureStore.setItemAsync failed for sensitive key ${key}:`, error);
+      console.error(
+        `[SecureStorage] SecureStore.setItemAsync failed for sensitive key ${key}:`,
+        error
+      );
       throw err;
     }
 
-    console.warn(`[SecureStorage] SecureStore unavailable for ${key}, falling back to AsyncStorage:`, error);
+    console.warn(
+      `[SecureStorage] SecureStore unavailable for ${key}, falling back to AsyncStorage:`,
+      error
+    );
     try {
       await AsyncStorage.setItem(fallbackKey, value);
       return;
     } catch (err2) {
       console.error(`[SecureStorage] Error storing secure item ${key} in fallback storage:`, err2);
-      throw new Error(`Failed to store secure data: ${err2 instanceof Error ? err2.message : 'Unknown error'}`);
+      throw new Error(
+        `Failed to store secure data: ${err2 instanceof Error ? err2.message : 'Unknown error'}`
+      );
     }
   }
 }
@@ -93,16 +102,25 @@ export async function getSecureItem(key: string): Promise<string | null> {
     return null;
   } catch (error) {
     if (SENSITIVE_KEYS.has(key)) {
-      console.error(`[SecureStorage] SecureStore.getItemAsync failed for sensitive key ${key}:`, error);
+      console.error(
+        `[SecureStorage] SecureStore.getItemAsync failed for sensitive key ${key}:`,
+        error
+      );
       throw new Error('SecureStoreUnavailable');
     }
-    console.warn(`[SecureStorage] SecureStore.getItemAsync failed for ${key}, trying fallback AsyncStorage:`, error);
+    console.warn(
+      `[SecureStorage] SecureStore.getItemAsync failed for ${key}, trying fallback AsyncStorage:`,
+      error
+    );
   }
   try {
     const fallback = await AsyncStorage.getItem(fallbackKey);
     return fallback;
   } catch (err) {
-    console.error(`[SecureStorage] Error retrieving secure item ${key} from fallback storage:`, err);
+    console.error(
+      `[SecureStorage] Error retrieving secure item ${key} from fallback storage:`,
+      err
+    );
     return null;
   }
 }
@@ -124,10 +142,16 @@ export async function deleteSecureItem(key: string): Promise<void> {
     securePresent = val !== null && val !== undefined;
   } catch (error) {
     if (SENSITIVE_KEYS.has(key)) {
-      console.error(`[SecureStorage] SecureStore.getItemAsync failed for sensitive key ${key}:`, error);
+      console.error(
+        `[SecureStorage] SecureStore.getItemAsync failed for sensitive key ${key}:`,
+        error
+      );
       throw new Error('SecureStoreUnavailable');
     }
-    console.warn(`[SecureStorage] SecureStore.getItemAsync failed for ${key}, will check fallback storage:`, error);
+    console.warn(
+      `[SecureStorage] SecureStore.getItemAsync failed for ${key}, will check fallback storage:`,
+      error
+    );
     securePresent = false;
   }
 
@@ -148,10 +172,16 @@ export async function deleteSecureItem(key: string): Promise<void> {
       await SecureStore.deleteItemAsync(secureKey);
     } catch (error) {
       if (SENSITIVE_KEYS.has(key)) {
-        console.error(`[SecureStorage] SecureStore.deleteItemAsync failed for sensitive key ${key}:`, error);
+        console.error(
+          `[SecureStorage] SecureStore.deleteItemAsync failed for sensitive key ${key}:`,
+          error
+        );
         throw new Error('SecureStoreUnavailable');
       }
-      console.warn(`[SecureStorage] SecureStore.deleteItemAsync failed for ${key}, continuing to fallback if present:`, error);
+      console.warn(
+        `[SecureStorage] SecureStore.deleteItemAsync failed for ${key}, continuing to fallback if present:`,
+        error
+      );
     }
   }
 
@@ -160,8 +190,13 @@ export async function deleteSecureItem(key: string): Promise<void> {
     try {
       await AsyncStorage.removeItem(fallbackKey);
     } catch (err) {
-      console.error(`[SecureStorage] Error deleting secure item ${key} from fallback storage:`, err);
-      throw new Error(`Failed to delete secure data: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      console.error(
+        `[SecureStorage] Error deleting secure item ${key} from fallback storage:`,
+        err
+      );
+      throw new Error(
+        `Failed to delete secure data: ${err instanceof Error ? err.message : 'Unknown error'}`
+      );
     }
   }
 }
@@ -180,7 +215,7 @@ export async function setSecureJSON<T>(key: string, value: T): Promise<void> {
 export async function getSecureJSON<T>(key: string): Promise<T | null> {
   const json = await getSecureItem(key);
   if (!json) return null;
-  
+
   try {
     return JSON.parse(json) as T;
   } catch (error) {
@@ -198,7 +233,9 @@ export async function setItem(key: string, value: string): Promise<void> {
     await AsyncStorage.setItem(key, value);
   } catch (error) {
     console.error(`[Storage] Error storing item ${key}:`, error);
-    throw new Error(`Failed to store data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(
+      `Failed to store data: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
   }
 }
 
@@ -222,7 +259,9 @@ export async function deleteItem(key: string): Promise<void> {
     await AsyncStorage.removeItem(key);
   } catch (error) {
     console.error(`[Storage] Error deleting item ${key}:`, error);
-    throw new Error(`Failed to delete data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(
+      `Failed to delete data: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
   }
 }
 
@@ -240,12 +279,117 @@ export async function setJSON<T>(key: string, value: T): Promise<void> {
 export async function getJSON<T>(key: string): Promise<T | null> {
   const json = await getItem(key);
   if (!json) return null;
-  
+
   try {
     return JSON.parse(json) as T;
   } catch (error) {
     console.error(`[Storage] Error parsing JSON for ${key}:`, error);
     return null;
+  }
+}
+
+// The AsyncStorage flag that records whether the one-time key-format migration
+// has already been completed on this device.
+const KEY_MIGRATION_V1_FLAG = '@bountyexpo:keyMigrationV1Done';
+
+// The old colon-containing key names that were written to SecureStore before
+// the sanitization logic was introduced. These are the keys we need to read
+// in order to migrate data to the current sanitized format.
+const LEGACY_KEYS = [
+  '@bountyexpo:secure:wallet_balance',
+  '@bountyexpo:secure:wallet_transactions',
+  '@bountyexpo:secure:wallet_last_deposit_ts',
+  '@bountyexpo:secure:payment_token',
+];
+
+/**
+ * One-time migration: for iOS devices that stored sensitive wallet keys under
+ * the old colon-containing key names (before sanitization was applied), read
+ * each old key directly from SecureStore, write the value under the current
+ * sanitized key name, and delete the old key.
+ *
+ * Legacy colon-containing keys can only exist on iOS (the Keychain allows
+ * arbitrary key names). On Android, SecureStore enforces the same character
+ * restrictions as sanitizeSecureKey, so no migration is needed.
+ *
+ * A flag in AsyncStorage (`@bountyexpo:keyMigrationV1Done`) prevents this
+ * migration from running more than once per device. The flag is only written
+ * when every key is processed without error, so a transient failure allows a
+ * retry on the next launch.
+ */
+export async function migrateSecureStorageKeys(): Promise<void> {
+  try {
+    // Check whether the migration has already been completed on this device.
+    const alreadyDone = await AsyncStorage.getItem(KEY_MIGRATION_V1_FLAG);
+    if (alreadyDone === 'true') {
+      return;
+    }
+
+    // Legacy colon-containing keys can only exist on iOS.
+    // On Android, set the flag immediately and skip probing to avoid spurious
+    // Keychain warnings on every fresh install.
+    if (Platform.OS !== 'ios') {
+      await AsyncStorage.setItem(KEY_MIGRATION_V1_FLAG, 'true');
+      return;
+    }
+
+    // expo-secure-store ~55+ validates keys client-side and throws "Invalid key"
+    // for any key containing '@' or ':' — before making any native Keychain call.
+    // All LEGACY_KEYS entries contain those characters, so SecureStore.getItemAsync
+    // can never reach the Keychain for them. We must call the underlying native
+    // module directly to bypass the JS-layer validation.
+    let nativeStore: {
+      getValueWithKeyAsync(key: string, options: Record<string, unknown>): Promise<string | null>;
+      deleteValueWithKeyAsync(key: string, options: Record<string, unknown>): Promise<void>;
+    } | null = null;
+    try {
+      nativeStore = requireNativeModule('ExpoSecureStore') as typeof nativeStore;
+    } catch {
+      // Native module unavailable (e.g. test environment without a native layer).
+    }
+
+    const nativeOpts: Record<string, unknown> = SECURE_OPTS ?? {};
+    let hadError = false;
+    for (const oldKey of LEGACY_KEYS) {
+      try {
+        if (!nativeStore) {
+          // No native module — cannot read legacy Keychain entries on this launch.
+          // Set hadError so the flag is withheld and migration retries next launch.
+          hadError = true;
+          console.warn(
+            '[SecureStorage] ExpoSecureStore native module unavailable; deferring migration.'
+          );
+          break;
+        }
+        // Read directly from the native Keychain, bypassing the JS-layer key
+        // validation that would otherwise throw for '@'/'​:'-containing keys.
+        const value = await nativeStore.getValueWithKeyAsync(oldKey, nativeOpts);
+        if (value !== null) {
+          // Derive the sanitized destination key the same way setSecureItem does.
+          const newKey = sanitizeSecureKey(oldKey);
+          // Write under the sanitized key name via the public API (key passes validation).
+          await SecureStore.setItemAsync(newKey, value, SECURE_OPTS);
+          // Delete the old Keychain entry via the native module (bypasses validation).
+          await nativeStore.deleteValueWithKeyAsync(oldKey, nativeOpts);
+        }
+      } catch (keyError) {
+        // Log but continue — a failure on one key must not block the others.
+        // Set hadError so the flag is withheld and migration can retry next launch.
+        hadError = true;
+        console.warn(`[SecureStorage] Migration failed for key "${oldKey}":`, keyError);
+      }
+    }
+
+    // Only mark migration as done when all keys were processed without error.
+    // If hadError is true, the migration will retry on the next app launch.
+    if (!hadError) {
+      await AsyncStorage.setItem(KEY_MIGRATION_V1_FLAG, 'true');
+    }
+  } catch (error) {
+    // Non-fatal: if the flag check or write fails, the migration may re-run on
+    // the next launch, which is idempotent (existing new-format keys are simply
+    // overwritten with the same value).
+    console.warn('[SecureStorage] migrateSecureStorageKeys error:', error);
   }
 }
 
@@ -260,19 +404,19 @@ export async function migrateToSecureStorage(key: string): Promise<boolean> {
     if (existingSecure) {
       return true;
     }
-    
+
     // Get from AsyncStorage
     const value = await getItem(key);
     if (!value) {
       return false;
     }
-    
+
     // Move to SecureStore
     await setSecureItem(key, value);
-    
+
     // Remove from AsyncStorage
     await deleteItem(key);
-    
+
     return true;
   } catch (error) {
     console.error(`[SecureStorage] Migration failed for ${key}:`, error);
@@ -286,10 +430,10 @@ export const SecureKeys = {
   WALLET_BALANCE: '@bountyexpo:secure:wallet_balance',
   WALLET_TRANSACTIONS: '@bountyexpo:secure:wallet_transactions',
   WALLET_LAST_DEPOSIT_TS: '@bountyexpo:secure:wallet_last_deposit_ts',
-  
+
   // Privacy & Security Settings
   PRIVACY_SETTINGS: '@bountyexpo:secure:privacy_settings',
-  
+
   // Payment tokens (if stored)
   PAYMENT_TOKEN: '@bountyexpo:secure:payment_token',
 } as const;
@@ -298,11 +442,11 @@ export const StorageKeys = {
   // UI Preferences (non-sensitive)
   THEME: '@bountyexpo:theme',
   NOTIFICATION_PREFS: '@bountyexpo:notification_prefs',
-  
+
   // Drafts (non-sensitive)
   PROFILE_DRAFT: '@bountyexpo:profile_draft',
   BOUNTY_DRAFT: '@bountyexpo:bounty_draft',
-  
+
   // Cache (non-sensitive)
   CONVERSATIONS_CACHE: '@bountyexpo:conversations_cache',
   MESSAGES_CACHE_PREFIX: '@bountyexpo:messages_',

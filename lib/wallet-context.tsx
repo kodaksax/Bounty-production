@@ -7,7 +7,7 @@ import { paymentService } from './services/payment-service';
 import { supabase } from './supabase';
 import { fetchWithTimeout } from './utils/fetch-with-timeout';
 import { getNetworkErrorMessage } from './utils/network-connectivity';
-import { getSecureJSON, SecureKeys, setSecureJSON } from './utils/secure-storage';
+import { getSecureJSON, migrateSecureStorageKeys, SecureKeys, setSecureJSON } from './utils/secure-storage';
 
 // Platform fee configuration
 // Service fees are deducted during bounty completion (when funds are released to hunter)
@@ -362,6 +362,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => {
     mountedRef.current = true;
     const init = async () => {
+      // Migrate any keys that were stored before the colon-to-underscore
+      // sanitization was applied (one-time, guarded by an AsyncStorage flag).
+      await migrateSecureStorageKeys();
       await refresh();
       // After loading the SecureStore cache, sync from the API so the server
       // is the authoritative source of truth for balance and transactions.
