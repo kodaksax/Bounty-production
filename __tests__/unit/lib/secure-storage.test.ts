@@ -1,6 +1,19 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 
+// Mutable handles so individual tests can override the native module behaviour.
+const mockNativeGetValue = jest.fn<Promise<string | null>, [string, Record<string, unknown>]>();
+const mockNativeDeleteValue = jest.fn<Promise<void>, [string, Record<string, unknown>]>();
+
+// Mock expo-modules-core so requireNativeModule('ExpoSecureStore') returns our
+// controllable stubs instead of running native code.
+jest.mock('expo-modules-core', () => ({
+  requireNativeModule: jest.fn(() => ({
+    getValueWithKeyAsync: mockNativeGetValue,
+    deleteValueWithKeyAsync: mockNativeDeleteValue,
+  })),
+}));
+
 // Mock both storage modules
 jest.mock('expo-secure-store', () => ({
   getItemAsync: jest.fn(),
@@ -111,6 +124,8 @@ describe('migrateSecureStorageKeys', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockNativeGetValue.mockResolvedValue(null);
+    mockNativeDeleteValue.mockResolvedValue(undefined);
     (SecureStore.getItemAsync as jest.Mock).mockResolvedValue(null);
     (SecureStore.setItemAsync as jest.Mock).mockResolvedValue(undefined);
     (SecureStore.deleteItemAsync as jest.Mock).mockResolvedValue(undefined);
@@ -131,15 +146,15 @@ describe('migrateSecureStorageKeys', () => {
     // AsyncStorage has no migration flag yet
     (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
 
-    // SecureStore returns values for old keys, null for anything else
-    (SecureStore.getItemAsync as jest.Mock).mockImplementation((key: string) => {
-      return Promise.resolve(oldValues[key] ?? null);
-    });
+    // The native module returns values for old keys, null for anything else.
+    // (SecureStore.getItemAsync is NOT used for legacy keys — the native module
+    // bypasses the JS-layer key validation that would throw for '@'/':' keys.)
+    mockNativeGetValue.mockImplementation((key: string) => Promise.resolve(oldValues[key] ?? null));
 
     await secure.migrateSecureStorageKeys();
 
-    // Each sanitized (new) key should have been written with the correct value.
-    // sanitizeSecureKey('@bountyexpo:secure:wallet_balance') -> '_bountyexpo_secure_wallet_balance'
+    // Each sanitized (new) key should have been written with the correct value
+    // via the public SecureStore API (new keys pass key validation).
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
       '_bountyexpo_secure_wallet_balance',
       '100',
@@ -161,23 +176,28 @@ describe('migrateSecureStorageKeys', () => {
       expect.anything()
     );
 
-    // Each old key should have been deleted
-    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(
+    // Each old key should have been deleted via the native module (not
+    // SecureStore.deleteItemAsync, which would also throw for invalid keys).
+    expect(mockNativeDeleteValue).toHaveBeenCalledWith(
       '@bountyexpo:secure:wallet_balance',
       expect.anything()
     );
-    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(
+    expect(mockNativeDeleteValue).toHaveBeenCalledWith(
       '@bountyexpo:secure:wallet_transactions',
       expect.anything()
     );
-    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(
+    expect(mockNativeDeleteValue).toHaveBeenCalledWith(
       '@bountyexpo:secure:wallet_last_deposit_ts',
       expect.anything()
     );
-    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(
+    expect(mockNativeDeleteValue).toHaveBeenCalledWith(
       '@bountyexpo:secure:payment_token',
       expect.anything()
     );
+
+    // Public SecureStore.deleteItemAsync must NOT be called for old keys since
+    // it would throw on '@'/':' characters before reaching the native layer.
+    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
 
     // The migration flag should have been set
     expect(AsyncStorage.setItem).toHaveBeenCalledWith('@bountyexpo:keyMigrationV1Done', 'true');
@@ -199,24 +219,26 @@ describe('migrateSecureStorageKeys', () => {
   test('skips keys that have no old value and still completes migration', async () => {
     // Only wallet_balance has an old value; the others are absent
     (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
-    (SecureStore.getItemAsync as jest.Mock).mockImplementation((key: string) =>
+    mockNativeGetValue.mockImplementation((key: string) =>
       Promise.resolve(key === '@bountyexpo:secure:wallet_balance' ? '42' : null)
     );
 
     await secure.migrateSecureStorageKeys();
 
-    // Only the present key should have been written and deleted
+    // Only the present key should have been written (via public API) and deleted
+    // (via native module).
     expect(SecureStore.setItemAsync).toHaveBeenCalledTimes(1);
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
       '_bountyexpo_secure_wallet_balance',
       '42',
       expect.anything()
     );
-    expect(SecureStore.deleteItemAsync).toHaveBeenCalledTimes(1);
-    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(
+    expect(mockNativeDeleteValue).toHaveBeenCalledTimes(1);
+    expect(mockNativeDeleteValue).toHaveBeenCalledWith(
       '@bountyexpo:secure:wallet_balance',
       expect.anything()
     );
+    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
 
     // Flag should still be set (no errors)
     expect(AsyncStorage.setItem).toHaveBeenCalledWith('@bountyexpo:keyMigrationV1Done', 'true');
@@ -224,8 +246,8 @@ describe('migrateSecureStorageKeys', () => {
 
   test('continues migrating remaining keys when one key fails, but does NOT set the flag', async () => {
     (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
-    (SecureStore.getItemAsync as jest.Mock).mockImplementation((key: string) => {
-      // Fail on the first legacy key, succeed on the others
+    mockNativeGetValue.mockImplementation((key: string) => {
+      // Native read fails on the first legacy key, succeeds on the others
       if (key === '@bountyexpo:secure:wallet_balance') {
         return Promise.reject(new Error('keychain error'));
       }
@@ -246,13 +268,17 @@ describe('migrateSecureStorageKeys', () => {
     expect(AsyncStorage.setItem).not.toHaveBeenCalled();
   });
 
-  test('treats "Invalid key" errors as not-found and still completes migration', async () => {
-    // expo-secure-store throws this exact message for keys containing '@' or ':'
-    // (the characters present in every LEGACY_KEYS entry).  The error is
-    // permanent — not a transient failure — so hadError must NOT be set and the
-    // migration flag MUST still be written.
+  test('"Invalid key" from native module is retryable, not treated as not-found', async () => {
+    // This test guards against regressions to the original bug: the old code
+    // treated "Invalid key" errors as a permanent "key not found" condition and
+    // still wrote the migration flag, silently losing any legacy Keychain data.
+    //
+    // With the fix, the native module is called directly (bypassing JS validation)
+    // so an "Invalid key" error coming back from the native layer is unexpected
+    // and should be treated as a retryable failure — hadError is set, the
+    // migration flag is NOT written, and the migration will retry on next launch.
     (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
-    (SecureStore.getItemAsync as jest.Mock).mockRejectedValue(
+    mockNativeGetValue.mockRejectedValue(
       new Error(
         'Invalid key provided to SecureStore. Keys must not be empty and contain only alphanumeric characters, ".", "-", and "_".'
       )
@@ -260,11 +286,10 @@ describe('migrateSecureStorageKeys', () => {
 
     await expect(secure.migrateSecureStorageKeys()).resolves.toBeUndefined();
 
-    // No data was retrieved, but the error is non-retryable — flag MUST be set.
-    expect(AsyncStorage.setItem).toHaveBeenCalledWith('@bountyexpo:keyMigrationV1Done', 'true');
-    // Nothing should have been written to or deleted from SecureStore.
+    // hadError is true — the flag must NOT be written so migration retries.
+    expect(AsyncStorage.setItem).not.toHaveBeenCalled();
+    // Nothing should have been written to SecureStore.
     expect(SecureStore.setItemAsync).not.toHaveBeenCalled();
-    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
   });
 
   test('on non-iOS platforms: sets flag immediately without probing SecureStore', async () => {

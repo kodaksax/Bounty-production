@@ -9,6 +9,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { requireNativeModule } from 'expo-modules-core';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
@@ -332,30 +333,46 @@ export async function migrateSecureStorageKeys(): Promise<void> {
       return;
     }
 
+    // expo-secure-store ~55+ validates keys client-side and throws "Invalid key"
+    // for any key containing '@' or ':' — before making any native Keychain call.
+    // All LEGACY_KEYS entries contain those characters, so SecureStore.getItemAsync
+    // can never reach the Keychain for them. We must call the underlying native
+    // module directly to bypass the JS-layer validation.
+    let nativeStore: {
+      getValueWithKeyAsync(key: string, options: Record<string, unknown>): Promise<string | null>;
+      deleteValueWithKeyAsync(key: string, options: Record<string, unknown>): Promise<void>;
+    } | null = null;
+    try {
+      nativeStore = requireNativeModule('ExpoSecureStore') as typeof nativeStore;
+    } catch {
+      // Native module unavailable (e.g. test environment without a native layer).
+    }
+
+    const nativeOpts: Record<string, unknown> = SECURE_OPTS ?? {};
     let hadError = false;
     for (const oldKey of LEGACY_KEYS) {
       try {
-        // Read directly from SecureStore using the legacy colon-containing key.
-        const value = await SecureStore.getItemAsync(oldKey, SECURE_OPTS);
+        if (!nativeStore) {
+          // No native module — cannot read legacy Keychain entries on this launch.
+          // Set hadError so the flag is withheld and migration retries next launch.
+          hadError = true;
+          console.warn(
+            '[SecureStorage] ExpoSecureStore native module unavailable; deferring migration.'
+          );
+          break;
+        }
+        // Read directly from the native Keychain, bypassing the JS-layer key
+        // validation that would otherwise throw for '@'/'​:'-containing keys.
+        const value = await nativeStore.getValueWithKeyAsync(oldKey, nativeOpts);
         if (value !== null) {
           // Derive the sanitized destination key the same way setSecureItem does.
           const newKey = sanitizeSecureKey(oldKey);
-          // Write under the sanitized key name.
+          // Write under the sanitized key name via the public API (key passes validation).
           await SecureStore.setItemAsync(newKey, value, SECURE_OPTS);
-          // Remove the old key so we don't leave stale data in the Keychain.
-          await SecureStore.deleteItemAsync(oldKey, SECURE_OPTS);
+          // Delete the old Keychain entry via the native module (bypasses validation).
+          await nativeStore.deleteValueWithKeyAsync(oldKey, nativeOpts);
         }
       } catch (keyError) {
-        // expo-secure-store validates keys before any native call and throws
-        // "Invalid key provided to SecureStore..." for keys containing '@' or
-        // ':'. Those characters exist in every LEGACY_KEYS entry, so this error
-        // is permanent — not a transient Keychain failure. Treat it as "key not
-        // found" (nothing can ever be stored under such a key name in the current
-        // library version) and skip without setting hadError, so the migration
-        // flag is still written and we don't re-run forever.
-        if (keyError instanceof Error && keyError.message.startsWith('Invalid key')) {
-          continue;
-        }
         // Log but continue — a failure on one key must not block the others.
         // Set hadError so the flag is withheld and migration can retry next launch.
         hadError = true;
