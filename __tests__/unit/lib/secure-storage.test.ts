@@ -246,6 +246,27 @@ describe('migrateSecureStorageKeys', () => {
     expect(AsyncStorage.setItem).not.toHaveBeenCalled();
   });
 
+  test('treats "Invalid key" errors as not-found and still completes migration', async () => {
+    // expo-secure-store throws this exact message for keys containing '@' or ':'
+    // (the characters present in every LEGACY_KEYS entry).  The error is
+    // permanent — not a transient failure — so hadError must NOT be set and the
+    // migration flag MUST still be written.
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
+    (SecureStore.getItemAsync as jest.Mock).mockRejectedValue(
+      new Error(
+        'Invalid key provided to SecureStore. Keys must not be empty and contain only alphanumeric characters, ".", "-", and "_".'
+      )
+    );
+
+    await expect(secure.migrateSecureStorageKeys()).resolves.toBeUndefined();
+
+    // No data was retrieved, but the error is non-retryable — flag MUST be set.
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith('@bountyexpo:keyMigrationV1Done', 'true');
+    // Nothing should have been written to or deleted from SecureStore.
+    expect(SecureStore.setItemAsync).not.toHaveBeenCalled();
+    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
+  });
+
   test('on non-iOS platforms: sets flag immediately without probing SecureStore', async () => {
     // Override the global react-native mock (Platform.OS = 'ios') with an
     // Android one for this test only. jest.doMock is NOT hoisted so it applies
