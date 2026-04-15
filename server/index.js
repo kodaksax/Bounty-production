@@ -1313,6 +1313,18 @@ app.post('/connect/transfer', paymentLimiter, authenticateUser, async (req, res)
       return res.status(400).json({ error: 'Insufficient balance' });
     }
 
+    // Deduct balance atomically BEFORE creating the Stripe transfer so that a
+    // hold-enforcement failure cannot leave money already sent to the user.
+    const { error: balanceError } = await supabase.rpc('withdraw_balance', {
+      p_user_id: userId,
+      p_amount: amount, // Positive amount; RPC deducts internally
+    });
+
+    if (balanceError) {
+      console.error('[Connect] Error deducting balance before transfer:', balanceError);
+      return res.status(400).json({ error: 'Failed to reserve balance' });
+    }
+
     // Build a deterministic fallback key scoped to user + rounded amount so
     // that retries without a client-supplied key are still protected.
     const stripeIdempotencyKey = idempotencyKey
@@ -1322,15 +1334,27 @@ app.post('/connect/transfer', paymentLimiter, authenticateUser, async (req, res)
     // Create transfer to connected account — pass the idempotency key to
     // Stripe so that duplicate requests return the cached transfer instead
     // of creating a second one.
-    const transfer = await stripe.transfers.create(
-      {
-        amount: Math.round(amount * 100), // Convert to cents
-        currency: currency,
-        destination: profile.stripe_connect_account_id,
-        metadata: { user_id: userId },
-      },
-      { idempotencyKey: stripeIdempotencyKey }
-    );
+    let transfer;
+    try {
+      transfer = await stripe.transfers.create(
+        {
+          amount: Math.round(amount * 100), // Convert to cents
+          currency: currency,
+          destination: profile.stripe_connect_account_id,
+          metadata: { user_id: userId },
+        },
+        { idempotencyKey: stripeIdempotencyKey }
+      );
+    } catch (stripeError) {
+      // Stripe failed — refund the balance deducted above so funds are not lost.
+      console.error('[Connect] Transfer creation failed, refunding balance:', stripeError);
+      await supabase
+        .rpc('update_balance', { p_user_id: userId, p_amount: amount })
+        .catch(rpcErr =>
+          console.error('[Connect] Balance refund after failed transfer also failed:', rpcErr)
+        );
+      throw stripeError;
+    }
 
     // Create withdrawal transaction
     const { data: transaction, error: txError } = await supabase
@@ -1351,18 +1375,6 @@ app.post('/connect/transfer', paymentLimiter, authenticateUser, async (req, res)
     if (txError) {
       console.error('[Connect] Error creating transaction:', txError);
       throw txError;
-    }
-
-    // Update user balance using withdraw_balance RPC which enforces the
-    // balance_on_hold constraint (available = balance - balance_on_hold >= amount).
-    const { data: newBalance, error: balanceError } = await supabase.rpc('withdraw_balance', {
-      p_user_id: userId,
-      p_amount: amount, // Positive amount; RPC deducts internally
-    });
-
-    if (balanceError) {
-      console.error('[Connect] Error updating balance:', balanceError);
-      throw new Error('Failed to update balance');
     }
 
     console.log(`[Connect] Transfer created: ${transfer.id} for user ${userId}, amount ${amount}`);
