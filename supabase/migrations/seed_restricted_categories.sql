@@ -1,0 +1,13 @@
+-- Seed Restricted Business Categories (legacy version stub)
+-- ============================================================================
+-- This file exists solely so that the Supabase CLI can match the remote
+-- schema_migrations version "seed_restricted_categories" (applied before the
+-- migrations directory adopted timestamp prefixes) to a local file.
+--
+-- The actual seed data is in 20251015_seed_restricted_categories.sql,
+-- which is idempotent (uses ON CONFLICT DO UPDATE) and safe to apply on top.
+--
+-- DO NOT remove or rename this file; doing so will cause the Supabase preview
+-- CI to fail with:
+--   "Remote migration versions not found in local migrations directory"
+-- ============================================================================

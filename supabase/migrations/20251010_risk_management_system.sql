@@ -31,11 +31,21 @@ COMMENT ON COLUMN profiles.account_restricted IS 'Whether account has restrictio
 COMMENT ON COLUMN profiles.restriction_reason IS 'Reason for account restriction';
 COMMENT ON COLUMN profiles.restricted_at IS 'Timestamp when account was restricted';
 
--- Add check constraints for risk management fields
-ALTER TABLE profiles
-ADD CONSTRAINT check_verification_status CHECK (verification_status IN ('pending', 'verified', 'rejected', 'under_review')),
-ADD CONSTRAINT check_risk_level CHECK (risk_level IN ('low', 'medium', 'high', 'critical')),
-ADD CONSTRAINT check_risk_score_range CHECK (risk_score >= 0 AND risk_score <= 100);
+-- Add check constraints for risk management fields (idempotent: skip if already present)
+DO $$ BEGIN
+  ALTER TABLE profiles ADD CONSTRAINT check_verification_status CHECK (verification_status IN ('pending', 'verified', 'rejected', 'under_review'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER TABLE profiles ADD CONSTRAINT check_risk_level CHECK (risk_level IN ('low', 'medium', 'high', 'critical'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER TABLE profiles ADD CONSTRAINT check_risk_score_range CHECK (risk_score >= 0 AND risk_score <= 100);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Create index for risk-based queries
 CREATE INDEX IF NOT EXISTS idx_profiles_risk ON profiles(risk_level, account_restricted);

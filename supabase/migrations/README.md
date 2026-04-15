@@ -149,6 +149,21 @@ Their content is captured in the timestamped migration files above:
 
 ---
 
+## Legacy Version Stubs
+
+Two stub (no-op) files live at the end of this directory:
+
+| Stub File | Reason |
+|-----------|--------|
+| `risk_management_system.sql` | Remote `schema_migrations` has version `risk_management_system` from before timestamp prefixes were adopted. The stub lets the Supabase CLI match that remote version to a local file, preventing the "Remote migration versions not found in local migrations directory" CI error. |
+| `seed_restricted_categories.sql` | Same reason as above for version `seed_restricted_categories`. |
+
+**Do not remove or rename these stubs.** The actual schema/data changes they correspond to are in
+`20251010_risk_management_system.sql` and `20251015_seed_restricted_categories.sql`, both of which
+are fully idempotent and safe to apply on databases that already have the old versions applied.
+
+---
+
 ## Migration: 20251022_inprogress_flow.sql
 
 This migration adds support for the in-progress bounty management flow:

@@ -1,0 +1,13 @@
+-- Risk Management System (legacy version stub)
+-- ============================================================================
+-- This file exists solely so that the Supabase CLI can match the remote
+-- schema_migrations version "risk_management_system" (applied before the
+-- migrations directory adopted timestamp prefixes) to a local file.
+--
+-- The actual schema changes are in 20251010_risk_management_system.sql,
+-- which is idempotent and safe to apply on top of this already-applied schema.
+--
+-- DO NOT remove or rename this file; doing so will cause the Supabase preview
+-- CI to fail with:
+--   "Remote migration versions not found in local migrations directory"
+-- ============================================================================
