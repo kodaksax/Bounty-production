@@ -56,17 +56,22 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
       preHandler: authMiddleware,
     },
     async (request: AuthenticatedRequest, reply) => {
+      // DEPRECATED: This Fastify route mirrors the canonical Supabase Edge Function.
+      // See docs/SERVER_CONSOLIDATION.md for the migration guide.
+      reply.header('X-Deprecated', 'true');
       try {
         if (!request.userId) {
           return reply.code(401).send({ error: 'Unauthorized' });
         }
 
-        const { balance, currency } = await ConsolidatedWalletService.getBalance(request.userId);
+        const { balance, currency, payoutFailedAt, payoutFailureCode } = await ConsolidatedWalletService.getBalance(request.userId);
 
         return {
           balance,
           balanceCents: Math.round(balance * 100),
           currency,
+          payoutFailedAt,
+          payoutFailureCode,
         };
       } catch (error) {
         logErrorWithContext(request, error, {
@@ -90,6 +95,9 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
       preHandler: authMiddleware,
     },
     async (request: AuthenticatedRequest, reply) => {
+      // DEPRECATED: This Fastify route mirrors the canonical Supabase Edge Function.
+      // See docs/SERVER_CONSOLIDATION.md for the migration guide.
+      reply.header('X-Deprecated', 'true');
       try {
         if (!request.userId) {
           return reply.code(401).send({ error: 'Unauthorized' });
@@ -163,6 +171,9 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
       preHandler: authMiddleware,
     },
     async (request: AuthenticatedRequest, reply) => {
+      // DEPRECATED: This Fastify route mirrors the canonical Supabase Edge Function.
+      // See docs/SERVER_CONSOLIDATION.md for the migration guide.
+      reply.header('X-Deprecated', 'true');
       let idempotencyKey: string | undefined;
       try {
         const body = depositSchema.parse(request.body);

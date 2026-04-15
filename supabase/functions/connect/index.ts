@@ -6,78 +6,92 @@
 //   POST /connect/transfer
 //   POST /connect/retry-transfer
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import Stripe from 'npm:stripe@14'
-import type { Profile, WalletTransaction } from '../_shared/types.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import Stripe from 'npm:stripe@14';
+import type { Profile, WalletTransaction } from '../_shared/types.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-}
+};
 
 function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  })
+  });
 }
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: corsHeaders });
   }
 
   if (req.method !== 'POST') {
-    return jsonResponse({ error: 'Method not allowed' }, 405)
+    return jsonResponse({ error: 'Method not allowed' }, 405);
   }
 
-  const url = new URL(req.url)
-  const pathParts = url.pathname.split('/connect')
-  const subPath = pathParts.length > 1 ? pathParts[1] : '/'
+  const url = new URL(req.url);
+  const pathParts = url.pathname.split('/connect');
+  const subPath = pathParts.length > 1 ? pathParts[1] : '/';
 
-  const stripeKey = Deno.env.get('STRIPE_SECRET_KEY')
+  const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
   if (!stripeKey) {
-    return jsonResponse({ error: 'Stripe not configured' }, 500)
+    return jsonResponse({ error: 'Stripe not configured' }, 500);
   }
-  const stripe = new Stripe(stripeKey, { apiVersion: '2023-10-16', httpClient: Stripe.createFetchHttpClient() })
+  const stripe = new Stripe(stripeKey, {
+    apiVersion: '2023-10-16',
+    httpClient: Stripe.createFetchHttpClient(),
+  });
 
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const supabase = createClient(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
-  })
+  });
 
   // Authenticate user
-  const authHeader = req.headers.get('Authorization')
+  const authHeader = req.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) {
-    return jsonResponse({ error: 'Missing or invalid authorization header' }, 401)
+    return jsonResponse({ error: 'Missing or invalid authorization header' }, 401);
   }
-  const token = authHeader.substring(7)
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+  const token = authHeader.substring(7);
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser(token);
   if (authError || !user) {
-    return jsonResponse({ error: 'Invalid or expired token' }, 401)
+    return jsonResponse({ error: 'Invalid or expired token' }, 401);
   }
-  const userId = user.id
+  const userId = user.id;
 
   try {
-    const appUrl = Deno.env.get('APP_URL') ?? 'http://localhost:8081'
+    const appUrl = Deno.env.get('APP_URL') ?? 'http://localhost:8081';
 
     // POST /connect/create-account-link
     if (subPath === '/create-account-link') {
-      const body = await req.json()
-      const { returnUrl, refreshUrl } = body
+      const body = await req.json();
+      const { returnUrl, refreshUrl, type: linkType } = body;
+
+      // Supported link types: 'account_onboarding' (default) and 'account_update'
+      const accountLinkType: 'account_onboarding' | 'account_update' =
+        linkType === 'account_update' ? 'account_update' : 'account_onboarding';
 
       const { data: profile } = await supabase
         .from('profiles')
         .select('stripe_connect_account_id, email')
         .eq('id', userId)
-        .single()
+        .single();
 
-      const profileRow = profile as Profile | null
-      let accountId = profileRow?.stripe_connect_account_id
+      const profileRow = profile as Profile | null;
+      let accountId = profileRow?.stripe_connect_account_id;
 
       if (!accountId) {
+        if (accountLinkType === 'account_update') {
+          // Cannot update an account that doesn't exist yet
+          return jsonResponse({ error: 'No Stripe Connect account found to update. Please complete onboarding first.' }, 400);
+        }
         const account = await stripe.accounts.create({
           type: 'express',
           email: profileRow?.email ?? undefined,
@@ -87,47 +101,68 @@ Deno.serve(async (req: Request) => {
           },
           business_type: 'individual',
           metadata: { user_id: userId },
-        })
-        accountId = account.id
-        await supabase.from('profiles').update({ stripe_connect_account_id: accountId }).eq('id', userId)
-        console.log(`[connect] Created new account: ${accountId} for user ${userId}`)
+        });
+        accountId = account.id;
+        await supabase
+          .from('profiles')
+          .update({ stripe_connect_account_id: accountId })
+          .eq('id', userId);
+        console.log(`[connect] Created new account: ${accountId} for user ${userId}`);
       }
 
       const accountLink = await stripe.accountLinks.create({
         account: accountId,
         refresh_url: refreshUrl ?? `${appUrl}/wallet/connect/refresh`,
         return_url: returnUrl ?? `${appUrl}/wallet/connect/return`,
-        type: 'account_onboarding',
-      })
+        type: accountLinkType,
+      });
 
       return jsonResponse({
         url: accountLink.url,
         accountId,
         expiresAt: accountLink.expires_at * 1000,
-      })
+      });
     }
 
     // POST /connect/verify-onboarding
     if (subPath === '/verify-onboarding') {
       const { data: profile } = await supabase
         .from('profiles')
-        .select('stripe_connect_account_id, stripe_connect_onboarded_at')
+        .select('stripe_connect_account_id, stripe_connect_onboarded_at, payout_failed_at')
         .eq('id', userId)
-        .single()
+        .single();
 
-      const profileRow = profile as Profile | null
+      const profileRow = profile as (Profile & { payout_failed_at?: string | null }) | null;
       if (!profileRow?.stripe_connect_account_id) {
-        return jsonResponse({ onboarded: false })
+        return jsonResponse({ onboarded: false });
       }
 
-      const account = await stripe.accounts.retrieve(profileRow.stripe_connect_account_id)
-      const onboarded = account.charges_enabled && account.payouts_enabled
+      const account = await stripe.accounts.retrieve(profileRow.stripe_connect_account_id);
+      const onboarded = account.charges_enabled && account.payouts_enabled;
+
+      const profileUpdates: Record<string, unknown> = {};
 
       if (onboarded && !profileRow.stripe_connect_onboarded_at) {
-        await supabase
+        profileUpdates.stripe_connect_onboarded_at = new Date().toISOString();
+      }
+
+      // Clear payout_failed_at when payouts are re-enabled so the recovery banner dismisses
+      if (account.payouts_enabled && profileRow.payout_failed_at) {
+        profileUpdates.payout_failed_at = null;
+        profileUpdates.payout_failure_code = null;
+        console.log(`[connect] Cleared payout_failed_at for user ${userId} — payouts re-enabled`);
+      }
+
+      if (Object.keys(profileUpdates).length > 0) {
+        const { error: updateError } = await supabase
           .from('profiles')
-          .update({ stripe_connect_onboarded_at: new Date().toISOString() })
-          .eq('id', userId)
+          .update(profileUpdates)
+          .eq('id', userId);
+
+        if (updateError) {
+          console.error('[connect] Failed to update profile during verify-onboarding', { userId, error: updateError });
+          return jsonResponse({ error: 'Failed to update account status. Please try again.' }, 500);
+        }
       }
 
       return jsonResponse({
@@ -136,65 +171,69 @@ Deno.serve(async (req: Request) => {
         chargesEnabled: account.charges_enabled,
         payoutsEnabled: account.payouts_enabled,
         detailsSubmitted: account.details_submitted,
-      })
+        payoutFailedCleared: account.payouts_enabled && !!profileRow.payout_failed_at,
+      });
     }
 
     // POST /connect/transfer
     if (subPath === '/transfer') {
-      const body = await req.json()
-      const { currency = 'usd' } = body
-      const amount = Number(body.amount)
+      const body = await req.json();
+      const { currency = 'usd' } = body;
+      const amount = Number(body.amount);
 
       if (!Number.isFinite(amount) || amount <= 0) {
-        return jsonResponse({ error: 'Invalid amount' }, 400)
+        return jsonResponse({ error: 'Invalid amount' }, 400);
       }
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('balance, stripe_connect_account_id, stripe_connect_onboarded_at')
+        .select('balance, balance_on_hold, stripe_connect_account_id, stripe_connect_onboarded_at')
         .eq('id', userId)
-        .single()
+        .single();
 
       if (!profile) {
-        return jsonResponse({ error: 'Profile not found' }, 404)
+        return jsonResponse({ error: 'Profile not found' }, 404);
       }
 
-      const p = profile as Profile
+      const p = profile as Profile;
       if (!p.stripe_connect_account_id || !p.stripe_connect_onboarded_at) {
-        return jsonResponse({ error: 'Stripe Connect account not set up' }, 400)
+        return jsonResponse({ error: 'Stripe Connect account not set up' }, 400);
       }
 
-      if ((p.balance ?? 0) < amount) {
-        return jsonResponse({ error: 'Insufficient balance' }, 400)
+      // Enforce hold: available = balance - balance_on_hold.
+      const available = (p.balance ?? 0) - (p.balance_on_hold ?? 0);
+      if (available < amount) {
+        return jsonResponse({ error: 'Insufficient balance' }, 400);
       }
 
-      // Deduct balance atomically BEFORE creating the Stripe transfer to avoid
-      // paying out funds without a corresponding balance deduction.
-      const { error: balanceError } = await supabase.rpc('update_balance', {
+      // Deduct balance atomically via withdraw_balance which enforces the hold check.
+      const { error: balanceError } = await supabase.rpc('withdraw_balance', {
         p_user_id: userId,
-        p_amount: -amount,
-      })
+        p_amount: amount,
+      });
 
       if (balanceError) {
-        console.error('[connect] Error deducting balance before transfer:', balanceError)
-        return jsonResponse({ error: 'Failed to reserve balance' }, 500)
+        console.error('[connect] Error deducting balance before transfer:', balanceError);
+        return jsonResponse({ error: 'Failed to reserve balance' }, 500);
       }
 
-      let transfer: Stripe.Transfer
+      let transfer: Stripe.Transfer;
       try {
         transfer = await stripe.transfers.create({
           amount: Math.round(amount * 100),
           currency,
           destination: p.stripe_connect_account_id,
           metadata: { user_id: userId },
-        })
+        });
       } catch (stripeError) {
         // Refund the deducted balance if Stripe transfer creation fails
-        console.error('[connect] Transfer creation failed, refunding balance:', stripeError)
+        console.error('[connect] Transfer creation failed, refunding balance:', stripeError);
         await supabase
           .rpc('update_balance', { p_user_id: userId, p_amount: amount })
-          .catch((rpcErr: unknown) => console.error('[connect] Balance refund after failed transfer also failed:', rpcErr))
-        throw stripeError
+          .catch((rpcErr: unknown) =>
+            console.error('[connect] Balance refund after failed transfer also failed:', rpcErr)
+          );
+        throw stripeError;
       }
 
       const { data: transaction, error: txError } = await supabase
@@ -210,11 +249,11 @@ Deno.serve(async (req: Request) => {
           metadata: { transfer },
         })
         .select()
-        .single()
+        .single();
 
       if (txError) {
-        console.error('[connect] Error creating transaction:', txError)
-        throw txError
+        console.error('[connect] Error creating transaction:', txError);
+        throw txError;
       }
 
       return jsonResponse({
@@ -226,16 +265,16 @@ Deno.serve(async (req: Request) => {
         transactionId: (transaction as WalletTransaction).id,
         estimatedArrival: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
         message: 'Transfer initiated. Funds typically arrive in 1-2 business days.',
-      })
+      });
     }
 
     // POST /connect/retry-transfer
     if (subPath === '/retry-transfer') {
-      const body = await req.json()
-      const { transactionId } = body
+      const body = await req.json();
+      const { transactionId } = body;
 
       if (!transactionId) {
-        return jsonResponse({ error: 'Transaction ID is required' }, 400)
+        return jsonResponse({ error: 'Transaction ID is required' }, 400);
       }
 
       const { data: tx, error: txError } = await supabase
@@ -244,82 +283,73 @@ Deno.serve(async (req: Request) => {
         .eq('id', transactionId)
         .eq('user_id', userId)
         .eq('status', 'failed')
-        .single()
+        .single();
 
       if (txError || !tx) {
-        return jsonResponse({ error: 'Failed transaction not found' }, 404)
+        return jsonResponse({ error: 'Failed transaction not found' }, 404);
       }
 
-      const t = tx as WalletTransaction
-      const retryCount = (t.metadata as Record<string, unknown> | null)?.retry_count as number ?? 0
+      const t = tx as WalletTransaction;
+      const retryCount =
+        ((t.metadata as Record<string, unknown> | null)?.retry_count as number) ?? 0;
       if (retryCount >= 3) {
-        return jsonResponse({
-          error: 'Maximum retry attempts reached. Please contact support.',
-          maxRetriesReached: true,
-        }, 400)
+        return jsonResponse(
+          {
+            error: 'Maximum retry attempts reached. Please contact support.',
+            maxRetriesReached: true,
+          },
+          400
+        );
       }
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('stripe_connect_account_id, balance')
+        .select('stripe_connect_account_id, balance, balance_on_hold')
         .eq('id', userId)
-        .single()
+        .single();
 
-      const p = profile as Profile | null
+      const p = profile as Profile | null;
       if (!p?.stripe_connect_account_id) {
-        return jsonResponse({ error: 'Stripe Connect account not found' }, 400)
+        return jsonResponse({ error: 'Stripe Connect account not found' }, 400);
       }
 
-      const amount = Math.abs(t.amount)
+      const amount = Math.abs(t.amount);
 
-      if ((p.balance ?? 0) < amount) {
-        return jsonResponse({ error: 'Insufficient balance for retry' }, 400)
+      // Enforce hold: available = balance - balance_on_hold.
+      const available = (p.balance ?? 0) - (p.balance_on_hold ?? 0);
+      if (available < amount) {
+        return jsonResponse({ error: 'Insufficient balance for retry' }, 400);
       }
 
-      const { error: rpcError } = await supabase.rpc('update_balance', {
+      const { error: rpcError } = await supabase.rpc('withdraw_balance', {
         p_user_id: userId,
-        p_amount: -amount,
-      })
-
-      let balanceDeducted = !rpcError
+        p_amount: amount,
+      });
 
       if (rpcError) {
-        console.warn('[connect] update_balance RPC failed, using optimistic locking for transfer retry')
-        const { data: updatedProfile, error: updateError } = await supabase
-          .from('profiles')
-          .update({ balance: (p.balance ?? 0) - amount })
-          .eq('id', userId)
-          .eq('balance', p.balance)
-          .select()
-          .single()
-
-        if (updateError || !updatedProfile) {
-          return jsonResponse({
-            error: 'Balance changed during processing. Please try again.',
-            code: 'BALANCE_CONFLICT',
-          }, 409)
-        }
-        balanceDeducted = true
+        console.error('[connect] withdraw_balance RPC failed during transfer retry:', rpcError);
+        return jsonResponse({ error: 'Failed to reserve balance for retry' }, 500);
       }
 
-      if (!balanceDeducted) {
-        return jsonResponse({ error: 'Failed to deduct balance for retry' }, 400)
-      }
-
-      let transfer: Stripe.Transfer
+      let transfer: Stripe.Transfer;
       try {
         transfer = await stripe.transfers.create({
           amount: Math.round(amount * 100),
           currency: 'usd',
           destination: p.stripe_connect_account_id,
           metadata: { user_id: userId, retry_of_transaction: transactionId },
-        })
+        });
       } catch (stripeError) {
-        console.error('[connect] Transfer creation failed, refunding balance:', stripeError)
+        console.error('[connect] Transfer creation failed, refunding balance:', stripeError);
         await supabase
           .rpc('update_balance', { p_user_id: userId, p_amount: amount })
-          .catch((rpcErr: unknown) => console.error('[connect] Balance refund after failed retry transfer also failed:', rpcErr))
-        throw stripeError
+          .catch((rpcErr: unknown) =>
+            console.error(
+              '[connect] Balance refund after failed retry transfer also failed:',
+              rpcErr
+            )
+          );
+        throw stripeError;
       }
 
       await supabase
@@ -327,24 +357,30 @@ Deno.serve(async (req: Request) => {
         .update({
           stripe_transfer_id: transfer.id,
           status: 'pending',
-          metadata: { ...t.metadata, retry_count: retryCount + 1, retried_at: new Date().toISOString() },
+          metadata: {
+            ...t.metadata,
+            retry_count: retryCount + 1,
+            retried_at: new Date().toISOString(),
+          },
         })
-        .eq('id', transactionId)
+        .eq('id', transactionId);
 
-      console.log(`[connect] Transfer retry successful: ${transfer.id} for transaction ${transactionId}`)
+      console.log(
+        `[connect] Transfer retry successful: ${transfer.id} for transaction ${transactionId}`
+      );
 
       return jsonResponse({
         success: true,
         transferId: transfer.id,
         transactionId,
         message: 'Transfer retry initiated successfully.',
-      })
+      });
     }
 
-    return jsonResponse({ error: 'Not found' }, 404)
+    return jsonResponse({ error: 'Not found' }, 404);
   } catch (error: unknown) {
-    const err = error as { message?: string }
-    console.error('[connect edge fn] Error:', err)
-    return jsonResponse({ error: err.message ?? 'Internal server error' }, 500)
+    const err = error as { message?: string };
+    console.error('[connect edge fn] Error:', err);
+    return jsonResponse({ error: err.message ?? 'Internal server error' }, 500);
   }
-})
+});

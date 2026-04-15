@@ -13,7 +13,9 @@ async function verifyAdminRole(): Promise<boolean> {
   try {
     if (!isSupabaseConfigured) return false;
 
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     if (!session?.user) return false;
 
     return session.user.app_metadata?.role === 'admin';
@@ -58,7 +60,11 @@ async function sendNotification(
 /**
  * Helper to create an admin notification for disputes
  */
-async function notifyAdminsOfDispute(disputeId: string, bountyId: string, reason: string): Promise<void> {
+async function notifyAdminsOfDispute(
+  disputeId: string,
+  bountyId: string,
+  reason: string
+): Promise<void> {
   try {
     if (!isSupabaseConfigured) {
       logger.error('Supabase not configured for admin notifications');
@@ -83,6 +89,22 @@ async function notifyAdminsOfDispute(disputeId: string, bountyId: string, reason
   } catch (err) {
     logger.error('Error notifying admins of dispute', { error: err });
   }
+}
+
+/**
+ * Normalize dispute id for RPCs: if the id is a pure integer (number or numeric
+ * string), return it as a JS number so PostgREST calls the integer-typed RPC.
+ * Otherwise return the original value (keeps tests and UUID-based schemas working).
+ */
+function normalizeDisputeIdParam(id: string | number): number | string {
+  if (id === null || id === undefined) return id as any;
+  if (typeof id === 'number' && Number.isInteger(id)) return id;
+  const s = String(id).trim();
+  if (/^\d+$/.test(s)) {
+    const n = Number(s);
+    if (Number.isInteger(n)) return n;
+  }
+  return id;
 }
 
 /**
@@ -136,7 +158,24 @@ export const disputeService = {
         return null;
       }
 
-      // Only update the cancellation status after dispute was created successfully.
+      // Explicitly call fn_open_dispute_hold to freeze the poster's wallet balance.
+      // If the hold cannot be placed, roll back by deleting the dispute and return null
+      // so the caller is not left with an orphaned dispute that has no escrow hold.
+      const _pDisputeId = normalizeDisputeIdParam(data.id);
+      const { error: holdError } = await supabase.rpc('fn_open_dispute_hold', {
+        p_dispute_id: _pDisputeId,
+      });
+
+      if (holdError) {
+        logger.error('Error placing dispute hold; rolling back dispute', {
+          error: holdError,
+          disputeId: data.id,
+        });
+        await supabase.from('bounty_disputes').delete().eq('id', data.id);
+        return null;
+      }
+
+      // Update the cancellation status now that the dispute row exists.
       const { error: updateError } = await supabase
         .from('bounty_cancellations')
         .update({ status: 'disputed' })
@@ -144,7 +183,10 @@ export const disputeService = {
 
       if (updateError) {
         // Log but do not fail the overall operation — dispute exists even if cancellation update failed.
-        logger.error('Error updating cancellation to disputed', { error: updateError, cancellationId });
+        logger.error('Error updating cancellation to disputed', {
+          error: updateError,
+          cancellationId,
+        });
       }
 
       // Transform to match BountyDispute interface
@@ -182,11 +224,13 @@ export const disputeService = {
               }
             );
           }
-          
+
           // If there's a hunter involved (from cancellation), notify them too
-          if (cancellation.requesterId && 
-              cancellation.requesterId !== initiatorId && 
-              cancellation.requesterId !== bounty.user_id) {
+          if (
+            cancellation.requesterId &&
+            cancellation.requesterId !== initiatorId &&
+            cancellation.requesterId !== bounty.user_id
+          ) {
             await sendNotification(
               String(cancellation.requesterId),
               'dispute_created',
@@ -208,10 +252,10 @@ export const disputeService = {
       return dispute;
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error');
-      logger.error('Error in createDispute', { 
-        cancellationId, 
-        initiatorId, 
-        error: { message: error.message } 
+      logger.error('Error in createDispute', {
+        cancellationId,
+        initiatorId,
+        error: { message: error.message },
       });
       return null;
     }
@@ -308,7 +352,10 @@ export const disputeService = {
       return dispute;
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error');
-      logger.error('Error in getDisputeByCancellationId', { cancellationId, error: { message: error.message } });
+      logger.error('Error in getDisputeByCancellationId', {
+        cancellationId,
+        error: { message: error.message },
+      });
       return null;
     }
   },
@@ -318,7 +365,14 @@ export const disputeService = {
    */
   async updateDisputeStatus(
     disputeId: string,
-    status: 'open' | 'under_review' | 'resolved' | 'closed'
+    status:
+      | 'open'
+      | 'under_review'
+      | 'resolved'
+      | 'closed'
+      | 'cancelled'
+      | 'resolved_poster_wins'
+      | 'resolved_hunter_wins'
   ): Promise<boolean> {
     try {
       if (!isSupabaseConfigured) {
@@ -326,10 +380,44 @@ export const disputeService = {
       }
 
       // Verify the current user has admin role
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session?.user?.id || !(await verifyAdminRole())) {
         logger.error('Non-admin attempted to update dispute status', { disputeId, status });
         throw new Error('Unauthorized: admin role required');
+      }
+
+      // For terminal statuses that have a defined hold-release semantic,
+      // delegate to fn_close_dispute_hold which atomically releases the
+      // balance_on_hold AND updates the dispute status in one DB transaction.
+      const terminalStatuses = [
+        'resolved',
+        'closed',
+        'cancelled',
+        'resolved_poster_wins',
+        'resolved_hunter_wins',
+      ];
+      if (terminalStatuses.includes(status)) {
+        const _pDisputeId = normalizeDisputeIdParam(disputeId);
+        const { error: rpcError } = await (supabase as any).rpc('fn_close_dispute_hold', {
+          p_dispute_id: _pDisputeId,
+          p_new_status: status,
+        });
+
+        if (rpcError) {
+          // Treat hold-release failure as fatal for terminal transitions: surfacing
+          // this error ensures the admin UI can show that the financial side did not
+          // finalize, rather than silently leaving balance_on_hold stranded.
+          logger.error('Error releasing dispute hold via fn_close_dispute_hold', {
+            rpcError,
+            disputeId,
+            status,
+          });
+          throw rpcError;
+        }
+
+        return true;
       }
 
       const { error } = await supabase
@@ -345,10 +433,10 @@ export const disputeService = {
       return true;
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error');
-      logger.error('Error in updateDisputeStatus', { 
-        disputeId, 
-        status, 
-        error: { message: error.message } 
+      logger.error('Error in updateDisputeStatus', {
+        disputeId,
+        status,
+        error: { message: error.message },
       });
       return false;
     }
@@ -378,15 +466,24 @@ export const disputeService = {
       }
 
       // Log audit event
-      await this.logAuditEvent(disputeId, 'escalated', null, 'admin', { reason: reason || 'manual' });
+      await this.logAuditEvent(disputeId, 'escalated', null, 'admin', {
+        reason: reason || 'manual',
+      });
 
       // Notify admins
       try {
         // Attempt to fetch dispute to include bounty id
         const d = await this.getDisputeById(disputeId);
-        await notifyAdminsOfDispute(disputeId, d?.bountyId || '', reason || 'Manually escalated by admin');
+        await notifyAdminsOfDispute(
+          disputeId,
+          d?.bountyId || '',
+          reason || 'Manually escalated by admin'
+        );
       } catch (notifyErr) {
-        logger.error('Failed to notify admins after manual escalation', { error: notifyErr, disputeId });
+        logger.error('Failed to notify admins after manual escalation', {
+          error: notifyErr,
+          disputeId,
+        });
       }
 
       return true;
@@ -417,7 +514,9 @@ export const disputeService = {
         logger.error('Non-admin attempted to resolve dispute', { disputeId });
         throw new Error('Unauthorized: admin role required');
       }
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       const resolvedBy = session!.user!.id;
 
       // Get the dispute first to access its data
@@ -427,7 +526,6 @@ export const disputeService = {
       }
 
       const updateData: Record<string, any> = {
-        status: 'resolved',
         resolution,
         resolved_by: resolvedBy,
         resolved_at: new Date().toISOString(),
@@ -437,6 +535,49 @@ export const disputeService = {
         updateData.winner = winner;
       }
 
+      // Fetch the bounty early — we need it both to choose the correct hold-release
+      // strategy and for the Stripe escrow action further below.
+      const bounty = prefetchedBounty || (await bountyService.getById(dispute.bountyId));
+      const isHonorBounty = bounty?.is_for_honor || !bounty?.amount || bounty.amount <= 0;
+      const hasStripeEscrow = bounty && !isHonorBounty && !!bounty.payment_intent_id;
+
+      // Map the winner to the new application-level resolution status and
+      // atomically release the balance_on_hold via fn_close_dispute_hold.
+      const resolvedStatus =
+        winner === 'hunter'
+          ? 'resolved_hunter_wins'
+          : winner === 'poster'
+            ? 'resolved_poster_wins'
+            : 'resolved';
+
+      // For Stripe-backed bounties resolved in the hunter's favour, fn_close_dispute_hold
+      // must NOT deduct from the poster's wallet.  The wallet hold was placed purely to
+      // prevent withdrawal during the dispute — the actual hunter payment is handled by
+      // paymentService.releaseEscrow() below.  Passing 'resolved' releases only the
+      // balance_on_hold without triggering the balance deduction that 'resolved_hunter_wins'
+      // would cause, which would double-charge the poster (once via Stripe, once via wallet).
+      // The dispute row's status is corrected to resolvedStatus by the update() call below.
+      const holdReleaseStatus =
+        winner === 'hunter' && hasStripeEscrow ? 'resolved' : resolvedStatus;
+
+      const _pDisputeId = normalizeDisputeIdParam(disputeId);
+      const { error: holdRpcError } = await (supabase as any).rpc('fn_close_dispute_hold', {
+        p_dispute_id: _pDisputeId,
+        p_new_status: holdReleaseStatus,
+      });
+
+      if (holdRpcError) {
+        logger.error('Error releasing dispute hold via fn_close_dispute_hold', {
+          holdRpcError,
+          disputeId,
+          resolvedStatus,
+        });
+        throw holdRpcError;
+      }
+
+      updateData.status = resolvedStatus;
+
+      // Write the extra metadata fields (resolution text, resolved_by, winner).
       const { error } = await supabase
         .from('bounty_disputes')
         .update(updateData)
@@ -447,22 +588,18 @@ export const disputeService = {
         throw error;
       }
 
-      // Use pre-fetched bounty if provided, otherwise fetch
-      const bounty = prefetchedBounty || await bountyService.getById(dispute.bountyId);
-
       // Determine winner label for notifications
-      const winnerLabel = winner === 'hunter'
-        ? 'Funds released to hunter.'
-        : winner === 'poster'
-        ? 'Funds refunded to poster.'
-        : '';
+      const winnerLabel =
+        winner === 'hunter'
+          ? 'Funds released to hunter.'
+          : winner === 'poster'
+            ? 'Funds refunded to poster.'
+            : '';
 
       // Execute escrow action based on winner
       let escrowActionExecuted = false;
       if (winner) {
         try {
-          const isHonorBounty = bounty?.is_for_honor || !bounty?.amount || bounty.amount <= 0;
-
           if (bounty && !isHonorBounty && bounty.payment_intent_id) {
             if (winner === 'hunter') {
               const releaseResult = await paymentService.releaseEscrow(bounty.payment_intent_id);
@@ -490,11 +627,14 @@ export const disputeService = {
               }
             }
           } else if (bounty && !isHonorBounty && !bounty.payment_intent_id) {
-            logger.warning('Dispute resolved with winner but bounty has no payment_intent_id — escrow action skipped', {
-              disputeId,
-              bountyId: dispute.bountyId,
-              winner,
-            });
+            logger.warning(
+              'Dispute resolved with winner but bounty has no payment_intent_id — escrow action skipped',
+              {
+                disputeId,
+                bountyId: dispute.bountyId,
+                winner,
+              }
+            );
           }
         } catch (escrowError) {
           // Log but don't fail the resolution if escrow action fails
@@ -510,9 +650,8 @@ export const disputeService = {
       try {
         if (bounty) {
           // Only include funds outcome if escrow action actually executed
-          const outcomeMessage = escrowActionExecuted && winnerLabel
-            ? ` Outcome: ${winnerLabel}`
-            : '';
+          const outcomeMessage =
+            escrowActionExecuted && winnerLabel ? ` Outcome: ${winnerLabel}` : '';
 
           // Notify the dispute initiator
           await sendNotification(
@@ -545,11 +684,15 @@ export const disputeService = {
           }
 
           // Get cancellation to notify other party if exists
-          const cancellation = dispute.cancellationId ? await cancellationService.getCancellationById(dispute.cancellationId) : null;
-          if (cancellation && 
-              cancellation.requesterId && 
-              cancellation.requesterId !== dispute.initiatorId && 
-              cancellation.requesterId !== bounty.user_id) {
+          const cancellation = dispute.cancellationId
+            ? await cancellationService.getCancellationById(dispute.cancellationId)
+            : null;
+          if (
+            cancellation &&
+            cancellation.requesterId &&
+            cancellation.requesterId !== dispute.initiatorId &&
+            cancellation.requesterId !== bounty.user_id
+          ) {
             await sendNotification(
               cancellation.requesterId,
               'dispute_resolved',
@@ -572,9 +715,9 @@ export const disputeService = {
       return true;
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error');
-      logger.error('Error in resolveDispute', { 
-        disputeId, 
-        error: { message: error.message } 
+      logger.error('Error in resolveDispute', {
+        disputeId,
+        error: { message: error.message },
       });
       return false;
     }
@@ -685,17 +828,15 @@ export const disputeService = {
         throw new Error('Supabase not configured');
       }
 
-      const { error } = await supabase
-        .from('dispute_evidence')
-        .insert({
-          dispute_id: disputeId,
-          uploaded_by: userId,
-          type: evidenceData.type,
-          content: evidenceData.content,
-          description: evidenceData.description,
-          mime_type: evidenceData.mimeType,
-          file_size: evidenceData.fileSize,
-        });
+      const { error } = await supabase.from('dispute_evidence').insert({
+        dispute_id: disputeId,
+        uploaded_by: userId,
+        type: evidenceData.type,
+        content: evidenceData.content,
+        description: evidenceData.description,
+        mime_type: evidenceData.mimeType,
+        file_size: evidenceData.fileSize,
+      });
 
       if (error) {
         logger.error('Error uploading evidence', { error, disputeId });
@@ -757,14 +898,12 @@ export const disputeService = {
         throw new Error('Supabase not configured');
       }
 
-      const { error } = await supabase
-        .from('dispute_comments')
-        .insert({
-          dispute_id: disputeId,
-          user_id: userId,
-          comment,
-          is_internal: isInternal,
-        });
+      const { error } = await supabase.from('dispute_comments').insert({
+        dispute_id: disputeId,
+        user_id: userId,
+        comment,
+        is_internal: isInternal,
+      });
 
       if (error) {
         logger.error('Error adding comment', { error, disputeId });
@@ -893,9 +1032,12 @@ export const disputeService = {
 
       // Update dispute status (this will send notifications to all parties)
       // Map decision outcome to winner for escrow action
-      const winner = decision.outcome === 'release' ? 'hunter' as const
-        : decision.outcome === 'refund' ? 'poster' as const
-        : null;
+      const winner =
+        decision.outcome === 'release'
+          ? ('hunter' as const)
+          : decision.outcome === 'refund'
+            ? ('poster' as const)
+            : null;
       await this.resolveDispute(disputeId, decision.rationale, winner, bounty);
 
       // Log audit event
@@ -908,9 +1050,9 @@ export const disputeService = {
       return true;
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error');
-      logger.error('Error in makeResolutionDecision', { 
-        disputeId, 
-        error: { message: error.message } 
+      logger.error('Error in makeResolutionDecision', {
+        disputeId,
+        error: { message: error.message },
       });
       return false;
     }
@@ -947,11 +1089,7 @@ export const disputeService = {
   /**
    * Create an appeal for a resolved dispute
    */
-  async createAppeal(
-    disputeId: string,
-    appellantId: string,
-    reason: string
-  ): Promise<boolean> {
+  async createAppeal(disputeId: string, appellantId: string, reason: string): Promise<boolean> {
     try {
       if (!isSupabaseConfigured) {
         throw new Error('Supabase not configured');
@@ -959,18 +1097,17 @@ export const disputeService = {
 
       // Verify dispute is resolved
       const dispute = await this.getDisputeById(disputeId);
-      if (!dispute || dispute.status !== 'resolved') {
+      const resolvedStatuses = ['resolved', 'resolved_hunter_wins', 'resolved_poster_wins'];
+      if (!dispute || !resolvedStatuses.includes(dispute.status)) {
         throw new Error('Can only appeal resolved disputes');
       }
 
-      const { error } = await supabase
-        .from('dispute_appeals')
-        .insert({
-          dispute_id: disputeId,
-          appellant_id: appellantId,
-          reason,
-          status: 'pending',
-        });
+      const { error } = await supabase.from('dispute_appeals').insert({
+        dispute_id: disputeId,
+        appellant_id: appellantId,
+        reason,
+        status: 'pending',
+      });
 
       if (error) {
         logger.error('Error creating appeal', { error, disputeId });
@@ -1052,18 +1189,37 @@ export const disputeService = {
       // Close each dispute
       let closedCount = 0;
       for (const dispute of staleDisputes) {
-        const { error: updateError } = await supabase
+        // Use fn_close_dispute_hold to atomically update the status AND release
+        // any balance_on_hold on the poster's wallet. A plain .update() would
+        // skip the hold-release, permanently locking poster funds.
+        const { error: rpcError } = await (supabase as any).rpc('fn_close_dispute_hold', {
+          p_dispute_id: dispute.id,
+          p_new_status: 'closed',
+        });
+
+        if (rpcError) {
+          logger.error('Error auto-closing dispute via fn_close_dispute_hold', {
+            error: rpcError,
+            disputeId: dispute.id,
+          });
+          continue;
+        }
+
+        // Set audit fields that fn_close_dispute_hold does not write.
+        const { error: auditError } = await supabase
           .from('bounty_disputes')
           .update({
-            status: 'closed',
             resolution: 'Auto-closed due to inactivity after 7 days',
             resolved_at: now,
           })
           .eq('id', dispute.id);
 
-        if (updateError) {
-          logger.error('Error auto-closing dispute', { error: updateError, disputeId: dispute.id });
-          continue;
+        if (auditError) {
+          logger.error('Error setting auto-close audit fields', {
+            error: auditError,
+            disputeId: dispute.id,
+          });
+          // Non-fatal: the status and hold were already released successfully.
         }
 
         // Log audit event
@@ -1151,9 +1307,16 @@ export const disputeService = {
 
         // Notify admins about escalation
         try {
-          await notifyAdminsOfDispute(String(dispute.id), String(dispute.bounty_id), 'Unresolved for 14 days');
+          await notifyAdminsOfDispute(
+            String(dispute.id),
+            String(dispute.bounty_id),
+            'Unresolved for 14 days'
+          );
         } catch (notifyErr) {
-          logger.error('Error notifying admins about escalated dispute', { error: notifyErr, disputeId: dispute.id });
+          logger.error('Error notifying admins about escalated dispute', {
+            error: notifyErr,
+            disputeId: dispute.id,
+          });
         }
 
         escalatedCount++;
@@ -1187,12 +1350,12 @@ export const disputeService = {
 
       // Simple heuristic-based suggestion
       // In a production system, this could use ML or more sophisticated logic
-      
+
       // Evidence scoring weights
       const EVIDENCE_SCORE_IMAGE = 3;
       const EVIDENCE_SCORE_DOCUMENT = 2;
       const EVIDENCE_SCORE_TEXT = 1;
-      
+
       let hunterScore = 0;
       let posterScore = 0;
 
@@ -1208,26 +1371,32 @@ export const disputeService = {
 
       const bounty = await bountyService.getById(dispute.bountyId);
       // Resolve cancellation to identify the hunter who requested it
-      const cancellation = dispute.cancellationId ? await cancellationService.getCancellationById(dispute.cancellationId) : null;
-      
+      const cancellation = dispute.cancellationId
+        ? await cancellationService.getCancellationById(dispute.cancellationId)
+        : null;
+
       const hunterId =
         cancellation?.requesterId ||
-        (hasHunterId(bounty) ? bounty.hunter_id :
-        hasAcceptedBy(bounty) ? bounty.accepted_by :
-        undefined);
+        (hasHunterId(bounty)
+          ? bounty.hunter_id
+          : hasAcceptedBy(bounty)
+            ? bounty.accepted_by
+            : undefined);
 
-      const posterId =
-        hasUserId(bounty) ? bounty.user_id :
-        hasPosterId(bounty) ? bounty.poster_id :
-        undefined;
+      const posterId = hasUserId(bounty)
+        ? bounty.user_id
+        : hasPosterId(bounty)
+          ? bounty.poster_id
+          : undefined;
 
       if (bounty) {
         evidence.forEach((ev: any) => {
-          const scoreValue = ev.type === 'image'
-            ? EVIDENCE_SCORE_IMAGE
-            : ev.type === 'document'
-            ? EVIDENCE_SCORE_DOCUMENT
-            : EVIDENCE_SCORE_TEXT;
+          const scoreValue =
+            ev.type === 'image'
+              ? EVIDENCE_SCORE_IMAGE
+              : ev.type === 'document'
+                ? EVIDENCE_SCORE_DOCUMENT
+                : EVIDENCE_SCORE_TEXT;
 
           if (hunterId && ev.uploaded_by === hunterId) {
             hunterScore += scoreValue;
@@ -1248,7 +1417,8 @@ export const disputeService = {
         suggestedOutcome = 'split';
         confidence = 0.3;
       } else if (hunterScore > posterScore * 2) {
-        reasoning = 'Hunter provided significantly more evidence. Recommend releasing funds to hunter.';
+        reasoning =
+          'Hunter provided significantly more evidence. Recommend releasing funds to hunter.';
         suggestedOutcome = 'release';
         confidence = Math.min(0.8, 0.5 + (hunterScore / (totalScore + 1)) * 0.3);
       } else if (posterScore > hunterScore * 2) {
@@ -1268,9 +1438,9 @@ export const disputeService = {
       };
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error');
-      logger.error('Error in calculateSuggestedResolution', { 
-        disputeId, 
-        error: { message: error.message } 
+      logger.error('Error in calculateSuggestedResolution', {
+        disputeId,
+        error: { message: error.message },
       });
       return {
         suggestedOutcome: 'split',
@@ -1356,7 +1526,10 @@ export const disputeService = {
       // Check for existing active dispute on this bounty
       const existing = await this.getDisputeByBountyId(bountyId);
       if (existing) {
-        logger.error('Active dispute already exists for this bounty', { bountyId, existingId: existing.id });
+        logger.error('Active dispute already exists for this bounty', {
+          bountyId,
+          existingId: existing.id,
+        });
         throw new Error('A dispute is already active for this bounty');
       }
 
@@ -1504,7 +1677,10 @@ export const disputeService = {
       };
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error');
-      logger.error('Error in getDisputeByBountyId', { bountyId, error: { message: error.message } });
+      logger.error('Error in getDisputeByBountyId', {
+        bountyId,
+        error: { message: error.message },
+      });
       return null;
     }
   },

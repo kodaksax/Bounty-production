@@ -1,15 +1,15 @@
 /**
  * @fileoverview Authoritative type definitions for BountyExpo
- * 
+ *
  * This file serves as the single source of truth for all domain types
  * used throughout the application. Do not redefine these types elsewhere.
- * 
+ *
  * @module lib/types
  */
 
 /**
  * Money type representing currency amounts in cents (USD)
- * 
+ *
  * @example
  * const bountyAmount: Money = 5000; // $50.00
  * const depositAmount: Money = 10000; // $100.00
@@ -18,7 +18,7 @@ export type Money = number;
 
 /**
  * Form values for creating or editing a bounty
- * 
+ *
  * @interface BountyFormValues
  * @property {string} title - Bounty title (10-200 characters)
  * @property {string} description - Detailed description (50-5000 characters)
@@ -42,10 +42,10 @@ export interface BountyFormValues {
 
 /**
  * User profile information
- * 
+ *
  * Represents a user's public and private profile data. Some fields are only
  * visible to the profile owner.
- * 
+ *
  * @interface UserProfile
  * @property {string} id - Unique user identifier (UUID)
  * @property {string} username - Unique username for the user
@@ -61,7 +61,7 @@ export interface BountyFormValues {
  * @property {'unverified' | 'pending' | 'verified'} [verificationStatus] - Account verification status
  * @property {number} [followerCount] - Number of users following this user
  * @property {number} [followingCount] - Number of users this user follows
- * 
+ *
  * @example
  * const profile: UserProfile = {
  *   id: "550e8400-e29b-41d4-a716-446655440000",
@@ -102,7 +102,7 @@ export interface UserProfile {
 
 /**
  * Follow relationship between two users
- * 
+ *
  * @interface Follow
  * @property {string} id - Unique identifier for the follow relationship
  * @property {string} followerId - ID of the user doing the following
@@ -124,7 +124,7 @@ export type FollowEdge = Follow;
 
 /**
  * Portfolio item showcasing user's work
- * 
+ *
  * @interface PortfolioItem
  * @property {string} id - Unique identifier
  * @property {string} userId - ID of the user who owns this portfolio item
@@ -154,7 +154,7 @@ export interface PortfolioItem {
 
 /**
  * Chat message within a conversation
- * 
+ *
  * @interface Message
  * @property {string} id - Unique message identifier
  * @property {string} conversationId - ID of the conversation this message belongs to
@@ -165,7 +165,7 @@ export interface PortfolioItem {
  * @property {string} [mediaUrl] - URL to attached media (image, video, file)
  * @property {'sending' | 'sent' | 'delivered' | 'read' | 'failed'} [status] - Message delivery status
  * @property {boolean} [isPinned] - Whether message is pinned in conversation
- * 
+ *
  * @example
  * const message: Message = {
  *   id: "msg_123",
@@ -192,10 +192,10 @@ export interface Message {
 
 /**
  * Conversation (chat) between users
- * 
+ *
  * Conversations are typically associated with a bounty but can also be
  * standalone direct messages.
- * 
+ *
  * @interface Conversation
  * @property {string} id - Unique conversation identifier
  * @property {string} [bountyId] - ID of associated bounty (if conversation is bounty-related)
@@ -206,7 +206,7 @@ export interface Message {
  * @property {string} [updatedAt] - ISO 8601 timestamp of last activity
  * @property {string[]} [participantIds] - Array of user IDs participating in conversation
  * @property {number} [unread] - Number of unread messages
- * 
+ *
  * @example
  * const conversation: Conversation = {
  *   id: "conv_123",
@@ -233,12 +233,12 @@ export interface Conversation {
 
 export interface FullConversation extends Conversation {
   messages: Message[];
-  realConversationId: string,
+  realConversationId: string;
 }
 
 /**
  * User rating/review for completed bounty work
- * 
+ *
  * @interface UserRating
  * @property {string} id - Unique rating identifier
  * @property {string} user_id - ID of user being rated (the ratee)
@@ -247,7 +247,7 @@ export interface FullConversation extends Conversation {
  * @property {1 | 2 | 3 | 4 | 5} score - Rating score (1-5 stars)
  * @property {string} [comment] - Optional written review
  * @property {string} createdAt - ISO 8601 timestamp when rating was created
- * 
+ *
  * @example
  * const rating: UserRating = {
  *   id: "rating_123",
@@ -271,10 +271,10 @@ export interface UserRating {
 
 /**
  * Wallet transaction record
- * 
+ *
  * Represents any financial transaction in the user's wallet, including
  * deposits, withdrawals, escrow operations, and refunds.
- * 
+ *
  * @interface WalletTransaction
  * @property {string} id - Unique transaction identifier
  * @property {"escrow" | "release" | "refund" | "deposit" | "withdrawal"} type - Transaction type
@@ -287,7 +287,7 @@ export interface UserRating {
  * @property {string} [details.title] - Transaction description
  * @property {string} [details.method] - Payment method used
  * @property {string} [details.counterparty] - Other party in transaction
- * 
+ *
  * @example
  * // Deposit transaction
  * const deposit: WalletTransaction = {
@@ -302,7 +302,7 @@ export interface UserRating {
  *     method: "Visa ending in 4242"
  *   }
  * };
- * 
+ *
  * // Escrow transaction
  * const escrow: WalletTransaction = {
  *   id: "txn_456",
@@ -320,12 +320,12 @@ export interface UserRating {
  */
 export interface WalletTransaction {
   id: string;
-  type: "escrow" | "release" | "refund" | "deposit" | "withdrawal";
+  type: 'escrow' | 'release' | 'refund' | 'deposit' | 'withdrawal';
   amount: Money;
   bountyId?: string;
   createdAt: string;
-  status?: "pending" | "completed" | "failed";
-  disputeStatus?: "none" | "pending" | "resolved";
+  status?: 'pending' | 'completed' | 'failed';
+  disputeStatus?: 'none' | 'pending' | 'resolved';
   details?: {
     title?: string;
     method?: string;
@@ -386,7 +386,7 @@ export interface Request {
   bountyId: string;
   hunterId: string;
   posterId?: string;
-  status: "pending" | "accepted" | "rejected";
+  status: 'pending' | 'accepted' | 'rejected';
   createdAt: string;
 }
 
@@ -416,7 +416,13 @@ export interface BountyDispute {
   respondentId?: string; // The other party in the dispute
   reason: string;
   evidence?: DisputeEvidence[];
-  status: 'open' | 'under_review' | 'resolved' | 'closed';
+  status:
+    | 'open'
+    | 'under_review'
+    | 'resolved'
+    | 'resolved_hunter_wins'
+    | 'resolved_poster_wins'
+    | 'closed';
   disputeStage?: 'in_progress' | 'review_verify' | 'cancellation';
   resolution?: string;
   winner?: 'hunter' | 'poster' | null;
@@ -526,11 +532,11 @@ export interface Attachment {
 
 /**
  * Notification type enumeration
- * 
+ *
  * Defines all possible notification types in the system.
- * 
+ *
  * @typedef {'application' | 'acceptance' | 'completion' | 'payment' | 'message' | 'follow' | 'cancellation_request' | 'cancellation_accepted' | 'cancellation_rejected' | 'dispute_created' | 'dispute_resolved' | 'stale_bounty' | 'stale_bounty_cancelled' | 'stale_bounty_reposted'} NotificationType
- * 
+ *
  * - **application**: Someone applied to your bounty
  * - **acceptance**: Your bounty application was accepted
  * - **completion**: A bounty you're involved in was completed
@@ -546,11 +552,26 @@ export interface Attachment {
  * - **stale_bounty_cancelled**: Stale bounty was cancelled
  * - **stale_bounty_reposted**: Stale bounty was reposted
  */
-export type NotificationType = 'application' | 'acceptance' | 'completion' | 'payment' | 'message' | 'follow' | 'cancellation_request' | 'cancellation_accepted' | 'cancellation_rejected' | 'dispute_created' | 'dispute_resolved' | 'workflow_dispute_created' | 'stale_bounty' | 'stale_bounty_cancelled' | 'stale_bounty_reposted';
+export type NotificationType =
+  | 'application'
+  | 'acceptance'
+  | 'completion'
+  | 'payment'
+  | 'message'
+  | 'follow'
+  | 'cancellation_request'
+  | 'cancellation_accepted'
+  | 'cancellation_rejected'
+  | 'dispute_created'
+  | 'dispute_resolved'
+  | 'workflow_dispute_created'
+  | 'stale_bounty'
+  | 'stale_bounty_cancelled'
+  | 'stale_bounty_reposted';
 
 /**
  * User notification
- * 
+ *
  * @interface Notification
  * @property {string} id - Unique notification identifier
  * @property {string} user_id - ID of user receiving the notification
@@ -568,7 +589,7 @@ export type NotificationType = 'application' | 'acceptance' | 'completion' | 'pa
  * @property {string} [data.cancellationId] - Related cancellation ID
  * @property {boolean} read - Whether notification has been read
  * @property {string} created_at - ISO 8601 timestamp when created
- * 
+ *
  * @example
  * const notification: Notification = {
  *   id: "notif_123",
@@ -606,7 +627,12 @@ export interface Notification {
 }
 
 // Search & Filter Types
-export type BountySortOption = 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc' | 'distance_asc';
+export type BountySortOption =
+  | 'date_desc'
+  | 'date_asc'
+  | 'amount_desc'
+  | 'amount_asc'
+  | 'distance_asc';
 export type UserSortOption = 'relevance' | 'followers_desc' | 'date_desc';
 
 export interface BountySearchFilters {

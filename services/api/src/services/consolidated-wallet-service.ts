@@ -111,6 +111,8 @@ export interface BalanceResult {
   balance: number;
   currency: string;
   user_id: string;
+  payoutFailedAt: string | null;
+  payoutFailureCode: string | null;
 }
 
 /**
@@ -160,7 +162,7 @@ export async function getBalance(userId: string): Promise<BalanceResult> {
 
   const { data: profile, error } = await admin
     .from('profiles')
-    .select('balance')
+    .select('balance, payout_failed_at, payout_failure_code')
     .eq('id', userId)
     .single();
 
@@ -220,6 +222,8 @@ export async function getBalance(userId: string): Promise<BalanceResult> {
     balance,
     currency: 'USD',
     user_id: userId,
+    payoutFailedAt: profile?.payout_failed_at ?? null,
+    payoutFailureCode: profile?.payout_failure_code ?? null,
   };
 }
 
@@ -574,9 +578,13 @@ export async function createWithdrawal(
     });
   }
 
+  let balanceDeducted = false;
   try {
-    // Deduct from balance atomically (this validates sufficient balance)
-    await updateBalance(userId, -amount);
+    // Deduct from balance atomically via withdraw_balance which enforces:
+    //   balance - balance_on_hold >= amount  (prevents draining held funds)
+    //   balance_frozen = false              (Stripe chargeback guard)
+    await withdrawBalance(userId, amount);
+    balanceDeducted = true;
 
     // Initiate Stripe transfer with idempotency key
     const transferParams: Stripe.TransferCreateParams = {
@@ -642,8 +650,9 @@ export async function createWithdrawal(
     }
 
     // Best-effort: refund the balance (rollback)
-    // Only attempt if balance was actually deducted (error occurred after updateBalance)
-    if (!(error instanceof ValidationError && error.message?.includes('Insufficient balance'))) {
+    // Only attempt if balance was actually deducted (withdrawBalance succeeded before the error).
+    // withdrawBalance's RPC is atomic so any error from it means no deduction occurred.
+    if (balanceDeducted) {
       try {
         await updateBalance(userId, amount);
       } catch (rollbackError) {
@@ -1110,6 +1119,72 @@ export async function updateBalance(userId: string, amount: number): Promise<voi
   // RPC succeeded
 }
 
+/**
+ * Atomically withdraw `amount` from a user's wallet balance, enforcing:
+ *   1. balance - balance_on_hold >= amount  (dispute hold guard)
+ *   2. balance_frozen = false               (Stripe chargeback guard)
+ *
+ * Uses the `withdraw_balance` DB RPC which holds a row-lock to prevent
+ * race conditions. Use this instead of `updateBalance(userId, -amount)`
+ * for all withdrawal paths.
+ *
+ * @param userId - User ID to withdraw from
+ * @param amount - Positive dollar amount to deduct
+ */
+export async function withdrawBalance(userId: string, amount: number): Promise<void> {
+  if (amount <= 0) {
+    throw new ValidationError('Withdrawal amount must be positive');
+  }
+
+  const admin = getSupabaseAdmin();
+
+  const { error: rpcError } = await (admin as any).rpc('withdraw_balance', {
+    p_user_id: userId,
+    p_amount: amount,
+  });
+
+  if (rpcError) {
+    const errorCode = (rpcError as any).code;
+    const errorMessage = rpcError.message?.toLowerCase() || '';
+
+    if (errorCode === 'PGRST202') {
+      // Fail closed: falling back to update_balance would bypass balance_on_hold
+      // enforcement and reintroduce the exact drain scenario this function prevents.
+      logger.error(
+        { userId, amount, errorCode, error: rpcError.message },
+        '[WalletService] withdraw_balance RPC not found; refusing insecure legacy fallback'
+      );
+      throw new ExternalServiceError(
+        'Supabase',
+        'Withdrawal is temporarily unavailable. Please try again in a few moments or contact support if the issue persists.',
+        { error: rpcError.message }
+      );
+    }
+
+    if (
+      errorMessage.includes('insufficient') ||
+      errorMessage.includes('negative') ||
+      errorMessage.includes('available')
+    ) {
+      throw new ValidationError(
+        'Insufficient available balance. Part of your balance may be reserved by an open dispute.'
+      );
+    }
+    if (errorMessage.includes('frozen')) {
+      throw new ValidationError(
+        'Wallet is frozen due to an open Stripe dispute. Resolve the dispute before withdrawing.'
+      );
+    }
+    if (errorMessage.includes('not found')) {
+      throw new NotFoundError('User', userId);
+    }
+
+    throw new ExternalServiceError('Supabase', 'Failed to withdraw balance via RPC', {
+      error: rpcError.message,
+    });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Platform ledger helpers
 // ---------------------------------------------------------------------------
@@ -1177,5 +1252,6 @@ export const consolidatedWalletService = {
   releaseEscrow,
   refundEscrow,
   updateBalance,
+  withdrawBalance,
   getTransactionByPaymentIntent,
 };

@@ -1055,4 +1055,79 @@ describe('Stripe Service', () => {
       await expect(stripeService.releaseEscrow('escrow-net-err')).rejects.toBeDefined();
     });
   });
+
+  describe('fetchEdgeFunction — response shape guard', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('throws a network_error when fetch resolves to null', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue(null);
+
+      await expect(stripeService.createPaymentIntent(50, 'usd', 'tok_test')).rejects.toMatchObject({
+        type: 'network_error',
+        code: 'NETWORK_ERROR',
+      });
+    });
+
+    it('throws a network_error when response is missing .text() method', async () => {
+      // Minimal response shape with no .text — triggers the guard added in this PR
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: true, status: 200 });
+
+      await expect(stripeService.createPaymentIntent(50, 'usd', 'tok_test')).rejects.toMatchObject({
+        type: 'network_error',
+        code: 'NETWORK_ERROR',
+      });
+    });
+
+    it('logs a console.warn when the response carries an X-Deprecated header', async () => {
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        text: async () =>
+          JSON.stringify({ clientSecret: 'pi_secret_dep', paymentIntentId: 'pi_dep_01' }),
+        headers: {
+          get: (key: string) => (key === 'X-Deprecated' ? 'true' : null),
+        },
+      });
+
+      const result = await stripeService.createPaymentIntent(50, 'usd', 'tok_test');
+      expect(result.id).toBe('pi_dep_01');
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('X-Deprecated'));
+      warnSpy.mockRestore();
+    });
+  });
+
+  describe('invokePayments — getSession() TIMEOUT path', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('proceeds without a token and logs a warning when getSession() rejects with TIMEOUT', async () => {
+      const { supabase: supabaseMock } = require('../../../lib/supabase');
+      const originalAuth = supabaseMock.auth;
+
+      // Simulate a TIMEOUT rejection — the code catches this, logs a warning, and continues
+      supabaseMock.auth = {
+        getSession: jest.fn().mockRejectedValue({
+          type: 'network_error',
+          code: 'TIMEOUT',
+          message: 'getSession() timed out (5000ms) — possible auth lock contention',
+        }),
+      };
+
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        text: async () =>
+          JSON.stringify({ clientSecret: 'pi_secret_to', paymentIntentId: 'pi_timeout_01' }),
+      });
+
+      // Request without a pre-obtained accessToken forces the getSession() path
+      const result = await stripeService.createPaymentIntent(50, 'usd' /* no authToken */);
+      expect(result.id).toBe('pi_timeout_01');
+
+      supabaseMock.auth = originalAuth;
+    });
+  });
 });

@@ -131,6 +131,10 @@ export async function registerDisputeRoutes(fastify: FastifyInstance) {
 
       await client.query('UPDATE bounty_cancellations SET status = $1 WHERE id = $2', ['disputed', cancellationId]);
 
+      // Place a wallet hold on the poster's balance for the disputed bounty amount.
+      // fn_open_dispute_hold is idempotent and a no-op for honor/zero-amount bounties.
+      await client.query('SELECT fn_open_dispute_hold($1)', [disputeId]);
+
       await client.query('COMMIT');
 
       return reply.code(201).send({ disputeId });
