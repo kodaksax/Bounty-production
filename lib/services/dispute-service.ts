@@ -142,11 +142,21 @@ export const disputeService = {
         return null;
       }
 
-      // The wallet hold (fn_open_dispute_hold) is now placed automatically by the
-      // trg_after_bounty_dispute_insert DB trigger, which fires AFTER INSERT on
-      // bounty_disputes. No explicit RPC call is required here — the trigger runs
-      // as the function owner (SECURITY DEFINER) and is therefore not subject to
-      // the `authenticated` role's lack of EXECUTE permission on that function.
+      // Explicitly call fn_open_dispute_hold to freeze the poster's wallet balance.
+      // If the hold cannot be placed, roll back by deleting the dispute and return null
+      // so the caller is not left with an orphaned dispute that has no escrow hold.
+      const { error: holdError } = await supabase.rpc('fn_open_dispute_hold', {
+        p_dispute_id: data.id,
+      });
+
+      if (holdError) {
+        logger.error('Error placing dispute hold; rolling back dispute', {
+          error: holdError,
+          disputeId: data.id,
+        });
+        await supabase.from('bounty_disputes').delete().eq('id', data.id);
+        return null;
+      }
 
       // Update the cancellation status now that the dispute row exists.
       const { error: updateError } = await supabase
@@ -1057,7 +1067,8 @@ export const disputeService = {
 
       // Verify dispute is resolved
       const dispute = await this.getDisputeById(disputeId);
-      if (!dispute || dispute.status !== 'resolved') {
+      const resolvedStatuses = ['resolved', 'resolved_hunter_wins', 'resolved_poster_wins'];
+      if (!dispute || !resolvedStatuses.includes(dispute.status)) {
         throw new Error('Can only appeal resolved disputes');
       }
 

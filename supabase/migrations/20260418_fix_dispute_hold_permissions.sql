@@ -6,41 +6,26 @@
 --           This caused all dispute creation/resolution to fail silently.
 --
 -- Fix strategy:
---   1. fn_open_dispute_hold — add an AFTER INSERT trigger on bounty_disputes so the hold
---      is placed atomically by the DB without the client needing EXECUTE permission.
+--   1. fn_open_dispute_hold — GRANT EXECUTE to authenticated. The service calls this
+--      explicitly after INSERT and rolls back (deletes) the dispute row if the call
+--      fails, so the hold and the dispute record are always kept in sync.
+--      The trigger approach was abandoned because it would apply the hold twice if
+--      the service also calls the function explicitly.
 --   2. fn_close_dispute_hold — add a caller-authorization guard inside the function
 --      (JWT app_metadata.role = 'admin') then GRANT EXECUTE to authenticated.
 --      Admin-only operations (updateDisputeStatus / resolveDispute) already enforce
 --      admin checks at the application layer; this adds a DB-level guard too.
 
--- ─── 1. Trigger wrapper for fn_open_dispute_hold ─────────────────────────────
--- The trigger fires AFTER INSERT so the new row is committed and visible inside
--- fn_open_dispute_hold's SELECT ... FOR UPDATE.
-
-CREATE OR REPLACE FUNCTION public.trg_fn_open_dispute_hold()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-BEGIN
-  PERFORM public.fn_open_dispute_hold(NEW.id);
-  RETURN NEW;
-END;
-$$;
-
-COMMENT ON FUNCTION public.trg_fn_open_dispute_hold() IS
-  'Trigger wrapper: automatically places fn_open_dispute_hold on every new '
-  'bounty_disputes row. Runs as the function owner (SECURITY DEFINER), so '
-  'no EXECUTE grant to authenticated is needed.';
-
--- Drop trigger first in case migration is re-run.
+-- ─── 1. Grant fn_open_dispute_hold to authenticated ──────────────────────────
+-- Ensure any stale trigger from earlier iterations of this migration is removed
+-- so that the hold cannot be applied twice (once by trigger, once by service call).
 DROP TRIGGER IF EXISTS trg_after_bounty_dispute_insert ON public.bounty_disputes;
+DROP FUNCTION IF EXISTS public.trg_fn_open_dispute_hold();
 
-CREATE TRIGGER trg_after_bounty_dispute_insert
-  AFTER INSERT ON public.bounty_disputes
-  FOR EACH ROW
-  EXECUTE FUNCTION public.trg_fn_open_dispute_hold();
+-- The service (dispute-service.ts › createDispute) calls fn_open_dispute_hold
+-- immediately after inserting the dispute row and deletes the row if the call
+-- fails.  EXECUTE must therefore be granted to the authenticated role.
+GRANT EXECUTE ON FUNCTION public.fn_open_dispute_hold(UUID) TO authenticated;
 
 -- ─── 2. Add admin-guard to fn_close_dispute_hold and grant to authenticated ──
 -- Replace the function body with an identical copy plus a JWT admin check at the
