@@ -709,28 +709,30 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // Attempt server-side refund first to ensure server is the source of truth.
       try {
         const token = await getAccessToken();
-        if (token) {
-          const response = await fetchWithTimeout(`${FINANCIAL_API_BASE_URL}/wallet/refund`, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json',
-              ...(config.supabase.anonKey ? { apikey: config.supabase.anonKey } : {}),
-            },
-            body: JSON.stringify({
-              bountyId: bountyIdStr,
-              reason: `${refundPercentage}% refund`,
-              refundPercentage,
-            }),
-            timeout: API_TIMEOUTS.DEFAULT,
-            retries: 0, // No retries for financial operations
-          });
+        if (!token) {
+          console.error('[wallet] Cannot process refund: no access token');
+          return false;
+        }
+        const response = await fetchWithTimeout(`${FINANCIAL_API_BASE_URL}/wallet/refund`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            ...(config.supabase.anonKey ? { apikey: config.supabase.anonKey } : {}),
+          },
+          body: JSON.stringify({
+            bountyId: bountyIdStr,
+            reason: `${refundPercentage}% refund`,
+            refundPercentage,
+          }),
+          timeout: API_TIMEOUTS.DEFAULT,
+          retries: 0, // No retries for financial operations
+        });
 
-          if (!response.ok) {
-            const errData = await response.json().catch(() => ({}));
-            console.error('[wallet] Server refund failed:', (errData as any).error);
-            return false;
-          }
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          console.error('[wallet] Server refund failed:', (errData as any).error);
+          return false;
         }
       } catch (error) {
         console.error('[wallet] Error calling refund API:', error);
