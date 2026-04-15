@@ -92,6 +92,22 @@ async function notifyAdminsOfDispute(
 }
 
 /**
+ * Normalize dispute id for RPCs: if the id is a pure integer (number or numeric
+ * string), return it as a JS number so PostgREST calls the integer-typed RPC.
+ * Otherwise return the original value (keeps tests and UUID-based schemas working).
+ */
+function normalizeDisputeIdParam(id: string | number): number | string {
+  if (id === null || id === undefined) return id as any;
+  if (typeof id === 'number' && Number.isInteger(id)) return id;
+  const s = String(id).trim();
+  if (/^\d+$/.test(s)) {
+    const n = Number(s);
+    if (Number.isInteger(n)) return n;
+  }
+  return id;
+}
+
+/**
  * Service for handling bounty dispute lifecycle
  */
 export const disputeService = {
@@ -145,8 +161,9 @@ export const disputeService = {
       // Explicitly call fn_open_dispute_hold to freeze the poster's wallet balance.
       // If the hold cannot be placed, roll back by deleting the dispute and return null
       // so the caller is not left with an orphaned dispute that has no escrow hold.
+      const _pDisputeId = normalizeDisputeIdParam(data.id);
       const { error: holdError } = await supabase.rpc('fn_open_dispute_hold', {
-        p_dispute_id: data.id,
+        p_dispute_id: _pDisputeId,
       });
 
       if (holdError) {
@@ -382,8 +399,9 @@ export const disputeService = {
         'resolved_hunter_wins',
       ];
       if (terminalStatuses.includes(status)) {
+        const _pDisputeId = normalizeDisputeIdParam(disputeId);
         const { error: rpcError } = await (supabase as any).rpc('fn_close_dispute_hold', {
-          p_dispute_id: disputeId,
+          p_dispute_id: _pDisputeId,
           p_new_status: status,
         });
 
@@ -517,6 +535,12 @@ export const disputeService = {
         updateData.winner = winner;
       }
 
+      // Fetch the bounty early — we need it both to choose the correct hold-release
+      // strategy and for the Stripe escrow action further below.
+      const bounty = prefetchedBounty || (await bountyService.getById(dispute.bountyId));
+      const isHonorBounty = bounty?.is_for_honor || !bounty?.amount || bounty.amount <= 0;
+      const hasStripeEscrow = bounty && !isHonorBounty && !!bounty.payment_intent_id;
+
       // Map the winner to the new application-level resolution status and
       // atomically release the balance_on_hold via fn_close_dispute_hold.
       const resolvedStatus =
@@ -526,9 +550,20 @@ export const disputeService = {
             ? 'resolved_poster_wins'
             : 'resolved';
 
+      // For Stripe-backed bounties resolved in the hunter's favour, fn_close_dispute_hold
+      // must NOT deduct from the poster's wallet.  The wallet hold was placed purely to
+      // prevent withdrawal during the dispute — the actual hunter payment is handled by
+      // paymentService.releaseEscrow() below.  Passing 'resolved' releases only the
+      // balance_on_hold without triggering the balance deduction that 'resolved_hunter_wins'
+      // would cause, which would double-charge the poster (once via Stripe, once via wallet).
+      // The dispute row's status is corrected to resolvedStatus by the update() call below.
+      const holdReleaseStatus =
+        winner === 'hunter' && hasStripeEscrow ? 'resolved' : resolvedStatus;
+
+      const _pDisputeId = normalizeDisputeIdParam(disputeId);
       const { error: holdRpcError } = await (supabase as any).rpc('fn_close_dispute_hold', {
-        p_dispute_id: disputeId,
-        p_new_status: resolvedStatus,
+        p_dispute_id: _pDisputeId,
+        p_new_status: holdReleaseStatus,
       });
 
       if (holdRpcError) {
@@ -553,9 +588,6 @@ export const disputeService = {
         throw error;
       }
 
-      // Use pre-fetched bounty if provided, otherwise fetch
-      const bounty = prefetchedBounty || (await bountyService.getById(dispute.bountyId));
-
       // Determine winner label for notifications
       const winnerLabel =
         winner === 'hunter'
@@ -568,8 +600,6 @@ export const disputeService = {
       let escrowActionExecuted = false;
       if (winner) {
         try {
-          const isHonorBounty = bounty?.is_for_honor || !bounty?.amount || bounty.amount <= 0;
-
           if (bounty && !isHonorBounty && bounty.payment_intent_id) {
             if (winner === 'hunter') {
               const releaseResult = await paymentService.releaseEscrow(bounty.payment_intent_id);

@@ -25,7 +25,7 @@ DROP FUNCTION IF EXISTS public.trg_fn_open_dispute_hold();
 -- The service (dispute-service.ts › createDispute) calls fn_open_dispute_hold
 -- immediately after inserting the dispute row and deletes the row if the call
 -- fails.  EXECUTE must therefore be granted to the authenticated role.
-GRANT EXECUTE ON FUNCTION public.fn_open_dispute_hold(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.fn_open_dispute_hold(INTEGER) TO authenticated;
 
 -- ─── 2. Add admin-guard to fn_close_dispute_hold and grant to authenticated ──
 -- Replace the function body with an identical copy plus a JWT admin check at the
@@ -33,7 +33,7 @@ GRANT EXECUTE ON FUNCTION public.fn_open_dispute_hold(UUID) TO authenticated;
 -- deductions on disputes they are not authorized to touch.
 
 CREATE OR REPLACE FUNCTION public.fn_close_dispute_hold(
-  p_dispute_id UUID,
+  p_dispute_id INTEGER,
   p_new_status TEXT
 )
 RETURNS void
@@ -123,7 +123,7 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION public.fn_close_dispute_hold(UUID, TEXT) IS
+COMMENT ON FUNCTION public.fn_close_dispute_hold(INTEGER, TEXT) IS
   'Releases the wallet hold placed by fn_open_dispute_hold and updates the dispute status '
   'atomically. On resolved_hunter_wins the hold amount is also deducted from the poster''s '
   'balance. Callable by service_role (direct DB) or by authenticated users with '
@@ -131,4 +131,4 @@ COMMENT ON FUNCTION public.fn_close_dispute_hold(UUID, TEXT) IS
 
 -- Grant authenticated so PostgREST admin panel calls succeed.
 -- The function itself rejects non-admin JWTs, so this is safe.
-GRANT EXECUTE ON FUNCTION public.fn_close_dispute_hold(UUID, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.fn_close_dispute_hold(INTEGER, TEXT) TO authenticated;
