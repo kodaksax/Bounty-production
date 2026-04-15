@@ -301,6 +301,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             }
           }
         }
+        }
       } catch (error) {
         const errorMessage = getNetworkErrorMessage(error);
         console.error('[wallet] Error refreshing from API:', errorMessage, error);
