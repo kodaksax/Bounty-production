@@ -800,6 +800,262 @@ describe('Stripe Service', () => {
     });
   });
 
+  // ---------------------------------------------------------------------------
+  describe('detachPaymentMethod', () => {
+    it('should successfully detach a payment method', async () => {
+      // fetchEdgeFunction calls response.text() (not .json()), so the mock must provide text()
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        text: async () => '{}',
+      });
+
+      await expect(
+        stripeService.detachPaymentMethod('pm_test_123', 'auth-token')
+      ).resolves.toBeUndefined();
+    });
+
+    it('should throw when authToken is missing', async () => {
+      await expect(stripeService.detachPaymentMethod('pm_test_123')).rejects.toBeDefined();
+    });
+
+    it('should throw on network error', async () => {
+      (global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
+      await expect(
+        stripeService.detachPaymentMethod('pm_error', 'auth-token')
+      ).rejects.toBeDefined();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  describe('createConnectAccount', () => {
+    it('should create a Connect account successfully', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ accountId: 'acct_test123' }),
+      });
+
+      const result = await stripeService.createConnectAccount(
+        'user-1',
+        'test@example.com',
+        'auth-token'
+      );
+      expect(result.accountId).toBe('acct_test123');
+      expect(performanceService.startMeasurement).toHaveBeenCalledWith(
+        'connect_account_create',
+        'payment_process',
+        expect.any(Object)
+      );
+      expect(performanceService.endMeasurement).toHaveBeenCalledWith(
+        'connect_account_create',
+        expect.objectContaining({ success: true })
+      );
+    });
+
+    it('should handle account id nested in account.id field', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ account: { id: 'acct_nested' } }),
+      });
+
+      const result = await stripeService.createConnectAccount('user-2', 'other@example.com');
+      expect(result.accountId).toBe('acct_nested');
+    });
+
+    it('should throw validation error when userId or email missing', async () => {
+      await expect(
+        stripeService.createConnectAccount('', 'test@example.com')
+      ).rejects.toBeDefined();
+      await expect(stripeService.createConnectAccount('user-1', '')).rejects.toBeDefined();
+    });
+
+    it('should throw when API response is not ok', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 500 });
+      await expect(
+        stripeService.createConnectAccount('user-1', 'test@example.com', 'token')
+      ).rejects.toBeDefined();
+      expect(performanceService.endMeasurement).toHaveBeenCalledWith(
+        'connect_account_create',
+        expect.objectContaining({ success: false })
+      );
+    });
+
+    it('should throw when response is missing accountId', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({}),
+      });
+      await expect(
+        stripeService.createConnectAccount('user-1', 'test@example.com')
+      ).rejects.toBeDefined();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  describe('createConnectAccountLink', () => {
+    it('should return the onboarding URL', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ url: 'https://connect.stripe.com/setup/e/test' }),
+      });
+
+      const url = await stripeService.createConnectAccountLink('acct_test', 'auth-token');
+      expect(url).toBe('https://connect.stripe.com/setup/e/test');
+    });
+
+    it('should accept URL nested in accountLink.url', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ accountLink: { url: 'https://connect.stripe.com/setup/e/nested' } }),
+      });
+
+      const url = await stripeService.createConnectAccountLink('acct_test');
+      expect(url).toBe('https://connect.stripe.com/setup/e/nested');
+    });
+
+    it('should throw validation error when accountId is empty', async () => {
+      await expect(stripeService.createConnectAccountLink('')).rejects.toBeDefined();
+    });
+
+    it('should throw when API response is not ok', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 400 });
+      await expect(
+        stripeService.createConnectAccountLink('acct_test', 'token')
+      ).rejects.toBeDefined();
+    });
+
+    it('should throw when URL is missing from response', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ message: 'no url here' }),
+      });
+      await expect(stripeService.createConnectAccountLink('acct_test')).rejects.toBeDefined();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  describe('createEscrow', () => {
+    const validParams = {
+      bountyId: 'bounty-1',
+      amount: 50,
+      posterId: 'poster-1',
+      hunterId: 'hunter-1',
+    };
+
+    it('should create escrow and return escrow details', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          escrowId: 'escrow-100',
+          paymentIntentClientSecret: 'pi_test_secret_abc',
+          paymentIntentId: 'pi_test',
+          status: 'requires_payment_method',
+        }),
+      });
+
+      const result = await stripeService.createEscrow(validParams, 'auth-token');
+      expect(result.escrowId).toBe('escrow-100');
+      expect(result.paymentIntentClientSecret).toBe('pi_test_secret_abc');
+      expect(performanceService.endMeasurement).toHaveBeenCalledWith(
+        'escrow_create',
+        expect.objectContaining({ success: true })
+      );
+    });
+
+    it('should derive paymentIntentId from clientSecret when not provided', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          escrowId: 'escrow-101',
+          paymentIntentClientSecret: 'pi_derived_secret_xyz',
+        }),
+      });
+
+      const result = await stripeService.createEscrow(validParams);
+      expect(result.escrowId).toBe('escrow-101');
+      expect(result.paymentIntentId).toBe('pi_derived');
+    });
+
+    it('should throw validation error when params are invalid', async () => {
+      await expect(stripeService.createEscrow({ ...validParams, amount: 0 })).rejects.toBeDefined();
+      await expect(
+        stripeService.createEscrow({ ...validParams, bountyId: '' })
+      ).rejects.toBeDefined();
+    });
+
+    it('should throw when API response is not ok', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 402 });
+      await expect(stripeService.createEscrow(validParams, 'token')).rejects.toBeDefined();
+    });
+
+    it('should throw when escrowId or clientSecret missing from response', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ status: 'pending' }), // missing escrowId and clientSecret
+      });
+      await expect(stripeService.createEscrow(validParams)).rejects.toBeDefined();
+    });
+
+    it('should throw on network error', async () => {
+      (global.fetch as jest.Mock).mockRejectedValue(new Error('Network down'));
+      await expect(stripeService.createEscrow(validParams)).rejects.toBeDefined();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  describe('releaseEscrow', () => {
+    it('should release escrow successfully', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          transferId: 'tr_test_release',
+          paymentIntentId: 'pi_test_release',
+          status: 'succeeded',
+        }),
+      });
+
+      const result = await stripeService.releaseEscrow('escrow-rel-1', 'auth-token');
+      expect(result.transferId).toBe('tr_test_release');
+      expect(result.paymentIntentId).toBe('pi_test_release');
+      expect(performanceService.endMeasurement).toHaveBeenCalledWith(
+        'escrow_release',
+        expect.objectContaining({ success: true })
+      );
+    });
+
+    it('should handle nested transfer and paymentIntent fields', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          transfer: { id: 'tr_nested' },
+          paymentIntent: { id: 'pi_nested' },
+          status: 'succeeded',
+        }),
+      });
+
+      const result = await stripeService.releaseEscrow('escrow-rel-2');
+      expect(result.transferId).toBe('tr_nested');
+      expect(result.paymentIntentId).toBe('pi_nested');
+    });
+
+    it('should throw validation error when escrowId is empty', async () => {
+      await expect(stripeService.releaseEscrow('')).rejects.toBeDefined();
+    });
+
+    it('should throw on API error response', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 404 });
+      await expect(stripeService.releaseEscrow('escrow-not-found', 'token')).rejects.toBeDefined();
+      expect(performanceService.endMeasurement).toHaveBeenCalledWith(
+        'escrow_release',
+        expect.objectContaining({ success: false })
+      );
+    });
+
+    it('should throw on network error', async () => {
+      (global.fetch as jest.Mock).mockRejectedValue(new Error('Network failure'));
+      await expect(stripeService.releaseEscrow('escrow-net-err')).rejects.toBeDefined();
+    });
+  });
+
   describe('fetchEdgeFunction — response shape guard', () => {
     beforeEach(() => {
       jest.clearAllMocks();

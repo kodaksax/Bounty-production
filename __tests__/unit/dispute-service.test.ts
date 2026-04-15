@@ -1,6 +1,6 @@
 /**
  * Unit Tests for Dispute Service
- * 
+ *
  * Tests cover core dispute resolution functionality including:
  * - Dispute creation and retrieval
  * - Evidence management
@@ -93,7 +93,9 @@ describe('DisputeService', () => {
       };
 
       // Mock cancellationService.getCancellationById
-      const { cancellationService: mockCancellationService } = require('../../lib/services/cancellation-service');
+      const {
+        cancellationService: mockCancellationService,
+      } = require('../../lib/services/cancellation-service');
       (mockCancellationService.getCancellationById as jest.Mock).mockResolvedValue({
         id: 'cancel-123',
         bountyId: 'bounty-123',
@@ -151,7 +153,9 @@ describe('DisputeService', () => {
         updated_at: new Date().toISOString(),
       };
 
-      const { cancellationService: mockCancellationService } = require('../../lib/services/cancellation-service');
+      const {
+        cancellationService: mockCancellationService,
+      } = require('../../lib/services/cancellation-service');
       (mockCancellationService.getCancellationById as jest.Mock).mockResolvedValue({
         id: 'cancel-456',
         bountyId: 'bounty-456',
@@ -180,11 +184,7 @@ describe('DisputeService', () => {
       // Simulate hold failure
       mockRpc.mockResolvedValue({ data: null, error: { message: 'RPC error', code: 'P0001' } });
 
-      const dispute = await disputeService.createDispute(
-        'cancel-456',
-        'user-123',
-        'Hold test'
-      );
+      const dispute = await disputeService.createDispute('cancel-456', 'user-123', 'Hold test');
 
       expect(dispute).toBeNull();
       expect(mockDelete).toHaveBeenCalled();
@@ -192,7 +192,9 @@ describe('DisputeService', () => {
 
     it('should handle errors gracefully', async () => {
       // Mock cancellationService.getCancellationById
-      const { cancellationService: mockCancellationService } = require('../../lib/services/cancellation-service');
+      const {
+        cancellationService: mockCancellationService,
+      } = require('../../lib/services/cancellation-service');
       (mockCancellationService.getCancellationById as jest.Mock).mockResolvedValue({
         id: 'cancel-123',
         bountyId: 'bounty-123',
@@ -678,7 +680,9 @@ describe('DisputeService', () => {
       (mockBountyService.getById as jest.Mock).mockResolvedValue(mockBounty);
 
       const { paymentService: mockPaymentService } = require('../../lib/services/payment-service');
-      (mockPaymentService.releaseEscrow as jest.Mock).mockRejectedValue(new Error('Network timeout'));
+      (mockPaymentService.releaseEscrow as jest.Mock).mockRejectedValue(
+        new Error('Network timeout')
+      );
 
       const { logger } = require('../../lib/utils/error-logger');
 
@@ -694,6 +698,332 @@ describe('DisputeService', () => {
         'Error executing escrow action during dispute resolution',
         expect.objectContaining({ disputeId: 'dispute-791', winner: 'hunter' })
       );
+    });
+  });
+
+  describe('getDisputeById', () => {
+    it('returns a dispute when found', async () => {
+      const mockDispute = {
+        id: 'dispute-get-1',
+        cancellation_id: 'cancel-get-1',
+        bounty_id: 'bounty-get-1',
+        initiator_id: 'user-get-1',
+        reason: 'Test reason',
+        status: 'open',
+        created_at: new Date().toISOString(),
+      };
+
+      mockFrom.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            single: jest.fn().mockResolvedValue({ data: mockDispute, error: null }),
+          }),
+        }),
+      });
+
+      const result = await disputeService.getDisputeById('dispute-get-1');
+      expect(result).toBeDefined();
+      expect(result?.id).toBe('dispute-get-1');
+    });
+
+    it('returns null when dispute not found', async () => {
+      mockFrom.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            single: jest
+              .fn()
+              .mockResolvedValue({ data: null, error: { code: 'PGRST116', message: 'not found' } }),
+          }),
+        }),
+      });
+
+      const result = await disputeService.getDisputeById('nonexistent');
+      expect(result).toBeNull();
+    });
+
+    it('returns null on DB error', async () => {
+      mockFrom.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            single: jest.fn().mockResolvedValue({ data: null, error: { message: 'DB error' } }),
+          }),
+        }),
+      });
+
+      // Service swallows errors and returns null
+      const result = await disputeService.getDisputeById('dispute-err');
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('getDisputeByCancellationId', () => {
+    it('returns a dispute when found', async () => {
+      const mockDispute = {
+        id: 'dispute-by-cancel',
+        cancellation_id: 'cancel-lookup',
+        bounty_id: 'bounty-lookup',
+        initiator_id: 'user-lookup',
+        reason: 'Test',
+        status: 'open',
+        created_at: new Date().toISOString(),
+      };
+
+      mockFrom.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            order: jest.fn().mockReturnValue({
+              limit: jest.fn().mockReturnValue({
+                maybeSingle: jest.fn().mockResolvedValue({ data: mockDispute, error: null }),
+              }),
+            }),
+          }),
+        }),
+      });
+
+      const result = await disputeService.getDisputeByCancellationId('cancel-lookup');
+      expect(result?.id).toBe('dispute-by-cancel');
+    });
+
+    it('returns null when not found', async () => {
+      mockFrom.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            order: jest.fn().mockReturnValue({
+              limit: jest.fn().mockReturnValue({
+                maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
+              }),
+            }),
+          }),
+        }),
+      });
+
+      const result = await disputeService.getDisputeByCancellationId('no-match');
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('updateDisputeStatus', () => {
+    it('updates dispute status successfully (admin user)', async () => {
+      mockFrom.mockReturnValue({
+        update: jest.fn().mockReturnValue({
+          eq: jest.fn().mockResolvedValue({ error: null }),
+        }),
+      });
+
+      const result = await disputeService.updateDisputeStatus('dispute-upd', 'under_review');
+      expect(result).toBe(true);
+    });
+
+    it('returns false when DB update fails (non-terminal status)', async () => {
+      // The service catches all errors and returns false
+      mockFrom.mockReturnValue({
+        update: jest.fn().mockReturnValue({
+          eq: jest.fn().mockResolvedValue({ error: { message: 'update failed' } }),
+        }),
+      });
+
+      const result = await disputeService.updateDisputeStatus('dispute-upd', 'under_review');
+      expect(result).toBe(false);
+    });
+
+    it('calls fn_close_dispute_hold for resolved status', async () => {
+      mockRpc.mockResolvedValueOnce({ error: null });
+
+      const result = await disputeService.updateDisputeStatus('dispute-upd', 'resolved');
+      expect(mockRpc).toHaveBeenCalledWith(
+        'fn_close_dispute_hold',
+        expect.objectContaining({ p_new_status: 'resolved' })
+      );
+      expect(result).toBe(true);
+    });
+  });
+
+  describe('escalateDispute', () => {
+    it('escalates the dispute successfully', async () => {
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'bounty_disputes') {
+          return {
+            update: jest.fn().mockReturnValue({
+              eq: jest.fn().mockResolvedValue({ error: null }),
+            }),
+          };
+        }
+        return { insert: jest.fn().mockResolvedValue({ error: null }) };
+      });
+
+      const result = await disputeService.escalateDispute('dispute-esc-1', 'Needs admin review');
+      expect(result).toBe(true);
+    });
+  });
+
+  describe('getDisputesByUserId', () => {
+    it('returns disputes for a user', async () => {
+      const disputes = [
+        {
+          id: 'd1',
+          initiator_id: 'user-abc',
+          bounty_id: 'b1',
+          status: 'open',
+          created_at: new Date().toISOString(),
+        },
+        {
+          id: 'd2',
+          initiator_id: 'user-abc',
+          bounty_id: 'b2',
+          status: 'resolved',
+          created_at: new Date().toISOString(),
+        },
+      ];
+
+      mockFrom.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            order: jest.fn().mockResolvedValue({ data: disputes, error: null }),
+          }),
+        }),
+      });
+
+      const result = await disputeService.getDisputesByUserId('user-abc');
+      expect(Array.isArray(result)).toBe(true);
+      expect(result.length).toBe(2);
+    });
+
+    it('returns empty array when no disputes found', async () => {
+      mockFrom.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockResolvedValue({ data: [], error: null }),
+        }),
+      });
+
+      const result = await disputeService.getDisputesByUserId('user-no-disputes');
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('getAllActiveDisputes', () => {
+    it('returns all open and under_review disputes', async () => {
+      const activeDisputes = [
+        {
+          id: 'da1',
+          bounty_id: 'b1',
+          initiator_id: 'u1',
+          status: 'open',
+          created_at: new Date().toISOString(),
+        },
+        {
+          id: 'da2',
+          bounty_id: 'b2',
+          initiator_id: 'u2',
+          status: 'under_review',
+          created_at: new Date().toISOString(),
+        },
+      ];
+
+      mockFrom.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          in: jest.fn().mockReturnValue({
+            order: jest.fn().mockResolvedValue({ data: activeDisputes, error: null }),
+          }),
+        }),
+      });
+
+      const result = await disputeService.getAllActiveDisputes();
+      expect(Array.isArray(result)).toBe(true);
+      expect(result.length).toBe(2);
+    });
+
+    it('returns empty array when no active disputes', async () => {
+      mockFrom.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          in: jest.fn().mockResolvedValue({ data: [], error: null }),
+        }),
+      });
+
+      const result = await disputeService.getAllActiveDisputes();
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('getDisputeEvidence', () => {
+    it('returns evidence for a dispute', async () => {
+      const evidence = [
+        {
+          id: 'ev1',
+          dispute_id: 'dispute-ev-1',
+          type: 'image',
+          url: 'https://example.com/img.png',
+        },
+      ];
+
+      mockFrom.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            order: jest.fn().mockResolvedValue({ data: evidence, error: null }),
+          }),
+        }),
+      });
+
+      const result = await disputeService.getDisputeEvidence('dispute-ev-1');
+      expect(Array.isArray(result)).toBe(true);
+      expect(result.length).toBe(1);
+    });
+
+    it('returns empty array when no evidence', async () => {
+      mockFrom.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            order: jest.fn().mockResolvedValue({ data: [], error: null }),
+          }),
+        }),
+      });
+
+      const result = await disputeService.getDisputeEvidence('dispute-no-ev');
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('getDisputeComments', () => {
+    it('returns public comments (no internal)', async () => {
+      const comments = [
+        { id: 'c1', dispute_id: 'dispute-c1', user_id: 'u1', comment: 'Test', is_internal: false },
+      ];
+
+      mockFrom.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              order: jest.fn().mockResolvedValue({ data: comments, error: null }),
+            }),
+            order: jest.fn().mockResolvedValue({ data: comments, error: null }),
+          }),
+        }),
+      });
+
+      const result = await disputeService.getDisputeComments('dispute-c1', false);
+      expect(Array.isArray(result)).toBe(true);
+    });
+
+    it('returns all comments including internal', async () => {
+      const comments = [
+        {
+          id: 'c2',
+          dispute_id: 'dispute-c2',
+          user_id: 'u1',
+          comment: 'Internal note',
+          is_internal: true,
+        },
+      ];
+
+      mockFrom.mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            order: jest.fn().mockResolvedValue({ data: comments, error: null }),
+          }),
+        }),
+      });
+
+      const result = await disputeService.getDisputeComments('dispute-c2', true);
+      expect(Array.isArray(result)).toBe(true);
     });
   });
 
@@ -717,7 +1047,7 @@ describe('DisputeService', () => {
         amount: 50000, // $500
       };
 
-      mockFrom.mockImplementation((table) => {
+      mockFrom.mockImplementation(table => {
         if (table === 'bounty_disputes') {
           return {
             select: jest.fn().mockReturnValue({
@@ -763,16 +1093,12 @@ describe('DisputeService', () => {
       const { bountyService: mockBountyService } = require('../../lib/services/bounty-service');
       (mockBountyService.getById as jest.Mock).mockResolvedValue(mockBounty);
 
-      const result = await disputeService.makeResolutionDecision(
-        'dispute-123',
-        'admin-123',
-        {
-          outcome: 'split',
-          amountToHunter: 30000,
-          amountToPoster: 20000,
-          rationale: 'Fair split based on evidence',
-        }
-      );
+      const result = await disputeService.makeResolutionDecision('dispute-123', 'admin-123', {
+        outcome: 'split',
+        amountToHunter: 30000,
+        amountToPoster: 20000,
+        rationale: 'Fair split based on evidence',
+      });
 
       expect(result).toBe(true);
     });
@@ -798,7 +1124,7 @@ describe('DisputeService', () => {
         poster_id: 'poster-123',
       };
 
-      mockFrom.mockImplementation((table) => {
+      mockFrom.mockImplementation(table => {
         if (table === 'bounty_disputes') {
           return {
             select: jest.fn().mockReturnValue({
@@ -865,7 +1191,7 @@ describe('DisputeService', () => {
         poster_id: 'poster-123',
       };
 
-      mockFrom.mockImplementation((table) => {
+      mockFrom.mockImplementation(table => {
         if (table === 'bounty_disputes') {
           return {
             select: jest.fn().mockReturnValue({
@@ -936,7 +1262,7 @@ describe('DisputeService', () => {
         },
       ];
 
-      mockFrom.mockImplementation((table) => {
+      mockFrom.mockImplementation(table => {
         if (table === 'bounty_disputes') {
           return {
             select: jest.fn().mockReturnValue({
@@ -977,7 +1303,7 @@ describe('DisputeService', () => {
         },
       ];
 
-      mockFrom.mockImplementation((table) => {
+      mockFrom.mockImplementation(table => {
         if (table === 'bounty_disputes') {
           return {
             select: jest.fn().mockReturnValue({
@@ -1014,7 +1340,7 @@ describe('DisputeService', () => {
         bounty_id: 'bounty-123',
       };
 
-      mockFrom.mockImplementation((table) => {
+      mockFrom.mockImplementation(table => {
         if (table === 'bounty_disputes') {
           return {
             select: jest.fn().mockReturnValue({
@@ -1064,11 +1390,7 @@ describe('DisputeService', () => {
         }),
       });
 
-      const result = await disputeService.createAppeal(
-        'dispute-123',
-        'user-123',
-        'Appeal reason'
-      );
+      const result = await disputeService.createAppeal('dispute-123', 'user-123', 'Appeal reason');
 
       expect(result).toBe(false);
     });
@@ -1092,7 +1414,7 @@ describe('DisputeService', () => {
         error: null,
       });
 
-      mockFrom.mockImplementation((table) => {
+      mockFrom.mockImplementation(table => {
         if (table === 'bounty_disputes') {
           return {
             insert: jest.fn().mockReturnValue({
@@ -1119,7 +1441,10 @@ describe('DisputeService', () => {
       });
 
       const { bountyService: mockBountyService } = require('../../lib/services/bounty-service');
-      (mockBountyService.getById as jest.Mock).mockResolvedValue({ id: 'bounty-123', title: 'Test' });
+      (mockBountyService.getById as jest.Mock).mockResolvedValue({
+        id: 'bounty-123',
+        title: 'Test',
+      });
 
       const dispute = await disputeService.createWorkflowDispute(
         'bounty-123',
@@ -1138,7 +1463,7 @@ describe('DisputeService', () => {
 
     it('should block creating a workflow dispute if one is already active', async () => {
       // Mock getDisputeByBountyId returning an active dispute
-      mockFrom.mockImplementation((table) => {
+      mockFrom.mockImplementation(table => {
         if (table === 'bounty_disputes') {
           return {
             select: jest.fn().mockReturnValue({
@@ -1171,7 +1496,7 @@ describe('DisputeService', () => {
     });
 
     it('should return disputes where user is either initiator or respondent', async () => {
-      mockFrom.mockImplementation((table) => {
+      mockFrom.mockImplementation(table => {
         if (table === 'bounty_disputes') {
           return {
             select: jest.fn().mockReturnValue({

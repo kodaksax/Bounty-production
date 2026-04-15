@@ -24,6 +24,7 @@ try {
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const MAX_TRANSFER_RETRIES = 3;
 
 // Initialize Supabase client with service role key (bypasses RLS)
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
@@ -1071,24 +1072,78 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
         const transfer = event.data.object;
         console.log(`[Webhook] Transfer failed: ${transfer.id}`);
 
-        // Mark transaction as failed and prepare for retry
-        const { data: tx } = await supabase
+        // Read existing metadata so we can (a) preserve fields written by the
+        // retry endpoint (e.g. retry_count, retried_at) and (b) check whether
+        // the retry limit is reached without double-incrementing retry_count
+        // (the retry endpoint already does that increment).
+        // NOTE: We also select `id` so the subsequent UPDATE can use the stable
+        // primary key. Filtering only on stripe_transfer_id in the UPDATE would
+        // create a race: if /connect/retry-transfer runs between this SELECT and
+        // the UPDATE it replaces stripe_transfer_id with the new transfer's ID,
+        // causing the UPDATE to match no row and silently skipping the refund.
+        const { data: existingTx } = await supabase
           .from('wallet_transactions')
-          .update({
-            status: 'failed',
-            metadata: {
-              transfer_status: 'failed',
-              failure_reason: transfer.failure_code,
-              retry_count: 0,
-            },
-          })
+          .select('id, metadata')
           .eq('stripe_transfer_id', transfer.id)
-          .select()
-          .single();
+          .maybeSingle();
+        const existingMetadata = existingTx?.metadata ?? {};
+        const currentRetries = existingMetadata.retry_count ?? 0;
+        const permanentlyFailed = currentRetries >= MAX_TRANSFER_RETRIES;
+
+        // Use the row's primary key as the primary filter and keep
+        // stripe_transfer_id as an optimistic-lock guard: if the retry endpoint
+        // replaced stripe_transfer_id with a new value before we got here, we
+        // must NOT overwrite the in-flight retry's 'pending' status back to
+        // 'failed'. The guard makes the UPDATE a no-op in that case, and we
+        // surface a CRITICAL alert below instead of silently dropping the refund.
+        let tx = null;
+        if (existingTx?.id) {
+          const { data: updateData, error: updateError } = await supabase
+            .from('wallet_transactions')
+            .update({
+              // wallet_transactions.status is constrained to ('pending','completed','failed').
+              // Encode permanent-failure state in metadata.transfer_status instead.
+              status: 'failed',
+              metadata: {
+                ...existingMetadata,
+                transfer_status: permanentlyFailed ? 'permanently_failed' : 'failed',
+                failure_reason: transfer.failure_code,
+              },
+            })
+            .eq('id', existingTx.id)
+            .eq('stripe_transfer_id', transfer.id) // optimistic-lock guard
+            .select()
+            .single();
+
+          // PGRST116 means zero rows matched — the optimistic-lock guard fired
+          // (retry endpoint replaced stripe_transfer_id between SELECT and UPDATE).
+          // Any other error is a real database problem; surface it immediately.
+          if (updateError && updateError.code !== 'PGRST116') {
+            throw updateError;
+          }
+          tx = updateData;
+        }
+
+        if (!tx && existingTx?.id) {
+          // The optimistic-lock guard fired: /connect/retry-transfer replaced
+          // stripe_transfer_id with a new transfer ID between our SELECT and
+          // UPDATE. The in-flight retry's row was intentionally left untouched,
+          // but the T1 failure has not been reflected and its refund was not
+          // issued. Surface this for immediate manual investigation to avoid
+          // silent fund loss.
+          console.error(
+            '[Webhook] CRITICAL: transfer.failed race condition detected. ' +
+              `stripe_transfer_id for transaction ${existingTx.id} was replaced by a retry ` +
+              `between SELECT and UPDATE. Transfer ${transfer.id} failure not recorded and ` +
+              'refund not issued. Manual review required.',
+            { transferId: transfer.id, transactionId: existingTx.id }
+          );
+        }
 
         if (tx) {
-          // Refund the amount back to user's wallet for failed withdrawal
-          // Use atomic RPC if available, with fallback
+          // Always refund the debited balance — it was decremented when this transfer
+          // attempt was initiated regardless of retry count. If the transfer never
+          // settled with Stripe there is nothing blocking an immediate wallet restore.
           const refundAmount = Math.abs(tx.amount);
 
           const { error: rpcError } = await supabase.rpc('increment_balance', {
@@ -1128,11 +1183,57 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
             }
           }
 
-          console.log(
-            `[Webhook] Refunded $${refundAmount} to user ${tx.user_id} for failed transfer`
-          );
+          if (permanentlyFailed) {
+            console.warn(
+              `[Webhook] Transfer ${transfer.id} permanently failed after ${currentRetries} retries for user ${tx.user_id}. Balance of $${refundAmount} restored. Manual review required for root cause.`
+            );
 
-          // Note: User notification should be implemented via notification service when available
+            // Check for an existing notification to keep this handler idempotent
+            // (Stripe may re-deliver the same webhook event on transient errors).
+            const { data: existingNotification, error: existingNotificationError } = await supabase
+              .from('notifications')
+              .select('id')
+              .eq('user_id', tx.user_id)
+              .eq('type', 'payment')
+              .eq('title', 'Withdrawal Failed')
+              .contains('data', { transferId: transfer.id })
+              .limit(1)
+              .maybeSingle();
+
+            if (existingNotificationError) {
+              console.error('[Webhook] Failed to check existing permanently_failed notification', {
+                userId: tx.user_id,
+                transferId: transfer.id,
+                error: existingNotificationError,
+              });
+              throw existingNotificationError;
+            } else if (!existingNotification) {
+              const { error: notifError } = await supabase.from('notifications').insert({
+                user_id: tx.user_id,
+                type: 'payment',
+                title: 'Withdrawal Failed',
+                body: 'Your withdrawal could not be completed after multiple attempts. Your balance has been restored. Please contact support if you need further assistance.',
+                data: { transferId: transfer.id, retry_count: currentRetries },
+              });
+              if (notifError) {
+                console.error('[Webhook] Failed to insert permanently_failed notification', {
+                  userId: tx.user_id,
+                  transferId: transfer.id,
+                  error: notifError,
+                });
+                throw notifError;
+              }
+            } else {
+              console.log('[Webhook] Skipping duplicate permanently_failed notification', {
+                userId: tx.user_id,
+                transferId: transfer.id,
+              });
+            }
+          } else {
+            console.log(
+              `[Webhook] Refunded $${refundAmount} to user ${tx.user_id} for failed transfer (retries: ${currentRetries}/${MAX_TRANSFER_RETRIES})`
+            );
+          }
         }
         break;
       }
