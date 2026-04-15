@@ -34,17 +34,20 @@ COMMENT ON COLUMN profiles.restricted_at IS 'Timestamp when account was restrict
 -- Add check constraints for risk management fields (idempotent: skip if already present)
 DO $$ BEGIN
   ALTER TABLE profiles ADD CONSTRAINT check_verification_status CHECK (verification_status IN ('pending', 'verified', 'rejected', 'under_review'));
-EXCEPTION WHEN duplicate_object THEN NULL;
+EXCEPTION WHEN duplicate_object THEN
+  RAISE NOTICE 'constraint check_verification_status already exists, skipping';
 END $$;
 
 DO $$ BEGIN
   ALTER TABLE profiles ADD CONSTRAINT check_risk_level CHECK (risk_level IN ('low', 'medium', 'high', 'critical'));
-EXCEPTION WHEN duplicate_object THEN NULL;
+EXCEPTION WHEN duplicate_object THEN
+  RAISE NOTICE 'constraint check_risk_level already exists, skipping';
 END $$;
 
 DO $$ BEGIN
   ALTER TABLE profiles ADD CONSTRAINT check_risk_score_range CHECK (risk_score >= 0 AND risk_score <= 100);
-EXCEPTION WHEN duplicate_object THEN NULL;
+EXCEPTION WHEN duplicate_object THEN
+  RAISE NOTICE 'constraint check_risk_score_range already exists, skipping';
 END $$;
 
 -- Create index for risk-based queries

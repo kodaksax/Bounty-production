@@ -159,8 +159,10 @@ Two stub (no-op) files live at the end of this directory:
 | `seed_restricted_categories.sql` | Same reason as above for version `seed_restricted_categories`. |
 
 **Do not remove or rename these stubs.** The actual schema/data changes they correspond to are in
-`20251010_risk_management_system.sql` and `20251015_seed_restricted_categories.sql`, both of which
-are fully idempotent and safe to apply on databases that already have the old versions applied.
+`20251010_risk_management_system.sql` and `20251015_seed_restricted_categories.sql`.
+`20251010_risk_management_system.sql` is fully idempotent (all DDL uses `IF NOT EXISTS` / `DO ... EXCEPTION WHEN duplicate_object` guards).
+`20251015_seed_restricted_categories.sql` is fully idempotent (uses `INSERT ... ON CONFLICT DO UPDATE`).
+Both files are safe to apply on databases that already have the old versions applied.
 
 ---
 
