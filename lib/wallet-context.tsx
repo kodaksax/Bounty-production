@@ -732,8 +732,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           }
         }
       } catch (error) {
-        console.error('[wallet] Error calling refund API, proceeding with local update:', error);
-        // Fall through to update local state so UI stays consistent
+        console.error('[wallet] Error calling refund API:', error);
+        return false;
       }
 
       // Update escrow transaction status

@@ -271,80 +271,59 @@ Deno.serve(async (req: Request) => {
         if (!Number.isFinite(amount) || amount <= 0)
           return jsonResponse({ error: 'Invalid amount' }, 400);
 
-        // Prevent duplicate escrow for the same bounty
-        const { data: existingEscrow } = await supabase
-          .from('wallet_transactions')
-          .select('id')
-          .eq('bounty_id', bountyId)
-          .eq('type', 'escrow')
-          .eq('status', 'completed')
-          .maybeSingle();
-        if (existingEscrow) {
+        const effectiveKey = idempotencyKey || `escrow_${bountyId}_${userId}`;
+        const description = title ? `Escrow for bounty: ${title}` : `Escrow for bounty ${bountyId}`;
+
+        // apply_escrow is a SECURITY DEFINER RPC that atomically:
+        //   1. Returns applied=false if a completed escrow already exists (idempotent).
+        //   2. Deducts the balance via update_balance() — raises on insufficient funds,
+        //      rolling back the whole transaction.
+        //   3. Inserts the escrow wallet_transactions row.
+        // This replaces four separate non-atomic operations that were vulnerable to a
+        // race condition where concurrent requests for the same bounty could both pass
+        // the existence check and each create an escrow row + deduct the balance.
+        const { data: escrowResult, error: escrowErr } = await supabase
+          .rpc('apply_escrow', {
+            p_user_id: userId,
+            p_bounty_id: bountyId,
+            p_amount: amount,
+            p_description: description,
+            p_metadata: {
+              bounty_id: bountyId,
+              escrowed_at: new Date().toISOString(),
+              idempotency_key: effectiveKey,
+            },
+          })
+          .single();
+
+        if (escrowErr) {
+          const errMsg: string = (escrowErr as { message?: string }).message ?? '';
+          // SQLSTATE 23514 is raised by update_balance() when balance would go negative.
+          if (escrowErr.code === '23514' || errMsg.toLowerCase().includes('insufficient')) {
+            return jsonResponse({ error: 'Insufficient balance' }, 400);
+          }
+          console.error('[wallet] apply_escrow RPC error:', escrowErr);
+          return jsonResponse({ error: 'Failed to create escrow transaction' }, 500);
+        }
+
+        const { applied, transaction_id, new_balance } = escrowResult as {
+          applied: boolean;
+          transaction_id: string;
+          new_balance: number | null;
+        };
+
+        if (!applied) {
           return jsonResponse(
             { error: 'Escrow already exists for this bounty', code: 'duplicate_transaction' },
             409
           );
         }
 
-        // Verify sufficient funds
-        const { data: profileData, error: profileFetchErr } = await supabase
-          .from('profiles')
-          .select('balance')
-          .eq('id', userId)
-          .single();
-        if (profileFetchErr || !profileData)
-          return jsonResponse({ error: 'Failed to fetch balance' }, 500);
-        const currentBalance: number = (profileData as Profile | null)?.balance ?? 0;
-        if (currentBalance < amount) return jsonResponse({ error: 'Insufficient balance' }, 400);
-
-        const effectiveKey = idempotencyKey || `escrow_${bountyId}_${userId}`;
-        const description = title ? `Escrow for bounty: ${title}` : `Escrow for bounty ${bountyId}`;
-
-        // Insert escrow transaction (debit)
-        const { data: txRow, error: txErr } = await supabase
-          .from('wallet_transactions')
-          .insert([
-            {
-              user_id: userId,
-              bounty_id: bountyId,
-              type: 'escrow',
-              amount: -amount,
-              description,
-              status: 'completed',
-              metadata: {
-                bounty_id: bountyId,
-                escrowed_at: new Date().toISOString(),
-                idempotency_key: effectiveKey,
-              },
-            },
-          ])
-          .select()
-          .single();
-        if (txErr) {
-          console.error('[wallet] create escrow tx error:', txErr);
-          return jsonResponse({ error: 'Failed to create escrow transaction' }, 500);
-        }
-
-        // Deduct from balance
-        const newBalance = currentBalance - amount;
-        const { error: balanceErr } = await supabase
-          .from('profiles')
-          .update({ balance: newBalance })
-          .eq('id', userId);
-        if (balanceErr) {
-          console.error('[wallet] balance deduct error after escrow, rolling back tx:', balanceErr);
-          await supabase
-            .from('wallet_transactions')
-            .delete()
-            .eq('id', (txRow as WalletTransaction).id);
-          return jsonResponse({ error: 'Failed to update balance' }, 500);
-        }
-
         return jsonResponse({
           success: true,
-          transactionId: (txRow as WalletTransaction).id,
+          transactionId: transaction_id,
           amount,
-          newBalance,
+          newBalance: new_balance,
           message: `$${amount.toFixed(2)} held in escrow for bounty.`,
         });
       }
@@ -369,14 +348,14 @@ Deno.serve(async (req: Request) => {
 
         if (!bountyId) return jsonResponse({ error: 'bountyId is required' }, 400);
 
-        // Verify the caller is the bounty creator (uses the DB column name: creator_id)
+        // Verify the caller is the bounty owner (user_id is the canonical owner column)
         const { data: bountyRow, error: bountyErr } = await supabase
           .from('bounties')
-          .select('creator_id')
+          .select('user_id')
           .eq('id', bountyId)
           .single();
         if (bountyErr || !bountyRow) return jsonResponse({ error: 'Bounty not found' }, 404);
-        if ((bountyRow as { creator_id: string }).creator_id !== userId) {
+        if ((bountyRow as { user_id: string }).user_id !== userId) {
           return jsonResponse({ error: 'Unauthorized to refund funds' }, 403);
         }
 
