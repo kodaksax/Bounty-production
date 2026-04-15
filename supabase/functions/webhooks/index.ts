@@ -451,27 +451,31 @@ Deno.serve(async (req: Request) => {
         const transfer = event.data.object as Stripe.Transfer;
         console.log(`[webhooks] Transfer failed: ${transfer.id}`);
 
-        // Read the existing retry_count before overwriting so we don't reset
-        // it on each failure event and inadvertently bypass the retry limit.
+        // Read the existing metadata so we can (a) preserve fields written by
+        // the retry endpoint (e.g. retry_count, retried_at) and (b) check
+        // whether the retry limit has been reached without double-incrementing
+        // retry_count (the retry endpoint already does that increment).
         const { data: existingTx } = await supabase
           .from('wallet_transactions')
           .select('metadata')
           .eq('stripe_transfer_id', transfer.id)
           .maybeSingle();
-        const currentRetries = (existingTx?.metadata as { retry_count?: number } | null)?.retry_count ?? 0;
-        const newRetryCount = currentRetries + 1;
-        const permanentlyFailed = newRetryCount >= MAX_TRANSFER_RETRIES;
+        const existingMetadata = (existingTx?.metadata as Record<string, unknown> | null) ?? {};
+        const currentRetries = (existingMetadata.retry_count as number | undefined) ?? 0;
+        const permanentlyFailed = currentRetries >= MAX_TRANSFER_RETRIES;
 
         const { data: tx } = await supabase
           .from('wallet_transactions')
           .update({
-            status: permanentlyFailed ? 'permanently_failed' : 'failed',
+            // wallet_transactions.status is constrained to ('pending','completed','failed').
+            // Encode permanent-failure state in metadata.transfer_status instead.
+            status: 'failed',
             metadata: {
+              ...existingMetadata,
               transfer_status: permanentlyFailed ? 'permanently_failed' : 'failed',
               // Stripe Transfer objects expose failure_code on the Transfer type
               failure_reason: (transfer as Stripe.Transfer & { failure_code?: string })
                 .failure_code,
-              retry_count: newRetryCount,
             },
           })
           .eq('stripe_transfer_id', transfer.id)
@@ -486,21 +490,49 @@ Deno.serve(async (req: Request) => {
           if (permanentlyFailed) {
             // Do NOT automatically refund — requires manual review.
             console.warn(
-              `[webhooks] Transfer ${transfer.id} permanently failed after ${newRetryCount} attempts for user ${txUserId}. Manual review required.`
+              `[webhooks] Transfer ${transfer.id} permanently failed after ${currentRetries} retries for user ${txUserId}. Manual review required.`
             );
-            const { error: notifError } = await supabase.from('notifications').insert({
-              user_id: txUserId,
-              type: 'payment',
-              title: 'Withdrawal Failed',
-              body: 'Your withdrawal could not be completed after multiple attempts. Please contact support.',
-              data: { transferId: transfer.id, retry_count: newRetryCount },
-            });
-            if (notifError) {
-              console.error('[webhooks] Failed to insert permanently_failed notification', {
+
+            // Check for an existing notification to keep this handler idempotent
+            // (Stripe may re-deliver the same webhook event on transient errors).
+            const { data: existingNotification, error: existingNotificationError } = await supabase
+              .from('notifications')
+              .select('id')
+              .eq('user_id', txUserId)
+              .eq('type', 'payment')
+              .eq('title', 'Withdrawal Failed')
+              .contains('data', { transferId: transfer.id })
+              .maybeSingle();
+
+            if (existingNotificationError) {
+              console.error('[webhooks] Failed to check for existing permanently_failed notification', {
                 userId: txUserId,
-                error: notifError,
+                transferId: transfer.id,
+                error: existingNotificationError,
               });
-              throw notifError;
+              throw existingNotificationError;
+            }
+
+            if (!existingNotification) {
+              const { error: notifError } = await supabase.from('notifications').insert({
+                user_id: txUserId,
+                type: 'payment',
+                title: 'Withdrawal Failed',
+                body: 'Your withdrawal could not be completed after multiple attempts. Please contact support.',
+                data: { transferId: transfer.id, retry_count: currentRetries },
+              });
+              if (notifError) {
+                console.error('[webhooks] Failed to insert permanently_failed notification', {
+                  userId: txUserId,
+                  transferId: transfer.id,
+                  error: notifError,
+                });
+                throw notifError;
+              }
+            } else {
+              console.log(
+                `[webhooks] Skipping duplicate permanently_failed notification for transfer ${transfer.id} and user ${txUserId}`
+              );
             }
           } else {
             const { error: rpcError } = await supabase.rpc('update_balance', {
@@ -520,7 +552,7 @@ Deno.serve(async (req: Request) => {
               }
             }
             console.log(
-              `[webhooks] Refunded $${refundAmount} to user ${txUserId} for failed transfer (retry ${newRetryCount}/${MAX_TRANSFER_RETRIES})`
+              `[webhooks] Refunded $${refundAmount} to user ${txUserId} for failed transfer (retries: ${currentRetries}/${MAX_TRANSFER_RETRIES})`
             );
           }
         }
