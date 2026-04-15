@@ -331,7 +331,12 @@ Deno.serve(async (req: Request) => {
       // POST /wallet/refund — return escrowed funds to a poster on cancellation.
       // Also previously Fastify-only and unreachable in production with Supabase.
       if (req.method === 'POST' && subPath === '/refund') {
-        let body: { bountyId?: unknown; reason?: unknown; idempotencyKey?: unknown };
+        let body: {
+          bountyId?: unknown;
+          reason?: unknown;
+          idempotencyKey?: unknown;
+          refundPercentage?: unknown;
+        };
         try {
           body = await req.json();
         } catch {
@@ -345,6 +350,10 @@ Deno.serve(async (req: Request) => {
             : 'Bounty cancelled';
         const idempotencyKey =
           typeof body.idempotencyKey === 'string' ? body.idempotencyKey.trim() : undefined;
+        // Clamp to (0, 100]; default to 100 (full refund) when not provided.
+        const rawRefundPct =
+          typeof body.refundPercentage === 'number' ? body.refundPercentage : 100;
+        const refundPercentage = Math.min(100, Math.max(0, rawRefundPct));
 
         if (!bountyId) return jsonResponse({ error: 'bountyId is required' }, 400);
 
@@ -386,10 +395,13 @@ Deno.serve(async (req: Request) => {
         if (escrowErr || !escrowTx)
           return jsonResponse({ error: 'Escrow transaction not found' }, 404);
 
-        const refundAmount = Math.abs((escrowTx as WalletTransaction).amount);
+        const escrowAmount = Math.abs((escrowTx as WalletTransaction).amount);
+        const refundAmount = Math.round(((escrowAmount * refundPercentage) / 100) * 100) / 100;
         const effectiveKey = idempotencyKey || `refund_${bountyId}_${userId}`;
 
-        // Insert refund transaction (credit)
+        // Insert refund transaction as 'pending' first; promote to 'completed' only after
+        // the balance update succeeds. This prevents an orphaned 'completed' record from
+        // permanently blocking future refund attempts if the balance update fails.
         const { data: refundTxRow, error: refundTxErr } = await supabase
           .from('wallet_transactions')
           .insert([
@@ -399,11 +411,13 @@ Deno.serve(async (req: Request) => {
               type: 'refund',
               amount: refundAmount,
               description: `Refund for bounty ${bountyId}: ${reason}`,
-              status: 'completed',
+              status: 'pending',
               metadata: {
                 bounty_id: bountyId,
                 escrow_transaction_id: (escrowTx as WalletTransaction).id,
                 reason,
+                refund_percentage: refundPercentage,
+                original_escrow_amount: escrowAmount,
                 refunded_at: new Date().toISOString(),
                 idempotency_key: effectiveKey,
               },
@@ -424,10 +438,17 @@ Deno.serve(async (req: Request) => {
           .single();
         if (profileFetchErr2 || !profileData2) {
           console.error('[wallet] fetch balance error before refund credit:', profileFetchErr2);
-          await supabase
+          const { error: rollbackErr1 } = await supabase
             .from('wallet_transactions')
             .delete()
             .eq('id', (refundTxRow as WalletTransaction).id);
+          if (rollbackErr1) {
+            console.error(
+              '[wallet] CRITICAL: failed to roll back pending refund tx after balance fetch error; tx id:',
+              (refundTxRow as WalletTransaction).id,
+              rollbackErr1
+            );
+          }
           return jsonResponse({ error: 'Failed to fetch balance for refund' }, 500);
         }
         const currentBalance2: number = (profileData2 as Profile | null)?.balance ?? 0;
@@ -440,11 +461,33 @@ Deno.serve(async (req: Request) => {
             '[wallet] balance credit error after refund, rolling back tx:',
             balanceErr2
           );
-          await supabase
+          const { error: rollbackErr2 } = await supabase
             .from('wallet_transactions')
             .delete()
             .eq('id', (refundTxRow as WalletTransaction).id);
+          if (rollbackErr2) {
+            console.error(
+              '[wallet] CRITICAL: failed to roll back pending refund tx after balance update error; tx id:',
+              (refundTxRow as WalletTransaction).id,
+              rollbackErr2
+            );
+          }
           return jsonResponse({ error: 'Failed to update balance' }, 500);
+        }
+
+        // Balance updated — promote the transaction to 'completed' atomically
+        const { error: confirmErr } = await supabase
+          .from('wallet_transactions')
+          .update({ status: 'completed' })
+          .eq('id', (refundTxRow as WalletTransaction).id);
+        if (confirmErr) {
+          // Balance was credited but the status promotion failed. Log for manual reconciliation;
+          // do not return an error to the caller since the funds have already moved.
+          console.error(
+            '[wallet] CRITICAL: balance credited but failed to mark refund tx completed; tx id:',
+            (refundTxRow as WalletTransaction).id,
+            confirmErr
+          );
         }
 
         return jsonResponse({

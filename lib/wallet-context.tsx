@@ -720,6 +720,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             body: JSON.stringify({
               bountyId: bountyIdStr,
               reason: `${refundPercentage}% refund`,
+              refundPercentage,
             }),
             timeout: API_TIMEOUTS.DEFAULT,
             retries: 0, // No retries for financial operations
