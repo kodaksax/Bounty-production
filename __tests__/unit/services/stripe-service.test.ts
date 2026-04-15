@@ -93,7 +93,7 @@ describe('Stripe Service', () => {
     it('should initialize only once', async () => {
       await stripeService.initialize();
       await stripeService.initialize();
-      
+
       // Should not throw and should be idempotent
       expect(true).toBe(true);
     });
@@ -123,21 +123,21 @@ describe('Stripe Service', () => {
     it('should detect card brand correctly', async () => {
       const visaCard = { ...validCardData, cardNumber: '4242424242424242' };
       const result = await stripeService.createPaymentMethod(visaCard);
-      
+
       expect(result.card.brand).toBe('visa');
     });
 
     it('should handle Mastercard', async () => {
       const mastercardData = { ...validCardData, cardNumber: '5555555555554444' };
       const result = await stripeService.createPaymentMethod(mastercardData);
-      
+
       expect(result.card.brand).toBe('mastercard');
       expect(result.card.last4).toBe('4444');
     });
 
     it('should include created timestamp', async () => {
       const result = await stripeService.createPaymentMethod(validCardData);
-      
+
       expect(result.created).toBeGreaterThan(0);
       expect(typeof result.created).toBe('number');
     });
@@ -149,7 +149,11 @@ describe('Stripe Service', () => {
       // fetchEdgeFunction when SUPABASE_ANON_KEY is set, as in CI)
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
-        text: async () => JSON.stringify({ clientSecret: 'pi_mock_secret_12345', paymentIntentId: 'pi_mock_67890' }),
+        text: async () =>
+          JSON.stringify({
+            clientSecret: 'pi_mock_secret_12345',
+            paymentIntentId: 'pi_mock_67890',
+          }),
       });
     });
 
@@ -186,21 +190,21 @@ describe('Stripe Service', () => {
         { amount: 75, currency: 'usd' }
       );
 
-      expect(performanceService.endMeasurement).toHaveBeenCalledWith(
-        'payment_initiate',
-        { success: true, amount: 75 }
-      );
+      expect(performanceService.endMeasurement).toHaveBeenCalledWith('payment_initiate', {
+        success: true,
+        amount: 75,
+      });
     });
 
     it('should use USD as default currency', async () => {
       const paymentIntent = await stripeService.createPaymentIntent(100);
-      
+
       expect(paymentIntent.currency).toBe('usd');
     });
 
     it('should handle different currencies', async () => {
       const paymentIntent = await stripeService.createPaymentIntent(100, 'eur');
-      
+
       expect(paymentIntent.currency).toBe('eur');
     });
 
@@ -258,20 +262,25 @@ describe('Stripe Service', () => {
 
     it('should handle slow network requests via invokePayments', async () => {
       // Mock a slow-but-within-timeout response (100ms, well under the 15s service timeout)
-      (global.fetch as jest.Mock).mockImplementation(() =>
-        new Promise((resolve) => {
-          setTimeout(() => resolve({
-            ok: true,
-            text: async () => JSON.stringify({ paymentMethods: [] }),
-          }), 100);
-        })
+      (global.fetch as jest.Mock).mockImplementation(
+        () =>
+          new Promise(resolve => {
+            setTimeout(
+              () =>
+                resolve({
+                  ok: true,
+                  text: async () => JSON.stringify({ paymentMethods: [] }),
+                }),
+              100
+            );
+          })
       );
 
       const authToken = 'test_token';
 
       // The method will wait for the network request via invokePayments
       const methodsPromise = stripeService.listPaymentMethods(authToken);
-      
+
       // For testing purposes, we'll verify it returns the result when it completes
       const methods = await methodsPromise;
       expect(Array.isArray(methods)).toBe(true);
@@ -285,26 +294,25 @@ describe('Stripe Service', () => {
 
       const authToken = 'test_token';
 
-      await expect(stripeService.listPaymentMethods(authToken))
-        .rejects
-        .toMatchObject({
-          message: expect.stringMatching(/Network request failed|error/i)
-        });
+      await expect(stripeService.listPaymentMethods(authToken)).rejects.toMatchObject({
+        message: expect.stringMatching(/Network request failed|error/i),
+      });
     });
 
     it('should successfully fetch payment methods within timeout', async () => {
       // Mock a fast successful response
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
-        text: async () => JSON.stringify({
-          paymentMethods: [
-            {
-              id: 'pm_test123',
-              card: { brand: 'visa', last4: '4242', exp_month: 12, exp_year: 2025 },
-              created: 1234567890,
-            },
-          ],
-        }),
+        text: async () =>
+          JSON.stringify({
+            paymentMethods: [
+              {
+                id: 'pm_test123',
+                card: { brand: 'visa', last4: '4242', exp_month: 12, exp_year: 2025 },
+                created: 1234567890,
+              },
+            ],
+          }),
       });
 
       const authToken = 'test_token';
@@ -350,11 +358,9 @@ describe('Stripe Service', () => {
 
       const authToken = 'invalid_token';
 
-      await expect(stripeService.listPaymentMethods(authToken))
-        .rejects
-        .toMatchObject({
-          message: expect.stringMatching(/payment methods request failed|401|unauthorized/i)
-        });
+      await expect(stripeService.listPaymentMethods(authToken)).rejects.toMatchObject({
+        message: expect.stringMatching(/payment methods request failed|401|unauthorized/i),
+      });
     });
 
     it('should surface 405 Method Not Allowed as a meaningful message', async () => {
@@ -366,25 +372,19 @@ describe('Stripe Service', () => {
 
       const authToken = 'test_token';
 
-      await expect(stripeService.listPaymentMethods(authToken))
-        .rejects
-        .toMatchObject({
-          message: expect.stringMatching(/405|method not allowed/i)
-        });
+      await expect(stripeService.listPaymentMethods(authToken)).rejects.toMatchObject({
+        message: expect.stringMatching(/405|method not allowed/i),
+      });
     });
 
     it('should handle network errors with friendly messages', async () => {
-      (global.fetch as jest.Mock).mockRejectedValue(
-        new Error('Network request failed')
-      );
+      (global.fetch as jest.Mock).mockRejectedValue(new Error('Network request failed'));
 
       const authToken = 'test_token';
 
-      await expect(stripeService.listPaymentMethods(authToken))
-        .rejects
-        .toMatchObject({
-          message: expect.stringMatching(/Unable to connect|connect|network/i)
-        });
+      await expect(stripeService.listPaymentMethods(authToken)).rejects.toMatchObject({
+        message: expect.stringMatching(/Unable to connect|connect|network/i),
+      });
     });
 
     it('should fall back to fetch when supabase.functions is unavailable', async () => {
@@ -395,9 +395,16 @@ describe('Stripe Service', () => {
 
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
-        text: async () => JSON.stringify({ paymentMethods: [
-          { id: 'pm_fallback', card: { brand: 'visa', last4: '1234', exp_month: 6, exp_year: 2027 }, created: 0 }
-        ]}),
+        text: async () =>
+          JSON.stringify({
+            paymentMethods: [
+              {
+                id: 'pm_fallback',
+                card: { brand: 'visa', last4: '1234', exp_month: 6, exp_year: 2027 },
+                created: 0,
+              },
+            ],
+          }),
       });
 
       try {
@@ -421,15 +428,16 @@ describe('Stripe Service', () => {
     it('should attach a payment method successfully', async () => {
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
-        text: async () => JSON.stringify({
-          success: true,
-          paymentMethod: {
-            id: 'pm_attach123',
-            type: 'card',
-            card: { brand: 'visa', last4: '4242', exp_month: 12, exp_year: 2026 },
-            created: 1234567890,
-          },
-        }),
+        text: async () =>
+          JSON.stringify({
+            success: true,
+            paymentMethod: {
+              id: 'pm_attach123',
+              type: 'card',
+              card: { brand: 'visa', last4: '4242', exp_month: 12, exp_year: 2026 },
+              created: 1234567890,
+            },
+          }),
       });
 
       const authToken = 'test_token';
@@ -445,9 +453,9 @@ describe('Stripe Service', () => {
     });
 
     it('should require an auth token', async () => {
-      await expect(stripeService.attachPaymentMethod('pm_test123'))
-        .rejects
-        .toMatchObject({ message: expect.stringMatching(/auth|required/i) });
+      await expect(stripeService.attachPaymentMethod('pm_test123')).rejects.toMatchObject({
+        message: expect.stringMatching(/auth|required/i),
+      });
       expect(supabase.functions.invoke).not.toHaveBeenCalled();
     });
 
@@ -458,9 +466,9 @@ describe('Stripe Service', () => {
         text: async () => JSON.stringify({ error: 'Payment method ID is required' }),
       });
 
-      await expect(stripeService.attachPaymentMethod('', 'test_token'))
-        .rejects
-        .toMatchObject({ message: expect.stringMatching(/400|payment method/i) });
+      await expect(stripeService.attachPaymentMethod('', 'test_token')).rejects.toMatchObject({
+        message: expect.stringMatching(/400|payment method/i),
+      });
     });
   });
 
@@ -498,8 +506,8 @@ describe('Stripe Service', () => {
     describe('presentApplePay', () => {
       it('should return error on non-iOS platforms', async () => {
         Platform.OS = 'android';
-        const result = await stripeService.presentApplePay(10.00);
-        
+        const result = await stripeService.presentApplePay(10.0);
+
         expect(result.success).toBe(false);
         expect(result.error).toMatch(/iOS/i);
         expect(result.errorCode).toBe('platform_not_supported');
@@ -507,8 +515,8 @@ describe('Stripe Service', () => {
 
       it('should return error when SDK is not available', async () => {
         Platform.OS = 'ios';
-        const result = await stripeService.presentApplePay(10.00);
-        
+        const result = await stripeService.presentApplePay(10.0);
+
         expect(result.success).toBe(false);
         expect(result.error).toBeDefined();
         expect(result.errorCode).toBeDefined();
@@ -517,7 +525,7 @@ describe('Stripe Service', () => {
       it('should enforce minimum amount of $0.50', async () => {
         Platform.OS = 'ios';
         const result = await stripeService.presentApplePay(0.49);
-        
+
         expect(result.success).toBe(false);
         expect(result.error).toMatch(/at least.*0\.50/i);
         expect(result.errorCode).toBe('invalid_amount');
@@ -526,7 +534,7 @@ describe('Stripe Service', () => {
       it('should validate amount is not zero', async () => {
         Platform.OS = 'ios';
         const result = await stripeService.presentApplePay(0);
-        
+
         expect(result.success).toBe(false);
         expect(result.error).toMatch(/at least.*0\.50/i);
         expect(result.errorCode).toBe('invalid_amount');
@@ -534,8 +542,8 @@ describe('Stripe Service', () => {
 
       it('should validate amount is not negative', async () => {
         Platform.OS = 'ios';
-        const result = await stripeService.presentApplePay(-5.00);
-        
+        const result = await stripeService.presentApplePay(-5.0);
+
         expect(result.success).toBe(false);
         expect(result.error).toMatch(/at least.*0\.50/i);
         expect(result.errorCode).toBe('invalid_amount');
@@ -543,7 +551,7 @@ describe('Stripe Service', () => {
 
       it('should accept valid amount above minimum', async () => {
         Platform.OS = 'ios';
-        const result = await stripeService.presentApplePay(1.00);
+        const result = await stripeService.presentApplePay(1.0);
         // Will fail due to SDK not available, but should pass amount validation
         expect(result).toHaveProperty('success');
         // Error should not be about amount
@@ -558,10 +566,10 @@ describe('Stripe Service', () => {
           { label: 'Item 1', amount: '10.00', type: 'final' as const },
           { label: 'Item 2', amount: '5.00', type: 'final' as const },
         ];
-        
+
         // Amount (20.00) doesn't match cart total (15.00)
-        const result = await stripeService.presentApplePay(20.00, 'Payment', customCartItems);
-        
+        const result = await stripeService.presentApplePay(20.0, 'Payment', customCartItems);
+
         expect(result.success).toBe(false);
         expect(result.error).toMatch(/match.*cart.*total/i);
         expect(result.errorCode).toBe('amount_mismatch');
@@ -573,9 +581,9 @@ describe('Stripe Service', () => {
           { label: 'Item 1', amount: '10.00', type: 'final' as const },
           { label: 'Item 2', amount: '5.00', type: 'final' as const },
         ];
-        
+
         // Amount matches cart total
-        const result = await stripeService.presentApplePay(15.00, 'Payment', customCartItems);
+        const result = await stripeService.presentApplePay(15.0, 'Payment', customCartItems);
         expect(result).toHaveProperty('success');
         // Error should not be about amount mismatch
         if (!result.success && result.errorCode) {
@@ -585,19 +593,19 @@ describe('Stripe Service', () => {
 
       it('should use default description if not provided', async () => {
         Platform.OS = 'ios';
-        const result = await stripeService.presentApplePay(10.00);
+        const result = await stripeService.presentApplePay(10.0);
         // Even though it will fail (SDK not available), it should process the default description
         expect(result).toHaveProperty('success');
       });
 
       it('should handle errors gracefully', async () => {
         Platform.OS = 'ios';
-        const result = await stripeService.presentApplePay(10.00);
-        
+        const result = await stripeService.presentApplePay(10.0);
+
         // Should always return a result object
         expect(result).toHaveProperty('success');
         expect(typeof result.success).toBe('boolean');
-        
+
         // If not successful, should have error info
         if (!result.success) {
           expect(result.error).toBeDefined();
@@ -621,20 +629,26 @@ describe('Stripe Service', () => {
       const error = new Error('Request took too long');
       error.name = 'TimeoutError';
       const result = stripeService.parseStripeError(error);
-      expect(result).toBe('Connection timed out. Please check your internet connection and try again.');
+      expect(result).toBe(
+        'Connection timed out. Please check your internet connection and try again.'
+      );
     });
 
     it('should handle timeout by message content', () => {
       const error = new Error('Connection timed out after 30 seconds');
       const result = stripeService.parseStripeError(error);
-      expect(result).toBe('Connection timed out. Please check your internet connection and try again.');
+      expect(result).toBe(
+        'Connection timed out. Please check your internet connection and try again.'
+      );
     });
 
     it('should handle AbortError', () => {
       const error = new Error('Request was aborted');
       error.name = 'AbortError';
       const result = stripeService.parseStripeError(error);
-      expect(result).toBe('Connection interrupted. Please check your internet connection and try again.');
+      expect(result).toBe(
+        'Connection interrupted. Please check your internet connection and try again.'
+      );
     });
 
     it('should handle NetworkError by name', () => {
@@ -659,13 +673,17 @@ describe('Stripe Service', () => {
     it('should detect test/live mode mismatch (live mode with test key)', () => {
       const error = new Error('No such setupintent: si_123 in live mode but using test mode key');
       const result = stripeService.parseStripeError(error);
-      expect(result).toBe('Payment configuration error: Your payment keys are in different modes. Please contact support or check your environment configuration.');
+      expect(result).toBe(
+        'Payment configuration error: Your payment keys are in different modes. Please contact support or check your environment configuration.'
+      );
     });
 
     it('should detect test/live mode mismatch (test mode with live key)', () => {
       const error = new Error('No such paymentintent: pi_123 in test mode but using live mode key');
       const result = stripeService.parseStripeError(error);
-      expect(result).toBe('Payment configuration error: Your payment keys are in different modes. Please contact support or check your environment configuration.');
+      expect(result).toBe(
+        'Payment configuration error: Your payment keys are in different modes. Please contact support or check your environment configuration.'
+      );
     });
 
     it('should return original message for unknown error types', () => {
@@ -690,14 +708,18 @@ describe('Stripe Service', () => {
       const error = new Error('Some random message');
       error.name = 'TimeoutError';
       const result = stripeService.parseStripeError(error);
-      expect(result).toBe('Connection timed out. Please check your internet connection and try again.');
+      expect(result).toBe(
+        'Connection timed out. Please check your internet connection and try again.'
+      );
     });
 
     it('should prioritize AbortError name over message', () => {
       const error = new Error('Network failed');
       error.name = 'AbortError';
       const result = stripeService.parseStripeError(error);
-      expect(result).toBe('Connection interrupted. Please check your internet connection and try again.');
+      expect(result).toBe(
+        'Connection interrupted. Please check your internet connection and try again.'
+      );
     });
   });
 
@@ -723,8 +745,15 @@ describe('Stripe Service', () => {
         expect.stringContaining('/payments/escrows/escrow-123/refund'),
         expect.objectContaining({ method: 'POST' })
       );
-      expect(performanceService.startMeasurement).toHaveBeenCalledWith('escrow_refund', 'payment_process', { escrowId: 'escrow-123' });
-      expect(performanceService.endMeasurement).toHaveBeenCalledWith('escrow_refund', expect.objectContaining({ success: true }));
+      expect(performanceService.startMeasurement).toHaveBeenCalledWith(
+        'escrow_refund',
+        'payment_process',
+        { escrowId: 'escrow-123' }
+      );
+      expect(performanceService.endMeasurement).toHaveBeenCalledWith(
+        'escrow_refund',
+        expect.objectContaining({ success: true })
+      );
     });
 
     it('should handle paymentIntent nested response format', async () => {
@@ -750,18 +779,280 @@ describe('Stripe Service', () => {
       });
 
       await expect(stripeService.refundEscrow('escrow-err')).rejects.toBeDefined();
-      expect(performanceService.endMeasurement).toHaveBeenCalledWith('escrow_refund', expect.objectContaining({ success: false, status: 500 }));
+      expect(performanceService.endMeasurement).toHaveBeenCalledWith(
+        'escrow_refund',
+        expect.objectContaining({ success: false, status: 500 })
+      );
     });
 
     it('should throw on network error', async () => {
       (global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
 
       await expect(stripeService.refundEscrow('escrow-net')).rejects.toBeDefined();
-      expect(performanceService.endMeasurement).toHaveBeenCalledWith('escrow_refund', expect.objectContaining({ success: false }));
+      expect(performanceService.endMeasurement).toHaveBeenCalledWith(
+        'escrow_refund',
+        expect.objectContaining({ success: false })
+      );
     });
 
     it('should throw validation error when escrowId is empty', async () => {
       await expect(stripeService.refundEscrow('')).rejects.toBeDefined();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  describe('detachPaymentMethod', () => {
+    it('should successfully detach a payment method', async () => {
+      // fetchEdgeFunction calls response.text() (not .json()), so the mock must provide text()
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        text: async () => '{}',
+      });
+
+      await expect(
+        stripeService.detachPaymentMethod('pm_test_123', 'auth-token')
+      ).resolves.toBeUndefined();
+    });
+
+    it('should throw when authToken is missing', async () => {
+      await expect(stripeService.detachPaymentMethod('pm_test_123')).rejects.toBeDefined();
+    });
+
+    it('should throw on network error', async () => {
+      (global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
+      await expect(
+        stripeService.detachPaymentMethod('pm_error', 'auth-token')
+      ).rejects.toBeDefined();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  describe('createConnectAccount', () => {
+    it('should create a Connect account successfully', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ accountId: 'acct_test123' }),
+      });
+
+      const result = await stripeService.createConnectAccount(
+        'user-1',
+        'test@example.com',
+        'auth-token'
+      );
+      expect(result.accountId).toBe('acct_test123');
+      expect(performanceService.startMeasurement).toHaveBeenCalledWith(
+        'connect_account_create',
+        'payment_process',
+        expect.any(Object)
+      );
+      expect(performanceService.endMeasurement).toHaveBeenCalledWith(
+        'connect_account_create',
+        expect.objectContaining({ success: true })
+      );
+    });
+
+    it('should handle account id nested in account.id field', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ account: { id: 'acct_nested' } }),
+      });
+
+      const result = await stripeService.createConnectAccount('user-2', 'other@example.com');
+      expect(result.accountId).toBe('acct_nested');
+    });
+
+    it('should throw validation error when userId or email missing', async () => {
+      await expect(
+        stripeService.createConnectAccount('', 'test@example.com')
+      ).rejects.toBeDefined();
+      await expect(stripeService.createConnectAccount('user-1', '')).rejects.toBeDefined();
+    });
+
+    it('should throw when API response is not ok', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 500 });
+      await expect(
+        stripeService.createConnectAccount('user-1', 'test@example.com', 'token')
+      ).rejects.toBeDefined();
+      expect(performanceService.endMeasurement).toHaveBeenCalledWith(
+        'connect_account_create',
+        expect.objectContaining({ success: false })
+      );
+    });
+
+    it('should throw when response is missing accountId', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({}),
+      });
+      await expect(
+        stripeService.createConnectAccount('user-1', 'test@example.com')
+      ).rejects.toBeDefined();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  describe('createConnectAccountLink', () => {
+    it('should return the onboarding URL', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ url: 'https://connect.stripe.com/setup/e/test' }),
+      });
+
+      const url = await stripeService.createConnectAccountLink('acct_test', 'auth-token');
+      expect(url).toBe('https://connect.stripe.com/setup/e/test');
+    });
+
+    it('should accept URL nested in accountLink.url', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ accountLink: { url: 'https://connect.stripe.com/setup/e/nested' } }),
+      });
+
+      const url = await stripeService.createConnectAccountLink('acct_test');
+      expect(url).toBe('https://connect.stripe.com/setup/e/nested');
+    });
+
+    it('should throw validation error when accountId is empty', async () => {
+      await expect(stripeService.createConnectAccountLink('')).rejects.toBeDefined();
+    });
+
+    it('should throw when API response is not ok', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 400 });
+      await expect(
+        stripeService.createConnectAccountLink('acct_test', 'token')
+      ).rejects.toBeDefined();
+    });
+
+    it('should throw when URL is missing from response', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ message: 'no url here' }),
+      });
+      await expect(stripeService.createConnectAccountLink('acct_test')).rejects.toBeDefined();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  describe('createEscrow', () => {
+    const validParams = {
+      bountyId: 'bounty-1',
+      amount: 50,
+      posterId: 'poster-1',
+      hunterId: 'hunter-1',
+    };
+
+    it('should create escrow and return escrow details', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          escrowId: 'escrow-100',
+          paymentIntentClientSecret: 'pi_test_secret_abc',
+          paymentIntentId: 'pi_test',
+          status: 'requires_payment_method',
+        }),
+      });
+
+      const result = await stripeService.createEscrow(validParams, 'auth-token');
+      expect(result.escrowId).toBe('escrow-100');
+      expect(result.paymentIntentClientSecret).toBe('pi_test_secret_abc');
+      expect(performanceService.endMeasurement).toHaveBeenCalledWith(
+        'escrow_create',
+        expect.objectContaining({ success: true })
+      );
+    });
+
+    it('should derive paymentIntentId from clientSecret when not provided', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          escrowId: 'escrow-101',
+          paymentIntentClientSecret: 'pi_derived_secret_xyz',
+        }),
+      });
+
+      const result = await stripeService.createEscrow(validParams);
+      expect(result.escrowId).toBe('escrow-101');
+      expect(result.paymentIntentId).toBe('pi_derived');
+    });
+
+    it('should throw validation error when params are invalid', async () => {
+      await expect(stripeService.createEscrow({ ...validParams, amount: 0 })).rejects.toBeDefined();
+      await expect(
+        stripeService.createEscrow({ ...validParams, bountyId: '' })
+      ).rejects.toBeDefined();
+    });
+
+    it('should throw when API response is not ok', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 402 });
+      await expect(stripeService.createEscrow(validParams, 'token')).rejects.toBeDefined();
+    });
+
+    it('should throw when escrowId or clientSecret missing from response', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ status: 'pending' }), // missing escrowId and clientSecret
+      });
+      await expect(stripeService.createEscrow(validParams)).rejects.toBeDefined();
+    });
+
+    it('should throw on network error', async () => {
+      (global.fetch as jest.Mock).mockRejectedValue(new Error('Network down'));
+      await expect(stripeService.createEscrow(validParams)).rejects.toBeDefined();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  describe('releaseEscrow', () => {
+    it('should release escrow successfully', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          transferId: 'tr_test_release',
+          paymentIntentId: 'pi_test_release',
+          status: 'succeeded',
+        }),
+      });
+
+      const result = await stripeService.releaseEscrow('escrow-rel-1', 'auth-token');
+      expect(result.transferId).toBe('tr_test_release');
+      expect(result.paymentIntentId).toBe('pi_test_release');
+      expect(performanceService.endMeasurement).toHaveBeenCalledWith(
+        'escrow_release',
+        expect.objectContaining({ success: true })
+      );
+    });
+
+    it('should handle nested transfer and paymentIntent fields', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          transfer: { id: 'tr_nested' },
+          paymentIntent: { id: 'pi_nested' },
+          status: 'succeeded',
+        }),
+      });
+
+      const result = await stripeService.releaseEscrow('escrow-rel-2');
+      expect(result.transferId).toBe('tr_nested');
+      expect(result.paymentIntentId).toBe('pi_nested');
+    });
+
+    it('should throw validation error when escrowId is empty', async () => {
+      await expect(stripeService.releaseEscrow('')).rejects.toBeDefined();
+    });
+
+    it('should throw on API error response', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 404 });
+      await expect(stripeService.releaseEscrow('escrow-not-found', 'token')).rejects.toBeDefined();
+      expect(performanceService.endMeasurement).toHaveBeenCalledWith(
+        'escrow_release',
+        expect.objectContaining({ success: false })
+      );
+    });
+
+    it('should throw on network error', async () => {
+      (global.fetch as jest.Mock).mockRejectedValue(new Error('Network failure'));
+      await expect(stripeService.releaseEscrow('escrow-net-err')).rejects.toBeDefined();
     });
   });
 });

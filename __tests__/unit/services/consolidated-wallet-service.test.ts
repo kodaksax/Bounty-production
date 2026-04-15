@@ -1096,6 +1096,98 @@ describe('Consolidated Wallet Service', () => {
   });
 
   // =========================================================================
+  // createWithdrawal — additional edge cases for uncovered error paths
+  // =========================================================================
+  describe('createWithdrawal (additional error paths)', () => {
+    it('logs error but does not rethrow when marking tx-failed itself throws', async () => {
+      // Stripe transfer fails; the subsequent UPDATE to mark the tx as failed
+      // also throws (not just returns an error). Covers the inner catch block
+      // that calls logger.error('[WalletService] Failed to mark withdrawal transaction as failed').
+      const pendingTx = {
+        id: 'tx_mark_fail_throws',
+        user_id: 'u1',
+        type: 'withdrawal',
+        amount: -5000,
+        metadata: {},
+      };
+
+      const admin = makeAdmin(
+        [
+          { data: pendingTx, error: null }, // insert pending tx
+          Promise.reject(new Error('DB connection lost')), // mark-failed UPDATE throws
+          { error: null }, // balance rollback
+        ],
+        [
+          { data: null, error: null }, // updateBalance deduction
+          { data: null, error: null }, // updateBalance rollback
+        ]
+      );
+
+      mockStripeTransfersCreate.mockRejectedValueOnce(new Error('Stripe timeout'));
+      const svc = buildService(admin);
+
+      // Should rethrow Stripe error; mark-failed failure is swallowed
+      await expect(svc.createWithdrawal('u1', 5000, 'acct_x')).rejects.toThrow('Stripe timeout');
+    });
+
+    it('logs CRITICAL error when balance rollback throws and flag update also fails', async () => {
+      const pendingTx = {
+        id: 'tx_rollback_also_flag_fail',
+        user_id: 'u1',
+        type: 'withdrawal',
+        amount: -5000,
+        metadata: {},
+      };
+
+      const admin = makeAdmin(
+        [
+          { data: pendingTx, error: null }, // insert pending tx
+          { error: null }, // mark-failed succeeds
+          // profiles select in fallback updateBalance → raises an error
+          { data: null, error: { message: 'db down', code: '500' } },
+          // flag update returns an error (not throws) — covers flagError branch
+          { error: { message: 'flag update failed' } },
+        ],
+        [
+          { data: null, error: null }, // deduct balance via RPC
+          { data: null, error: { code: 'PGRST202', message: 'function not found' } }, // rollback RPC → fallback path
+        ]
+      );
+
+      mockStripeTransfersCreate.mockRejectedValueOnce(new Error('Stripe transfer failed'));
+      const svc = buildService(admin);
+      await expect(svc.createWithdrawal('u1', 5000, 'acct_x')).rejects.toThrow(
+        'Stripe transfer failed'
+      );
+
+      // Let fire-and-forget flag update settle
+      await new Promise<void>(resolve => setImmediate(resolve));
+    });
+  });
+
+  // =========================================================================
+  // getBalance — fire-and-forget reconcile catch path
+  // =========================================================================
+  describe('getBalance (reconcile catch path)', () => {
+    it('logs error when fire-and-forget reconcile update chain throws (not just returns error)', async () => {
+      // The reconcile update chain rejects (throws) instead of returning { error }.
+      // This covers the .catch() handler after the fire-and-forget .then() call.
+      const admin = makeAdmin([
+        { data: { balance: 0 }, error: null }, // profile balance = 0
+        { data: [{ amount: 5000 }], error: null }, // derived from transactions
+        Promise.reject(new Error('network timeout')), // reconcile update chain THROWS
+      ]);
+      const svc = buildService(admin);
+
+      // Should still resolve successfully (fire-and-forget)
+      await expect(svc.getBalance('user1')).resolves.toBeDefined();
+
+      // Flush micro-tasks so the catch handler fires
+      await new Promise<void>(resolve => setImmediate(resolve));
+    });
+  });
+
+  // =========================================================================
   // recordPlatformFee
   // =========================================================================
   describe('recordPlatformFee', () => {
