@@ -742,28 +742,44 @@ Deno.serve(async (req: Request) => {
         const refundAmount = Math.abs(txRow.amount);
         const txUserId = txRow.user_id;
 
-        // Always refund the debited balance — it was decremented when the transfer was
-        // initiated and must be restored on any permanent or temporary failure, matching
-        // the behaviour of the Express server implementation.
-        const { error: rpcError } = await supabase.rpc('update_balance', {
-          p_user_id: txUserId,
-          p_amount: refundAmount,
-        });
-        if (rpcError) {
-          const { error: retryError } = await supabase.rpc('update_balance', {
+        // Idempotency guard: if transfer_status was already 'failed' or
+        // 'permanently_failed' in the DB before this execution's UPDATE, a prior
+        // invocation of this handler already issued the refund. Stripe may re-deliver
+        // the same event (e.g. if a subsequent step threw after the refund was issued),
+        // and re-running update_balance would credit the user twice. Skip the RPC and
+        // fall through to the notification idempotency check instead.
+        const refundAlreadyIssued =
+          existingMetadata.transfer_status === 'failed' ||
+          existingMetadata.transfer_status === 'permanently_failed';
+
+        if (refundAlreadyIssued) {
+          console.log(
+            `[webhooks] Skipping duplicate refund for transfer ${transfer.id} — balance already restored in a prior invocation`
+          );
+        } else {
+          // Refund the debited balance — it was decremented when the transfer was
+          // initiated and must be restored on any permanent or temporary failure,
+          // matching the behaviour of the Express server implementation.
+          const { error: rpcError } = await supabase.rpc('update_balance', {
             p_user_id: txUserId,
             p_amount: refundAmount,
           });
-          if (retryError) {
-            console.error(
-              '[webhooks] Atomic balance update for transfer refund failed — letting Stripe retry'
-            );
-            throw retryError;
+          if (rpcError) {
+            const { error: retryError } = await supabase.rpc('update_balance', {
+              p_user_id: txUserId,
+              p_amount: refundAmount,
+            });
+            if (retryError) {
+              console.error(
+                '[webhooks] Atomic balance update for transfer refund failed — letting Stripe retry'
+              );
+              throw retryError;
+            }
           }
+          console.log(
+            `[webhooks] Refunded $${refundAmount} to user ${txUserId} for failed transfer (retries: ${currentRetries}/${MAX_TRANSFER_RETRIES})`
+          );
         }
-        console.log(
-          `[webhooks] Refunded $${refundAmount} to user ${txUserId} for failed transfer (retries: ${currentRetries}/${MAX_TRANSFER_RETRIES})`
-        );
 
         if (permanentlyFailed) {
           console.warn(

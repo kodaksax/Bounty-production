@@ -153,7 +153,9 @@ describe('DisputeService', () => {
         updated_at: new Date().toISOString(),
       };
 
-      const { cancellationService: mockCancellationService } = require('../../lib/services/cancellation-service');
+      const {
+        cancellationService: mockCancellationService,
+      } = require('../../lib/services/cancellation-service');
       (mockCancellationService.getCancellationById as jest.Mock).mockResolvedValue({
         id: 'cancel-456',
         bountyId: 'bounty-456',
@@ -182,11 +184,7 @@ describe('DisputeService', () => {
       // Simulate hold failure
       mockRpc.mockResolvedValue({ data: null, error: { message: 'RPC error', code: 'P0001' } });
 
-      const dispute = await disputeService.createDispute(
-        'cancel-456',
-        'user-123',
-        'Hold test'
-      );
+      const dispute = await disputeService.createDispute('cancel-456', 'user-123', 'Hold test');
 
       expect(dispute).toBeNull();
       expect(mockDelete).toHaveBeenCalled();
@@ -816,7 +814,7 @@ describe('DisputeService', () => {
       expect(result).toBe(true);
     });
 
-    it('returns false when DB update fails', async () => {
+    it('returns false when DB update fails (non-terminal status)', async () => {
       // The service catches all errors and returns false
       mockFrom.mockReturnValue({
         update: jest.fn().mockReturnValue({
@@ -824,8 +822,19 @@ describe('DisputeService', () => {
         }),
       });
 
-      const result = await disputeService.updateDisputeStatus('dispute-upd', 'resolved');
+      const result = await disputeService.updateDisputeStatus('dispute-upd', 'under_review');
       expect(result).toBe(false);
+    });
+
+    it('calls fn_close_dispute_hold for resolved status', async () => {
+      mockRpc.mockResolvedValueOnce({ error: null });
+
+      const result = await disputeService.updateDisputeStatus('dispute-upd', 'resolved');
+      expect(mockRpc).toHaveBeenCalledWith(
+        'fn_close_dispute_hold',
+        expect.objectContaining({ p_new_status: 'resolved' })
+      );
+      expect(result).toBe(true);
     });
   });
 

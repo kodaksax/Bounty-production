@@ -1098,7 +1098,7 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
         // surface a CRITICAL alert below instead of silently dropping the refund.
         let tx = null;
         if (existingTx?.id) {
-          ({ data: tx } = await supabase
+          const { data: updateData, error: updateError } = await supabase
             .from('wallet_transactions')
             .update({
               // wallet_transactions.status is constrained to ('pending','completed','failed').
@@ -1113,7 +1113,15 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
             .eq('id', existingTx.id)
             .eq('stripe_transfer_id', transfer.id) // optimistic-lock guard
             .select()
-            .single());
+            .single();
+
+          // PGRST116 means zero rows matched — the optimistic-lock guard fired
+          // (retry endpoint replaced stripe_transfer_id between SELECT and UPDATE).
+          // Any other error is a real database problem; surface it immediately.
+          if (updateError && updateError.code !== 'PGRST116') {
+            throw updateError;
+          }
+          tx = updateData;
         }
 
         if (!tx && existingTx?.id) {
