@@ -13,13 +13,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import type { Href } from 'expo-router';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../../components/ui/branding-logo';
 import { useAuthContext } from '../../../hooks/use-auth-context';
@@ -56,7 +50,8 @@ export default function ConnectReturnScreen() {
         throw new Error(`Verification failed: ${res.status}`);
       }
 
-      const data: { onboarded?: boolean; chargesEnabled?: boolean; payoutsEnabled?: boolean } = await res.json();
+      const data: { onboarded?: boolean; chargesEnabled?: boolean; payoutsEnabled?: boolean } =
+        await res.json();
       const isOnboarded = !!(data.onboarded ?? (data.chargesEnabled && data.payoutsEnabled));
       setStatus(isOnboarded ? 'success' : 'pending');
     } catch (err) {
@@ -73,7 +68,11 @@ export default function ConnectReturnScreen() {
   }, [authLoading, verifyOnboarding]);
 
   const handleGoToWallet = () => {
-    try { markInitialNavigationDone(); } catch { /* ignore */ }
+    try {
+      markInitialNavigationDone();
+    } catch {
+      /* ignore */
+    }
     router.replace('/tabs/wallet-screen' as Href);
   };
 
@@ -88,9 +87,7 @@ export default function ConnectReturnScreen() {
           <View style={styles.centerContent}>
             <ActivityIndicator size="large" color="#a7f3d0" />
             <Text style={styles.title}>Verifying Account</Text>
-            <Text style={styles.description}>
-              Checking your Stripe account status…
-            </Text>
+            <Text style={styles.description}>Checking your Stripe account status…</Text>
           </View>
         );
 
@@ -102,7 +99,8 @@ export default function ConnectReturnScreen() {
             </View>
             <Text style={styles.title}>Account Verified!</Text>
             <Text style={styles.description}>
-              Your account is set up and ready to receive payouts. Earnings from completed bounties will be transferred to your bank.
+              Your account is set up and ready to receive payouts. Earnings from completed bounties
+              will be transferred to your bank.
             </Text>
             <TouchableOpacity style={styles.primaryButton} onPress={handleGoToWallet}>
               <Text style={styles.primaryButtonText}>Go to Wallet</Text>
@@ -119,7 +117,9 @@ export default function ConnectReturnScreen() {
             </View>
             <Text style={styles.title}>Verification Pending</Text>
             <Text style={styles.description}>
-              {"Stripe is still reviewing your information. This usually takes a few minutes. You'll be able to withdraw once your account is approved."}
+              {
+                "Stripe is still reviewing your information. This usually takes a few minutes. You'll be able to withdraw once your account is approved."
+              }
             </Text>
             <TouchableOpacity style={styles.primaryButton} onPress={handleGoToWallet}>
               <Text style={styles.primaryButtonText}>Go to Wallet</Text>
@@ -163,9 +163,7 @@ export default function ConnectReturnScreen() {
       <View style={styles.brandingHeader}>
         <BrandingLogo size="large" />
       </View>
-      <View style={styles.content}>
-        {renderContent()}
-      </View>
+      <View style={styles.content}>{renderContent()}</View>
     </View>
   );
 }

@@ -225,82 +225,84 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           if (mountedRef.current) {
             setBalance(resolvedBalance);
 
-          // Update payout failure state from API response
-          setPayoutFailed(!!balanceData.payoutFailedAt);
-          setPayoutFailureCode(
-            typeof balanceData.payoutFailureCode === 'string' ? balanceData.payoutFailureCode : null
-          );
-
-          try {
-            await persist(resolvedBalance);
-          } catch (persistError) {
-            console.error('[wallet] Failed to persist balance', persistError);
-          }
-        }
-
-        // Fetch transactions from API with timeout and retry
-        const txResponse = await fetchWithTimeout(
-          `${FINANCIAL_API_BASE_URL}/wallet/transactions?limit=100`,
-          {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
-              ...(config.supabase.anonKey ? { apikey: config.supabase.anonKey } : {}),
-            },
-            timeout: API_TIMEOUTS.DEFAULT,
-            retries: 2,
-          }
-        );
-
-        if (txResponse.headers?.get?.('X-Deprecated') === 'true') {
-          console.warn(
-            '[API] Received X-Deprecated header on GET /wallet/transactions — this server surface is deprecated. ' +
-              'Please ensure EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL is set so requests ' +
-              'route to the Supabase Edge Function.'
-          );
-        }
-
-        // Transaction types that represent outflow (money leaving the user's wallet)
-        const OUTFLOW_TYPES = ['escrow', 'withdrawal', 'bounty_posted'];
-
-        if (txResponse.ok && mountedRef.current) {
-          const txData = await txResponse.json();
-          if (txData.transactions && Array.isArray(txData.transactions)) {
-            // Map API transactions to local format
-            const mappedTransactions: WalletTransactionRecord[] = txData.transactions.map(
-              (tx: any) => ({
-                id: tx.id,
-                type: tx.type as WalletTransactionType,
-                // Use centralized config for transaction sign
-                amount: OUTFLOW_TYPES.includes(tx.type)
-                  ? -Math.abs(tx.amount)
-                  : Math.abs(tx.amount),
-                date: new Date(tx.date),
-                details: {
-                  title: tx.details?.title,
-                  method: tx.details?.method,
-                  status: tx.details?.status,
-                  bounty_id: tx.details?.bounty_id,
-                },
-              })
+            // Update payout failure state from API response
+            setPayoutFailed(!!balanceData.payoutFailedAt);
+            setPayoutFailureCode(
+              typeof balanceData.payoutFailureCode === 'string'
+                ? balanceData.payoutFailureCode
+                : null
             );
 
-            // Merge inside the setTransactions updater so the merge always runs
-            // against the latest state, not a potentially stale closed-over snapshot.
-            // This also makes refreshFromApi safe to call from the mount effect
-            // whose dependency array is [] (initial closure has transactions = []).
-            if (mountedRef.current) {
-              setTransactions(prev => {
-                const apiTxIds = new Set(mappedTransactions.map(tx => tx.id));
-                const localOnlyTx = prev.filter(tx => !apiTxIds.has(tx.id));
-                const mergedTransactions = [...mappedTransactions, ...localOnlyTx];
-                mergedTransactions.sort((a, b) => b.date.getTime() - a.date.getTime());
-                persistTransactions(mergedTransactions); // fire-and-forget inside updater
-                return mergedTransactions;
-              });
+            try {
+              await persist(resolvedBalance);
+            } catch (persistError) {
+              console.error('[wallet] Failed to persist balance', persistError);
             }
           }
-        }
+
+          // Fetch transactions from API with timeout and retry
+          const txResponse = await fetchWithTimeout(
+            `${FINANCIAL_API_BASE_URL}/wallet/transactions?limit=100`,
+            {
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+                ...(config.supabase.anonKey ? { apikey: config.supabase.anonKey } : {}),
+              },
+              timeout: API_TIMEOUTS.DEFAULT,
+              retries: 2,
+            }
+          );
+
+          if (txResponse.headers?.get?.('X-Deprecated') === 'true') {
+            console.warn(
+              '[API] Received X-Deprecated header on GET /wallet/transactions — this server surface is deprecated. ' +
+                'Please ensure EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL is set so requests ' +
+                'route to the Supabase Edge Function.'
+            );
+          }
+
+          // Transaction types that represent outflow (money leaving the user's wallet)
+          const OUTFLOW_TYPES = ['escrow', 'withdrawal', 'bounty_posted'];
+
+          if (txResponse.ok && mountedRef.current) {
+            const txData = await txResponse.json();
+            if (txData.transactions && Array.isArray(txData.transactions)) {
+              // Map API transactions to local format
+              const mappedTransactions: WalletTransactionRecord[] = txData.transactions.map(
+                (tx: any) => ({
+                  id: tx.id,
+                  type: tx.type as WalletTransactionType,
+                  // Use centralized config for transaction sign
+                  amount: OUTFLOW_TYPES.includes(tx.type)
+                    ? -Math.abs(tx.amount)
+                    : Math.abs(tx.amount),
+                  date: new Date(tx.date),
+                  details: {
+                    title: tx.details?.title,
+                    method: tx.details?.method,
+                    status: tx.details?.status,
+                    bounty_id: tx.details?.bounty_id,
+                  },
+                })
+              );
+
+              // Merge inside the setTransactions updater so the merge always runs
+              // against the latest state, not a potentially stale closed-over snapshot.
+              // This also makes refreshFromApi safe to call from the mount effect
+              // whose dependency array is [] (initial closure has transactions = []).
+              if (mountedRef.current) {
+                setTransactions(prev => {
+                  const apiTxIds = new Set(mappedTransactions.map(tx => tx.id));
+                  const localOnlyTx = prev.filter(tx => !apiTxIds.has(tx.id));
+                  const mergedTransactions = [...mappedTransactions, ...localOnlyTx];
+                  mergedTransactions.sort((a, b) => b.date.getTime() - a.date.getTime());
+                  persistTransactions(mergedTransactions); // fire-and-forget inside updater
+                  return mergedTransactions;
+                });
+              }
+            }
+          }
         }
       } catch (error) {
         const errorMessage = getNetworkErrorMessage(error);

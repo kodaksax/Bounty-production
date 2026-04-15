@@ -24,7 +24,11 @@ export default function ConnectRefreshScreen() {
   const insets = useSafeAreaInsets();
 
   const handleRestartSetup = () => {
-    try { markInitialNavigationDone(); } catch { /* ignore */ }
+    try {
+      markInitialNavigationDone();
+    } catch {
+      /* ignore */
+    }
     // Navigate to the wallet/withdraw area where onboarding can be restarted
     router.replace('/tabs/wallet-screen' as Href);
   };
@@ -42,13 +46,16 @@ export default function ConnectRefreshScreen() {
 
         <Text style={styles.title}>Onboarding Link Expired</Text>
         <Text style={styles.description}>
-          Your Stripe onboarding link has expired. Please return to the app and start the setup again to get a fresh link.
+          Your Stripe onboarding link has expired. Please return to the app and start the setup
+          again to get a fresh link.
         </Text>
 
         <View style={styles.infoBox}>
           <MaterialIcons name="info-outline" size={20} color="#a7f3d0" />
           <Text style={styles.infoText}>
-            {"This happens automatically after the link's security window closes. It only takes a moment to get a new one."}
+            {
+              "This happens automatically after the link's security window closes. It only takes a moment to get a new one."
+            }
           </Text>
         </View>
 
