@@ -284,7 +284,7 @@ export async function migrateSecureStorageKeys(): Promise<void> {
       try {
         // Read directly from SecureStore using the legacy colon-containing key.
         const value = await SecureStore.getItemAsync(oldKey, SECURE_OPTS);
-        if (value !== null && value !== undefined) {
+        if (value !== null) {
           // Write under the sanitized key name.
           await SecureStore.setItemAsync(newKey, value, SECURE_OPTS);
           // Remove the old key so we don't leave stale data in the Keychain.
