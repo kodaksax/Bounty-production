@@ -8,27 +8,33 @@
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
-import React, { useCallback, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { API_BASE_URL } from '../../lib/config/api';
+import { useAuthContext } from '../../hooks/use-auth-context';
 import { config } from '../../lib/config';
+import { API_BASE_URL } from '../../lib/config/api';
 import { openUrlInBrowser } from '../../lib/utils/browser';
 import { useWallet } from '../../lib/wallet-context';
-import { useAuthContext } from '../../hooks/use-auth-context';
 
 // Human-friendly messages for well-known Stripe failure codes.
 // https://stripe.com/docs/api/payouts/object#payout_object-failure_code
 const FAILURE_CODE_MESSAGES: Record<string, string> = {
   account_closed: 'Your bank account has been closed. Please add a new one.',
   account_frozen: 'Your bank account is frozen. Please contact your bank.',
-  bank_account_restricted: 'Your bank account has restrictions that prevent payouts. Please contact your bank.',
+  bank_account_restricted:
+    'Your bank account has restrictions that prevent payouts. Please contact your bank.',
   bank_ownership_changed: 'The bank account ownership has changed. Please reconnect your account.',
-  could_not_process: 'Your bank was unable to process the payout. Please try again or update your details.',
-  debit_not_authorized: 'Debits are not authorized for this account. Please check your bank settings.',
+  could_not_process:
+    'Your bank was unable to process the payout. Please try again or update your details.',
+  debit_not_authorized:
+    'Debits are not authorized for this account. Please check your bank settings.',
   declined: 'Your bank declined the payout. Please contact your bank for details.',
-  incorrect_account_holder_name: 'The account holder name does not match. Please update your details.',
-  incorrect_account_holder_address: 'The account holder address does not match. Please update your details.',
-  incorrect_account_holder_tax_id: 'The tax ID associated with your account is incorrect. Please update your details.',
+  incorrect_account_holder_name:
+    'The account holder name does not match. Please update your details.',
+  incorrect_account_holder_address:
+    'The account holder address does not match. Please update your details.',
+  incorrect_account_holder_tax_id:
+    'The tax ID associated with your account is incorrect. Please update your details.',
   insufficient_funds: 'Your Stripe balance was insufficient. This should resolve automatically.',
   invalid_account_number: 'The bank account number is invalid. Please update your details.',
   invalid_currency: 'The currency is not supported for your bank account.',
@@ -46,7 +52,7 @@ function getFailureMessage(failureCode: string | null, fallback?: string): strin
 }
 
 export function PayoutFailedBanner() {
-  const { payoutFailed, payoutFailureCode, refreshFromApi } = useWallet();
+  const { payoutFailed, payoutFailureCode, refreshFromApi, clearPayoutFailure } = useWallet();
   const { session } = useAuthContext();
   const [isFixing, setIsFixing] = useState(false);
   const [fixError, setFixError] = useState<string | null>(null);
@@ -62,7 +68,7 @@ export function PayoutFailedBanner() {
       const response = await fetch(`${API_BASE_URL}/connect/create-account-link`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
           ...(config.supabase.anonKey ? { apikey: config.supabase.anonKey } : {}),
         },
@@ -71,7 +77,9 @@ export function PayoutFailedBanner() {
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
-        throw new Error((errData as { error?: string }).error || 'Failed to create account update link');
+        throw new Error(
+          (errData as { error?: string }).error || 'Failed to create account update link'
+        );
       }
 
       const { url } = await response.json();
@@ -92,7 +100,7 @@ export function PayoutFailedBanner() {
       const verifyResponse = await fetch(`${API_BASE_URL}/connect/verify-onboarding`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
           ...(config.supabase.anonKey ? { apikey: config.supabase.anonKey } : {}),
         },
@@ -107,17 +115,32 @@ export function PayoutFailedBanner() {
 
       const verifyData = await verifyResponse.json();
 
-      // Refresh wallet balance so the context picks up the cleared flag
+      // If onboarding verification indicates payouts are enabled, proactively
+      // clear the wallet payout failure state. This helps when `refreshFromApi`
+      // fails transiently (network error) so the banner does not persist after
+      // the user successfully updates their payment details.
+      if (verifyData.payoutsEnabled) {
+        try {
+          clearPayoutFailure();
+        } catch {
+          // swallow - non-critical UI update
+        }
+      }
+
+      // Refresh wallet balance so the context picks up the cleared flag (authoritative)
       await refreshFromApi(session.access_token);
 
-      // If payouts still aren't enabled after the update session, let the user
-      // know they may need to finish their Stripe details.
+      // If payouts still aren't enabled after the update session, show guidance
       if (!verifyData.payoutsEnabled) {
-        setFixError('Your payment details were saved, but payouts are not yet enabled. Please ensure all required information is complete in Stripe.');
+        setFixError(
+          'Your payment details were saved, but payouts are not yet enabled. Please ensure all required information is complete in Stripe.'
+        );
       }
     } catch (err: unknown) {
       console.error('[PayoutFailedBanner] Fix payment details error:', err);
-      setFixError((err instanceof Error ? err.message : null) || 'Something went wrong. Please try again.');
+      setFixError(
+        (err instanceof Error ? err.message : null) || 'Something went wrong. Please try again.'
+      );
     } finally {
       setIsFixing(false);
     }
@@ -133,12 +156,8 @@ export function PayoutFailedBanner() {
         </View>
         <View style={styles.textContainer}>
           <Text style={styles.title}>Payout Failed</Text>
-          <Text style={styles.subtitle}>
-            {getFailureMessage(payoutFailureCode)}
-          </Text>
-          {fixError ? (
-            <Text style={styles.errorText}>{fixError}</Text>
-          ) : null}
+          <Text style={styles.subtitle}>{getFailureMessage(payoutFailureCode)}</Text>
+          {fixError ? <Text style={styles.errorText}>{fixError}</Text> : null}
           <TouchableOpacity
             onPress={handleFixPaymentDetails}
             disabled={isFixing}

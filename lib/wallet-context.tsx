@@ -52,6 +52,8 @@ interface WalletContextValue {
   secureStoreAvailable: boolean;
   payoutFailed: boolean;
   payoutFailureCode: string | null;
+  // Clears the payout failure state (used after verify-onboarding succeeds)
+  clearPayoutFailure: () => void;
   deposit: (amount: number, meta?: Partial<WalletTransactionRecord['details']>) => Promise<void>;
   withdraw: (
     amount: number,
@@ -800,12 +802,24 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     [transactions, persistTransactions, logTransaction, persist, refreshFromApi, getAccessToken]
   );
 
+  // Clear payout failure state (used by UI flows that verify onboarding)
+  const clearPayoutFailure = useCallback(() => {
+    if (!mountedRef.current) return;
+    setPayoutFailed(false);
+    setPayoutFailureCode(null);
+  }, []);
+
   const value: WalletContextValue = {
     balance,
     isLoading,
     secureStoreAvailable,
     payoutFailed,
     payoutFailureCode,
+    // Expose an explicit API to allow callers to clear the payout failure flag
+    // when they have independently verified onboarding (prevents transient
+    // network failures from leaving the banner visible after the user fixes
+    // their payment details).
+    clearPayoutFailure,
     deposit,
     withdraw,
     setBalance: (amt: number) => {

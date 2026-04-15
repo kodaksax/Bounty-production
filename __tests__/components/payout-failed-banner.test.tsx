@@ -2,8 +2,7 @@
  * Tests for PayoutFailedBanner component
  */
 
-import React from 'react';
-import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { PayoutFailedBanner } from '../../components/ui/PayoutFailedBanner';
 
 // ---- module mocks ----
@@ -30,20 +29,23 @@ jest.mock('../../lib/config', () => ({
 
 // ---- imports after mocks ----
 
-import { useWallet } from '../../lib/wallet-context';
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { openUrlInBrowser } from '../../lib/utils/browser';
+import { useWallet } from '../../lib/wallet-context';
 
 // ---- helpers ----
 
 const mockRefreshFromApi = jest.fn();
 const mockSession = { access_token: 'test-token' };
 
-function setupWallet(overrides: Partial<{ payoutFailed: boolean; payoutFailureCode: string | null }> = {}) {
+function setupWallet(
+  overrides: Partial<{ payoutFailed: boolean; payoutFailureCode: string | null }> = {}
+) {
   (useWallet as jest.Mock).mockReturnValue({
     payoutFailed: true,
     payoutFailureCode: null,
     refreshFromApi: mockRefreshFromApi,
+    clearPayoutFailure: jest.fn(),
     ...overrides,
   });
   (useAuthContext as jest.Mock).mockReturnValue({ session: mockSession });
@@ -93,20 +95,26 @@ describe('PayoutFailedBanner', () => {
     it('shows a mapped message for no_account', () => {
       setupWallet({ payoutFailed: true, payoutFailureCode: 'no_account' });
       const { getByText } = render(<PayoutFailedBanner />);
-      expect(getByText('The bank account could not be found. Please re-enter your details.')).toBeTruthy();
+      expect(
+        getByText('The bank account could not be found. Please re-enter your details.')
+      ).toBeTruthy();
     });
 
     it('shows a generic code message for an unknown failure code', () => {
       setupWallet({ payoutFailed: true, payoutFailureCode: 'some_exotic_code' });
       const { getByText } = render(<PayoutFailedBanner />);
-      expect(getByText('Payout failed (some_exotic_code). Please update your payment details.')).toBeTruthy();
+      expect(
+        getByText('Payout failed (some_exotic_code). Please update your payment details.')
+      ).toBeTruthy();
     });
 
     it('shows the default message when failureCode is null', () => {
       setupWallet({ payoutFailed: true, payoutFailureCode: null });
       const { getByText } = render(<PayoutFailedBanner />);
       expect(
-        getByText('Your most recent payout could not be processed. Please update your payment details.')
+        getByText(
+          'Your most recent payout could not be processed. Please update your payment details.'
+        )
       ).toBeTruthy();
     });
   });
@@ -133,10 +141,11 @@ describe('PayoutFailedBanner', () => {
 
     it('shows an error and does NOT call verify-onboarding when browser open fails', async () => {
       setupWallet();
-      (openUrlInBrowser as jest.Mock).mockResolvedValue({ success: false, error: 'Browser unavailable' });
-      setupFetch([
-        { ok: true, json: () => Promise.resolve({ url: 'https://stripe.com/update' }) },
-      ]);
+      (openUrlInBrowser as jest.Mock).mockResolvedValue({
+        success: false,
+        error: 'Browser unavailable',
+      });
+      setupFetch([{ ok: true, json: () => Promise.resolve({ url: 'https://stripe.com/update' }) }]);
 
       const { getByText, queryByText } = render(<PayoutFailedBanner />);
       await act(async () => {
@@ -173,7 +182,11 @@ describe('PayoutFailedBanner', () => {
       (openUrlInBrowser as jest.Mock).mockResolvedValue({ success: true });
       setupFetch([
         { ok: true, json: () => Promise.resolve({ url: 'https://stripe.com/update' }) },
-        { ok: false, json: () => Promise.resolve({ error: 'Failed to update account status. Please try again.' }) },
+        {
+          ok: false,
+          json: () =>
+            Promise.resolve({ error: 'Failed to update account status. Please try again.' }),
+        },
       ]);
 
       const { getByText, queryByText } = render(<PayoutFailedBanner />);
@@ -201,9 +214,7 @@ describe('PayoutFailedBanner', () => {
       });
 
       await waitFor(() => {
-        expect(
-          queryByText(/payouts are not yet enabled/i)
-        ).toBeTruthy();
+        expect(queryByText(/payouts are not yet enabled/i)).toBeTruthy();
       });
       // refreshFromApi still called even when payouts not yet enabled
       expect(mockRefreshFromApi).toHaveBeenCalledWith('test-token');
