@@ -1332,20 +1332,47 @@ app.post('/connect/transfer', paymentLimiter, authenticateUser, async (req, res)
       ? `${idempotencyKey}`
       : `transfer_${userId}_${Math.round(amount * 100)}`;
 
-    // Create transfer to connected account — pass the idempotency key to
-    // Stripe so that duplicate requests return the cached transfer instead
-    // of creating a second one.
-    const transfer = await stripe.transfers.create(
-      {
-        amount: Math.round(amount * 100), // Convert to cents
-        currency: currency,
-        destination: profile.stripe_connect_account_id,
-        metadata: { user_id: userId },
-      },
-      { idempotencyKey: stripeIdempotencyKey }
-    );
+    // Step 1: Atomically deduct the balance BEFORE sending money to Stripe.
+    // update_balance enforces non-negative balance via a DB constraint
+    // (SQLSTATE 23514), so this also serialises concurrent requests and
+    // prevents TOCTOU double-spend races.
+    const { data: newBalance, error: balanceError } = await supabase.rpc('update_balance', {
+      p_user_id: userId,
+      p_amount: -amount, // Negative amount for withdrawal
+    });
 
-    // Create withdrawal transaction
+    if (balanceError) {
+      console.error('[Connect] Error updating balance:', balanceError);
+      // Propagate the DB-level "insufficient funds" message when available.
+      return res.status(400).json({ error: balanceError.message || 'Insufficient balance' });
+    }
+
+    // Step 2: Create transfer to connected account — pass the idempotency key
+    // so duplicate requests return the cached transfer instead of a new one.
+    // If this fails we compensate by restoring the balance before re-throwing.
+    let transfer;
+    try {
+      transfer = await stripe.transfers.create(
+        {
+          amount: Math.round(amount * 100), // Convert to cents
+          currency: currency,
+          destination: profile.stripe_connect_account_id,
+          metadata: { user_id: userId },
+        },
+        { idempotencyKey: stripeIdempotencyKey }
+      );
+    } catch (stripeError) {
+      // Stripe failed — restore the balance that was deducted above.
+      console.error('[Connect] Stripe transfer failed, restoring balance:', stripeError);
+      await supabase.rpc('update_balance', {
+        p_user_id: userId,
+        p_amount: amount, // Positive: reverses the deduction
+      });
+      throw stripeError;
+    }
+
+    // Step 3: Record the withdrawal transaction now that both the balance
+    // deduction and the Stripe transfer have succeeded.
     const { data: transaction, error: txError } = await supabase
       .from('wallet_transactions')
       .insert({
@@ -1364,18 +1391,6 @@ app.post('/connect/transfer', paymentLimiter, authenticateUser, async (req, res)
     if (txError) {
       console.error('[Connect] Error creating transaction:', txError);
       throw txError;
-    }
-
-    // Update user balance using parameterized RPC function
-    // This prevents SQL injection by using a stored procedure with proper parameter binding
-    const { data: newBalance, error: balanceError } = await supabase.rpc('update_balance', {
-      p_user_id: userId,
-      p_amount: -amount, // Negative amount for withdrawal
-    });
-
-    if (balanceError) {
-      console.error('[Connect] Error updating balance:', balanceError);
-      throw new Error('Failed to update balance');
     }
 
     console.log(`[Connect] Transfer created: ${transfer.id} for user ${userId}, amount ${amount}`);
