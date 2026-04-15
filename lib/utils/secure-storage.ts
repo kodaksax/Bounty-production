@@ -253,24 +253,30 @@ export async function getJSON<T>(key: string): Promise<T | null> {
 // has already been completed on this device.
 const KEY_MIGRATION_V1_FLAG = '@bountyexpo:keyMigrationV1Done';
 
-// Mapping from the old colon-containing key names (as they were stored before
-// the sanitization logic was introduced) to the sanitized key names that are
-// used by setSecureItem/getSecureItem today.
-const LEGACY_KEY_MAP: Record<string, string> = {
-  '@bountyexpo:secure:wallet_balance': '@bountyexpo_secure_wallet_balance',
-  '@bountyexpo:secure:wallet_transactions': '@bountyexpo_secure_wallet_transactions',
-  '@bountyexpo:secure:wallet_last_deposit_ts': '@bountyexpo_secure_wallet_last_deposit_ts',
-  '@bountyexpo:secure:payment_token': '@bountyexpo_secure_payment_token',
-};
+// The old colon-containing key names that were written to SecureStore before
+// the sanitization logic was introduced. These are the keys we need to read
+// in order to migrate data to the current sanitized format.
+const LEGACY_KEYS = [
+  '@bountyexpo:secure:wallet_balance',
+  '@bountyexpo:secure:wallet_transactions',
+  '@bountyexpo:secure:wallet_last_deposit_ts',
+  '@bountyexpo:secure:payment_token',
+];
 
 /**
- * One-time migration: for devices that stored sensitive wallet keys under the
- * old colon-containing key names (before sanitization was applied), read each
- * old key directly from SecureStore, write the value under the new
- * underscore-sanitized key, and delete the old key.
+ * One-time migration: for iOS devices that stored sensitive wallet keys under
+ * the old colon-containing key names (before sanitization was applied), read
+ * each old key directly from SecureStore, write the value under the current
+ * sanitized key name, and delete the old key.
+ *
+ * Legacy colon-containing keys can only exist on iOS (the Keychain allows
+ * arbitrary key names). On Android, SecureStore enforces the same character
+ * restrictions as sanitizeSecureKey, so no migration is needed.
  *
  * A flag in AsyncStorage (`@bountyexpo:keyMigrationV1Done`) prevents this
- * migration from running more than once per device.
+ * migration from running more than once per device. The flag is only written
+ * when every key is processed without error, so a transient failure allows a
+ * retry on the next launch.
  */
 export async function migrateSecureStorageKeys(): Promise<void> {
   try {
@@ -280,11 +286,22 @@ export async function migrateSecureStorageKeys(): Promise<void> {
       return;
     }
 
-    for (const [oldKey, newKey] of Object.entries(LEGACY_KEY_MAP)) {
+    // Legacy colon-containing keys can only exist on iOS.
+    // On Android, set the flag immediately and skip probing to avoid spurious
+    // Keychain warnings on every fresh install.
+    if (Platform.OS !== 'ios') {
+      await AsyncStorage.setItem(KEY_MIGRATION_V1_FLAG, 'true');
+      return;
+    }
+
+    let hadError = false;
+    for (const oldKey of LEGACY_KEYS) {
       try {
         // Read directly from SecureStore using the legacy colon-containing key.
         const value = await SecureStore.getItemAsync(oldKey, SECURE_OPTS);
         if (value !== null) {
+          // Derive the sanitized destination key the same way setSecureItem does.
+          const newKey = sanitizeSecureKey(oldKey);
           // Write under the sanitized key name.
           await SecureStore.setItemAsync(newKey, value, SECURE_OPTS);
           // Remove the old key so we don't leave stale data in the Keychain.
@@ -292,12 +309,17 @@ export async function migrateSecureStorageKeys(): Promise<void> {
         }
       } catch (keyError) {
         // Log but continue — a failure on one key must not block the others.
+        // Set hadError so the flag is withheld and migration can retry next launch.
+        hadError = true;
         console.warn(`[SecureStorage] Migration failed for key "${oldKey}":`, keyError);
       }
     }
 
-    // Mark migration as done so it never runs again.
-    await AsyncStorage.setItem(KEY_MIGRATION_V1_FLAG, 'true');
+    // Only mark migration as done when all keys were processed without error.
+    // If hadError is true, the migration will retry on the next app launch.
+    if (!hadError) {
+      await AsyncStorage.setItem(KEY_MIGRATION_V1_FLAG, 'true');
+    }
   } catch (error) {
     // Non-fatal: if the flag check or write fails, the migration may re-run on
     // the next launch, which is idempotent (existing new-format keys are simply

@@ -107,9 +107,17 @@ describe('migrateSecureStorageKeys', () => {
   // Re-require the module fresh for each test so the module-level state is clean
   let secure: typeof import('../../../lib/utils/secure-storage')
 
+  // Mock Platform so we can test the iOS guard
+  const mockPlatform = { OS: 'ios' }
+  jest.mock('react-native', () => ({
+    Platform: mockPlatform,
+  }))
+
   beforeEach(() => {
     jest.resetModules()
     jest.clearAllMocks()
+
+    mockPlatform.OS = 'ios'
 
     ;(SecureStore.getItemAsync as jest.Mock).mockResolvedValue(null)
     ;(SecureStore.setItemAsync as jest.Mock).mockResolvedValue(undefined)
@@ -122,9 +130,8 @@ describe('migrateSecureStorageKeys', () => {
   })
 
   test('migrates old colon-containing keys to sanitized keys and deletes the old keys', async () => {
-    // Simulate old keys existing in SecureStore with the colon-containing names.
-    // getItemAsync is called first with the migration flag (returns null = not done),
-    // then for each legacy key.
+    // sanitizeSecureKey replaces '@' and ':' with '_', so the destination keys
+    // have a leading underscore: _bountyexpo_secure_*
     const oldValues: Record<string, string> = {
       '@bountyexpo:secure:wallet_balance': '100',
       '@bountyexpo:secure:wallet_transactions': '[{"id":"tx1"}]',
@@ -142,24 +149,25 @@ describe('migrateSecureStorageKeys', () => {
 
     await secure.migrateSecureStorageKeys()
 
-    // Each sanitized (new) key should have been written with the correct value
+    // Each sanitized (new) key should have been written with the correct value.
+    // sanitizeSecureKey('@bountyexpo:secure:wallet_balance') -> '_bountyexpo_secure_wallet_balance'
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
-      '@bountyexpo_secure_wallet_balance',
+      '_bountyexpo_secure_wallet_balance',
       '100',
       expect.anything()
     )
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
-      '@bountyexpo_secure_wallet_transactions',
+      '_bountyexpo_secure_wallet_transactions',
       '[{"id":"tx1"}]',
       expect.anything()
     )
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
-      '@bountyexpo_secure_wallet_last_deposit_ts',
+      '_bountyexpo_secure_wallet_last_deposit_ts',
       '1700000000000',
       expect.anything()
     )
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
-      '@bountyexpo_secure_payment_token',
+      '_bountyexpo_secure_payment_token',
       'tok_abc',
       expect.anything()
     )
@@ -211,7 +219,7 @@ describe('migrateSecureStorageKeys', () => {
     // Only the present key should have been written and deleted
     expect(SecureStore.setItemAsync).toHaveBeenCalledTimes(1)
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
-      '@bountyexpo_secure_wallet_balance',
+      '_bountyexpo_secure_wallet_balance',
       '42',
       expect.anything()
     )
@@ -221,16 +229,14 @@ describe('migrateSecureStorageKeys', () => {
       expect.anything()
     )
 
-    // Flag should still be set
+    // Flag should still be set (no errors)
     expect(AsyncStorage.setItem).toHaveBeenCalledWith('@bountyexpo:keyMigrationV1Done', 'true')
   })
 
-  test('continues migrating remaining keys when one key fails', async () => {
+  test('continues migrating remaining keys when one key fails, but does NOT set the flag', async () => {
     ;(AsyncStorage.getItem as jest.Mock).mockResolvedValue(null)
 
-    let callCount = 0
     ;(SecureStore.getItemAsync as jest.Mock).mockImplementation((key: string) => {
-      callCount++
       // Fail on the first legacy key, succeed on the others
       if (key === '@bountyexpo:secure:wallet_balance') {
         return Promise.reject(new Error('keychain error'))
@@ -243,12 +249,29 @@ describe('migrateSecureStorageKeys', () => {
 
     // The second key (transactions) should still have been migrated
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
-      '@bountyexpo_secure_wallet_transactions',
+      '_bountyexpo_secure_wallet_transactions',
       'txdata',
       expect.anything()
     )
 
-    // Flag should still be written
+    // Flag must NOT be set so the migration retries on the next launch
+    expect(AsyncStorage.setItem).not.toHaveBeenCalled()
+  })
+
+  test('on non-iOS platforms: sets flag immediately without probing SecureStore', async () => {
+    mockPlatform.OS = 'android'
+    // Re-require after changing platform so the module picks up the mock
+    secure = require('../../../lib/utils/secure-storage')
+    ;(AsyncStorage.getItem as jest.Mock).mockResolvedValue(null)
+
+    await secure.migrateSecureStorageKeys()
+
+    // SecureStore must not be probed on Android
+    expect(SecureStore.getItemAsync).not.toHaveBeenCalled()
+    expect(SecureStore.setItemAsync).not.toHaveBeenCalled()
+    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled()
+
+    // Flag should be set so subsequent calls skip immediately
     expect(AsyncStorage.setItem).toHaveBeenCalledWith('@bountyexpo:keyMigrationV1Done', 'true')
   })
 })
