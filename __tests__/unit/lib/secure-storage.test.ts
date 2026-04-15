@@ -107,17 +107,9 @@ describe('migrateSecureStorageKeys', () => {
   // Re-require the module fresh for each test so the module-level state is clean
   let secure: typeof import('../../../lib/utils/secure-storage')
 
-  // Mock Platform so we can test the iOS guard
-  const mockPlatform = { OS: 'ios' }
-  jest.mock('react-native', () => ({
-    Platform: mockPlatform,
-  }))
-
   beforeEach(() => {
     jest.resetModules()
     jest.clearAllMocks()
-
-    mockPlatform.OS = 'ios'
 
     ;(SecureStore.getItemAsync as jest.Mock).mockResolvedValue(null)
     ;(SecureStore.setItemAsync as jest.Mock).mockResolvedValue(undefined)
@@ -126,6 +118,8 @@ describe('migrateSecureStorageKeys', () => {
     ;(AsyncStorage.getItem as jest.Mock).mockResolvedValue(null)
     ;(AsyncStorage.setItem as jest.Mock).mockResolvedValue(undefined)
 
+    // Global react-native mock from jest.setup.js defaults Platform.OS to 'ios'.
+    // Re-require so this test's module instance uses the fresh mock registry.
     secure = require('../../../lib/utils/secure-storage')
   })
 
@@ -259,12 +253,17 @@ describe('migrateSecureStorageKeys', () => {
   })
 
   test('on non-iOS platforms: sets flag immediately without probing SecureStore', async () => {
-    mockPlatform.OS = 'android'
-    // Re-require after changing platform so the module picks up the mock
-    secure = require('../../../lib/utils/secure-storage')
+    // Override the global react-native mock (Platform.OS = 'ios') with an
+    // Android one for this test only. jest.doMock is NOT hoisted so it applies
+    // to the next require() after the current resetModules() call.
+    jest.resetModules()
+    jest.doMock('react-native', () => ({
+      Platform: { OS: 'android', select: jest.fn(obj => obj.android || obj.default) },
+    }))
+    const androidSecure = require('../../../lib/utils/secure-storage')
     ;(AsyncStorage.getItem as jest.Mock).mockResolvedValue(null)
 
-    await secure.migrateSecureStorageKeys()
+    await androidSecure.migrateSecureStorageKeys()
 
     // SecureStore must not be probed on Android
     expect(SecureStore.getItemAsync).not.toHaveBeenCalled()
