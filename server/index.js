@@ -1061,30 +1061,61 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
         // retry endpoint (e.g. retry_count, retried_at) and (b) check whether
         // the retry limit is reached without double-incrementing retry_count
         // (the retry endpoint already does that increment).
+        // NOTE: We also select `id` so the subsequent UPDATE can use the stable
+        // primary key. Filtering only on stripe_transfer_id in the UPDATE would
+        // create a race: if /connect/retry-transfer runs between this SELECT and
+        // the UPDATE it replaces stripe_transfer_id with the new transfer's ID,
+        // causing the UPDATE to match no row and silently skipping the refund.
         const { data: existingTx } = await supabase
           .from('wallet_transactions')
-          .select('metadata')
+          .select('id, metadata')
           .eq('stripe_transfer_id', transfer.id)
           .maybeSingle();
         const existingMetadata = existingTx?.metadata ?? {};
         const currentRetries = existingMetadata.retry_count ?? 0;
         const permanentlyFailed = currentRetries >= MAX_TRANSFER_RETRIES;
 
-        const { data: tx } = await supabase
-          .from('wallet_transactions')
-          .update({
-            // wallet_transactions.status is constrained to ('pending','completed','failed').
-            // Encode permanent-failure state in metadata.transfer_status instead.
-            status: 'failed',
-            metadata: {
-              ...existingMetadata,
-              transfer_status: permanentlyFailed ? 'permanently_failed' : 'failed',
-              failure_reason: transfer.failure_code,
-            },
-          })
-          .eq('stripe_transfer_id', transfer.id)
-          .select()
-          .single();
+        // Use the row's primary key as the primary filter and keep
+        // stripe_transfer_id as an optimistic-lock guard: if the retry endpoint
+        // replaced stripe_transfer_id with a new value before we got here, we
+        // must NOT overwrite the in-flight retry's 'pending' status back to
+        // 'failed'. The guard makes the UPDATE a no-op in that case, and we
+        // surface a CRITICAL alert below instead of silently dropping the refund.
+        let tx = null;
+        if (existingTx?.id) {
+          ({ data: tx } = await supabase
+            .from('wallet_transactions')
+            .update({
+              // wallet_transactions.status is constrained to ('pending','completed','failed').
+              // Encode permanent-failure state in metadata.transfer_status instead.
+              status: 'failed',
+              metadata: {
+                ...existingMetadata,
+                transfer_status: permanentlyFailed ? 'permanently_failed' : 'failed',
+                failure_reason: transfer.failure_code,
+              },
+            })
+            .eq('id', existingTx.id)
+            .eq('stripe_transfer_id', transfer.id) // optimistic-lock guard
+            .select()
+            .single());
+        }
+
+        if (!tx && existingTx?.id) {
+          // The optimistic-lock guard fired: /connect/retry-transfer replaced
+          // stripe_transfer_id with a new transfer ID between our SELECT and
+          // UPDATE. The in-flight retry's row was intentionally left untouched,
+          // but the T1 failure has not been reflected and its refund was not
+          // issued. Surface this for immediate manual investigation to avoid
+          // silent fund loss.
+          console.error(
+            '[Webhook] CRITICAL: transfer.failed race condition detected. ' +
+              `stripe_transfer_id for transaction ${existingTx.id} was replaced by a retry ` +
+              `between SELECT and UPDATE. Transfer ${transfer.id} failure not recorded and ` +
+              'refund not issued. Manual review required.',
+            { transferId: transfer.id, transactionId: existingTx.id }
+          );
+        }
 
         if (tx) {
           if (permanentlyFailed) {
@@ -1111,6 +1142,7 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
                 transferId: transfer.id,
                 error: existingNotificationError,
               });
+              throw existingNotificationError;
             } else if (!existingNotification) {
               const { error: notifError } = await supabase.from('notifications').insert({
                 user_id: tx.user_id,
@@ -1122,8 +1154,10 @@ app.post('/webhooks/stripe', bodyParser.raw({ type: 'application/json' }), async
               if (notifError) {
                 console.error('[Webhook] Failed to insert permanently_failed notification', {
                   userId: tx.user_id,
+                  transferId: transfer.id,
                   error: notifError,
                 });
+                throw notifError;
               }
             } else {
               console.log('[Webhook] Skipping duplicate permanently_failed notification', {
