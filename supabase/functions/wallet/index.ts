@@ -206,10 +206,12 @@ Deno.serve(async (req: Request) => {
           }
         }
 
-        const typedProfile = profile as (Profile & {
-          payout_failed_at?: string | null;
-          payout_failure_code?: string | null;
-        }) | null;
+        const typedProfile = profile as
+          | (Profile & {
+              payout_failed_at?: string | null;
+              payout_failure_code?: string | null;
+            })
+          | null;
 
         return jsonResponse({
           balance,
@@ -494,14 +496,6 @@ Deno.serve(async (req: Request) => {
           return jsonResponse({ error: 'Failed to update balance' }, 500);
         }
 
-      const profileRow = profile as Profile | null
-      return jsonResponse({
-        balance,
-        currency: 'USD',
-        payoutFailedAt: profileRow?.payout_failed_at ?? null,
-        payoutFailureCode: profileRow?.payout_failure_code ?? null,
-      })
-    }
         // Balance updated — promote the transaction to 'completed' atomically
         const { error: confirmErr } = await supabase
           .from('wallet_transactions')
