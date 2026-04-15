@@ -9,6 +9,8 @@ export interface Profile {
   stripe_customer_id?: string | null
   stripe_connect_account_id?: string | null
   stripe_connect_onboarded_at?: string | null
+  payout_failed_at?: string | null
+  payout_failure_code?: string | null
 }
 
 export interface WalletTransaction {
