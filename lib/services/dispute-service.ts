@@ -392,7 +392,6 @@ export const disputeService = {
       // delegate to fn_close_dispute_hold which atomically releases the
       // balance_on_hold AND updates the dispute status in one DB transaction.
       const terminalStatuses = [
-        'resolved',
         'closed',
         'cancelled',
         'resolved_poster_wins',
