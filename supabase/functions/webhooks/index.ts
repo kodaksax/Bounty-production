@@ -710,7 +710,7 @@ Deno.serve(async (req: Request) => {
           .eq('id', existingTx.id)
           .eq('stripe_transfer_id', transfer.id) // optimistic-lock guard
           .select()
-          .single();
+          .maybeSingle();
 
         if (txUpdateError) {
           console.error('[webhooks] Failed to update transaction for transfer.failed', {

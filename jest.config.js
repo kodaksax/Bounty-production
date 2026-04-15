@@ -10,7 +10,7 @@ module.exports = {
     '**/tests/**/*.test.ts',
     '**/tests/**/*.test.tsx',
     '**/tests/**/*.test.js',
-    '**/tests/**/*.test.jsx'
+    '**/tests/**/*.test.jsx',
   ],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   coverageDirectory: 'coverage',
@@ -47,12 +47,16 @@ module.exports = {
     '^@supabase/supabase-js$': '<rootDir>/node_modules/@supabase/supabase-js',
   },
   transform: {
-    '^.+\\.tsx?$': ['ts-jest', {
-      tsconfig: '<rootDir>/tsconfig.jest.json',
-    }],
+    '^.+\\.tsx?$': [
+      'ts-jest',
+      {
+        tsconfig: '<rootDir>/tsconfig.jest.json',
+      },
+    ],
   },
   transformIgnorePatterns: [
     'node_modules/(?!(expo-secure-store|expo-.*|@expo/.*|@react-native|react-native|react-native-url-polyfill|@supabase|mixpanel-react-native|@sentry)/)',
   ],
   testTimeout: 30000,
+  forceExit: true,
 };

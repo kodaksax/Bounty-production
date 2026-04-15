@@ -1,15 +1,17 @@
 // Jest setup file for global test configuration
 
-
 // Prefer environment variables for secrets; fall back to safe placeholders
 // This avoids embedding sensitive-ish strings directly in a tracked file.
 process.env.SUPABASE_URL = process.env.SUPABASE_URL || 'https://test.supabase.co';
 process.env.SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'test-anon-key';
-process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'test-service-role-key';
+process.env.SUPABASE_SERVICE_ROLE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY || 'test-service-role-key';
 process.env.STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || 'test-stripe-secret';
 process.env.STRIPE_PUBLISHABLE_KEY = process.env.STRIPE_PUBLISHABLE_KEY || 'test-stripe-pub';
-process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || 'test-stripe-pub';
-process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY || 'test-api-key-12345';
+process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY =
+  process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || 'test-stripe-pub';
+process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY =
+  process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY || 'test-api-key-12345';
 process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 
 // Define __DEV__ global for React Native code
@@ -77,14 +79,14 @@ jest.mock('react-native', () => {
     },
     Platform: {
       OS: 'ios',
-      select: jest.fn((obj) => obj.ios || obj.default),
+      select: jest.fn(obj => obj.ios || obj.default),
     },
     StyleSheet: {
-      create: (styles) => styles,
-      flatten: (style) => style,
+      create: styles => styles,
+      flatten: style => style,
     },
     Animated: {
-      Value: jest.fn().mockImplementation((value) => ({
+      Value: jest.fn().mockImplementation(value => ({
         _value: value,
         setValue: jest.fn(),
         interpolate: jest.fn().mockReturnValue(value),
@@ -94,7 +96,7 @@ jest.mock('react-native', () => {
       loop: jest.fn().mockReturnValue({ start: jest.fn(), stop: jest.fn() }),
       sequence: jest.fn().mockReturnValue({ start: jest.fn() }),
       parallel: jest.fn().mockReturnValue({ start: jest.fn() }),
-      createAnimatedComponent: jest.fn((component) => component),
+      createAnimatedComponent: jest.fn(component => component),
       View: 'Animated.View',
     },
     Dimensions: {
@@ -190,7 +192,7 @@ jest.mock('@react-native-community/netinfo', () => ({
     type: 'wifi',
     details: null,
   }),
-  addEventListener: jest.fn().mockReturnValue(() => { }),
+  addEventListener: jest.fn().mockReturnValue(() => {}),
 }));
 
 // Mock @react-native-async-storage/async-storage
@@ -227,8 +229,8 @@ jest.mock('@sentry/react-native', () => ({
   setContext: jest.fn(),
   setTag: jest.fn(),
   setExtra: jest.fn(),
-  withScope: jest.fn((callback) => callback({ setTag: jest.fn(), setExtra: jest.fn() })),
-  configureScope: jest.fn((callback) => callback({ setTag: jest.fn(), setExtra: jest.fn() })),
+  withScope: jest.fn(callback => callback({ setTag: jest.fn(), setExtra: jest.fn() })),
+  configureScope: jest.fn(callback => callback({ setTag: jest.fn(), setExtra: jest.fn() })),
 }));
 
 // Mock mixpanel-react-native
@@ -330,12 +332,12 @@ jest.mock('expo-sharing', () => ({
 jest.mock('@expo/vector-icons', () => {
   const React = require('react');
   return {
-    MaterialIcons: (props) => React.createElement('MaterialIcons', props),
-    Ionicons: (props) => React.createElement('Ionicons', props),
-    FontAwesome: (props) => React.createElement('FontAwesome', props),
-    AntDesign: (props) => React.createElement('AntDesign', props),
-    Entypo: (props) => React.createElement('Entypo', props),
-    Feather: (props) => React.createElement('Feather', props),
+    MaterialIcons: props => React.createElement('MaterialIcons', props),
+    Ionicons: props => React.createElement('Ionicons', props),
+    FontAwesome: props => React.createElement('FontAwesome', props),
+    AntDesign: props => React.createElement('AntDesign', props),
+    Entypo: props => React.createElement('Entypo', props),
+    Feather: props => React.createElement('Feather', props),
   };
 });
 
@@ -375,7 +377,14 @@ global.console = {
       firstArg.includes('[PayoutFailedBanner]') ||
       firstArg.includes('[Redis]') ||
       firstArg.includes('[WebSocket]') ||
-      firstArg.includes('[AuthProvider]')
+      firstArg.includes('[AuthProvider]') ||
+      firstArg.includes('[SecureStorage]') ||
+      firstArg.includes('[SignOut]') ||
+      firstArg.includes('[logger][error]') ||
+      firstArg.includes('[E2EKeyService]') ||
+      firstArg.includes('Error verifying Connect onboarding:') ||
+      firstArg.includes('Error creating account link:') ||
+      firstArg.includes('Error refunding PaymentIntent')
     ) {
       return;
     }
@@ -390,7 +399,11 @@ afterAll(() => {
   try {
     const list = globalThis.__BACKGROUND_INTERVALS || [];
     for (const id of list) {
-      try { clearInterval(id); } catch (e) { /* ignore */ }
+      try {
+        clearInterval(id);
+      } catch (e) {
+        /* ignore */
+      }
     }
     globalThis.__BACKGROUND_INTERVALS = [];
   } catch (e) {

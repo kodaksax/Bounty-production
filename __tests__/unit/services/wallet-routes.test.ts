@@ -84,9 +84,9 @@ jest.mock('drizzle-orm', () => ({ eq: jest.fn((field: any, val: any) => ({ field
 import { registerWalletRoutes } from '../../../services/api/src/routes/wallet';
 import * as WalletService from '../../../services/api/src/services/consolidated-wallet-service';
 import {
-    checkIdempotencyKey,
-    removeIdempotencyKey,
-    storeIdempotencyKey,
+  checkIdempotencyKey,
+  removeIdempotencyKey,
+  storeIdempotencyKey,
 } from '../../../services/api/src/services/idempotency-service';
 import { stripeConnectService } from '../../../services/api/src/services/stripe-connect-service';
 
@@ -118,11 +118,16 @@ async function buildHandlers(): Promise<HandlerMap> {
   return handlers;
 }
 
-/** Build a minimal mock reply object. Fluent: `.code(n)` returns itself. */
+/** Build a minimal mock reply object. Fluent: `.code(n)` and `.header(...)` return itself. */
 function mockReply() {
   const reply: any = {
     _code: 200,
     _body: undefined,
+    _headers: {} as Record<string, string>,
+    header(name: string, value: string) {
+      this._headers[name] = value;
+      return this;
+    },
     code(n: number) {
       this._code = n;
       return this;
