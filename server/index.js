@@ -293,7 +293,10 @@ app.get('/debug', (req, res) => {
 
 // POST /payments/create-payment-intent
 // Creates a PaymentIntent for the specified amount
+// DEPRECATED: This Express route mirrors the canonical Supabase Edge Function.
+// See docs/SERVER_CONSOLIDATION.md for the migration guide.
 app.post('/payments/create-payment-intent', paymentLimiter, authenticateUser, async (req, res) => {
+  res.set('X-Deprecated', 'true');
   try {
     const { amountCents, currency = 'usd', metadata = {} } = req.body;
     const userId = req.user.id;
@@ -471,7 +474,10 @@ app.post('/apple-pay/confirm', paymentLimiter, authenticateUser, async (req, res
 
 // GET /payments/methods
 // Retrieves all payment methods for the authenticated user
+// DEPRECATED: This Express route mirrors the canonical Supabase Edge Function.
+// See docs/SERVER_CONSOLIDATION.md for the migration guide.
 app.get('/payments/methods', apiLimiter, authenticateUser, async (req, res) => {
+  res.set('X-Deprecated', 'true');
   try {
     const userId = req.user.id;
 
@@ -541,7 +547,10 @@ app.get('/payments/methods', apiLimiter, authenticateUser, async (req, res) => {
 
 // POST /payments/methods
 // Attaches a payment method to the user's Stripe customer
+// DEPRECATED: This Express route mirrors the canonical Supabase Edge Function.
+// See docs/SERVER_CONSOLIDATION.md for the migration guide.
 app.post('/payments/methods', paymentLimiter, authenticateUser, async (req, res) => {
+  res.set('X-Deprecated', 'true');
   try {
     const userId = req.user.id;
     const { paymentMethodId } = req.body;
@@ -614,7 +623,10 @@ app.post('/payments/methods', paymentLimiter, authenticateUser, async (req, res)
 
 // DELETE /payments/methods/:id
 // Detaches a payment method from the user's Stripe customer
+// DEPRECATED: This Express route mirrors the canonical Supabase Edge Function.
+// See docs/SERVER_CONSOLIDATION.md for the migration guide.
 app.delete('/payments/methods/:id', apiLimiter, authenticateUser, async (req, res) => {
+  res.set('X-Deprecated', 'true');
   try {
     const userId = req.user.id;
     const paymentMethodId = req.params.id;
@@ -657,7 +669,10 @@ app.delete('/payments/methods/:id', apiLimiter, authenticateUser, async (req, re
 
 // POST /payments/confirm
 // Confirms a payment intent with 3D Secure handling
+// DEPRECATED: This Express route mirrors the canonical Supabase Edge Function.
+// See docs/SERVER_CONSOLIDATION.md for the migration guide.
 app.post('/payments/confirm', paymentLimiter, authenticateUser, async (req, res) => {
+  res.set('X-Deprecated', 'true');
   try {
     const userId = req.user.id;
     const { paymentIntentId, paymentMethodId } = req.body;
@@ -1387,7 +1402,12 @@ app.post('/connect/transfer', paymentLimiter, authenticateUser, async (req, res)
 
 // GET /wallet/balance
 // Returns the user's current wallet balance
+// DEPRECATED: This Express route mirrors the canonical Supabase Edge Function.
+// Setting EXPO_PUBLIC_SUPABASE_URL routes the mobile client to Supabase Edge
+// Functions (derived as <SUPABASE_URL>/functions/v1), not to this handler.
+// See docs/SERVER_CONSOLIDATION.md for the migration guide.
 app.get('/wallet/balance', apiLimiter, authenticateUser, async (req, res) => {
+  res.set('X-Deprecated', 'true');
   try {
     const userId = req.user.id;
 
@@ -1448,7 +1468,10 @@ app.get('/wallet/balance', apiLimiter, authenticateUser, async (req, res) => {
 
 // GET /wallet/transactions
 // Returns the user's transaction history
+// DEPRECATED: This Express route mirrors the canonical Supabase Edge Function.
+// See docs/SERVER_CONSOLIDATION.md for the migration guide.
 app.get('/wallet/transactions', apiLimiter, authenticateUser, async (req, res) => {
+  res.set('X-Deprecated', 'true');
   try {
     const userId = req.user.id;
     const limit = Math.min(parseInt(req.query.limit) || 50, 100);
