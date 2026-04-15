@@ -578,11 +578,13 @@ export async function createWithdrawal(
     });
   }
 
+  let balanceDeducted = false;
   try {
     // Deduct from balance atomically via withdraw_balance which enforces:
     //   balance - balance_on_hold >= amount  (prevents draining held funds)
     //   balance_frozen = false              (Stripe chargeback guard)
     await withdrawBalance(userId, amount);
+    balanceDeducted = true;
 
     // Initiate Stripe transfer with idempotency key
     const transferParams: Stripe.TransferCreateParams = {
@@ -648,8 +650,9 @@ export async function createWithdrawal(
     }
 
     // Best-effort: refund the balance (rollback)
-    // Only attempt if balance was actually deducted (error occurred after updateBalance)
-    if (!(error instanceof ValidationError && error.message?.includes('Insufficient balance'))) {
+    // Only attempt if balance was actually deducted (withdrawBalance succeeded before the error).
+    // withdrawBalance's RPC is atomic so any error from it means no deduction occurred.
+    if (balanceDeducted) {
       try {
         await updateBalance(userId, amount);
       } catch (rollbackError) {
@@ -1158,11 +1161,19 @@ export async function withdrawBalance(userId: string, amount: number): Promise<v
       );
     }
 
-    if (errorMessage.includes('insufficient') || errorMessage.includes('negative') || errorMessage.includes('available')) {
-      throw new ValidationError('Insufficient available balance. Part of your balance may be reserved by an open dispute.');
+    if (
+      errorMessage.includes('insufficient') ||
+      errorMessage.includes('negative') ||
+      errorMessage.includes('available')
+    ) {
+      throw new ValidationError(
+        'Insufficient available balance. Part of your balance may be reserved by an open dispute.'
+      );
     }
     if (errorMessage.includes('frozen')) {
-      throw new ValidationError('Wallet is frozen due to an open Stripe dispute. Resolve the dispute before withdrawing.');
+      throw new ValidationError(
+        'Wallet is frozen due to an open Stripe dispute. Resolve the dispute before withdrawing.'
+      );
     }
     if (errorMessage.includes('not found')) {
       throw new NotFoundError('User', userId);
