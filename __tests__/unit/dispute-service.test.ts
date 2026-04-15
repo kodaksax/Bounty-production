@@ -12,12 +12,14 @@
 
 // Mock Supabase with proper method chaining - must be defined before import
 const mockFrom = jest.fn();
+const mockRpc = jest.fn();
 
 // Mock dependencies before importing the service
 jest.mock('../../lib/supabase', () => ({
   isSupabaseConfigured: true,
   supabase: {
     from: mockFrom,
+    rpc: mockRpc,
     auth: {
       getSession: jest.fn().mockResolvedValue({
         data: {
@@ -72,6 +74,8 @@ import { disputeService } from '../../lib/services/dispute-service';
 describe('DisputeService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Default: all RPC calls succeed (fn_open_dispute_hold, fn_close_dispute_hold, etc.)
+    mockRpc.mockResolvedValue({ data: null, error: null });
   });
 
   describe('createDispute', () => {
@@ -130,6 +134,60 @@ describe('DisputeService', () => {
       expect(dispute?.status).toBe('open');
       // Evidence is now uploaded separately via uploadEvidence, not stored during creation
       expect(dispute?.evidence).toHaveLength(0);
+      // Verify the hold RPC was called
+      expect(mockRpc).toHaveBeenCalledWith('fn_open_dispute_hold', { p_dispute_id: 'dispute-123' });
+    });
+
+    it('should roll back the dispute when hold placement fails', async () => {
+      const mockDispute = {
+        id: 'dispute-456',
+        cancellation_id: 'cancel-456',
+        bounty_id: 'bounty-456',
+        initiator_id: 'user-123',
+        reason: 'Hold test',
+        evidence_json: null,
+        status: 'open',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      const { cancellationService: mockCancellationService } = require('../../lib/services/cancellation-service');
+      (mockCancellationService.getCancellationById as jest.Mock).mockResolvedValue({
+        id: 'cancel-456',
+        bountyId: 'bounty-456',
+        requesterId: 'hunter-456',
+      });
+
+      const mockDelete = jest.fn().mockReturnValue({
+        eq: jest.fn().mockResolvedValue({ error: null }),
+      });
+
+      mockFrom.mockReturnValue({
+        insert: jest.fn().mockReturnValue({
+          select: jest.fn().mockReturnValue({
+            single: jest.fn().mockResolvedValue({
+              data: mockDispute,
+              error: null,
+            }),
+          }),
+        }),
+        delete: mockDelete,
+        update: jest.fn().mockReturnValue({
+          eq: jest.fn().mockResolvedValue({ error: null }),
+        }),
+      });
+
+      // Simulate hold failure
+      mockRpc.mockResolvedValue({ data: null, error: { message: 'RPC error', code: 'P0001' } });
+
+      const dispute = await disputeService.createDispute(
+        'cancel-456',
+        'user-123',
+        'Hold test'
+      );
+
+      expect(dispute).toBeNull();
+      expect(mockDelete).toHaveBeenCalled();
     });
 
     it('should handle errors gracefully', async () => {
