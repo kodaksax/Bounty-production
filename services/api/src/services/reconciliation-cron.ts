@@ -184,12 +184,16 @@ export class ReconciliationCronService {
     // 'escrow' (finalization + refund double-failure) transactions.
     // These are flagged with needs_balance_refund=true in their metadata by the
     // wallet service when the balance-restoring updateBalance call throws.
+    // We include both 'failed' and 'pending' statuses because if the DB update that
+    // flips the record to 'failed' itself fails, the record stays 'pending' while
+    // still carrying the needs_balance_refund flag — that case would otherwise be
+    // silently missed.
     try {
       const { data: orphanedTxs, error: orphanErr } = await admin
         .from('wallet_transactions')
         .select('*')
         .in('type', ['withdrawal', 'escrow'])
-        .eq('status', 'failed')
+        .in('status', ['failed', 'pending'])
         .filter('metadata->>needs_balance_refund', 'eq', 'true')
         .limit(100);
 
