@@ -838,10 +838,11 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
 
       dispatchUi({ type: 'set', key: 'conversation', value: targetConversation })
       await navigationIntent.setPendingConversationId(targetConversationId)
-      router.push('/tabs/messenger')
+      router.push('/tabs/bounty-app?screen=messages' as '/tabs/bounty-app')
     } catch (err) {
-      console.error('Failed to open conversation via messenger tab', err)
+      console.error('Failed to navigate to messages screen via BountyApp', { conversationId: targetConversationId, error: err })
       if (targetConversationId) {
+        console.info('Attempting fallback navigation to direct message route', { conversationId: targetConversationId })
         try {
           ;(router as any).push(`/messages/${encodeURIComponent(targetConversationId)}`)
           return
