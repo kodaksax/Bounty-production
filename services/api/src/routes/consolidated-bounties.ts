@@ -607,9 +607,7 @@ export async function registerConsolidatedBountyRoutes(
                 { userId, bountyId: bounty.id },
                 'Rolled back bounty after escrow failure'
               );
-              throw new Error(
-                'Failed to secure funds for bounty creation. Your bounty was not posted. Please try again or contact support if the problem persists.'
-              );
+              throw escrowError;
             }
           }
 

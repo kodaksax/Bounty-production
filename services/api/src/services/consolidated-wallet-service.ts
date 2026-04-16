@@ -730,16 +730,20 @@ export async function createEscrow(
   // Generate effective idempotency key
   const effectiveIdempotencyKey = idempotencyKey || `escrow_${bountyId}_${posterId}`;
 
-  // Check for existing escrow transaction to prevent duplicates
+  // Check for existing escrow transaction to prevent duplicates/retries from
+  // creating additional debits.
   const { data: existingEscrow } = await admin
     .from('wallet_transactions')
-    .select('id')
+    .select('id, status')
     .eq('bounty_id', bountyId)
     .eq('type', 'escrow')
-    .eq('status', 'completed')
+    .in('status', ['pending', 'completed'])
     .maybeSingle();
 
   if (existingEscrow) {
+    if (existingEscrow.status === 'pending') {
+      throw new ConflictError('Escrow is already being processed for this bounty');
+    }
     throw new ConflictError('Escrow already exists for this bounty');
   }
 
@@ -766,6 +770,9 @@ export async function createEscrow(
     .single();
 
   if (txError) {
+    if ((txError as any).code === '23505') {
+      throw new ConflictError('Escrow is already being processed for this bounty');
+    }
     throw new ExternalServiceError('Supabase', 'Failed to create escrow transaction', {
       error: txError.message,
     });
@@ -844,6 +851,41 @@ export async function createEscrow(
           },
           '[WalletService] CRITICAL: Failed to rollback poster balance after escrow failure'
         );
+
+        // Flag for reconciliation so automated jobs can restore balance later.
+        try {
+          const { error: flagError }: { error: any } = (await admin
+            .from('wallet_transactions')
+            .update({
+              metadata: {
+                ...(transaction.metadata || {}),
+                failed_at: new Date().toISOString(),
+                failure_reason: error instanceof Error ? error.message : String(error),
+                needs_balance_refund: true,
+                needs_balance_refund_amount: amount,
+                rollback_failed_at: new Date().toISOString(),
+              },
+            })
+            .eq('id', transaction.id)) as any;
+
+          if (flagError) {
+            logger.error(
+              { posterId, bountyId, transactionId: transaction.id, amount, error: flagError },
+              '[WalletService] CRITICAL: Failed to flag escrow transaction for balance refund - manual intervention required'
+            );
+          }
+        } catch (flagError) {
+          logger.error(
+            {
+              posterId,
+              bountyId,
+              transactionId: transaction.id,
+              amount,
+              error: flagError instanceof Error ? flagError.message : String(flagError),
+            },
+            '[WalletService] CRITICAL: Failed to flag escrow transaction for balance refund - manual intervention required'
+          );
+        }
       }
     }
 

@@ -41,7 +41,9 @@ function getCreateEscrow() {
 
 type BuildOptions = {
   withdrawRpcError?: { message: string; code?: string } | null;
+  updateBalanceRpcError?: { message: string; code?: string } | null;
   completeUpdateError?: { message: string } | null;
+  existingEscrowStatus?: 'pending' | 'completed' | null;
 };
 
 function buildSupabaseAdmin(options: BuildOptions = {}) {
@@ -62,8 +64,13 @@ function buildSupabaseAdmin(options: BuildOptions = {}) {
       select: jest.fn(() => ({
         eq: jest.fn(() => ({
           eq: jest.fn(() => ({
-            eq: jest.fn(() => ({
-              maybeSingle: jest.fn(async () => ({ data: null, error: null })),
+            in: jest.fn(() => ({
+              maybeSingle: jest.fn(async () => ({
+                data: options.existingEscrowStatus
+                  ? { id: 'existing_escrow', status: options.existingEscrowStatus }
+                : null,
+                error: null,
+              })),
             })),
           })),
         })),
@@ -97,7 +104,7 @@ function buildSupabaseAdmin(options: BuildOptions = {}) {
         return { error: options.withdrawRpcError || null };
       }
       if (fn === 'update_balance') {
-        return { error: null };
+        return { error: options.updateBalanceRpcError || null };
       }
       return { error: null };
     }),
@@ -143,5 +150,40 @@ describe('consolidated-wallet-service createEscrow', () => {
     expect(updatePayloads).toHaveLength(2);
     expect(updatePayloads[0]).toMatchObject({ status: 'completed' });
     expect(updatePayloads[1]).toMatchObject({ status: 'failed' });
+  });
+
+  it('treats pending escrow as conflict and does not withdraw again', async () => {
+    const { admin, rpcCalls } = buildSupabaseAdmin({
+      existingEscrowStatus: 'pending',
+    });
+    mockCreateClient.mockReturnValue(admin as any);
+    const createEscrow = getCreateEscrow();
+
+    await expect(createEscrow('bounty-1', 'poster-1', 50)).rejects.toThrow(
+      'Escrow is already being processed for this bounty'
+    );
+    expect(rpcCalls).toHaveLength(0);
+  });
+
+  it('flags transaction for reconciliation when refund rollback fails', async () => {
+    const { admin, updatePayloads } = buildSupabaseAdmin({
+      completeUpdateError: { message: 'failed to finalize' },
+      updateBalanceRpcError: { message: 'credit rollback failed' },
+    });
+    mockCreateClient.mockReturnValue(admin as any);
+    const createEscrow = getCreateEscrow();
+
+    await expect(createEscrow('bounty-1', 'poster-1', 50)).rejects.toThrow(
+      'Failed to finalize escrow transaction'
+    );
+
+    expect(updatePayloads).toHaveLength(3);
+    expect(updatePayloads[1]).toMatchObject({ status: 'failed' });
+    expect(updatePayloads[2]).toMatchObject({
+      metadata: expect.objectContaining({
+        needs_balance_refund: true,
+        needs_balance_refund_amount: 50,
+      }),
+    });
   });
 });
