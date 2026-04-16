@@ -666,11 +666,23 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           // local wallet escrow record and we can continue. This handles bounties accepted
           // before the wallet-escrow-at-posting feature was deployed.
           if (!bountyData?.payment_intent_id) {
-            console.error(
-              '[wallet] No funded escrow found and no payment_intent_id for bounty:',
+            // No local escrow record and no Stripe PaymentIntent. This can occur when
+            // the app's local wallet state is lost (reinstall / cache clear) for a paid
+            // bounty that was escrowed via the internal wallet path.
+            // Fall through to the server-side /wallet/release endpoint — it tracks
+            // escrow state authoritatively in the database.
+            if (!bountyData?.amount) {
+              // Genuinely no amount on record — nothing to release.
+              console.error(
+                '[wallet] No funded escrow, no payment_intent_id, and no amount for bounty:',
+                bountyId
+              );
+              return false;
+            }
+            console.warn(
+              '[wallet] No local escrow record found; attempting server-side release for bounty:',
               bountyId
             );
-            return false;
           }
         }
 
