@@ -12,7 +12,6 @@ import { Alert } from 'react-native'
 
 interface UseAcceptRequestParams {
   currentUserId?: string
-  balance: number
   bountyRequests: BountyRequestWithDetails[]
   myBounties: Bounty[]
   setBountyRequests: React.Dispatch<React.SetStateAction<BountyRequestWithDetails[]>>
@@ -20,7 +19,6 @@ interface UseAcceptRequestParams {
   setInProgressBounties: React.Dispatch<React.SetStateAction<Bounty[]>>
   setIsLoading: React.Dispatch<React.SetStateAction<{ myBounties: boolean; inProgress: boolean; requests: boolean }>>
   setError: React.Dispatch<React.SetStateAction<string | null>>
-  setShowAddMoney: (show: boolean) => void
   loadMyBounties: () => Promise<void>
   loadInProgress: () => Promise<void>
   loadRequestsForMyBounties: (bounties: Bounty[]) => Promise<void>
@@ -30,7 +28,6 @@ interface UseAcceptRequestParams {
 
 export function useAcceptRequest({
   currentUserId,
-  balance,
   bountyRequests,
   myBounties,
   setBountyRequests,
@@ -38,7 +35,6 @@ export function useAcceptRequest({
   setInProgressBounties,
   setIsLoading,
   setError,
-  setShowAddMoney,
   loadMyBounties,
   loadInProgress,
   loadRequestsForMyBounties,
@@ -62,21 +58,6 @@ export function useAcceptRequest({
       // Prepare identifiers and hunter id
       const hunterIdForConv = (request as any).hunter_id || (request as any).user_id
       const resolvedBountyId = (request.bounty as any)?.id ?? (request as any)?.bounty_id
-
-      // Check balance before any optimistic UI updates so the UI stays consistent if we bail early
-      if (request.bounty && !request.bounty.is_for_honor && request.bounty.amount > 0) {
-        if (balance < request.bounty.amount) {
-          Alert.alert(
-            'Insufficient Balance',
-            `You need $${request.bounty.amount.toFixed(2)} to accept this request. Your current balance is $${balance.toFixed(2)}.\n\nWould you like to add money to your wallet?`,
-            [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Add Money', onPress: () => setShowAddMoney(true) }
-            ]
-          )
-          return
-        }
-      }
 
       // Optimistically remove all requests for this bounty so UI moves immediately
       if (resolvedBountyId != null) {
@@ -153,9 +134,8 @@ export function useAcceptRequest({
         }
       }
 
-      // Note: Wallet escrow is created as part of request acceptance, not at bounty posting time.
-      // The acceptRequest() flow on the server calls paymentService.createEscrow(...) and updates payment_intent_id.
-      // This hook intentionally does NOT create escrow directly; do not add extra escrow creation here to avoid duplicates.
+      // Note: Wallet escrow is funded at bounty creation time.
+      // This accept flow should not perform additional balance checks or charge the poster again.
 
       // Auto-create a conversation for coordination (use bountyId as context)
       try {
@@ -294,7 +274,6 @@ export function useAcceptRequest({
     }
   }, [
     currentUserId,
-    balance,
     bountyRequests,
     myBounties,
     setBountyRequests,
@@ -302,7 +281,6 @@ export function useAcceptRequest({
     setInProgressBounties,
     setIsLoading,
     setError,
-    setShowAddMoney,
     loadMyBounties,
     loadInProgress,
     loadRequestsForMyBounties,
