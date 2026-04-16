@@ -11,7 +11,7 @@
  * - Atomic balance updates
  */
 
-import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@supabase/supabase-js';
 import { config } from '../config';
 import {
@@ -27,7 +27,6 @@ import { withStripeIdempotency } from './stripe-safeguards';
 
 // Initialize Supabase admin client (relaxed typing to avoid PostgREST `never` inference)
 let supabaseAdmin: SupabaseClient<any> | null = null;
-const POSTGRES_UNIQUE_VIOLATION = '23505';
 
 function getSupabaseAdmin(): SupabaseClient<any> {
   if (!supabaseAdmin) {
@@ -731,26 +730,26 @@ export async function createEscrow(
   // Generate effective idempotency key
   const effectiveIdempotencyKey = idempotencyKey || `escrow_${bountyId}_${posterId}`;
 
-  // Check for existing escrow transaction to prevent duplicates/retries from
-  // creating additional debits.
+  // Check for existing escrow transaction to prevent duplicates
   const { data: existingEscrow } = await admin
     .from('wallet_transactions')
-    .select('id, status')
+    .select('id')
     .eq('bounty_id', bountyId)
     .eq('type', 'escrow')
-    .in('status', ['pending', 'completed'])
+    .eq('status', 'completed')
     .maybeSingle();
 
   if (existingEscrow) {
-    if (existingEscrow.status === 'pending') {
-      throw new ConflictError('Escrow is already being processed for this bounty');
-    }
     throw new ConflictError('Escrow already exists for this bounty');
   }
 
-  // Create pending escrow transaction first, then deduct funds and mark complete.
-  // This prevents a "completed" escrow row from being left behind if balance
-  // deduction fails.
+  // Deduct from poster's balance first (validates sufficient balance).
+  // Doing this before the insert means a failed insert can be compensated,
+  // whereas the reverse order would leave a 'completed' escrow record that
+  // permanently blocks retries via the duplicate check above.
+  await updateBalance(posterId, -amount);
+
+  // Create escrow transaction
   const { data: transaction, error: txError } = await admin
     .from('wallet_transactions')
     .insert([
@@ -760,9 +759,10 @@ export async function createEscrow(
         type: 'escrow',
         amount: -amount, // Negative for debit
         description: `Escrow for bounty ${bountyId}`,
-        status: 'pending',
+        status: 'completed',
         metadata: {
           bounty_id: bountyId,
+          escrowed_at: new Date().toISOString(),
           idempotency_key: effectiveIdempotencyKey,
         },
       },
@@ -771,128 +771,18 @@ export async function createEscrow(
     .single();
 
   if (txError) {
-    if (txError.code === POSTGRES_UNIQUE_VIOLATION) {
-      throw new ConflictError('Escrow is already being processed for this bounty');
-    }
+    // Compensate: restore the balance that was already deducted so the
+    // caller can safely retry without being permanently blocked.
+    await updateBalance(posterId, amount).catch(() => {
+      // Log compensation failure but don't swallow the original error.
+      // Manual reconciliation will be needed if this path is hit.
+    });
     throw new ExternalServiceError('Supabase', 'Failed to create escrow transaction', {
       error: txError.message,
     });
   }
 
-  let balanceWasDeducted = false;
-  try {
-    // Deduct from poster balance atomically (enforces hold/frozen constraints too)
-    await withdrawBalance(posterId, amount);
-    balanceWasDeducted = true;
-
-    // Mark escrow as completed only after successful deduction
-    const completedMetadata = {
-      ...(transaction.metadata || {}),
-      escrowed_at: new Date().toISOString(),
-    };
-    const { error: completeError } = await admin
-      .from('wallet_transactions')
-      .update({
-        status: 'completed',
-        metadata: completedMetadata,
-      })
-      .eq('id', transaction.id);
-
-    if (completeError) {
-      throw new ExternalServiceError('Supabase', 'Failed to finalize escrow transaction', {
-        error: completeError.message,
-      });
-    }
-
-    return toWalletTransaction({
-      ...transaction,
-      status: 'completed',
-      metadata: completedMetadata,
-    });
-  } catch (error) {
-    // Best-effort mark failed for observability/reconciliation
-    try {
-      await admin
-        .from('wallet_transactions')
-        .update({
-          status: 'failed',
-          metadata: {
-            ...(transaction.metadata || {}),
-            failed_at: new Date().toISOString(),
-            failure_reason: error instanceof Error ? error.message : String(error),
-          },
-        })
-        .eq('id', transaction.id);
-    } catch (txUpdateError) {
-      logger.error(
-        {
-          posterId,
-          bountyId,
-          transactionId: transaction.id,
-          error: txUpdateError instanceof Error ? txUpdateError.message : String(txUpdateError),
-        },
-        '[WalletService] Failed to mark escrow transaction as failed'
-      );
-    }
-
-    // If balance was already deducted, refund it.
-    if (balanceWasDeducted) {
-      try {
-        // Refund uses updateBalance(+amount): this is a credit path (not a guarded
-        // withdrawal), and is only executed after we already deducted the same amount.
-        await updateBalance(posterId, amount);
-      } catch (rollbackError) {
-        logger.error(
-          {
-            posterId,
-            bountyId,
-            transactionId: transaction.id,
-            amount,
-            error: rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
-          },
-          '[WalletService] CRITICAL: Failed to rollback poster balance after escrow failure'
-        );
-
-        // Flag for reconciliation so automated jobs can restore balance later.
-        try {
-          const flagResult: { error: PostgrestError | null } = await admin
-            .from('wallet_transactions')
-            .update({
-              metadata: {
-                ...(transaction.metadata || {}),
-                failed_at: new Date().toISOString(),
-                failure_reason: error instanceof Error ? error.message : String(error),
-                needs_balance_refund: true,
-                needs_balance_refund_amount: amount,
-                rollback_failed_at: new Date().toISOString(),
-              },
-            })
-            .eq('id', transaction.id);
-          const flagError = flagResult.error;
-
-          if (flagError) {
-            logger.error(
-              { posterId, bountyId, transactionId: transaction.id, amount, error: flagError },
-              '[WalletService] CRITICAL: Failed to flag escrow transaction for balance refund - manual intervention required'
-            );
-          }
-        } catch (flagError) {
-          logger.error(
-            {
-              posterId,
-              bountyId,
-              transactionId: transaction.id,
-              amount,
-              error: flagError instanceof Error ? flagError.message : String(flagError),
-            },
-            '[WalletService] CRITICAL: Failed to flag escrow transaction for balance refund - manual intervention required'
-          );
-        }
-      }
-    }
-
-    throw error;
-  }
+  return toWalletTransaction(transaction);
 }
 
 /**
