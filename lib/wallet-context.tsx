@@ -275,23 +275,48 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           if (txResponse.ok && mountedRef.current) {
             const txData = await txResponse.json();
             if (txData.transactions && Array.isArray(txData.transactions)) {
+              // Determine which bounty IDs have already been settled (release or refund)
+              // so escrow rows can be tagged as 'released' rather than 'funded' after a
+              // cold reload. Without this, escrowStatus is undefined for all transactions
+              // fetched from the API, causing releaseFunds to fail silently on restart.
+              const settledBountyIds = new Set<string>(
+                (txData.transactions as any[])
+                  .filter((tx: any) => tx.type === 'release' || tx.type === 'refund')
+                  .map((tx: any) => String(tx.details?.bounty_id ?? ''))
+                  .filter(Boolean)
+              );
+
               // Map API transactions to local format
               const mappedTransactions: WalletTransactionRecord[] = txData.transactions.map(
-                (tx: any) => ({
-                  id: tx.id,
-                  type: tx.type as WalletTransactionType,
-                  // Use centralized config for transaction sign
-                  amount: OUTFLOW_TYPES.includes(tx.type)
-                    ? -Math.abs(tx.amount)
-                    : Math.abs(tx.amount),
-                  date: new Date(tx.date),
-                  details: {
-                    title: tx.details?.title,
-                    method: tx.details?.method,
-                    status: tx.details?.status,
-                    bounty_id: tx.details?.bounty_id,
-                  },
-                })
+                (tx: any) => {
+                  let escrowStatus: 'funded' | 'pending' | 'released' | undefined;
+                  if (tx.type === 'escrow') {
+                    const bid = String(tx.details?.bounty_id ?? '');
+                    if (settledBountyIds.has(bid)) {
+                      escrowStatus = 'released';
+                    } else if (tx.details?.status === 'completed') {
+                      escrowStatus = 'funded';
+                    } else {
+                      escrowStatus = 'pending';
+                    }
+                  }
+                  return {
+                    id: tx.id,
+                    type: tx.type as WalletTransactionType,
+                    // Use centralized config for transaction sign
+                    amount: OUTFLOW_TYPES.includes(tx.type)
+                      ? -Math.abs(tx.amount)
+                      : Math.abs(tx.amount),
+                    date: new Date(tx.date),
+                    escrowStatus,
+                    details: {
+                      title: tx.details?.title,
+                      method: tx.details?.method,
+                      status: tx.details?.status,
+                      bounty_id: tx.details?.bounty_id,
+                    },
+                  };
+                }
               );
 
               // Merge inside the setTransactions updater so the merge always runs
@@ -632,17 +657,28 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             tx.escrowStatus === 'funded'
         );
 
-        if (!escrowTx) {
-          console.error('No funded escrow found for bounty:', bountyId);
-          return false;
-        }
-
-        // Get the bounty to check whether a Stripe PaymentIntent was created for it.
-        // Bounties escrowed at posting time (new flow) have no payment_intent_id and must
-        // be settled via the internal /wallet/release balance-transfer endpoint instead.
+        // Fetch bounty data early — needed to determine the release path and as a
+        // fallback amount source for legacy bounties that have no local escrow record.
         const bountyData = await bountyService.getById(bountyId);
 
-        const grossAmount = Math.abs(escrowTx.amount);
+        if (!escrowTx) {
+          // If there's a Stripe PaymentIntent, the Stripe capture path doesn't require a
+          // local wallet escrow record and we can continue. This handles bounties accepted
+          // before the wallet-escrow-at-posting feature was deployed.
+          if (!bountyData?.payment_intent_id) {
+            console.error(
+              '[wallet] No funded escrow found and no payment_intent_id for bounty:',
+              bountyId
+            );
+            return false;
+          }
+        }
+
+        // Use local escrow amount when available; fall back to the bounty's stated amount
+        // for legacy bounties that were accepted before wallet escrow at posting was live.
+        const grossAmount = escrowTx
+          ? Math.abs(escrowTx.amount)
+          : Math.abs(bountyData?.amount ?? 0);
         let platformFee: number;
         let netAmount: number;
 
@@ -690,20 +726,23 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           netAmount = releaseData.releaseAmount ?? grossAmount - platformFee;
         }
 
-        // Update local escrow transaction status
-        setTransactions(prev => {
-          const next = prev.map(tx =>
-            tx.id === escrowTx.id
-              ? ({
-                  ...tx,
-                  escrowStatus: 'released',
-                  details: { ...tx.details, status: 'completed' },
-                } as WalletTransactionRecord)
-              : tx
-          ) as WalletTransactionRecord[];
-          persistTransactions(next);
-          return next;
-        });
+        // Update local escrow transaction status (only when a local escrow record exists;
+        // legacy Stripe-path bounties may not have one in the local state).
+        if (escrowTx) {
+          setTransactions(prev => {
+            const next = prev.map(tx =>
+              tx.id === escrowTx.id
+                ? ({
+                    ...tx,
+                    escrowStatus: 'released',
+                    details: { ...tx.details, status: 'completed' },
+                  } as WalletTransactionRecord)
+                : tx
+            ) as WalletTransactionRecord[];
+            persistTransactions(next);
+            return next;
+          });
+        }
 
         // Log platform fee transaction (for local record keeping)
         await logTransaction({
