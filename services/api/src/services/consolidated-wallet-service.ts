@@ -771,11 +771,11 @@ export async function createEscrow(
     });
   }
 
-  let balanceDeducted = false;
+  let balanceWasDeducted = false;
   try {
     // Deduct from poster balance atomically (enforces hold/frozen constraints too)
     await withdrawBalance(posterId, amount);
-    balanceDeducted = true;
+    balanceWasDeducted = true;
 
     // Mark escrow as completed only after successful deduction
     const completedMetadata = {
@@ -828,8 +828,10 @@ export async function createEscrow(
     }
 
     // If balance was already deducted, refund it.
-    if (balanceDeducted) {
+    if (balanceWasDeducted) {
       try {
+        // Refund uses updateBalance(+amount): this is a credit path (not a guarded
+        // withdrawal), and is only executed after we already deducted the same amount.
         await updateBalance(posterId, amount);
       } catch (rollbackError) {
         logger.error(

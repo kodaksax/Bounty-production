@@ -48,10 +48,14 @@ function buildSupabaseAdmin(options: BuildOptions = {}) {
   const updatePayloads: any[] = [];
   const rpcCalls: Array<{ fn: string; args: any }> = [];
 
-  const updateEq = jest
-    .fn()
-    .mockImplementationOnce(async () => ({ error: options.completeUpdateError || null }))
-    .mockImplementation(async () => ({ error: null }));
+  let updateCallCount = 0;
+  const updateEq = jest.fn(async () => {
+    updateCallCount += 1;
+    if (updateCallCount === 1) {
+      return { error: options.completeUpdateError || null };
+    }
+    return { error: null };
+  });
 
   const admin = {
     from: jest.fn(() => ({
