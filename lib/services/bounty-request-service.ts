@@ -828,7 +828,7 @@ export const bountyRequestService = {
   /**
    * Accept a bounty request
    * Moves the request/bounty state to in_progress.
-   * Escrow funding is handled at bounty creation time.
+   * Escrow funding is handled at bounty creation time (see useBountyForm.handlePostBounty).
    *
    * Safeguards:
    * - Bounty transition uses optimistic lock (status = 'open' + accepted_by IS NULL)

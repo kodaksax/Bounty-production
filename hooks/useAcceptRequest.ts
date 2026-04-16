@@ -135,7 +135,7 @@ export function useAcceptRequest({
       }
 
       // Note: Wallet escrow is funded at bounty creation time (see useBountyForm.handlePostBounty).
-      // This accept flow should not perform additional balance checks or charge the poster again.
+      // Checking/charging again in this accept flow would double-charge the poster.
 
       // Auto-create a conversation for coordination (use bountyId as context)
       try {
