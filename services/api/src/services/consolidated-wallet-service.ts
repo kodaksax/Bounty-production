@@ -786,7 +786,21 @@ export async function createEscrow(
   try {
     await withdrawBalance(posterId, amount);
   } catch (withdrawError) {
-    await admin.from('wallet_transactions').update({ status: 'failed' }).eq('id', transaction.id);
+    try {
+      await admin.from('wallet_transactions').update({ status: 'failed' }).eq('id', transaction.id);
+    } catch (markFailedError) {
+      // If we can't mark the record as failed it will remain 'pending', permanently
+      // blocking new escrow attempts for this bounty. Log so ops can reconcile.
+      logger.error(
+        {
+          transactionId: transaction.id,
+          bountyId,
+          error:
+            markFailedError instanceof Error ? markFailedError.message : String(markFailedError),
+        },
+        '[createEscrow] CRITICAL: Failed to mark escrow transaction as failed after withdraw error — record stuck in pending'
+      );
+    }
     throw withdrawError;
   }
 
@@ -804,7 +818,23 @@ export async function createEscrow(
     );
 
     // Mark the record as failed regardless of whether the refund succeeded.
-    await admin.from('wallet_transactions').update({ status: 'failed' }).eq('id', transaction.id);
+    try {
+      await admin.from('wallet_transactions').update({ status: 'failed' }).eq('id', transaction.id);
+    } catch (markFailedError) {
+      // If we can't mark the record as failed it will remain 'pending', permanently
+      // blocking new escrow attempts for this bounty. Balance may also have been
+      // deducted without a refund — log so ops can reconcile both.
+      logger.error(
+        {
+          transactionId: transaction.id,
+          bountyId,
+          amount,
+          error:
+            markFailedError instanceof Error ? markFailedError.message : String(markFailedError),
+        },
+        '[createEscrow] CRITICAL: Failed to mark escrow transaction as failed after finalize error — record stuck in pending, balance may need manual refund'
+      );
+    }
 
     if (refundError) {
       // Refund also failed — flag the record so ops can reconcile manually.
