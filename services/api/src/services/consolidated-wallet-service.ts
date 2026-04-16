@@ -11,7 +11,7 @@
  * - Atomic balance updates
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@supabase/supabase-js';
 import { config } from '../config';
 import {
@@ -27,6 +27,7 @@ import { withStripeIdempotency } from './stripe-safeguards';
 
 // Initialize Supabase admin client (relaxed typing to avoid PostgREST `never` inference)
 let supabaseAdmin: SupabaseClient<any> | null = null;
+const POSTGRES_UNIQUE_VIOLATION = '23505';
 
 function getSupabaseAdmin(): SupabaseClient<any> {
   if (!supabaseAdmin) {
@@ -770,7 +771,7 @@ export async function createEscrow(
     .single();
 
   if (txError) {
-    if ((txError as any).code === '23505') {
+    if (txError.code === POSTGRES_UNIQUE_VIOLATION) {
       throw new ConflictError('Escrow is already being processed for this bounty');
     }
     throw new ExternalServiceError('Supabase', 'Failed to create escrow transaction', {
@@ -854,7 +855,7 @@ export async function createEscrow(
 
         // Flag for reconciliation so automated jobs can restore balance later.
         try {
-          const { error: flagError }: { error: any } = (await admin
+          const flagResult: { error: PostgrestError | null } = await admin
             .from('wallet_transactions')
             .update({
               metadata: {
@@ -866,7 +867,8 @@ export async function createEscrow(
                 rollback_failed_at: new Date().toISOString(),
               },
             })
-            .eq('id', transaction.id)) as any;
+            .eq('id', transaction.id);
+          const flagError = flagResult.error;
 
           if (flagError) {
             logger.error(
