@@ -569,8 +569,41 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   }, [bounty.attachments_json])
 
   const handleSendMessage = async (text: string) => {
-    if (!conversation) throw new Error('No conversation')
-    await messageService.sendMessage(conversation.id, text, currentUserId)
+    const resolveCounterpartyId = () => {
+      const participantFallback = (conversation?.participantIds || []).find(
+        id => String(id) !== String(currentUserId || getCurrentUserId())
+      )
+
+      if (isOwner) {
+        return String(bounty.accepted_by || readyRecord?.hunter_id || participantFallback || '')
+      }
+
+      return String(bounty.poster_id || bounty.user_id || participantFallback || '')
+    }
+
+    let targetConversationId = conversation?.id ? String(conversation.id) : null
+    const counterpartyId = resolveCounterpartyId()
+
+    if (counterpartyId) {
+      try {
+        const canonicalConversation = await messageService.getOrCreateConversation(
+          [counterpartyId],
+          '',
+          String(bounty.id)
+        )
+        if (canonicalConversation?.id) {
+          targetConversationId = String(canonicalConversation.id)
+          if (!conversation || String(conversation.id) !== targetConversationId) {
+            dispatchUi({ type: 'set', key: 'conversation', value: canonicalConversation })
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to resolve canonical conversation for quick message', err)
+      }
+    }
+
+    if (!targetConversationId) throw new Error('No conversation')
+    await messageService.sendMessage(targetConversationId, text, currentUserId)
   }
 
   const formatTime = (seconds: number): string => {
@@ -783,60 +816,36 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   }
 
   const handleMessagePoster = async () => {
-    // Ensure we have a valid conversation id (string) before calling navigationIntent
-    const convId = conversation && conversation.id ? String(conversation.id) : null
+    let targetConversationId: string | null = null
+    try {
+      const posterId = bounty.poster_id || bounty.user_id
+      if (!posterId) {
+        Alert.alert('No Conversation', 'No active conversation found for this bounty yet.')
+        return
+      }
 
-    // If no conversation exists yet, attempt to create one with the poster
-    if (!convId) {
-      try {
-        const posterId = bounty.poster_id || bounty.user_id
-        if (!posterId) {
-          Alert.alert('No Conversation', 'No active conversation found for this bounty yet.')
-          return
-        }
+      const targetConversation = await messageService.getOrCreateConversation([String(posterId)], '', String(bounty.id))
+      targetConversationId = targetConversation?.id ? String(targetConversation.id) : null
 
-        const created = await messageService.getOrCreateConversation([String(posterId)], '', String(bounty.id))
-        const createdId = created?.id ? String(created.id) : null
-        if (!createdId) {
-          Alert.alert('Message Failed', 'We could not open or create a conversation. You can try again or compose a new message manually.')
-          return
-        }
-
-        // Prefer navigationIntent so root UI opens the correct tab, fallback to direct route
-        try {
-          await navigationIntent.setPendingConversationId(createdId)
-          router.push('/tabs/bounty-app?screen=messages' as '/tabs/bounty-app')
-          return
-        } catch (err) {
-          console.error('Failed to open new conversation via navigation intent', err)
-          try {
-            ;(router as any).push(`/messages/${encodeURIComponent(String(createdId))}`)
-            return
-          } catch (err2) {
-            console.error('Fallback direct conversation route failed for created conv', err2)
-          }
-        }
-      } catch (err) {
-        console.error('Unable to open or create conversation', err)
+      if (!targetConversationId) {
         Alert.alert('Message Failed', 'We could not open or create a conversation. You can try again or compose a new message manually.')
         return
       }
-    }
 
-    // If we have an existing conversation id, navigate to it
-    try {
-      await navigationIntent.setPendingConversationId(convId)
-      router.push('/tabs/bounty-app?screen=messages' as '/tabs/bounty-app')
+      dispatchUi({ type: 'set', key: 'conversation', value: targetConversation })
+      await navigationIntent.setPendingConversationId(targetConversationId)
+      router.push('/tabs/messenger' as '/tabs/messenger')
     } catch (err) {
-      console.error('Failed to open conversation via navigation intent', err)
-      // Fallback: try to open the conversation route directly
-      try {
-        ;(router as any).push(`/messages/${encodeURIComponent(String(convId))}`)
-        return
-      } catch (err2) {
-        console.error('Fallback direct conversation route failed', err2)
+      console.error('Failed to open conversation via messenger tab', err)
+      if (targetConversationId) {
+        try {
+          ;(router as any).push(`/messages/${encodeURIComponent(targetConversationId)}`)
+          return
+        } catch (err2) {
+          console.error('Fallback direct conversation route failed', err2)
+        }
       }
-      Alert.alert('Unable to Open Chat', 'Please try again in a moment.')
+      Alert.alert('Message Failed', 'We could not open or create a conversation. You can try again or compose a new message manually.')
     }
   }
 
