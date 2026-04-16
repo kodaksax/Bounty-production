@@ -786,17 +786,18 @@ export async function createEscrow(
   try {
     await withdrawBalance(posterId, amount);
   } catch (withdrawError) {
-    try {
-      await admin.from('wallet_transactions').update({ status: 'failed' }).eq('id', transaction.id);
-    } catch (markFailedError) {
+    const { error: markFailedError } = await admin
+      .from('wallet_transactions')
+      .update({ status: 'failed' })
+      .eq('id', transaction.id);
+    if (markFailedError) {
       // If we can't mark the record as failed it will remain 'pending', permanently
       // blocking new escrow attempts for this bounty. Log so ops can reconcile.
       logger.error(
         {
           transactionId: transaction.id,
           bountyId,
-          error:
-            markFailedError instanceof Error ? markFailedError.message : String(markFailedError),
+          error: markFailedError.message,
         },
         '[createEscrow] CRITICAL: Failed to mark escrow transaction as failed after withdraw error — record stuck in pending'
       );
