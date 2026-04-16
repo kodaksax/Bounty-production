@@ -59,22 +59,24 @@ function buildSupabaseAdmin(options: BuildOptions = {}) {
     return { error: null };
   });
 
+  // Chainable query object returned by select(): eq() and in() both return
+  // the same chain so any number of .eq()/.in() calls before .maybeSingle()
+  // or .single() work regardless of how the service chains them.
+  const selectChain: any = {
+    eq: jest.fn(() => selectChain),
+    in: jest.fn(() => selectChain),
+    maybeSingle: jest.fn(async () => ({
+      data: options.existingEscrowStatus
+        ? { id: 'existing_escrow', status: options.existingEscrowStatus }
+        : null,
+      error: null,
+    })),
+    single: jest.fn(async () => ({ data: null, error: null })),
+  };
+
   const admin = {
     from: jest.fn(() => ({
-      select: jest.fn(() => ({
-        eq: jest.fn(() => ({
-          eq: jest.fn(() => ({
-            in: jest.fn(() => ({
-              maybeSingle: jest.fn(async () => ({
-                data: options.existingEscrowStatus
-                  ? { id: 'existing_escrow', status: options.existingEscrowStatus }
-                : null,
-                error: null,
-              })),
-            })),
-          })),
-        })),
-      })),
+      select: jest.fn(() => selectChain),
       insert: jest.fn(() => ({
         select: jest.fn(() => ({
           single: jest.fn(async () => ({

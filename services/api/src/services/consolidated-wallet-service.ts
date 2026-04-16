@@ -15,11 +15,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@supabase/supabase-js';
 import { config } from '../config';
 import {
-    ConflictError,
-    ExternalServiceError,
-    handleStripeError,
-    NotFoundError,
-    ValidationError,
+  ConflictError,
+  ExternalServiceError,
+  handleStripeError,
+  NotFoundError,
+  ValidationError,
 } from '../middleware/error-handler';
 import { stripe } from './consolidated-payment-service';
 import { logger } from './logger';
@@ -730,26 +730,31 @@ export async function createEscrow(
   // Generate effective idempotency key
   const effectiveIdempotencyKey = idempotencyKey || `escrow_${bountyId}_${posterId}`;
 
-  // Check for existing escrow transaction to prevent duplicates
+  // Check for existing escrow transaction to prevent duplicates.
+  // Include 'pending' so that an in-flight or failed-mid-flight escrow also
+  // blocks a retry, preventing double deductions.
   const { data: existingEscrow } = await admin
     .from('wallet_transactions')
-    .select('id')
+    .select('id, status')
     .eq('bounty_id', bountyId)
     .eq('type', 'escrow')
-    .eq('status', 'completed')
+    .in('status', ['pending', 'completed'])
     .maybeSingle();
 
   if (existingEscrow) {
+    if (existingEscrow.status === 'pending') {
+      throw new ConflictError('Escrow is already being processed for this bounty');
+    }
     throw new ConflictError('Escrow already exists for this bounty');
   }
 
-  // Deduct from poster's balance first (validates sufficient balance).
-  // Doing this before the insert means a failed insert can be compensated,
-  // whereas the reverse order would leave a 'completed' escrow record that
-  // permanently blocks retries via the duplicate check above.
-  await updateBalance(posterId, -amount);
-
-  // Create escrow transaction
+  // Insert the escrow record as 'pending' first.  This acts as a distributed
+  // lock: concurrent retries will see the pending record and throw a conflict
+  // before touching the user's balance.  It also creates an immutable audit
+  // trail — on any failure the record is updated to 'failed' so ops can
+  // identify transactions that need manual reconciliation.
+  // withdrawBalance (called below) enforces balance_on_hold and balance_frozen
+  // checks; updateBalance(posterId, -amount) would bypass those guards.
   const { data: transaction, error: txError } = await admin
     .from('wallet_transactions')
     .insert([
@@ -759,7 +764,7 @@ export async function createEscrow(
         type: 'escrow',
         amount: -amount, // Negative for debit
         description: `Escrow for bounty ${bountyId}`,
-        status: 'completed',
+        status: 'pending',
         metadata: {
           bounty_id: bountyId,
           escrowed_at: new Date().toISOString(),
@@ -771,14 +776,51 @@ export async function createEscrow(
     .single();
 
   if (txError) {
-    // Compensate: restore the balance that was already deducted so the
-    // caller can safely retry without being permanently blocked.
-    await updateBalance(posterId, amount).catch(() => {
-      // Log compensation failure but don't swallow the original error.
-      // Manual reconciliation will be needed if this path is hit.
-    });
     throw new ExternalServiceError('Supabase', 'Failed to create escrow transaction', {
       error: txError.message,
+    });
+  }
+
+  // Deduct from poster's balance.  If this fails we mark the pending record as
+  // 'failed' (releasing the lock) so the caller can safely retry.
+  try {
+    await withdrawBalance(posterId, amount);
+  } catch (withdrawError) {
+    await admin.from('wallet_transactions').update({ status: 'failed' }).eq('id', transaction.id);
+    throw withdrawError;
+  }
+
+  // Finalize: flip the record from 'pending' to 'completed'.
+  const { error: completeError } = await admin
+    .from('wallet_transactions')
+    .update({ status: 'completed' })
+    .eq('id', transaction.id);
+
+  if (completeError) {
+    // The balance was already deducted — attempt to refund it.
+    const { error: refundError } = await updateBalance(posterId, amount).then(
+      () => ({ error: null as null }),
+      (e: unknown) => ({ error: e })
+    );
+
+    // Mark the record as failed regardless of whether the refund succeeded.
+    await admin.from('wallet_transactions').update({ status: 'failed' }).eq('id', transaction.id);
+
+    if (refundError) {
+      // Refund also failed — flag the record so ops can reconcile manually.
+      await admin
+        .from('wallet_transactions')
+        .update({
+          metadata: {
+            needs_balance_refund: true,
+            needs_balance_refund_amount: amount,
+          },
+        })
+        .eq('id', transaction.id);
+    }
+
+    throw new ExternalServiceError('Supabase', 'Failed to finalize escrow transaction', {
+      error: completeError.message,
     });
   }
 
