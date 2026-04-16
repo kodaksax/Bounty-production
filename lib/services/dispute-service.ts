@@ -25,7 +25,9 @@ async function verifyAdminRole(): Promise<boolean> {
 }
 
 /**
- * Helper to send notification via Supabase direct insert
+ * Helper to send notification via SECURITY DEFINER RPC so we can notify
+ * users other than the currently authenticated one without violating the
+ * `notifications_insert_own` RLS policy.
  */
 async function sendNotification(
   userId: string,
@@ -40,13 +42,12 @@ async function sendNotification(
       return;
     }
 
-    const { error } = await supabase.from('notifications').insert({
-      user_id: userId,
-      type,
-      title,
-      body,
-      data: data || null,
-      read: false,
+    const { error } = await supabase.rpc('send_system_notification', {
+      p_user_id: userId,
+      p_type: type,
+      p_title: title,
+      p_body: body,
+      p_data: data ?? null,
     });
 
     if (error) {
