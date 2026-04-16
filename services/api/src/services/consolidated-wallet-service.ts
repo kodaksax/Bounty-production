@@ -808,10 +808,18 @@ export async function createEscrow(
 
     if (refundError) {
       // Refund also failed — flag the record so ops can reconcile manually.
+      // Merge reconciliation flags into the existing metadata instead of
+      // replacing it, so bounty_id, escrowed_at, and idempotency_key are
+      // preserved for the audit trail.
+      const existingMetadata =
+        typeof transaction.metadata === 'object' && transaction.metadata !== null
+          ? transaction.metadata
+          : {};
       await admin
         .from('wallet_transactions')
         .update({
           metadata: {
+            ...existingMetadata,
             needs_balance_refund: true,
             needs_balance_refund_amount: amount,
           },
@@ -824,7 +832,7 @@ export async function createEscrow(
     });
   }
 
-  return toWalletTransaction(transaction);
+  return toWalletTransaction({ ...transaction, status: 'completed' });
 }
 
 /**
