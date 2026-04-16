@@ -15,7 +15,15 @@ BEGIN
 END$$;
 
 -- Backfill poster_id from user_id if present
-UPDATE bounties SET poster_id = user_id WHERE poster_id IS NULL AND user_id IS NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = current_schema() AND table_name = 'bounties' AND column_name = 'user_id'
+  ) THEN
+    UPDATE bounties SET poster_id = user_id WHERE poster_id IS NULL AND user_id IS NOT NULL;
+  END IF;
+END$$;
 
 -- Ensure profiles primary key exists (fail early if not)
 -- Add FK constraint on poster_id -> profiles(id) if not exists
@@ -43,7 +51,15 @@ BEGIN
 END$$;
 
 -- Backfill hunter_id from user_id where applicable
-UPDATE bounty_requests SET hunter_id = user_id WHERE hunter_id IS NULL AND user_id IS NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = current_schema() AND table_name = 'bounty_requests' AND column_name = 'user_id'
+  ) THEN
+    UPDATE bounty_requests SET hunter_id = user_id WHERE hunter_id IS NULL AND user_id IS NOT NULL;
+  END IF;
+END$$;
 
 -- Add FK constraint on hunter_id -> profiles(id) if not exists
 DO $$

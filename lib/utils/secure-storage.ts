@@ -338,12 +338,13 @@ export async function migrateSecureStorageKeys(): Promise<void> {
     // All LEGACY_KEYS entries contain those characters, so SecureStore.getItemAsync
     // can never reach the Keychain for them. We must call the underlying native
     // module directly to bypass the JS-layer validation.
-    let nativeStore: {
+    type NativeSecureStoreModule = {
       getValueWithKeyAsync(key: string, options: Record<string, unknown>): Promise<string | null>;
       deleteValueWithKeyAsync(key: string, options: Record<string, unknown>): Promise<void>;
-    } | null = null;
+    };
+    let nativeStore: NativeSecureStoreModule | null = null;
     try {
-      nativeStore = requireNativeModule('ExpoSecureStore') as typeof nativeStore;
+      nativeStore = requireNativeModule('ExpoSecureStore') as NativeSecureStoreModule;
     } catch {
       // Native module unavailable (e.g. test environment without a native layer).
     }
