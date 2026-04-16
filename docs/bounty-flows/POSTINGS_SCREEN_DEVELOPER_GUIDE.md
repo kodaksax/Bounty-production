@@ -21,6 +21,7 @@
 12. [Security & Permissions](#security--permissions)
 13. [Testing Checklist](#testing-checklist)
 14. [Future Enhancements Summary](#future-enhancements-summary)
+15. [UX Intuitiveness Improvements](#ux-intuitiveness-improvements)
 
 ---
 
@@ -674,6 +675,365 @@ The table below consolidates the highest-priority improvements across all tabs:
 
 ---
 
+## UX Intuitiveness Improvements
+
+> **Context**: Beta testers have reported that the Postings screen requires conscious effort to learn rather than being immediately understood. This section diagnoses the root causes and provides concrete, implementation-ready changes ordered by effort and impact.
+
+Intuitiveness means a user can accomplish their goal without instruction, tooltips, or exploration. The changes below are grouped into three tiers:
+
+- **🟢 Quick Wins** — 1–2 hour changes, zero new dependencies, high perceived improvement
+- **🟡 Medium Changes** — half-day changes, minimal new state, noticeable improvement
+- **🔴 Larger Investments** — multi-day changes, may require new components or backend support
+
+---
+
+### Root Cause Analysis
+
+Beta tester confusion traces to five structural patterns in the current screen:
+
+| Root Cause | Affected Area | Symptom |
+|------------|--------------|---------|
+| **Hidden affordances** | My Postings, In Progress cards | Cards expand, but nothing signals that they are tappable or expandable |
+| **Abstract tab names** | Tab bar | "Requests" and "New" require domain knowledge to interpret |
+| **Invisible navigation shortcuts** | Header | Wallet Balance Button and bookmark icon provide navigation but have no labels |
+| **Buried primary actions** | In Progress WIP section | Work submission, attachment upload, and "Ready to Submit" are inside a collapsed panel |
+| **Silent side-effects** | Requests tab | Accepting an applicant silently creates a conversation — users don't know where to go next |
+
+---
+
+### 🟢 Quick Wins
+
+#### 1. Rename "Requests" → "Applicants"
+
+**Why**: "Requests" is ambiguous — it could mean HTTP requests, cancellation requests, or feature requests. "Applicants" is concrete and immediately understood.
+
+**Where**: `app/tabs/postings-screen.tsx`, line ~286
+
+```diff
+  const tabs = [
+    { id: "new",        label: "New" },
+    { id: "inProgress", label: "In Progress" },
+    { id: "myPostings", label: "My Postings" },
+-   { id: "requests",   label: "Requests" },
++   { id: "requests",   label: "Applicants" },
+  ]
+```
+
+**Accessibility note**: Update `accessibilityHint` on the Requests empty state CTAs from `"Post a Bounty"` to remain unchanged — only the visible label changes.
+
+---
+
+#### 2. Label the Bookmark (Archived History) Icon
+
+**Why**: An unlabeled bookmark icon next to the wallet button is invisible to most users. It is the only path to view completed/archived bounty history, yet nobody finds it.
+
+**Where**: `app/tabs/postings-screen.tsx`, header right section (~line 618)
+
+```diff
+  <TouchableOpacity
+    className="ml-3 p-2 touch-target-min"
+    onPress={() => setShowArchivedBounties(true)}
+    accessibilityRole="button"
+    accessibilityLabel="View archived bounties"
+  >
++   <View className="items-center">
+      <MaterialIcons name="bookmark" size={20} color="#ffffff" accessibilityElementsHidden={true} />
++     <Text className="text-white text-[9px] font-medium" accessibilityElementsHidden={true}>
++       HISTORY
++     </Text>
++   </View>
+  </TouchableOpacity>
+```
+
+---
+
+#### 3. Add a Chevron Expand Indicator to Bounty Cards
+
+**Why**: Tappable/expandable cards must signal their interactivity. Without a chevron, users treat cards as read-only displays.
+
+**Where**: `components/bounty-card.tsx` — add a rotating chevron to the card footer row.
+
+```diff
++ import { Animated } from 'react-native';
+
+  // Inside BountyCardProps, add:
++ expanded?: boolean;
+
+  // Inside the card JSX, in the bottom-right of the card footer:
++ <MaterialIcons
++   name={expanded ? "keyboard-arrow-up" : "keyboard-arrow-down"}
++   size={18}
++   color="#6ee7b7"
++   accessibilityElementsHidden={true}
++ />
+```
+
+Pass `expanded={!!expandedMap[String(bounty.id)]}` from `renderMyPostingItem` and `renderInProgressItem` in `postings-screen.tsx`.
+
+---
+
+#### 4. Add Count Badges to Tab Chips
+
+**Why**: Users don't know they have pending applicants without switching to the Requests tab. A badge gives at-a-glance awareness — the same pattern used in email, messaging, and every major mobile app.
+
+**Where**: `app/tabs/postings-screen.tsx`, tab bar render (~line 657)
+
+Add badge counts to the tabs array:
+
+```tsx
+const tabBadges: Record<string, number> = {
+  requests: bountyRequests.length,
+  inProgress: inProgressBounties.filter(b => b.status === 'in_progress').length,
+}
+```
+
+Update the tab chip render to show the badge:
+
+```tsx
+{tabs.map((tab) => {
+  const isActive = activeTab === tab.id
+  const badge = tabBadges[tab.id] ?? 0
+  return (
+    <TouchableOpacity key={tab.id} onPress={() => setActiveTab(tab.id)} ...>
+      <View className="relative items-center">
+        <Text className={...}>{tab.label.toUpperCase()}</Text>
+        {badge > 0 && (
+          <View
+            className="absolute -top-1 -right-3 bg-red-500 rounded-full min-w-[14px] h-[14px] items-center justify-center"
+            accessibilityElementsHidden={true}
+          >
+            <Text className="text-white text-[8px] font-bold px-0.5">
+              {badge > 99 ? '99+' : badge}
+            </Text>
+          </View>
+        )}
+      </View>
+    </TouchableOpacity>
+  )
+})}
+```
+
+---
+
+#### 5. "Accept opens a chat" Micro-Copy in ApplicantCard
+
+**Why**: Posters accept hunters and then ask support "where is my chat?" because accepting silently creates a conversation in Messenger with no visual confirmation or pointer.
+
+**Where**: `components/applicant-card.tsx`, below the Accept button
+
+```diff
+  <TouchableOpacity onPress={handleAccept} ...>
+    <Text>Accept</Text>
+  </TouchableOpacity>
++ <Text className="text-emerald-300 text-[10px] text-center mt-0.5" accessibilityElementsHidden={true}>
++   Opens a chat in Messenger
++ </Text>
+```
+
+---
+
+#### 6. Show "Draft saved" Indicator on the New Tab
+
+**Why**: Users lose drafts by leaving the New tab, assuming nothing was saved. The opposite is true — drafts persist — but there's no indicator of this.
+
+**Where**: `app/tabs/postings-screen.tsx` — check for a saved draft using `useBountyDraft` and render a small indicator when `activeTab === 'new'`.
+
+```tsx
+// In PostingsScreen:
+const { draft } = useBountyForm(...)
+// draft exists when title is non-empty
+const hasDraft = !!draft?.title
+
+// In the tab render, add below the tab bar:
+{activeTab === 'new' && hasDraft && (
+  <View className="mx-4 mb-1 flex-row items-center gap-1">
+    <MaterialIcons name="save" size={12} color="#6ee7b7" />
+    <Text className="text-emerald-300 text-xs">Draft saved — your progress is restored automatically</Text>
+  </View>
+)}
+```
+
+---
+
+### 🟡 Medium Changes
+
+#### 7. Surface the Primary Action on Collapsed Cards
+
+**Why**: The most important action for an in-progress bounty (e.g., "Submit Work", "Review Submission", "Release Payout") is only reachable by expanding the card and scrolling. Users who never expand cards never complete their bounties.
+
+**Strategy**: Inspect `bounty.status` and `variant` at render time and add a single prominent CTA *below* the collapsed `BountyCard` but *above* the expanded panel. Only show the single most important next action.
+
+```tsx
+// In MyPostingExpandable, between BountyCard and AnimatedSection:
+const primaryAction = useMemo(() => {
+  if (variant === 'owner') {
+    if (hasSubmission)    return { label: 'Review Submission →', color: '#fbbf24', onPress: () => setReviewExpanded(true) }
+    if (bounty.status === 'in_progress') return null // nothing to do yet
+  }
+  if (variant === 'hunter') {
+    if (hasRevisionRequested) return { label: 'View Revision Request →', color: '#f97316', onPress: () => setWipExpanded(true) }
+    if (!hasSubmission && bounty.status === 'in_progress')
+      return { label: 'Submit Work →', color: '#10b981', onPress: () => setWipExpanded(true) }
+    if (submissionPending) return { label: 'Awaiting poster review', color: '#38bdf8', onPress: null }
+  }
+  return null
+}, [variant, hasSubmission, hasRevisionRequested, submissionPending, bounty.status])
+
+{primaryAction && !expanded && (
+  <TouchableOpacity
+    onPress={() => { onToggle(); primaryAction.onPress?.() }}
+    className="mx-1 mb-2 py-2 px-4 rounded-lg flex-row items-center justify-between"
+    style={{ backgroundColor: primaryAction.color + '22', borderWidth: 1, borderColor: primaryAction.color + '66' }}
+  >
+    <Text style={{ color: primaryAction.color, fontSize: 13, fontWeight: '600' }}>
+      {primaryAction.label}
+    </Text>
+    <MaterialIcons name="arrow-forward" size={14} color={primaryAction.color} />
+  </TouchableOpacity>
+)}
+```
+
+---
+
+#### 8. Add "Tap to manage" Subtitle to Card Headers
+
+**Why**: New users don't understand that the card header is tappable. A small, secondary label reinforces the interaction affordance alongside the chevron (Quick Win #3).
+
+**Where**: `components/bounty-card.tsx`, card header subtitle
+
+```diff
+  <Text className="text-white font-semibold text-base" numberOfLines={2}>
+    {bounty.title}
+  </Text>
++ {!expanded && (
++   <Text className="text-emerald-300 text-xs mt-0.5" accessibilityElementsHidden={true}>
++     Tap to manage
++   </Text>
++ )}
+```
+
+Use `expanded` prop added in Quick Win #3.
+
+---
+
+#### 9. Better Empty States for Each Tab
+
+Current empty state descriptions are generic. More contextual copy helps users understand *why* the tab is empty and *exactly* what to do.
+
+**Where**: `app/tabs/postings-screen.tsx`, each tab's `ListEmptyComponent`
+
+| Tab | Current Description | Improved Description |
+|-----|--------------------|--------------------|
+| In Progress | "Ready to start earning? Browse available bounties and accept one to begin!" | "Bounties you apply to show up here once a poster accepts you. Browse open bounties to apply." |
+| My Postings | "You haven't posted any bounties yet. Create your first bounty to get started!" | "Post a task with a reward. When someone applies, you'll review them here in My Postings." |
+| Requests | "When hunters apply to your bounties, you'll review and accept them here. Post a bounty to get started!" | "No applications yet. Make sure your bounty is live and clearly describes the work needed." |
+
+---
+
+#### 10. Progress Stage Indicator Visible Without Expanding
+
+**Why**: Users don't know where a bounty is in its lifecycle until they expand the card. Showing the current stage as a small coloured pill in the collapsed `BountyCard` creates at-a-glance awareness.
+
+The `BountyCard` already has `getStatusLabel()`. Extend it to map to human-readable stage language:
+
+```tsx
+// In bounty-card.tsx getStatusLabel():
+if (reviewNeeded)        return '📋 REVIEW NEEDED'
+if (submittedForReview)  return '📤 SUBMITTED FOR REVIEW'
+// add:
+if (bounty.status === 'in_progress' && !reviewNeeded && !submittedForReview) return '🔨 WORK IN PROGRESS'
+if (bounty.status === 'completed')   return '✅ COMPLETED'
+```
+
+---
+
+### 🔴 Larger Investments
+
+#### 11. One-Time Onboarding Overlay for New Users
+
+**Why**: First-time users see four tabs with no explanation. A lightweight tooltip sequence (run once, stored in `AsyncStorage`) prevents the most common confusion.
+
+**Implementation outline**:
+
+1. Create a `useFirstVisit(key: string)` hook backed by `AsyncStorage`.
+2. After the first `loadMyBounties()` completes and the list is empty, show a `<CoachmarkOverlay>` component.
+3. The overlay highlights, in sequence: (a) the New tab — "Post a task here", (b) the My Postings tab — "Your tasks live here", (c) the Requests (Applicants) tab — "Review and accept applicants here".
+4. Dismiss on tap or after 8 seconds.
+
+```tsx
+const { isFirstVisit, markVisited } = useFirstVisit('postings-screen-v1')
+
+useEffect(() => {
+  if (isFirstVisit && !isLoading.myBounties && myBounties.length === 0) {
+    // Show onboarding overlay
+  }
+}, [isFirstVisit, isLoading.myBounties, myBounties.length])
+```
+
+---
+
+#### 12. Post-Accept Confirmation Toast with Navigation Shortcut
+
+**Why**: After accepting an applicant, the user is left on the now-empty Requests tab with no feedback about what happened or where the conversation went.
+
+**Implementation**: In `useAcceptRequest`, after the conversation is created, trigger a toast (or inline banner) with a navigation shortcut:
+
+```tsx
+// After successful accept in useAcceptRequest:
+showToast({
+  message: `${hunterName} accepted! A chat has been started.`,
+  action: { label: 'Open Chat', onPress: () => setActiveScreen('messenger') }
+})
+```
+
+Use the existing `error` state pattern (replace with a `notification` state) or integrate a lightweight toast library already in the project.
+
+---
+
+#### 13. Real-Time Notification Dot on BottomNav Postings Icon
+
+**Why**: Users don't return to the Postings screen because they don't know something needs their attention. A notification dot on the BottomNav icon (not a push notification — just a local indicator) draws them back.
+
+**Signal conditions**:
+- `bountyRequests.length > 0` (new applicants)
+- Any `inProgressBounty` where a submission is pending review (`hasSubmission`)
+- Any stale bounty alert
+
+**Where**: Pass a `hasPendingAction` prop from `PostingsScreen` up to `BountyApp` / `BottomNav`:
+
+```tsx
+// In bounty-app.tsx, pass to BottomNav:
+<BottomNav
+  activeScreen={activeScreen}
+  onNavigate={setActiveScreen}
+  postingsBadge={postingsPendingCount > 0}
+/>
+```
+
+---
+
+### Intuitiveness Change Summary
+
+| # | Change | Tier | Effort | Impact |
+|---|--------|------|--------|--------|
+| 1 | Rename "Requests" → "Applicants" | 🟢 Quick Win | 5 min | High — removes ambiguity |
+| 2 | Label the bookmark icon "HISTORY" | 🟢 Quick Win | 10 min | Medium — reveals hidden feature |
+| 3 | Chevron expand indicator on cards | 🟢 Quick Win | 30 min | High — shows cards are tappable |
+| 4 | Count badges on tab chips | 🟢 Quick Win | 1 hr | High — surfaces pending work |
+| 5 | "Opens a chat" micro-copy on Accept | 🟢 Quick Win | 10 min | High — removes most common confusion |
+| 6 | "Draft saved" indicator on New tab | 🟢 Quick Win | 30 min | Medium — prevents data loss anxiety |
+| 7 | Primary action CTA on collapsed cards | 🟡 Medium | 2–4 hrs | Very High — removes biggest friction |
+| 8 | "Tap to manage" subtitle on card | 🟡 Medium | 30 min | Medium — reinforces affordance |
+| 9 | Improved empty state copy | 🟡 Medium | 1 hr | Medium — reduces dead-end confusion |
+| 10 | Stage pill visible without expanding | 🟡 Medium | 1 hr | High — lifecycle visible at a glance |
+| 11 | One-time onboarding overlay | 🔴 Larger | 1–2 days | Very High — eliminates cold-start confusion |
+| 12 | Post-accept toast + chat shortcut | 🔴 Larger | 4–8 hrs | High — closes navigation gap |
+| 13 | Notification dot on BottomNav | 🔴 Larger | 4–8 hrs | High — pulls users back to act |
+
+**Recommended implementation order**: Start with items 1–6 (combined effort < 3 hours) as a fast-follow release. Then tackle item 7 (primary action CTA) as the single highest-impact individual change before investing in the onboarding overlay.
+
+---
+
 ## Related Documents
 
 - [Bounty Dashboard Implementation](BOUNTY_DASHBOARD_IMPLEMENTATION.md) — Detail on `/postings/[bountyId]/` routes (Review & Verify, Payout)
@@ -687,5 +1047,5 @@ The table below consolidates the highest-priority improvements across all tabs:
 
 ---
 
-*Last updated: 2026-03-04*  
+*Last updated: 2026-04-16*  
 *Primary source file: `app/tabs/postings-screen.tsx`*
