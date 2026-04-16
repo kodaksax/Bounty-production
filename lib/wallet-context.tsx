@@ -7,7 +7,12 @@ import { paymentService } from './services/payment-service';
 import { supabase } from './supabase';
 import { fetchWithTimeout } from './utils/fetch-with-timeout';
 import { getNetworkErrorMessage } from './utils/network-connectivity';
-import { getSecureJSON, migrateSecureStorageKeys, SecureKeys, setSecureJSON } from './utils/secure-storage';
+import {
+    getSecureJSON,
+    migrateSecureStorageKeys,
+    SecureKeys,
+    setSecureJSON,
+} from './utils/secure-storage';
 
 // Platform fee configuration
 // Service fees are deducted during bounty completion (when funds are released to hunter)
@@ -632,26 +637,58 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           return false;
         }
 
-        // Get the bounty to retrieve the payment_intent_id (escrowId)
+        // Get the bounty to check whether a Stripe PaymentIntent was created for it.
+        // Bounties escrowed at posting time (new flow) have no payment_intent_id and must
+        // be settled via the internal /wallet/release balance-transfer endpoint instead.
         const bountyData = await bountyService.getById(bountyId);
 
-        if (!bountyData || !bountyData.payment_intent_id) {
-          console.error('No payment_intent_id found for bounty:', bountyId);
-          return false;
-        }
-
-        // Call the backend API to release escrow
-        // This will capture the PaymentIntent and transfer to hunter's Connect account
-        const releaseResult = await paymentService.releaseEscrow(bountyData.payment_intent_id);
-
-        if (!releaseResult.success) {
-          console.error('Failed to release escrow:', releaseResult.error);
-          return false;
-        }
-
         const grossAmount = Math.abs(escrowTx.amount);
-        const platformFee = releaseResult.platformFee || grossAmount * PLATFORM_FEE_PERCENTAGE;
-        const netAmount = releaseResult.hunterAmount || grossAmount - platformFee;
+        let platformFee: number;
+        let netAmount: number;
+
+        if (bountyData?.payment_intent_id) {
+          // Legacy / Stripe path: capture the PaymentIntent and transfer to hunter's Connect account.
+          const releaseResult = await paymentService.releaseEscrow(bountyData.payment_intent_id);
+
+          if (!releaseResult.success) {
+            console.error('Failed to release escrow via Stripe:', releaseResult.error);
+            return false;
+          }
+
+          platformFee = releaseResult.platformFee || grossAmount * PLATFORM_FEE_PERCENTAGE;
+          netAmount = releaseResult.hunterAmount || grossAmount - platformFee;
+        } else {
+          // Internal wallet path: bounty was escrowed at posting time via /wallet/escrow.
+          // Use the server-side /wallet/release endpoint to credit the hunter's balance.
+          const token = await getAccessToken();
+          if (!token) {
+            console.error('[wallet] Cannot release funds: no access token');
+            return false;
+          }
+
+          const response = await fetchWithTimeout(`${FINANCIAL_API_BASE_URL}/wallet/release`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+              ...(config.supabase.anonKey ? { apikey: config.supabase.anonKey } : {}),
+            },
+            body: JSON.stringify({ bountyId: bountyIdStr, hunterId }),
+            timeout: API_TIMEOUTS.DEFAULT,
+            retries: 0, // No retries for financial operations to prevent double-credit
+          });
+
+          if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            console.error('[wallet] Server release failed:', (errData as any).error);
+            return false;
+          }
+
+          const releaseData = await response.json();
+          // Server returns the net amount after platform fee deduction.
+          platformFee = releaseData.platformFee ?? grossAmount * PLATFORM_FEE_PERCENTAGE;
+          netAmount = releaseData.releaseAmount ?? grossAmount - platformFee;
+        }
 
         // Update local escrow transaction status
         setTransactions(prev => {

@@ -89,8 +89,8 @@ export class ReconciliationCronService {
         for (const tx of pendingTransfers) {
           try {
             const transferId = tx.stripe_transfer_id;
-            const transfer = await stripe.transfers.retrieve(transferId);
-            const s = transfer.status;
+            const transfer = (await stripe.transfers.retrieve(transferId)) as any;
+            const s = transfer.status as string | undefined;
 
             if (s === 'paid' || s === 'succeeded') {
               await admin
