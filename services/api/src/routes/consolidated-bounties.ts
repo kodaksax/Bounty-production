@@ -585,9 +585,29 @@ export async function registerConsolidatedBountyRoutes(
                 { error: escrowError, userId, bountyId: bounty.id },
                 'Escrow creation failed after bounty creation'
               );
-              // Note: In a production system, we'd want to either roll back the bounty 
-              // or mark it as 'pending_payment'. For now, we'll throw to let the user know.
-              throw escrowError;
+              // Roll back bounty creation when funds could not be secured so we do
+              // not leave unpaid bounties visible in postings.
+              const { error: rollbackError } = await supabase
+                .from('bounties')
+                .delete()
+                .eq('id', bounty.id)
+                .eq('user_id', userId);
+
+              if (rollbackError) {
+                request.log.error(
+                  { error: rollbackError, userId, bountyId: bounty.id },
+                  'Failed to rollback bounty after escrow failure'
+                );
+                throw new Error(
+                  'Failed to secure funds for bounty creation, and automatic rollback failed. Please contact support.'
+                );
+              }
+
+              request.log.warn(
+                { userId, bountyId: bounty.id },
+                'Rolled back bounty after escrow failure'
+              );
+              throw new Error('Failed to secure funds for bounty creation. Your bounty was not posted.');
             }
           }
 
