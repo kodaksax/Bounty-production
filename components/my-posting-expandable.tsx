@@ -66,6 +66,7 @@ const STAGES = [
   { id: 'review_verify', label: 'Review & Verify', icon: 'rate-review' },
   { id: 'payout', label: 'Payout', icon: 'account-balance-wallet' },
 ]
+const EMPTY_CONVERSATION_NAME = ''
 
 type ProofDraftItem = {
   id: string
@@ -569,16 +570,19 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   }, [bounty.attachments_json])
 
   const handleSendMessage = async (text: string) => {
-    const resolveCounterpartyId = () => {
-      const participantFallback = (conversation?.participantIds || []).find(
-        id => String(id) !== String(currentUserId || getCurrentUserId())
-      )
+    const resolveCounterpartyId = (): string | null => {
+      const effectiveUserId = currentUserId || getCurrentUserId()
+      const participantFallback = effectiveUserId
+        ? (conversation?.participantIds || []).find(id => String(id) !== String(effectiveUserId))
+        : null
+      const ownerCounterparty = bounty.accepted_by || readyRecord?.hunter_id || participantFallback
+      const hunterCounterparty = bounty.poster_id || bounty.user_id || participantFallback
 
       if (isOwner) {
-        return String(bounty.accepted_by || readyRecord?.hunter_id || participantFallback || '')
+        return ownerCounterparty ? String(ownerCounterparty) : null
       }
 
-      return String(bounty.poster_id || bounty.user_id || participantFallback || '')
+      return hunterCounterparty ? String(hunterCounterparty) : null
     }
 
     let targetConversationId = conversation?.id ? String(conversation.id) : null
@@ -588,7 +592,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
       try {
         const canonicalConversation = await messageService.getOrCreateConversation(
           [counterpartyId],
-          '',
+          EMPTY_CONVERSATION_NAME,
           String(bounty.id)
         )
         if (canonicalConversation?.id) {
@@ -824,7 +828,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         return
       }
 
-      const targetConversation = await messageService.getOrCreateConversation([String(posterId)], '', String(bounty.id))
+      const targetConversation = await messageService.getOrCreateConversation([String(posterId)], EMPTY_CONVERSATION_NAME, String(bounty.id))
       targetConversationId = targetConversation?.id ? String(targetConversation.id) : null
 
       if (!targetConversationId) {
@@ -834,7 +838,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
 
       dispatchUi({ type: 'set', key: 'conversation', value: targetConversation })
       await navigationIntent.setPendingConversationId(targetConversationId)
-      router.push('/tabs/messenger' as '/tabs/messenger')
+      router.push('/tabs/messenger')
     } catch (err) {
       console.error('Failed to open conversation via messenger tab', err)
       if (targetConversationId) {
