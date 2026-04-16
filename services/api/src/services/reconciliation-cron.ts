@@ -1,9 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 import * as cron from 'node-cron';
 import { backendAnalytics } from './analytics';
+import { stripe } from './consolidated-payment-service';
 import { updateBalance } from './consolidated-wallet-service';
-const { stripe } = require('./consolidated-payment-service');
-const { logger } = require('./logger');
+import { logger } from './logger';
 
 /**
  * Reconciliation Cron
@@ -33,7 +33,7 @@ export class ReconciliationCronService {
         await this.runOnce();
         try {
           backendAnalytics.trackEvent('system', 'reconciliation_run', { schedule });
-        } catch (e) {
+        } catch {
           /* ignore */
         }
       } catch (err) {
@@ -48,7 +48,7 @@ export class ReconciliationCronService {
         backendAnalytics.trackEvent('system', 'reconciliation_initial_failed', {
           error: err instanceof Error ? err.message : String(err),
         });
-      } catch (e) {
+      } catch {
         /* ignore */
       }
     });
@@ -179,22 +179,28 @@ export class ReconciliationCronService {
       logger.error({ err }, '[reconciliation] Error during payment intent reconciliation loop');
     }
 
-    // Restore balance for failed withdrawals where the rollback itself failed.
+    // Restore balance for failed transactions where the balance rollback itself failed.
+    // This covers both 'withdrawal' (Stripe transfer + rollback double-failure) and
+    // 'escrow' (finalization + refund double-failure) transactions.
     // These are flagged with needs_balance_refund=true in their metadata by the
-    // wallet service when updateBalance throws during the catch block.
+    // wallet service when the balance-restoring updateBalance call throws.
+    // We include both 'failed' and 'pending' statuses because if the DB update that
+    // flips the record to 'failed' itself fails, the record stays 'pending' while
+    // still carrying the needs_balance_refund flag — that case would otherwise be
+    // silently missed.
     try {
       const { data: orphanedTxs, error: orphanErr } = await admin
         .from('wallet_transactions')
         .select('*')
-        .eq('type', 'withdrawal')
-        .eq('status', 'failed')
+        .in('type', ['withdrawal', 'escrow'])
+        .in('status', ['failed', 'pending'])
         .filter('metadata->>needs_balance_refund', 'eq', 'true')
         .limit(100);
 
       if (orphanErr) {
         logger.error(
           { error: orphanErr },
-          '[reconciliation] Failed to fetch failed withdrawals needing balance refund'
+          '[reconciliation] Failed to fetch failed transactions needing balance refund'
         );
       } else if (orphanedTxs && orphanedTxs.length) {
         for (const tx of orphanedTxs) {
@@ -252,8 +258,8 @@ export class ReconciliationCronService {
             }
 
             logger.info(
-              { txId: tx.id, userId: tx.user_id, amount: refundAmount },
-              '[reconciliation] Restored user balance for failed withdrawal rollback'
+              { txId: tx.id, userId: tx.user_id, amount: refundAmount, type: tx.type },
+              '[reconciliation] Restored user balance for failed transaction rollback'
             );
             try {
               backendAnalytics.trackEvent('system', 'reconciliation_balance_refund', {
@@ -261,7 +267,7 @@ export class ReconciliationCronService {
                 userId: tx.user_id,
                 amount: refundAmount,
               });
-            } catch (e) {
+            } catch {
               /* ignore */
             }
           } catch (err) {
