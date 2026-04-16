@@ -66,6 +66,7 @@ const STAGES = [
   { id: 'review_verify', label: 'Review & Verify', icon: 'rate-review' },
   { id: 'payout', label: 'Payout', icon: 'account-balance-wallet' },
 ]
+const EMPTY_CONVERSATION_NAME = ''
 
 type ProofDraftItem = {
   id: string
@@ -569,8 +570,44 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   }, [bounty.attachments_json])
 
   const handleSendMessage = async (text: string) => {
-    if (!conversation) throw new Error('No conversation')
-    await messageService.sendMessage(conversation.id, text, currentUserId)
+    const resolveCounterpartyId = (): string | null => {
+      const effectiveUserId = currentUserId || getCurrentUserId()
+      const participantFallback = effectiveUserId
+        ? (conversation?.participantIds || []).find(id => String(id) !== String(effectiveUserId))
+        : null
+      const ownerCounterparty = bounty.accepted_by || readyRecord?.hunter_id || participantFallback
+      const hunterCounterparty = bounty.poster_id || bounty.user_id || participantFallback
+
+      if (isOwner) {
+        return ownerCounterparty ? String(ownerCounterparty) : null
+      }
+
+      return hunterCounterparty ? String(hunterCounterparty) : null
+    }
+
+    let targetConversationId = conversation?.id ? String(conversation.id) : null
+    const counterpartyId = resolveCounterpartyId()
+
+    if (counterpartyId) {
+      try {
+        const canonicalConversation = await messageService.getOrCreateConversation(
+          [counterpartyId],
+          EMPTY_CONVERSATION_NAME,
+          String(bounty.id)
+        )
+        if (canonicalConversation?.id) {
+          targetConversationId = String(canonicalConversation.id)
+          if (!conversation || String(conversation.id) !== targetConversationId) {
+            dispatchUi({ type: 'set', key: 'conversation', value: canonicalConversation })
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to resolve canonical conversation for quick message', err)
+      }
+    }
+
+    if (!targetConversationId) throw new Error('No conversation')
+    await messageService.sendMessage(targetConversationId, text, currentUserId)
   }
 
   const formatTime = (seconds: number): string => {
@@ -783,60 +820,37 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   }
 
   const handleMessagePoster = async () => {
-    // Ensure we have a valid conversation id (string) before calling navigationIntent
-    const convId = conversation && conversation.id ? String(conversation.id) : null
+    let targetConversationId: string | null = null
+    try {
+      const posterId = bounty.poster_id || bounty.user_id
+      if (!posterId) {
+        Alert.alert('No Conversation', 'No active conversation found for this bounty yet.')
+        return
+      }
 
-    // If no conversation exists yet, attempt to create one with the poster
-    if (!convId) {
-      try {
-        const posterId = bounty.poster_id || bounty.user_id
-        if (!posterId) {
-          Alert.alert('No Conversation', 'No active conversation found for this bounty yet.')
-          return
-        }
+      const targetConversation = await messageService.getOrCreateConversation([String(posterId)], EMPTY_CONVERSATION_NAME, String(bounty.id))
+      targetConversationId = targetConversation?.id ? String(targetConversation.id) : null
 
-        const created = await messageService.getOrCreateConversation([String(posterId)], '', String(bounty.id))
-        const createdId = created?.id ? String(created.id) : null
-        if (!createdId) {
-          Alert.alert('Message Failed', 'We could not open or create a conversation. You can try again or compose a new message manually.')
-          return
-        }
-
-        // Prefer navigationIntent so root UI opens the correct tab, fallback to direct route
-        try {
-          await navigationIntent.setPendingConversationId(createdId)
-          router.push('/tabs/bounty-app?screen=messages' as '/tabs/bounty-app')
-          return
-        } catch (err) {
-          console.error('Failed to open new conversation via navigation intent', err)
-          try {
-            ;(router as any).push(`/messages/${encodeURIComponent(String(createdId))}`)
-            return
-          } catch (err2) {
-            console.error('Fallback direct conversation route failed for created conv', err2)
-          }
-        }
-      } catch (err) {
-        console.error('Unable to open or create conversation', err)
+      if (!targetConversationId) {
         Alert.alert('Message Failed', 'We could not open or create a conversation. You can try again or compose a new message manually.')
         return
       }
-    }
 
-    // If we have an existing conversation id, navigate to it
-    try {
-      await navigationIntent.setPendingConversationId(convId)
+      dispatchUi({ type: 'set', key: 'conversation', value: targetConversation })
+      await navigationIntent.setPendingConversationId(targetConversationId)
       router.push('/tabs/bounty-app?screen=messages' as '/tabs/bounty-app')
     } catch (err) {
-      console.error('Failed to open conversation via navigation intent', err)
-      // Fallback: try to open the conversation route directly
-      try {
-        ;(router as any).push(`/messages/${encodeURIComponent(String(convId))}`)
-        return
-      } catch (err2) {
-        console.error('Fallback direct conversation route failed', err2)
+      console.error('Failed to navigate to messages screen via BountyApp', { conversationId: targetConversationId, error: err })
+      if (targetConversationId) {
+        console.info('Attempting fallback navigation to direct message route', { conversationId: targetConversationId })
+        try {
+          ;(router as any).push(`/messages/${encodeURIComponent(targetConversationId)}`)
+          return
+        } catch (err2) {
+          console.error('Fallback direct conversation route failed', err2)
+        }
       }
-      Alert.alert('Unable to Open Chat', 'Please try again in a moment.')
+      Alert.alert('Message Failed', 'We could not open or create a conversation. You can try again or compose a new message manually.')
     }
   }
 
