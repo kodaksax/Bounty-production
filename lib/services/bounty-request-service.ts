@@ -1,9 +1,7 @@
 import type { Bounty, BountyRequest, Profile } from 'lib/services/database.types';
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
-import { MIN_ESCROW_CENTS } from 'lib/utils/bounty-validation';
 import { getApiBase } from 'lib/utils/dev-host';
 import { logger } from 'lib/utils/error-logger';
-import { paymentService } from './payment-service';
 
 export type BountyRequestWithDetails = BountyRequest & {
   bounty: Bounty;
@@ -829,14 +827,12 @@ export const bountyRequestService = {
 
   /**
    * Accept a bounty request
-   * Creates escrow PaymentIntent to hold funds
+   * Moves the request to 'accepted' and the bounty to 'in_progress'.
+   * Escrow funding is handled during the bounty creation flow, before a request is accepted.
    *
    * Safeguards:
    * - Bounty transition uses optimistic lock (status = 'open' + accepted_by IS NULL)
    * - If bounty was already claimed, rolls back request to 'pending' and returns null
-   * - Only creates escrow AFTER confirming bounty transitioned successfully
-   * - Validates bounty amount > 0 before attempting escrow
-   * - Logs escrow failures but does not leave bounty in inconsistent state
    */
   async acceptRequest(requestId: string | number): Promise<BountyRequest | null> {
     // Pre-check: verify the request is still in 'pending' status before attempting acceptance.
@@ -1051,50 +1047,6 @@ export const bountyRequestService = {
 
       if (!result) return null;
 
-      // Create escrow for paid bounties (best-effort; does not block acceptance)
-      try {
-        const bountyData = await this.getBountyForRequest(result.bounty_id);
-        if (bountyData && !bountyData.is_for_honor && bountyData.amount > 0) {
-          if (bountyData.amount < MIN_ESCROW_CENTS / 100) {
-            logger.error('Bounty amount below minimum for escrow', {
-              bountyId: result.bounty_id,
-              amount: bountyData.amount,
-            });
-          } else {
-            const escrowResult = await paymentService.createEscrow({
-              bountyId: String(result.bounty_id),
-              amount: bountyData.amount,
-              posterId: bountyData.user_id || bountyData.poster_id,
-              hunterId: result.hunter_id,
-              userId: bountyData.user_id || bountyData.poster_id,
-            });
-
-            if (escrowResult.success && escrowResult.escrowId) {
-              try {
-                await this.updateBountyPaymentIntent(result.bounty_id, escrowResult.escrowId);
-              } catch (updateError) {
-                logger.error('Failed to update bounty with payment_intent_id', {
-                  bountyId: result.bounty_id,
-                  escrowId: escrowResult.escrowId,
-                  error: updateError,
-                });
-              }
-            } else if (!escrowResult.success) {
-              logger.error('Failed to create escrow for accepted bounty request', {
-                requestId,
-                bountyId: result.bounty_id,
-                error: escrowResult.error,
-              });
-            }
-          }
-        }
-      } catch (error) {
-        logger.error('Error creating escrow after accepting bounty request', {
-          requestId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-
       return result;
     }
 
@@ -1184,46 +1136,6 @@ export const bountyRequestService = {
           'Accept function returned success but accepted request data unavailable; proceeding',
           { requestId }
         );
-      }
-
-      // Create escrow if needed using authoritative bounty data
-      try {
-        const bountyData = await this.getBountyForRequest((acceptedReq as any)?.bounty_id);
-        if (acceptedReq && bountyData && !bountyData.is_for_honor && bountyData.amount > 0) {
-          const escrowResult = await paymentService.createEscrow({
-            bountyId: String((acceptedReq as any).bounty_id),
-            amount: bountyData.amount,
-            posterId: bountyData.user_id || bountyData.poster_id,
-            hunterId: (acceptedReq as any).hunter_id,
-            userId: bountyData.user_id || bountyData.poster_id,
-          });
-
-          if (escrowResult.success && escrowResult.escrowId) {
-            try {
-              await this.updateBountyPaymentIntent(
-                (acceptedReq as any).bounty_id,
-                escrowResult.escrowId
-              );
-            } catch (updateError) {
-              logger.error('Failed to update bounty with payment_intent_id', {
-                bountyId: (acceptedReq as any).bounty_id,
-                escrowId: escrowResult.escrowId,
-                error: updateError,
-              });
-            }
-          } else if (!escrowResult.success) {
-            logger.error('Failed to create escrow for accepted bounty request', {
-              requestId,
-              bountyId: (acceptedReq as any).bounty_id,
-              error: escrowResult.error,
-            });
-          }
-        }
-      } catch (error) {
-        logger.error('Error creating escrow after accepting bounty request (edge function path)', {
-          requestId,
-          error: error instanceof Error ? error.message : String(error),
-        });
       }
 
       return acceptedReq;

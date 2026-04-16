@@ -64,7 +64,8 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
           return reply.code(401).send({ error: 'Unauthorized' });
         }
 
-        const { balance, currency, payoutFailedAt, payoutFailureCode } = await ConsolidatedWalletService.getBalance(request.userId);
+        const { balance, currency, payoutFailedAt, payoutFailureCode } =
+          await ConsolidatedWalletService.getBalance(request.userId);
 
         return {
           balance,
@@ -612,6 +613,7 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
           success: true,
           transactionId: transaction.id,
           releaseAmount: transaction.amount,
+          platformFee: (transaction as any).metadata?.platform_fee ?? null,
           message: `$${transaction.amount.toFixed(2)} released to hunter.`,
         };
       } catch (error: any) {

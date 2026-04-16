@@ -31,7 +31,7 @@ describe('bountyRequestService (unit)', () => {
     })
   }
 
-  test('acceptRequest creates escrow and updates bounty payment intent when escrow succeeds', async () => {
+  test('acceptRequest transitions bounty without creating new escrow charges', async () => {
     // Mock logger
     jest.doMock('../../lib/utils/error-logger', () => ({
       logger: { error: jest.fn(), warning: jest.fn(), info: jest.fn() },
@@ -69,8 +69,8 @@ describe('bountyRequestService (unit)', () => {
     const result = await svc.acceptRequest('r1')
 
     expect(result).toEqual({ id: 'r1', bounty_id: 'b1', hunter_id: 'h1' })
-    expect(createEscrow).toHaveBeenCalled()
-    expect(updateSpy).toHaveBeenCalledWith('b1', 'esc_123')
+    expect(createEscrow).not.toHaveBeenCalled()
+    expect(updateSpy).not.toHaveBeenCalled()
   })
 
   test('acceptRequest transitions bounty to in_progress and rejects competing requests', async () => {

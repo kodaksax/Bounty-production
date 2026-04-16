@@ -332,7 +332,6 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   // ---- Accept/Reject request handlers (extracted to hooks) ----
   const { handleAcceptRequest } = useAcceptRequest({
     currentUserId,
-    balance,
     bountyRequests,
     myBounties,
     setBountyRequests,
@@ -340,7 +339,6 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
     setInProgressBounties,
     setIsLoading,
     setError,
-    setShowAddMoney,
     loadMyBounties,
     loadInProgress,
     loadRequestsForMyBounties,
