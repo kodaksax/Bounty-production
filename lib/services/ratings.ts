@@ -1,29 +1,30 @@
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
-import type { UserRating } from "lib/types";
-import { logger } from "lib/utils/error-logger";
+import type { UserRating } from 'lib/types';
+import { logger } from 'lib/utils/error-logger';
 import { getReachableApiBaseUrl } from 'lib/utils/network';
 
 // API Configuration
 function getApiBaseUrl() {
-  const preferred = (process.env.EXPO_PUBLIC_API_BASE_URL as string | undefined)
-    || (process.env.API_BASE_URL as string | undefined)
-    || 'http://localhost:3001'
-  const base = getReachableApiBaseUrl(preferred, 3001)
-  return base
+  const preferred =
+    (process.env.EXPO_PUBLIC_API_BASE_URL as string | undefined) ||
+    (process.env.API_BASE_URL as string | undefined) ||
+    'http://localhost:3001';
+  const base = getReachableApiBaseUrl(preferred, 3001);
+  return base;
 }
 
 // Simple once-per-key logger to avoid spamming console
-const emitted: Record<string, boolean> = {}
+const emitted: Record<string, boolean> = {};
 function logOnce(key: string, level: 'error' | 'warn', message: string, meta?: any) {
-  if (emitted[key]) return
-  emitted[key] = true
+  if (emitted[key]) return;
+  emitted[key] = true;
   if (level === 'error') {
-    logger.error(message, meta)
+    logger.error(message, meta);
   } else {
     if (typeof (logger as any).warning === 'function') {
-      (logger as any).warning(message, meta)
+      (logger as any).warning(message, meta);
     } else {
-      logger.error(message, meta)
+      logger.error(message, meta);
     }
   }
 }
@@ -32,7 +33,7 @@ export const ratingsService = {
   /**
    * Create a new rating
    */
-  async create(rating: Omit<UserRating, "id" | "createdAt">): Promise<UserRating | null> {
+  async create(rating: Omit<UserRating, 'id' | 'createdAt'>): Promise<UserRating | null> {
     try {
       if (isSupabaseConfigured) {
         const { data, error } = await supabase
@@ -45,18 +46,18 @@ export const ratingsService = {
             comment: rating.comment,
           })
           .select('*')
-          .single()
+          .single();
 
-        if (!error) return this.mapFromRatingsDb(data)
+        if (!error) return this.mapFromRatingsDb(data);
 
-        const primaryError = String(error?.message || JSON.stringify(error)).toLowerCase()
+        const primaryError = String(error?.message || JSON.stringify(error)).toLowerCase();
         const canFallback =
           primaryError.includes('relation') ||
           primaryError.includes('does not exist') ||
           primaryError.includes('column') ||
-          primaryError.includes('schema cache')
+          primaryError.includes('schema cache');
 
-        if (!canFallback) throw error
+        if (!canFallback) throw error;
 
         const { data: fallbackData, error: fallbackError } = await supabase
           .from('user_ratings')
@@ -68,153 +69,168 @@ export const ratingsService = {
             comment: rating.comment,
           })
           .select('*')
-          .single()
+          .single();
 
-        if (fallbackError) throw fallbackError
-        return this.mapFromDb(fallbackData)
+        if (fallbackError) throw fallbackError;
+        return this.mapFromDb(fallbackData);
       }
 
-      const API_URL = `${getApiBaseUrl()}/api/ratings`
+      const API_URL = `${getApiBaseUrl()}/api/ratings`;
       const response = await fetch(API_URL, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify(rating),
-      })
+      });
 
       if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`Failed to create rating: ${errorText}`)
+        const errorText = await response.text();
+        throw new Error(`Failed to create rating: ${errorText}`);
       }
 
-      return await response.json()
+      return await response.json();
     } catch (err) {
-      const error = err instanceof Error ? err : new Error("Unknown error")
-      logOnce('ratings:create', 'error', 'Error creating rating', { rating, error })
-      throw error
+      const error = err instanceof Error ? err : new Error('Unknown error');
+      logOnce('ratings:create', 'error', 'Error creating rating', { rating, error });
+      throw error;
     }
   },
 
   /**
    * Get ratings for a user (as ratee)
    */
-  async getByUserId(userId: string, options?: { limit?: number; offset?: number }): Promise<UserRating[]> {
+  async getByUserId(
+    userId: string,
+    options?: { limit?: number; offset?: number }
+  ): Promise<UserRating[]> {
     try {
       if (isSupabaseConfigured) {
-        const limit = options?.limit ?? 20
-        const offset = options?.offset ?? 0
+        const limit = options?.limit ?? 20;
+        const offset = options?.offset ?? 0;
 
         let query = supabase
           .from('ratings')
           .select('*')
           .eq('to_user_id', userId)
           .order('created_at', { ascending: false })
-          .range(offset, offset + limit - 1)
+          .range(offset, offset + limit - 1);
 
-        const { data, error } = await query
-        if (!error) return (data || []).map(this.mapFromRatingsDb)
+        const { data, error } = await query;
+        if (!error) return (data || []).map(this.mapFromRatingsDb);
 
-        const primaryError = String(error?.message || JSON.stringify(error)).toLowerCase()
+        const primaryError = String(error?.message || JSON.stringify(error)).toLowerCase();
         const canFallback =
           primaryError.includes('relation') ||
           primaryError.includes('does not exist') ||
           primaryError.includes('column') ||
-          primaryError.includes('schema cache')
+          primaryError.includes('schema cache');
 
-        if (!canFallback) throw error
+        if (!canFallback) throw error;
 
         let fallbackQuery = supabase
           .from('user_ratings')
           .select('*')
           .eq('user_id', userId)
           .order('created_at', { ascending: false })
-          .range(offset, offset + limit - 1)
+          .range(offset, offset + limit - 1);
 
-        const { data: fallbackData, error: fallbackError } = await fallbackQuery
-        if (fallbackError) throw fallbackError
-        return (fallbackData || []).map(this.mapFromDb)
+        const { data: fallbackData, error: fallbackError } = await fallbackQuery;
+        if (fallbackError) throw fallbackError;
+        return (fallbackData || []).map(this.mapFromDb);
       }
 
-      const API_URL = `${getApiBaseUrl()}/api/ratings`
-      const params = new URLSearchParams()
-      params.append('user_id', userId)
-      if (options?.limit) params.append('limit', String(options.limit))
-      if (options?.offset) params.append('offset', String(options.offset))
+      const API_URL = `${getApiBaseUrl()}/api/ratings`;
+      const params = new URLSearchParams();
+      params.append('user_id', userId);
+      if (options?.limit) params.append('limit', String(options.limit));
+      if (options?.offset) params.append('offset', String(options.offset));
 
-      const response = await fetch(`${API_URL}?${params.toString()}`)
+      const response = await fetch(`${API_URL}?${params.toString()}`);
       if (!response.ok) {
-        throw new Error(`Failed to fetch ratings: ${response.statusText}`)
+        throw new Error(`Failed to fetch ratings: ${response.statusText}`);
       }
-      return await response.json()
+      return await response.json();
     } catch (err) {
-      const error = err instanceof Error ? err : new Error("Unknown error")
+      const error = err instanceof Error ? err : new Error('Unknown error');
       // Log as a warning to avoid surfacing as a fatal error in dev overlays
-      logOnce('ratings:getByUserId', 'warn', 'Error fetching ratings', { userId, error })
-      return []
+      logOnce('ratings:getByUserId', 'warn', 'Error fetching ratings', { userId, error });
+      return [];
     }
   },
 
   /**
    * Get aggregated rating stats for a user
    */
-  async getAggregatedStats(userId: string): Promise<{ averageRating: number; ratingCount: number }> {
+  async getAggregatedStats(
+    userId: string
+  ): Promise<{ averageRating: number; ratingCount: number }> {
     try {
       if (isSupabaseConfigured) {
         const { data, error } = await supabase
           .from('ratings')
           .select('rating')
-          .eq('to_user_id', userId)
+          .eq('to_user_id', userId);
 
         if (!error) {
-          const rows = data || []
+          const rows = data || [];
           if (rows.length === 0) {
-            return { averageRating: 0, ratingCount: 0 }
+            return { averageRating: 0, ratingCount: 0 };
           }
-          const total = rows.reduce((sum: number, row: any) => sum + Number(row.rating || 0), 0)
+          const total = rows.reduce((sum: number, row: any) => sum + Number(row.rating || 0), 0);
           return {
             averageRating: total / rows.length,
             ratingCount: rows.length,
-          }
+          };
         }
 
-        const primaryError = String(error?.message || JSON.stringify(error)).toLowerCase()
+        const primaryError = String(error?.message || JSON.stringify(error)).toLowerCase();
         const canFallback =
           primaryError.includes('relation') ||
           primaryError.includes('does not exist') ||
           primaryError.includes('column') ||
-          primaryError.includes('schema cache')
+          primaryError.includes('schema cache');
 
-        if (!canFallback) throw error
+        if (!canFallback) throw error;
 
-        const { data: legacyData, error: legacyError } = await supabase
-          .rpc('get_user_rating_stats', { target_user_id: userId })
+        const { data: legacyData, error: legacyError } = await supabase.rpc(
+          'get_user_rating_stats',
+          { target_user_id: userId }
+        );
 
-        if (legacyError) throw legacyError
-        if (legacyData && typeof legacyData === 'object' && 'average_rating' in legacyData && 'rating_count' in legacyData) {
+        if (legacyError) throw legacyError;
+        if (
+          legacyData &&
+          typeof legacyData === 'object' &&
+          'average_rating' in legacyData &&
+          'rating_count' in legacyData
+        ) {
           return {
             averageRating: Number((legacyData as any).average_rating) || 0,
             ratingCount: Number((legacyData as any).rating_count) || 0,
-          }
+          };
         }
       }
 
       // Fallback: fetch all ratings and compute locally
-      const ratings = await this.getByUserId(userId, { limit: 1000 })
+      const ratings = await this.getByUserId(userId, { limit: 1000 });
       if (ratings.length === 0) {
-        return { averageRating: 0, ratingCount: 0 }
+        return { averageRating: 0, ratingCount: 0 };
       }
 
-      const sum = ratings.reduce((acc, r) => acc + r.score, 0)
+      const sum = ratings.reduce((acc, r) => acc + r.score, 0);
       return {
         averageRating: sum / ratings.length,
         ratingCount: ratings.length,
-      }
+      };
     } catch (err) {
-      const error = err instanceof Error ? err : new Error("Unknown error")
+      const error = err instanceof Error ? err : new Error('Unknown error');
       // Non-fatal: surface as a warning instead of error to reduce dev overlay noise
-      logOnce('ratings:getAggregatedStats', 'warn', 'Error getting aggregated stats', { userId, error })
-      return { averageRating: 0, ratingCount: 0 }
+      logOnce('ratings:getAggregatedStats', 'warn', 'Error getting aggregated stats', {
+        userId,
+        error,
+      });
+      return { averageRating: 0, ratingCount: 0 };
     }
   },
 
@@ -224,31 +240,56 @@ export const ratingsService = {
   async hasRated(raterId: string, bountyId: string, userId: string): Promise<boolean> {
     try {
       if (isSupabaseConfigured) {
+        // Try primary ratings table first (canonical schema)
         const { data, error } = await supabase
+          .from('ratings')
+          .select('id')
+          .eq('from_user_id', raterId)
+          .eq('bounty_id', bountyId)
+          .eq('to_user_id', userId)
+          .single();
+
+        if (!error || error.code === 'PGRST116') return !!data; // PGRST116 = not found
+
+        const msg = String(error?.message || '').toLowerCase();
+        const canFallback =
+          msg.includes('relation') ||
+          msg.includes('does not exist') ||
+          msg.includes('column') ||
+          msg.includes('schema cache');
+
+        if (!canFallback) throw error;
+
+        // Fallback: legacy user_ratings view / table
+        const { data: legacyData, error: legacyError } = await supabase
           .from('user_ratings')
           .select('id')
           .eq('rater_id', raterId)
           .eq('bounty_id', bountyId)
           .eq('user_id', userId)
-          .single()
+          .single();
 
-        if (error && error.code !== 'PGRST116') throw error // PGRST116 = not found
-        return !!data
+        if (legacyError && legacyError.code !== 'PGRST116') throw legacyError;
+        return !!legacyData;
       }
 
-      const API_URL = `${getApiBaseUrl()}/api/ratings/check`
-      const params = new URLSearchParams()
-      params.append('rater_id', raterId)
-      params.append('bounty_id', bountyId)
-      params.append('user_id', userId)
+      const API_URL = `${getApiBaseUrl()}/api/ratings/check`;
+      const params = new URLSearchParams();
+      params.append('rater_id', raterId);
+      params.append('bounty_id', bountyId);
+      params.append('user_id', userId);
 
-      const response = await fetch(`${API_URL}?${params.toString()}`)
-      if (!response.ok) return false
-      const json = await response.json()
-      return json.exists === true
+      const response = await fetch(`${API_URL}?${params.toString()}`);
+      if (!response.ok) return false;
+      const json = await response.json();
+      return json.exists === true;
     } catch (err) {
-      logOnce('ratings:hasRated', 'error', 'Error checking if rated', { raterId, bountyId, userId })
-      return false
+      logOnce('ratings:hasRated', 'error', 'Error checking if rated', {
+        raterId,
+        bountyId,
+        userId,
+      });
+      return false;
     }
   },
 
@@ -264,7 +305,7 @@ export const ratingsService = {
       score: record.score,
       comment: record.comment,
       createdAt: record.created_at,
-    }
+    };
   },
 
   mapFromRatingsDb(record: any): UserRating {
@@ -276,6 +317,6 @@ export const ratingsService = {
       score: record.rating,
       comment: record.comment,
       createdAt: record.created_at,
-    }
+    };
   },
-}
+};
