@@ -1,3 +1,6 @@
+/**
+ * Canonical wallet ledger transaction types used across API services and routes.
+ */
 export const TRANSACTION_TYPES = [
   'deposit',
   'withdrawal',
