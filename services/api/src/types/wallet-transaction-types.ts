@@ -5,6 +5,7 @@ export const TRANSACTION_TYPES = [
   'release',
   'refund',
   'platform_fee',
+  'bounty_posted',
 ] as const;
 
 export type TransactionType = (typeof TRANSACTION_TYPES)[number];

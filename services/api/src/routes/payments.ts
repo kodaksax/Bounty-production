@@ -786,10 +786,9 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
         );
 
         // Create release transaction for hunter and credit their wallet balance
-        const releaseTransactionType: TransactionType = 'release';
         await walletService.createTransaction({
           user_id: hunterId,
-          type: releaseTransactionType,
+          type: 'release' satisfies TransactionType,
           amount: hunterAmountCents / 100,
           bounty_id: bountyId,
           stripe_transfer_id: transfer.id,

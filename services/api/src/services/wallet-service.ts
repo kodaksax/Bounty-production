@@ -1,12 +1,12 @@
 import { eq } from 'drizzle-orm';
 import { db } from '../db/connection';
 import { walletTransactions } from '../db/schema';
-import { TRANSACTION_TYPES } from '../types/wallet-transaction-types';
+import { TRANSACTION_TYPES, type TransactionType } from '../types/wallet-transaction-types';
 import { walletRiskIntegration } from './wallet-risk-integration';
 
 /** Allowed wallet transaction types to prevent invalid ledger entries */
-export const VALID_TRANSACTION_TYPES = [...TRANSACTION_TYPES, 'bounty_posted'] as const;
-export type WalletTransactionType = typeof VALID_TRANSACTION_TYPES[number];
+export const VALID_TRANSACTION_TYPES = TRANSACTION_TYPES;
+export type WalletTransactionType = TransactionType;
 
 // Define types locally to avoid import issues
 export interface CreateWalletTransactionInput {
