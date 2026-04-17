@@ -569,12 +569,13 @@ Deno.serve(async (req: Request) => {
           });
           return jsonResponse({ error: 'Failed to validate existing settlement state' }, 500);
         }
-        // We intentionally cap at 2 rows:
+        // We intentionally cap at 2 rows to avoid fetching unnecessary data while
+        // still detecting duplicate settlement history:
         // - 0 rows => no prior settlement
         // - 1 row  => handle that settlement record directly
         // - 2 rows => there are at least 2 matches (possibly more), which indicates
         //            duplicate settlement history and must be blocked for safety.
-        if ((settlementRows?.length ?? 0) >= 2) {
+        if ((settlementRows?.length ?? 0) === 2) {
           console.error('[wallet] multiple settlement rows detected; blocking duplicate release:', {
             bountyId,
             hunterId,
@@ -745,7 +746,7 @@ Deno.serve(async (req: Request) => {
           .eq('id', (releaseTxRow as WalletTransaction).id);
         if (confirmErr) {
           console.error(
-            '[wallet] CRITICAL: release payout processed but failed to mark release tx completed; tx id:',
+            '[wallet] CRITICAL: failed to mark release tx completed; tx id:',
             (releaseTxRow as WalletTransaction).id,
             { hunterBalanceCredited, hunterId },
             confirmErr
