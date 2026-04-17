@@ -15,11 +15,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@supabase/supabase-js';
 import { config } from '../config';
 import {
-  ConflictError,
-  ExternalServiceError,
-  handleStripeError,
-  NotFoundError,
-  ValidationError,
+    ConflictError,
+    ExternalServiceError,
+    handleStripeError,
+    NotFoundError,
+    ValidationError,
 } from '../middleware/error-handler';
 import { stripe } from './consolidated-payment-service';
 import { logger } from './logger';
@@ -909,11 +909,35 @@ export async function releaseEscrow(
     .eq('status', 'completed')
     .single();
 
-  if (escrowError || !escrowTx) {
-    throw new NotFoundError('Escrow transaction', bountyId);
-  }
+  let totalAmount: number;
 
-  const totalAmount = Math.abs(escrowTx.amount);
+  if (escrowError || !escrowTx) {
+    // No server-side escrow record found.  This can happen for bounties created
+    // through the legacy client path that deducted funds locally (via withdraw /
+    // bounty_posted) without calling the /wallet/escrow endpoint.  Fall back to
+    // the bounty's stored amount so the release can still proceed.
+    const { data: bountyRecord, error: bountyLookupError } = await admin
+      .from('bounties')
+      .select('amount, is_for_honor')
+      .eq('id', bountyId)
+      .single();
+
+    if (bountyLookupError || !bountyRecord || !bountyRecord.amount || bountyRecord.is_for_honor) {
+      throw new NotFoundError('Escrow transaction', bountyId);
+    }
+
+    totalAmount = Math.abs(Number(bountyRecord.amount));
+    if (totalAmount <= 0 || Number.isNaN(totalAmount)) {
+      throw new NotFoundError('Escrow transaction', bountyId);
+    }
+
+    logger.warn(
+      { bountyId, hunterId, amount: totalAmount },
+      '[releaseEscrow] No escrow record found; falling back to bounty amount for release'
+    );
+  } else {
+    totalAmount = Math.abs(escrowTx.amount);
+  }
 
   // Calculate platform fee
   const platformFeePercent = config.stripe.platformFeePercent || 5;
@@ -933,7 +957,7 @@ export async function releaseEscrow(
         status: 'completed',
         metadata: {
           bounty_id: bountyId,
-          escrow_transaction_id: escrowTx.id,
+          escrow_transaction_id: escrowTx?.id ?? null,
           platform_fee: platformFee,
           released_at: new Date().toISOString(),
           idempotency_key: effectiveIdempotencyKey,

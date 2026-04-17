@@ -40,7 +40,7 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
   const { session } = useAuthContext();
   const { draft, saveDraft, clearDraft, isLoading } = useBountyDraft(session?.user?.id);
   const insets = useSafeAreaInsets();
-  const { withdraw, balance } = useWallet();
+  const { createEscrow, balance } = useWallet();
   const { isEmailVerified, canPostBounties, userEmail } = useEmailVerification();
 
   // Use form submission hook with debouncing
@@ -70,26 +70,22 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
         throw new Error('Failed to create bounty');
       }
 
-      // Only deduct funds after successful bounty creation (for non-honor bounties)
+      // Only create escrow after successful bounty creation (for non-honor bounties)
       if (!draft.isForHonor && draft.amount > 0) {
-        const withdrawSuccess = await withdraw(draft.amount, {
-          method: 'bounty_posted',
-          title: draft.title,
-          bounty_id: result.id.toString(),
-          status: 'completed',
-        });
-
-        if (!withdrawSuccess) {
+        try {
+          await createEscrow(result.id, draft.amount, draft.title, session?.user?.id ?? '');
+        } catch (escrowError) {
+          // If escrow creation fails, delete the bounty to maintain consistency
           try {
             await bountyService.deleteBounty(result.id);
-            console.error('Bounty creation rolled back due to failed fund deduction.');
+            console.error('Bounty creation rolled back due to failed escrow:', escrowError);
           } catch (deleteErr) {
-            console.error('Failed to delete bounty after withdrawal failure:', deleteErr);
+            console.error('Failed to delete bounty after escrow failure:', deleteErr);
             throw new Error(
-              'Failed to deduct funds and could not roll back bounty. Please contact support.'
+              'Failed to create escrow and could not roll back bounty. Please contact support.'
             );
           }
-          throw new Error('Failed to deduct funds from wallet. Your bounty was not posted.');
+          throw new Error('Failed to create escrow for this bounty. Your bounty was not posted.');
         }
       }
 
