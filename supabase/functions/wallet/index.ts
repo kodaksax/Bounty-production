@@ -166,7 +166,7 @@ Deno.serve(async (req: Request) => {
           .from('profiles')
           .select('balance, payout_failed_at, payout_failure_code')
           .eq('id', userId)
-          .single();
+          .maybeSingle();
 
         if (error) {
           console.error('[wallet] Error fetching balance:', error);
@@ -555,14 +555,44 @@ Deno.serve(async (req: Request) => {
         // Prevent double-release / double-refund
         const { data: existingSettlement } = await supabase
           .from('wallet_transactions')
-          .select('id, type, status')
+          .select('id, user_id, type, status, amount')
           .eq('bounty_id', bountyId)
           .in('type', ['release', 'refund'])
           .in('status', ['completed', 'pending'])
           .maybeSingle();
         if (existingSettlement) {
-          const verb = (existingSettlement as any).type === 'release' ? 'released' : 'refunded';
-          const isPending = (existingSettlement as any).status === 'pending';
+          const settlement = existingSettlement as WalletTransaction;
+          const isPending = settlement.status === 'pending';
+          if (
+            isPending &&
+            settlement.type === 'release' &&
+            settlement.user_id === hunterId
+          ) {
+            const { error: finalizePendingErr } = await supabase
+              .from('wallet_transactions')
+              .update({ status: 'completed' })
+              .eq('id', settlement.id)
+              .eq('status', 'pending');
+            if (finalizePendingErr) {
+              console.error('[wallet] failed to finalize pending release:', finalizePendingErr);
+              return jsonResponse(
+                {
+                  error: 'A release transaction for this bounty is already pending',
+                  code: 'duplicate_transaction',
+                },
+                409
+              );
+            }
+
+            return jsonResponse({
+              success: true,
+              transactionId: settlement.id,
+              releaseAmount: Math.abs(Number(settlement.amount) || 0),
+              message: 'Existing pending release finalized.',
+            });
+          }
+
+          const verb = settlement.type === 'release' ? 'released' : 'refunded';
           return jsonResponse(
             {
               error: isPending
@@ -644,8 +674,8 @@ Deno.serve(async (req: Request) => {
           .from('profiles')
           .select('balance')
           .eq('id', hunterId)
-          .single();
-        if (hunterFetchErr || !hunterProfile) {
+          .maybeSingle();
+        if (hunterFetchErr) {
           console.error('[wallet] fetch hunter balance error:', hunterFetchErr);
           await supabase
             .from('wallet_transactions')
@@ -653,21 +683,28 @@ Deno.serve(async (req: Request) => {
             .eq('id', (releaseTxRow as WalletTransaction).id);
           return jsonResponse({ error: 'Failed to fetch hunter balance' }, 500);
         }
-        const currentHunterBalance: number = (hunterProfile as Profile | null)?.balance ?? 0;
-        const { error: balanceErr } = await supabase
-          .from('profiles')
-          .update({
-            balance: currentHunterBalance + hunterAmount,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', hunterId);
-        if (balanceErr) {
-          console.error('[wallet] balance credit error for hunter, rolling back tx:', balanceErr);
-          await supabase
-            .from('wallet_transactions')
-            .delete()
-            .eq('id', (releaseTxRow as WalletTransaction).id);
-          return jsonResponse({ error: 'Failed to update hunter balance' }, 500);
+        if (hunterProfile) {
+          const currentHunterBalance: number = (hunterProfile as Profile | null)?.balance ?? 0;
+          const { error: balanceErr } = await supabase
+            .from('profiles')
+            .update({
+              balance: currentHunterBalance + hunterAmount,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', hunterId);
+          if (balanceErr) {
+            console.error('[wallet] balance credit error for hunter, rolling back tx:', balanceErr);
+            await supabase
+              .from('wallet_transactions')
+              .delete()
+              .eq('id', (releaseTxRow as WalletTransaction).id);
+            return jsonResponse({ error: 'Failed to update hunter balance' }, 500);
+          }
+        } else {
+          console.warn(
+            '[wallet] hunter profile missing during release; recording completed release transaction only',
+            hunterId
+          );
         }
 
         // Promote to 'completed'
