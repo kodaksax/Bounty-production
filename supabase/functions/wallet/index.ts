@@ -569,7 +569,12 @@ Deno.serve(async (req: Request) => {
           });
           return jsonResponse({ error: 'Failed to validate existing settlement state' }, 500);
         }
-        if ((settlementRows?.length ?? 0) > 1) {
+        // We intentionally cap at 2 rows:
+        // - 0 rows => no prior settlement
+        // - 1 row  => handle that settlement record directly
+        // - 2 rows => there are at least 2 matches (possibly more), which indicates
+        //            duplicate settlement history and must be blocked for safety.
+        if ((settlementRows?.length ?? 0) >= 2) {
           console.error('[wallet] multiple settlement rows detected; blocking duplicate release:', {
             bountyId,
             hunterId,
