@@ -174,21 +174,29 @@ describe('Payment Endpoints Integration Tests', () => {
     const RELEASE_CLOCK_START = 1710000000; // 2024-03-09T16:00:00.000Z
     const REFUND_CLOCK_START = 1711000000; // 2024-03-21T05:46:40.000Z
 
-    type StripeWebhookPayload = {
-      id?: string;
-      payment_intent?: string;
-      amount_received?: number;
-      amount_refunded?: number;
+    type CapturedWebhookPayload = {
+      id: string;
+      amount_received: number;
+      payment_intent?: never;
+      amount_refunded?: never;
     };
 
-    type StripeWebhookEvent = {
-      type: 'payment_intent.captured' | 'charge.refunded';
-      data: { object: StripeWebhookPayload };
+    type RefundedWebhookPayload = {
+      payment_intent: string;
+      amount_refunded: number;
+      id?: never;
+      amount_received?: never;
     };
+
+    type StripeWebhookPayload = CapturedWebhookPayload | RefundedWebhookPayload;
+
+    type StripeWebhookEvent =
+      | { type: 'payment_intent.captured'; data: { object: CapturedWebhookPayload } }
+      | { type: 'charge.refunded'; data: { object: RefundedWebhookPayload } };
 
     const getPaymentIntentIdFromWebhookPayload = (payload: StripeWebhookPayload) =>
       // Capture events provide `id` (PaymentIntent id) while refund events provide `payment_intent`.
-      payload.id ?? payload.payment_intent;
+      'id' in payload ? payload.id : payload.payment_intent;
 
     const applyWebhookEvent = (
       event: StripeWebhookEvent,
@@ -196,18 +204,22 @@ describe('Payment Endpoints Integration Tests', () => {
       escrowOwnerByIntent: Record<string, { posterId: string; hunterId: string }>,
     ) => {
       const payload = event.data.object;
-      const owner = escrowOwnerByIntent[getPaymentIntentIdFromWebhookPayload(payload) ?? ''];
+      const intentId = getPaymentIntentIdFromWebhookPayload(payload);
+
+      if (!intentId) {
+        throw new Error('Webhook payload missing payment intent id');
+      }
+
+      const owner = escrowOwnerByIntent[intentId];
 
       if (!owner) {
         return;
       }
 
       if (event.type === 'payment_intent.captured') {
-        balances[owner.hunterId] = (balances[owner.hunterId] ?? 0) + payload.amount_received;
-      }
-
-      if (event.type === 'charge.refunded') {
-        balances[owner.posterId] = (balances[owner.posterId] ?? 0) + payload.amount_refunded;
+        balances[owner.hunterId] = (balances[owner.hunterId] ?? 0) + event.data.object.amount_received;
+      } else {
+        balances[owner.posterId] = (balances[owner.posterId] ?? 0) + event.data.object.amount_refunded;
       }
     };
 
@@ -223,45 +235,89 @@ describe('Payment Endpoints Integration Tests', () => {
       const balances: Record<string, number> = { [posterId]: 0, [hunterId]: 2500 };
       const escrowOwnerByIntent: Record<string, { posterId: string; hunterId: string }> = {};
 
-      const clock = await mockStripe.testHelpers.testClocks.create({
-        frozen_time: RELEASE_CLOCK_START,
-        name: 'escrow-release-flow',
-      });
-
-      const escrowIntent = await mockStripe.paymentIntents.create({
-        amount: amountCents,
-        currency: 'usd',
-        capture_method: 'manual',
-        test_clock: clock.id,
-        metadata: { bountyId, posterId, hunterId, type: 'escrow' },
-      });
-
-      escrowOwnerByIntent[escrowIntent.id] = { posterId, hunterId };
-
       mockStripe.paymentIntents.confirm.mockResolvedValueOnce({
-        id: escrowIntent.id,
+        id: 'pi_test123',
         status: 'requires_capture',
         amount: amountCents,
         metadata: { bountyId, posterId, hunterId, type: 'escrow' },
       });
 
-      const confirmed = await mockStripe.paymentIntents.confirm(escrowIntent.id);
-      expect(confirmed.status).toBe('requires_capture');
+      app = express();
+      app.use(express.json());
+      app.use((req: any, res: any, next: any) => {
+        if (req.headers.authorization === 'Bearer valid_token') {
+          req.user = { id: posterId };
+          next();
+        } else {
+          res.status(401).json({ error: 'Unauthorized' });
+        }
+      });
+      app.post('/api/escrow/lifecycle/release', async (req: any, res: any) => {
+        const clock = await mockStripe.testHelpers.testClocks.create({
+          frozen_time: RELEASE_CLOCK_START,
+          name: 'escrow-release-flow',
+        });
 
-      await mockStripe.testHelpers.testClocks.advance(clock.id, { frozen_time: 1710000600 });
+        const escrowIntent = await mockStripe.paymentIntents.create({
+          amount: req.body.amountCents,
+          currency: 'usd',
+          capture_method: 'manual',
+          test_clock: clock.id,
+          metadata: {
+            bountyId: req.body.bountyId,
+            posterId: req.body.posterId,
+            hunterId: req.body.hunterId,
+            type: 'escrow',
+          },
+        });
 
-      applyWebhookEvent(
-        {
-          type: 'payment_intent.captured',
-          data: { object: { id: escrowIntent.id, amount_received: amountCents } },
-        },
-        balances,
-        escrowOwnerByIntent,
-      );
+        escrowOwnerByIntent[escrowIntent.id] = {
+          posterId: req.body.posterId,
+          hunterId: req.body.hunterId,
+        };
 
+        const confirmed = await mockStripe.paymentIntents.confirm(escrowIntent.id);
+        await mockStripe.testHelpers.testClocks.advance(clock.id, { frozen_time: 1710000600 });
+
+        applyWebhookEvent(
+          {
+            type: 'payment_intent.captured',
+            data: { object: { id: escrowIntent.id, amount_received: req.body.amountCents } },
+          },
+          balances,
+          escrowOwnerByIntent,
+        );
+
+        res.json({
+          success: true,
+          status: confirmed.status,
+          clockId: clock.id,
+          escrowId: escrowIntent.id,
+          hunterBalance: balances[req.body.hunterId],
+        });
+      });
+
+      const response = await request(app)
+        .post('/api/escrow/lifecycle/release')
+        .set('Authorization', 'Bearer valid_token')
+        .send({ bountyId, posterId, hunterId, amountCents });
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('requires_capture');
+      expect(response.body.hunterBalance).toBe(12500);
       expect(balances[hunterId]).toBe(12500);
-      expect(mockStripe.testHelpers.testClocks.create).toHaveBeenCalled();
-      expect(mockStripe.testHelpers.testClocks.advance).toHaveBeenCalledWith(clock.id, { frozen_time: 1710000600 });
+      expect(mockStripe.testHelpers.testClocks.create).toHaveBeenCalledWith({
+        frozen_time: RELEASE_CLOCK_START,
+        name: 'escrow-release-flow',
+      });
+      expect(mockStripe.paymentIntents.create).toHaveBeenCalledWith({
+        amount: amountCents,
+        currency: 'usd',
+        capture_method: 'manual',
+        test_clock: 'clock_test123',
+        metadata: { bountyId, posterId, hunterId, type: 'escrow' },
+      });
+      expect(mockStripe.testHelpers.testClocks.advance).toHaveBeenCalledWith('clock_test123', { frozen_time: 1710000600 });
     });
 
     it('create escrow → confirm PaymentIntent → refund credits poster balance', async () => {
@@ -276,59 +332,111 @@ describe('Payment Endpoints Integration Tests', () => {
       const balances: Record<string, number> = { [posterId]: 4000, [hunterId]: 0 };
       const escrowOwnerByIntent: Record<string, { posterId: string; hunterId: string }> = {};
 
-      const clock = await mockStripe.testHelpers.testClocks.create({
-        frozen_time: REFUND_CLOCK_START,
-        name: 'escrow-refund-flow',
-      });
-
-      const escrowIntent = await mockStripe.paymentIntents.create({
-        amount: amountCents,
-        currency: 'usd',
-        capture_method: 'manual',
-        test_clock: clock.id,
-        metadata: { bountyId, posterId, hunterId, type: 'escrow' },
-      });
-
-      escrowOwnerByIntent[escrowIntent.id] = { posterId, hunterId };
-
       mockStripe.paymentIntents.confirm.mockResolvedValueOnce({
-        id: escrowIntent.id,
+        id: 'pi_test123',
         status: 'requires_capture',
         amount: amountCents,
         metadata: { bountyId, posterId, hunterId, type: 'escrow' },
       });
 
-      const confirmed = await mockStripe.paymentIntents.confirm(escrowIntent.id);
-      expect(confirmed.status).toBe('requires_capture');
-
       mockStripe.refunds.create.mockResolvedValueOnce({
         id: 'ref_refund_1',
         amount: amountCents,
         status: 'succeeded',
-        payment_intent: escrowIntent.id,
+        payment_intent: 'pi_test123',
       });
 
-      const refund = await mockStripe.refunds.create({
-        payment_intent: escrowIntent.id,
-        amount: amountCents,
-        metadata: { bountyId, posterId, hunterId, reason: 'poster_cancelled' },
+      app = express();
+      app.use(express.json());
+      app.use((req: any, res: any, next: any) => {
+        if (req.headers.authorization === 'Bearer valid_token') {
+          req.user = { id: posterId };
+          next();
+        } else {
+          res.status(401).json({ error: 'Unauthorized' });
+        }
+      });
+      app.post('/api/escrow/lifecycle/refund', async (req: any, res: any) => {
+        const clock = await mockStripe.testHelpers.testClocks.create({
+          frozen_time: REFUND_CLOCK_START,
+          name: 'escrow-refund-flow',
+        });
+
+        const escrowIntent = await mockStripe.paymentIntents.create({
+          amount: req.body.amountCents,
+          currency: 'usd',
+          capture_method: 'manual',
+          test_clock: clock.id,
+          metadata: {
+            bountyId: req.body.bountyId,
+            posterId: req.body.posterId,
+            hunterId: req.body.hunterId,
+            type: 'escrow',
+          },
+        });
+
+        escrowOwnerByIntent[escrowIntent.id] = {
+          posterId: req.body.posterId,
+          hunterId: req.body.hunterId,
+        };
+
+        const confirmed = await mockStripe.paymentIntents.confirm(escrowIntent.id);
+        const refund = await mockStripe.refunds.create({
+          payment_intent: escrowIntent.id,
+          amount: req.body.amountCents,
+          metadata: {
+            bountyId: req.body.bountyId,
+            posterId: req.body.posterId,
+            hunterId: req.body.hunterId,
+            reason: 'poster_cancelled',
+          },
+        });
+
+        await mockStripe.testHelpers.testClocks.advance(clock.id, { frozen_time: 1711000600 });
+
+        applyWebhookEvent(
+          {
+            type: 'charge.refunded',
+            data: {
+              object: { payment_intent: escrowIntent.id, amount_refunded: refund.amount },
+            },
+          },
+          balances,
+          escrowOwnerByIntent,
+        );
+
+        res.json({
+          success: true,
+          status: confirmed.status,
+          refundStatus: refund.status,
+          clockId: clock.id,
+          escrowId: escrowIntent.id,
+          posterBalance: balances[req.body.posterId],
+        });
       });
 
-      await mockStripe.testHelpers.testClocks.advance(clock.id, { frozen_time: 1711000600 });
+      const response = await request(app)
+        .post('/api/escrow/lifecycle/refund')
+        .set('Authorization', 'Bearer valid_token')
+        .send({ bountyId, posterId, hunterId, amountCents });
 
-      applyWebhookEvent(
-        {
-          type: 'charge.refunded',
-          data: { object: { payment_intent: escrowIntent.id, amount_refunded: refund.amount } },
-        },
-        balances,
-        escrowOwnerByIntent,
-      );
-
-      expect(refund.status).toBe('succeeded');
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('requires_capture');
+      expect(response.body.refundStatus).toBe('succeeded');
+      expect(response.body.posterBalance).toBe(12000);
       expect(balances[posterId]).toBe(12000);
-      expect(mockStripe.testHelpers.testClocks.create).toHaveBeenCalled();
-      expect(mockStripe.testHelpers.testClocks.advance).toHaveBeenCalledWith(clock.id, { frozen_time: 1711000600 });
+      expect(mockStripe.testHelpers.testClocks.create).toHaveBeenCalledWith({
+        frozen_time: REFUND_CLOCK_START,
+        name: 'escrow-refund-flow',
+      });
+      expect(mockStripe.paymentIntents.create).toHaveBeenCalledWith({
+        amount: amountCents,
+        currency: 'usd',
+        capture_method: 'manual',
+        test_clock: 'clock_test123',
+        metadata: { bountyId, posterId, hunterId, type: 'escrow' },
+      });
+      expect(mockStripe.testHelpers.testClocks.advance).toHaveBeenCalledWith('clock_test123', { frozen_time: 1711000600 });
     });
   });
 
