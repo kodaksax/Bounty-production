@@ -604,6 +604,8 @@ class StripeService {
    * If the backend doesn't use idempotency keys, retries could create duplicate
    * PaymentIntents. For critical payment flows, use createPaymentIntentSecure()
    * which includes built-in idempotency protection.
+   *
+   * @deprecated Use createPaymentIntentSecure() for all new payment flows.
    */
   async createPaymentIntent(
     amount: number,
