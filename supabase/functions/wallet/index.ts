@@ -553,13 +553,37 @@ Deno.serve(async (req: Request) => {
         }
 
         // Prevent double-release / double-refund
-        const { data: existingSettlement } = await supabase
+        const { data: settlementRows, error: existingSettlementErr } = await supabase
           .from('wallet_transactions')
           .select('id, user_id, type, status, amount')
           .eq('bounty_id', bountyId)
           .in('type', ['release', 'refund'])
           .in('status', ['completed', 'pending'])
-          .maybeSingle();
+          .order('created_at', { ascending: false })
+          .limit(2);
+        if (existingSettlementErr) {
+          console.error('[wallet] failed checking existing release/refund settlement:', {
+            bountyId,
+            hunterId,
+            error: existingSettlementErr,
+          });
+          return jsonResponse({ error: 'Failed to validate existing settlement state' }, 500);
+        }
+        if ((settlementRows?.length ?? 0) > 1) {
+          console.error('[wallet] multiple settlement rows detected; blocking duplicate release:', {
+            bountyId,
+            hunterId,
+            settlementRows,
+          });
+          return jsonResponse(
+            {
+              error: 'A settlement transaction for this bounty is already in progress',
+              code: 'duplicate_transaction',
+            },
+            409
+          );
+        }
+        const existingSettlement = settlementRows?.[0] ?? null;
         if (existingSettlement) {
           const settlement = existingSettlement as WalletTransaction;
           const isPending = settlement.status === 'pending';
@@ -683,6 +707,7 @@ Deno.serve(async (req: Request) => {
             .eq('id', (releaseTxRow as WalletTransaction).id);
           return jsonResponse({ error: 'Failed to fetch hunter balance' }, 500);
         }
+        let hunterBalanceCredited = false;
         if (hunterProfile) {
           const currentHunterBalance: number = (hunterProfile as Profile | null)?.balance ?? 0;
           const { error: balanceErr } = await supabase
@@ -700,6 +725,7 @@ Deno.serve(async (req: Request) => {
               .eq('id', (releaseTxRow as WalletTransaction).id);
             return jsonResponse({ error: 'Failed to update hunter balance' }, 500);
           }
+          hunterBalanceCredited = true;
         } else {
           console.warn(
             '[wallet] hunter profile missing during release; recording completed release transaction only',
@@ -714,8 +740,9 @@ Deno.serve(async (req: Request) => {
           .eq('id', (releaseTxRow as WalletTransaction).id);
         if (confirmErr) {
           console.error(
-            '[wallet] CRITICAL: hunter balance credited but failed to mark release tx completed; tx id:',
+            '[wallet] CRITICAL: release payout processed but failed to mark release tx completed; tx id:',
             (releaseTxRow as WalletTransaction).id,
+            { hunterBalanceCredited, hunterId },
             confirmErr
           );
         }
