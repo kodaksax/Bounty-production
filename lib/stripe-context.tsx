@@ -183,6 +183,7 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
   ): Promise<{ success: boolean; paymentIntentId?: string; error?: string }> => {
     return processPaymentSecure(amount, {
       paymentMethodId,
+      purpose: 'wallet_deposit',
       userId: session?.user?.id,
     });
   };
