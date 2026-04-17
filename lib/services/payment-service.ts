@@ -635,17 +635,6 @@ class PaymentService {
   }
 
   /**
-   * [UNIMPLEMENTED] Get payment receipt information
-   * This method is not yet implemented and will throw if called.
-   */
-  async _getPaymentReceiptNotImplemented(
-    paymentIntentId: string,
-    authToken?: string
-  ): Promise<never> {
-    throw new Error("getPaymentReceipt is not implemented yet. This method is a placeholder and should not be used until the backend endpoint is ready.");
-  }
-
-  /**
    * Validate card number using Luhn algorithm
    */
   validateCardNumber(cardNumber: string): boolean {
