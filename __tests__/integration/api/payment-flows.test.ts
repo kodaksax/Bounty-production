@@ -135,7 +135,7 @@ const mockStripe = {
         frozen_time: 1710000000,
         status: 'ready',
       })),
-      advance: jest.fn(async (_clockId: string, params: any) => ({
+      advance: jest.fn(async (_clockId: string, params: { frozen_time?: number }) => ({
         id: 'clock_test123',
         frozen_time: params?.frozen_time ?? 1710000300,
         status: 'ready',
@@ -171,13 +171,32 @@ describe('Payment Endpoints Integration Tests', () => {
   });
 
   describe('Escrow lifecycle integration with Stripe test clock simulation', () => {
+    const RELEASE_CLOCK_START = 1710000000; // 2024-03-09T16:00:00.000Z
+    const REFUND_CLOCK_START = 1711000000; // 2024-03-21T05:46:40.000Z
+
+    type StripeWebhookPayload = {
+      id?: string;
+      payment_intent?: string;
+      amount_received?: number;
+      amount_refunded?: number;
+    };
+
+    type StripeWebhookEvent = {
+      type: 'payment_intent.captured' | 'charge.refunded';
+      data: { object: StripeWebhookPayload };
+    };
+
+    const getPaymentIntentIdFromWebhookPayload = (payload: StripeWebhookPayload) =>
+      // Capture events provide `id` (PaymentIntent id) while refund events provide `payment_intent`.
+      payload.id ?? payload.payment_intent;
+
     const applyWebhookEvent = (
-      event: { type: string; data: { object: any } },
+      event: StripeWebhookEvent,
       balances: Record<string, number>,
       escrowOwnerByIntent: Record<string, { posterId: string; hunterId: string }>,
     ) => {
       const payload = event.data.object;
-      const owner = escrowOwnerByIntent[payload.id ?? payload.payment_intent];
+      const owner = escrowOwnerByIntent[getPaymentIntentIdFromWebhookPayload(payload) ?? ''];
 
       if (!owner) {
         return;
@@ -193,7 +212,9 @@ describe('Payment Endpoints Integration Tests', () => {
     };
 
     it('create escrow → confirm PaymentIntent → release credits hunter balance', async () => {
-      expect(process.env.STRIPE_SECRET_KEY).toMatch(/^sk_test_/);
+      const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+      expect(stripeSecretKey).toBeDefined();
+      expect(stripeSecretKey).toMatch(/^sk_test_/);
 
       const bountyId = 'bounty-release-1';
       const posterId = 'poster-release-1';
@@ -203,7 +224,7 @@ describe('Payment Endpoints Integration Tests', () => {
       const escrowOwnerByIntent: Record<string, { posterId: string; hunterId: string }> = {};
 
       const clock = await mockStripe.testHelpers.testClocks.create({
-        frozen_time: 1710000000,
+        frozen_time: RELEASE_CLOCK_START,
         name: 'escrow-release-flow',
       });
 
@@ -244,7 +265,9 @@ describe('Payment Endpoints Integration Tests', () => {
     });
 
     it('create escrow → confirm PaymentIntent → refund credits poster balance', async () => {
-      expect(process.env.STRIPE_SECRET_KEY).toMatch(/^sk_test_/);
+      const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+      expect(stripeSecretKey).toBeDefined();
+      expect(stripeSecretKey).toMatch(/^sk_test_/);
 
       const bountyId = 'bounty-refund-1';
       const posterId = 'poster-refund-1';
@@ -254,7 +277,7 @@ describe('Payment Endpoints Integration Tests', () => {
       const escrowOwnerByIntent: Record<string, { posterId: string; hunterId: string }> = {};
 
       const clock = await mockStripe.testHelpers.testClocks.create({
-        frozen_time: 1711000000,
+        frozen_time: REFUND_CLOCK_START,
         name: 'escrow-refund-flow',
       });
 
