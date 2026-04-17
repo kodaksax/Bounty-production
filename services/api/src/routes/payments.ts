@@ -18,6 +18,7 @@ import { logger } from '../services/logger';
 import { notificationService } from '../services/notification-service';
 import { stripeConnectService } from '../services/stripe-connect-service';
 import { walletService } from '../services/wallet-service';
+import type { TransactionType } from '../types/wallet-transaction-types';
 import { toJsonSchema } from '../utils/zod-json';
 
 // Lazy-initialized Supabase admin client for webhook DB operations
@@ -785,9 +786,10 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
         );
 
         // Create release transaction for hunter and credit their wallet balance
+        const releaseTransactionType: TransactionType = 'release';
         await walletService.createTransaction({
           user_id: hunterId,
-          type: 'release',
+          type: releaseTransactionType,
           amount: hunterAmountCents / 100,
           bounty_id: bountyId,
           stripe_transfer_id: transfer.id,

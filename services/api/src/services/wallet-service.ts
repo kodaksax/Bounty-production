@@ -1,10 +1,11 @@
 import { eq } from 'drizzle-orm';
 import { db } from '../db/connection';
 import { walletTransactions } from '../db/schema';
+import { TRANSACTION_TYPES } from '../types/wallet-transaction-types';
 import { walletRiskIntegration } from './wallet-risk-integration';
 
 /** Allowed wallet transaction types to prevent invalid ledger entries */
-export const VALID_TRANSACTION_TYPES = ['escrow', 'release', 'refund', 'deposit', 'withdrawal', 'bounty_posted'] as const;
+export const VALID_TRANSACTION_TYPES = [...TRANSACTION_TYPES, 'bounty_posted'] as const;
 export type WalletTransactionType = typeof VALID_TRANSACTION_TYPES[number];
 
 // Define types locally to avoid import issues
@@ -12,7 +13,7 @@ export interface CreateWalletTransactionInput {
   user_id: string;
   bounty_id?: string;
   bountyId?: string; // Keep for backwards compatibility
-  type: string;
+  type: WalletTransactionType;
   amount: number;
   stripe_transfer_id?: string;
   platform_fee_cents?: number;
@@ -21,7 +22,7 @@ export interface CreateWalletTransactionInput {
 export interface WalletTransaction {
   id: string;
   user_id: string;
-  type: string;
+  type: WalletTransactionType;
   amount: number;
   bountyId?: string;
   description?: string;
