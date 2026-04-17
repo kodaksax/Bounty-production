@@ -6,32 +6,46 @@ const lastError: { message: string; time: number } = { message: '', time: 0 };
 const DEDUPE_WINDOW_MS = 2000; // suppress identical messages repeated within 2s
 const verboseClientLogs = process.env.EXPO_PUBLIC_LOG_CLIENT_VERBOSE === '1';
 
-type LogLevel = 'info' | 'warn' | 'error'
+type LogLevel = 'info' | 'warn' | 'error';
 
 export async function logClientError(message: string, metadata?: Record<string, any>) {
   // In test environments avoid emitting async logs which can run after
   // Jest has finished and cause "Cannot log after tests are done".
   if (process.env.NODE_ENV === 'test') return;
   const now = Date.now();
-  const isDuplicate = !verboseClientLogs && message === lastError.message && (now - lastError.time) < DEDUPE_WINDOW_MS;
-  lastError.message = message; lastError.time = now;
+  const isDuplicate =
+    !verboseClientLogs && message === lastError.message && now - lastError.time < DEDUPE_WINDOW_MS;
+  lastError.message = message;
+  lastError.time = now;
   if (isDuplicate) return; // skip console + remote insert
   // Normalize metadata so errors/objects are serializable and readable in logs
   let safeMeta: Record<string, any> = {};
   try {
     if (metadata) {
       for (const k of Object.keys(metadata)) {
-        const v = (metadata as any)[k]
+        const v = (metadata as any)[k];
         try {
-          safeMeta[k] = typeof v === 'string' ? v : JSON.parse(JSON.stringify(v))
+          if (v instanceof Error) {
+            safeMeta[k] = { name: v.name, message: v.message, stack: v.stack };
+          } else {
+            safeMeta[k] = typeof v === 'string' ? v : JSON.parse(JSON.stringify(v));
+          }
         } catch (err) {
-          try { safeMeta[k] = String(v) } catch { safeMeta[k] = null }
+          try {
+            safeMeta[k] = String(v);
+          } catch {
+            safeMeta[k] = null;
+          }
         }
       }
     }
 
     // Best-effort: try sending to a 'client_logs' table if it exists
-    await supabase.from('client_logs').insert([{ level: 'error', message, metadata: safeMeta, created_at: new Date().toISOString() }])
+    await supabase
+      .from('client_logs')
+      .insert([
+        { level: 'error', message, metadata: safeMeta, created_at: new Date().toISOString() },
+      ]);
   } catch (e) {
     // swallow - we don't want monitoring failures to break app logic
     // still print to console for local debugging
@@ -39,34 +53,58 @@ export async function logClientError(message: string, metadata?: Record<string, 
   }
 
   // Always output to console too - use the safe serialized metadata we built above
-  try { console.error('[client_log]', message, Object.keys(safeMeta).length ? JSON.stringify(safeMeta) : undefined) } catch {}
+  try {
+    console.error(
+      '[client_log]',
+      message,
+      Object.keys(safeMeta).length ? JSON.stringify(safeMeta) : undefined
+    );
+  } catch {}
 }
 
 export async function logClientInfo(message: string, metadata?: Record<string, any>) {
   // No-op during tests to avoid async console logs interfering with Jest
   if (process.env.NODE_ENV === 'test') return;
   const now = Date.now();
-  const isDuplicate = !verboseClientLogs && message === lastInfo.message && (now - lastInfo.time) < DEDUPE_WINDOW_MS;
-  lastInfo.message = message; lastInfo.time = now;
+  const isDuplicate =
+    !verboseClientLogs && message === lastInfo.message && now - lastInfo.time < DEDUPE_WINDOW_MS;
+  lastInfo.message = message;
+  lastInfo.time = now;
   if (isDuplicate) return;
   let safeMeta: Record<string, any> = {};
   try {
     if (metadata) {
       for (const k of Object.keys(metadata)) {
-        const v = (metadata as any)[k]
+        const v = (metadata as any)[k];
         try {
-          safeMeta[k] = typeof v === 'string' ? v : JSON.parse(JSON.stringify(v))
+          if (v instanceof Error) {
+            safeMeta[k] = { name: v.name, message: v.message, stack: v.stack };
+          } else {
+            safeMeta[k] = typeof v === 'string' ? v : JSON.parse(JSON.stringify(v));
+          }
         } catch (err) {
-          try { safeMeta[k] = String(v) } catch { safeMeta[k] = null }
+          try {
+            safeMeta[k] = String(v);
+          } catch {
+            safeMeta[k] = null;
+          }
         }
       }
     }
-    await supabase.from('client_logs').insert([{ level: 'info', message, metadata: safeMeta, created_at: new Date().toISOString() }])
+    await supabase
+      .from('client_logs')
+      .insert([
+        { level: 'info', message, metadata: safeMeta, created_at: new Date().toISOString() },
+      ]);
   } catch (e) {}
   // Also log to console in development for debugging
   if (typeof __DEV__ !== 'undefined' && __DEV__) {
-    console.log('[client_log]', message, Object.keys(safeMeta).length ? JSON.stringify(safeMeta) : undefined)
+    console.log(
+      '[client_log]',
+      message,
+      Object.keys(safeMeta).length ? JSON.stringify(safeMeta) : undefined
+    );
   }
 }
 
-export default { logClientError, logClientInfo }
+export default { logClientError, logClientInfo };

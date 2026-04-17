@@ -6,6 +6,7 @@
 //   POST /wallet/deposit   (client-initiated deposit after Stripe payment confirmation)
 //   POST /wallet/escrow    (hold funds when a bounty is posted)
 //   POST /wallet/refund    (return escrowed funds to poster on cancellation)
+//   POST /wallet/release   (release escrowed funds to hunter on completion)
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import type { ApplyDepositResult, Profile, WalletTransaction } from '../_shared/types.ts';
@@ -516,6 +517,178 @@ Deno.serve(async (req: Request) => {
           transactionId: (refundTxRow as WalletTransaction).id,
           amount: refundAmount,
           message: `Refund of $${refundAmount.toFixed(2)} processed.`,
+        });
+      }
+
+      // POST /wallet/release — release escrowed funds to hunter on bounty completion.
+      if (req.method === 'POST' && subPath === '/release') {
+        let body: {
+          bountyId?: unknown;
+          hunterId?: unknown;
+          idempotencyKey?: unknown;
+        };
+        try {
+          body = await req.json();
+        } catch {
+          return jsonResponse({ error: 'Invalid JSON body' }, 400);
+        }
+
+        const bountyId = typeof body.bountyId === 'string' ? body.bountyId.trim() : '';
+        const hunterId = typeof body.hunterId === 'string' ? body.hunterId.trim() : '';
+        const idempotencyKey =
+          typeof body.idempotencyKey === 'string' ? body.idempotencyKey.trim() : undefined;
+
+        if (!bountyId) return jsonResponse({ error: 'bountyId is required' }, 400);
+        if (!hunterId) return jsonResponse({ error: 'hunterId is required' }, 400);
+
+        // Verify the caller is the bounty creator
+        const { data: bountyRow, error: bountyErr } = await supabase
+          .from('bounties')
+          .select('user_id, amount, is_for_honor')
+          .eq('id', bountyId)
+          .single();
+        if (bountyErr || !bountyRow) return jsonResponse({ error: 'Bounty not found' }, 404);
+        if ((bountyRow as { user_id: string }).user_id !== userId) {
+          return jsonResponse({ error: 'Unauthorized to release funds' }, 403);
+        }
+
+        // Prevent double-release / double-refund
+        const { data: existingSettlement } = await supabase
+          .from('wallet_transactions')
+          .select('id, type, status')
+          .eq('bounty_id', bountyId)
+          .in('type', ['release', 'refund'])
+          .in('status', ['completed', 'pending'])
+          .maybeSingle();
+        if (existingSettlement) {
+          const verb = (existingSettlement as any).type === 'release' ? 'released' : 'refunded';
+          const isPending = (existingSettlement as any).status === 'pending';
+          return jsonResponse(
+            {
+              error: isPending
+                ? `A ${verb} transaction for this bounty is already pending`
+                : `Escrow already ${verb} for this bounty`,
+              code: 'duplicate_transaction',
+            },
+            409
+          );
+        }
+
+        // Find the escrow transaction to determine release amount.
+        // Fall back to the bounty's own amount for bounties created via the legacy
+        // withdraw/bounty_posted path that never created a wallet_transactions escrow row.
+        const { data: escrowTx } = await supabase
+          .from('wallet_transactions')
+          .select('*')
+          .eq('bounty_id', bountyId)
+          .eq('type', 'escrow')
+          .eq('status', 'completed')
+          .maybeSingle();
+
+        let totalAmount: number;
+        if (escrowTx) {
+          totalAmount = Math.abs((escrowTx as WalletTransaction).amount);
+        } else {
+          // Legacy bounty — no escrow record. Use the bounty's stored amount.
+          const bountyAmount = Number((bountyRow as any).amount);
+          if (!bountyAmount || bountyAmount <= 0 || (bountyRow as any).is_for_honor) {
+            console.error(
+              '[wallet] No escrow record and no valid bounty amount for release:',
+              bountyId
+            );
+            return jsonResponse({ error: 'Escrow transaction not found' }, 404);
+          }
+          totalAmount = bountyAmount;
+          console.warn(
+            '[wallet] No escrow record found; using bounty amount for release:',
+            bountyId,
+            totalAmount
+          );
+        }
+
+        const PLATFORM_FEE_PERCENT = Number(Deno.env.get('PLATFORM_FEE_PERCENT') ?? '5');
+        const platformFee = Math.round(((totalAmount * PLATFORM_FEE_PERCENT) / 100) * 100) / 100;
+        const hunterAmount = Math.round((totalAmount - platformFee) * 100) / 100;
+        const effectiveKey = idempotencyKey || `release_${bountyId}_${hunterId}`;
+
+        // Insert release transaction as 'pending' first; promote to 'completed' after
+        // the balance update succeeds to prevent orphaned completed records on failure.
+        const { data: releaseTxRow, error: releaseTxErr } = await supabase
+          .from('wallet_transactions')
+          .insert([
+            {
+              user_id: hunterId,
+              bounty_id: bountyId,
+              type: 'release',
+              amount: hunterAmount, // positive: credit to hunter
+              description: `Payment for bounty ${bountyId}`,
+              status: 'pending',
+              metadata: {
+                bounty_id: bountyId,
+                escrow_transaction_id: escrowTx ? (escrowTx as WalletTransaction).id : null,
+                platform_fee: platformFee,
+                released_at: new Date().toISOString(),
+                idempotency_key: effectiveKey,
+              },
+            },
+          ])
+          .select()
+          .single();
+        if (releaseTxErr) {
+          console.error('[wallet] create release tx error:', releaseTxErr);
+          return jsonResponse({ error: 'Failed to create release transaction' }, 500);
+        }
+
+        // Credit hunter's balance
+        const { data: hunterProfile, error: hunterFetchErr } = await supabase
+          .from('profiles')
+          .select('balance')
+          .eq('id', hunterId)
+          .single();
+        if (hunterFetchErr || !hunterProfile) {
+          console.error('[wallet] fetch hunter balance error:', hunterFetchErr);
+          await supabase
+            .from('wallet_transactions')
+            .delete()
+            .eq('id', (releaseTxRow as WalletTransaction).id);
+          return jsonResponse({ error: 'Failed to fetch hunter balance' }, 500);
+        }
+        const currentHunterBalance: number = (hunterProfile as Profile | null)?.balance ?? 0;
+        const { error: balanceErr } = await supabase
+          .from('profiles')
+          .update({
+            balance: currentHunterBalance + hunterAmount,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', hunterId);
+        if (balanceErr) {
+          console.error('[wallet] balance credit error for hunter, rolling back tx:', balanceErr);
+          await supabase
+            .from('wallet_transactions')
+            .delete()
+            .eq('id', (releaseTxRow as WalletTransaction).id);
+          return jsonResponse({ error: 'Failed to update hunter balance' }, 500);
+        }
+
+        // Promote to 'completed'
+        const { error: confirmErr } = await supabase
+          .from('wallet_transactions')
+          .update({ status: 'completed' })
+          .eq('id', (releaseTxRow as WalletTransaction).id);
+        if (confirmErr) {
+          console.error(
+            '[wallet] CRITICAL: hunter balance credited but failed to mark release tx completed; tx id:',
+            (releaseTxRow as WalletTransaction).id,
+            confirmErr
+          );
+        }
+
+        return jsonResponse({
+          success: true,
+          transactionId: (releaseTxRow as WalletTransaction).id,
+          releaseAmount: hunterAmount,
+          platformFee,
+          message: `$${hunterAmount.toFixed(2)} released to hunter.`,
         });
       }
 
