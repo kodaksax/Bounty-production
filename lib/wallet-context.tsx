@@ -699,21 +699,45 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           const releaseResult = await paymentService.releaseEscrow(bountyData.payment_intent_id);
 
           if (!releaseResult.success) {
-            console.error('Failed to release escrow via Stripe:', releaseResult.error);
-            return false;
+            const stripeErrMsg = releaseResult.error?.message ?? '';
+            // Treat "already captured/released" as an idempotent success — the funds have
+            // already been settled via Stripe, so the approval flow can continue.
+            if (/already (released|captured)|funds already/i.test(stripeErrMsg)) {
+              console.warn(
+                '[wallet] Stripe escrow already captured for bounty (idempotent):',
+                bountyIdStr
+              );
+              platformFee = grossAmount * PLATFORM_FEE_PERCENTAGE;
+              netAmount = grossAmount - platformFee;
+            } else if (/payout account|connect account/i.test(stripeErrMsg)) {
+              // Hunter has not set up their Stripe Connect account.
+              throw new Error(
+                'The hunter has not set up their payout account. Funds remain in escrow — please contact support.'
+              );
+            } else {
+              console.error('Failed to release escrow via Stripe:', stripeErrMsg);
+              return false;
+            }
+          } else {
+            platformFee = releaseResult.platformFee || grossAmount * PLATFORM_FEE_PERCENTAGE;
+            netAmount = releaseResult.hunterAmount || grossAmount - platformFee;
           }
-
-          platformFee = releaseResult.platformFee || grossAmount * PLATFORM_FEE_PERCENTAGE;
-          netAmount = releaseResult.hunterAmount || grossAmount - platformFee;
         } else {
           // Internal wallet path: bounty was escrowed at posting time via /wallet/escrow.
           // Use the server-side /wallet/release endpoint to credit the hunter's balance.
           const token = await getAccessToken();
           if (!token) {
-            console.error('[wallet] Cannot release funds: no access token');
-            return false;
+            // Token is missing — likely the session expired. Throw so the UI surfaces a
+            // useful message rather than showing a generic "contact support" prompt.
+            throw new Error(
+              'Your session has expired. Please sign out and sign back in, then try again.'
+            );
           }
 
+          // Allow one retry on network/timeout errors only (not on server errors).
+          // The server's ConflictError 409 idempotency protection makes this safe: if the
+          // first request reached the server and succeeded, the retry gets a 409 "already
+          // released" response which the handler below treats as success.
           const response = await fetchWithTimeout(`${FINANCIAL_API_BASE_URL}/wallet/release`, {
             method: 'POST',
             headers: {
@@ -723,19 +747,61 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             },
             body: JSON.stringify({ bountyId: bountyIdStr, hunterId }),
             timeout: API_TIMEOUTS.DEFAULT,
-            retries: 0, // No retries for financial operations to prevent double-credit
+            retries: 1,
+            // Only retry on genuine network/timeout errors where no server response was
+            // received. Do NOT retry on 4xx/5xx to avoid double-processing ambiguity.
+            retryOn: (res, err) => {
+              if (
+                err &&
+                (err.name === 'AbortError' || /timeout|network|fetch/i.test(err.message))
+              ) {
+                return true;
+              }
+              return false;
+            },
           });
 
           if (!response.ok) {
             const errData = await response.json().catch(() => ({}));
-            console.error('[wallet] Server release failed:', (errData as any).error);
-            return false;
-          }
+            const errMsg: string = (errData as any).error ?? '';
 
-          const releaseData = await response.json();
-          // Server returns the net amount after platform fee deduction.
-          platformFee = releaseData.platformFee ?? grossAmount * PLATFORM_FEE_PERCENTAGE;
-          netAmount = releaseData.releaseAmount ?? grossAmount - platformFee;
+            // 409 "already released/refunded" — escrow is already settled (idempotent success).
+            if (response.status === 409 && /already (released|refunded)/i.test(errMsg)) {
+              console.warn(
+                '[wallet] Escrow already released for bounty (idempotent):',
+                bountyIdStr
+              );
+              platformFee = grossAmount * PLATFORM_FEE_PERCENTAGE;
+              netAmount = grossAmount - platformFee;
+            } else if (response.status === 409 && /duplicate/i.test(errMsg)) {
+              // 409 "Duplicate request detected" from idempotency key check — the first
+              // request was already processed, treat as success.
+              console.warn(
+                '[wallet] Duplicate release request detected (idempotent):',
+                bountyIdStr
+              );
+              platformFee = grossAmount * PLATFORM_FEE_PERCENTAGE;
+              netAmount = grossAmount - platformFee;
+            } else if (response.status === 400 && /payout account|connect account/i.test(errMsg)) {
+              // Hunter has not set up a payout account — user-actionable failure.
+              throw new Error(
+                'The hunter has not set up their payout account. Funds remain in escrow — please contact support.'
+              );
+            } else if (response.status === 401 || response.status === 403) {
+              // Auth failure — guide the poster to re-authenticate.
+              throw new Error(
+                'Authorization error releasing funds. Please sign out and sign back in, then try again.'
+              );
+            } else {
+              console.error('[wallet] Server release failed:', errMsg || `HTTP ${response.status}`);
+              return false;
+            }
+          } else {
+            const releaseData = await response.json();
+            // Server returns the net amount after platform fee deduction.
+            platformFee = releaseData.platformFee ?? grossAmount * PLATFORM_FEE_PERCENTAGE;
+            netAmount = releaseData.releaseAmount ?? grossAmount - platformFee;
+          }
         }
 
         // Update local escrow transaction status (only when a local escrow record exists;
