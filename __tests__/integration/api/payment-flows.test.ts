@@ -9,7 +9,7 @@
  * routes for more accurate integration testing.
  */
 
-import express from 'express';
+import express, { type Application, type NextFunction, type Request, type Response } from 'express';
 import request from 'supertest';
 
 // Set environment variables
@@ -71,6 +71,8 @@ jest.mock('@supabase/supabase-js', () => ({
 }));
 
 // Mock Stripe
+const MOCK_CLOCK_ID = 'clock_test123';
+
 const mockStripe = {
   customers: {
     create: jest.fn(async () => ({
@@ -131,12 +133,12 @@ const mockStripe = {
   testHelpers: {
     testClocks: {
       create: jest.fn(async () => ({
-        id: 'clock_test123',
+        id: MOCK_CLOCK_ID,
         frozen_time: 1710000000,
         status: 'ready',
       })),
       advance: jest.fn(async (_clockId: string, params: { frozen_time?: number }) => ({
-        id: 'clock_test123',
+        id: MOCK_CLOCK_ID,
         frozen_time: params?.frozen_time ?? 1710000300,
         status: 'ready',
       })),
@@ -223,6 +225,17 @@ describe('Payment Endpoints Integration Tests', () => {
       }
     };
 
+    const attachTestAuth = (targetApp: Application, userId: string) => {
+      targetApp.use((req: Request, res: Response, next: NextFunction) => {
+        if (req.headers.authorization === 'Bearer valid_token') {
+          (req as Request & { user?: { id: string } }).user = { id: userId };
+          next();
+        } else {
+          res.status(401).json({ error: 'Unauthorized' });
+        }
+      });
+    };
+
     it('create escrow → confirm PaymentIntent → release credits hunter balance', async () => {
       const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
       expect(stripeSecretKey).toBeDefined();
@@ -235,24 +248,11 @@ describe('Payment Endpoints Integration Tests', () => {
       const balances: Record<string, number> = { [posterId]: 0, [hunterId]: 2500 };
       const escrowOwnerByIntent: Record<string, { posterId: string; hunterId: string }> = {};
 
-      mockStripe.paymentIntents.confirm.mockResolvedValueOnce({
-        id: 'pi_test123',
-        status: 'requires_capture',
-        amount: amountCents,
-        metadata: { bountyId, posterId, hunterId, type: 'escrow' },
-      });
-
       app = express();
       app.use(express.json());
-      app.use((req: any, res: any, next: any) => {
-        if (req.headers.authorization === 'Bearer valid_token') {
-          req.user = { id: posterId };
-          next();
-        } else {
-          res.status(401).json({ error: 'Unauthorized' });
-        }
-      });
-      app.post('/api/escrow/lifecycle/release', async (req: any, res: any) => {
+      attachTestAuth(app, posterId);
+      // Test harness endpoint for lifecycle simulation; not a production API route.
+      app.post('/api/escrow/lifecycle/release', async (req: Request, res: Response) => {
         const clock = await mockStripe.testHelpers.testClocks.create({
           frozen_time: RELEASE_CLOCK_START,
           name: 'escrow-release-flow',
@@ -297,6 +297,13 @@ describe('Payment Endpoints Integration Tests', () => {
         });
       });
 
+      mockStripe.paymentIntents.confirm.mockResolvedValueOnce({
+        id: 'pi_test123',
+        status: 'requires_capture',
+        amount: amountCents,
+        metadata: { bountyId, posterId, hunterId, type: 'escrow' },
+      });
+
       const response = await request(app)
         .post('/api/escrow/lifecycle/release')
         .set('Authorization', 'Bearer valid_token')
@@ -314,10 +321,10 @@ describe('Payment Endpoints Integration Tests', () => {
         amount: amountCents,
         currency: 'usd',
         capture_method: 'manual',
-        test_clock: 'clock_test123',
+        test_clock: MOCK_CLOCK_ID,
         metadata: { bountyId, posterId, hunterId, type: 'escrow' },
       });
-      expect(mockStripe.testHelpers.testClocks.advance).toHaveBeenCalledWith('clock_test123', { frozen_time: 1710000600 });
+      expect(mockStripe.testHelpers.testClocks.advance).toHaveBeenCalledWith(MOCK_CLOCK_ID, { frozen_time: 1710000600 });
     });
 
     it('create escrow → confirm PaymentIntent → refund credits poster balance', async () => {
@@ -332,31 +339,11 @@ describe('Payment Endpoints Integration Tests', () => {
       const balances: Record<string, number> = { [posterId]: 4000, [hunterId]: 0 };
       const escrowOwnerByIntent: Record<string, { posterId: string; hunterId: string }> = {};
 
-      mockStripe.paymentIntents.confirm.mockResolvedValueOnce({
-        id: 'pi_test123',
-        status: 'requires_capture',
-        amount: amountCents,
-        metadata: { bountyId, posterId, hunterId, type: 'escrow' },
-      });
-
-      mockStripe.refunds.create.mockResolvedValueOnce({
-        id: 'ref_refund_1',
-        amount: amountCents,
-        status: 'succeeded',
-        payment_intent: 'pi_test123',
-      });
-
       app = express();
       app.use(express.json());
-      app.use((req: any, res: any, next: any) => {
-        if (req.headers.authorization === 'Bearer valid_token') {
-          req.user = { id: posterId };
-          next();
-        } else {
-          res.status(401).json({ error: 'Unauthorized' });
-        }
-      });
-      app.post('/api/escrow/lifecycle/refund', async (req: any, res: any) => {
+      attachTestAuth(app, posterId);
+      // Test harness endpoint for lifecycle simulation; not a production API route.
+      app.post('/api/escrow/lifecycle/refund', async (req: Request, res: Response) => {
         const clock = await mockStripe.testHelpers.testClocks.create({
           frozen_time: REFUND_CLOCK_START,
           name: 'escrow-refund-flow',
@@ -415,6 +402,20 @@ describe('Payment Endpoints Integration Tests', () => {
         });
       });
 
+      mockStripe.paymentIntents.confirm.mockResolvedValueOnce({
+        id: 'pi_test123',
+        status: 'requires_capture',
+        amount: amountCents,
+        metadata: { bountyId, posterId, hunterId, type: 'escrow' },
+      });
+
+      mockStripe.refunds.create.mockResolvedValueOnce({
+        id: 'ref_refund_1',
+        amount: amountCents,
+        status: 'succeeded',
+        payment_intent: 'pi_test123',
+      });
+
       const response = await request(app)
         .post('/api/escrow/lifecycle/refund')
         .set('Authorization', 'Bearer valid_token')
@@ -433,10 +434,10 @@ describe('Payment Endpoints Integration Tests', () => {
         amount: amountCents,
         currency: 'usd',
         capture_method: 'manual',
-        test_clock: 'clock_test123',
+        test_clock: MOCK_CLOCK_ID,
         metadata: { bountyId, posterId, hunterId, type: 'escrow' },
       });
-      expect(mockStripe.testHelpers.testClocks.advance).toHaveBeenCalledWith('clock_test123', { frozen_time: 1711000600 });
+      expect(mockStripe.testHelpers.testClocks.advance).toHaveBeenCalledWith(MOCK_CLOCK_ID, { frozen_time: 1711000600 });
     });
   });
 
