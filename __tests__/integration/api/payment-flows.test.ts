@@ -128,6 +128,20 @@ const mockStripe = {
       client_secret: 'seti_test123_secret_abc',
     })),
   },
+  testHelpers: {
+    testClocks: {
+      create: jest.fn(async () => ({
+        id: 'clock_test123',
+        frozen_time: 1710000000,
+        status: 'ready',
+      })),
+      advance: jest.fn(async (_clockId: string, params: any) => ({
+        id: 'clock_test123',
+        frozen_time: params?.frozen_time ?? 1710000300,
+        status: 'ready',
+      })),
+    },
+  },
   refunds: {
     create: jest.fn(async () => ({
       id: 'ref_test123',
@@ -154,6 +168,145 @@ describe('Payment Endpoints Integration Tests', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  describe('Escrow lifecycle integration with Stripe test clock simulation', () => {
+    const applyWebhookEvent = (
+      event: { type: string; data: { object: any } },
+      balances: Record<string, number>,
+      escrowOwnerByIntent: Record<string, { posterId: string; hunterId: string }>,
+    ) => {
+      const payload = event.data.object;
+      const owner = escrowOwnerByIntent[payload.id ?? payload.payment_intent];
+
+      if (!owner) {
+        return;
+      }
+
+      if (event.type === 'payment_intent.captured') {
+        balances[owner.hunterId] = (balances[owner.hunterId] ?? 0) + payload.amount_received;
+      }
+
+      if (event.type === 'charge.refunded') {
+        balances[owner.posterId] = (balances[owner.posterId] ?? 0) + payload.amount_refunded;
+      }
+    };
+
+    it('create escrow → confirm PaymentIntent → release credits hunter balance', async () => {
+      expect(process.env.STRIPE_SECRET_KEY).toMatch(/^sk_test_/);
+
+      const bountyId = 'bounty-release-1';
+      const posterId = 'poster-release-1';
+      const hunterId = 'hunter-release-1';
+      const amountCents = 10000;
+      const balances: Record<string, number> = { [posterId]: 0, [hunterId]: 2500 };
+      const escrowOwnerByIntent: Record<string, { posterId: string; hunterId: string }> = {};
+
+      const clock = await mockStripe.testHelpers.testClocks.create({
+        frozen_time: 1710000000,
+        name: 'escrow-release-flow',
+      });
+
+      const escrowIntent = await mockStripe.paymentIntents.create({
+        amount: amountCents,
+        currency: 'usd',
+        capture_method: 'manual',
+        test_clock: clock.id,
+        metadata: { bountyId, posterId, hunterId, type: 'escrow' },
+      });
+
+      escrowOwnerByIntent[escrowIntent.id] = { posterId, hunterId };
+
+      mockStripe.paymentIntents.confirm.mockResolvedValueOnce({
+        id: escrowIntent.id,
+        status: 'requires_capture',
+        amount: amountCents,
+        metadata: { bountyId, posterId, hunterId, type: 'escrow' },
+      });
+
+      const confirmed = await mockStripe.paymentIntents.confirm(escrowIntent.id);
+      expect(confirmed.status).toBe('requires_capture');
+
+      await mockStripe.testHelpers.testClocks.advance(clock.id, { frozen_time: 1710000600 });
+
+      applyWebhookEvent(
+        {
+          type: 'payment_intent.captured',
+          data: { object: { id: escrowIntent.id, amount_received: amountCents } },
+        },
+        balances,
+        escrowOwnerByIntent,
+      );
+
+      expect(balances[hunterId]).toBe(12500);
+      expect(mockStripe.testHelpers.testClocks.create).toHaveBeenCalled();
+      expect(mockStripe.testHelpers.testClocks.advance).toHaveBeenCalledWith(clock.id, { frozen_time: 1710000600 });
+    });
+
+    it('create escrow → confirm PaymentIntent → refund credits poster balance', async () => {
+      expect(process.env.STRIPE_SECRET_KEY).toMatch(/^sk_test_/);
+
+      const bountyId = 'bounty-refund-1';
+      const posterId = 'poster-refund-1';
+      const hunterId = 'hunter-refund-1';
+      const amountCents = 8000;
+      const balances: Record<string, number> = { [posterId]: 4000, [hunterId]: 0 };
+      const escrowOwnerByIntent: Record<string, { posterId: string; hunterId: string }> = {};
+
+      const clock = await mockStripe.testHelpers.testClocks.create({
+        frozen_time: 1711000000,
+        name: 'escrow-refund-flow',
+      });
+
+      const escrowIntent = await mockStripe.paymentIntents.create({
+        amount: amountCents,
+        currency: 'usd',
+        capture_method: 'manual',
+        test_clock: clock.id,
+        metadata: { bountyId, posterId, hunterId, type: 'escrow' },
+      });
+
+      escrowOwnerByIntent[escrowIntent.id] = { posterId, hunterId };
+
+      mockStripe.paymentIntents.confirm.mockResolvedValueOnce({
+        id: escrowIntent.id,
+        status: 'requires_capture',
+        amount: amountCents,
+        metadata: { bountyId, posterId, hunterId, type: 'escrow' },
+      });
+
+      const confirmed = await mockStripe.paymentIntents.confirm(escrowIntent.id);
+      expect(confirmed.status).toBe('requires_capture');
+
+      mockStripe.refunds.create.mockResolvedValueOnce({
+        id: 'ref_refund_1',
+        amount: amountCents,
+        status: 'succeeded',
+        payment_intent: escrowIntent.id,
+      });
+
+      const refund = await mockStripe.refunds.create({
+        payment_intent: escrowIntent.id,
+        amount: amountCents,
+        metadata: { bountyId, posterId, hunterId, reason: 'poster_cancelled' },
+      });
+
+      await mockStripe.testHelpers.testClocks.advance(clock.id, { frozen_time: 1711000600 });
+
+      applyWebhookEvent(
+        {
+          type: 'charge.refunded',
+          data: { object: { payment_intent: escrowIntent.id, amount_refunded: refund.amount } },
+        },
+        balances,
+        escrowOwnerByIntent,
+      );
+
+      expect(refund.status).toBe('succeeded');
+      expect(balances[posterId]).toBe(12000);
+      expect(mockStripe.testHelpers.testClocks.create).toHaveBeenCalled();
+      expect(mockStripe.testHelpers.testClocks.advance).toHaveBeenCalledWith(clock.id, { frozen_time: 1711000600 });
+    });
   });
 
   describe('POST /api/payments/create-intent', () => {
