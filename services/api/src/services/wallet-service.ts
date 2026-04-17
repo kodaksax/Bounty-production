@@ -8,7 +8,7 @@ import { walletRiskIntegration } from './wallet-risk-integration';
 export const VALID_TRANSACTION_TYPES = TRANSACTION_TYPES;
 export type WalletTransactionType = TransactionType;
 
-// Define types locally to avoid import issues
+// Keep service-specific request/response interfaces local while reusing shared transaction type definitions.
 export interface CreateWalletTransactionInput {
   user_id: string;
   bounty_id?: string;

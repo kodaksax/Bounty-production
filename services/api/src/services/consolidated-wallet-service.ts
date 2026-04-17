@@ -21,7 +21,7 @@ import {
     NotFoundError,
     ValidationError,
 } from '../middleware/error-handler';
-import type { TransactionType } from '../types/wallet-transaction-types';
+import type { TransactionType as SharedTransactionType } from '../types/wallet-transaction-types';
 import { stripe } from './consolidated-payment-service';
 import { logger } from './logger';
 import { withStripeIdempotency } from './stripe-safeguards';
@@ -41,7 +41,7 @@ function getSupabaseAdmin(): SupabaseClient<any> {
   return supabaseAdmin;
 }
 
-export type { TransactionType } from '../types/wallet-transaction-types';
+export type TransactionType = SharedTransactionType;
 
 /**
  * Transaction status enum matching database schema
