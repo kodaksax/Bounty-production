@@ -77,7 +77,7 @@ Deno.serve(async (req: Request) => {
 
     try {
       // POST /wallet/deposit — client-initiated deposit after Stripe payment confirmation.
-      // Called immediately after processPayment() succeeds on the client so that
+      // Called immediately after processPaymentSecure() succeeds on the client so that
       // profiles.balance is updated durably without relying solely on the webhook.
       // Uses the apply_deposit RPC which is idempotent on stripe_payment_intent_id,
       // so a concurrent webhook delivery results in a safe no-op.

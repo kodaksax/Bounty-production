@@ -78,7 +78,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
   const [isApplePayAvailable, setIsApplePayAvailable] = useState(false)
   const [error, setError] = useState<any>(null)
   const { deposit, refreshFromApi } = useWallet()
-  const { processPayment, paymentMethods, isLoading: stripeLoading, error: stripeError, loadPaymentMethods } = useStripe()
+  const { processPaymentSecure, paymentMethods, isLoading: stripeLoading, error: stripeError, loadPaymentMethods } = useStripe()
   const { session } = useAuthContext()
 
   const handleNumberPress = (num: number) => {
@@ -140,8 +140,12 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
           throw new Error('Not authenticated. Please sign in again.')
         }
 
-        // processPayment handles creating the payment intent (with auth) and confirming it
-        const result = await processPayment(numAmount, paymentMethods[0]?.id)
+        // processPaymentSecure handles idempotent payment intent creation and confirmation
+        const result = await processPaymentSecure(numAmount, {
+          userId: session?.user?.id,
+          purpose: 'wallet_deposit',
+          paymentMethodId: paymentMethods[0]?.id,
+        })
 
         if (result.success) {
           // Optimistically update local wallet balance

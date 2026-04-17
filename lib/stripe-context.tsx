@@ -15,8 +15,14 @@ interface StripeContextType {
   createPaymentMethod: (cardData: CreatePaymentMethodData) => Promise<StripePaymentMethod>;
   loadPaymentMethods: () => Promise<void>;
   removePaymentMethod: (paymentMethodId: string) => Promise<void>;
+  /**
+   * @deprecated Use processPaymentSecure() to ensure idempotent payment intent creation.
+   */
   processPayment: (amount: number, paymentMethodId?: string) => Promise<{ success: boolean; paymentIntentId?: string; error?: string }>;
-  processPaymentSecure: (amount: number, options?: { userId?: string; purpose?: string }) => Promise<{ success: boolean; error?: string }>;
+  processPaymentSecure: (
+    amount: number,
+    options?: { userId?: string; purpose?: string; paymentMethodId?: string }
+  ) => Promise<{ success: boolean; paymentIntentId?: string; error?: string }>;
   createSetupIntent: () => Promise<StripeSetupIntent | null>;
   clearError: () => void;
 }
@@ -168,55 +174,24 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
     }
   };
 
-  const processPayment = async (amount: number, paymentMethodId?: string): Promise<{ success: boolean; paymentIntentId?: string; error?: string }> => {
-    try {
-      setIsLoading(true);
-      clearError();
-
-      // Ensure user is authenticated before attempting to create a payment intent
-      if (!session?.access_token) {
-        const errorMessage = 'Not authenticated. Please sign in again.';
-        setError(errorMessage);
-        return { success: false, error: errorMessage };
-      }
-
-      // Create payment intent - pass auth token to authenticate with backend
-      const paymentIntent = await stripeService.createPaymentIntent(amount, 'usd', session.access_token);
-      
-      // Use provided payment method or default to first available
-      const pmId = paymentMethodId || paymentMethods[0]?.id;
-      
-      if (!pmId) {
-        throw new Error('No payment method available. Please add a payment method first.');
-      }
-
-      // Confirm payment - pass auth token so the backend /payments/confirm call is authenticated
-      const confirmedIntent = await stripeService.confirmPayment(paymentIntent.client_secret, pmId, session.access_token);
-      
-      if (confirmedIntent.status === 'succeeded') {
-        return { success: true, paymentIntentId: paymentIntent.id };
-      } else {
-        return { 
-          success: false, 
-          error: 'Payment was not completed. Please try again.' 
-        };
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Payment processing failed';
-      setError(errorMessage);
-      return { 
-        success: false, 
-        error: errorMessage 
-      };
-    } finally {
-      setIsLoading(false);
-    }
+  /**
+   * @deprecated Use processPaymentSecure() directly.
+   */
+  const processPayment = async (
+    amount: number,
+    paymentMethodId?: string
+  ): Promise<{ success: boolean; paymentIntentId?: string; error?: string }> => {
+    return processPaymentSecure(amount, {
+      paymentMethodId,
+      purpose: 'wallet_deposit',
+      userId: session?.user?.id,
+    });
   };
 
   const processPaymentSecure = async (
     amount: number, 
-    options?: { userId?: string; purpose?: string }
-  ): Promise<{ success: boolean; error?: string }> => {
+    options?: { userId?: string; purpose?: string; paymentMethodId?: string }
+  ): Promise<{ success: boolean; paymentIntentId?: string; error?: string }> => {
     try {
       setIsLoading(true);
       clearError();
@@ -236,8 +211,8 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
         options
       );
       
-      // Use default payment method
-      const pmId = paymentMethods[0]?.id;
+      // Use provided payment method or default payment method
+      const pmId = options?.paymentMethodId || paymentMethods[0]?.id;
       
       if (!pmId) {
         throw new Error('No payment method available. Please add a payment method first.');
@@ -252,7 +227,7 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
       );
       
       if (confirmedIntent.status === 'succeeded') {
-        return { success: true };
+        return { success: true, paymentIntentId: paymentIntent.id };
       } else {
         return { 
           success: false, 
