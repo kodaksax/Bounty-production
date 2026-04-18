@@ -50,60 +50,14 @@ jest.mock('drizzle-orm', () => ({
   eq: jest.fn(() => 'eq_condition'),
 }));
 
-// Mock Stripe
-const mockStripeAccount = {
-  id: 'acct_test123',
-  type: 'express',
-  details_submitted: true,
-  charges_enabled: true,
-  payouts_enabled: true,
-  requirements: {
-    currently_due: [],
-    eventually_due: [],
-  },
-};
-
-const mockStripe = {
-  accounts: {
-    create: jest.fn(async () => mockStripeAccount),
-    retrieve: jest.fn(async () => mockStripeAccount),
-  },
-  accountLinks: {
-    create: jest.fn(async () => ({
-      url: 'https://connect.stripe.com/setup/test',
-      expires_at: Math.floor(Date.now() / 1000) + 3600,
-    })),
-  },
-  paymentIntents: {
-    create: jest.fn(async () => ({
-      id: 'pi_test123',
-      client_secret: 'pi_test123_secret_abc',
-      amount: 5000,
-      currency: 'usd',
-      status: 'requires_payment_method',
-    })),
-    retrieve: jest.fn(async () => ({
-      id: 'pi_test123',
-      amount: 5000,
-      currency: 'usd',
-      status: 'succeeded',
-    })),
-  },
-  refunds: {
-    create: jest.fn(async () => ({
-      id: 'ref_test123',
-      amount: 5000,
-      status: 'succeeded',
-    })),
-  },
-  webhooks: {
-    constructEvent: jest.fn((payload: any, signature: string, secret: string) => {
-      const parsedPayload = typeof payload === 'string' ? JSON.parse(payload) : payload;
-      return parsedPayload;
-    }),
-  },
-};
-
+// jest.mock('stripe', ...) factories are hoisted before any module-level const/let
+// declarations are initialized. Referencing a module-level `const mockStripe` from
+// inside the factory would hit the temporal dead zone (TDZ) when the factory executes
+// (triggered by the service singleton constructor at module-load time).
+//
+// Fix: create the mock Stripe instance INSIDE the factory so there are no outer-scope
+// TDZ references. Expose it via a static property and retrieve it with jest.requireMock
+// in the module body (which runs *after* the factory has already executed).
 jest.mock('stripe', () => {
   class StripeError extends Error {
     constructor(message?: string) {
@@ -111,11 +65,88 @@ jest.mock('stripe', () => {
       this.name = 'StripeError';
     }
   }
-  // Return a constructor function that returns the mock Stripe instance
-  const MockStripe = jest.fn().mockImplementation(() => mockStripe);
+
+  const defaultAccount = {
+    id: 'acct_test123',
+    type: 'express',
+    details_submitted: true,
+    charges_enabled: true,
+    payouts_enabled: true,
+    requirements: { currently_due: [] as string[], eventually_due: [] as string[] },
+  };
+
+  const instance = {
+    accounts: {
+      create: jest.fn(async () => defaultAccount),
+      retrieve: jest.fn(async () => defaultAccount),
+    },
+    accountLinks: {
+      create: jest.fn(async () => ({
+        url: 'https://connect.stripe.com/setup/test',
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+      })),
+    },
+    paymentIntents: {
+      create: jest.fn(async () => ({
+        id: 'pi_test123',
+        client_secret: 'pi_test123_secret_abc',
+        amount: 5000,
+        currency: 'usd',
+        status: 'requires_payment_method',
+      })),
+      retrieve: jest.fn(async () => ({
+        id: 'pi_test123',
+        amount: 5000,
+        currency: 'usd',
+        status: 'succeeded',
+      })),
+    },
+    refunds: {
+      create: jest.fn(async () => ({
+        id: 'ref_test123',
+        amount: 5000,
+        status: 'succeeded',
+      })),
+    },
+    webhooks: {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      constructEvent: jest.fn((payload: any) => {
+        return typeof payload === 'string' ? JSON.parse(payload) : payload;
+      }),
+    },
+  };
+
+  const MockStripe = jest.fn().mockImplementation(() => instance);
   (MockStripe as any).errors = { StripeError };
+  // Expose the instance so tests can retrieve it via jest.requireMock
+  (MockStripe as any).__mockInstance = instance;
   return MockStripe;
 });
+
+// Retrieve the singleton mock instance created inside the factory above.
+// By the time this module-body code runs the factory has already executed
+// (it was triggered by the hoisted service import), so __mockInstance is set.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockStripe = (jest.requireMock('stripe') as any).__mockInstance as {
+  accounts: { create: jest.Mock; retrieve: jest.Mock };
+  accountLinks: { create: jest.Mock };
+  paymentIntents: { create: jest.Mock; retrieve: jest.Mock };
+  refunds: { create: jest.Mock };
+  webhooks: { constructEvent: jest.Mock };
+};
+
+// Default account shape used to restore mocks in beforeEach
+const mockStripeAccount = {
+  id: 'acct_test123',
+  type: 'express',
+  details_submitted: true,
+  charges_enabled: true,
+  payouts_enabled: true,
+  requirements: {
+    currently_due: [] as string[],
+    eventually_due: [] as string[],
+  },
+};
 
 // Import service after mocks
 // Set environment variables BEFORE importing the service
@@ -614,6 +645,11 @@ describe('Stripe Connect Service', () => {
     });
 
     it('should validate webhook signature', async () => {
+      // Simulate Stripe throwing a signature-verification error (as the real SDK does)
+      mockStripe.webhooks.constructEvent.mockImplementationOnce(() => {
+        throw new Error('No signatures found matching the expected signature for payload');
+      });
+
       const payload = Buffer.from('invalid_payload');
       const signature = 'invalid_signature';
 

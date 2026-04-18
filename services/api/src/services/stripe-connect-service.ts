@@ -1,6 +1,17 @@
 import { eq } from 'drizzle-orm';
-import { db } from '../db/connection';
-import { bounties, users } from '../db/schema';
+
+// Lazy accessors — importing db/schema at module scope triggers real DB pool
+// creation (side effects) which breaks Jest. Requiring inside methods lets
+// Jest register mocks before any module-level code runs.
+function getDb() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return (require('../db/connection') as typeof import('../db/connection')).db;
+}
+
+function getSchema() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('../db/schema') as typeof import('../db/schema');
+}
 
 export interface EscrowPaymentIntentResponse {
   paymentIntentId: string;
@@ -68,6 +79,8 @@ class StripeConnectService {
     this.ensureConfigured();
 
     try {
+      const db = getDb();
+      const { users } = getSchema();
       const { userId, refreshUrl, returnUrl } = request;
 
       // Check if user already has a Stripe account
@@ -158,6 +171,8 @@ class StripeConnectService {
     this.ensureConfigured();
 
     try {
+      const db = getDb();
+      const { users } = getSchema();
       // Get user record
       const userRecord = await db.select().from(users).where(eq(users.id, userId)).limit(1);
 
@@ -209,6 +224,8 @@ class StripeConnectService {
     this.ensureConfigured();
 
     try {
+      const db = getDb();
+      const { bounties, users } = getSchema();
       // Get bounty details
       const bountyRecord = await db
         .select()
@@ -396,6 +413,8 @@ class StripeConnectService {
     this.ensureConfigured();
 
     try {
+      const db = getDb();
+      const { users } = getSchema();
       const userRecord = await db.select().from(users).where(eq(users.id, userId)).limit(1);
 
       if (!userRecord.length) {
