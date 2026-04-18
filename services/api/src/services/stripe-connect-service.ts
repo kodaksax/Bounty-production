@@ -122,8 +122,12 @@ class StripeConnectService {
           ? (error as any).message
           : String(error);
 
-      // Provide a user-friendly message for common Stripe Connect configuration errors
-      if (message.includes('signed up for Connect') || message.includes('create new accounts')) {
+      // Provide a user-friendly message for common Stripe Connect configuration errors.
+      // Only match actual Stripe errors to avoid false positives on unrelated exceptions.
+      const isStripeError = error?.type === 'StripeInvalidRequestError' ||
+        (error instanceof Stripe.errors.StripeError);
+      const lowerMessage = message.toLowerCase();
+      if (isStripeError && (lowerMessage.includes('signed up for connect') || lowerMessage.includes('create new accounts'))) {
         throw new Error(
           'Stripe Connect is not yet enabled on the platform. Please contact support to enable withdrawals.'
         );

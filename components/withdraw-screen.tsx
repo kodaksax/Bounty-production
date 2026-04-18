@@ -176,27 +176,28 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
       let errorMessage = error.message || 'Unable to start Connect onboarding. Please try again.';
       let errorTitle = 'Onboarding Failed';
 
-      // Check for common Stripe Connect issues
+      // Check for common Stripe Connect issues (case-insensitive)
+      const lowerMsg = String(error.message ?? '').toLowerCase();
       if (
-        error.message?.includes('signed up for Connect') ||
-        error.message?.includes('create new accounts') ||
-        error.message?.includes('not yet enabled')
+        lowerMsg.includes('signed up for connect') ||
+        lowerMsg.includes('create new accounts') ||
+        lowerMsg.includes('not yet enabled')
       ) {
         errorTitle = 'Service Unavailable';
         errorMessage =
           'Stripe Connect is not yet enabled for this platform. Withdrawals will be available once the platform completes Stripe Connect setup. Please contact support for assistance.';
-      } else if (error.message?.includes('account already exists')) {
+      } else if (lowerMsg.includes('account already exists')) {
         errorTitle = 'Account Already Exists';
         errorMessage =
           'You already have a Stripe Connect account. Please contact support if you need to update your banking details.';
       } else if (
-        error.message?.includes('not configured') ||
-        error.message?.includes('STRIPE_SECRET_KEY')
+        lowerMsg.includes('not configured') ||
+        lowerMsg.includes('stripe_secret_key')
       ) {
         errorTitle = 'Service Unavailable';
         errorMessage =
           'Stripe Connect is not configured on this server. Please contact support to enable withdrawals.';
-      } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
+      } else if (lowerMsg.includes('network request failed') || lowerMsg.includes('network') || lowerMsg.includes('fetch failed')) {
         errorTitle = 'Network Error';
         errorMessage =
           'Unable to connect to the payment service. Please check your internet connection and try again.';
