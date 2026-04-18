@@ -191,9 +191,13 @@ export function WithdrawWithBankScreen({
           'Unable to connect to the payment service. Please check your internet connection and try again.';
       }
 
+      const suffix = errorMessage.includes('contact support')
+        ? ''
+        : '\n\nIf this problem persists, please contact support.';
+
       Alert.alert(
         errorTitle,
-        errorMessage + '\n\nIf this problem persists, please contact support.',
+        errorMessage + suffix,
         [{ text: 'OK' }]
       );
     } finally {
