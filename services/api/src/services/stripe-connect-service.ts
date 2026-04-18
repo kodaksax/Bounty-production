@@ -1,5 +1,4 @@
 import { eq } from 'drizzle-orm';
-import Stripe from 'stripe';
 import { db } from '../db/connection';
 import { bounties, users } from '../db/schema';
 
@@ -34,12 +33,20 @@ export interface ConnectStatusResponse {
 
 class StripeConnectService {
   private stripe: Stripe | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private StripeLib: any = null;
   private isConfigured: boolean = false;
 
   constructor() {
     const secretKey = process.env.STRIPE_SECRET_KEY;
     if (secretKey) {
-      this.stripe = new Stripe(secretKey);
+      // Lazily require Stripe so the SDK is never loaded at module evaluation
+      // time (avoids ESM/CJS failures when Jest loads this file without the key).
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const StripeModule = require('stripe');
+      const StripeClass = StripeModule.default ?? StripeModule;
+      this.StripeLib = StripeClass;
+      this.stripe = new StripeClass(secretKey) as Stripe;
       this.isConfigured = true;
     } else {
       console.warn(
@@ -126,8 +133,9 @@ class StripeConnectService {
       // Only match actual Stripe errors to avoid false positives on unrelated exceptions.
       const isStripeError =
         error?.type === 'StripeInvalidRequestError' ||
-        (typeof Stripe?.errors?.StripeError === 'function' &&
-          error instanceof Stripe.errors.StripeError);
+        (this.StripeLib &&
+          typeof this.StripeLib?.errors?.StripeError === 'function' &&
+          error instanceof this.StripeLib.errors.StripeError);
       const lowerMessage = message.toLowerCase();
       if (
         isStripeError &&
