@@ -4,22 +4,29 @@
  */
 
 // Mock environment initialized globally above for singleton service setup
+// Import service after environment setup — require() is intentional here so
+// jest.mock() hoisting runs before the singleton service constructor fires.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+import { stripeConnectService } from '../../../services/api/src/services/stripe-connect-service';
+
 beforeAll(() => {
   // Other setup if needed
 });
 
 // Mock database
-const mockDb = {
+const mockDb: { select: jest.Mock; update: jest.Mock } = {
   select: jest.fn(() => ({
     from: jest.fn(() => ({
       where: jest.fn(() => ({
-        limit: jest.fn(() => Promise.resolve([
-          {
-            id: 'user123',
-            email: 'test@example.com',
-            stripe_account_id: 'acct_test123',
-          },
-        ])),
+        limit: jest.fn(() =>
+          Promise.resolve([
+            {
+              id: 'user123',
+              email: 'test@example.com',
+              stripe_account_id: 'acct_test123',
+            },
+          ])
+        ),
       })),
     })),
   })),
@@ -98,17 +105,22 @@ const mockStripe = {
 };
 
 jest.mock('stripe', () => {
+  class StripeError extends Error {
+    constructor(message?: string) {
+      super(message);
+      this.name = 'StripeError';
+    }
+  }
   // Return a constructor function that returns the mock Stripe instance
-  return jest.fn().mockImplementation(() => mockStripe);
+  const MockStripe = jest.fn().mockImplementation(() => mockStripe);
+  (MockStripe as any).errors = { StripeError };
+  return MockStripe;
 });
 
 // Import service after mocks
 // Set environment variables BEFORE importing the service
 process.env.STRIPE_SECRET_KEY = 'sk_test_mock_key';
 process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test_secret';
-
-// Import service after environment setup
-const { stripeConnectService } = require('../../../services/api/src/services/stripe-connect-service');
 
 describe('Stripe Connect Service', () => {
   beforeEach(() => {
@@ -118,13 +130,15 @@ describe('Stripe Connect Service', () => {
     mockDb.select.mockImplementation(() => ({
       from: jest.fn(() => ({
         where: jest.fn(() => ({
-          limit: jest.fn(() => Promise.resolve([
-            {
-              id: 'user123',
-              email: 'test@example.com',
-              stripe_account_id: 'acct_test123',
-            },
-          ])),
+          limit: jest.fn(() =>
+            Promise.resolve([
+              {
+                id: 'user123',
+                email: 'test@example.com',
+                stripe_account_id: 'acct_test123',
+              },
+            ])
+          ),
         })),
       })),
     }));
@@ -144,13 +158,15 @@ describe('Stripe Connect Service', () => {
       mockDb.select = jest.fn(() => ({
         from: jest.fn(() => ({
           where: jest.fn(() => ({
-            limit: jest.fn(() => Promise.resolve([
-              {
-                id: 'user123',
-                email: 'test@example.com',
-                stripe_account_id: null,
-              },
-            ])),
+            limit: jest.fn(() =>
+              Promise.resolve([
+                {
+                  id: 'user123',
+                  email: 'test@example.com',
+                  stripe_account_id: null,
+                },
+              ])
+            ),
           })),
         })),
       }));
@@ -218,42 +234,36 @@ describe('Stripe Connect Service', () => {
         userId: 'invalid_user',
       };
 
-      await expect(
-        stripeConnectService.createOnboardingLink(request)
-      ).rejects.toThrow('Stripe error: User not found');
+      await expect(stripeConnectService.createOnboardingLink(request)).rejects.toThrow(
+        'Stripe error: User not found'
+      );
     });
 
     it('should handle Stripe account creation failure', async () => {
       mockDb.select = jest.fn(() => ({
         from: jest.fn(() => ({
           where: jest.fn(() => ({
-            limit: jest.fn(() => Promise.resolve([
-              { id: 'user123', stripe_account_id: null },
-            ])),
+            limit: jest.fn(() => Promise.resolve([{ id: 'user123', stripe_account_id: null }])),
           })),
         })),
       }));
 
-      mockStripe.accounts.create.mockRejectedValueOnce(
-        new Error('Stripe API error')
-      );
+      mockStripe.accounts.create.mockRejectedValueOnce(new Error('Stripe API error'));
 
       const request = {
         userId: 'user123',
       };
 
-      await expect(
-        stripeConnectService.createOnboardingLink(request)
-      ).rejects.toThrow('Stripe error: Stripe API error');
+      await expect(stripeConnectService.createOnboardingLink(request)).rejects.toThrow(
+        'Stripe error: Stripe API error'
+      );
     });
 
     it('should update user with new Stripe account ID', async () => {
       mockDb.select = jest.fn(() => ({
         from: jest.fn(() => ({
           where: jest.fn(() => ({
-            limit: jest.fn(() => Promise.resolve([
-              { id: 'user123', stripe_account_id: null },
-            ])),
+            limit: jest.fn(() => Promise.resolve([{ id: 'user123', stripe_account_id: null }])),
           })),
         })),
       }));
@@ -284,9 +294,7 @@ describe('Stripe Connect Service', () => {
       mockDb.select = jest.fn(() => ({
         from: jest.fn(() => ({
           where: jest.fn(() => ({
-            limit: jest.fn(() => Promise.resolve([
-              { id: 'user123', stripe_account_id: null },
-            ])),
+            limit: jest.fn(() => Promise.resolve([{ id: 'user123', stripe_account_id: null }])),
           })),
         })),
       }));
@@ -337,9 +345,9 @@ describe('Stripe Connect Service', () => {
         })),
       }));
 
-      await expect(
-        stripeConnectService.getConnectStatus('invalid_user')
-      ).rejects.toThrow('Stripe error: User not found');
+      await expect(stripeConnectService.getConnectStatus('invalid_user')).rejects.toThrow(
+        'Stripe error: User not found'
+      );
     });
   });
 
@@ -348,16 +356,18 @@ describe('Stripe Connect Service', () => {
       mockDb.select = jest.fn(() => ({
         from: jest.fn(() => ({
           where: jest.fn(() => ({
-            limit: jest.fn(() => Promise.resolve([
-              {
-                id: 'bounty123',
-                amount_cents: 5000,
-                creator_id: 'user123',
-                hunter_id: 'hunter123',
-                title: 'Test Bounty',
-                is_for_honor: false,
-              },
-            ])),
+            limit: jest.fn(() =>
+              Promise.resolve([
+                {
+                  id: 'bounty123',
+                  amount_cents: 5000,
+                  creator_id: 'user123',
+                  hunter_id: 'hunter123',
+                  title: 'Test Bounty',
+                  is_for_honor: false,
+                },
+              ])
+            ),
           })),
         })),
       }));
@@ -400,16 +410,18 @@ describe('Stripe Connect Service', () => {
       mockDb.select = jest.fn(() => ({
         from: jest.fn(() => ({
           where: jest.fn(() => ({
-            limit: jest.fn(() => Promise.resolve([
-              { id: 'bounty123', amount_cents: 0, creator_id: 'user123', title: 'Zero Bounty' },
-            ])),
+            limit: jest.fn(() =>
+              Promise.resolve([
+                { id: 'bounty123', amount_cents: 0, creator_id: 'user123', title: 'Zero Bounty' },
+              ])
+            ),
           })),
         })),
       }));
 
-      await expect(
-        stripeConnectService.createEscrowPaymentIntent('bounty123')
-      ).rejects.toThrow('Stripe error: Cannot create escrow for zero amount bounties');
+      await expect(stripeConnectService.createEscrowPaymentIntent('bounty123')).rejects.toThrow(
+        'Stripe error: Cannot create escrow for zero amount bounties'
+      );
     });
   });
 
@@ -459,19 +471,14 @@ describe('Stripe Connect Service', () => {
         status: 'succeeded',
       } as any);
 
-      const result = await stripeConnectService.refundPaymentIntent(
-        'pi_test123',
-        'bounty123'
-      );
+      const result = await stripeConnectService.refundPaymentIntent('pi_test123', 'bounty123');
 
       expect(result.success).toBe(true);
       expect(result.amount).toBe(2500);
     });
 
     it('should handle Stripe refund errors', async () => {
-      mockStripe.refunds.create.mockRejectedValueOnce(
-        new Error('Refund already processed')
-      );
+      mockStripe.refunds.create.mockRejectedValueOnce(new Error('Refund already processed'));
 
       const result = await stripeConnectService.refundPaymentIntent('pi_test123', 'bounty123');
 
@@ -488,10 +495,7 @@ describe('Stripe Connect Service', () => {
         charges_enabled: true,
       } as any);
 
-      const result = await stripeConnectService.validatePaymentCapability(
-        'user123',
-        5000
-      );
+      const result = await stripeConnectService.validatePaymentCapability('user123', 5000);
 
       expect(result.canPay).toBe(true);
       expect(result.error).toBeUndefined();
@@ -501,20 +505,17 @@ describe('Stripe Connect Service', () => {
       mockDb.select = jest.fn(() => ({
         from: jest.fn(() => ({
           where: jest.fn(() => ({
-            limit: jest.fn(() => Promise.resolve([
-              { id: 'user123', stripe_account_id: null },
-            ])),
+            limit: jest.fn(() => Promise.resolve([{ id: 'user123', stripe_account_id: null }])),
           })),
         })),
       }));
 
-      const result = await stripeConnectService.validatePaymentCapability(
-        'user123',
-        5000
-      );
+      const result = await stripeConnectService.validatePaymentCapability('user123', 5000);
 
       expect(result.canPay).toBe(false);
-      expect(result.error).toBe('User has not set up payment method. Please complete Stripe onboarding first.');
+      expect(result.error).toBe(
+        'User has not set up payment method. Please complete Stripe onboarding first.'
+      );
     });
 
     it('should return error for account with charges disabled', async () => {
@@ -523,13 +524,12 @@ describe('Stripe Connect Service', () => {
         charges_enabled: false,
       } as any);
 
-      const result = await stripeConnectService.validatePaymentCapability(
-        'user123',
-        5000
-      );
+      const result = await stripeConnectService.validatePaymentCapability('user123', 5000);
 
       expect(result.canPay).toBe(false);
-      expect(result.error).toBe('User account is not verified to make payments. Please complete account verification.');
+      expect(result.error).toBe(
+        'User account is not verified to make payments. Please complete account verification.'
+      );
     });
 
     it('should validate minimum payment amount', async () => {
@@ -551,10 +551,7 @@ describe('Stripe Connect Service', () => {
         })),
       }));
 
-      const result = await stripeConnectService.validatePaymentCapability(
-        'invalid_user',
-        5000
-      );
+      const result = await stripeConnectService.validatePaymentCapability('invalid_user', 5000);
 
       expect(result.canPay).toBe(false);
       expect(result.error).toBe('User not found');
@@ -563,66 +560,64 @@ describe('Stripe Connect Service', () => {
 
   describe('handleWebhook', () => {
     it('should handle account.updated webhook', async () => {
-      const payload = JSON.stringify({
-        type: 'account.updated',
-        data: {
-          object: mockStripeAccount,
-        },
-      });
+      const payload = Buffer.from(
+        JSON.stringify({
+          type: 'account.updated',
+          data: {
+            object: mockStripeAccount,
+          },
+        })
+      );
 
       const signature = 'whsec_test_signature';
 
-      await expect(
-        stripeConnectService.handleWebhook(payload, signature)
-      ).resolves.not.toThrow();
+      await expect(stripeConnectService.handleWebhook(payload, signature)).resolves.not.toThrow();
     });
 
     it('should handle payment_intent.succeeded webhook', async () => {
-      const payload = JSON.stringify({
-        type: 'payment_intent.succeeded',
-        data: {
-          object: {
-            id: 'pi_test123',
-            amount: 5000,
-            metadata: {
-              bountyId: 'bounty123',
+      const payload = Buffer.from(
+        JSON.stringify({
+          type: 'payment_intent.succeeded',
+          data: {
+            object: {
+              id: 'pi_test123',
+              amount: 5000,
+              metadata: {
+                bountyId: 'bounty123',
+              },
             },
           },
-        },
-      });
+        })
+      );
 
       const signature = 'whsec_test_signature';
 
-      await expect(
-        stripeConnectService.handleWebhook(payload, signature)
-      ).resolves.not.toThrow();
+      await expect(stripeConnectService.handleWebhook(payload, signature)).resolves.not.toThrow();
     });
 
     it('should handle refund.created webhook', async () => {
-      const payload = JSON.stringify({
-        type: 'charge.refunded',
-        data: {
-          object: {
-            id: 'ch_test123',
-            refunded: true,
+      const payload = Buffer.from(
+        JSON.stringify({
+          type: 'charge.refunded',
+          data: {
+            object: {
+              id: 'ch_test123',
+              refunded: true,
+            },
           },
-        },
-      });
+        })
+      );
 
       const signature = 'whsec_test_signature';
 
-      await expect(
-        stripeConnectService.handleWebhook(payload, signature)
-      ).resolves.not.toThrow();
+      await expect(stripeConnectService.handleWebhook(payload, signature)).resolves.not.toThrow();
     });
 
     it('should validate webhook signature', async () => {
-      const payload = 'invalid_payload';
+      const payload = Buffer.from('invalid_payload');
       const signature = 'invalid_signature';
 
-      await expect(
-        stripeConnectService.handleWebhook(payload, signature)
-      ).rejects.toThrow();
+      await expect(stripeConnectService.handleWebhook(payload, signature)).rejects.toThrow();
     });
   });
 
@@ -637,9 +632,7 @@ describe('Stripe Connect Service', () => {
         throw new Error('Database connection failed');
       });
 
-      await expect(
-        stripeConnectService.getConnectStatus('user123')
-      ).rejects.toThrow();
+      await expect(stripeConnectService.getConnectStatus('user123')).rejects.toThrow();
     });
 
     it('should handle Stripe API rate limits', async () => {
@@ -648,19 +641,13 @@ describe('Stripe Connect Service', () => {
         message: 'Too many requests',
       });
 
-      await expect(
-        stripeConnectService.getConnectStatus('user123')
-      ).rejects.toThrow();
+      await expect(stripeConnectService.getConnectStatus('user123')).rejects.toThrow();
     });
 
     it('should handle network timeouts', async () => {
-      mockStripe.paymentIntents.create.mockRejectedValueOnce(
-        new Error('ETIMEDOUT')
-      );
+      mockStripe.paymentIntents.create.mockRejectedValueOnce(new Error('ETIMEDOUT'));
 
-      await expect(
-        stripeConnectService.createEscrowPaymentIntent('bounty123')
-      ).rejects.toThrow();
+      await expect(stripeConnectService.createEscrowPaymentIntent('bounty123')).rejects.toThrow();
     });
   });
 });
