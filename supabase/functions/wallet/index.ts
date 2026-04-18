@@ -166,7 +166,7 @@ Deno.serve(async (req: Request) => {
           .from('profiles')
           .select('balance, payout_failed_at, payout_failure_code')
           .eq('id', userId)
-          .single();
+          .maybeSingle();
 
         if (error) {
           console.error('[wallet] Error fetching balance:', error);
@@ -553,16 +553,101 @@ Deno.serve(async (req: Request) => {
         }
 
         // Prevent double-release / double-refund
-        const { data: existingSettlement } = await supabase
+        const { data: settlementRows, error: existingSettlementErr } = await supabase
           .from('wallet_transactions')
-          .select('id, type, status')
+          .select('id, user_id, type, status, amount')
           .eq('bounty_id', bountyId)
           .in('type', ['release', 'refund'])
           .in('status', ['completed', 'pending'])
-          .maybeSingle();
+          .order('created_at', { ascending: false })
+          .limit(2);
+        if (existingSettlementErr) {
+          console.error('[wallet] failed checking existing release/refund settlement:', {
+            bountyId,
+            hunterId,
+            error: existingSettlementErr,
+          });
+          return jsonResponse({ error: 'Failed to validate existing settlement state' }, 500);
+        }
+        // We intentionally cap at 2 rows to avoid fetching unnecessary data while
+        // still detecting duplicate settlement history:
+        // - 0 rows => no prior settlement
+        // - 1 row  => handle that settlement record directly
+        // - 2 rows => there are at least 2 matches (possibly more), which indicates
+        //            duplicate settlement history and must be blocked for safety.
+        if ((settlementRows?.length ?? 0) === 2) {
+          console.error('[wallet] multiple settlement rows detected; blocking duplicate release:', {
+            bountyId,
+            hunterId,
+            settlementRows,
+          });
+          return jsonResponse(
+            {
+              error: 'A settlement transaction for this bounty is already in progress',
+              code: 'duplicate_transaction',
+            },
+            409
+          );
+        }
+        const existingSettlement = settlementRows?.[0] ?? null;
         if (existingSettlement) {
-          const verb = (existingSettlement as any).type === 'release' ? 'released' : 'refunded';
-          const isPending = (existingSettlement as any).status === 'pending';
+          const settlement = existingSettlement as WalletTransaction;
+          const isPending = settlement.status === 'pending';
+          if (isPending && settlement.type === 'release' && settlement.user_id === hunterId) {
+            // Recovery path: the original attempt created the pending transaction but
+            // the process crashed before the balance credit and status promotion could
+            // both commit.  apply_release_tx atomically promotes the status AND credits
+            // the balance in a single PG transaction, so a pending row reliably means
+            // "not yet credited" — no double-credit is possible.
+            const recoveryAmount = Math.abs(Number(settlement.amount) || 0);
+
+            const { data: recoveryResult, error: recoveryErr } = await supabase.rpc(
+              'apply_release_tx',
+              {
+                p_tx_id: settlement.id,
+                p_hunter_id: hunterId,
+                p_amount: recoveryAmount,
+              }
+            );
+            if (recoveryErr) {
+              console.error('[wallet] recovery: apply_release_tx RPC error:', recoveryErr);
+              return jsonResponse(
+                { error: 'Failed to finalize pending release during recovery' },
+                500
+              );
+            }
+
+            const recoveryApplied = Array.isArray(recoveryResult)
+              ? (recoveryResult[0] as any)?.applied
+              : (recoveryResult as any)?.applied;
+            if (recoveryApplied) {
+              console.log('[wallet] recovery: apply_release_tx applied balance credit:', {
+                txId: settlement.id,
+              });
+            } else {
+              // applied=false means the UPDATE WHERE status='pending' matched no rows.
+              // The only realistic cause here (given we verified status='pending' above)
+              // is a concurrent request that already completed this transaction and
+              // credited the balance — an idempotent success.  A missing profile would
+              // have raised a P0002 exception caught above as recoveryErr, not landed here.
+              console.warn(
+                '[wallet] recovery: apply_release_tx returned applied=false — ' +
+                  'transaction was likely already completed by a concurrent request:',
+                settlement.id
+              );
+            }
+
+            return jsonResponse({
+              success: true,
+              transactionId: settlement.id,
+              releaseAmount: recoveryAmount,
+              message: recoveryApplied
+                ? 'Existing pending release finalized.'
+                : 'Release already completed (concurrent finalization).',
+            });
+          }
+
+          const verb = settlement.type === 'release' ? 'released' : 'refunded';
           return jsonResponse(
             {
               error: isPending
@@ -639,47 +724,37 @@ Deno.serve(async (req: Request) => {
           return jsonResponse({ error: 'Failed to create release transaction' }, 500);
         }
 
-        // Credit hunter's balance
-        const { data: hunterProfile, error: hunterFetchErr } = await supabase
-          .from('profiles')
-          .select('balance')
-          .eq('id', hunterId)
-          .single();
-        if (hunterFetchErr || !hunterProfile) {
-          console.error('[wallet] fetch hunter balance error:', hunterFetchErr);
+        // Atomically credit the hunter's balance and promote the transaction to
+        // 'completed' in a single PG transaction via apply_release_tx.  This
+        // eliminates the window where a process crash between the two separate
+        // Supabase calls would leave a pending transaction with an already-credited
+        // balance — which would cause the recovery path to double-credit on retry.
+        const { data: releaseResult, error: releaseRpcErr } = await supabase.rpc(
+          'apply_release_tx',
+          {
+            p_tx_id: (releaseTxRow as WalletTransaction).id,
+            p_hunter_id: hunterId,
+            p_amount: hunterAmount,
+          }
+        );
+        if (releaseRpcErr) {
+          console.error('[wallet] apply_release_tx RPC error:', releaseRpcErr);
+          // Roll back the pending transaction so the caller can retry cleanly.
           await supabase
             .from('wallet_transactions')
             .delete()
             .eq('id', (releaseTxRow as WalletTransaction).id);
-          return jsonResponse({ error: 'Failed to fetch hunter balance' }, 500);
-        }
-        const currentHunterBalance: number = (hunterProfile as Profile | null)?.balance ?? 0;
-        const { error: balanceErr } = await supabase
-          .from('profiles')
-          .update({
-            balance: currentHunterBalance + hunterAmount,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', hunterId);
-        if (balanceErr) {
-          console.error('[wallet] balance credit error for hunter, rolling back tx:', balanceErr);
-          await supabase
-            .from('wallet_transactions')
-            .delete()
-            .eq('id', (releaseTxRow as WalletTransaction).id);
-          return jsonResponse({ error: 'Failed to update hunter balance' }, 500);
+          return jsonResponse({ error: 'Failed to finalize release transaction' }, 500);
         }
 
-        // Promote to 'completed'
-        const { error: confirmErr } = await supabase
-          .from('wallet_transactions')
-          .update({ status: 'completed' })
-          .eq('id', (releaseTxRow as WalletTransaction).id);
-        if (confirmErr) {
-          console.error(
-            '[wallet] CRITICAL: hunter balance credited but failed to mark release tx completed; tx id:',
-            (releaseTxRow as WalletTransaction).id,
-            confirmErr
+        const releaseApplied = Array.isArray(releaseResult)
+          ? (releaseResult[0] as any)?.applied
+          : (releaseResult as any)?.applied;
+        if (!releaseApplied) {
+          // Should not happen for a freshly-inserted pending row; log for investigation.
+          console.warn(
+            '[wallet] apply_release_tx returned applied=false for new pending tx:',
+            (releaseTxRow as WalletTransaction).id
           );
         }
 
