@@ -177,7 +177,15 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
       let errorTitle = 'Onboarding Failed';
 
       // Check for common Stripe Connect issues
-      if (error.message?.includes('account already exists')) {
+      if (
+        error.message?.includes('signed up for Connect') ||
+        error.message?.includes('create new accounts') ||
+        error.message?.includes('not yet enabled')
+      ) {
+        errorTitle = 'Service Unavailable';
+        errorMessage =
+          'Stripe Connect is not yet enabled for this platform. Withdrawals will be available once the platform completes Stripe Connect setup. Please contact support for assistance.';
+      } else if (error.message?.includes('account already exists')) {
         errorTitle = 'Account Already Exists';
         errorMessage =
           'You already have a Stripe Connect account. Please contact support if you need to update your banking details.';
@@ -682,6 +690,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     padding: 16,
+    paddingBottom: 100,
     backgroundColor: '#059669',
     borderTopWidth: 1,
     borderTopColor: '#10b981',

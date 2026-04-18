@@ -161,9 +161,39 @@ export function WithdrawWithBankScreen({
       }
     } catch (error: any) {
       console.error('Connect onboarding error:', error);
+
+      let errorTitle = 'Onboarding Failed';
+      let errorMessage = error.message || 'Unable to start Connect onboarding. Please try again.';
+
+      // Detect common Stripe Connect configuration issues
+      if (
+        error.message?.includes('signed up for Connect') ||
+        error.message?.includes('create new accounts') ||
+        error.message?.includes('not yet enabled')
+      ) {
+        errorTitle = 'Service Unavailable';
+        errorMessage =
+          'Stripe Connect is not yet enabled for this platform. Withdrawals will be available once the platform completes Stripe Connect setup. Please contact support for assistance.';
+      } else if (error.message?.includes('account already exists')) {
+        errorTitle = 'Account Already Exists';
+        errorMessage =
+          'You already have a Stripe Connect account. Please contact support if you need to update your banking details.';
+      } else if (
+        error.message?.includes('not configured') ||
+        error.message?.includes('STRIPE_SECRET_KEY')
+      ) {
+        errorTitle = 'Service Unavailable';
+        errorMessage =
+          'The payment service is not configured. Please contact support to enable withdrawals.';
+      } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
+        errorTitle = 'Network Error';
+        errorMessage =
+          'Unable to connect to the payment service. Please check your internet connection and try again.';
+      }
+
       Alert.alert(
-        'Onboarding Failed',
-        error.message || 'Unable to start Connect onboarding. Please try again.',
+        errorTitle,
+        errorMessage + '\n\nIf this problem persists, please contact support.',
         [{ text: 'OK' }]
       );
     } finally {
@@ -604,6 +634,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
+    paddingBottom: 80,
   },
   balanceCard: {
     backgroundColor: 'rgba(4,120,87,0.6)',
@@ -809,7 +840,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     padding: 16,
-    paddingBottom: 32,
+    paddingBottom: 100,
   },
   withdrawButton: {
     flexDirection: 'row',
