@@ -120,6 +120,8 @@ Stripe integration, escrow, wallet, Apple Pay, payouts, and payment flows
 - [Payout System Implementation Summary](payments/PAYOUT_SYSTEM_IMPLEMENTATION_SUMMARY.md)
 - [Payout System Summary](payments/PAYOUT_SYSTEM_SUMMARY.md)
 - [Payout System Testing Guide](payments/PAYOUT_SYSTEM_TESTING_GUIDE.md)
+- [PR Prompts Withdrawal Fixes](payments/PR_PROMPTS_WITHDRAWAL_FIXES.md)
+- [Withdrawal Fix Diagnostic Playbook](payments/WITHDRAWAL_FIX_DIAGNOSTIC_PLAYBOOK.md)
 - [Stripe Backend Visual Guide](payments/STRIPE_BACKEND_VISUAL_GUIDE.md)
 - [Stripe Connect Implementation](payments/STRIPE_CONNECT_IMPLEMENTATION.md)
 - [Stripe Connect Troubleshooting](payments/STRIPE_CONNECT_TROUBLESHOOTING.md)
