@@ -620,16 +620,30 @@ Deno.serve(async (req: Request) => {
             const recoveryApplied = Array.isArray(recoveryResult)
               ? (recoveryResult[0] as any)?.applied
               : (recoveryResult as any)?.applied;
-            console.log('[wallet] recovery: apply_release_tx result:', {
-              recoveryApplied,
-              txId: settlement.id,
-            });
+            if (recoveryApplied) {
+              console.log('[wallet] recovery: apply_release_tx applied balance credit:', {
+                txId: settlement.id,
+              });
+            } else {
+              // applied=false means the UPDATE WHERE status='pending' matched no rows.
+              // The only realistic cause here (given we verified status='pending' above)
+              // is a concurrent request that already completed this transaction and
+              // credited the balance — an idempotent success.  A missing profile would
+              // have raised a P0002 exception caught above as recoveryErr, not landed here.
+              console.warn(
+                '[wallet] recovery: apply_release_tx returned applied=false — ' +
+                  'transaction was likely already completed by a concurrent request:',
+                settlement.id
+              );
+            }
 
             return jsonResponse({
               success: true,
               transactionId: settlement.id,
               releaseAmount: recoveryAmount,
-              message: 'Existing pending release finalized.',
+              message: recoveryApplied
+                ? 'Existing pending release finalized.'
+                : 'Release already completed (concurrent finalization).',
             });
           }
 
