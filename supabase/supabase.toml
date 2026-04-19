@@ -1,0 +1,5 @@
+[functions.create-stripe-connect]
+verify_jwt = false
+
+[functions.verify-stripe-connect]
+verify_jwt = false

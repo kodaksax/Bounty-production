@@ -1,0 +1,8 @@
+{
+  "name": "@bountyexpo/supabase-functions",
+  "private": true,
+  "description": "Supabase Edge Functions for BountyExpo (Deno runtime)",
+  "scripts": {
+    "check": "echo \"Use 'supabase functions serve' or 'supabase functions deploy' to validate edge functions.\""
+  }
+}
