@@ -161,9 +161,44 @@ export function WithdrawWithBankScreen({
       }
     } catch (error: any) {
       console.error('Connect onboarding error:', error);
+
+      let errorTitle = 'Onboarding Failed';
+      let errorMessage = error.message || 'Unable to start Connect onboarding. Please try again.';
+
+      // Detect common Stripe Connect configuration issues (case-insensitive)
+      const lowerMsg = String(error.message ?? '').toLowerCase();
+      if (
+        lowerMsg.includes('signed up for connect') ||
+        lowerMsg.includes('create new accounts') ||
+        lowerMsg.includes('not yet enabled')
+      ) {
+        errorTitle = 'Service Unavailable';
+        errorMessage =
+          'Stripe Connect is not yet enabled for this platform. Withdrawals will be available once the platform completes Stripe Connect setup. Please contact support for assistance.';
+      } else if (lowerMsg.includes('account already exists')) {
+        errorTitle = 'Account Already Exists';
+        errorMessage =
+          'You already have a Stripe Connect account. Please contact support if you need to update your banking details.';
+      } else if (
+        lowerMsg.includes('not configured') ||
+        lowerMsg.includes('stripe_secret_key')
+      ) {
+        errorTitle = 'Service Unavailable';
+        errorMessage =
+          'The payment service is not configured. Please contact support to enable withdrawals.';
+      } else if (lowerMsg.includes('network request failed') || lowerMsg.includes('network') || lowerMsg.includes('fetch failed')) {
+        errorTitle = 'Network Error';
+        errorMessage =
+          'Unable to connect to the payment service. Please check your internet connection and try again.';
+      }
+
+      const suffix = errorMessage.includes('contact support')
+        ? ''
+        : '\n\nIf this problem persists, please contact support.';
+
       Alert.alert(
-        'Onboarding Failed',
-        error.message || 'Unable to start Connect onboarding. Please try again.',
+        errorTitle,
+        errorMessage + suffix,
         [{ text: 'OK' }]
       );
     } finally {
@@ -604,6 +639,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
+    paddingBottom: 80,
   },
   balanceCard: {
     backgroundColor: 'rgba(4,120,87,0.6)',
@@ -809,7 +845,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     padding: 16,
-    paddingBottom: 32,
+    paddingBottom: 100,
   },
   withdrawButton: {
     flexDirection: 'row',

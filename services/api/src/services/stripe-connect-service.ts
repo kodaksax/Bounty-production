@@ -1,7 +1,17 @@
-import Stripe from 'stripe';
-import { db } from '../db/connection';
-import { users, bounties } from '../db/schema';
 import { eq } from 'drizzle-orm';
+
+// Lazy accessors — importing db/schema at module scope triggers real DB pool
+// creation (side effects) which breaks Jest. Requiring inside methods lets
+// Jest register mocks before any module-level code runs.
+function getDb() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return (require('../db/connection') as typeof import('../db/connection')).db;
+}
+
+function getSchema() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('../db/schema') as typeof import('../db/schema');
+}
 
 export interface EscrowPaymentIntentResponse {
   paymentIntentId: string;
@@ -34,15 +44,25 @@ export interface ConnectStatusResponse {
 
 class StripeConnectService {
   private stripe: Stripe | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private StripeLib: any = null;
   private isConfigured: boolean = false;
 
   constructor() {
     const secretKey = process.env.STRIPE_SECRET_KEY;
     if (secretKey) {
-      this.stripe = new Stripe(secretKey);
+      // Lazily require Stripe so the SDK is never loaded at module evaluation
+      // time (avoids ESM/CJS failures when Jest loads this file without the key).
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const StripeModule = require('stripe');
+      const StripeClass = StripeModule.default ?? StripeModule;
+      this.StripeLib = StripeClass;
+      this.stripe = new StripeClass(secretKey) as Stripe;
       this.isConfigured = true;
     } else {
-      console.warn('[StripeConnectService] STRIPE_SECRET_KEY not configured. Service will be disabled.');
+      console.warn(
+        '[StripeConnectService] STRIPE_SECRET_KEY not configured. Service will be disabled.'
+      );
     }
   }
 
@@ -57,16 +77,14 @@ class StripeConnectService {
    */
   async createOnboardingLink(request: OnboardingLinkRequest): Promise<OnboardingLinkResponse> {
     this.ensureConfigured();
-    
+
     try {
+      const db = getDb();
+      const { users } = getSchema();
       const { userId, refreshUrl, returnUrl } = request;
 
       // Check if user already has a Stripe account
-      const userRecord = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
+      const userRecord = await db.select().from(users).where(eq(users.id, userId)).limit(1);
 
       if (!userRecord.length) {
         throw new Error('User not found');
@@ -106,8 +124,10 @@ class StripeConnectService {
       // Create onboarding link
       const accountLink = await this.stripe!.accountLinks.create({
         account: stripeAccountId,
-        refresh_url: refreshUrl || `${process.env.FRONTEND_URL || 'http://localhost:3000'}/onboarding/refresh`,
-        return_url: returnUrl || `${process.env.FRONTEND_URL || 'http://localhost:3000'}/onboarding/return`,
+        refresh_url:
+          refreshUrl || `${process.env.FRONTEND_URL || 'http://localhost:3000'}/onboarding/refresh`,
+        return_url:
+          returnUrl || `${process.env.FRONTEND_URL || 'http://localhost:3000'}/onboarding/return`,
         type: 'account_onboarding',
       });
 
@@ -121,6 +141,25 @@ class StripeConnectService {
         typeof error === 'object' && error !== null && 'message' in error
           ? (error as any).message
           : String(error);
+
+      // Provide a user-friendly message for common Stripe Connect configuration errors.
+      // Only match actual Stripe errors to avoid false positives on unrelated exceptions.
+      const isStripeError =
+        error?.type === 'StripeInvalidRequestError' ||
+        (this.StripeLib &&
+          typeof this.StripeLib?.errors?.StripeError === 'function' &&
+          error instanceof this.StripeLib.errors.StripeError);
+      const lowerMessage = message.toLowerCase();
+      if (
+        isStripeError &&
+        (lowerMessage.includes('signed up for connect') ||
+          lowerMessage.includes('create new accounts'))
+      ) {
+        throw new Error(
+          'Stripe Connect is not yet enabled on the platform. Please contact support to enable withdrawals.'
+        );
+      }
+
       throw new Error(`Stripe error: ${message}`);
     }
   }
@@ -130,14 +169,12 @@ class StripeConnectService {
    */
   async getConnectStatus(userId: string): Promise<ConnectStatusResponse> {
     this.ensureConfigured();
-    
+
     try {
+      const db = getDb();
+      const { users } = getSchema();
       // Get user record
-      const userRecord = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
+      const userRecord = await db.select().from(users).where(eq(users.id, userId)).limit(1);
 
       if (!userRecord.length) {
         throw new Error('User not found');
@@ -161,8 +198,8 @@ class StripeConnectService {
         detailsSubmitted: account.details_submitted,
         chargesEnabled: account.charges_enabled,
         payoutsEnabled: account.payouts_enabled,
-        requiresAction: !account.details_submitted || 
-          (account.requirements?.currently_due?.length ?? 0) > 0,
+        requiresAction:
+          !account.details_submitted || (account.requirements?.currently_due?.length ?? 0) > 0,
         currentlyDue: account.requirements?.currently_due || [],
       };
     } catch (error: any) {
@@ -187,6 +224,8 @@ class StripeConnectService {
     this.ensureConfigured();
 
     try {
+      const db = getDb();
+      const { bounties, users } = getSchema();
       // Get bounty details
       const bountyRecord = await db
         .select()
@@ -212,7 +251,9 @@ class StripeConnectService {
       // Note: clientSecret is empty because the PaymentIntent was created in a prior
       // call; callers should treat status 'existing' as an idempotent no-op.
       if (bounty.payment_intent_id) {
-        console.warn(`⚠️ Bounty ${bountyId} already has payment_intent_id ${bounty.payment_intent_id}; skipping duplicate escrow creation`);
+        console.warn(
+          `⚠️ Bounty ${bountyId} already has payment_intent_id ${bounty.payment_intent_id}; skipping duplicate escrow creation`
+        );
         return {
           paymentIntentId: bounty.payment_intent_id,
           clientSecret: '', // unavailable for previously-created intents
@@ -238,30 +279,35 @@ class StripeConnectService {
       const idempotencyKey = `escrow_${bountyId}`;
 
       // Create real Stripe PaymentIntent
-      const paymentIntent = await this.stripe!.paymentIntents.create({
-        amount: bounty.amount_cents,
-        currency: 'usd',
-        capture_method: 'automatic', // Capture funds immediately
-        payment_method_types: ['card'],
-        metadata: {
-          bounty_id: bountyId,
-          creator_id: bounty.creator_id,
-          type: 'escrow',
-          bounty_title: bounty.title,
+      const paymentIntent = await this.stripe!.paymentIntents.create(
+        {
+          amount: bounty.amount_cents,
+          currency: 'usd',
+          capture_method: 'automatic', // Capture funds immediately
+          payment_method_types: ['card'],
+          metadata: {
+            bounty_id: bountyId,
+            creator_id: bounty.creator_id,
+            type: 'escrow',
+            bounty_title: bounty.title,
+          },
+          description: `Escrow for bounty: ${bounty.title}`,
         },
-        description: `Escrow for bounty: ${bounty.title}`,
-      }, { idempotencyKey });
+        { idempotencyKey }
+      );
 
       // Update bounty with payment intent ID
       await db
         .update(bounties)
-        .set({ 
+        .set({
           payment_intent_id: paymentIntent.id,
           updated_at: new Date(),
         })
         .where(eq(bounties.id, bountyId));
 
-      console.log(`✅ Created Stripe PaymentIntent ${paymentIntent.id} for bounty ${bountyId} (${bounty.amount_cents} cents)`);
+      console.log(
+        `✅ Created Stripe PaymentIntent ${paymentIntent.id} for bounty ${bountyId} (${bounty.amount_cents} cents)`
+      );
 
       return {
         paymentIntentId: paymentIntent.id,
@@ -270,7 +316,6 @@ class StripeConnectService {
         currency: paymentIntent.currency,
         status: paymentIntent.status,
       };
-
     } catch (error: any) {
       console.error(`❌ Error creating escrow PaymentIntent for bounty ${bountyId}:`, error);
       if ((error as any)?.message) {
@@ -283,7 +328,11 @@ class StripeConnectService {
   /**
    * Refund a PaymentIntent (for cancelled bounties)
    */
-  async refundPaymentIntent(paymentIntentId: string, bountyId: string, reason?: string): Promise<{
+  async refundPaymentIntent(
+    paymentIntentId: string,
+    bountyId: string,
+    reason?: string
+  ): Promise<{
     success: boolean;
     refundId?: string;
     amount?: number;
@@ -304,9 +353,9 @@ class StripeConnectService {
 
       // Create the refund
       // Map reason to Stripe's accepted values or default to 'requested_by_customer'
-      const stripeReason: 'duplicate' | 'fraudulent' | 'requested_by_customer' = 
+      const stripeReason: 'duplicate' | 'fraudulent' | 'requested_by_customer' =
         reason === 'duplicate' || reason === 'fraudulent' ? reason : 'requested_by_customer';
-      
+
       const { withStripeIdempotency } = await import('./stripe-safeguards');
       const refund = await withStripeIdempotency(
         `refund_${paymentIntentId}_${bountyId}`,
@@ -327,21 +376,21 @@ class StripeConnectService {
         }
       );
 
-      console.log(`✅ Created refund ${refund.id} for PaymentIntent ${paymentIntentId} (${refund.amount} cents)`);
+      console.log(
+        `✅ Created refund ${refund.id} for PaymentIntent ${paymentIntentId} (${refund.amount} cents)`
+      );
 
       return {
         success: true,
         refundId: refund.id,
         amount: refund.amount,
       };
-
     } catch (error) {
       console.error(`❌ Error refunding PaymentIntent ${paymentIntentId}:`, error);
-      
+
       let errorMessage = 'Unknown error';
       if ((error as any)?.message) {
         errorMessage = (error as any).message;
-
       }
 
       return {
@@ -354,18 +403,19 @@ class StripeConnectService {
   /**
    * Check if a payment has sufficient funds and account is verified
    */
-  async validatePaymentCapability(userId: string, amountCents: number): Promise<{
+  async validatePaymentCapability(
+    userId: string,
+    amountCents: number
+  ): Promise<{
     canPay: boolean;
     error?: string;
   }> {
     this.ensureConfigured();
 
     try {
-      const userRecord = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
+      const db = getDb();
+      const { users } = getSchema();
+      const userRecord = await db.select().from(users).where(eq(users.id, userId)).limit(1);
 
       if (!userRecord.length) {
         return {
@@ -387,11 +437,12 @@ class StripeConnectService {
       // Verify the Stripe account is active
       try {
         const account = await this.stripe!.accounts.retrieve(user.stripe_account_id);
-        
+
         if (!account.charges_enabled) {
           return {
             canPay: false,
-            error: 'User account is not verified to make payments. Please complete account verification.',
+            error:
+              'User account is not verified to make payments. Please complete account verification.',
           };
         }
       } catch (stripeError) {
@@ -403,7 +454,8 @@ class StripeConnectService {
       }
 
       // Amount validation
-      if (amountCents < 50) { // Stripe minimum is $0.50
+      if (amountCents < 50) {
+        // Stripe minimum is $0.50
         return {
           canPay: false,
           error: 'Amount must be at least $0.50',
@@ -413,7 +465,6 @@ class StripeConnectService {
       return {
         canPay: true,
       };
-
     } catch (error) {
       console.error('Error validating payment capability:', error);
       return {
@@ -441,7 +492,9 @@ class StripeConnectService {
         case 'account.updated':
           // Handle account updates (onboarding completion, etc.)
           const account = event.data.object as Stripe.Account;
-          console.log(`Account ${account.id} updated - details_submitted: ${account.details_submitted}`);
+          console.log(
+            `Account ${account.id} updated - details_submitted: ${account.details_submitted}`
+          );
           break;
         default:
           console.log(`Unhandled webhook event type: ${event.type}`);

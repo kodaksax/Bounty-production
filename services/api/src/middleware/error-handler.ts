@@ -318,11 +318,28 @@ export function handleStripeError(error: any): AppError {
       case 'StripeRateLimitError':
         return new RateLimitError('Too many requests to payment processor');
 
-      case 'StripeInvalidRequestError':
+      case 'StripeInvalidRequestError': {
+        // Catch the specific Stripe Connect platform configuration error
+        const msg = String(error.message ?? '').toLowerCase();
+        if (
+          msg.includes('signed up for connect') ||
+          msg.includes('create new accounts')
+        ) {
+          const userMessage =
+            'Stripe Connect is not yet enabled on the platform. Please contact support to enable withdrawals.';
+          const appError = new ExternalServiceError('Stripe', userMessage, {
+            code: error.code,
+            param: error.param,
+          });
+          // Override the prefixed message so clients receive the pure user-facing text
+          (appError as any).message = userMessage;
+          return appError;
+        }
         return new ValidationError(error.message, {
           code: error.code,
           param: error.param,
         });
+      }
 
       case 'StripeAPIError':
         return new ExternalServiceError('Stripe', error.message, {
