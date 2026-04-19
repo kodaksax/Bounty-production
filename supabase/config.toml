@@ -125,6 +125,12 @@ verify_jwt = false
 [functions.connect]
 verify_jwt = false
 
+[functions.create-stripe-connect]
+verify_jwt = false
+
+[functions.verify-stripe-connect]
+verify_jwt = false
+
 # webhooks: receives events from Stripe (not from authenticated users),
 # so it must NOT require a Supabase JWT.
 [functions.webhooks]
