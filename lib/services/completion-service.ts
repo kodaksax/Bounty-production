@@ -228,7 +228,7 @@ export const completionService = {
 
         // Fallback classic subscription
         // @ts-ignore
-        const sub = supabase
+        const sub = (supabase as any)
           .from(`completion_submissions:bounty_id=eq.${bountyId}`)
           .on('*', async (payload: any) => {
             const latest = await (completionService as any).getSubmission(bountyId);
@@ -551,7 +551,7 @@ export const completionService = {
 
         // Fallback: classic subscription
         // @ts-ignore
-        const sub = supabase
+        const sub = (supabase as any)
           .from(`completion_ready:bounty_id=eq.${bountyId}`)
           .on('*', (payload: any) => {
             onUpdate(payload.new || null);
