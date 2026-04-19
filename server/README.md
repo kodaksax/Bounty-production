@@ -25,8 +25,8 @@ All endpoints from this server are now available as Supabase Edge Functions:
 | `GET/POST/DELETE /payments/methods[/:id]` | `supabase/functions/payments` |
 | `POST /payments/confirm` | `supabase/functions/payments` |
 | `POST /webhooks/stripe` | `supabase/functions/webhooks` |
-| `POST /connect/create-account-link` | `supabase/functions/connect` |
-| `POST /connect/verify-onboarding` | `supabase/functions/connect` |
+| `POST /connect/create-account-link` | `supabase/functions/create-stripe-connect` |
+| `POST /connect/verify-onboarding` | `supabase/functions/verify-stripe-connect` |
 | `POST /connect/transfer` | `supabase/functions/connect` |
 | `POST /connect/retry-transfer` | `supabase/functions/connect` |
 | `GET /wallet/balance` | `supabase/functions/wallet` |
@@ -62,6 +62,8 @@ All endpoints from this server are now available as Supabase Edge Functions:
    ```bash
    supabase functions deploy payments
    supabase functions deploy webhooks
+   supabase functions deploy create-stripe-connect
+   supabase functions deploy verify-stripe-connect
    supabase functions deploy connect
    supabase functions deploy wallet
    supabase functions deploy auth
