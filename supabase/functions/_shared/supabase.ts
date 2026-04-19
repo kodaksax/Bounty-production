@@ -30,16 +30,16 @@ function requiredEnv(name: string): string {
   return value;
 }
 
-function normalizeUrl(value: string): string {
+function trimTrailingSlashes(value: string): string {
   return value.replace(/\/+$/, '');
 }
 
 export function getFunctionEnvConfig(): FunctionEnvConfig {
-  const supabaseUrl = normalizeUrl(requiredEnv('SUPABASE_URL'));
+  const supabaseUrl = trimTrailingSlashes(requiredEnv('SUPABASE_URL'));
   const supabaseServiceRoleKey = requiredEnv('SUPABASE_SERVICE_ROLE_KEY');
   const stripeSecretKey = requiredEnv('STRIPE_SECRET_KEY');
 
-  const appDomain = normalizeUrl(
+  const appDomain = trimTrailingSlashes(
     Deno.env.get('APP_DOMAIN') ??
       Deno.env.get('APP_URL') ??
       Deno.env.get('EXPO_PUBLIC_API_URL') ??

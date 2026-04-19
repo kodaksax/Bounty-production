@@ -70,9 +70,18 @@ async function stripeRequest<T>(config: FunctionEnvConfig, opts: {
     body,
   });
 
-  const payload = await response.json().catch(() => null) as
-    | { error?: { message?: string } }
-    | null;
+  const rawResponse = await response.text();
+  let payload: { error?: { message?: string } } | null = null;
+  if (rawResponse) {
+    try {
+      payload = JSON.parse(rawResponse) as { error?: { message?: string } };
+    } catch {
+      if (!response.ok) {
+        throw new HttpError(response.status, `Stripe request failed with status ${response.status}`);
+      }
+      throw new HttpError(502, 'Stripe returned a non-JSON response');
+    }
+  }
 
   if (!response.ok) {
     throw new HttpError(

@@ -51,11 +51,20 @@ Deno.serve(async (req: Request) => {
     const supabase = createServiceRoleSupabaseClient(config);
     const profile = await getProfileStripeConnectData(supabase, user.id);
 
-    const body = await req.json().catch(() => ({})) as {
+    type CreateStripeConnectBody = {
       returnUrl?: string;
       refreshUrl?: string;
       type?: 'account_onboarding' | 'account_update';
     };
+    let body: CreateStripeConnectBody;
+    try {
+      const parsedBody = await req.json().catch((error) => {
+        throw error;
+      });
+      body = (parsedBody && typeof parsedBody === 'object' ? parsedBody : {}) as CreateStripeConnectBody;
+    } catch {
+      throw new HttpError(400, 'Invalid JSON body');
+    }
 
     const linkType: 'account_onboarding' | 'account_update' =
       body?.type === 'account_update' ? 'account_update' : 'account_onboarding';

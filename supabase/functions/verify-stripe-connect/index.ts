@@ -33,7 +33,15 @@ Deno.serve(async (req: Request) => {
     const user = await validateJwtAndGetUser(req, config);
     const supabase = createServiceRoleSupabaseClient(config);
 
-    const body = await req.json().catch(() => ({})) as { accountId?: string };
+    let body: { accountId?: string };
+    try {
+      const parsedBody = await req.json().catch((error) => {
+        throw error;
+      });
+      body = (parsedBody && typeof parsedBody === 'object' ? parsedBody : {}) as { accountId?: string };
+    } catch {
+      throw new HttpError(400, 'Invalid JSON body');
+    }
     let accountId = body?.accountId?.trim();
 
     if (!accountId) {
