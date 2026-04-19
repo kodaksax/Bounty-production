@@ -75,7 +75,10 @@ async function stripeRequest<T>(config: FunctionEnvConfig, opts: {
     | null;
 
   if (!response.ok) {
-    throw new HttpError(response.status, payload?.error?.message ?? 'Stripe request failed');
+    throw new HttpError(
+      response.status,
+      payload?.error?.message ?? `Stripe request failed with status ${response.status}`
+    );
   }
 
   return payload as T;

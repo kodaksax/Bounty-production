@@ -1,3 +1,5 @@
+# Compatibility mirror for tooling that looks for supabase/supabase.toml.
+# Authoritative Supabase CLI config remains in supabase/config.toml.
 [functions.create-stripe-connect]
 verify_jwt = false
 

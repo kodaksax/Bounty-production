@@ -23,14 +23,18 @@ function jsonResponse(data: unknown, status = 200) {
 
 function defaultRefreshUrl(appDomain: string, appDeepLinkScheme: string): string {
   return `${appDomain}/wallet/connect/refresh?deep_link=${encodeURIComponent(
-    `${appDeepLinkScheme}://wallet/connect/refresh`
+    buildDeepLinkUrl(appDeepLinkScheme, 'refresh')
   )}`;
 }
 
 function defaultReturnUrl(appDomain: string, appDeepLinkScheme: string): string {
   return `${appDomain}/wallet/connect/return?deep_link=${encodeURIComponent(
-    `${appDeepLinkScheme}://wallet/connect/return`
+    buildDeepLinkUrl(appDeepLinkScheme, 'return')
   )}`;
+}
+
+function buildDeepLinkUrl(appDeepLinkScheme: string, endpoint: 'refresh' | 'return'): string {
+  return `${appDeepLinkScheme}://wallet/connect/${endpoint}`;
 }
 
 Deno.serve(async (req: Request) => {
@@ -77,7 +81,7 @@ Deno.serve(async (req: Request) => {
 
     const refreshUrl = body?.refreshUrl || defaultRefreshUrl(config.appDomain, config.appDeepLinkScheme);
     const returnUrl = body?.returnUrl || defaultReturnUrl(config.appDomain, config.appDeepLinkScheme);
-    const deepLinkReturnUrl = `${config.appDeepLinkScheme}://wallet/connect/return`;
+    const deepLinkReturnUrl = buildDeepLinkUrl(config.appDeepLinkScheme, 'return');
 
     const accountLink = await createStripeAccountLink(config, {
       accountId,

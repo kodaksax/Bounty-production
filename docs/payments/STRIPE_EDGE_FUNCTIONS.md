@@ -97,7 +97,7 @@ Or deploy all functions:
 supabase functions deploy
 ```
 
-`verify_jwt = false` is also registered in Supabase TOML so the function handles auth itself.
+`verify_jwt = false` is registered in both `supabase/config.toml` (authoritative CLI config) and `supabase/supabase.toml` (compatibility mirror for environments expecting that filename), so each function handles auth itself.
 
 ## Client Example
 

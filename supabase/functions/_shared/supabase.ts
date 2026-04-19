@@ -100,7 +100,9 @@ export function createServiceRoleSupabaseClient(config: FunctionEnvConfig) {
   });
 }
 
-export async function getProfileStripeConnectData(supabase: ReturnType<typeof createServiceRoleSupabaseClient>, userId: string) {
+export type ServiceRoleSupabaseClient = ReturnType<typeof createServiceRoleSupabaseClient>;
+
+export async function getProfileStripeConnectData(supabase: ServiceRoleSupabaseClient, userId: string) {
   const { data, error } = await supabase
     .from('profiles')
     .select('id, email, stripe_connect_account_id')
@@ -121,7 +123,7 @@ export async function getProfileStripeConnectData(supabase: ReturnType<typeof cr
 }
 
 export async function saveStripeConnectAccountId(
-  supabase: ReturnType<typeof createServiceRoleSupabaseClient>,
+  supabase: ServiceRoleSupabaseClient,
   userId: string,
   accountId: string
 ) {
