@@ -838,15 +838,52 @@ Deno.serve(async (req: Request) => {
         const account = event.data.object as Stripe.Account;
         console.log(`[webhooks] Connect account updated: ${account.id}`);
         if (account.metadata?.user_id) {
+          const fullyOnboarded = !!(account.charges_enabled && account.payouts_enabled);
+          const requirements = account.requirements ?? null;
           await supabase
             .from('profiles')
             .update({
-              stripe_connect_onboarded_at:
-                account.charges_enabled && account.payouts_enabled
-                  ? new Date().toISOString()
-                  : null,
+              stripe_connect_charges_enabled: !!account.charges_enabled,
+              stripe_connect_payouts_enabled: !!account.payouts_enabled,
+              stripe_connect_requirements: requirements as unknown as Record<string, unknown> | null,
+              stripe_connect_onboarded_at: fullyOnboarded ? new Date().toISOString() : null,
+              onboarding_complete: fullyOnboarded,
             })
             .eq('id', account.metadata.user_id);
+        }
+        break;
+      }
+
+      case 'capability.updated': {
+        const capability = event.data.object as Stripe.Capability;
+        const capAccountId = (capability as unknown as { account?: string }).account;
+        console.log(
+          `[webhooks] Connect capability updated: ${capability.id} status=${capability.status} account=${capAccountId}`
+        );
+        if (capAccountId) {
+          try {
+            const account = await stripe.accounts.retrieve(capAccountId);
+            if (account.metadata?.user_id) {
+              const fullyOnboarded = !!(account.charges_enabled && account.payouts_enabled);
+              await supabase
+                .from('profiles')
+                .update({
+                  stripe_connect_charges_enabled: !!account.charges_enabled,
+                  stripe_connect_payouts_enabled: !!account.payouts_enabled,
+                  stripe_connect_requirements: (account.requirements ?? null) as unknown as
+                    | Record<string, unknown>
+                    | null,
+                  stripe_connect_onboarded_at: fullyOnboarded ? new Date().toISOString() : null,
+                  onboarding_complete: fullyOnboarded,
+                })
+                .eq('id', account.metadata.user_id);
+            }
+          } catch (err) {
+            console.error('[webhooks] Failed to sync account after capability.updated', {
+              capAccountId,
+              error: err,
+            });
+          }
         }
         break;
       }

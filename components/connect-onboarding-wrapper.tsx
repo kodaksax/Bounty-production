@@ -12,10 +12,10 @@
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Linking,
   StyleSheet,
   Text,
@@ -24,7 +24,6 @@ import {
 } from 'react-native';
 
 import { API_BASE_URL } from '../lib/config/api';
-import { CONNECT_REFRESH_URL, CONNECT_RETURN_URL } from '../lib/config/app';
 import { theme } from '../lib/theme';
 
 
@@ -37,9 +36,9 @@ export interface ConnectOnboardingWrapperProps {
   onError: (error: ConnectOnboardingError) => void;
   /** Callback when user cancels */
   onCancel?: () => void;
-  /** Return URL after onboarding */
+  /** @deprecated Ignored in embedded mode; retained for API compatibility. */
   returnUrl?: string;
-  /** Refresh URL for expired links */
+  /** @deprecated Ignored in embedded mode; retained for API compatibility. */
   refreshUrl?: string;
 }
 
@@ -61,7 +60,7 @@ export interface ConnectAccountStatus {
 
 /**
  * ConnectOnboardingWrapper Component
- * 
+ *
  * Handles the Stripe Connect onboarding flow for bank account setup.
  * This is required for users who want to receive payouts.
  */
@@ -70,8 +69,6 @@ export function ConnectOnboardingWrapper({
   onComplete,
   onError,
   onCancel,
-  returnUrl = CONNECT_RETURN_URL,
-  refreshUrl = CONNECT_REFRESH_URL,
 }: ConnectOnboardingWrapperProps) {
   const [status, setStatus] = useState<ConnectAccountStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -158,79 +155,32 @@ export function ConnectOnboardingWrapper({
     };
   }, [checkAccountStatus]);
 
-  // Start the onboarding flow
+  const router = useRouter();
+
+  // Start the onboarding flow (embedded — no browser redirect)
   const startOnboarding = useCallback(async () => {
     try {
       setIsStartingOnboarding(true);
       setError(null);
-
-      const response = await fetch(`${API_BASE_URL}/connect/create-account-link`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({
-          returnUrl,
-          refreshUrl,
-        }),
-      });
-
-      if (!isMountedRef.current) return;
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to create onboarding link');
-      }
-
-      const { url } = await response.json();
-
-      if (!isMountedRef.current) return;
-
-      // Check if we can open the URL
-      const supported = await Linking.canOpenURL(url);
-      if (!supported) {
-        throw new Error('Cannot open onboarding URL');
-      }
-
-      // Open the Stripe Connect onboarding URL
-      await Linking.openURL(url);
-
-      // Show a message that they need to complete onboarding
-      Alert.alert(
-        'Complete Setup',
-        'Please complete your account setup in the browser. Return to the app when finished.',
-        [{ text: 'OK' }]
-      );
+      router.push('/wallet/connect/embedded-onboarding');
     } catch (err: any) {
       console.error('[ConnectOnboardingWrapper] Onboarding start error:', err);
 
       if (!isMountedRef.current) return;
 
-      let errorMessage = err.message || 'Failed to start onboarding';
-      let requiresSupport = false;
-
-      // Check for specific error conditions
-      if (err.message?.includes('account already exists')) {
-        errorMessage = 'You already have a connected account. Please contact support to update your details.';
-        requiresSupport = true;
-      } else if (err.message?.includes('not configured')) {
-        errorMessage = 'Stripe Connect is not available. Please contact support.';
-        requiresSupport = true;
-      }
-
+      const errorMessage = err.message || 'Failed to start onboarding';
       setError(errorMessage);
       onError({
         code: 'onboarding_failed',
         message: errorMessage,
-        requiresSupport,
+        requiresSupport: false,
       });
     } finally {
       if (isMountedRef.current) {
         setIsStartingOnboarding(false);
       }
     }
-  }, [authToken, returnUrl, refreshUrl, onError]);
+  }, [router, onError]);
 
   // Continue incomplete onboarding
   const continueOnboarding = useCallback(async () => {

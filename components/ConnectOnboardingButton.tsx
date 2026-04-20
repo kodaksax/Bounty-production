@@ -1,7 +1,6 @@
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { stripeService } from '../lib/services/stripe-service';
-import { openUrlInBrowser } from '../lib/utils/browser';
 
 interface Props {
   userId: string;
@@ -13,28 +12,21 @@ interface Props {
 }
 
 export const ConnectOnboardingButton: React.FC<Props> = ({
-  userId,
-  email,
-  authToken,
-  onSuccess,
+  onSuccess: _onSuccess,
   onError,
   label = 'Set up payouts',
 }) => {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
 
   const startOnboarding = async () => {
     try {
       setLoading(true);
-      const { accountId } = await stripeService.createConnectAccount(userId, email, authToken);
-      const url = await stripeService.createConnectAccountLink(accountId, authToken);
-      const opened = await openUrlInBrowser(url);
-      if (!opened.success) {
-        throw new Error(opened.error || 'Failed to open onboarding URL');
-      }
-      onSuccess?.(accountId);
-    } catch (error: any) {
+      // Embedded onboarding runs inside the app; no browser redirect.
+      router.push('/wallet/connect/embedded-onboarding');
+    } catch (error: unknown) {
       console.error('[ConnectOnboardingButton] Onboarding error:', error);
-      onError?.(error);
+      onError?.(error instanceof Error ? error : new Error(String(error)));
     } finally {
       setLoading(false);
     }
