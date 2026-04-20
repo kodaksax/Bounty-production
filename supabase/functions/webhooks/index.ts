@@ -56,21 +56,22 @@ async function syncConnectAccountToProfile(
   const update: Record<string, unknown> = {
     stripe_connect_charges_enabled: !!account.charges_enabled,
     stripe_connect_payouts_enabled: !!account.payouts_enabled,
-    stripe_connect_requirements: (account.requirements ?? null) as unknown as
-      | Record<string, unknown>
-      | null,
+    stripe_connect_requirements: (account.requirements ?? null) as unknown as Record<
+      string,
+      unknown
+    > | null,
     onboarding_complete: fullyOnboarded,
   };
 
   // Only set the onboarded timestamp on the first transition; never clear it.
-  if (fullyOnboarded && !existing?.stripe_connect_onboarded_at) {
+  // Guard on !readError: if the read failed, existing is null and we cannot
+  // distinguish "never set" from "already set but unreadable". Skipping the
+  // timestamp in that case preserves the once-only invariant.
+  if (fullyOnboarded && !readError && !existing?.stripe_connect_onboarded_at) {
     update.stripe_connect_onboarded_at = new Date().toISOString();
   }
 
-  const { error: updateError } = await supabase
-    .from('profiles')
-    .update(update)
-    .eq('id', userId);
+  const { error: updateError } = await supabase.from('profiles').update(update).eq('id', userId);
 
   if (updateError) {
     console.error('[webhooks] Failed to sync Connect account to profile', {
