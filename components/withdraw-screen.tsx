@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { BrandingLogo } from 'components/ui/branding-logo';
-import { useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -73,6 +73,15 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
     verifyConnectOnboarding();
   }, [session?.access_token]);
 
+  // Re-verify when the screen regains focus (e.g. user returns from embedded onboarding)
+  useFocusEffect(
+    useCallback(() => {
+      if (session?.access_token) {
+        verifyConnectOnboarding().finally(() => setIsOnboarding(false));
+      }
+    }, [session?.access_token])
+  );
+
   // Fetch bank accounts when Connect account is verified
   useEffect(() => {
     if (hasConnectedAccount && session?.access_token) {
@@ -137,15 +146,8 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
     try {
       setIsOnboarding(true);
       router.push('/wallet/connect/embedded-onboarding');
-      // Refresh status shortly after the user returns. The embedded screen
-      // also triggers a server-side verify; this is belt-and-braces.
-      setTimeout(async () => {
-        try {
-          await verifyConnectOnboarding();
-        } finally {
-          setIsOnboarding(false);
-        }
-      }, 2000);
+      // Status re-verification happens in the useFocusEffect above when the
+      // user returns from the embedded onboarding screen.
     } catch (error: unknown) {
       console.error('[withdraw-screen] Failed to open embedded onboarding', error);
       Alert.alert(
