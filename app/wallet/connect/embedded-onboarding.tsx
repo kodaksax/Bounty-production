@@ -38,17 +38,23 @@ export default function EmbeddedOnboardingScreen() {
       // confirm (or reset) this based on Stripe's authoritative state.
       const userId = session?.user?.id;
       if (userId) {
-        await supabase
-          .from('profiles')
-          .update({ onboarding_complete: true })
-          .eq('id', userId)
-          .then(() => undefined, () => undefined);
+        try {
+          await supabase.from('profiles').update({ onboarding_complete: true }).eq('id', userId);
+        } catch (err) {
+          // Non-fatal — the authoritative account.updated webhook will
+          // reconcile `onboarding_complete` regardless of this optimistic write.
+          console.warn('[embedded-onboarding] Failed to optimistically mark onboarding_complete', err);
+        }
       }
       // Pull the latest status from Stripe so the wallet UI is accurate.
-      await fetch(`${API_BASE_URL}/connect/verify-onboarding`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      }).catch(() => undefined);
+      try {
+        await fetch(`${API_BASE_URL}/connect/verify-onboarding`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        });
+      } catch (err) {
+        console.warn('[embedded-onboarding] verify-onboarding refresh failed', err);
+      }
     } finally {
       setVerifying(false);
       router.replace('/tabs/wallet-screen');

@@ -283,7 +283,10 @@ export function ConnectEmbeddedWebView({
             // `evil-stripe.com` from being treated as Stripe.
             const host = u.hostname.toLowerCase();
             if (host === 'stripe.com' || host.endsWith('.stripe.com')) return true;
-            Alert.alert('External link', u.origin);
+            Alert.alert(
+              'External link blocked',
+              `For your security, only links to Bounty or Stripe can open here.\n\nOrigin: ${u.origin}`
+            );
             return false;
           } catch {
             return true;
