@@ -148,15 +148,16 @@ export function ConnectEmbeddedWebView({
   const sendInit = useCallback(() => {
     if (!init || !webViewRef.current) return;
     const payload = {
-      type: 'init',
       publishableKey: init.publishableKey,
       clientSecret: init.clientSecret,
       component,
     };
-    // Use postMessage directly so `window.message` listeners fire.
-    const js = `(function(){try{window.dispatchEvent(new MessageEvent('message',{data:${JSON.stringify(
-      JSON.stringify(payload)
-    )}}));}catch(e){}})(); true;`;
+    // URL-encode the JSON payload before interpolation. `encodeURIComponent`
+    // guarantees the output contains only characters from a safe subset that
+    // cannot terminate the surrounding JS string literal (no quotes, no
+    // backslashes, no newlines), so this is not a code-injection sink.
+    const encoded = encodeURIComponent(JSON.stringify(payload));
+    const js = `(function(){try{window.__bountyConnectInit && window.__bountyConnectInit('${encoded}');}catch(e){}})(); true;`;
     webViewRef.current.injectJavaScript(js);
   }, [component, init]);
 
@@ -276,9 +277,12 @@ export function ConnectEmbeddedWebView({
             const our = new URL(embeddedUrl());
             if (u.origin === our.origin) return true;
             if (u.origin === 'about:blank' || req.url.startsWith('about:')) return true;
-            // Stripe may open hosted verification flows (e.g. identity) in new tabs;
-            // for safety, block in-WebView and let the user retry via the shim.
-            if (u.origin.endsWith('stripe.com')) return true;
+            // Stripe may open hosted verification flows (e.g. identity) in new
+            // tabs — allow only genuine Stripe hostnames (exact match or proper
+            // subdomain of stripe.com). This prevents domains like
+            // `evil-stripe.com` from being treated as Stripe.
+            const host = u.hostname.toLowerCase();
+            if (host === 'stripe.com' || host.endsWith('.stripe.com')) return true;
             Alert.alert('External link', u.origin);
             return false;
           } catch {

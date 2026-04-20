@@ -3,23 +3,23 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 
 interface Props {
-  userId: string;
-  email: string;
+  /** @deprecated Not required for embedded onboarding; retained for API compatibility. */
+  userId?: string;
+  /** @deprecated Not required for embedded onboarding; retained for API compatibility. */
+  email?: string;
+  /** @deprecated Not required for embedded onboarding; retained for API compatibility. */
   authToken?: string;
+  /** @deprecated Not invoked in embedded mode; exit is handled by the onboarding screen itself. */
   onSuccess?: (accountId: string) => void;
   onError?: (error: Error) => void;
   label?: string;
 }
 
-export const ConnectOnboardingButton: React.FC<Props> = ({
-  onSuccess: _onSuccess,
-  onError,
-  label = 'Set up payouts',
-}) => {
+export const ConnectOnboardingButton: React.FC<Props> = ({ onError, label = 'Set up payouts' }) => {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
-  const startOnboarding = async () => {
+  const startOnboarding = () => {
     try {
       setLoading(true);
       // Embedded onboarding runs inside the app; no browser redirect.

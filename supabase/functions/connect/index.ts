@@ -224,20 +224,22 @@ Deno.serve(async (req: Request) => {
       };
 
       const componentsPayload: Record<string, unknown> = {};
-      const ao = normalize(components.account_onboarding, { external_account_collection: true });
-      if (ao) componentsPayload.account_onboarding = ao;
-      const pay = normalize(components.payments, {
+      const accountOnboardingConfig = normalize(components.account_onboarding, {
+        external_account_collection: true,
+      });
+      if (accountOnboardingConfig) componentsPayload.account_onboarding = accountOnboardingConfig;
+      const paymentsConfig = normalize(components.payments, {
         refund_management: true,
         dispute_management: true,
         capture_payments: true,
       });
-      if (pay) componentsPayload.payments = pay;
-      const po = normalize(components.payouts, {
+      if (paymentsConfig) componentsPayload.payments = paymentsConfig;
+      const payoutsConfig = normalize(components.payouts, {
         instant_payouts: false,
         standard_payouts: true,
         edit_payout_schedule: false,
       });
-      if (po) componentsPayload.payouts = po;
+      if (payoutsConfig) componentsPayload.payouts = payoutsConfig;
 
       if (Object.keys(componentsPayload).length === 0) {
         componentsPayload.account_onboarding = { enabled: true };
@@ -709,6 +711,19 @@ function renderEmbeddedPage(): string {
     // WebView delivers messages on both window and document depending on platform.
     window.addEventListener('message', onMessage);
     document.addEventListener('message', onMessage);
+
+    // Native bridge entry point used by RN injectJavaScript. The payload is
+    // URL-encoded JSON so the invoking string literal cannot contain quotes or
+    // backslashes that would enable code injection.
+    window.__bountyConnectInit = function (encoded) {
+      try {
+        var json = decodeURIComponent(String(encoded));
+        var payload = JSON.parse(json);
+        handleInit(payload);
+      } catch (e) {
+        showError('Invalid init payload.');
+      }
+    };
 
     function loadScript() {
       var s = document.createElement('script');
