@@ -31,8 +31,33 @@ import {
 import type { WebViewMessageEvent } from 'react-native-webview';
 import { WebView } from 'react-native-webview';
 
+import Constants from 'expo-constants';
+
 import { API_BASE_URL } from '../lib/config/api';
 import { colors } from '../lib/theme';
+
+/**
+ * Returns the Supabase anon key, which the Supabase Functions gateway
+ * requires on EVERY request (as an `apikey` header or `?apikey=` query
+ * param) to route the call to the function — independently of whether
+ * `verify_jwt` is enabled. Without it the gateway short-circuits with its
+ * own error response, which a WebView then renders as visible raw HTML/JSON.
+ */
+function getSupabaseAnonKey(): string {
+  try {
+    const extra = Constants.expoConfig?.extra as Record<string, unknown> | undefined;
+    const fromExtra = extra?.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+    const extraStr = typeof fromExtra === 'string' ? fromExtra.trim() : '';
+    return (
+      (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY as string | undefined)?.trim() ||
+      (process.env.SUPABASE_ANON_KEY as string | undefined)?.trim() ||
+      extraStr ||
+      ''
+    );
+  } catch {
+    return '';
+  }
+}
 
 export type ConnectComponent = 'onboarding' | 'payments' | 'payouts';
 
@@ -210,10 +235,17 @@ export function ConnectEmbeddedWebView({
     if (init && readyFiredRef.current) sendInit();
   }, [init, sendInit]);
 
-  const source = useMemo(
-    () => ({ uri: `${embeddedUrl()}?v=${nonce}&c=${component}` }),
-    [component, nonce]
-  );
+  const source = useMemo(() => {
+    // The Supabase Functions gateway requires an `apikey` on every request
+    // (header OR query param) to route the call to the function, even when
+    // `verify_jwt = false`. A WebView loading a URI cannot set custom headers,
+    // so we append it as a query param. Without this, the gateway returns its
+    // own error response which renders as raw visible HTML/JSON in the WebView.
+    const anonKey = getSupabaseAnonKey();
+    const params = new URLSearchParams({ v: String(nonce), c: component });
+    if (anonKey) params.set('apikey', anonKey);
+    return { uri: `${embeddedUrl()}?${params.toString()}` };
+  }, [component, nonce]);
 
   if (loadingSession && !init) {
     return (
