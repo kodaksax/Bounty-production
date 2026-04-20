@@ -1,9 +1,9 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    Linking,
     ScrollView,
     StyleSheet,
     Text,
@@ -14,7 +14,6 @@ import {
 import { useAuthContext } from '../hooks/use-auth-context';
 import { useEmailVerification } from '../hooks/use-email-verification';
 import { API_BASE_URL } from '../lib/config/api';
-import { CONNECT_REFRESH_URL, CONNECT_RETURN_URL } from '../lib/config/app';
 import { MIN_WITHDRAWAL_AMOUNT } from '../lib/constants';
 import { theme } from '../lib/theme';
 import { useWallet } from '../lib/wallet-context';
@@ -120,53 +119,34 @@ export function WithdrawWithBankScreen({
     loadBankAccounts();
   }, [loadConnectStatus, loadBankAccounts]);
 
-  const handleConnectOnboarding = async () => {
-    setIsOnboarding(true);
+  const router = useRouter();
 
+  const handleConnectOnboarding = () => {
+    // Use the in-app embedded onboarding route so users never leave the app.
+    // The embedded screen handles errors itself (including the platform-level
+    // "not signed up for Connect" error) and refreshes status on exit.
     try {
-      if (!session?.access_token) {
-        throw new Error('Not authenticated. Please sign in again.');
-      }
-
-      const response = await fetch(`${API_BASE_URL}/connect/create-account-link`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          returnUrl: CONNECT_RETURN_URL,
-          refreshUrl: CONNECT_REFRESH_URL,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to create account link');
-      }
-
-      const { url } = await response.json();
-
-      const supported = await Linking.canOpenURL(url);
-      if (supported) {
-        await Linking.openURL(url);
-
-        // Refresh status after user returns
-        setTimeout(async () => {
+      setIsOnboarding(true);
+      router.push('/wallet/connect/embedded-onboarding');
+      // Refresh status shortly after the user returns. The embedded screen
+      // also triggers a server-side verify; this is belt-and-braces.
+      setTimeout(async () => {
+        try {
           await loadConnectStatus();
           await loadBankAccounts();
-        }, 2000);
-      } else {
-        throw new Error('Cannot open Stripe Connect URL');
-      }
-    } catch (error: any) {
-      console.error('Connect onboarding error:', error);
+        } finally {
+          setIsOnboarding(false);
+        }
+      }, 2000);
+    } catch (error: unknown) {
+      console.error('[withdraw-with-bank] Failed to open embedded onboarding', error);
       Alert.alert(
         'Onboarding Failed',
-        error.message || 'Unable to start Connect onboarding. Please try again.',
+        error instanceof Error
+          ? error.message
+          : 'Unable to start Connect onboarding. Please try again.',
         [{ text: 'OK' }]
       );
-    } finally {
       setIsOnboarding(false);
     }
   };
