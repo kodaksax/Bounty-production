@@ -1,5 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
@@ -53,6 +53,28 @@ export function WithdrawWithBankScreen({
   const { isEmailVerified, canWithdrawFunds, userEmail } = useEmailVerification();
 
   const balance = propBalance ?? walletBalance;
+
+  // Tracks whether we need to refresh Connect status when this screen
+  // regains focus (i.e. the user returns from the embedded onboarding screen).
+  const needsRefreshOnFocusRef = useRef(false);
+
+  // Refresh Connect status and bank accounts when returning from the embedded
+  // onboarding screen, then clear the loading indicator.
+  useFocusEffect(
+    useCallback(() => {
+      if (needsRefreshOnFocusRef.current) {
+        needsRefreshOnFocusRef.current = false;
+        (async () => {
+          try {
+            await loadConnectStatus();
+            await loadBankAccounts();
+          } finally {
+            setIsOnboarding(false);
+          }
+        })();
+      }
+    }, [loadConnectStatus, loadBankAccounts])
+  );
 
   // Stable idempotency key for this withdrawal attempt.  Generated once on
   // mount so that retries (e.g. network failure) reuse the same key, letting
@@ -127,19 +149,13 @@ export function WithdrawWithBankScreen({
     // "not signed up for Connect" error) and refreshes status on exit.
     try {
       setIsOnboarding(true);
+      needsRefreshOnFocusRef.current = true;
       router.push('/wallet/connect/embedded-onboarding');
-      // Refresh status shortly after the user returns. The embedded screen
-      // also triggers a server-side verify; this is belt-and-braces.
-      setTimeout(async () => {
-        try {
-          await loadConnectStatus();
-          await loadBankAccounts();
-        } finally {
-          setIsOnboarding(false);
-        }
-      }, 2000);
+      // Status refresh and isOnboarding reset are handled by useFocusEffect
+      // when this screen regains focus after the user returns.
     } catch (error: unknown) {
       console.error('[withdraw-with-bank] Failed to open embedded onboarding', error);
+      needsRefreshOnFocusRef.current = false;
       Alert.alert(
         'Onboarding Failed',
         error instanceof Error
