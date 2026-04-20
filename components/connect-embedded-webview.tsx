@@ -18,18 +18,18 @@
  * The WebView never receives the Stripe secret key.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Linking,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Linking,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import { WebView } from 'react-native-webview';
 import type { WebViewMessageEvent } from 'react-native-webview';
+import { WebView } from 'react-native-webview';
 
 import { API_BASE_URL } from '../lib/config/api';
 import { colors } from '../lib/theme';
@@ -120,7 +120,9 @@ export function ConnectEmbeddedWebView({
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error((data && data.error) || `Failed to create session (HTTP ${response.status})`);
+        throw new Error(
+          (data && data.error) || `Failed to create session (HTTP ${response.status})`
+        );
       }
       if (!data.clientSecret || !data.publishableKey) {
         throw new Error('Invalid session response from server.');
@@ -180,7 +182,8 @@ export function ConnectEmbeddedWebView({
           onMounted?.(component);
           break;
         case 'retry':
-          setNonce((n) => n + 1);
+          setInit(null);
+          setNonce(n => n + 1);
           fetchSession();
           break;
         case 'load_error': {
@@ -230,7 +233,7 @@ export function ConnectEmbeddedWebView({
           style={styles.retryBtn}
           onPress={() => {
             setInit(null);
-            setNonce((n) => n + 1);
+            setNonce(n => n + 1);
             fetchSession();
           }}
           accessibilityRole="button"
@@ -270,7 +273,7 @@ export function ConnectEmbeddedWebView({
           setError(m);
           onError?.(m);
         }}
-        onShouldStartLoadWithRequest={(req) => {
+        onShouldStartLoadWithRequest={req => {
           // Allow navigation inside our origin; open known-safe external links
           // (Stripe) in the system browser; block everything else. Fails
           // CLOSED on any parsing or validation error.
@@ -305,10 +308,7 @@ export function ConnectEmbeddedWebView({
           // embedded WebView scoped to our own HTML shim.
           if (u.protocol === 'https:') {
             Linking.openURL(req.url).catch(() => {
-              Alert.alert(
-                'Could not open link',
-                'This app could not open the external link.'
-              );
+              Alert.alert('Could not open link', 'This app could not open the external link.');
             });
             return false;
           }

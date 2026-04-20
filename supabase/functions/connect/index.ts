@@ -49,8 +49,8 @@ Deno.serve(async (req: Request) => {
         'Content-Security-Policy':
           "default-src 'self'; " +
           "script-src 'self' 'unsafe-inline' https://connect-js.stripe.com https://js.stripe.com; " +
-          "frame-src https://connect-js.stripe.com https://js.stripe.com; " +
-          "connect-src https://api.stripe.com https://connect-js.stripe.com https://merchant-ui-api.stripe.com; " +
+          'frame-src https://connect-js.stripe.com https://js.stripe.com; ' +
+          'connect-src https://api.stripe.com https://connect-js.stripe.com https://merchant-ui-api.stripe.com; ' +
           "img-src 'self' data: https:; " +
           "style-src 'self' 'unsafe-inline';",
       },
@@ -115,7 +115,12 @@ Deno.serve(async (req: Request) => {
       if (!accountId) {
         if (accountLinkType === 'account_update') {
           // Cannot update an account that doesn't exist yet
-          return jsonResponse({ error: 'No Stripe Connect account found to update. Please complete onboarding first.' }, 400);
+          return jsonResponse(
+            {
+              error: 'No Stripe Connect account found to update. Please complete onboarding first.',
+            },
+            400
+          );
         }
         const account = await stripe.accounts.create({
           type: 'express',
@@ -212,14 +217,18 @@ Deno.serve(async (req: Request) => {
       //   { account_onboarding: { enabled: true, features: { ... } }, ... }
       type ComponentSpec = boolean | { enabled?: boolean; features?: Record<string, unknown> };
       const normalize = (spec: ComponentSpec, defaultFeatures?: Record<string, unknown>) => {
-        if (spec === false) return undefined;
-        if (spec === true || spec === undefined) {
+        if (spec === false || spec === undefined) return undefined;
+        if (spec === true) {
           return { enabled: true, ...(defaultFeatures ? { features: defaultFeatures } : {}) };
         }
         if (typeof spec === 'object' && spec.enabled !== false) {
           return {
             enabled: true,
-            ...(spec.features ? { features: spec.features } : defaultFeatures ? { features: defaultFeatures } : {}),
+            ...(spec.features
+              ? { features: spec.features }
+              : defaultFeatures
+                ? { features: defaultFeatures }
+                : {}),
           };
         }
         return undefined;
@@ -296,7 +305,10 @@ Deno.serve(async (req: Request) => {
           .eq('id', userId);
 
         if (updateError) {
-          console.error('[connect] Failed to update profile during verify-onboarding', { userId, error: updateError });
+          console.error('[connect] Failed to update profile during verify-onboarding', {
+            userId,
+            error: updateError,
+          });
           return jsonResponse({ error: 'Failed to update account status. Please try again.' }, 500);
         }
       }
