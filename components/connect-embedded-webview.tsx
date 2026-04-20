@@ -22,6 +22,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -143,22 +144,19 @@ export function ConnectEmbeddedWebView({
   }, [fetchSession]);
 
   // Send init to the WebView once both (a) we have session data and (b) the
-  // page has posted `ready`. We store the init in a ref-like state so we can
-  // re-send on explicit retry.
+  // page has posted `ready`. Uses the WebView's native `postMessage` API
+  // (delivered to the page's `window.addEventListener('message', …)`) rather
+  // than `injectJavaScript`, so no JS source is ever constructed from our
+  // payload — this eliminates any code-injection sink entirely.
   const sendInit = useCallback(() => {
     if (!init || !webViewRef.current) return;
     const payload = {
+      type: 'init',
       publishableKey: init.publishableKey,
       clientSecret: init.clientSecret,
       component,
     };
-    // URL-encode the JSON payload before interpolation. `encodeURIComponent`
-    // guarantees the output contains only characters from a safe subset that
-    // cannot terminate the surrounding JS string literal (no quotes, no
-    // backslashes, no newlines), so this is not a code-injection sink.
-    const encoded = encodeURIComponent(JSON.stringify(payload));
-    const js = `(function(){try{window.__bountyConnectInit && window.__bountyConnectInit('${encoded}');}catch(e){}})(); true;`;
-    webViewRef.current.injectJavaScript(js);
+    webViewRef.current.postMessage(JSON.stringify(payload));
   }, [component, init]);
 
   const handleMessage = useCallback(
@@ -223,7 +221,7 @@ export function ConnectEmbeddedWebView({
     );
   }
 
-  if (error && !init) {
+  if (error) {
     return (
       <View style={styles.center}>
         <Text style={styles.errorTitle}>We couldn’t start Stripe Connect.</Text>
@@ -231,6 +229,7 @@ export function ConnectEmbeddedWebView({
         <TouchableOpacity
           style={styles.retryBtn}
           onPress={() => {
+            setInit(null);
             setNonce((n) => n + 1);
             fetchSession();
           }}
@@ -248,7 +247,8 @@ export function ConnectEmbeddedWebView({
       <WebView
         ref={webViewRef}
         source={source}
-        originWhitelist={['https://*', 'http://*']}
+        // Restrict to HTTPS only — this WebView hosts payment / KYC UI.
+        originWhitelist={['https://*']}
         javaScriptEnabled
         domStorageEnabled
         allowsInlineMediaPlayback
@@ -271,26 +271,53 @@ export function ConnectEmbeddedWebView({
           onError?.(m);
         }}
         onShouldStartLoadWithRequest={(req) => {
-          // Keep navigation inside our origin; open any other URLs externally.
+          // Allow navigation inside our origin; open known-safe external links
+          // (Stripe) in the system browser; block everything else. Fails
+          // CLOSED on any parsing or validation error.
+          let u: URL;
+          let our: URL;
           try {
-            const u = new URL(req.url);
-            const our = new URL(embeddedUrl());
-            if (u.origin === our.origin) return true;
-            if (u.origin === 'about:blank' || req.url.startsWith('about:')) return true;
-            // Stripe may open hosted verification flows (e.g. identity) in new
-            // tabs — allow only genuine Stripe hostnames (exact match or proper
-            // subdomain of stripe.com). This prevents domains like
-            // `evil-stripe.com` from being treated as Stripe.
-            const host = u.hostname.toLowerCase();
-            if (host === 'stripe.com' || host.endsWith('.stripe.com')) return true;
+            u = new URL(req.url);
+            our = new URL(embeddedUrl());
+          } catch {
             Alert.alert(
-              'External link blocked',
-              `For your security, only links to Bounty or Stripe can open here.\n\nOrigin: ${u.origin}`
+              'Invalid link blocked',
+              'For your security, this app blocked a link that could not be validated.'
             );
             return false;
-          } catch {
-            return true;
           }
+
+          if (u.origin === our.origin) return true;
+          if (req.url.startsWith('about:')) return true;
+
+          // Only allow genuine Stripe hostnames (exact match or proper
+          // subdomain of stripe.com) over HTTPS. This prevents domains like
+          // `evil-stripe.com` from being treated as Stripe and blocks insecure
+          // `http://stripe.com/...` navigations.
+          const host = u.hostname.toLowerCase();
+          const isStripe =
+            u.protocol === 'https:' && (host === 'stripe.com' || host.endsWith('.stripe.com'));
+          if (isStripe) return true;
+
+          // For any other HTTPS link the page tries to open (support pages,
+          // bank partner sites, …), hand it off to the system browser so the
+          // user stays in control of where they navigate, and keep the
+          // embedded WebView scoped to our own HTML shim.
+          if (u.protocol === 'https:') {
+            Linking.openURL(req.url).catch(() => {
+              Alert.alert(
+                'Could not open link',
+                'This app could not open the external link.'
+              );
+            });
+            return false;
+          }
+
+          Alert.alert(
+            'External link blocked',
+            `For your security, only links to Bounty or Stripe can open here.\n\nOrigin: ${u.origin}`
+          );
+          return false;
         }}
         style={styles.flex}
       />

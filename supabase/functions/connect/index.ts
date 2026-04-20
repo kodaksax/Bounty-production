@@ -168,15 +168,17 @@ Deno.serve(async (req: Request) => {
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('stripe_connect_account_id, email, country')
+        .select('stripe_connect_account_id, email')
         .eq('id', userId)
         .single();
 
-      const profileRow = profile as (Profile & { country?: string | null }) | null;
+      const profileRow = profile as Profile | null;
       let accountId = profileRow?.stripe_connect_account_id;
 
       if (!accountId) {
-        const country = (typeof body.country === 'string' && body.country) || profileRow?.country || 'US';
+        const requestedCountry =
+          typeof body.country === 'string' ? body.country.trim().toUpperCase() : '';
+        const country = /^[A-Z]{2}$/.test(requestedCountry) ? requestedCountry : 'US';
         const account = await stripe.accounts.create({
           type: 'express',
           country,
@@ -711,19 +713,6 @@ function renderEmbeddedPage(): string {
     // WebView delivers messages on both window and document depending on platform.
     window.addEventListener('message', onMessage);
     document.addEventListener('message', onMessage);
-
-    // Native bridge entry point used by RN injectJavaScript. The payload is
-    // URL-encoded JSON so the invoking string literal cannot contain quotes or
-    // backslashes that would enable code injection.
-    window.__bountyConnectInit = function (encoded) {
-      try {
-        var json = decodeURIComponent(String(encoded));
-        var payload = JSON.parse(json);
-        handleInit(payload);
-      } catch (e) {
-        showError('Invalid init payload.');
-      }
-    };
 
     function loadScript() {
       var s = document.createElement('script');
