@@ -7,6 +7,10 @@
 //   POST /connect/verify-onboarding
 //   POST /connect/transfer
 //   POST /connect/retry-transfer
+//   GET  /connect/bank-accounts            (list external bank accounts on Connect account)
+//   POST /connect/bank-accounts            (add a bank account to Connect account)
+//   DELETE /connect/bank-accounts/:id      (remove a bank account)
+//   POST /connect/bank-accounts/:id/default (set a bank account as default for currency)
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Stripe from 'npm:stripe@14';
@@ -15,7 +19,7 @@ import type { Profile, WalletTransaction } from '../_shared/types.ts';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
 };
 
 function jsonResponse(data: unknown, status = 200) {
@@ -57,7 +61,12 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  if (req.method !== 'POST') {
+  const isBankAccountsPath = subPath === '/bank-accounts' || subPath.startsWith('/bank-accounts/');
+  if (
+    req.method !== 'POST' &&
+    !(req.method === 'GET' && isBankAccountsPath) &&
+    !(req.method === 'DELETE' && isBankAccountsPath)
+  ) {
     return jsonResponse({ error: 'Method not allowed' }, 405);
   }
 
@@ -525,6 +534,167 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    // GET /connect/bank-accounts — list external bank accounts on the Connect account
+    if (req.method === 'GET' && subPath === '/bank-accounts') {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('stripe_connect_account_id')
+        .eq('id', userId)
+        .single();
+
+      const accountId = (profile as { stripe_connect_account_id?: string } | null)
+        ?.stripe_connect_account_id;
+      if (!accountId) {
+        return jsonResponse({ bankAccounts: [] });
+      }
+
+      const accounts = await stripe.accounts.listExternalAccounts(accountId, {
+        object: 'bank_account',
+        limit: 20,
+      });
+      const bankAccounts = accounts.data.map(ba => ({
+        id: ba.id,
+        bankName: (ba as unknown as { bank_name?: string }).bank_name ?? null,
+        last4: ba.last4,
+        routingNumber: (ba as unknown as { routing_number?: string }).routing_number ?? null,
+        accountHolderName:
+          (ba as unknown as { account_holder_name?: string }).account_holder_name ?? null,
+        accountType: (ba as unknown as { account_type?: string }).account_type ?? null,
+        default: ba.default_for_currency,
+        status: ba.status,
+      }));
+      return jsonResponse({ bankAccounts });
+    }
+
+    // POST /connect/bank-accounts — add a bank account to the Connect account
+    if (req.method === 'POST' && subPath === '/bank-accounts') {
+      const body = await req.json().catch(() => ({}));
+      const { accountHolderName, routingNumber, accountNumber, accountType } = body ?? {};
+
+      if (!accountHolderName || !routingNumber || !accountNumber || !accountType) {
+        return jsonResponse(
+          {
+            error: 'accountHolderName, routingNumber, accountNumber, and accountType are required',
+          },
+          400
+        );
+      }
+      if (String(routingNumber).length !== 9) {
+        return jsonResponse({ error: 'Routing number must be 9 digits' }, 400);
+      }
+      if (String(accountNumber).length < 4) {
+        return jsonResponse({ error: 'Account number must be at least 4 digits' }, 400);
+      }
+      if (!['checking', 'savings'].includes(accountType)) {
+        return jsonResponse({ error: 'accountType must be "checking" or "savings"' }, 400);
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('stripe_connect_account_id')
+        .eq('id', userId)
+        .single();
+
+      const accountId = (profile as { stripe_connect_account_id?: string } | null)
+        ?.stripe_connect_account_id;
+      if (!accountId) {
+        return jsonResponse(
+          {
+            error: 'Stripe Connect account not found. Please complete onboarding first.',
+            requiresOnboarding: true,
+          },
+          400
+        );
+      }
+
+      const bankAccount = await stripe.accounts.createExternalAccount(accountId, {
+        external_account: {
+          object: 'bank_account',
+          country: 'US',
+          currency: 'usd',
+          account_holder_name: accountHolderName,
+          account_holder_type: 'individual',
+          routing_number: String(routingNumber),
+          account_number: String(accountNumber),
+        } as Stripe.ExternalAccountCreateParams,
+      });
+
+      const ba = bankAccount as Stripe.BankAccount;
+      return jsonResponse({
+        success: true,
+        bankAccount: {
+          id: ba.id,
+          last4: ba.last4,
+          bankName: ba.bank_name ?? null,
+          accountHolderName: ba.account_holder_name ?? null,
+          accountType: ba.account_type ?? null,
+          default: ba.default_for_currency,
+          status: ba.status,
+          verified: ba.status === 'verified',
+        },
+      });
+    }
+
+    // DELETE /connect/bank-accounts/:bankAccountId — remove a bank account
+    if (req.method === 'DELETE' && subPath.startsWith('/bank-accounts/')) {
+      const bankAccountId = subPath.slice('/bank-accounts/'.length).split('/')[0];
+      if (!bankAccountId) {
+        return jsonResponse({ error: 'bankAccountId is required' }, 400);
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('stripe_connect_account_id')
+        .eq('id', userId)
+        .single();
+
+      const accountId = (profile as { stripe_connect_account_id?: string } | null)
+        ?.stripe_connect_account_id;
+      if (!accountId) {
+        return jsonResponse({ error: 'Stripe Connect account not found' }, 404);
+      }
+
+      await stripe.accounts.deleteExternalAccount(accountId, bankAccountId);
+      return jsonResponse({ success: true });
+    }
+
+    // POST /connect/bank-accounts/:bankAccountId/default — set as default payout account
+    if (
+      req.method === 'POST' &&
+      subPath.startsWith('/bank-accounts/') &&
+      subPath.endsWith('/default')
+    ) {
+      const bankAccountId = subPath.slice('/bank-accounts/'.length).replace('/default', '');
+      if (!bankAccountId) {
+        return jsonResponse({ error: 'bankAccountId is required' }, 400);
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('stripe_connect_account_id')
+        .eq('id', userId)
+        .single();
+
+      const accountId = (profile as { stripe_connect_account_id?: string } | null)
+        ?.stripe_connect_account_id;
+      if (!accountId) {
+        return jsonResponse({ error: 'Stripe Connect account not found' }, 404);
+      }
+
+      const updated = (await stripe.accounts.updateExternalAccount(accountId, bankAccountId, {
+        default_for_currency: true,
+      } as Stripe.ExternalAccountUpdateParams)) as Stripe.BankAccount;
+
+      return jsonResponse({
+        success: true,
+        bankAccount: {
+          id: updated.id,
+          last4: updated.last4,
+          isDefault: updated.default_for_currency,
+        },
+      });
+    }
+
     return jsonResponse({ error: 'Not found' }, 404);
   } catch (error: unknown) {
     const err = error as { message?: string };
@@ -677,7 +847,7 @@ function renderEmbeddedPage(): string {
       var locale = payload.locale || 'en-US';
 
       var loader =
-        (window.StripeConnect && window.StripeConnect.loadConnectAndInitialize) ||
+        (window.StripeConnect && (window.StripeConnect.init || window.StripeConnect.loadConnectAndInitialize)) ||
         window.loadConnectAndInitialize;
       if (typeof loader !== 'function') {
         showError('Stripe Connect SDK failed to load.');
