@@ -58,24 +58,6 @@ export function WithdrawWithBankScreen({
   // regains focus (i.e. the user returns from the embedded onboarding screen).
   const needsRefreshOnFocusRef = useRef(false);
 
-  // Refresh Connect status and bank accounts when returning from the embedded
-  // onboarding screen, then clear the loading indicator.
-  useFocusEffect(
-    useCallback(() => {
-      if (needsRefreshOnFocusRef.current) {
-        needsRefreshOnFocusRef.current = false;
-        (async () => {
-          try {
-            await loadConnectStatus();
-            await loadBankAccounts();
-          } finally {
-            setIsOnboarding(false);
-          }
-        })();
-      }
-    }, [loadConnectStatus, loadBankAccounts])
-  );
-
   // Stable idempotency key for this withdrawal attempt.  Generated once on
   // mount so that retries (e.g. network failure) reuse the same key, letting
   // the server return the cached Stripe response instead of creating a
@@ -134,6 +116,24 @@ export function WithdrawWithBankScreen({
       setIsLoadingAccounts(false);
     }
   }, [session?.access_token]);
+
+  // Refresh Connect status and bank accounts when returning from the embedded
+  // onboarding screen, then clear the loading indicator.
+  useFocusEffect(
+    useCallback(() => {
+      if (needsRefreshOnFocusRef.current) {
+        needsRefreshOnFocusRef.current = false;
+        (async () => {
+          try {
+            await loadConnectStatus();
+            await loadBankAccounts();
+          } finally {
+            setIsOnboarding(false);
+          }
+        })();
+      }
+    }, [loadConnectStatus, loadBankAccounts])
+  );
 
   // Load Connect status and bank accounts when session changes
   useEffect(() => {
