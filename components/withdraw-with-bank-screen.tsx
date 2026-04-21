@@ -468,7 +468,9 @@ export function WithdrawWithBankScreen({
                     )}
                   </View>
                   <Text style={styles.bankAccountDetails}>
-                    {account.accountType.charAt(0).toUpperCase() + account.accountType.slice(1)}{' '}
+                    {account.accountType
+                      ? account.accountType.charAt(0).toUpperCase() + account.accountType.slice(1)
+                      : ''}{' '}
                     ••••{account.last4}
                   </Text>
                   <Text style={styles.bankAccountStatus}>Status: {account.status}</Text>
