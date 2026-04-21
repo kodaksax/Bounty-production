@@ -70,7 +70,7 @@ describe('ConnectEmbeddedWebView', () => {
       html: '<!doctype html><html><body>Stripe shell</body></html>',
       baseUrl: 'https://example.supabase.co/functions/v1/connect/',
     });
-    expect(lastProps.originWhitelist).toEqual(['*']);
+    expect(lastProps.originWhitelist).toEqual(['about:blank', 'https://*']);
     expect(lastProps.javaScriptEnabled).toBe(true);
     expect(lastProps.domStorageEnabled).toBe(true);
 

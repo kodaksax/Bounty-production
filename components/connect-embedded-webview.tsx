@@ -610,6 +610,7 @@ export function ConnectEmbeddedWebView({
         // loads Stripe assets over HTTPS. Allow only the bootstrap document
         // origin and secure remote origins required by Stripe.
         originWhitelist={['about:blank', 'https://*']}
+        javaScriptEnabled
         domStorageEnabled
         cacheEnabled={false}
         allowsInlineMediaPlayback
