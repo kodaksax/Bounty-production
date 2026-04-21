@@ -29,9 +29,9 @@
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
-import * as WebBrowser from 'expo-web-browser';
 import { Stack, useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import * as WebBrowser from 'expo-web-browser';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -132,12 +132,12 @@ export default function ConnectOnboardingScreen() {
         console.warn('[connect-onboarding] verify-onboarding refresh failed', err);
       }
 
-      router.replace('/tabs/wallet-screen');
+      router.back();
     } catch (err) {
       const message =
         err instanceof Error && err.message
           ? err.message
-          : "Something went wrong starting Stripe onboarding. Please try again.";
+          : 'Something went wrong starting Stripe onboarding. Please try again.';
       console.warn('[connect-onboarding] launch failed', err);
       setError(message);
       setPhase('error');
@@ -180,19 +180,19 @@ export default function ConnectOnboardingScreen() {
     phase === 'error'
       ? 'Onboarding unavailable'
       : phase === 'finalizing'
-      ? 'Finalizing…'
-      : phase === 'in_browser'
-      ? 'Complete onboarding'
-      : 'Set up payouts';
+        ? 'Finalizing…'
+        : phase === 'in_browser'
+          ? 'Complete onboarding'
+          : 'Set up payouts';
 
   const message =
     phase === 'error'
-      ? error ?? "Something went wrong starting Stripe onboarding. Please try again."
+      ? (error ?? 'Something went wrong starting Stripe onboarding. Please try again.')
       : phase === 'finalizing'
-      ? "We're refreshing your account status. This takes a moment."
-      : phase === 'in_browser'
-      ? "Complete the Stripe onboarding in the secure browser window. You'll return here automatically when you're done."
-      : "Opening Stripe's secure onboarding…";
+        ? "We're refreshing your account status. This takes a moment."
+        : phase === 'in_browser'
+          ? "Complete the Stripe onboarding in the secure browser window. You'll return here automatically when you're done."
+          : "Opening Stripe's secure onboarding…";
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
