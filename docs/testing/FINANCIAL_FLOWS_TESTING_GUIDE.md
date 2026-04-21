@@ -2,7 +2,7 @@
 
 > **Scope:** Core financial features of BOUNTYExpo — payment processing, bounty escrow, bounty completion, dispute resolution, in-app payouts, bank/alternative-method withdrawals, and in-app money transfers.
 >
-> **Last updated:** 2026-04-15
+> **Last updated:** 2026-04-21
 
 ---
 
@@ -59,11 +59,17 @@ stripe listen --forward-to http://localhost:54321/functions/v1/webhooks
 ### 1.4 Running the Test Suite
 
 ```bash
-# Full test suite
-npx jest
+# Unit tests (recommended; runs in-process without a watch loop)
+npm run test:unit -- --runInBand --watchAll=false
 
 # Only financial/payment tests
-npx jest --testPathPattern='payment|wallet|escrow|dispute'
+npm run test:unit -- --runInBand --watchAll=false --testPathPattern='payment|wallet|escrow|dispute'
+
+# Lint
+npm run lint
+
+# Build
+npm run build
 
 # Typecheck (run before every PR)
 npx tsc --noEmit
@@ -79,6 +85,7 @@ These rules are enforced at the database level and **must** be respected in ever
 |---|---|---|
 | Minimum escrow amount | $1.00 (100 cents) | `lib/utils/bounty-validation.ts: MIN_ESCROW_CENTS` |
 | Maximum escrow amount | $10,000.00 (1,000,000 cents) | `lib/utils/bounty-validation.ts: MAX_ESCROW_CENTS` |
+| Minimum withdrawal amount | $10.00 | `lib/constants.ts: MIN_WITHDRAWAL_AMOUNT` |
 | Minimum bounty title length | 5 characters | `lib/utils/bounty-validation.ts: validateTitle` |
 | Minimum bounty description length | 20 characters | `lib/utils/bounty-validation.ts: validateDescription` |
 | `wallet_transactions.status` allowed values | `pending`, `completed`, `failed` | DB CHECK constraint |
@@ -173,27 +180,33 @@ Both step 3 and step 4 call `apply_deposit`, which is **idempotent by `stripe_pa
 
 ### 4.1 Overview
 
-1. Poster fills out the bounty creation form (title ≥ 5 chars, description ≥ 20 chars, amount $1–$10,000 or `is_for_honor=true`).
-2. On accept by a hunter, `fn_accept_bounty_request` RPC is called (SECURITY DEFINER) — atomically transitions bounty to `in_progress` and bounty request to `accepted`.
-3. The `apply_escrow` RPC is called to atomically deduct the bounty amount from the poster's balance and record the escrow transaction.
+Escrow is funded **at bounty posting time** — not at acceptance time. This is the authoritative flow:
+
+1. Poster fills out the creation form (title ≥ 5 chars, description ≥ 20 chars, amount $1–$10,000 or `is_for_honor=true`).
+2. Client calls `POST /bounties` to create the bounty record.
+3. For paid bounties, the client **immediately** calls `POST /wallet/escrow` to hold the amount from the poster's in-app wallet balance. If escrow creation fails the bounty is rolled back (deleted). (`useBountyForm.ts:174–195`)
+4. Hunter applies by creating a `bounty_requests` record.
+5. Poster accepts via `fn_accept_bounty_request` RPC (SECURITY DEFINER) — atomically transitions bounty to `in_progress`, marks the selected request `accepted`, and rejects all other pending requests for that bounty. **This RPC does not create or modify escrow.**
+
+> **Important:** Do not add extra escrow creation logic in the acceptance flow. Calling `POST /wallet/escrow` a second time for the same bounty is detected as a duplicate and returns a `409 Conflict` (enforced by the `idx_wallet_tx_one_escrow_per_bounty` unique index).
 
 ### 4.2 Happy-Path Test Cases
 
-#### TC-ESC-01: Monetary bounty — successful escrow
+#### TC-ESC-01: Monetary bounty — successful escrow at posting time
 
 | Field | Value |
 |---|---|
 | **Test ID** | TC-ESC-01 |
 | **Preconditions** | Poster balance ≥ bounty amount ($50). No existing escrow for this bounty ID. |
-| **Steps** | 1. Create bounty with `amount=50, is_for_honor=false`. <br>2. Hunter applies. <br>3. Poster accepts request via `fn_accept_bounty_request`. <br>4. `apply_escrow` is called server-side. |
-| **Expected outcome** | `wallet_transactions` row with `type='escrow'`, `status='completed'`, `amount=-50` (negative = debit). `profiles.balance` decreases by 50. Bounty status = `in_progress`. |
+| **Steps** | 1. Create bounty via `POST /bounties` with `amount=50, is_for_honor=false`. <br>2. Client calls `POST /wallet/escrow` with `{ bountyId, amount: 50 }` — escrow is funded immediately. <br>3. Hunter applies via `POST /bounty-requests`. <br>4. Poster accepts via `fn_accept_bounty_request` — state transition only (no escrow). |
+| **Expected outcome** | After step 2: `wallet_transactions` row with `type='escrow'`, `status='completed'`, `amount=-50` (negative = debit). `profiles.balance` decreases by 50. After step 4: Bounty status = `in_progress`, selected request = `accepted`, all other pending requests = `rejected`. |
 
 #### TC-ESC-02: Honor bounty — no escrow required
 
 | Field | Value |
 |---|---|
 | **Test ID** | TC-ESC-02 |
-| **Steps** | 1. Create bounty with `is_for_honor=true`, `amount=0`. <br>2. Hunter applies & poster accepts. |
+| **Steps** | 1. Create bounty with `is_for_honor=true`, `amount=0`. <br>2. Client skips `POST /wallet/escrow` (guarded by `!bounty.is_for_honor && bounty.amount > 0`). <br>3. Hunter applies & poster accepts. |
 | **Expected outcome** | **No** `wallet_transactions` row of type `escrow` is created. Bounty transitions to `in_progress`. Poster balance unchanged. |
 
 #### TC-ESC-03: Daily creation limit enforcement
@@ -207,13 +220,13 @@ Both step 3 and step 4 call `apply_deposit`, which is **idempotent by `stripe_pa
 
 ### 4.3 Edge Cases & Failure Scenarios
 
-#### TC-ESC-04: Concurrent escrow — race condition guard
+#### TC-ESC-04: Concurrent escrow at posting time — race condition guard
 
 | Field | Value |
 |---|---|
 | **Test ID** | TC-ESC-04 |
-| **Steps** | Send two simultaneous `apply_escrow` calls for the **same bounty ID**. |
-| **Expected outcome** | Only one succeeds (`applied=true`). The second returns `applied=false` (409-equivalent). Poster's balance is deducted **exactly once**. The unique partial index `idx_wallet_tx_one_escrow_per_bounty` prevents a second completed escrow row. |
+| **Steps** | Send two simultaneous `POST /wallet/escrow` calls for the **same bounty ID** (e.g. due to a double-tap or client retry immediately after posting). |
+| **Expected outcome** | One call succeeds (inserts `status='completed'` row). The second returns `409 Conflict` — `ConflictError('Escrow already exists for this bounty')`. The unique partial index `idx_wallet_tx_one_escrow_per_bounty` provides the DB-level backstop. Poster's balance is deducted **exactly once**. |
 
 #### TC-ESC-05: Insufficient balance for escrow
 
@@ -221,8 +234,8 @@ Both step 3 and step 4 call `apply_deposit`, which is **idempotent by `stripe_pa
 |---|---|
 | **Test ID** | TC-ESC-05 |
 | **Preconditions** | Poster balance = $10. Bounty amount = $50. |
-| **Steps** | Attempt to call `apply_escrow` for a $50 bounty. |
-| **Expected outcome** | RPC raises SQLSTATE `23514` (insufficient funds). No `wallet_transactions` row inserted. Poster balance unchanged. API responds with a user-friendly error. |
+| **Steps** | 1. Create bounty for $50. <br>2. Call `POST /wallet/escrow` for $50. |
+| **Expected outcome** | `createEscrow` calls `updateBalance(posterId, -amount)` which raises on insufficient funds. No `wallet_transactions` row committed with `status='completed'`. Poster balance unchanged. API responds with a user-friendly error. Client rolls back the bounty creation. |
 
 #### TC-ESC-06: Escrow with balance_on_hold (active dispute)
 
@@ -230,8 +243,8 @@ Both step 3 and step 4 call `apply_deposit`, which is **idempotent by `stripe_pa
 |---|---|
 | **Test ID** | TC-ESC-06 |
 | **Preconditions** | Poster balance = $100. `balance_on_hold = $80` (due to open dispute). Bounty amount = $30. |
-| **Steps** | Attempt `apply_escrow` for a new $30 bounty. |
-| **Expected outcome** | Available = $100 − $80 = $20 < $30 → escrow rejected. Error indicates held funds. Poster balance unchanged. |
+| **Steps** | 1. Create bounty for $30. <br>2. Call `POST /wallet/escrow` for $30. |
+| **Expected outcome** | `withdraw_balance` or balance check raises because available = $100 − $80 = $20 < $30. Escrow rejected. Error indicates held funds. Poster balance unchanged. Client rolls back the bounty creation. |
 
 ---
 
@@ -260,9 +273,9 @@ Both step 3 and step 4 call `apply_deposit`, which is **idempotent by `stripe_pa
 | Field | Value |
 |---|---|
 | **Test ID** | TC-COMP-01 |
-| **Preconditions** | Bounty in `in_progress` with completed escrow. Hunter has submitted proof. |
-| **Steps** | 1. Hunter marks completion via `POST /completion/ready`. <br>2. Poster approves the submission. <br>3. Backend releases escrow. |
-| **Expected outcome** | `wallet_transactions` row with `type='release'`, `status='completed'`. Hunter's `profiles.balance` increases by `(bounty_amount − platform_fee)`. Bounty status = `completed`. Platform ledger records the fee. |
+| **Preconditions** | Bounty in `in_progress` with a `completed` escrow. Hunter has submitted proof. |
+| **Steps** | 1. Hunter marks completion via `POST /completion/ready`. <br>2. Poster approves the submission. <br>3. Backend calls `POST /wallet/release` with `{ bountyId, hunterId }`. |
+| **Expected outcome** | `wallet_transactions` row with `type='release'`, `status='completed'`, `amount = escrow_amount − platform_fee` (positive = credit to hunter). Hunter's `profiles.balance` increases. Platform fee written to `platform_ledger`. Bounty status = `completed`. |
 
 #### TC-COMP-02: Revision requested then re-submitted and approved
 
@@ -430,14 +443,24 @@ BOUNTYExpo has two distinct dispute tracks:
 
 ### 7.1 Overview
 
-Withdrawals transfer the user's in-app balance to their bank account via **Stripe Connect**. Prerequisites:
+Withdrawals transfer the user's in-app balance to their bank account via **Stripe Connect**. The mobile app calls `POST /connect/transfer` (implemented in `services/api/src/routes/wallet.ts`). Bank account management (add/list/remove/set-default) uses `POST|GET|DELETE /connect/bank-accounts*` routes in the same file.
+
+Prerequisites:
 
 - `profiles.stripe_connect_account_id` is set and onboarded.
 - `profiles.stripe_connect_payouts_enabled = true`.
 - `profiles.balance_frozen = false`.
 - `profiles.balance − profiles.balance_on_hold ≥ withdrawal_amount`.
+- Minimum withdrawal: **$10.00** (enforced by `MIN_WITHDRAWAL_AMOUNT` in `lib/constants.ts` and `services/api/src/routes/wallet.ts`).
 
-The `withdraw_balance(user_id, amount)` RPC atomically enforces all balance constraints before debiting. A pending withdrawal prevents a second one (`idx_wallet_tx_one_pending_withdrawal` unique index).
+The `createWithdrawal` function in `consolidated-wallet-service.ts` performs these steps atomically:
+1. Inserts a `wallet_transactions` row with `status='pending'`.
+2. Calls `withdraw_balance(userId, amount)` RPC — enforces balance constraints and deducts balance.
+3. Creates the Stripe transfer via `stripe.transfers.create(...)` with an idempotency key.
+4. Updates the transaction to `status='completed'` with `stripe_transfer_id`.
+5. On failure: marks transaction `status='failed'` and best-effort rolls back the balance deduction. If rollback itself fails, sets `metadata.needs_balance_refund=true` for manual reconciliation.
+
+The unique partial index `idx_wallet_tx_one_pending_withdrawal` prevents a second `pending` withdrawal row from being inserted while one is already in-flight.
 
 ### 7.2 Happy-Path Test Cases
 
@@ -447,16 +470,16 @@ The `withdraw_balance(user_id, amount)` RPC atomically enforces all balance cons
 |---|---|
 | **Test ID** | TC-WDRAW-01 |
 | **Preconditions** | Stripe Connect account onboarded and `payouts_enabled=true`. `balance ≥ withdrawal_amount`. `balance_frozen=false`, `balance_on_hold=0`. No pending withdrawal. |
-| **Steps** | 1. User initiates withdrawal for $100. <br>2. Server calls `withdraw_balance(user_id, 100)`. <br>3. Server calls `stripe.transfers.create(...)` to move funds to connected account. <br>4. Stripe sends `transfer.created` webhook. <br>5. Stripe sends `transfer.paid` webhook. |
-| **Expected outcome** | Step 2: `profiles.balance` decreases by 100. `wallet_transactions` row `type='withdrawal'`, `status='pending'` inserted. Step 4: `stripe_transfer_id` written to tx row. Step 5: tx `status='completed'`. |
+| **Steps** | 1. User initiates withdrawal for $100 via `POST /connect/transfer` with `{ amount: 100, currency: 'usd', idempotencyKey }`. <br>2. Server calls `createWithdrawal(userId, 100, stripeAccountId, idempotencyKey)`. <br>3. `wallet_transactions` row inserted with `status='pending'`. <br>4. `withdraw_balance` RPC deducts `profiles.balance` by 100. <br>5. Stripe transfer created (`stripe.transfers.create`). <br>6. Transaction updated to `status='completed'`, `stripe_transfer_id` set. <br>7. Stripe sends `transfer.created` webhook → `stripe_transfer_id` confirmed in the row. <br>8. Stripe sends `transfer.paid` webhook → row confirmed as `status='completed'`. |
+| **Expected outcome** | Final `wallet_transactions` row: `type='withdrawal'`, `status='completed'`, `amount=-100`, `stripe_transfer_id` set. `profiles.balance` reduced by 100. |
 
 #### TC-WDRAW-02: Stripe Connect onboarding flow
 
 | Field | Value |
 |---|---|
 | **Test ID** | TC-WDRAW-02 |
-| **Steps** | 1. User taps "Connect Bank Account". <br>2. `openUrlInBrowser(onboardingUrl)` launches Stripe Connect OAuth. <br>3. User completes onboarding. <br>4. `account.updated` webhook fires. |
-| **Expected outcome** | `profiles.stripe_connect_account_id` populated. `stripe_connect_payouts_enabled=true`, `stripe_connect_charges_enabled=true`. User is directed back to the app. |
+| **Steps** | 1. User taps "Connect Bank Account". <br>2. `POST /connect/create-account-link` returns an onboarding URL. <br>3. `openUrlInBrowser(onboardingUrl)` opens the Stripe Connect embedded onboarding (returned `{ success, error }`; check `success` and surface error on failure). <br>4. User completes onboarding; Stripe redirects to `https://bountyfinder.app` deep link (`bountyexpo-workspace://`). <br>5. `account.updated` webhook fires → server updates `stripe_connect_payouts_enabled` and `stripe_connect_charges_enabled`. <br>6. Optionally add a bank account via `POST /connect/bank-accounts`. |
+| **Expected outcome** | `profiles.stripe_connect_account_id` populated. `stripe_connect_payouts_enabled=true`, `stripe_connect_charges_enabled=true`. `POST /connect/verify-onboarding` returns `{ onboarded: true }`. User can now initiate withdrawals. |
 
 ### 7.3 Edge Cases & Failure Scenarios
 
@@ -495,21 +518,21 @@ The `withdraw_balance(user_id, amount)` RPC atomically enforces all balance cons
 | **Steps** | User attempts withdrawal. |
 | **Expected outcome** | Pre-flight check rejects the request with a message instructing the user to complete Stripe Connect onboarding. No DB writes. |
 
-#### TC-WDRAW-07: Transfer fails after balance deduction
+#### TC-WDRAW-07: Transfer fails after balance deduction — automatic rollback
 
 | Field | Value |
 |---|---|
 | **Test ID** | TC-WDRAW-07 |
-| **Steps** | 1. `withdraw_balance` succeeds (balance debited). <br>2. `stripe.transfers.create(...)` throws a Stripe API error. |
-| **Expected outcome** | `wallet_transactions` row exists with `type='withdrawal'`, `status='failed'`, `payout_failed_at` set. `profiles.balance` has been debited (this is expected — the payout failure is surfaced to the user for re-initiation or admin correction). The transaction should be surfaced in the user's transaction history as failed. |
+| **Steps** | 1. `withdraw_balance` RPC succeeds (balance debited, `balanceDeducted=true`). <br>2. `stripe.transfers.create(...)` throws a Stripe API error. |
+| **Expected outcome** | `wallet_transactions` row updated to `status='failed'`. **Best-effort rollback**: `updateBalance(userId, amount)` is called to reverse the deduction. If rollback also fails, `metadata.needs_balance_refund=true` is flagged for reconciliation. The failed transaction appears in the user's transaction history. |
 
 #### TC-WDRAW-08: Withdrawal amount below platform minimum
 
 | Field | Value |
 |---|---|
 | **Test ID** | TC-WDRAW-08 |
-| **Steps** | Attempt withdrawal of $0 or a negative amount. |
-| **Expected outcome** | `withdraw_balance` raises: "Withdrawal amount must be positive." API returns `400`. |
+| **Steps** | Attempt `POST /connect/transfer` with `amount=5` (below $10 minimum) or `amount=0` / a negative value. |
+| **Expected outcome** | Zod schema validation rejects the request with `'Minimum transfer is $10.00'`. API returns `400`. No DB write. Mobile client enforces `MIN_WITHDRAWAL_AMOUNT = 10` (`lib/constants.ts`) before even sending the request. |
 
 ---
 
@@ -574,8 +597,9 @@ In-app transfers move funds directly between two users' wallet balances without 
 | `charge.refunded` | `apply_refund` | Partial unique index on `stripe_refund_id` | `applied=false`, balance unchanged |
 | `charge.dispute.created` | Upsert on `stripe_dispute_id` | Unique index `idx_bounty_disputes_stripe_dispute_id` | No-op |
 | `charge.dispute.closed` | `apply_dispute_loss_transaction` | Unique index `idx_wallet_tx_stripe_dispute_id_dispute_loss` | Returns existing row |
-| `transfer.created` | Update `stripe_transfer_id` | `.is('stripe_transfer_id', null)` filter | Matches 0 rows, no-op |
-| `transfer.paid` | Update `status='completed'` | Idempotent UPDATE | No-op |
+| `transfer.created` | Update `stripe_transfer_id` | `.is('stripe_transfer_id', null)` filter — matches 0 rows if already set | No-op |
+| `transfer.paid` | Update `status='completed'` | Idempotent `UPDATE` — already `completed`, no change | No-op |
+| `account.updated` | Update `stripe_connect_*` columns | Idempotent `UPDATE` on `profiles` | Columns overwritten to same values |
 
 ### 9.2 Webhook Signature Validation
 
