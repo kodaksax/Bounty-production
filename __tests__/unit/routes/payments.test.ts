@@ -69,14 +69,21 @@ const adminData: any = {
   updateError: null,
 };
 
+// Track RPC calls so tests can assert dispute handlers invoked the right ones
+const mockRpc = jest.fn(async (_fn: string, _args: any) => ({ data: null, error: null }));
+// Track recorded dispute row inserts so tests can assert metadata was logged
+const recordedDisputeInserts: any[] = [];
+const recordedNotificationInserts: any[] = [];
+
 jest.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
+    rpc: (fn: string, args: any) => mockRpc(fn, args),
     from: (table: string) => {
       return (() => {
-        const ctx: any = { _select: undefined, _eq: undefined, _in: undefined };
+        const ctx: any = { _select: undefined, _eq: undefined, _in: undefined, _update: undefined };
 
         const obj: any = {
-          select(selectStr?: string) {
+          select(selectStr?: string, _opts?: any) {
             ctx._select = selectStr;
             return obj;
           },
@@ -104,6 +111,21 @@ jest.mock('@supabase/supabase-js', () => ({
               return { data: adminData.processedRefunds };
             }
 
+            // Dispute closed: .update().eq(stripe_dispute_id).select(initiator_id).maybeSingle()
+            if (table === 'bounty_disputes' && ctx._update) {
+              return { data: adminData.resolvedDispute ?? null, error: adminData.updateError };
+            }
+
+            // Bounty disputes lookup by stripe_dispute_id (charge.dispute.created)
+            if (table === 'bounty_disputes' && ctx._eq?.some((e: any) => e[0] === 'stripe_dispute_id')) {
+              return { data: adminData.existingDispute ?? null, error: null };
+            }
+
+            // Dispute closed: idempotency lookup for existing dispute_loss tx
+            if (table === 'wallet_transactions' && ctx._eq?.some((e: any) => e[0] === 'type' && e[1] === 'dispute_loss')) {
+              return { data: adminData.existingDisputeLossTx ?? null, error: null };
+            }
+
             // If fetching original transaction by payment intent
             if (table === 'wallet_transactions' && ctx._eq?.some((e: any) => e[0] === 'stripe_payment_intent_id')) {
               return { data: adminData.originalTx, error: adminData.txFetchError };
@@ -116,13 +138,28 @@ jest.mock('@supabase/supabase-js', () => ({
 
             return { data: null };
           },
+          // Support `await .eq().eq(...)` returning a terminal {count,error} for count queries
+          then(resolve: any) {
+            // Counting open stripe disputes (charge.dispute.closed won branch)
+            if (table === 'bounty_disputes' && ctx._select === 'id') {
+              return resolve({ count: adminData.remainingOpenCount ?? 0, error: null });
+            }
+            // Default: the update chain (e.g. profiles.update().eq()) — resolves to {error}
+            if (ctx._update) {
+              return resolve({ error: adminData.updateError });
+            }
+            return resolve({ data: null, error: null });
+          },
           upsert: async () => ({ error: adminData.upsertError }),
-          insert: async () => ({ error: adminData.insertError }),
-          update: (_obj: any) => ({
-            eq: (_col: string, _val: any) => ({
-              eq: (_col2: string, _val2: any) => Promise.resolve({ error: adminData.updateError }),
-            }),
-          }),
+          insert: async (row: any) => {
+            if (table === 'bounty_disputes') recordedDisputeInserts.push(row);
+            if (table === 'notifications') recordedNotificationInserts.push(row);
+            return { error: adminData.insertError };
+          },
+          update: (updateObj: any) => {
+            ctx._update = updateObj;
+            return obj;
+          },
         };
 
         return obj;
@@ -420,5 +457,201 @@ describe('payments routes (confirm + webhook deposit)', () => {
     expect(result).toEqual({ received: true });
 
     adminData.originalTx = prevOriginal;
+  });
+
+  it('POST /payments/webhook: handles charge.dispute.created by recording dispute, freezing wallet, and notifying user', async () => {
+    const fastify = new MockFastify();
+
+    const event = {
+      id: 'evt_dispute_created_1',
+      type: 'charge.dispute.created',
+      data: {
+        object: {
+          id: 'dp_1',
+          charge: 'ch_disp_1',
+          payment_intent: 'pi_disp_1',
+          amount: 5000,
+          reason: 'fraudulent',
+          status: 'needs_response',
+        },
+      },
+    };
+
+    // wallet_transaction lookup returns the originating poster
+    const prevOriginal = adminData.originalTx;
+    adminData.originalTx = { user_id: 'poster_user_1' };
+    adminData.existingDispute = null;
+    adminData.insertError = null;
+    adminData.updateError = null;
+    recordedDisputeInserts.length = 0;
+    recordedNotificationInserts.length = 0;
+
+    mockStripeInstance.webhooks.constructEvent.mockImplementation((body: any) => JSON.parse(body));
+
+    await registerPaymentRoutes(fastify as any);
+
+    const handler = fastify.routes['/payments/webhook'];
+    const req: any = { headers: { 'stripe-signature': 'sig' }, rawBody: JSON.stringify(event) };
+
+    const result = await handler(req, {});
+
+    expect(result).toEqual({ received: true });
+
+    // Dispute metadata logged for manual review
+    expect(recordedDisputeInserts).toHaveLength(1);
+    expect(recordedDisputeInserts[0]).toMatchObject({
+      initiator_id: 'poster_user_1',
+      status: 'stripe_dispute',
+      stripe_dispute_id: 'dp_1',
+      stripe_payment_intent_id: 'pi_disp_1',
+      dispute_stage: 'cancellation',
+    });
+
+    // Poster notified of the freeze
+    expect(recordedNotificationInserts).toHaveLength(1);
+    expect(recordedNotificationInserts[0]).toMatchObject({
+      user_id: 'poster_user_1',
+      type: 'payment',
+      title: 'Payment Dispute Opened',
+      data: { stripeDisputeId: 'dp_1' },
+    });
+
+    adminData.originalTx = prevOriginal;
+  });
+
+  it('POST /payments/webhook: charge.dispute.created with no matching wallet_transaction is a no-op', async () => {
+    const fastify = new MockFastify();
+
+    const event = {
+      id: 'evt_dispute_created_orphan',
+      type: 'charge.dispute.created',
+      data: {
+        object: {
+          id: 'dp_orphan',
+          charge: 'ch_orphan',
+          payment_intent: 'pi_orphan',
+          amount: 1000,
+          reason: 'fraudulent',
+          status: 'needs_response',
+        },
+      },
+    };
+
+    const prevOriginal = adminData.originalTx;
+    adminData.originalTx = null;
+    recordedDisputeInserts.length = 0;
+    recordedNotificationInserts.length = 0;
+
+    mockStripeInstance.webhooks.constructEvent.mockImplementation((body: any) => JSON.parse(body));
+
+    await registerPaymentRoutes(fastify as any);
+
+    const handler = fastify.routes['/payments/webhook'];
+    const req: any = { headers: { 'stripe-signature': 'sig' }, rawBody: JSON.stringify(event) };
+
+    const result = await handler(req, {});
+
+    expect(result).toEqual({ received: true });
+    // Should not have created a bounty_disputes row or notification
+    expect(recordedDisputeInserts).toHaveLength(0);
+    expect(recordedNotificationInserts).toHaveLength(0);
+
+    adminData.originalTx = prevOriginal;
+  });
+
+  it('POST /payments/webhook: handles charge.dispute.closed (won) by unfreezing wallet when no other open disputes', async () => {
+    const fastify = new MockFastify();
+
+    const event = {
+      id: 'evt_dispute_closed_won',
+      type: 'charge.dispute.closed',
+      data: {
+        object: {
+          id: 'dp_won_1',
+          charge: 'ch_won_1',
+          payment_intent: 'pi_won_1',
+          amount: 2500,
+          status: 'won',
+        },
+      },
+    };
+
+    adminData.resolvedDispute = { initiator_id: 'poster_user_2' };
+    adminData.remainingOpenCount = 0;
+    recordedNotificationInserts.length = 0;
+    mockRpc.mockImplementation(async (fn: string) => {
+      if (fn === 'unfreeze_profile_if_no_open_disputes') return { data: true, error: null };
+      return { data: null, error: null };
+    });
+
+    mockStripeInstance.webhooks.constructEvent.mockImplementation((body: any) => JSON.parse(body));
+
+    await registerPaymentRoutes(fastify as any);
+
+    const handler = fastify.routes['/payments/webhook'];
+    const req: any = { headers: { 'stripe-signature': 'sig' }, rawBody: JSON.stringify(event) };
+
+    const result = await handler(req, {});
+
+    expect(result).toEqual({ received: true });
+    expect(mockRpc).toHaveBeenCalledWith('unfreeze_profile_if_no_open_disputes', {
+      p_user_id: 'poster_user_2',
+    });
+    expect(recordedNotificationInserts).toHaveLength(1);
+    expect(recordedNotificationInserts[0]).toMatchObject({
+      user_id: 'poster_user_2',
+      title: 'Dispute Resolved — Won',
+    });
+  });
+
+  it('POST /payments/webhook: handles charge.dispute.closed (lost) by applying dispute loss RPC and notifying user', async () => {
+    const fastify = new MockFastify();
+
+    const event = {
+      id: 'evt_dispute_closed_lost',
+      type: 'charge.dispute.closed',
+      data: {
+        object: {
+          id: 'dp_lost_1',
+          charge: 'ch_lost_1',
+          payment_intent: 'pi_lost_1',
+          amount: 7500,
+          status: 'lost',
+        },
+      },
+    };
+
+    adminData.resolvedDispute = { initiator_id: 'poster_user_3' };
+    adminData.existingDisputeLossTx = null;
+    recordedNotificationInserts.length = 0;
+    mockRpc.mockImplementation(async (fn: string) => {
+      if (fn === 'apply_dispute_loss_transaction') return { data: null, error: null };
+      return { data: null, error: null };
+    });
+
+    mockStripeInstance.webhooks.constructEvent.mockImplementation((body: any) => JSON.parse(body));
+
+    await registerPaymentRoutes(fastify as any);
+
+    const handler = fastify.routes['/payments/webhook'];
+    const req: any = { headers: { 'stripe-signature': 'sig' }, rawBody: JSON.stringify(event) };
+
+    const result = await handler(req, {});
+
+    expect(result).toEqual({ received: true });
+    expect(mockRpc).toHaveBeenCalledWith(
+      'apply_dispute_loss_transaction',
+      expect.objectContaining({
+        p_user_id: 'poster_user_3',
+        p_amount: -75,
+        p_stripe_dispute_id: 'dp_lost_1',
+        p_stripe_payment_intent_id: 'pi_lost_1',
+      })
+    );
+    expect(recordedNotificationInserts).toHaveLength(1);
+    expect(recordedNotificationInserts[0]).toMatchObject({
+      user_id: 'poster_user_3',
+      title: 'Dispute Resolved — Lost',
+    });
   });
 });

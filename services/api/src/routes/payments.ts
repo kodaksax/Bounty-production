@@ -1287,16 +1287,490 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
 
           case 'charge.dispute.created': {
             const dispute = event.data.object as Stripe.Dispute;
-            logger.warn(`[payments] Dispute created for charge ${dispute.charge}`);
-            // TODO: Notify admin team
-            // TODO: Freeze related funds
+            const disputePaymentIntentId =
+              typeof dispute.payment_intent === 'string'
+                ? dispute.payment_intent
+                : ((dispute.payment_intent as Stripe.PaymentIntent | null)?.id ?? null);
+            const disputeAmountDollars = dispute.amount / 100;
+
+            logger.warn(
+              {
+                disputeId: dispute.id,
+                chargeId: dispute.charge,
+                paymentIntentId: disputePaymentIntentId,
+                amount: disputeAmountDollars,
+                reason: dispute.reason,
+                status: dispute.status,
+              },
+              '[payments] charge.dispute.created: freezing wallet and recording dispute'
+            );
+
+            const admin = getSupabaseAdmin();
+
+            // Look up the original wallet transaction to find the poster
+            let disputeUserId: string | null = null;
+            if (disputePaymentIntentId) {
+              const { data: origTx, error: origTxError } = await admin
+                .from('wallet_transactions')
+                .select('user_id')
+                .eq('stripe_payment_intent_id', disputePaymentIntentId)
+                .maybeSingle();
+
+              if (origTxError) {
+                logger.error(
+                  {
+                    disputeId: dispute.id,
+                    paymentIntentId: disputePaymentIntentId,
+                    err: origTxError.message,
+                  },
+                  '[payments] charge.dispute.created: failed to look up originating wallet_transaction'
+                );
+                throw origTxError;
+              }
+
+              disputeUserId = (origTx as { user_id: string } | null)?.user_id ?? null;
+            }
+
+            if (!disputeUserId) {
+              logger.warn(
+                {
+                  disputeId: dispute.id,
+                  paymentIntentId: disputePaymentIntentId,
+                },
+                '[payments] charge.dispute.created: no wallet_transaction found — logging only'
+              );
+              break;
+            }
+
+            // Insert or update bounty_disputes for this Stripe dispute.
+            // Avoid PostgREST upsert with onConflict because the underlying
+            // unique index on stripe_dispute_id is partial (WHERE ... IS NOT NULL).
+            const disputeRow = {
+              initiator_id: disputeUserId,
+              reason: `Stripe chargeback dispute opened (${dispute.id})`,
+              status: 'stripe_dispute',
+              stripe_dispute_id: dispute.id,
+              stripe_payment_intent_id: disputePaymentIntentId,
+              // 'cancellation' is the closest available dispute_stage value for a
+              // Stripe chargeback, which arrives outside the normal in-app flow.
+              dispute_stage: 'cancellation',
+            } as any;
+
+            const { data: existingDispute, error: selectDisputeError } = await admin
+              .from('bounty_disputes')
+              .select('id')
+              .eq('stripe_dispute_id', dispute.id)
+              .maybeSingle();
+
+            if (selectDisputeError) {
+              logger.error(
+                { disputeId: dispute.id, err: selectDisputeError.message },
+                '[payments] charge.dispute.created: failed to query bounty_disputes'
+              );
+              throw selectDisputeError;
+            }
+
+            if (existingDispute && (existingDispute as any).id) {
+              const { error: updateErr } = await admin
+                .from('bounty_disputes')
+                .update(disputeRow)
+                .eq('id', (existingDispute as any).id);
+
+              if (updateErr) {
+                logger.error(
+                  { disputeId: dispute.id, err: updateErr.message },
+                  '[payments] charge.dispute.created: failed to update bounty_disputes'
+                );
+                throw updateErr;
+              }
+            } else {
+              const { error: insertErr } = await admin
+                .from('bounty_disputes')
+                .insert(disputeRow);
+
+              if (insertErr) {
+                logger.warn(
+                  { disputeId: dispute.id, err: insertErr.message },
+                  '[payments] charge.dispute.created: insert failed, attempting update fallback'
+                );
+
+                const { error: updateFallbackErr } = await admin
+                  .from('bounty_disputes')
+                  .update(disputeRow)
+                  .eq('stripe_dispute_id', dispute.id);
+
+                if (updateFallbackErr) {
+                  logger.error(
+                    {
+                      disputeId: dispute.id,
+                      insertErr: insertErr.message,
+                      updateErr: updateFallbackErr.message,
+                    },
+                    '[payments] charge.dispute.created: failed to insert or update bounty_disputes'
+                  );
+                  throw updateFallbackErr;
+                }
+              }
+            }
+
+            // Freeze the poster's wallet so they cannot withdraw disputed funds
+            const { error: freezeError } = await admin
+              .from('profiles')
+              .update({ balance_frozen: true })
+              .eq('id', disputeUserId);
+
+            if (freezeError) {
+              logger.error(
+                { userId: disputeUserId, err: freezeError.message },
+                '[payments] charge.dispute.created: failed to freeze wallet'
+              );
+              throw freezeError;
+            }
+
+            // Notify the poster (non-fatal if this fails)
+            const { error: notifError } = await admin.from('notifications').insert({
+              user_id: disputeUserId,
+              type: 'payment',
+              title: 'Payment Dispute Opened',
+              body: 'A payment dispute has been opened on your account. Your wallet has been temporarily frozen.',
+              data: { stripeDisputeId: dispute.id },
+            });
+            if (notifError) {
+              logger.error(
+                { userId: disputeUserId, err: notifError.message },
+                '[payments] charge.dispute.created: failed to insert notification'
+              );
+            }
+
+            logger.info(
+              { disputeId: dispute.id, userId: disputeUserId },
+              '[payments] charge.dispute.created: dispute recorded and wallet frozen'
+            );
             break;
           }
 
           case 'charge.dispute.closed': {
-            const dispute = event.data.object as Stripe.Dispute;
+            const closedDispute = event.data.object as Stripe.Dispute;
+            const closedPaymentIntentId =
+              typeof closedDispute.payment_intent === 'string'
+                ? closedDispute.payment_intent
+                : ((closedDispute.payment_intent as Stripe.PaymentIntent | null)?.id ?? null);
+            const closedAmountDollars = closedDispute.amount / 100;
+            const disputeWon = closedDispute.status === 'won';
+            // Track whether the dispute loss was successfully applied to the
+            // user's balance. If we cannot apply the deduction due to
+            // insufficient funds, we record a failed transaction so Stripe
+            // does not keep retrying the webhook.
+            let disputeLossApplied = true;
+
             logger.info(
-              `[payments] Dispute closed for charge ${dispute.charge}, status: ${dispute.status}`
+              {
+                disputeId: closedDispute.id,
+                status: closedDispute.status,
+                amount: closedAmountDollars,
+                paymentIntentId: closedPaymentIntentId,
+              },
+              '[payments] charge.dispute.closed: resolving dispute'
+            );
+
+            const admin = getSupabaseAdmin();
+
+            // Resolve the bounty_disputes row
+            const closedStatus = disputeWon ? 'resolved_won' : 'resolved_lost';
+            const { data: resolvedDispute, error: resolveError } = await admin
+              .from('bounty_disputes')
+              .update({
+                status: closedStatus,
+                resolved_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              })
+              .eq('stripe_dispute_id', closedDispute.id)
+              .select('initiator_id')
+              .maybeSingle();
+
+            if (resolveError) {
+              logger.error(
+                { disputeId: closedDispute.id, err: resolveError.message },
+                '[payments] charge.dispute.closed: failed to update bounty_disputes'
+              );
+              throw resolveError;
+            }
+
+            let closedUserId =
+              (resolvedDispute as { initiator_id: string } | null)?.initiator_id ?? null;
+
+            if (!closedUserId) {
+              // Fallback: recover the user via wallet_transactions when no
+              // bounty_disputes row exists (e.g. charge.dispute.created was
+              // never processed).
+              let closedWalletTx: { user_id?: string } | null = null;
+              let closedWalletTxError: any = null;
+
+              if (closedPaymentIntentId) {
+                ({ data: closedWalletTx, error: closedWalletTxError } = await admin
+                  .from('wallet_transactions')
+                  .select('user_id')
+                  .eq('stripe_payment_intent_id', closedPaymentIntentId)
+                  .maybeSingle());
+              } else if ((closedDispute.charge as string | undefined) != null) {
+                ({ data: closedWalletTx, error: closedWalletTxError } = await admin
+                  .from('wallet_transactions')
+                  .select('user_id')
+                  .eq('stripe_charge_id', closedDispute.charge as string)
+                  .maybeSingle());
+              }
+
+              if (closedWalletTxError) {
+                logger.error(
+                  {
+                    disputeId: closedDispute.id,
+                    paymentIntentId: closedPaymentIntentId ?? null,
+                    chargeId: closedDispute.charge ?? null,
+                    err: closedWalletTxError.message,
+                  },
+                  '[payments] charge.dispute.closed: failed wallet_transactions fallback lookup'
+                );
+                throw closedWalletTxError;
+              }
+
+              closedUserId = (closedWalletTx as { user_id?: string } | null)?.user_id ?? null;
+
+              if (!closedUserId) {
+                logger.warn(
+                  { disputeId: closedDispute.id },
+                  '[payments] charge.dispute.closed: no bounty_disputes or wallet_transactions row — skipping balance/wallet ops'
+                );
+                break;
+              }
+
+              logger.warn(
+                { userId: closedUserId, disputeId: closedDispute.id },
+                '[payments] charge.dispute.closed: recovered user from wallet_transactions fallback'
+              );
+            }
+
+            // Track whether the wallet was actually unfrozen so the
+            // notification reflects the true state when multiple disputes
+            // are concurrent.
+            let walletActuallyUnfrozen = false;
+            let remainingOpenCountNumber: number | null = null;
+
+            if (disputeWon) {
+              // Platform won — only unfreeze when there are no other open Stripe disputes
+              const { count: remainingOpenCount, error: remainingOpenError } = await admin
+                .from('bounty_disputes')
+                .select('id', { count: 'exact', head: true })
+                .eq('initiator_id', closedUserId)
+                .eq('status', 'stripe_dispute');
+
+              if (remainingOpenError) {
+                logger.error(
+                  { userId: closedUserId, err: remainingOpenError.message },
+                  '[payments] charge.dispute.closed (won): failed to check remaining open disputes'
+                );
+                throw remainingOpenError;
+              }
+
+              remainingOpenCountNumber = Number(remainingOpenCount ?? 0);
+
+              if (remainingOpenCountNumber === 0) {
+                // Atomic RPC: check + update server-side to avoid a race
+                // against concurrent dispute.created events.
+                const { data: unfreezeRes, error: unfreezeError } = await admin.rpc(
+                  'unfreeze_profile_if_no_open_disputes',
+                  { p_user_id: closedUserId }
+                );
+
+                if (unfreezeError) {
+                  logger.error(
+                    { userId: closedUserId, err: unfreezeError.message },
+                    '[payments] charge.dispute.closed (won): failed to unfreeze wallet'
+                  );
+                  throw unfreezeError;
+                }
+
+                walletActuallyUnfrozen = Boolean(
+                  unfreezeRes &&
+                    (Array.isArray(unfreezeRes)
+                      ? unfreezeRes[0] === true ||
+                        Object.values(unfreezeRes[0] as any).includes(true)
+                      : unfreezeRes === true)
+                );
+
+                logger.info(
+                  { userId: closedUserId, unfrozen: walletActuallyUnfrozen },
+                  '[payments] charge.dispute.closed (won): unfreeze RPC complete'
+                );
+              } else {
+                logger.info(
+                  { userId: closedUserId, remainingOpen: remainingOpenCountNumber },
+                  '[payments] charge.dispute.closed (won): wallet remains frozen due to other open disputes'
+                );
+              }
+            } else {
+              // Platform lost — deduct the disputed amount. balance_frozen
+              // remains true intentionally until manual admin review.
+
+              // Idempotency guard for webhook retries.
+              const { data: existingDisputeLossTx, error: existingDisputeLossTxError } =
+                await admin
+                  .from('wallet_transactions')
+                  .select('id')
+                  .eq('user_id', closedUserId)
+                  .eq('type', 'dispute_loss')
+                  .eq('status', 'completed')
+                  .eq('metadata->>stripe_dispute_id', closedDispute.id)
+                  .maybeSingle();
+
+              if (existingDisputeLossTxError) {
+                logger.error(
+                  {
+                    userId: closedUserId,
+                    disputeId: closedDispute.id,
+                    err: existingDisputeLossTxError.message,
+                  },
+                  '[payments] charge.dispute.closed (lost): failed to check existing dispute_loss transaction'
+                );
+                throw existingDisputeLossTxError;
+              }
+
+              if (existingDisputeLossTx) {
+                logger.info(
+                  { userId: closedUserId, disputeId: closedDispute.id },
+                  '[payments] charge.dispute.closed (lost): dispute_loss already recorded; skipping duplicate deduction'
+                );
+              } else {
+                const { error: applyError } = await admin.rpc(
+                  'apply_dispute_loss_transaction',
+                  {
+                    p_user_id: closedUserId,
+                    p_amount: -closedAmountDollars,
+                    p_description: `Chargeback dispute lost (${closedDispute.id})`,
+                    p_stripe_dispute_id: closedDispute.id,
+                    p_stripe_payment_intent_id: closedPaymentIntentId ?? null,
+                  }
+                );
+
+                if (applyError) {
+                  const errMsg = (applyError && (applyError.message || '')) as string;
+                  const errCode = (applyError && ((applyError as any).code || '')) as string;
+                  const insufficientFunds =
+                    errCode === '23514' || errMsg.toLowerCase().includes('insufficient funds');
+
+                  if (insufficientFunds) {
+                    disputeLossApplied = false;
+                    logger.warn(
+                      {
+                        userId: closedUserId,
+                        disputeId: closedDispute.id,
+                        amount: closedAmountDollars,
+                        err: errMsg,
+                      },
+                      '[payments] charge.dispute.closed (lost): insufficient funds — recording failed dispute_loss for manual review'
+                    );
+
+                    try {
+                      const { error: insertErr } = await admin
+                        .from('wallet_transactions')
+                        .insert({
+                          user_id: closedUserId,
+                          type: 'dispute_loss',
+                          amount: -closedAmountDollars,
+                          description: `Chargeback dispute lost (${closedDispute.id}) - failed due to insufficient funds`,
+                          status: 'failed',
+                          metadata: {
+                            stripe_dispute_id: closedDispute.id,
+                            stripe_payment_intent_id: closedPaymentIntentId ?? null,
+                          },
+                        });
+
+                      if (insertErr) {
+                        logger.error(
+                          {
+                            userId: closedUserId,
+                            disputeId: closedDispute.id,
+                            err: insertErr.message,
+                          },
+                          '[payments] charge.dispute.closed (lost): failed to insert failed dispute_loss transaction'
+                        );
+                      }
+                    } catch (insErr: any) {
+                      logger.error(
+                        {
+                          userId: closedUserId,
+                          disputeId: closedDispute.id,
+                          err: insErr?.message,
+                        },
+                        '[payments] charge.dispute.closed (lost): exception while recording failed dispute_loss transaction'
+                      );
+                    }
+                  } else {
+                    logger.error(
+                      {
+                        userId: closedUserId,
+                        disputeId: closedDispute.id,
+                        err: errMsg,
+                      },
+                      '[payments] charge.dispute.closed (lost): failed to apply dispute_loss transaction atomically'
+                    );
+                    throw applyError;
+                  }
+                } else {
+                  logger.info(
+                    {
+                      userId: closedUserId,
+                      disputeId: closedDispute.id,
+                      amount: closedAmountDollars,
+                    },
+                    '[payments] charge.dispute.closed (lost): dispute loss applied'
+                  );
+                }
+              }
+            }
+
+            // Notify the poster of the outcome.
+            let outcomeMsg: string;
+            if (disputeWon) {
+              if (walletActuallyUnfrozen) {
+                outcomeMsg =
+                  'The payment dispute on your account has been resolved in your favor. Your wallet has been unfrozen.';
+              } else if (remainingOpenCountNumber !== null && remainingOpenCountNumber > 0) {
+                outcomeMsg = `The payment dispute on your account has been resolved in your favor, but your wallet remains frozen due to ${remainingOpenCountNumber} other open dispute(s).`;
+              } else {
+                outcomeMsg =
+                  'The payment dispute on your account has been resolved in your favor. Your wallet may still be frozen pending other disputes or review.';
+              }
+            } else if (!disputeLossApplied) {
+              outcomeMsg = `The payment dispute on your account has been resolved against you. We attempted to deduct $${closedAmountDollars.toFixed(
+                2
+              )} from your wallet but the deduction failed due to insufficient funds. The amount remains outstanding; please add funds or contact support.`;
+            } else {
+              outcomeMsg = `The payment dispute on your account has been resolved against you. $${closedAmountDollars.toFixed(
+                2
+              )} has been deducted from your wallet.`;
+            }
+
+            const { error: closedNotifError } = await admin.from('notifications').insert({
+              user_id: closedUserId,
+              type: 'payment',
+              title: disputeWon ? 'Dispute Resolved — Won' : 'Dispute Resolved — Lost',
+              body: outcomeMsg,
+              data: { stripeDisputeId: closedDispute.id },
+            });
+            if (closedNotifError) {
+              logger.error(
+                { userId: closedUserId, err: closedNotifError.message },
+                '[payments] charge.dispute.closed: failed to insert notification'
+              );
+            }
+
+            logger.info(
+              {
+                disputeId: closedDispute.id,
+                userId: closedUserId,
+                status: closedStatus,
+              },
+              '[payments] charge.dispute.closed: dispute resolved'
             );
             break;
           }
