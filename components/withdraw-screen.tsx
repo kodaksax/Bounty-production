@@ -58,6 +58,12 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
   // so retries reuse the same key.  Rotated after a successful withdrawal.
   const idempotencyKeyRef = useRef(`withdraw_${session?.user?.id ?? 'u'}_${Date.now()}`);
 
+  // Only refresh Connect status when returning from the embedded onboarding
+  // screen. Without this guard, useFocusEffect fires on every focus event
+  // (including initial mount, which already triggers via useEffect below),
+  // causing duplicate API calls and an unconditional setIsOnboarding(false).
+  const needsRefreshOnFocusRef = useRef(false);
+
   // Set default selected method when payment methods load
   useEffect(() => {
     if (paymentMethods.length > 0 && !selectedMethod) {
@@ -73,10 +79,11 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
     verifyConnectOnboarding();
   }, [session?.access_token]);
 
-  // Re-verify when the screen regains focus (e.g. user returns from embedded onboarding)
+  // Re-verify only when returning from the embedded onboarding screen.
   useFocusEffect(
     useCallback(() => {
-      if (session?.access_token) {
+      if (needsRefreshOnFocusRef.current) {
+        needsRefreshOnFocusRef.current = false;
         verifyConnectOnboarding().finally(() => setIsOnboarding(false));
       }
     }, [session?.access_token])
@@ -145,11 +152,13 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
     // "not signed up for Connect" error) and refreshes status on exit.
     try {
       setIsOnboarding(true);
+      needsRefreshOnFocusRef.current = true;
       router.push('/wallet/connect/embedded-onboarding');
-      // Status re-verification happens in the useFocusEffect above when the
-      // user returns from the embedded onboarding screen.
+      // Status re-verification and isOnboarding reset happen in useFocusEffect
+      // when this screen regains focus after the user returns.
     } catch (error: unknown) {
       console.error('[withdraw-screen] Failed to open embedded onboarding', error);
+      needsRefreshOnFocusRef.current = false;
       Alert.alert(
         'Onboarding Failed',
         error instanceof Error
