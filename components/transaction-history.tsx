@@ -3,25 +3,25 @@
  * Shows payment history with detailed status information
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View,
-  Text,
-  FlatList,
-  StyleSheet,
-  Pressable,
-  RefreshControl,
-  ActivityIndicator,
-} from 'react-native';
-import {
-  ArrowUpRight,
-  ArrowDownLeft,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  AlertCircle,
-  ChevronRight,
+    AlertCircle,
+    ArrowDownLeft,
+    ArrowUpRight,
+    CheckCircle2,
+    ChevronRight,
+    Clock,
+    XCircle,
 } from 'lucide-react-native';
+import { useCallback, useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    FlatList,
+    Pressable,
+    RefreshControl,
+    StyleSheet,
+    Text,
+    View,
+} from 'react-native';
 
 export interface Transaction {
   id: string;
@@ -60,91 +60,94 @@ export function TransactionHistory({
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
 
-  const loadTransactions = useCallback(async (isRefresh: boolean = false) => {
-    try {
-      if (isRefresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
+  const loadTransactions = useCallback(
+    async (isRefresh: boolean = false) => {
+      try {
+        if (isRefresh) {
+          setRefreshing(true);
+        } else {
+          setLoading(true);
+        }
+        setError(null);
+
+        // TODO (Post-Launch): Replace with actual API call
+        // const response = await fetch(`/api/wallet/transactions?userId=${userId}&limit=${limit}`, {
+        //   headers: {
+        //     Authorization: `Bearer ${authToken}`,
+        //   },
+        // });
+        // const data = await response.json();
+
+        // Mock data for now
+        const mockTransactions: Transaction[] = [
+          {
+            id: 'txn_001',
+            type: 'deposit',
+            amount: 100.0,
+            currency: 'USD',
+            status: 'succeeded',
+            createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
+            description: 'Wallet deposit',
+            paymentMethod: {
+              type: 'card',
+              brand: 'Visa',
+              last4: '4242',
+            },
+          },
+          {
+            id: 'txn_002',
+            type: 'payment',
+            amount: 50.0,
+            currency: 'USD',
+            status: 'succeeded',
+            createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1 day ago
+            description: 'Bounty payment for "Fix bug in dashboard"',
+          },
+          {
+            id: 'txn_003',
+            type: 'withdrawal',
+            amount: 25.0,
+            currency: 'USD',
+            status: 'processing',
+            createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2), // 2 days ago
+            description: 'Withdrawal to bank account',
+            paymentMethod: {
+              type: 'bank_account',
+              last4: '1234',
+            },
+          },
+          {
+            id: 'txn_004',
+            type: 'refund',
+            amount: 15.0,
+            currency: 'USD',
+            status: 'succeeded',
+            createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3), // 3 days ago
+            description: 'Refund for cancelled bounty',
+          },
+          {
+            id: 'txn_005',
+            type: 'payment',
+            amount: 75.0,
+            currency: 'USD',
+            status: 'failed',
+            createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 4), // 4 days ago
+            description: 'Bounty payment attempt',
+          },
+        ];
+
+        setTransactions(mockTransactions);
+        setHasMore(mockTransactions.length >= limit);
+      } catch (err: any) {
+        console.error('Error loading transactions:', err);
+        setError(err.message || 'Failed to load transactions');
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-      setError(null);
-
-      // TODO (Post-Launch): Replace with actual API call
-      // const response = await fetch(`/api/wallet/transactions?userId=${userId}&limit=${limit}`, {
-      //   headers: {
-      //     Authorization: `Bearer ${authToken}`,
-      //   },
-      // });
-      // const data = await response.json();
-
-      // Mock data for now
-      const mockTransactions: Transaction[] = [
-        {
-          id: 'txn_001',
-          type: 'deposit',
-          amount: 100.00,
-          currency: 'USD',
-          status: 'succeeded',
-          createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
-          description: 'Wallet deposit',
-          paymentMethod: {
-            type: 'card',
-            brand: 'Visa',
-            last4: '4242',
-          },
-        },
-        {
-          id: 'txn_002',
-          type: 'payment',
-          amount: 50.00,
-          currency: 'USD',
-          status: 'succeeded',
-          createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1 day ago
-          description: 'Bounty payment for "Fix bug in dashboard"',
-        },
-        {
-          id: 'txn_003',
-          type: 'withdrawal',
-          amount: 25.00,
-          currency: 'USD',
-          status: 'processing',
-          createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2), // 2 days ago
-          description: 'Withdrawal to bank account',
-          paymentMethod: {
-            type: 'bank_account',
-            last4: '1234',
-          },
-        },
-        {
-          id: 'txn_004',
-          type: 'refund',
-          amount: 15.00,
-          currency: 'USD',
-          status: 'succeeded',
-          createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3), // 3 days ago
-          description: 'Refund for cancelled bounty',
-        },
-        {
-          id: 'txn_005',
-          type: 'payment',
-          amount: 75.00,
-          currency: 'USD',
-          status: 'failed',
-          createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 4), // 4 days ago
-          description: 'Bounty payment attempt',
-        },
-      ];
-
-      setTransactions(mockTransactions);
-      setHasMore(mockTransactions.length >= limit);
-    } catch (err: any) {
-      console.error('Error loading transactions:', err);
-      setError(err.message || 'Failed to load transactions');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [userId, authToken, limit]);
+    },
+    [userId, authToken, limit]
+  );
 
   useEffect(() => {
     loadTransactions();
@@ -216,7 +219,7 @@ export function TransactionHistory({
 
   const getTransactionIcon = (type: string, status: string) => {
     const color = status === 'succeeded' ? '#047857' : '#6b7280';
-    
+
     if (type === 'deposit' || type === 'refund') {
       return <ArrowDownLeft size={24} color={color} />;
     } else {
@@ -233,13 +236,8 @@ export function TransactionHistory({
   };
 
   const renderTransaction = ({ item }: { item: Transaction }) => (
-    <Pressable
-      style={styles.transactionItem}
-      onPress={() => onTransactionPress?.(item)}
-    >
-      <View style={styles.transactionIcon}>
-        {getTransactionIcon(item.type, item.status)}
-      </View>
+    <Pressable style={styles.transactionItem} onPress={() => onTransactionPress?.(item)}>
+      <View style={styles.transactionIcon}>{getTransactionIcon(item.type, item.status)}</View>
 
       <View style={styles.transactionDetails}>
         <Text style={styles.transactionDescription} numberOfLines={2}>
@@ -248,13 +246,13 @@ export function TransactionHistory({
         <View style={styles.transactionMeta}>
           {getStatusIcon(item.status)}
           <Text style={[styles.transactionStatus, { color: getStatusColor(item.status) }]}>
-            {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+            {item.status ? item.status.charAt(0).toUpperCase() + item.status.slice(1) : ''}
           </Text>
           <Text style={styles.transactionDate}> • {formatDate(item.createdAt)}</Text>
         </View>
         {item.paymentMethod && (
           <Text style={styles.paymentMethod}>
-            {item.paymentMethod.brand || item.paymentMethod.type} 
+            {item.paymentMethod.brand || item.paymentMethod.type}
             {item.paymentMethod.last4 && ` •••• ${item.paymentMethod.last4}`}
           </Text>
         )}
@@ -265,10 +263,7 @@ export function TransactionHistory({
           style={[
             styles.amount,
             {
-              color:
-                item.type === 'deposit' || item.type === 'refund'
-                  ? '#10b981'
-                  : '#111827',
+              color: item.type === 'deposit' || item.type === 'refund' ? '#10b981' : '#111827',
             },
           ]}
         >
@@ -283,9 +278,7 @@ export function TransactionHistory({
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
       <Text style={styles.emptyStateTitle}>No transactions yet</Text>
-      <Text style={styles.emptyStateText}>
-        Your payment history will appear here
-      </Text>
+      <Text style={styles.emptyStateText}>Your payment history will appear here</Text>
     </View>
   );
 
@@ -325,7 +318,7 @@ export function TransactionHistory({
       <FlatList
         data={transactions}
         renderItem={renderTransaction}
-        keyExtractor={(item) => item.id}
+        keyExtractor={item => item.id}
         ListEmptyComponent={renderEmptyState}
         ListFooterComponent={renderFooter}
         refreshControl={
@@ -336,9 +329,7 @@ export function TransactionHistory({
             colors={['#047857']}
           />
         }
-        contentContainerStyle={
-          transactions.length === 0 ? styles.emptyContainer : undefined
-        }
+        contentContainerStyle={transactions.length === 0 ? styles.emptyContainer : undefined}
       />
     </View>
   );

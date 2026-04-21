@@ -1,10 +1,10 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { BrandingLogo } from 'components/ui/branding-logo';
-import { useEffect, useRef, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    Linking,
     ScrollView,
     StyleSheet,
     Text,
@@ -15,7 +15,6 @@ import {
 import { useAuthContext } from '../hooks/use-auth-context';
 import { useEmailVerification } from '../hooks/use-email-verification';
 import { API_BASE_URL } from '../lib/config/api';
-import { CONNECT_REFRESH_URL, CONNECT_RETURN_URL } from '../lib/config/app';
 import { MIN_WITHDRAWAL_AMOUNT } from '../lib/constants';
 import { useStripe } from '../lib/stripe-context';
 import { theme } from '../lib/theme';
@@ -59,6 +58,12 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
   // so retries reuse the same key.  Rotated after a successful withdrawal.
   const idempotencyKeyRef = useRef(`withdraw_${session?.user?.id ?? 'u'}_${Date.now()}`);
 
+  // Only refresh Connect status when returning from the embedded onboarding
+  // screen. Without this guard, useFocusEffect fires on every focus event
+  // (including initial mount, which already triggers via useEffect below),
+  // causing duplicate API calls and an unconditional setIsOnboarding(false).
+  const needsRefreshOnFocusRef = useRef(false);
+
   // Set default selected method when payment methods load
   useEffect(() => {
     if (paymentMethods.length > 0 && !selectedMethod) {
@@ -73,6 +78,16 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
     }
     verifyConnectOnboarding();
   }, [session?.access_token]);
+
+  // Re-verify only when returning from the embedded onboarding screen.
+  useFocusEffect(
+    useCallback(() => {
+      if (needsRefreshOnFocusRef.current) {
+        needsRefreshOnFocusRef.current = false;
+        verifyConnectOnboarding().finally(() => setIsOnboarding(false));
+      }
+    }, [session?.access_token])
+  );
 
   // Fetch bank accounts when Connect account is verified
   useEffect(() => {
@@ -129,78 +144,28 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
     }
   };
 
-  const handleConnectOnboarding = async () => {
-    setIsOnboarding(true);
+  const router = useRouter();
 
+  const handleConnectOnboarding = () => {
+    // Use the in-app embedded onboarding route so users never leave the app.
+    // The embedded screen handles errors itself (including the platform-level
+    // "not signed up for Connect" error) and refreshes status on exit.
     try {
-      if (!session?.access_token) {
-        throw new Error('Not authenticated. Please sign in again.');
-      }
-
-      // Call backend to create Connect account link
-      const response = await fetch(`${API_BASE_URL}/connect/create-account-link`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          returnUrl: CONNECT_RETURN_URL,
-          refreshUrl: CONNECT_REFRESH_URL,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to create account link');
-      }
-
-      const { url, accountId } = await response.json();
-
-      // Open the Stripe Connect onboarding URL
-      const supported = await Linking.canOpenURL(url);
-      if (supported) {
-        await Linking.openURL(url);
-
-        // After returning, verify onboarding status
-        setTimeout(async () => {
-          await verifyConnectOnboarding();
-        }, 2000);
-      } else {
-        throw new Error('Cannot open Stripe Connect URL');
-      }
-    } catch (error: any) {
-      console.error('Connect onboarding error:', error);
-
-      // Provide detailed error messages with troubleshooting guidance
-      let errorMessage = error.message || 'Unable to start Connect onboarding. Please try again.';
-      let errorTitle = 'Onboarding Failed';
-
-      // Check for common Stripe Connect issues
-      if (error.message?.includes('account already exists')) {
-        errorTitle = 'Account Already Exists';
-        errorMessage =
-          'You already have a Stripe Connect account. Please contact support if you need to update your banking details.';
-      } else if (
-        error.message?.includes('not configured') ||
-        error.message?.includes('STRIPE_SECRET_KEY')
-      ) {
-        errorTitle = 'Service Unavailable';
-        errorMessage =
-          'Stripe Connect is not configured on this server. Please contact support to enable withdrawals.';
-      } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
-        errorTitle = 'Network Error';
-        errorMessage =
-          'Unable to connect to the payment service. Please check your internet connection and try again.';
-      }
-
+      setIsOnboarding(true);
+      needsRefreshOnFocusRef.current = true;
+      router.push('/wallet/connect/embedded-onboarding');
+      // Status re-verification and isOnboarding reset happen in useFocusEffect
+      // when this screen regains focus after the user returns.
+    } catch (error: unknown) {
+      console.error('[withdraw-screen] Failed to open embedded onboarding', error);
+      needsRefreshOnFocusRef.current = false;
       Alert.alert(
-        errorTitle,
-        errorMessage +
-          '\n\nIf this problem persists, please contact support at support@bountyexpo.com',
+        'Onboarding Failed',
+        error instanceof Error
+          ? error.message
+          : 'Unable to start Connect onboarding. Please try again.',
         [{ text: 'OK' }]
       );
-    } finally {
       setIsOnboarding(false);
     }
   };

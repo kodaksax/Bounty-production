@@ -23,6 +23,65 @@ function jsonResponse(data: unknown, status = 200) {
   });
 }
 
+/**
+ * Syncs a Stripe Connect `Account` snapshot into `profiles`. Writes the
+ * current capability booleans and requirements payload on every call, but
+ * preserves `stripe_connect_onboarded_at`: it is set exactly once on the
+ * first transition to `charges_enabled && payouts_enabled` and never cleared,
+ * matching the semantics used by the `/connect/verify-onboarding` route.
+ */
+async function syncConnectAccountToProfile(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  account: Stripe.Account
+): Promise<void> {
+  const userId = account.metadata?.user_id;
+  if (!userId) return;
+  const fullyOnboarded = !!(account.charges_enabled && account.payouts_enabled);
+
+  const { data: existing, error: readError } = await supabase
+    .from('profiles')
+    .select('stripe_connect_onboarded_at')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (readError) {
+    console.error('[webhooks] Failed to read profile for Connect sync', {
+      userId,
+      error: readError,
+    });
+    // Fall through — we still want to attempt the update.
+  }
+
+  const update: Record<string, unknown> = {
+    stripe_connect_charges_enabled: !!account.charges_enabled,
+    stripe_connect_payouts_enabled: !!account.payouts_enabled,
+    stripe_connect_requirements: (account.requirements ?? null) as unknown as Record<
+      string,
+      unknown
+    > | null,
+    onboarding_complete: fullyOnboarded,
+  };
+
+  // Only set the onboarded timestamp on the first transition; never clear it.
+  // Guard on !readError: if the read failed, existing is null and we cannot
+  // distinguish "never set" from "already set but unreadable". Skipping the
+  // timestamp in that case preserves the once-only invariant.
+  if (fullyOnboarded && !readError && !existing?.stripe_connect_onboarded_at) {
+    update.stripe_connect_onboarded_at = new Date().toISOString();
+  }
+
+  const { error: updateError } = await supabase.from('profiles').update(update).eq('id', userId);
+
+  if (updateError) {
+    console.error('[webhooks] Failed to sync Connect account to profile', {
+      userId,
+      accountId: account.id,
+      error: updateError,
+    });
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -838,15 +897,29 @@ Deno.serve(async (req: Request) => {
         const account = event.data.object as Stripe.Account;
         console.log(`[webhooks] Connect account updated: ${account.id}`);
         if (account.metadata?.user_id) {
-          await supabase
-            .from('profiles')
-            .update({
-              stripe_connect_onboarded_at:
-                account.charges_enabled && account.payouts_enabled
-                  ? new Date().toISOString()
-                  : null,
-            })
-            .eq('id', account.metadata.user_id);
+          await syncConnectAccountToProfile(supabase, account);
+        }
+        break;
+      }
+
+      case 'capability.updated': {
+        const capability = event.data.object as Stripe.Capability;
+        const capAccountId = (capability as unknown as { account?: string }).account;
+        console.log(
+          `[webhooks] Connect capability updated: ${capability.id} status=${capability.status} account=${capAccountId}`
+        );
+        if (capAccountId) {
+          try {
+            const account = await stripe.accounts.retrieve(capAccountId);
+            if (account.metadata?.user_id) {
+              await syncConnectAccountToProfile(supabase, account);
+            }
+          } catch (err) {
+            console.error('[webhooks] Failed to sync account after capability.updated', {
+              capAccountId,
+              error: err,
+            });
+          }
         }
         break;
       }
