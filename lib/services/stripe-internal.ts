@@ -547,22 +547,8 @@ export function validateCardNumber(cardNumber: string): boolean {
 export function handleStripeError(
   error: any
 ): Error & { type?: string; code?: string; decline_code?: string } {
-  // If already a proper error object with Stripe properties, preserve them
-  if (error?.type) {
-    const stripeError = new Error(error.message || 'Payment error occurred') as Error & {
-      type?: string;
-      code?: string;
-      decline_code?: string;
-    };
-    stripeError.type = error.type;
-    // For card errors, decline_code is more specific than code
-    // Prefer decline_code when available for better error messaging
-    stripeError.code = error.decline_code || error.code;
-    stripeError.decline_code = error.decline_code;
-    return stripeError;
-  }
-
-  // Map specific error types to user-friendly messages
+  // Map specific error types to user-friendly messages (must come before the
+  // generic `error?.type` fallback so specific handling is not bypassed)
   if (error?.type === 'card_error' || error?.decline_code) {
     // For card errors, decline_code is more specific
     const declineCode = error.decline_code || error.code;
@@ -639,6 +625,20 @@ export function handleStripeError(
       'Unable to connect to payment service. Check your connection and try again.'
     ) as Error & { type?: string };
     stripeError.type = 'network_error';
+    return stripeError;
+  }
+
+  // For any other error that already carries a `type` property (unknown Stripe
+  // error types, pre-normalised errors, etc.), preserve the shape as-is.
+  if (error?.type) {
+    const stripeError = new Error(error.message || 'Payment error occurred') as Error & {
+      type?: string;
+      code?: string;
+      decline_code?: string;
+    };
+    stripeError.type = error.type;
+    stripeError.code = error.decline_code || error.code;
+    stripeError.decline_code = error.decline_code;
     return stripeError;
   }
 
