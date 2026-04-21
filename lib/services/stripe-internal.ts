@@ -20,19 +20,30 @@ import { logger } from '../utils/error-logger';
 import { getNetworkErrorMessage } from '../utils/network-connectivity';
 
 /**
- * Call a Supabase Edge Function sub-path under /payments.
+ * Options for `invokePayments`, which calls a Supabase Edge Function
+ * sub-path under `/payments`.
  *
- * Uses `supabase.functions.invoke()` which calls `supabase.auth.getSession()`
- * internally to always attach the freshest possible token — bypassing any
- * React-state propagation lag that can cause a stale JWT to be sent.
- * Both the `Authorization` and `apikey` headers are set automatically by
- * the Supabase JS client.
+ * Control flow of `invokePayments` (in order of preference):
  *
- * When the Supabase client is not fully configured (e.g. in dev/test where a
- * stub client is used and `.functions` is unavailable), this safely falls
- * back to a direct fetch against `${FINANCIAL_API_BASE_URL}`. In local/dev
- * setups where no Supabase URL is configured, that base URL may point to the
- * legacy local server; otherwise it remains the configured financial API base.
+ *   1. **Direct fetch with explicit auth headers (preferred).** When the
+ *      Supabase anon key is available we call `${FINANCIAL_API_BASE_URL}/<subPath>`
+ *      directly with `apikey` + `Authorization: Bearer <jwt>` headers. We
+ *      obtain the JWT either from `options.accessToken` (when the caller
+ *      already has a fresh token) or via `supabase.auth.getSession()` with a
+ *      5 s timeout guard. This avoids the supabase-js internal session lock
+ *      contention described in the `invokePayments` body comment, which can
+ *      cause `functions.invoke()` to hang indefinitely under concurrent auth
+ *      events (explicit refresh racing with auto-refresh).
+ *
+ *   2. **`supabase.functions.invoke()` fallback.** Used when no anon key is
+ *      configured (local dev / unit tests with a stubbed Supabase client that
+ *      still exposes `.functions.invoke`). Supabase JS client sets the auth
+ *      headers internally but is subject to the session-lock contention above,
+ *      so it is only used as a fallback.
+ *
+ *   3. **Unauthenticated direct fetch (last resort).** If the stubbed client
+ *      also lacks `.functions.invoke` (legacy Node server setups), we fall
+ *      back to a plain fetch with no auth headers.
  */
 export interface InvokePaymentsOptions {
   method?: string;

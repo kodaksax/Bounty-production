@@ -19,7 +19,7 @@ class StripeSdkManager {
     const key = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY;
     if (!key) {
       logger.error(
-        '[StripeService] Missing EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY env variable. Payments disabled.'
+        '[StripeSdk] Missing EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY env variable. Payments disabled.'
       );
       this.publishableKey = '';
     } else {
@@ -53,7 +53,7 @@ class StripeSdkManager {
         // SDK initialization may fail in non-native environments (e.g., web, Node)
         if (__DEV__) {
           logger.error(
-            '[StripeService] Unable to initialize SDK (expected in non-native environments):',
+            '[StripeSdk] Unable to initialize SDK (expected in non-native environments):',
             { error: sdkError }
           );
         }
@@ -61,7 +61,7 @@ class StripeSdkManager {
 
       this.isInitialized = true;
     } catch (error) {
-      logger.error('[StripeService] Failed to initialize:', { error });
+      logger.error('[StripeSdk] Failed to initialize:', { error });
       throw new Error('Failed to initialize payment service');
     }
   }
