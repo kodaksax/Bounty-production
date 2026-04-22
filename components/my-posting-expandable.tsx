@@ -573,6 +573,10 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     console.log('[handleSendMessage] bounty.accepted_by:', bounty.accepted_by)
     console.log('[handleSendMessage] conversation:', conversation?.id, conversation?.participantIds)
     console.log('[handleSendMessage] currentUserId:', currentUserId)
+    if (conversation?.id) {
+    await messageService.sendMessage(String(conversation.id), text, currentUserId)
+    return
+  }
     const resolveCounterpartyId = (): string | null => {
       const effectiveUserId = currentUserId || getCurrentUserId()
       const participantFallback = effectiveUserId
