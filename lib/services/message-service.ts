@@ -180,7 +180,54 @@ export const messageService = {
         isEncrypted,
       });
 
-      message = await messagingService.sendMessage(conversationId, finalText, effectiveSenderId);
+      
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      const { data, error } = await supabase
+        .from('messages')
+        .insert({
+          conversation_id: conversationId,
+          sender_id: effectiveSenderId,
+          text: finalText,
+          status: 'sent',
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      message = {
+        id: data.id,
+        conversationId: data.conversation_id,
+        senderId: data.sender_id,
+        text: data.text,
+        createdAt: data.created_at,
+        status: data.status ?? 'sent',
+        isEncrypted,
+      }
+
+      // Also update the conversation's last_message in Supabase
+      await supabase
+        .from('conversations')
+        .update({
+          last_message: sanitizedText,
+          updated_at: message.createdAt,
+        })
+        .eq('id', conversationId)
+
+
 
       console.log('[sendMessage] Supabase response:', message);
     } catch (err) {
