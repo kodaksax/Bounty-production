@@ -11,7 +11,7 @@ import { logger } from '../utils/error-logger';
 
 class StripeSdkManager {
   private publishableKey: string = '';
-  private isInitialized: boolean = false;
+  private initPromise: Promise<void> | null = null;
   private stripeSDK: any = null;
 
   constructor() {
@@ -28,21 +28,28 @@ class StripeSdkManager {
   }
 
   async initialize(): Promise<void> {
-    try {
-      if (this.isInitialized) return;
+    if (this.initPromise) return this.initPromise;
+    this.initPromise = this._doInitialize();
+    return this.initPromise;
+  }
 
+  private async _doInitialize(): Promise<void> {
+    try {
       // Initialize the Stripe React Native SDK if available
       // NOTE: The merchantIdentifier must be registered in Apple Developer portal for Apple Pay to work.
       // See STRIPE_INTEGRATION_BACKEND.md for setup instructions.
       try {
-        const stripeModule: any = await import('@stripe/stripe-react-native');
-        if (stripeModule.initStripe && this.publishableKey) {
+        const rawModule: any = await import('@stripe/stripe-react-native');
+        // Handle both ESM (named export) and CJS/default-wrapped shapes
+        const stripeModule = rawModule?.default ?? rawModule;
+        const initStripe = stripeModule?.initStripe ?? rawModule?.initStripe;
+        if (initStripe && this.publishableKey) {
           // merchantIdentifier should match your Apple Pay Merchant ID from Apple Developer portal
           const merchantId =
             process.env.EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID || 'com.bounty0.BOUNTYExpo';
           // Use centralized deep link scheme constant
           const { DEEP_LINK_SCHEME } = await import('../config/app');
-          await stripeModule.initStripe({
+          await initStripe({
             publishableKey: this.publishableKey,
             merchantIdentifier: merchantId,
             urlScheme: DEEP_LINK_SCHEME,
@@ -58,8 +65,6 @@ class StripeSdkManager {
           );
         }
       }
-
-      this.isInitialized = true;
     } catch (error) {
       logger.error('[StripeSdk] Failed to initialize:', { error });
       throw new Error('Failed to initialize payment service');
