@@ -619,7 +619,19 @@ export function handleStripeError(
     return stripeError;
   }
 
-  // Handle network errors
+  // Handle pre-structured network errors (from fetchEdgeFunction / invokePayments).
+  // This check must come before the message-based heuristic below so that the
+  // structured `code` (e.g. 'NETWORK_ERROR') is preserved rather than discarded.
+  if (error?.type === 'network_error') {
+    const stripeError = new Error(
+      error.message || 'Unable to connect to payment service. Check your connection and try again.'
+    ) as Error & { type?: string; code?: string };
+    stripeError.type = 'network_error';
+    stripeError.code = error.code;
+    return stripeError;
+  }
+
+  // Handle network errors detected by message content (unstructured errors)
   if (error?.message?.includes('network') || error?.message?.includes('fetch')) {
     const stripeError = new Error(
       'Unable to connect to payment service. Check your connection and try again.'
