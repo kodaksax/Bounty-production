@@ -74,6 +74,7 @@ const mockRpc = jest.fn(async (_fn: string, _args: any) => ({ data: null, error:
 // Track recorded dispute row inserts so tests can assert metadata was logged
 const recordedDisputeInserts: any[] = [];
 const recordedNotificationInserts: any[] = [];
+const recordedWalletTxInserts: any[] = [];
 
 jest.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
@@ -154,6 +155,7 @@ jest.mock('@supabase/supabase-js', () => ({
           insert: async (row: any) => {
             if (table === 'bounty_disputes') recordedDisputeInserts.push(row);
             if (table === 'notifications') recordedNotificationInserts.push(row);
+            if (table === 'wallet_transactions') recordedWalletTxInserts.push(row);
             return { error: adminData.insertError };
           },
           update: (updateObj: any) => {
@@ -653,5 +655,126 @@ describe('payments routes (confirm + webhook deposit)', () => {
       user_id: 'poster_user_3',
       title: 'Dispute Resolved — Lost',
     });
+  });
+
+  it('POST /payments/webhook: charge.dispute.closed (won) with remaining open disputes skips unfreeze RPC and keeps wallet frozen', async () => {
+    const fastify = new MockFastify();
+
+    const event = {
+      id: 'evt_dispute_closed_won_concurrent',
+      type: 'charge.dispute.closed',
+      data: {
+        object: {
+          id: 'dp_won_concurrent',
+          charge: 'ch_won_concurrent',
+          payment_intent: 'pi_won_concurrent',
+          amount: 3000,
+          status: 'won',
+        },
+      },
+    };
+
+    adminData.resolvedDispute = { initiator_id: 'poster_user_4' };
+    adminData.remainingOpenCount = 2;
+    recordedNotificationInserts.length = 0;
+    mockRpc.mockImplementation(async () => ({ data: null, error: null }));
+
+    mockStripeInstance.webhooks.constructEvent.mockImplementation((body: any) => JSON.parse(body));
+
+    await registerPaymentRoutes(fastify as any);
+
+    const handler = fastify.routes['/payments/webhook'];
+    const req: any = { headers: { 'stripe-signature': 'sig' }, rawBody: JSON.stringify(event) };
+
+    const result = await handler(req, {});
+
+    expect(result).toEqual({ received: true });
+    // Must NOT attempt to unfreeze while other Stripe disputes are open.
+    expect(mockRpc).not.toHaveBeenCalledWith(
+      'unfreeze_profile_if_no_open_disputes',
+      expect.anything()
+    );
+    expect(recordedNotificationInserts).toHaveLength(1);
+    expect(recordedNotificationInserts[0]).toMatchObject({
+      user_id: 'poster_user_4',
+      title: 'Dispute Resolved — Won',
+    });
+    // Notification body should explain that the wallet stays frozen.
+    expect(recordedNotificationInserts[0].body).toMatch(/remains frozen/i);
+    expect(recordedNotificationInserts[0].body).toContain('2');
+  });
+
+  it('POST /payments/webhook: charge.dispute.closed (lost) with insufficient funds records nothing in wallet_transactions and notifies user of failed deduction', async () => {
+    const fastify = new MockFastify();
+
+    const event = {
+      id: 'evt_dispute_closed_lost_insufficient',
+      type: 'charge.dispute.closed',
+      data: {
+        object: {
+          id: 'dp_lost_insufficient',
+          charge: 'ch_lost_insufficient',
+          payment_intent: 'pi_lost_insufficient',
+          amount: 9900,
+          status: 'lost',
+        },
+      },
+    };
+
+    adminData.resolvedDispute = { initiator_id: 'poster_user_5' };
+    adminData.existingDisputeLossTx = null;
+    recordedNotificationInserts.length = 0;
+    recordedWalletTxInserts.length = 0;
+
+    // Simulate apply_dispute_loss_transaction failing with insufficient funds
+    // (CHECK constraint violation, SQLSTATE 23514).
+    mockRpc.mockImplementation(async (fn: string) => {
+      if (fn === 'apply_dispute_loss_transaction') {
+        return {
+          data: null,
+          error: {
+            code: '23514',
+            message: 'new row for relation "profiles" violates check constraint "profiles_balance_nonnegative" (insufficient funds)',
+          },
+        };
+      }
+      return { data: null, error: null };
+    });
+
+    mockStripeInstance.webhooks.constructEvent.mockImplementation((body: any) => JSON.parse(body));
+
+    await registerPaymentRoutes(fastify as any);
+
+    const handler = fastify.routes['/payments/webhook'];
+    const req: any = { headers: { 'stripe-signature': 'sig' }, rawBody: JSON.stringify(event) };
+
+    // Webhook must still ack (so Stripe doesn't retry forever) even though
+    // the deduction could not be applied.
+    const result = await handler(req, {});
+    expect(result).toEqual({ received: true });
+
+    expect(mockRpc).toHaveBeenCalledWith(
+      'apply_dispute_loss_transaction',
+      expect.objectContaining({
+        p_user_id: 'poster_user_5',
+        p_amount: -99,
+        p_stripe_dispute_id: 'dp_lost_insufficient',
+      })
+    );
+
+    // No wallet_transactions row should be inserted on the insufficient-funds
+    // path — a `failed` row would block later reconciliation because of the
+    // partial unique index on (metadata->>'stripe_dispute_id')
+    // WHERE type='dispute_loss'.
+    expect(recordedWalletTxInserts).toHaveLength(0);
+
+    // User is notified that the deduction failed and amount is outstanding.
+    expect(recordedNotificationInserts).toHaveLength(1);
+    expect(recordedNotificationInserts[0]).toMatchObject({
+      user_id: 'poster_user_5',
+      title: 'Dispute Resolved — Lost',
+    });
+    expect(recordedNotificationInserts[0].body).toMatch(/insufficient funds/i);
+    expect(recordedNotificationInserts[0].body).toContain('99.00');
   });
 });

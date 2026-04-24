@@ -1659,51 +1659,26 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
 
                   if (insufficientFunds) {
                     disputeLossApplied = false;
+                    // NOTE: intentionally do NOT insert a `failed` dispute_loss row.
+                    // wallet_transactions has a partial unique index on
+                    // (metadata->>'stripe_dispute_id') WHERE type='dispute_loss',
+                    // so a persisted failed row would block a later successful
+                    // reconciliation for the same dispute (e.g. after the user
+                    // tops up). balance_frozen remains true and the notification
+                    // below signals manual review; reconciliation tooling must
+                    // re-run apply_dispute_loss_transaction (which will insert
+                    // the completed row atomically) rather than relying on a
+                    // pre-existing failed row.
                     logger.warn(
                       {
                         userId: closedUserId,
                         disputeId: closedDispute.id,
                         amount: closedAmountDollars,
+                        stripePaymentIntentId: closedPaymentIntentId ?? null,
                         err: errMsg,
                       },
-                      '[payments] charge.dispute.closed (lost): insufficient funds — recording failed dispute_loss for manual review'
+                      '[payments] charge.dispute.closed (lost): insufficient funds — dispute_loss requires manual review; reconciliation must re-run apply_dispute_loss_transaction after top-up, wallet remains frozen'
                     );
-
-                    try {
-                      const { error: insertErr } = await admin
-                        .from('wallet_transactions')
-                        .insert({
-                          user_id: closedUserId,
-                          type: 'dispute_loss',
-                          amount: -closedAmountDollars,
-                          description: `Chargeback dispute lost (${closedDispute.id}) - failed due to insufficient funds`,
-                          status: 'failed',
-                          metadata: {
-                            stripe_dispute_id: closedDispute.id,
-                            stripe_payment_intent_id: closedPaymentIntentId ?? null,
-                          },
-                        });
-
-                      if (insertErr) {
-                        logger.error(
-                          {
-                            userId: closedUserId,
-                            disputeId: closedDispute.id,
-                            err: insertErr.message,
-                          },
-                          '[payments] charge.dispute.closed (lost): failed to insert failed dispute_loss transaction'
-                        );
-                      }
-                    } catch (insErr: any) {
-                      logger.error(
-                        {
-                          userId: closedUserId,
-                          disputeId: closedDispute.id,
-                          err: insErr?.message,
-                        },
-                        '[payments] charge.dispute.closed (lost): exception while recording failed dispute_loss transaction'
-                      );
-                    }
                   } else {
                     logger.error(
                       {
