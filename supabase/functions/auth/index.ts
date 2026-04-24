@@ -71,7 +71,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
       if (password.length < 6) return jsonResponse({ error: 'Password too short (min 6)' }, 400);
 
       const normalizedEmail = email.trim().toLowerCase();
-      const normalizedUsername = username.trim();
+      // Usernames are case-insensitive and stored lowercase so that the pool
+      // cannot be exhausted by case variants (Alice vs alice) of the same name.
+      const normalizedUsername = username.trim().toLowerCase();
 
       // Check for existing email
       const { data: existingEmail, error: emailCheckError } = await supabase
@@ -89,11 +91,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }
       if (existingEmail) return jsonResponse({ error: 'Email already registered' }, 409);
 
-      // Check for existing username
+      // Check for existing username (case-insensitive)
       const { data: existingUsername, error: usernameCheckError } = await supabase
         .from('profiles')
         .select('id')
-        .eq('username', normalizedUsername)
+        .ilike('username', normalizedUsername)
         .maybeSingle();
       if (usernameCheckError) {
         console.error(
