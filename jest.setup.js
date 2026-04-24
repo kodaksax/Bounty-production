@@ -283,7 +283,7 @@ jest.mock('expo-modules-core', () => ({
   },
   requireNativeModule: jest.fn(() => ({})),
   NativeModulesProxy: {},
-}));
+}), { virtual: true });
 
 // Mock expo-application
 jest.mock('expo-application', () => ({
