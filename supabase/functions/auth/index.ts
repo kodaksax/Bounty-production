@@ -71,12 +71,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
       // Generate a temporary username from the email local part if none provided.
       // The onboarding flow will let the user choose their real username.
+      const isExplicitUsername = !!(rawUsername && /^[a-zA-Z0-9_]{3,24}$/.test(rawUsername.trim()));
       let normalizedUsername: string;
-      if (rawUsername && /^[a-zA-Z0-9_]{3,24}$/.test(rawUsername.trim())) {
-        normalizedUsername = rawUsername.trim();
+      if (isExplicitUsername) {
+        normalizedUsername = rawUsername!.trim();
       } else {
-        const emailLocal = normalizedEmail.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 18);
-        const suffix = Date.now().toString(36).slice(-4);
+        const emailLocal = normalizedEmail.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 14);
+        // Use full base-36 timestamp for sufficient entropy in the suffix
+        const suffix = Date.now().toString(36);
         normalizedUsername = `${emailLocal}_${suffix}`;
       }
 
@@ -96,23 +98,27 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }
       if (existingEmail) return jsonResponse({ error: 'Email already registered' }, 409);
 
-      // Only check for duplicate username when the caller explicitly provided one.
-      // Auto-generated temp usernames include a timestamp suffix and are unique by design.
-      if (rawUsername && rawUsername.trim() === normalizedUsername) {
-        const { data: existingUsername, error: usernameCheckError } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('username', normalizedUsername)
-          .maybeSingle();
-        if (usernameCheckError) {
-          console.error(
-            '[auth/register] username lookup error:',
-            usernameCheckError.message,
-            usernameCheckError.code
-          );
-          return jsonResponse({ error: 'Unable to complete registration. Please try again.' }, 500);
+      // Always check for duplicate username to catch unlikely timestamp collisions and
+      // any explicitly-provided username conflicts.
+      const { data: existingUsername, error: usernameCheckError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('username', normalizedUsername)
+        .maybeSingle();
+      if (usernameCheckError) {
+        console.error(
+          '[auth/register] username lookup error:',
+          usernameCheckError.message,
+          usernameCheckError.code
+        );
+        return jsonResponse({ error: 'Unable to complete registration. Please try again.' }, 500);
+      }
+      if (existingUsername) {
+        if (isExplicitUsername) {
+          return jsonResponse({ error: 'Username already taken' }, 409);
         }
-        if (existingUsername) return jsonResponse({ error: 'Username already taken' }, 409);
+        // Collision on auto-generated name: append extra random entropy and retry once
+        normalizedUsername = `${normalizedUsername}_${Math.random().toString(36).slice(2, 6)}`;
       }
 
       console.log('[auth/register] creating auth user', {
