@@ -180,7 +180,7 @@ with the `{ error }` context shape expected by the logger's normalisation pass.
 | 🟢 Low | Multi-currency support (currently US-only via `currency: 'usd'`) |
 | 🟢 Low | Recurring bounties / subscriptions via `stripe.subscriptions` |
 | 🟢 Low | Consolidate `docs/payments/` — archive sprint logs, keep reference docs |
-| 🟢 Low | Migrate from `stripe.tokens.create` (deprecated) for ACH to `stripe.setupIntents` with `us_bank_account` |
+| ✅ Done | ~~Migrate from `stripe.tokens.create` (deprecated) for ACH to `stripe.setupIntents` with `us_bank_account`~~ — `POST /payments/bank-accounts` now uses `stripe.setupIntents.create` with `us_bank_account` + microdeposit verification (see `services/api/src/routes/payments.ts`) |
 | 🟢 Low | Radar / fraud rules: define custom Radar rules aligned with platform risk model |
 | 🟢 Low | PCI DSS SAQ-A compliance review before processing live card data |
 

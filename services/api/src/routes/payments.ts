@@ -1492,8 +1492,15 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
   );
 
   /**
-   * Add bank account (ACH) as a payment method
-   * Creates a bank account token and attaches it to the customer
+   * Add bank account (ACH) as a payment method for the customer.
+   *
+   * Uses a SetupIntent with `us_bank_account` + microdeposit verification,
+   * replacing the deprecated `stripe.tokens.create({ bank_account })` flow.
+   *
+   * The returned SetupIntent will typically be in `requires_action` status with
+   * a `verify_with_microdeposits` next action; the client uses the returned
+   * `clientSecret` to complete verification (microdeposits or Plaid/Financial
+   * Connections) before the bank account can be charged.
    */
   fastify.post(
     '/payments/bank-accounts',
@@ -1533,43 +1540,76 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
         // Get or create Stripe customer
         const customerId = await getOrCreateStripeCustomer(request.userId);
 
-        // Create bank account token
-        const token = await stripe.tokens.create({
-          bank_account: {
-            country: 'US',
-            currency: 'usd',
-            account_holder_name: accountHolderName,
-            account_holder_type: 'individual',
-            routing_number: routingNumber,
-            account_number: accountNumber,
+        // Create and confirm a SetupIntent for a us_bank_account payment method.
+        // `confirm: true` combined with inline `payment_method_data` both creates
+        // the PaymentMethod and attaches it to the customer, and transitions the
+        // SetupIntent to `requires_action` with microdeposit verification.
+        const setupIntent = await stripe.setupIntents.create({
+          customer: customerId,
+          payment_method_types: ['us_bank_account'],
+          payment_method_data: {
+            type: 'us_bank_account',
+            us_bank_account: {
+              account_number: accountNumber,
+              routing_number: routingNumber,
+              account_type: accountType,
+              account_holder_type: 'individual',
+            },
+            billing_details: {
+              name: accountHolderName,
+            },
           },
+          payment_method_options: {
+            us_bank_account: {
+              verification_method: 'microdeposits',
+            },
+          },
+          confirm: true,
+          usage: 'off_session',
         });
 
-        // Attach bank account to customer
-        const bankAccount = await stripe.customers.createSource(customerId, {
-          source: token.id,
-        });
+        // Retrieve PM details so we can surface last4/bank name to the client.
+        // (Stripe returns `payment_method` as either a string id or an expanded
+        // object depending on the request; handle both shapes safely.)
+        let paymentMethodId: string | undefined;
+        let last4: string | undefined;
+        let bankName: string | undefined;
 
-        // Type guard to safely access Stripe bank account properties
-        interface StripeBankAccount {
-          id: string;
-          object: string;
-          last4?: string;
-          bank_name?: string;
-          [key: string]: any;
+        const pmField = setupIntent.payment_method;
+        if (typeof pmField === 'string') {
+          paymentMethodId = pmField;
+          try {
+            const pm = await stripe.paymentMethods.retrieve(pmField);
+            last4 = pm.us_bank_account?.last4 ?? undefined;
+            bankName = pm.us_bank_account?.bank_name ?? undefined;
+          } catch (pmErr) {
+            logger.warn({ err: pmErr }, '[payments] Failed to retrieve PaymentMethod details');
+          }
+        } else if (pmField && typeof pmField === 'object') {
+          paymentMethodId = pmField.id;
+          last4 = pmField.us_bank_account?.last4 ?? undefined;
+          bankName = pmField.us_bank_account?.bank_name ?? undefined;
         }
 
-        const typedBankAccount = bankAccount as StripeBankAccount;
-        const last4 = typedBankAccount.last4 || accountNumber.slice(-4);
-        const bankName = typedBankAccount.bank_name;
+        // Fallback last4 to the supplied account number so the client always has
+        // something to display (never expose the full account number).
+        const safeLast4 = last4 || accountNumber.slice(-4);
 
-        logger.info(`[payments] Added bank account (last4: ${last4}) for user ${request.userId}`);
+        logger.info(
+          `[payments] Created us_bank_account SetupIntent ${setupIntent.id} (status=${setupIntent.status}, last4: ${safeLast4}) for user ${request.userId}`
+        );
 
         return {
           success: true,
+          setupIntent: {
+            id: setupIntent.id,
+            status: setupIntent.status,
+            clientSecret: setupIntent.client_secret,
+            nextAction: setupIntent.next_action ?? undefined,
+          },
           bankAccount: {
-            id: bankAccount.id,
-            last4,
+            id: paymentMethodId,
+            last4: safeLast4,
             bankName,
             accountType,
           },
@@ -1582,15 +1622,20 @@ export async function registerPaymentRoutes(fastify: FastifyInstance) {
         const stripeError = error as any;
 
         if (stripeError.type === 'StripeInvalidRequestError') {
-          // Check error code or param for more reliable error detection
+          // Check error code or param for more reliable error detection.
+          // Stripe reports the offending parameter under the new
+          // `payment_method_data.us_bank_account.*` path for SetupIntents.
+          const param: string | undefined = stripeError.param;
           if (
             stripeError.code === 'invalid_routing_number' ||
-            stripeError.param === 'bank_account[routing_number]'
+            param === 'bank_account[routing_number]' ||
+            param === 'payment_method_data[us_bank_account][routing_number]'
           ) {
             errorMessage = 'Invalid routing number';
           } else if (
             stripeError.code === 'invalid_account_number' ||
-            stripeError.param === 'bank_account[account_number]'
+            param === 'bank_account[account_number]' ||
+            param === 'payment_method_data[us_bank_account][account_number]'
           ) {
             errorMessage = 'Invalid account number';
           }
