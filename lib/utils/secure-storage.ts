@@ -9,6 +9,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+// eslint-disable-next-line import/no-unresolved
 import { requireNativeModule } from 'expo-modules-core';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';

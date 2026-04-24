@@ -570,6 +570,11 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   }, [bounty.attachments_json])
 
   const handleSendMessage = async (text: string) => {
+    if (__DEV__) {
+      console.log('[handleSendMessage] bounty.accepted_by:', bounty.accepted_by)
+      console.log('[handleSendMessage] conversation:', conversation?.id, conversation?.participantIds)
+      console.log('[handleSendMessage] currentUserId:', currentUserId)
+    }
     const resolveCounterpartyId = (): string | null => {
       const effectiveUserId = currentUserId || getCurrentUserId()
       const participantFallback = effectiveUserId
@@ -577,16 +582,21 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         : null
       const ownerCounterparty = bounty.accepted_by || readyRecord?.hunter_id || participantFallback
       const hunterCounterparty = bounty.poster_id || bounty.user_id || participantFallback
-
+      
       if (isOwner) {
         return ownerCounterparty ? String(ownerCounterparty) : null
       }
 
       return hunterCounterparty ? String(hunterCounterparty) : null
     }
+    
+    const counterpartyId = resolveCounterpartyId()
+    if (__DEV__) {
+      console.log('[handleSendMessage] counterpartyId:', counterpartyId)
+    }
 
     let targetConversationId = conversation?.id ? String(conversation.id) : null
-    const counterpartyId = resolveCounterpartyId()
+    
 
     if (counterpartyId) {
       try {
