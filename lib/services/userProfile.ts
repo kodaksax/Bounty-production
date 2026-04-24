@@ -81,15 +81,12 @@ export async function isUsernameUnique(username: string, currentUserId?: string)
       return false;
     }
 
-    // Swallow "no rows" style responses as "unique"; log everything else and
-    // fall through to the local fallback so onboarding isn't blocked by
-    // transient network/RLS issues.
-    const code = (error as { code?: string }).code;
-    if (code === 'PGRST116') {
-      return true;
-    }
+    // Any error from the authoritative query (network, RLS, etc.) → log and
+    // fall through to the local AsyncStorage fallback below. The DB UNIQUE
+    // constraint is the ultimate gate on writes, so a false "available" here
+    // can never cause two accounts to share a username.
     console.warn('[userProfile] Supabase username uniqueness check failed, falling back to local index:', {
-      code,
+      code: (error as { code?: string }).code,
       message: error.message,
     });
   } catch (err) {

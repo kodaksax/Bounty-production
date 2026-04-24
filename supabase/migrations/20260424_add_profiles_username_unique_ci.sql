@@ -6,13 +6,20 @@
 --
 -- This migration:
 --   1. De-duplicates any existing case-variant collisions by suffixing the
---      most recently created profile's username with a short random token so
---      the unique index can be built without errors. Affected users can pick
---      a new username in-app. This is intentionally non-destructive (no rows
---      are deleted) so nothing else that references profiles.id breaks.
+--      most recently created profile's username with a short fragment of its
+--      id so the unique index can be built without errors. The id suffix is
+--      globally unique so no new collisions can be introduced by this step.
+--      Affected users can pick a new username in-app. This is intentionally
+--      non-destructive (no rows are deleted) so nothing else that references
+--      profiles.id breaks.
 --   2. Adds a case-insensitive unique index on LOWER(username). Combined with
 --      the existing UNIQUE(username) this locks the username namespace to a
 --      single owner per canonical (lowercased) form.
+--
+-- Note on existing data: pre-existing profiles keep their original casing
+-- (e.g. `Alice` stays as `Alice`) — only their LOWER() form is uniqueness-
+-- checked. New registrations are lowercased at the edge function, so over
+-- time the dataset naturally converges to all-lowercase.
 --
 -- Usernames are returned to the pool automatically:
 --   - ON DELETE CASCADE from auth.users removes the profile row, freeing the name
