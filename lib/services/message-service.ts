@@ -15,6 +15,8 @@ import { logClientError, logClientInfo } from './monitoring';
 import { offlineQueueService } from './offline-queue-service';
 import * as supabaseMessaging from './supabase-messaging';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 function tryParseEncryptedPayload(text: string): EncryptedMessage | null {
   try {
     const parsed = JSON.parse(text);
@@ -170,68 +172,60 @@ export const messageService = {
       return { message: tempMessage, encryptionWarning };
     }
 
+    const isUuidConversation = UUID_RE.test(conversationId);
+
     let message: Message;
     try {
-      console.log('[sendMessage] Sending to Supabase:', {
-        conversationId,
-        text: finalText,
-        sanitizedText,
-        senderId: effectiveSenderId,
-        isEncrypted,
-      });
+      if (!isUuidConversation) {
+        // Local/fallback conversation IDs (e.g. "conv-*", "local-*") — use AsyncStorage-backed messaging
+        const localMessage = await messagingService.sendMessage(
+          conversationId,
+          finalText,
+          effectiveSenderId
+        );
+        message = { ...localMessage, isEncrypted };
+      } else {
+        // UUID conversations — persist to Supabase via supabaseMessaging to avoid duplicate logic
+        const sentMessage = await supabaseMessaging.sendMessage(
+          conversationId,
+          finalText,
+          effectiveSenderId
+        );
+        message = {
+          ...sentMessage,
+          status: sentMessage.status ?? 'sent',
+          isEncrypted,
+        };
 
-      
+        // Update the conversation's last_message in Supabase
+        const {
+          data: updatedConversation,
+          error: conversationUpdateError,
+        } = await supabase
+          .from('conversations')
+          .update({
+            last_message: sanitizedText,
+            updated_at: message.createdAt,
+          })
+          .eq('id', conversationId)
+          .select('id')
+          .maybeSingle();
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-      const { data, error } = await supabase
-        .from('messages')
-        .insert({
-          conversation_id: conversationId,
-          sender_id: effectiveSenderId,
-          text: finalText,
-          status: 'sent',
-        })
-        .select()
-        .single()
-
-      if (error) throw error
-
-      message = {
-        id: data.id,
-        conversationId: data.conversation_id,
-        senderId: data.sender_id,
-        text: data.text,
-        createdAt: data.created_at,
-        status: data.status ?? 'sent',
-        isEncrypted,
+        if (conversationUpdateError) {
+          console.error('[sendMessage] Failed to update conversation last_message:', {
+            conversationId,
+            messageId: message.id,
+            error: conversationUpdateError,
+          });
+        } else if (!updatedConversation) {
+          console.error('[sendMessage] Conversation last_message update affected no rows:', {
+            conversationId,
+            messageId: message.id,
+          });
+        }
       }
-
-      // Also update the conversation's last_message in Supabase
-      await supabase
-        .from('conversations')
-        .update({
-          last_message: sanitizedText,
-          updated_at: message.createdAt,
-        })
-        .eq('id', conversationId)
-
-
-
-      console.log('[sendMessage] Supabase response:', message);
     } catch (err) {
-      console.error('[sendMessage] Supabase call FAILED:', err);
+      console.error('[sendMessage] Send FAILED:', err);
       throw err;
     }
 
