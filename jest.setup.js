@@ -247,43 +247,47 @@ jest.mock('mixpanel-react-native', () => ({
 }));
 
 // Mock expo-modules-core
-jest.mock('expo-modules-core', () => ({
-  EventEmitter: class MockEventEmitter {
-    constructor() {
-      this.listeners = {};
-    }
-
-    addListener(event, callback) {
-      if (!this.listeners[event]) {
-        this.listeners[event] = [];
-      }
-      this.listeners[event].push(callback);
-      return { remove: () => this.removeListener(event, callback) };
-    }
-
-    removeListener(event, callback) {
-      if (this.listeners[event]) {
-        this.listeners[event] = this.listeners[event].filter(cb => cb !== callback);
-      }
-    }
-
-    emit(event, ...args) {
-      if (this.listeners[event]) {
-        this.listeners[event].forEach(callback => callback(...args));
-      }
-    }
-
-    removeAllListeners(event) {
-      if (event) {
-        delete this.listeners[event];
-      } else {
+jest.mock(
+  'expo-modules-core',
+  () => ({
+    EventEmitter: class MockEventEmitter {
+      constructor() {
         this.listeners = {};
       }
-    }
-  },
-  requireNativeModule: jest.fn(() => ({})),
-  NativeModulesProxy: {},
-}));
+
+      addListener(event, callback) {
+        if (!this.listeners[event]) {
+          this.listeners[event] = [];
+        }
+        this.listeners[event].push(callback);
+        return { remove: () => this.removeListener(event, callback) };
+      }
+
+      removeListener(event, callback) {
+        if (this.listeners[event]) {
+          this.listeners[event] = this.listeners[event].filter(cb => cb !== callback);
+        }
+      }
+
+      emit(event, ...args) {
+        if (this.listeners[event]) {
+          this.listeners[event].forEach(callback => callback(...args));
+        }
+      }
+
+      removeAllListeners(event) {
+        if (event) {
+          delete this.listeners[event];
+        } else {
+          this.listeners = {};
+        }
+      }
+    },
+    requireNativeModule: jest.fn(() => ({})),
+    NativeModulesProxy: {},
+  }),
+  { virtual: true }
+);
 
 // Mock expo-application
 jest.mock('expo-application', () => ({
