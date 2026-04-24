@@ -26,7 +26,7 @@ import {
 } from 'react-native'
 import { useAttachmentUpload } from '../hooks/use-attachment-upload'
 import { logClientError } from '../lib/services/monitoring'
-import { navigationIntent } from '../lib/services/navigation-intent'
+
 import { useWallet } from '../lib/wallet-context'
 import { AttachmentViewerModal } from './attachment-viewer-modal'
 import { BountyCard } from './bounty-card'
@@ -847,19 +847,8 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
       }
 
       dispatchUi({ type: 'set', key: 'conversation', value: targetConversation })
-      await navigationIntent.setPendingConversationId(targetConversationId)
-      router.push('/tabs/bounty-app?screen=messages' as '/tabs/bounty-app')
+      router.push(`/tabs/messenger/${encodeURIComponent(targetConversationId)}` as any)
     } catch (err) {
-      console.error('Failed to navigate to messages screen via BountyApp', { conversationId: targetConversationId, error: err })
-      if (targetConversationId) {
-        console.info('Attempting fallback navigation to direct message route', { conversationId: targetConversationId })
-        try {
-          ;(router as any).push(`/messages/${encodeURIComponent(targetConversationId)}`)
-          return
-        } catch (err2) {
-          console.error('Fallback direct conversation route failed', err2)
-        }
-      }
       Alert.alert('Message Failed', 'We could not open or create a conversation. You can try again or compose a new message manually.')
     }
   }
