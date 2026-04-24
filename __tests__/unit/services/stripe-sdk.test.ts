@@ -90,7 +90,7 @@ describe('stripe-sdk: initialize', () => {
 
   it('loads the native SDK and calls initStripe when available', async () => {
     const initStripe = jest.fn().mockResolvedValue(undefined);
-    jest.doMock('@stripe/stripe-react-native', () => ({ initStripe }), { virtual: true });
+    jest.doMock('@stripe/stripe-react-native', () => ({ initStripe }));
 
     let stripeSdk: any;
     jest.isolateModules(() => {
@@ -110,7 +110,7 @@ describe('stripe-sdk: initialize', () => {
 
   it('is idempotent — initialize only runs once', async () => {
     const initStripe = jest.fn().mockResolvedValue(undefined);
-    jest.doMock('@stripe/stripe-react-native', () => ({ initStripe }), { virtual: true });
+    jest.doMock('@stripe/stripe-react-native', () => ({ initStripe }));
 
     let stripeSdk: any;
     jest.isolateModules(() => {
@@ -128,13 +128,9 @@ describe('stripe-sdk: initialize', () => {
     // service uses dynamic import, we simulate the failure by providing a
     // module whose `initStripe` is undefined — the service then simply
     // skips setting `stripeSDK`, which is the supported behaviour in web/Node.
-    jest.doMock(
-      '@stripe/stripe-react-native',
-      () => {
-        throw new Error('Unavailable in non-native environment');
-      },
-      { virtual: true }
-    );
+    jest.doMock('@stripe/stripe-react-native', () => {
+      throw new Error('Unavailable in non-native environment');
+    });
 
     let stripeSdk: any;
     jest.isolateModules(() => {
@@ -149,7 +145,7 @@ describe('stripe-sdk: initialize', () => {
   it('skips initStripe when publishable key is empty', async () => {
     delete process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY;
     const initStripe = jest.fn().mockResolvedValue(undefined);
-    jest.doMock('@stripe/stripe-react-native', () => ({ initStripe }), { virtual: true });
+    jest.doMock('@stripe/stripe-react-native', () => ({ initStripe }));
 
     let stripeSdk: any;
     jest.isolateModules(() => {
