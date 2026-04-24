@@ -35,7 +35,6 @@ import type { FullConversation, Message } from '../../lib/types';
 interface ChatDetailScreenProps {
  conversation: FullConversation;
  onBack?: () => void;
- onNavigate?: (screen?: string) => void;
 }
 
 
@@ -204,11 +203,6 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
  };
 
 
- const getItemLayout = (_: any, index: number) => ({
-   length: 80,
-   offset: 80 * index,
-   index,
- });
 
 
  const selectedMessage = mergedMessages.find(m => m.id === selectedMessageId);
@@ -290,7 +284,6 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
            initialNumToRender={15}
            windowSize={10}
            removeClippedSubviews={true}
-           getItemLayout={getItemLayout}
            onScrollToIndexFailed={info => {
              const wait = new Promise(resolve => setTimeout(resolve, 500));
              wait.then(() => {
@@ -301,7 +294,7 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
 
 
          {/* Message Input */}
-         <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom || 0, BOTTOM_NAV_OFFSET + 8) }]}>
+         <View style={[styles.inputContainer, { paddingBottom: insets.bottom || 0 }]}>
            <View style={styles.inputRow}>
              <TouchableOpacity
                style={{ marginRight: 8, alignSelf: 'flex-end' }}
