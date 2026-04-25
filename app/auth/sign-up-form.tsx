@@ -3,8 +3,11 @@ import { MaterialIcons } from '@expo/vector-icons'
 import { ValidationMessage } from 'app/components/ValidationMessage'
 import type { Href } from 'expo-router'
 import { useRouter } from 'expo-router'
-import { useRef, useState } from 'react'
-import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { useEffect, useRef, useState } from 'react'
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import { PRIVACY_TEXT } from '../../assets/legal/privacy'
+import { TERMS_TEXT } from '../../assets/legal/terms'
 import { BrandingLogo } from '../../components/ui/branding-logo'
 import { ValidationPatterns } from '../../hooks/use-form-validation'
 import { config } from '../../lib/config'
@@ -39,6 +42,7 @@ export function SignUpForm() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [ageVerified, setAgeVerified] = useState(false)
   const [termsAccepted, setTermsAccepted] = useState(false)
+  const [legalModal, setLegalModal] = useState<'terms' | 'privacy' | null>(null)
 
   const passwordRef = useRef<TextInput>(null)
   const confirmPasswordRef = useRef<TextInput>(null)
@@ -265,6 +269,7 @@ export function SignUpForm() {
   }
 
   return (
+    <>
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
         <View className="flex-1 bg-emerald-700/95 px-6 pt-20 pb-8">
@@ -436,11 +441,19 @@ export function SignUpForm() {
                 </TouchableOpacity>
                 <View className="flex-1 flex-row flex-wrap">
                   <Text className="text-white/90">I accept the </Text>
-                  <TouchableOpacity onPress={() => router.push('/legal/terms')}>
+                  <TouchableOpacity
+                    onPress={() => setLegalModal('terms')}
+                    accessibilityRole="link"
+                    accessibilityLabel="View Terms of Service"
+                  >
                     <Text className="text-white underline">Terms of Service</Text>
                   </TouchableOpacity>
                   <Text className="text-white/90"> and </Text>
-                  <TouchableOpacity onPress={() => router.push('/legal/privacy')}>
+                  <TouchableOpacity
+                    onPress={() => setLegalModal('privacy')}
+                    accessibilityRole="link"
+                    accessibilityLabel="View Privacy Policy"
+                  >
                     <Text className="text-white underline">Privacy Policy</Text>
                   </TouchableOpacity>
                 </View>
@@ -463,5 +476,41 @@ export function SignUpForm() {
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+    <Modal
+      visible={legalModal !== null}
+      animationType="slide"
+      onRequestClose={() => setLegalModal(null)}
+    >
+      <SafeAreaView className="flex-1 bg-emerald-600">
+        <View className="flex-row justify-between items-center p-4">
+          <View className="flex-row items-center">
+            <MaterialIcons
+              name={legalModal === 'terms' ? 'gavel' : 'privacy-tip'}
+              size={24}
+              color="#fff"
+            />
+            <Text className="text-lg font-bold tracking-wider ml-2 text-white">
+              {legalModal === 'terms' ? 'Terms of Service' : 'Privacy Policy'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => setLegalModal(null)}
+            className="p-2"
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+          >
+            <MaterialIcons name="close" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
+        <ScrollView className="px-4" contentContainerStyle={{ paddingBottom: 96 }}>
+          {(legalModal === 'terms' ? TERMS_TEXT : PRIVACY_TEXT)
+            .split(/\n\n+/)
+            .map((p, i) => (
+              <Text key={i} className="text-emerald-100 text-sm leading-6 mb-3">{p}</Text>
+            ))}
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+    </>
   )
 }
