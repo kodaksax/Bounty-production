@@ -17,21 +17,13 @@ import { stripeService } from "../lib/services/stripe-service"
 import type { StripePaymentMethod } from "../lib/services/stripe-internal"
 
 /**
- * Public shape preserved for backward compatibility with existing callers.
- *
- * Manual bank account entry (raw routing/account numbers) is no longer
- * supported. The fields below are retained as optional so older code that
- * destructures them at the type-level keeps compiling, but they are never
- * populated by this component now that linking is handled by Stripe Financial
- * Connections.
+ * Payload passed to the optional `onSave` callback once Financial Connections
+ * has linked one or more banks. Manual entry fields have been removed — bank
+ * linking now goes through Stripe FC exclusively.
  */
 export interface BankAccountData {
-  accountHolderName?: string
-  accountNumber?: string
-  routingNumber?: string
-  accountType?: 'checking' | 'savings'
   /** Newly-linked us_bank_account payment methods returned by Financial Connections. */
-  linkedBanks?: StripePaymentMethod[]
+  linkedBanks: StripePaymentMethod[]
 }
 
 interface AddBankAccountModalProps {

@@ -733,7 +733,20 @@ class PaymentMethodsService {
 
       // 3. Have the server attach the PaymentMethod to the customer and mirror
       //    it on the Connect account.
-      const { linkedBanks } = await invokePayments<{ linkedBanks: unknown[] }>(
+      interface LinkedBankResponse {
+        id?: string;
+        stripe_payment_method_id?: string;
+        bank_name?: string | null;
+        bank_last4?: string | null;
+        account_type?: string | null;
+        fc_account_id?: string | null;
+        stripe_external_account_id?: string | null;
+        verification_status?: 'verified' | 'pending_microdeposits' | 'failed' | null;
+        is_default?: boolean;
+        created?: number;
+      }
+
+      const { linkedBanks } = await invokePayments<{ linkedBanks: LinkedBankResponse[] }>(
         'payments/financial-connections-complete',
         {
           body: {
@@ -744,28 +757,22 @@ class PaymentMethodsService {
         }
       );
 
-      const mapped = (linkedBanks ?? []).map((row: any) => {
+      const mapped: StripePaymentMethod[] = (linkedBanks ?? []).map((row) => {
         return {
           id: String(row.stripe_payment_method_id ?? row.id ?? ''),
           type: 'us_bank_account' as const,
           card: { brand: 'unknown', last4: '****', exp_month: 0, exp_year: 0 },
           us_bank_account: {
-            bank_name: (row.bank_name as string | null) ?? null,
-            last4: (row.bank_last4 as string | null) ?? null,
-            account_type: (row.account_type as string | null) ?? null,
-            fc_account_id: (row.fc_account_id as string | null) ?? null,
-            stripe_external_account_id:
-              (row.stripe_external_account_id as string | null) ?? null,
-            verification_status:
-              (row.verification_status as
-                | 'verified'
-                | 'pending_microdeposits'
-                | 'failed'
-                | null) ?? null,
+            bank_name: row.bank_name ?? null,
+            last4: row.bank_last4 ?? null,
+            account_type: row.account_type ?? null,
+            fc_account_id: row.fc_account_id ?? null,
+            stripe_external_account_id: row.stripe_external_account_id ?? null,
+            verification_status: row.verification_status ?? null,
             is_default: Boolean(row.is_default),
           },
           created: typeof row.created === 'number' ? row.created : Math.floor(Date.now() / 1000),
-        } satisfies StripePaymentMethod;
+        };
       });
 
       analyticsService

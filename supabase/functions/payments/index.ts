@@ -649,7 +649,27 @@ Deno.serve(async (req: Request) => {
 
         // 3) Upsert into payment_methods. Use stripe_payment_method_id as the
         // unique key (the table has a UNIQUE constraint on it).
-        const verificationStatus: string = 'verified'
+        //
+        // Verification status comes from the PaymentMethod itself: Stripe sets
+        // us_bank_account.status_details.blocked when the account can't be used,
+        // and the underlying us_bank_account verification_status reflects whether
+        // microdeposits are still pending. When in doubt, fall back to
+        // 'pending_microdeposits' so the client knows not to attempt deposits yet.
+        let verificationStatus: 'verified' | 'pending_microdeposits' | 'failed' =
+          'pending_microdeposits'
+        const usbankPm = (paymentMethod as any).us_bank_account
+        const fcPermissions: string[] = (fcAccount as any)?.permissions ?? []
+        const blocked = (usbankPm?.status_details as any)?.blocked
+        if (blocked) {
+          verificationStatus = 'failed'
+        } else if (
+          // Instant verification successful: FC linked the account with the
+          // payment_method permission and Stripe issued an immediately-usable PM.
+          fcPermissions.includes('payment_method') &&
+          !blocked
+        ) {
+          verificationStatus = 'verified'
+        }
 
         const upsertRow = {
           user_id: userId,
