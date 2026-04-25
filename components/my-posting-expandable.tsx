@@ -34,6 +34,7 @@ import { PosterReviewModal } from './poster-review-modal'
 import { StaleBountyAlert } from './stale-bounty-alert'
 import { AnimatedSection } from './ui/animated-section'
 import { AttachmentsList } from './ui/attachments-list'
+import { DisputeFrozenBanner } from './ui/dispute-frozen-banner'
 import { MessageBar } from './ui/message-bar'
 import { RatingStars } from './ui/rating-stars'
 import { RevisionFeedbackBanner } from './ui/revision-feedback-banner'
@@ -432,8 +433,13 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           }
         } catch { }
 
-        // Check for active dispute (both cancellation-based and workflow-stage)
+        // Check for active dispute (both cancellation-based and workflow-stage).
+        // Always reset first so resolved disputes (or refreshed cards) don't
+        // remain stuck in the locked state.
         try {
+          dispatchUi({ type: 'set', key: 'hasDispute', value: false })
+          dispatchUi({ type: 'set', key: 'activeDisputeId', value: null })
+
           // First check for workflow-stage disputes
           const workflowDispute = await disputeService.getDisputeByBountyId(String(bounty.id))
           if (!mounted) return
@@ -441,12 +447,16 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
             dispatchUi({ type: 'set', key: 'hasDispute', value: true })
             dispatchUi({ type: 'set', key: 'activeDisputeId', value: workflowDispute.id })
           } else {
-            // Fallback: check cancellation-based disputes
-            const dispute = await disputeService.getDisputeByCancellationId(String(bounty.id))
+            // Fallback: check cancellation-based disputes (looked up by cancellation id)
+            const cancellation = await cancellationService.getCancellationByBountyId(String(bounty.id))
             if (!mounted) return
-            if (dispute && (dispute.status === 'open' || dispute.status === 'under_review')) {
-              dispatchUi({ type: 'set', key: 'hasDispute', value: true })
-              dispatchUi({ type: 'set', key: 'activeDisputeId', value: dispute.id })
+            if (cancellation?.id) {
+              const dispute = await disputeService.getDisputeByCancellationId(String(cancellation.id))
+              if (!mounted) return
+              if (dispute && (dispute.status === 'open' || dispute.status === 'under_review')) {
+                dispatchUi({ type: 'set', key: 'hasDispute', value: true })
+                dispatchUi({ type: 'set', key: 'activeDisputeId', value: dispute.id })
+              }
             }
           }
         } catch { }
@@ -1002,12 +1012,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                   {/* Poster view: Message bar, attachments, rating */}
 
                   {hasDispute && (
-                    <View style={styles.disputeFrozenBox}>
-                      <MaterialIcons name="gavel" size={18} color="#fbbf24" />
-                      <Text style={styles.disputeFrozenText}>
-                        A dispute has been opened for this bounty. The submission and review flow is paused until an admin resolves the dispute.
-                      </Text>
-                    </View>
+                    <DisputeFrozenBanner message="A dispute has been opened for this bounty. The submission and review flow is paused until an admin resolves the dispute." />
                   )}
 
                   {/* Show review button if submission is pending */}
@@ -1101,12 +1106,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                   )}
 
                   {hasDispute && (
-                    <View style={styles.disputeFrozenBox}>
-                      <MaterialIcons name="gavel" size={18} color="#fbbf24" />
-                      <Text style={styles.disputeFrozenText}>
-                        A dispute has been opened for this bounty. Submitting evidence and other workflow actions are paused until an admin resolves the dispute.
-                      </Text>
-                    </View>
+                    <DisputeFrozenBanner message="A dispute has been opened for this bounty. Submitting evidence and other workflow actions are paused until an admin resolves the dispute." />
                   )}
 
                   <View style={styles.infoBox}>
@@ -1241,12 +1241,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
             >
               <View style={{ gap: 16 }}>
                 {hasDispute && (
-                  <View style={styles.disputeFrozenBox}>
-                    <MaterialIcons name="gavel" size={18} color="#fbbf24" />
-                    <Text style={styles.disputeFrozenText}>
-                      A dispute has been opened for this bounty. Reviewing or releasing the bounty is paused until an admin resolves the dispute.
-                    </Text>
-                  </View>
+                  <DisputeFrozenBanner message="A dispute has been opened for this bounty. Reviewing or releasing the bounty is paused until an admin resolves the dispute." />
                 )}
 
                 <View style={styles.infoBox}>
@@ -1287,12 +1282,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                 {(submissionPending || hasSubmission) ? (
                   <>
                     {hasDispute && (
-                      <View style={styles.disputeFrozenBox}>
-                        <MaterialIcons name="gavel" size={18} color="#fbbf24" />
-                        <Text style={styles.disputeFrozenText}>
-                          A dispute has been opened for this bounty. The flow is paused until an admin resolves the dispute.
-                        </Text>
-                      </View>
+                      <DisputeFrozenBanner message="A dispute has been opened for this bounty. The flow is paused until an admin resolves the dispute." />
                     )}
                     <View style={styles.infoBox}>
                       <MaterialIcons name="hourglass-top" size={18} color="#6ee7b7" />
@@ -1302,12 +1292,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                 ) : (
                   <>
                     {hasDispute && (
-                      <View style={styles.disputeFrozenBox}>
-                        <MaterialIcons name="gavel" size={18} color="#fbbf24" />
-                        <Text style={styles.disputeFrozenText}>
-                          A dispute has been opened for this bounty. Submitting evidence is paused until an admin resolves the dispute.
-                        </Text>
-                      </View>
+                      <DisputeFrozenBanner message="A dispute has been opened for this bounty. Submitting evidence is paused until an admin resolves the dispute." />
                     )}
                     {/* Message Input */}
                     <View>
@@ -1652,18 +1637,6 @@ const styles = StyleSheet.create({
   connector: { width: 18, height: 2, backgroundColor: 'rgba(110,231,183,0.35)', marginHorizontal: 6 },
   infoBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: 'rgba(5, 46, 27, 0.35)', padding: 10, borderRadius: 8, marginBottom: 8 },
   infoText: { color: '#d1fae5', fontSize: 12, flex: 1 },
-  disputeFrozenBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    backgroundColor: 'rgba(120, 53, 15, 0.35)',
-    borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.6)',
-    padding: 10,
-    borderRadius: 8,
-    marginBottom: 4,
-  },
-  disputeFrozenText: { color: '#fde68a', fontSize: 12, flex: 1, fontWeight: '600' },
   actionsRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
   primaryBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#10b981', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10 },
   primaryText: { color: '#fff', fontWeight: '600' },

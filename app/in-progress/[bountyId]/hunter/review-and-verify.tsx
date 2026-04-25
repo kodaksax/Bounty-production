@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DisputeFrozenBanner } from '../../../../components/ui/dispute-frozen-banner';
 import { HunterDashboardSkeleton } from '../../../../components/ui/skeleton-loaders';
 import { WorkflowDisputeModal } from '../../../../components/workflow-dispute-modal';
 import { useAttachmentUpload } from '../../../../hooks/use-attachment-upload';
@@ -111,17 +112,15 @@ export default function HunterReviewAndVerifyScreen() {
   }, [routeBountyId, startTime]);
 
   const loadActiveDispute = async (id: string) => {
+    // Always reset first so this works correctly if the screen is reused
+    // for a different bountyId or refreshed after an admin resolved the dispute.
+    setHasActiveDispute(false);
+    setActiveDisputeId(null);
     try {
       const workflowDispute = await disputeService.getDisputeByBountyId(id);
       if (workflowDispute && (workflowDispute.status === 'open' || workflowDispute.status === 'under_review')) {
         setHasActiveDispute(true);
         setActiveDisputeId(workflowDispute.id);
-        return;
-      }
-      const cancellationDispute = await disputeService.getDisputeByCancellationId(id);
-      if (cancellationDispute && (cancellationDispute.status === 'open' || cancellationDispute.status === 'under_review')) {
-        setHasActiveDispute(true);
-        setActiveDisputeId(cancellationDispute.id);
       }
     } catch (err) {
       console.error('Error loading active dispute:', err);
@@ -537,12 +536,7 @@ export default function HunterReviewAndVerifyScreen() {
         ListFooterComponent={() => (
           <>
             {hasActiveDispute && (
-              <View style={styles.disputeFrozenBox}>
-                <MaterialIcons name="gavel" size={18} color="#fbbf24" />
-                <Text style={styles.disputeFrozenText}>
-                  A dispute has been opened for this bounty. Submitting evidence is paused until an admin resolves the dispute.
-                </Text>
-              </View>
+              <DisputeFrozenBanner message="A dispute has been opened for this bounty. Submitting evidence is paused until an admin resolves the dispute." />
             )}
             <TouchableOpacity
               style={[styles.addProofButton, hasActiveDispute && styles.submitButtonDisabled]}
@@ -931,23 +925,6 @@ const styles = StyleSheet.create({
   disputeButtonText: {
     color: '#f59e0b',
     fontSize: 14,
-    fontWeight: '600',
-  },
-  disputeFrozenBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    backgroundColor: 'rgba(120, 53, 15, 0.35)',
-    borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.6)',
-    padding: 10,
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  disputeFrozenText: {
-    color: '#fde68a',
-    fontSize: 12,
-    flex: 1,
     fontWeight: '600',
   },
 });
