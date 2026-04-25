@@ -1,11 +1,13 @@
 "use client"
 import { MaterialIcons } from '@expo/vector-icons'
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import { ValidationMessage } from 'app/components/ValidationMessage'
 import type { Href } from 'expo-router'
 import { useRouter } from 'expo-router'
 import { useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import { PRIVACY_TEXT } from '../../assets/legal/privacy'
+import { TERMS_TEXT } from '../../assets/legal/terms'
 import { BrandingLogo } from '../../components/ui/branding-logo'
 import { ValidationPatterns } from '../../hooks/use-form-validation'
 import { config } from '../../lib/config'
@@ -16,6 +18,11 @@ import { generateCorrelationId, parseAuthError } from '../../lib/utils/auth-erro
 import { suggestEmailCorrection, validateEmail } from '../../lib/utils/auth-validation'
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation'
 
+// iOS Password AutoFill rules for the sign-up password fields.
+// Kept in sync with the client-side validation in `validateForm` so the
+// system-generated "Strong Password" satisfies our requirements.
+const IOS_NEW_PASSWORD_RULES = 'minlength: 8; required: lower; required: upper; required: digit;'
+
 export default function SignUpRoute() {
   return <SignUpForm />
 }
@@ -25,7 +32,6 @@ export function SignUpForm() {
   useScreenBackground('#097959ff') // EMERALD_800 / dark
   const router = useRouter()
   const [email, setEmail] = useState('')
-  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [authError, setAuthError] = useState<string | null>(null)
@@ -36,6 +42,7 @@ export function SignUpForm() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [ageVerified, setAgeVerified] = useState(false)
   const [termsAccepted, setTermsAccepted] = useState(false)
+  const [legalModal, setLegalModal] = useState<'terms' | 'privacy' | null>(null)
 
   const passwordRef = useRef<TextInput>(null)
   const confirmPasswordRef = useRef<TextInput>(null)
@@ -43,22 +50,17 @@ export function SignUpForm() {
   const validateForm = () => {
     const errors: Record<string, string> = {}
 
-    // Validate username
-    if (!username || username.trim().length === 0) {
-      errors.username = 'Username is required'
-    } else if (!/^[a-zA-Z0-9_]{3,24}$/.test(username.trim())) {
-      errors.username = 'Username must be 3-24 characters (letters, numbers, underscore)'
-    }
-
     // Validate email
     const emailError = validateEmail(email)
     if (emailError) errors.email = emailError
 
-    // Validate password - must meet strong password requirements
+    // Validate password - at least 8 chars with uppercase, lowercase, and a number.
+    // Requirements intentionally match iOS's auto-generated "Strong Password" format
+    // (letters + digits + hyphens) so Apple's password autofill works on sign-up.
     if (!password) {
       errors.password = 'Password is required'
-    } else if (!ValidationPatterns.strongPassword.test(password)) {
-      errors.password = 'Password must be at least 8 characters with uppercase, lowercase, number, and special character (@$!%*?&)'
+    } else if (!ValidationPatterns.password.test(password)) {
+      errors.password = 'Password must be at least 8 characters with uppercase, lowercase, and a number'
     }
 
     // Validate password match
@@ -80,23 +82,6 @@ export function SignUpForm() {
     return Object.keys(errors).length === 0
   }
 
-  // Prefill username from onboarding state if available to avoid duplicate entry
-  useEffect(() => {
-    let mounted = true
-    ;(async () => {
-      try {
-        const stored = await AsyncStorage.getItem('@bounty_onboarding_state')
-        if (!stored) return
-        const parsed = JSON.parse(stored)
-        const maybeUsername = parsed && parsed.username ? String(parsed.username) : ''
-        if (mounted && maybeUsername) setUsername(maybeUsername)
-      } catch (e) {
-        // ignore
-      }
-    })()
-    return () => { mounted = false }
-  }, [])
-
   const handleSubmit = async () => {
     setAuthError(null)
     setFieldErrors({})
@@ -116,7 +101,6 @@ export function SignUpForm() {
 
       // Register via backend to ensure duplicate-email checks use admin API
       const normalizedEmail = email.trim().toLowerCase()
-      const normalizedUsername = username.trim()
       // Supabase edge functions require the anon key for unauthenticated calls
       if (!config.supabase.anonKey) {
         console.error('[sign-up] Supabase anon key is missing while Supabase is configured', { correlationId })
@@ -132,7 +116,7 @@ export function SignUpForm() {
           'Content-Type': 'application/json',
           ...(anonKey ? { apikey: anonKey, Authorization: `Bearer ${anonKey}` } : {}),
         },
-        body: JSON.stringify({ email: normalizedEmail, username: normalizedUsername, password }),
+        body: JSON.stringify({ email: normalizedEmail, password }),
       })
 
       if (!registerRes.ok) {
@@ -228,7 +212,6 @@ export function SignUpForm() {
         const session = signInData.session
 
         // Clear form data for security
-        setUsername('')
         setEmail('')
         setPassword('')
         setConfirmPassword('')
@@ -286,6 +269,7 @@ export function SignUpForm() {
   }
 
   return (
+    <>
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
         <View className="flex-1 bg-emerald-700/95 px-6 pt-20 pb-8">
@@ -309,6 +293,8 @@ export function SignUpForm() {
                 }}
                 placeholder="Choose a username (3-24 chars)"
                 autoCapitalize="none"
+                autoComplete="username-new"
+                textContentType={Platform.OS === 'ios' ? 'username' : undefined}
                 editable={!isLoading}
                 className={`w-full bg-white/10 rounded px-3 py-3 text-white ${fieldErrors.username ? 'border border-red-400' : ''}`}
                 placeholderTextColor="rgba(255,255,255,0.4)"
@@ -376,6 +362,7 @@ export function SignUpForm() {
                   secureTextEntry={!showPassword}
                   autoComplete="password-new"
                   textContentType={Platform.OS === 'ios' ? 'newPassword' : undefined}
+                  passwordRules={Platform.OS === 'ios' ? IOS_NEW_PASSWORD_RULES : undefined}
                   editable={!isLoading}
                   className={`w-full bg-white/10 rounded px-3 py-3 text-white pr-12 ${fieldErrors.password ? 'border border-red-400' : ''}`}
                   placeholderTextColor="rgba(255,255,255,0.4)"
@@ -392,7 +379,7 @@ export function SignUpForm() {
                 </TouchableOpacity>
               </View>
               {fieldErrors.password ? <ValidationMessage message={fieldErrors.password} /> : null}
-              <Text className="text-xs text-white/60 mt-1">Must include uppercase, lowercase, number, and special character</Text>
+              <Text className="text-xs text-white/60 mt-1">Must include uppercase, lowercase, and a number</Text>
             </View>
 
             <View>
@@ -411,6 +398,7 @@ export function SignUpForm() {
                   secureTextEntry={!showConfirmPassword}
                   autoComplete="password-new"
                   textContentType={Platform.OS === 'ios' ? 'newPassword' : undefined}
+                  passwordRules={Platform.OS === 'ios' ? IOS_NEW_PASSWORD_RULES : undefined}
                   editable={!isLoading}
                   className={`w-full bg-white/10 rounded px-3 py-3 text-white pr-12 ${fieldErrors.confirmPassword ? 'border border-red-400' : ''}`}
                   placeholderTextColor="rgba(255,255,255,0.4)"
@@ -453,11 +441,19 @@ export function SignUpForm() {
                 </TouchableOpacity>
                 <View className="flex-1 flex-row flex-wrap">
                   <Text className="text-white/90">I accept the </Text>
-                  <TouchableOpacity onPress={() => router.push('/legal/terms')}>
+                  <TouchableOpacity
+                    onPress={() => setLegalModal('terms')}
+                    accessibilityRole="link"
+                    accessibilityLabel="View Terms of Service"
+                  >
                     <Text className="text-white underline">Terms of Service</Text>
                   </TouchableOpacity>
                   <Text className="text-white/90"> and </Text>
-                  <TouchableOpacity onPress={() => router.push('/legal/privacy')}>
+                  <TouchableOpacity
+                    onPress={() => setLegalModal('privacy')}
+                    accessibilityRole="link"
+                    accessibilityLabel="View Privacy Policy"
+                  >
                     <Text className="text-white underline">Privacy Policy</Text>
                   </TouchableOpacity>
                 </View>
@@ -480,5 +476,41 @@ export function SignUpForm() {
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+    <Modal
+      visible={legalModal !== null}
+      animationType="slide"
+      onRequestClose={() => setLegalModal(null)}
+    >
+      <SafeAreaView className="flex-1 bg-emerald-600">
+        <View className="flex-row justify-between items-center p-4">
+          <View className="flex-row items-center">
+            <MaterialIcons
+              name={legalModal === 'terms' ? 'gavel' : 'privacy-tip'}
+              size={24}
+              color="#fff"
+            />
+            <Text className="text-lg font-bold tracking-wider ml-2 text-white">
+              {legalModal === 'terms' ? 'Terms of Service' : 'Privacy Policy'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => setLegalModal(null)}
+            className="p-2"
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+          >
+            <MaterialIcons name="close" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
+        <ScrollView className="px-4" contentContainerStyle={{ paddingBottom: 96 }}>
+          {(legalModal === 'terms' ? TERMS_TEXT : PRIVACY_TEXT)
+            .split(/\n\n+/)
+            .map((p, i) => (
+              <Text key={i} className="text-emerald-100 text-sm leading-6 mb-3">{p}</Text>
+            ))}
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+    </>
   )
 }

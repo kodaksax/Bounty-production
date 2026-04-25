@@ -285,8 +285,24 @@ export const PCI_COMPLIANCE = {
 
 /**
  * Stripe Radar Configuration
- * For fraud prevention and risk management
+ * For fraud prevention and risk management on the BountyExpo P2P gig marketplace
+ *
+ * Radar risk model context:
+ * - P2P marketplace with escrow: funds are held on bounty creation and
+ *   released on completion. Chargebacks after release are costly.
+ * - Common attack vectors: card testing (many small charges), stolen-card
+ *   top-ups followed by fast withdrawal, bust-out by first-time high-value
+ *   customers, and geo-mismatched IP/card pairs.
+ * - Primary operating region is US / Canada / UK / EU / AU-NZ. Payments from
+ *   outside that footprint are rare and warrant additional scrutiny.
+ *
+ * All `rules` and `customRules` entries below are the authoritative source of
+ * truth for which Radar rules must be configured in the Stripe Dashboard
+ * (Dashboard → Radar → Rules). Keep this file and the Dashboard in sync.
+ *
  * @see https://stripe.com/docs/radar
+ * @see https://stripe.com/docs/radar/rules
+ * @see https://stripe.com/docs/radar/lists
  */
 export const RADAR_CONFIG = {
   /**
@@ -296,7 +312,9 @@ export const RADAR_CONFIG = {
   enabled: true,
 
   /**
-   * Risk thresholds
+   * Risk thresholds (0-100, aligned with Stripe's `risk_score`)
+   * These mirror the thresholds that should be configured on the
+   * Dashboard → Radar → Rules page.
    */
   riskThresholds: {
     // Block payments above this risk score
@@ -308,35 +326,315 @@ export const RADAR_CONFIG = {
   },
 
   /**
-   * Rules configuration
-   * These should be configured in Stripe Dashboard
+   * Platform-wide rule toggles. Each flag maps to one or more custom rules
+   * in `customRules` below and/or to a Stripe built-in rule that must be
+   * enabled in the Dashboard.
    */
   rules: {
-    // Block payments from high-risk countries
+    // Block payments from high-risk / sanctioned countries
     blockHighRiskCountries: true,
-    // Require 3DS for high-value transactions
+    // Require 3DS for high-value transactions (see SCA_CONFIG thresholds)
     require3DSHighValue: true,
-    // Block if IP doesn't match billing country
-    blockIPMismatch: false, // Can cause false positives
-    // Limit transaction velocity
+    // Block if IP doesn't match billing country (kept as review to avoid
+    // false positives from VPN / traveling legitimate users)
+    blockIPMismatch: false,
+    // Limit transaction velocity (card / customer / IP)
     velocityChecks: true,
+    // Block anonymous proxy / Tor / known-bad IPs
+    blockAnonymousProxy: true,
+    // Flag disposable / throwaway email domains for review
+    flagDisposableEmail: true,
+    // Card testing protection: block bursts of small declines from one source
+    blockCardTesting: true,
+    // Enforce CVC and postal/ZIP checks when available
+    requireCvcCheck: true,
+    requirePostalCheck: true,
   },
 
   /**
-   * Custom rules (examples)
+   * Country lists
+   *
+   * `blockedCountries` mirrors the Stripe "Blocklist: countries" list and
+   * should be kept consistent with US OFAC / EU sanctions guidance. Add a
+   * country here AND to the Dashboard blocklist.
+   *
+   * `reviewCountries` are routed to manual review rather than blocked
+   * outright.
+   *
+   * `allowedCountries` documents our primary operating footprint. Payments
+   * from outside this list are not automatically blocked but are eligible
+   * for stricter custom rules (see `customRules` below).
+   *
+   * Country codes are ISO 3166-1 alpha-2.
+   */
+  countryLists: {
+    // Comprehensive sanctions / extreme-risk block list. Update whenever
+    // sanctions guidance changes.
+    blockedCountries: [
+      'IR', // Iran
+      'KP', // North Korea
+      'SY', // Syria
+      'CU', // Cuba
+      'RU', // Russia
+      'BY', // Belarus
+      'MM', // Myanmar / Burma
+      'SD', // Sudan
+      'SS', // South Sudan
+      'VE', // Venezuela (sanctioned entities)
+      'AF', // Afghanistan (post-2021 sanctions)
+    ],
+    // Elevated-risk countries routed to manual review
+    reviewCountries: [
+      'NG', // Nigeria
+      'PK', // Pakistan
+      'BD', // Bangladesh
+      'ID', // Indonesia
+      'RO', // Romania
+      'UA', // Ukraine
+      'PH', // Philippines
+      'VN', // Vietnam
+    ],
+    // Primary operating footprint
+    allowedCountries: [
+      'US', 'CA', 'GB', 'IE',
+      'AU', 'NZ',
+      'DE', 'FR', 'NL', 'ES', 'IT', 'PT', 'BE', 'AT', 'FI', 'SE', 'DK', 'NO',
+      'CH', 'LU', 'PL', 'CZ',
+    ],
+  },
+
+  /**
+   * Allow / Block lists
+   *
+   * These document the Stripe "Lists" (Dashboard → Radar → Lists) that
+   * custom rules reference. Runtime code does NOT read these values; they
+   * are documentation of what must be maintained on the Dashboard.
+   *
+   * @see https://stripe.com/docs/radar/lists
+   */
+  lists: {
+    // Email addresses / domains / fingerprints / cards previously tied to
+    // confirmed fraud on this platform. Maintained by the Trust & Safety team.
+    blockList: {
+      emails: 'radar_block_emails',                 // list name in Dashboard
+      emailDomains: 'radar_block_email_domains',
+      cardFingerprints: 'radar_block_card_fingerprints',
+      ipAddresses: 'radar_block_ips',
+    },
+    // Trusted customers (internal test accounts, high-trust partners).
+    // Entries on this list bypass review rules but NOT block rules.
+    allowList: {
+      emails: 'radar_allow_emails',
+      customerIds: 'radar_allow_customer_ids',
+    },
+    // Disposable / throwaway email domains flagged for review.
+    disposableEmailDomains: 'radar_disposable_email_domains',
+  },
+
+  /**
+   * Amount thresholds (USD) specific to BountyExpo's marketplace. These
+   * feed the `customRules` below. Values are chosen to align with typical
+   * bounty sizes on the platform (median posting is ~$25-$100).
+   */
+  amountThresholds: {
+    // Bounties above this are unusual and get extra scrutiny
+    unusualAmount: 500,
+    // Bounties at or above this are high-value (require 3DS + review)
+    highValueAmount: 1000,
+    // Bounties at or above this are blocked outright for first-time customers
+    firstTimeBlockAmount: 2000,
+  },
+
+  /**
+   * Velocity thresholds. Mirror these in the corresponding Dashboard rules.
+   *
+   * Note: Stripe Radar's native aggregation windows are `_hourly` and
+   * `_daily` (there is no native 10-minute window), so velocity rules below
+   * use the `_hourly` aggregates.
+   */
+  velocity: {
+    // Max payment attempts per card+IP in 1 hour before blocking (card testing)
+    cardAttemptsPerHour: 10,
+    // Max payment attempts per IP in 1 hour
+    ipAttemptsPerHour: 20,
+    // Max successful payments per customer in 1 hour
+    customerPaymentsPerHour: 10,
+    // Max successful payments per customer in 24 hours
+    customerPaymentsPerDay: 30,
+  },
+
+  /**
+   * Custom rules
+   *
+   * Each entry corresponds to a rule that MUST be created in
+   * Stripe Dashboard → Radar → Rules. Conditions use Stripe's Radar rule
+   * syntax. Keep this list and the Dashboard in sync; this file is the
+   * source of truth for PR review.
+   *
+   * @see https://stripe.com/docs/radar/rules/reference
    */
   customRules: [
+    // --- Block rules -------------------------------------------------------
     {
-      name: 'Block high-value first-time customer',
-      condition: 'amount > 500 AND customer_transactions_count = 0',
+      name: 'Block payments from sanctioned / high-risk countries',
+      condition:
+        ":card_country: in ('IR','KP','SY','CU','RU','BY','MM','SD','SS','VE','AF') " +
+        "OR :ip_country: in ('IR','KP','SY','CU','RU','BY','MM','SD','SS','VE','AF')",
       action: 'block',
     },
     {
-      name: 'Review mismatched billing',
-      condition: 'ip_country != card_country',
+      name: 'Block anonymous proxy / Tor / known-bad IP',
+      condition: ':is_anonymous_ip:',
+      action: 'block',
+    },
+    {
+      name: 'Block card testing (≥10 declines per card+IP in 1 hour)',
+      condition: ':card_count_for_ip_hourly: > 10 AND :is_declined:',
+      action: 'block',
+    },
+    {
+      name: 'Block high-value first-time customer',
+      condition:
+        'amount_in_usd >= 2000 AND :card_count_for_customer_all_time: = 0',
+      action: 'block',
+    },
+    {
+      name: 'Block when Radar risk_score ≥ 85',
+      condition: ':risk_score: >= 85',
+      action: 'block',
+    },
+    {
+      name: 'Block when email appears on internal block list',
+      condition: ':email: in @radar_block_emails',
+      action: 'block',
+    },
+    {
+      name: 'Block when card fingerprint appears on internal block list',
+      condition: ':card_fingerprint: in @radar_block_card_fingerprints',
+      action: 'block',
+    },
+    {
+      name: 'Block when CVC check fails',
+      condition: ":cvc_check: = 'fail'",
+      action: 'block',
+    },
+
+    // --- Review rules ------------------------------------------------------
+    {
+      name: 'Review payments from elevated-risk countries',
+      condition:
+        ":card_country: in ('NG','PK','BD','ID','RO','UA','PH','VN') " +
+        "OR :ip_country: in ('NG','PK','BD','ID','RO','UA','PH','VN')",
       action: 'review',
     },
+    {
+      name: 'Review when billing country does not match IP country',
+      condition: ':ip_country: != :card_country:',
+      action: 'review',
+    },
+    {
+      name: 'Review when Radar risk_score between 65 and 85',
+      condition: ':risk_score: >= 65 AND :risk_score: < 85',
+      action: 'review',
+    },
+    {
+      name: 'Review unusual amount (> $500) for the platform',
+      condition: 'amount_in_usd > 500',
+      action: 'review',
+    },
+    {
+      name: 'Review high-value bounty (≥ $1000) — requires 3DS',
+      condition: 'amount_in_usd >= 1000',
+      action: 'review',
+    },
+    {
+      name: 'Review disposable / throwaway email domains',
+      condition: ':email_domain: in @radar_disposable_email_domains',
+      action: 'review',
+    },
+    {
+      name: 'Review high velocity per customer (>10 payments in 1 hour)',
+      condition: ':total_count_for_customer_hourly: > 10',
+      action: 'review',
+    },
+    {
+      name: 'Review high velocity per IP (>20 attempts in 1 hour)',
+      condition: ':total_count_for_ip_hourly: > 20',
+      action: 'review',
+    },
+    {
+      name: 'Review postal/ZIP check failures',
+      condition: ":zip_check: = 'fail'",
+      action: 'review',
+    },
+
+    // --- Allow rules (narrow, explicit) -----------------------------------
+    {
+      name: 'Allow trusted internal customers on allow-list',
+      condition: ':customer: in @radar_allow_customer_ids',
+      action: 'allow',
+    },
+
+    // --- 3D Secure rules --------------------------------------------------
+    {
+      name: 'Request 3DS for high-value transactions (≥ $250)',
+      condition: 'amount_in_usd >= 250',
+      action: 'request_3ds',
+    },
+    {
+      name: 'Request 3DS for first-time customers',
+      condition: ':card_count_for_customer_all_time: = 0',
+      action: 'request_3ds',
+    },
+    {
+      name: 'Request 3DS for all European cards (PSD2 / SCA)',
+      condition:
+        ":card_country: in ('AT','BE','BG','HR','CY','CZ','DK','EE','FI'," +
+        "'FR','DE','GR','HU','IE','IT','LV','LT','LU','MT','NL','PL','PT'," +
+        "'RO','SK','SI','ES','SE','IS','LI','NO','GB')",
+      action: 'request_3ds',
+    },
   ],
+
+  /**
+   * Review of Stripe's default fraud block / allow lists
+   *
+   * Stripe Radar ships with a default set of built-in block rules (e.g.
+   * "Block if CVC check fails", "Block if Radar risk level is 'highest'")
+   * and no default allow rules. We have audited the defaults and made the
+   * following decisions — these should also be reflected in the Dashboard:
+   *
+   *   ✔ Keep enabled: "Block if Radar risk level is 'highest'"
+   *   ✔ Keep enabled: "Block if CVC check fails" (duplicated explicitly above)
+   *   ✔ Keep enabled: "Block if card is disposable" (virtual-card lists)
+   *   ✔ Keep enabled: "Review if Radar risk level is 'elevated'"
+   *   ✘ Do NOT auto-block on zip_check failure — US AVS is noisy; we route
+   *     these to review instead (see custom rule above).
+   *   ✘ Do NOT enable "Block if email appears risky" without a review step;
+   *     we prefer to route suspicious emails through the disposable-email
+   *     review rule so humans can triage.
+   *
+   * Default allow lists: Stripe does not ship with any default allow rules.
+   * We only allow the narrow internal-customer list documented above.
+   */
+  defaultListsReview: {
+    reviewedAt: '2026-04-21',
+    keepEnabled: [
+      'block_if_risk_level_is_highest',
+      'block_if_cvc_check_fails',
+      'block_if_card_is_disposable',
+      'review_if_risk_level_is_elevated',
+    ],
+    overridden: [
+      // Stripe default would auto-block on zip_check failure; we route to review.
+      'block_if_zip_check_fails',
+      // Stripe default "risky email" auto-block disabled in favor of review.
+      'block_if_email_is_risky',
+    ],
+    allowListPolicy:
+      'Only the internal `radar_allow_customer_ids` list bypasses review rules. ' +
+      'No allow rule bypasses block rules.',
+  },
 };
 
 /**
