@@ -1,10 +1,9 @@
 "use client"
 import { MaterialIcons } from '@expo/vector-icons'
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import { ValidationMessage } from 'app/components/ValidationMessage'
 import type { Href } from 'expo-router'
 import { useRouter } from 'expo-router'
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { BrandingLogo } from '../../components/ui/branding-logo'
 import { ValidationPatterns } from '../../hooks/use-form-validation'
@@ -30,7 +29,6 @@ export function SignUpForm() {
   useScreenBackground('#097959ff') // EMERALD_800 / dark
   const router = useRouter()
   const [email, setEmail] = useState('')
-  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [authError, setAuthError] = useState<string | null>(null)
@@ -47,13 +45,6 @@ export function SignUpForm() {
 
   const validateForm = () => {
     const errors: Record<string, string> = {}
-
-    // Validate username
-    if (!username || username.trim().length === 0) {
-      errors.username = 'Username is required'
-    } else if (!/^[a-zA-Z0-9_]{3,24}$/.test(username.trim())) {
-      errors.username = 'Username must be 3-24 characters (letters, numbers, underscore)'
-    }
 
     // Validate email
     const emailError = validateEmail(email)
@@ -87,23 +78,6 @@ export function SignUpForm() {
     return Object.keys(errors).length === 0
   }
 
-  // Prefill username from onboarding state if available to avoid duplicate entry
-  useEffect(() => {
-    let mounted = true
-    ;(async () => {
-      try {
-        const stored = await AsyncStorage.getItem('@bounty_onboarding_state')
-        if (!stored) return
-        const parsed = JSON.parse(stored)
-        const maybeUsername = parsed && parsed.username ? String(parsed.username) : ''
-        if (mounted && maybeUsername) setUsername(maybeUsername)
-      } catch (e) {
-        // ignore
-      }
-    })()
-    return () => { mounted = false }
-  }, [])
-
   const handleSubmit = async () => {
     setAuthError(null)
     setFieldErrors({})
@@ -123,7 +97,6 @@ export function SignUpForm() {
 
       // Register via backend to ensure duplicate-email checks use admin API
       const normalizedEmail = email.trim().toLowerCase()
-      const normalizedUsername = username.trim()
       // Supabase edge functions require the anon key for unauthenticated calls
       if (!config.supabase.anonKey) {
         console.error('[sign-up] Supabase anon key is missing while Supabase is configured', { correlationId })
@@ -139,7 +112,7 @@ export function SignUpForm() {
           'Content-Type': 'application/json',
           ...(anonKey ? { apikey: anonKey, Authorization: `Bearer ${anonKey}` } : {}),
         },
-        body: JSON.stringify({ email: normalizedEmail, username: normalizedUsername, password }),
+        body: JSON.stringify({ email: normalizedEmail, password }),
       })
 
       if (!registerRes.ok) {
@@ -235,7 +208,6 @@ export function SignUpForm() {
         const session = signInData.session
 
         // Clear form data for security
-        setUsername('')
         setEmail('')
         setPassword('')
         setConfirmPassword('')
