@@ -115,8 +115,9 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   const STICKY_BOTTOM_EXTRA = 44 // extra height used by chips/title in sticky bar
   const BOTTOM_NAV_OFFSET = 60// height of BottomNav + gap so sticky actions sit fully above it
   const { balance, deposit, createEscrow, refundEscrow } = useWallet()
-  // Filter by status or request state (applied, in_progress, completed, rejected, open, etc.)
-  // Use separate filters per-tab so toggling one doesn't unexpectedly affect the other.
+  // Filter chip state for each tab; kept separate so toggling one doesn't affect the other.
+  // In Progress supports: all, review, applied, in_progress, rejected.
+  // My Postings supports: all, review, open, in_progress.
   const [statusFilterInProgress, setStatusFilterInProgress] = useState<'all' | 'review' | 'applied' | 'in_progress' | 'rejected'>('all')
   const [statusFilterMyPostings, setStatusFilterMyPostings] = useState<'all' | 'review' | 'open' | 'in_progress'>('all')
   // Keep the hunter's requests so we can filter In Progress by request status (applied/accepted/rejected)
@@ -929,7 +930,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                               <Text className={cn('text-xs', selected ? 'text-white font-medium' : 'text-emerald-200')}>{label}</Text>
                               {f === 'review' && count > 0 && (
                                 <View className="ml-1.5 px-1.5 rounded-full bg-amber-400 min-w-[18px] items-center">
-                                  <Text className="text-[10px] font-bold text-emerald-900">{count}</Text>
+                                  <Text className="text-[10px] font-bold text-emerald-900">{count > 99 ? "99+" : count}</Text>
                                 </View>
                               )}
                             </TouchableOpacity>
@@ -1072,7 +1073,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                               <Text className={cn('text-xs', selected ? 'text-white font-medium' : 'text-emerald-200')}>{label}</Text>
                               {f === 'review' && count > 0 && (
                                 <View className="ml-1.5 px-1.5 rounded-full bg-amber-400 min-w-[18px] items-center">
-                                  <Text className="text-[10px] font-bold text-emerald-900">{count}</Text>
+                                  <Text className="text-[10px] font-bold text-emerald-900">{count > 99 ? "99+" : count}</Text>
                                 </View>
                               )}
                             </TouchableOpacity>
