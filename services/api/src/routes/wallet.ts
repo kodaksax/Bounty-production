@@ -719,7 +719,12 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
   );
 
   /**
-   * Add a bank account to user's Stripe Connect account
+   * DEPRECATED — Add a bank account via raw routing/account numbers.
+   *
+   * Manual ACH entry has been removed in favor of Stripe Financial Connections.
+   * Clients must call POST /functions/v1/payments/create-financial-connections-session
+   * followed by POST /functions/v1/payments/financial-connections-complete instead.
+   * Returns 410 Gone so older clients can detect the deprecation and migrate.
    */
   fastify.post(
     '/connect/bank-accounts',
@@ -727,62 +732,17 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
       preHandler: authMiddleware,
     },
     async (request: AuthenticatedRequest, reply) => {
-      try {
-        if (!request.userId) {
-          return reply.code(401).send({ error: 'Unauthorized' });
-        }
-
-        const { accountHolderName, routingNumber, accountNumber, accountType } = request.body as {
-          accountHolderName: string;
-          routingNumber: string;
-          accountNumber: string;
-          accountType: 'checking' | 'savings';
-        };
-
-        if (!accountHolderName || !routingNumber || !accountNumber || !accountType) {
-          return reply.code(400).send({ error: 'Missing required fields' });
-        }
-
-        if (routingNumber.length !== 9) {
-          return reply.code(400).send({ error: 'Invalid routing number' });
-        }
-
-        if (accountNumber.length < 4 || accountNumber.length > 17) {
-          return reply.code(400).send({ error: 'Invalid account number' });
-        }
-
-        if (accountType !== 'checking' && accountType !== 'savings') {
-          return reply.code(400).send({ error: 'Account type must be checking or savings' });
-        }
-
-        // Use consolidated Stripe Connect service to add bank account
-        const { consolidatedStripeConnectService } =
-          await import('../services/consolidated-stripe-connect-service');
-
-        const bankAccount = await consolidatedStripeConnectService.addBankAccount(
-          request.userId,
-          accountHolderName,
-          routingNumber,
-          accountNumber,
-          accountType
-        );
-
-        return {
-          success: true,
-          bankAccount,
-        };
-      } catch (error) {
-        logErrorWithContext(request, error, {
-          operation: 'add_bank_account',
-          userId: request.userId,
-        });
-
-        const message = error instanceof Error ? error.message : 'Failed to add bank account';
-        return reply.code(500).send({
-          error: message,
-          requestId: getRequestContext(request).requestId,
-        });
-      }
+      logErrorWithContext(request, new Error('manual_bank_entry_deprecated'), {
+        operation: 'add_bank_account_deprecated',
+        userId: request.userId,
+      });
+      return reply.code(410).send({
+        error:
+          'Manual bank account entry is no longer supported. Please link your bank securely using Stripe Financial Connections.',
+        code: 'manual_bank_entry_deprecated',
+        migrate_to: '/functions/v1/payments/create-financial-connections-session',
+        requestId: getRequestContext(request).requestId,
+      });
     }
   );
 

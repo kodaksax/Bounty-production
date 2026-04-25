@@ -138,6 +138,33 @@ class PaymentMethodsService {
       const mapMethods = (fnData: { paymentMethods: unknown[] }): StripePaymentMethod[] =>
         (fnData?.paymentMethods || []).map((pm: unknown) => {
           const pmData = pm as Record<string, unknown>;
+          const typeStr = (pmData.type as string) || 'card';
+          if (typeStr === 'us_bank_account') {
+            const bank = (pmData.us_bank_account || {}) as Record<string, unknown>;
+            return {
+              id: (pmData.id as string) || '',
+              type: 'us_bank_account' as const,
+              // Card field is required by the type but unused for ACH; populate
+              // with stable defaults so downstream code doesn't crash.
+              card: { brand: 'unknown', last4: '****', exp_month: 0, exp_year: 0 },
+              us_bank_account: {
+                bank_name: (bank.bank_name as string | null) ?? null,
+                last4: (bank.last4 as string | null) ?? null,
+                account_type: (bank.account_type as string | null) ?? null,
+                fc_account_id: (bank.fc_account_id as string | null) ?? null,
+                stripe_external_account_id:
+                  (bank.stripe_external_account_id as string | null) ?? null,
+                verification_status:
+                  (bank.verification_status as
+                    | 'verified'
+                    | 'pending_microdeposits'
+                    | 'failed'
+                    | null) ?? null,
+                is_default: Boolean(bank.is_default),
+              },
+              created: (pmData.created as number) || Math.floor(Date.now() / 1000),
+            };
+          }
           const cardData = (pmData.card || {}) as Record<string, unknown>;
           return {
             id: (pmData.id as string) || '',
@@ -609,6 +636,276 @@ class PaymentMethodsService {
         success: false,
         error: handleStripeError(error) as StripeError,
       };
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Stripe Financial Connections (US ACH bank linking)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Link a US bank account using Stripe Financial Connections.
+   *
+   * Flow:
+   *   1. Server creates a Financial Connections session bound to the user's
+   *      Stripe Customer.
+   *   2. Stripe's native UI is presented via collectFinancialConnectionsAccounts
+   *      (no manual routing/account number entry — never PCI/NACHA in scope).
+   *   3. Server attaches the resulting us_bank_account PaymentMethod to the
+   *      Customer AND mirrors it onto the user's Connect account as an external
+   *      account (when a Connect account exists). Persists a unified row so the
+   *      same bank powers both deposits and withdrawals.
+   *
+   * Returns the list of newly linked banks (canonical rows from payment_methods).
+   */
+  async linkBankWithFinancialConnections(
+    authToken: string,
+    options: { setAsDefault?: boolean } = {}
+  ): Promise<StripePaymentMethod[]> {
+    performanceService.startMeasurement(
+      'financial_connections_link',
+      'payment_process',
+      {}
+    );
+
+    try {
+      await stripeSdk.initialize();
+
+      if (!authToken) {
+        throw new Error('Authentication required to link a bank account');
+      }
+
+      // 1. Create the FC session on the server.
+      const { clientSecret, sessionId } = await invokePayments<{
+        clientSecret: string;
+        sessionId: string;
+      }>('payments/create-financial-connections-session', {
+        body: {} as Record<string, unknown>,
+        accessToken: authToken,
+      });
+
+      if (!clientSecret || !sessionId) {
+        throw new Error('Failed to create bank linking session');
+      }
+
+      analyticsService
+        .trackEvent('ach_link_started', { sessionId })
+        .catch(() => {
+          /* fire-and-forget */
+        });
+
+      // 2. Present Stripe's native Financial Connections sheet.
+      const sdk = stripeSdk.getSDK();
+      if (!sdk?.collectFinancialConnectionsAccounts) {
+        throw new Error(
+          'Bank linking is not available on this platform. Please update the app and try again.'
+        );
+      }
+
+      const result = await sdk.collectFinancialConnectionsAccounts(clientSecret);
+      if (result?.error) {
+        analyticsService
+          .trackEvent('ach_link_failed', {
+            sessionId,
+            code: result.error.code,
+            message: result.error.message,
+          })
+          .catch(() => {
+            /* fire-and-forget */
+          });
+        // User cancellations come back with a "Canceled" code — surface a
+        // friendly StripeError so callers can treat them as soft failures.
+        throw {
+          type: 'card_error',
+          code: result.error.code,
+          message: result.error.message ?? 'Bank linking was cancelled.',
+        };
+      }
+
+      const linkedAccounts = result?.session?.accounts?.data ?? [];
+      if (linkedAccounts.length === 0) {
+        throw {
+          type: 'api_error',
+          code: 'no_accounts_linked',
+          message: 'No bank account was selected. Please try again.',
+        };
+      }
+
+      // 3. Have the server attach the PaymentMethod to the customer and mirror
+      //    it on the Connect account.
+      const { linkedBanks } = await invokePayments<{ linkedBanks: unknown[] }>(
+        'payments/financial-connections-complete',
+        {
+          body: {
+            sessionId,
+            setAsDefault: options.setAsDefault === true,
+          } as Record<string, unknown>,
+          accessToken: authToken,
+        }
+      );
+
+      const mapped = (linkedBanks ?? []).map((row: any) => {
+        return {
+          id: String(row.stripe_payment_method_id ?? row.id ?? ''),
+          type: 'us_bank_account' as const,
+          card: { brand: 'unknown', last4: '****', exp_month: 0, exp_year: 0 },
+          us_bank_account: {
+            bank_name: (row.bank_name as string | null) ?? null,
+            last4: (row.bank_last4 as string | null) ?? null,
+            account_type: (row.account_type as string | null) ?? null,
+            fc_account_id: (row.fc_account_id as string | null) ?? null,
+            stripe_external_account_id:
+              (row.stripe_external_account_id as string | null) ?? null,
+            verification_status:
+              (row.verification_status as
+                | 'verified'
+                | 'pending_microdeposits'
+                | 'failed'
+                | null) ?? null,
+            is_default: Boolean(row.is_default),
+          },
+          created: typeof row.created === 'number' ? row.created : Math.floor(Date.now() / 1000),
+        } satisfies StripePaymentMethod;
+      });
+
+      analyticsService
+        .trackEvent('ach_link_completed', {
+          sessionId,
+          count: mapped.length,
+        })
+        .catch(() => {
+          /* fire-and-forget */
+        });
+
+      await performanceService.endMeasurement('financial_connections_link', {
+        success: true,
+        count: mapped.length,
+      });
+
+      return mapped;
+    } catch (error) {
+      logger.error('[StripeService] Error linking bank via Financial Connections:', { error });
+
+      analyticsService
+        .trackEvent('ach_link_failed', {
+          error: getNetworkErrorMessage(error),
+        })
+        .catch(() => {
+          /* fire-and-forget */
+        });
+
+      await performanceService.endMeasurement('financial_connections_link', {
+        success: false,
+        error: String(error),
+      });
+
+      throw handleStripeError(error);
+    }
+  }
+
+  /**
+   * Initiate an ACH deposit using a previously linked us_bank_account
+   * PaymentMethod. The server creates and confirms the PaymentIntent in a
+   * single round-trip and returns the resulting status:
+   *
+   *   - 'processing'        → ACH debit in flight (typical happy path).
+   *   - 'requires_action'   → microdeposit verification needed; client should
+   *                           call `verifyMicrodepositsForPayment` later.
+   *   - 'succeeded'         → settled immediately (rare for ACH).
+   *
+   * Wallet credit is applied by the `payment_intent.succeeded` webhook (or via
+   * the existing `/wallet/deposit` endpoint when the client wants to optimistically
+   * record the deposit), so this method does not credit the wallet directly.
+   */
+  async createAchDeposit(
+    params: {
+      amount: number;
+      paymentMethodId: string;
+      currency?: string;
+      metadata?: Record<string, string>;
+    },
+    authToken: string
+  ): Promise<{
+    paymentIntentId: string;
+    clientSecret: string;
+    status: string;
+    requiresAction: boolean;
+    nextAction: unknown | null;
+  }> {
+    performanceService.startMeasurement('ach_deposit', 'payment_process', {
+      amount: params.amount,
+    });
+
+    try {
+      await stripeSdk.initialize();
+
+      if (!authToken) {
+        throw new Error('Authentication required to start a bank deposit');
+      }
+      if (!params.paymentMethodId) {
+        throw new Error('paymentMethodId is required');
+      }
+      if (!Number.isFinite(params.amount) || params.amount <= 0) {
+        throw new Error('Invalid amount');
+      }
+
+      const result = await invokePayments<{
+        clientSecret: string;
+        paymentIntentId: string;
+        status: string;
+        requiresAction?: boolean;
+        nextAction?: unknown | null;
+      }>('payments/create-payment-intent', {
+        body: {
+          amountCents: Math.round(params.amount * 100),
+          currency: params.currency ?? 'usd',
+          paymentMethodId: params.paymentMethodId,
+          paymentMethodType: 'us_bank_account',
+          confirm: true,
+          metadata: { purpose: 'wallet_deposit', ...(params.metadata ?? {}) },
+        } as Record<string, unknown>,
+        accessToken: authToken,
+      });
+
+      analyticsService
+        .trackEvent('ach_deposit_started', {
+          paymentIntentId: result.paymentIntentId,
+          status: result.status,
+          amount: params.amount,
+        })
+        .catch(() => {
+          /* fire-and-forget */
+        });
+
+      await performanceService.endMeasurement('ach_deposit', {
+        success: true,
+        status: result.status,
+      });
+
+      return {
+        paymentIntentId: result.paymentIntentId,
+        clientSecret: result.clientSecret,
+        status: result.status,
+        requiresAction: Boolean(result.requiresAction),
+        nextAction: result.nextAction ?? null,
+      };
+    } catch (error) {
+      logger.error('[StripeService] Error creating ACH deposit:', { error });
+
+      analyticsService
+        .trackEvent('ach_deposit_failed', {
+          error: getNetworkErrorMessage(error),
+        })
+        .catch(() => {
+          /* fire-and-forget */
+        });
+
+      await performanceService.endMeasurement('ach_deposit', {
+        success: false,
+        error: String(error),
+      });
+
+      throw handleStripeError(error);
     }
   }
 }

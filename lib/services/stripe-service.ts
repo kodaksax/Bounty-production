@@ -142,6 +142,33 @@ class StripeService {
     return paymentMethodsService.confirmSetupIntent(clientSecret);
   }
 
+  /**
+   * Link a US bank account using Stripe Financial Connections.
+   * See `paymentMethodsService.linkBankWithFinancialConnections` for details.
+   */
+  async linkBankWithFinancialConnections(
+    authToken: string,
+    options?: { setAsDefault?: boolean }
+  ): Promise<StripePaymentMethod[]> {
+    return paymentMethodsService.linkBankWithFinancialConnections(authToken, options);
+  }
+
+  /**
+   * Initiate an ACH deposit using a previously linked us_bank_account method.
+   * See `paymentMethodsService.createAchDeposit` for details.
+   */
+  async createAchDeposit(
+    params: {
+      amount: number;
+      paymentMethodId: string;
+      currency?: string;
+      metadata?: Record<string, string>;
+    },
+    authToken: string
+  ) {
+    return paymentMethodsService.createAchDeposit(params, authToken);
+  }
+
   // ── Escrow (delegates to escrowService) ──────────────────────────────────
 
   async createEscrow(
