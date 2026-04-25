@@ -111,3 +111,59 @@ async function waitFor(cond: () => boolean, timeout = 2000) {
   }
   throw new Error('waitFor timeout');
 }
+
+test('dedupes repeated bounty submissions while offline so only one posts on reconnect', async () => {
+  let netListener: any = null;
+
+  // Start offline so multiple submissions accumulate
+  jest.doMock('@react-native-community/netinfo', () => ({
+    addEventListener: (cb: any) => {
+      netListener = cb;
+      cb({ isConnected: false });
+      return () => {};
+    },
+  }));
+
+  const store: Record<string, string> = {};
+  jest.doMock('@react-native-async-storage/async-storage', () => ({
+    getItem: async (k: string) => store[k] ?? null,
+    setItem: async (k: string, v: string) => { store[k] = v; },
+    removeItem: async (k: string) => { delete store[k]; },
+  }));
+
+  const processQueuedBounty = jest.fn(async (b: any) => ({ id: 'created-dup', ...b }));
+  jest.doMock('lib/services/bounty-service', () => ({
+    bountyService: { processQueuedBounty },
+  }));
+
+  const { offlineQueueService } = await import('../offline-queue-service');
+
+  // Simulate the user retrying the same bounty multiple times while offline / errors
+  // are happening (e.g. the staging-debug scenario). Title casing and surrounding
+  // whitespace should not defeat deduplication.
+  await offlineQueueService.enqueue('bounty', { bounty: { title: 'Walk my dog', poster_id: 'user-1', amount: 10 } });
+  await offlineQueueService.enqueue('bounty', { bounty: { title: 'walk my dog', poster_id: 'user-1', amount: 10 } });
+  await offlineQueueService.enqueue('bounty', { bounty: { title: '  Walk My Dog  ', poster_id: 'user-1', amount: 15 } });
+
+  // A different bounty from the same user should NOT be deduped against the above.
+  await offlineQueueService.enqueue('bounty', { bounty: { title: 'Mow the lawn', poster_id: 'user-1', amount: 20 } });
+
+  // Two distinct bounties expected in queue (deduped to 1 + 1).
+  const queuedBounties = offlineQueueService.getQueueByType('bounty');
+  expect(queuedBounties).toHaveLength(2);
+
+  // The deduped item should reflect the latest submission's payload.
+  const dogItem = queuedBounties.find(q => {
+    const b = (q.data as any).bounty;
+    return (b.title || '').toLowerCase().trim() === 'walk my dog';
+  });
+  expect(dogItem).toBeTruthy();
+  expect((dogItem!.data as any).bounty.amount).toBe(15);
+
+  // Reconnect and verify the queue flushes with only the deduped count.
+  expect(netListener).toBeTruthy();
+  await netListener({ isConnected: true });
+
+  await waitFor(() => offlineQueueService.getQueue().length === 0);
+  expect(processQueuedBounty).toHaveBeenCalledTimes(2);
+});
