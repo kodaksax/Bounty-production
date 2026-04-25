@@ -1,6 +1,5 @@
 "use client"
 import { MaterialIcons } from '@expo/vector-icons'
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import { ValidationMessage } from 'app/components/ValidationMessage'
 import type { Href } from 'expo-router'
 import { useRouter } from 'expo-router'
@@ -18,6 +17,11 @@ import { generateCorrelationId, parseAuthError } from '../../lib/utils/auth-erro
 import { suggestEmailCorrection, validateEmail } from '../../lib/utils/auth-validation'
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation'
 
+// iOS Password AutoFill rules for the sign-up password fields.
+// Kept in sync with the client-side validation in `validateForm` so the
+// system-generated "Strong Password" satisfies our requirements.
+const IOS_NEW_PASSWORD_RULES = 'minlength: 8; required: lower; required: upper; required: digit;'
+
 export default function SignUpRoute() {
   return <SignUpForm />
 }
@@ -27,7 +31,6 @@ export function SignUpForm() {
   useScreenBackground('#097959ff') // EMERALD_800 / dark
   const router = useRouter()
   const [email, setEmail] = useState('')
-  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [authError, setAuthError] = useState<string | null>(null)
@@ -46,22 +49,17 @@ export function SignUpForm() {
   const validateForm = () => {
     const errors: Record<string, string> = {}
 
-    // Validate username
-    if (!username || username.trim().length === 0) {
-      errors.username = 'Username is required'
-    } else if (!/^[a-zA-Z0-9_]{3,24}$/.test(username.trim())) {
-      errors.username = 'Username must be 3-24 characters (letters, numbers, underscore)'
-    }
-
     // Validate email
     const emailError = validateEmail(email)
     if (emailError) errors.email = emailError
 
-    // Validate password - must meet strong password requirements
+    // Validate password - at least 8 chars with uppercase, lowercase, and a number.
+    // Requirements intentionally match iOS's auto-generated "Strong Password" format
+    // (letters + digits + hyphens) so Apple's password autofill works on sign-up.
     if (!password) {
       errors.password = 'Password is required'
-    } else if (!ValidationPatterns.strongPassword.test(password)) {
-      errors.password = 'Password must be at least 8 characters with uppercase, lowercase, number, and special character (@$!%*?&)'
+    } else if (!ValidationPatterns.password.test(password)) {
+      errors.password = 'Password must be at least 8 characters with uppercase, lowercase, and a number'
     }
 
     // Validate password match
@@ -83,23 +81,6 @@ export function SignUpForm() {
     return Object.keys(errors).length === 0
   }
 
-  // Prefill username from onboarding state if available to avoid duplicate entry
-  useEffect(() => {
-    let mounted = true
-    ;(async () => {
-      try {
-        const stored = await AsyncStorage.getItem('@bounty_onboarding_state')
-        if (!stored) return
-        const parsed = JSON.parse(stored)
-        const maybeUsername = parsed && parsed.username ? String(parsed.username) : ''
-        if (mounted && maybeUsername) setUsername(maybeUsername)
-      } catch (e) {
-        // ignore
-      }
-    })()
-    return () => { mounted = false }
-  }, [])
-
   const handleSubmit = async () => {
     setAuthError(null)
     setFieldErrors({})
@@ -119,7 +100,6 @@ export function SignUpForm() {
 
       // Register via backend to ensure duplicate-email checks use admin API
       const normalizedEmail = email.trim().toLowerCase()
-      const normalizedUsername = username.trim()
       // Supabase edge functions require the anon key for unauthenticated calls
       if (!config.supabase.anonKey) {
         console.error('[sign-up] Supabase anon key is missing while Supabase is configured', { correlationId })
@@ -135,7 +115,7 @@ export function SignUpForm() {
           'Content-Type': 'application/json',
           ...(anonKey ? { apikey: anonKey, Authorization: `Bearer ${anonKey}` } : {}),
         },
-        body: JSON.stringify({ email: normalizedEmail, username: normalizedUsername, password }),
+        body: JSON.stringify({ email: normalizedEmail, password }),
       })
 
       if (!registerRes.ok) {
@@ -231,7 +211,6 @@ export function SignUpForm() {
         const session = signInData.session
 
         // Clear form data for security
-        setUsername('')
         setEmail('')
         setPassword('')
         setConfirmPassword('')
@@ -313,6 +292,8 @@ export function SignUpForm() {
                 }}
                 placeholder="Choose a username (3-24 chars)"
                 autoCapitalize="none"
+                autoComplete="username-new"
+                textContentType={Platform.OS === 'ios' ? 'username' : undefined}
                 editable={!isLoading}
                 className={`w-full bg-white/10 rounded px-3 py-3 text-white ${fieldErrors.username ? 'border border-red-400' : ''}`}
                 placeholderTextColor="rgba(255,255,255,0.4)"
@@ -380,6 +361,7 @@ export function SignUpForm() {
                   secureTextEntry={!showPassword}
                   autoComplete="password-new"
                   textContentType={Platform.OS === 'ios' ? 'newPassword' : undefined}
+                  passwordRules={Platform.OS === 'ios' ? IOS_NEW_PASSWORD_RULES : undefined}
                   editable={!isLoading}
                   className={`w-full bg-white/10 rounded px-3 py-3 text-white pr-12 ${fieldErrors.password ? 'border border-red-400' : ''}`}
                   placeholderTextColor="rgba(255,255,255,0.4)"
@@ -396,7 +378,7 @@ export function SignUpForm() {
                 </TouchableOpacity>
               </View>
               {fieldErrors.password ? <ValidationMessage message={fieldErrors.password} /> : null}
-              <Text className="text-xs text-white/60 mt-1">Must include uppercase, lowercase, number, and special character</Text>
+              <Text className="text-xs text-white/60 mt-1">Must include uppercase, lowercase, and a number</Text>
             </View>
 
             <View>
@@ -415,6 +397,7 @@ export function SignUpForm() {
                   secureTextEntry={!showConfirmPassword}
                   autoComplete="password-new"
                   textContentType={Platform.OS === 'ios' ? 'newPassword' : undefined}
+                  passwordRules={Platform.OS === 'ios' ? IOS_NEW_PASSWORD_RULES : undefined}
                   editable={!isLoading}
                   className={`w-full bg-white/10 rounded px-3 py-3 text-white pr-12 ${fieldErrors.confirmPassword ? 'border border-red-400' : ''}`}
                   placeholderTextColor="rgba(255,255,255,0.4)"

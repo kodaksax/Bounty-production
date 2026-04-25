@@ -57,21 +57,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const body = (
         rawBody !== null && rawBody !== undefined && typeof rawBody === 'object' ? rawBody : {}
       ) as { email?: string; username?: string; password?: string };
-      const { email, username, password } = body;
+      const { email, username: rawUsername, password } = body;
 
-      if (!email || !username || !password) {
-        return jsonResponse({ error: 'email, username, and password are required' }, 400);
+      if (!email || !password) {
+        return jsonResponse({ error: 'email and password are required' }, 400);
       }
 
       const emailRegex = /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/;
       if (!emailRegex.test(email)) return jsonResponse({ error: 'Invalid email' }, 400);
-      if (!/^[a-zA-Z0-9_]{3,24}$/.test(username)) {
-        return jsonResponse({ error: 'Invalid username format' }, 400);
-      }
       if (password.length < 6) return jsonResponse({ error: 'Password too short (min 6)' }, 400);
 
       const normalizedEmail = email.trim().toLowerCase();
-      const normalizedUsername = username.trim();
 
       // Check for existing email
       const { data: existingEmail, error: emailCheckError } = await supabase
@@ -89,21 +85,63 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }
       if (existingEmail) return jsonResponse({ error: 'Email already registered' }, 409);
 
-      // Check for existing username
-      const { data: existingUsername, error: usernameCheckError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('username', normalizedUsername)
-        .maybeSingle();
-      if (usernameCheckError) {
-        console.error(
-          '[auth/register] username lookup error:',
-          usernameCheckError.message,
-          usernameCheckError.code
-        );
+      // Validate or auto-generate username.
+      // The onboarding flow lets users choose their real username; the value set
+      // here is a temporary placeholder used only until onboarding completes.
+      const providedUsername = typeof rawUsername === 'string' ? rawUsername.trim() : '';
+      const hasProvidedUsername = providedUsername.length > 0;
+
+      // Reject an explicitly-supplied username that doesn't meet format requirements.
+      if (hasProvidedUsername && !/^[a-zA-Z0-9_]{3,24}$/.test(providedUsername)) {
+        return jsonResponse({ error: 'Invalid username format' }, 400);
+      }
+
+      // Resolve a unique username: explicit (checked once) or auto-generated (up to 5 attempts).
+      const MAX_ATTEMPTS = 5;
+      let normalizedUsername = hasProvidedUsername ? providedUsername : '';
+      let usernameIsUnique = false;
+      // emailLocal is computed once outside the loop — it never changes between attempts.
+      const emailLocal = normalizedEmail.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 14);
+
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        if (!hasProvidedUsername) {
+          // Auto-generate: base (≤14 chars) + '_' + crypto random suffix (up to 7 chars) ≤ 24 chars.
+          const randomArr = new Uint32Array(1);
+          crypto.getRandomValues(randomArr);
+          const randomPart = randomArr[0].toString(36);
+          normalizedUsername = `${emailLocal}_${randomPart}`.slice(0, 24);
+        }
+
+        const { data: existingUser, error: usernameCheckError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('username', normalizedUsername)
+          .maybeSingle();
+
+        if (usernameCheckError) {
+          console.error(
+            '[auth/register] username lookup error:',
+            usernameCheckError.message,
+            usernameCheckError.code
+          );
+          return jsonResponse({ error: 'Unable to complete registration. Please try again.' }, 500);
+        }
+
+        if (!existingUser) {
+          usernameIsUnique = true;
+          break;
+        }
+
+        // Explicit username: conflict — no retries.
+        if (hasProvidedUsername) {
+          return jsonResponse({ error: 'Username already taken' }, 409);
+        }
+      }
+
+      if (!usernameIsUnique) {
+        console.error('[auth/register] failed to find unique username after', MAX_ATTEMPTS, 'attempts');
         return jsonResponse({ error: 'Unable to complete registration. Please try again.' }, 500);
       }
-      if (existingUsername) return jsonResponse({ error: 'Username already taken' }, 409);
 
       console.log('[auth/register] creating auth user', {
         email: normalizedEmail,
