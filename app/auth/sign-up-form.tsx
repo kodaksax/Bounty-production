@@ -16,6 +16,11 @@ import { generateCorrelationId, parseAuthError } from '../../lib/utils/auth-erro
 import { suggestEmailCorrection, validateEmail } from '../../lib/utils/auth-validation'
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation'
 
+// iOS Password AutoFill rules for the sign-up password fields.
+// Kept in sync with the client-side validation in `validateForm` so the
+// system-generated "Strong Password" satisfies our requirements.
+const IOS_NEW_PASSWORD_RULES = 'minlength: 8; required: lower; required: upper; required: digit;'
+
 export default function SignUpRoute() {
   return <SignUpForm />
 }
@@ -380,7 +385,7 @@ export function SignUpForm() {
                   secureTextEntry={!showPassword}
                   autoComplete="password-new"
                   textContentType={Platform.OS === 'ios' ? 'newPassword' : undefined}
-                  passwordRules={Platform.OS === 'ios' ? 'minlength: 8; required: lower; required: upper; required: digit;' : undefined}
+                  passwordRules={Platform.OS === 'ios' ? IOS_NEW_PASSWORD_RULES : undefined}
                   editable={!isLoading}
                   className={`w-full bg-white/10 rounded px-3 py-3 text-white pr-12 ${fieldErrors.password ? 'border border-red-400' : ''}`}
                   placeholderTextColor="rgba(255,255,255,0.4)"
@@ -416,7 +421,7 @@ export function SignUpForm() {
                   secureTextEntry={!showConfirmPassword}
                   autoComplete="password-new"
                   textContentType={Platform.OS === 'ios' ? 'newPassword' : undefined}
-                  passwordRules={Platform.OS === 'ios' ? 'minlength: 8; required: lower; required: upper; required: digit;' : undefined}
+                  passwordRules={Platform.OS === 'ios' ? IOS_NEW_PASSWORD_RULES : undefined}
                   editable={!isLoading}
                   className={`w-full bg-white/10 rounded px-3 py-3 text-white pr-12 ${fieldErrors.confirmPassword ? 'border border-red-400' : ''}`}
                   placeholderTextColor="rgba(255,255,255,0.4)"
