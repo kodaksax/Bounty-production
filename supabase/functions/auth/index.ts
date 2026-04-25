@@ -69,19 +69,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
       const normalizedEmail = email.trim().toLowerCase();
 
-      // Generate a temporary username from the email local part if none provided.
-      // The onboarding flow will let the user choose their real username.
-      const isExplicitUsername = !!(rawUsername && /^[a-zA-Z0-9_]{3,24}$/.test(rawUsername.trim()));
-      let normalizedUsername: string;
-      if (isExplicitUsername) {
-        normalizedUsername = rawUsername!.trim();
-      } else {
-        const emailLocal = normalizedEmail.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 14);
-        // Use full base-36 timestamp for sufficient entropy in the suffix
-        const suffix = Date.now().toString(36);
-        normalizedUsername = `${emailLocal}_${suffix}`;
-      }
-
       // Check for existing email
       const { data: existingEmail, error: emailCheckError } = await supabase
         .from('profiles')
@@ -98,32 +85,61 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }
       if (existingEmail) return jsonResponse({ error: 'Email already registered' }, 409);
 
-      // Always check for duplicate username to catch unlikely timestamp collisions and
-      // any explicitly-provided username conflicts.
-      const { data: existingUsername, error: usernameCheckError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('username', normalizedUsername)
-        .maybeSingle();
-      if (usernameCheckError) {
-        console.error(
-          '[auth/register] username lookup error:',
-          usernameCheckError.message,
-          usernameCheckError.code
-        );
-        return jsonResponse({ error: 'Unable to complete registration. Please try again.' }, 500);
+      // Validate or auto-generate username.
+      // The onboarding flow lets users choose their real username; the value set
+      // here is a temporary placeholder used only until onboarding completes.
+      const providedUsername = typeof rawUsername === 'string' ? rawUsername.trim() : '';
+      const hasProvidedUsername = providedUsername.length > 0;
+
+      // Reject an explicitly-supplied username that doesn't meet format requirements.
+      if (hasProvidedUsername && !/^[a-zA-Z0-9_]{3,24}$/.test(providedUsername)) {
+        return jsonResponse({ error: 'Invalid username format' }, 400);
       }
-      if (existingUsername) {
-        if (isExplicitUsername) {
+
+      // Resolve a unique username: explicit (checked once) or auto-generated (up to 5 attempts).
+      const MAX_ATTEMPTS = 5;
+      let normalizedUsername = hasProvidedUsername ? providedUsername : '';
+      let usernameIsUnique = false;
+
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        if (!hasProvidedUsername) {
+          // Auto-generate: base (≤14 chars) + '_' + crypto random suffix (≤7 chars) ≤ 22 chars total.
+          const emailLocal = normalizedEmail.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 14);
+          const randomArr = new Uint32Array(1);
+          crypto.getRandomValues(randomArr);
+          const randomPart = randomArr[0].toString(36);
+          normalizedUsername = `${emailLocal}_${randomPart}`.slice(0, 24);
+        }
+
+        const { data: existingUser, error: usernameCheckError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('username', normalizedUsername)
+          .maybeSingle();
+
+        if (usernameCheckError) {
+          console.error(
+            '[auth/register] username lookup error:',
+            usernameCheckError.message,
+            usernameCheckError.code
+          );
+          return jsonResponse({ error: 'Unable to complete registration. Please try again.' }, 500);
+        }
+
+        if (!existingUser) {
+          usernameIsUnique = true;
+          break;
+        }
+
+        // Explicit username: conflict — no retries.
+        if (hasProvidedUsername) {
           return jsonResponse({ error: 'Username already taken' }, 409);
         }
-        // Collision on auto-generated name: append extra random entropy and retry once
-        const randomSuffix = crypto
-          .getRandomValues(new Uint32Array(1))[0]
-          .toString(36)
-          .slice(0, 4)
-          .padEnd(4, '0');
-        normalizedUsername = `${normalizedUsername}_${randomSuffix}`;
+      }
+
+      if (!usernameIsUnique) {
+        console.error('[auth/register] failed to find unique username after', MAX_ATTEMPTS, 'attempts');
+        return jsonResponse({ error: 'Unable to complete registration. Please try again.' }, 500);
       }
 
       console.log('[auth/register] creating auth user', {
