@@ -182,7 +182,7 @@ with the `{ error }` context shape expected by the logger's normalisation pass.
 | 🟢 Low | Consolidate `docs/payments/` — archive sprint logs, keep reference docs |
 | 🟢 Low | Migrate from `stripe.tokens.create` (deprecated) for ACH to `stripe.setupIntents` with `us_bank_account` |
 | 🟢 Low | Radar / fraud rules: define custom Radar rules aligned with platform risk model |
-| 🟢 Low | PCI DSS SAQ-A compliance review before processing live card data |
+| 🟢 Low | PCI DSS SAQ-A compliance review before processing live card data — posture documented in [`docs/security/PCI_DSS_SAQ_A_COMPLIANCE.md`](../security/PCI_DSS_SAQ_A_COMPLIANCE.md); questionnaire to be submitted via Stripe Dashboard before public launch |
 
 ---
 

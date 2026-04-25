@@ -23,6 +23,13 @@ This document provides comprehensive guidance on security and compliance for the
 - Leverages Stripe as Level 1 Service Provider
 - Outsources cardholder data handling to Stripe
 
+**Self-Assessment Questionnaire:** [SAQ A](./PCI_DSS_SAQ_A_COMPLIANCE.md) — BountyExpo
+qualifies for SAQ A because all card capture, processing, and storage is fully
+outsourced to Stripe (no cardholder data ever touches our mobile app runtime or
+servers). See [`PCI_DSS_SAQ_A_COMPLIANCE.md`](./PCI_DSS_SAQ_A_COMPLIANCE.md) for
+the full per-requirement review, shared-responsibility matrix, and evidence
+pointers.
+
 ### PCI DSS Requirements & Implementation
 
 #### Requirement 1: Install and maintain a firewall configuration
