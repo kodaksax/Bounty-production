@@ -149,9 +149,58 @@ class OfflineQueueService {
   }
 
   /**
-   * Add an item to the queue
+   * Add an item to the queue.
+   *
+   * Bounty dedup: if a pending/failed bounty with the same poster_id + normalized
+   * title (case-insensitive, trimmed) is already queued, replace its payload and
+   * reset retry state instead of appending a duplicate. This prevents repeated
+   * submissions of the same bounty (e.g. user retrying while offline or while a
+   * transient error is occurring) from all being posted at once when connectivity
+   * is restored.
    */
   async enqueue(type: QueueItemType, data: BountyQueueData | MessageQueueData): Promise<QueueItem> {
+    if (type === 'bounty') {
+      const newBounty = (data as BountyQueueData)?.bounty as any;
+      const newTitle = typeof newBounty?.title === 'string' ? newBounty.title.toLowerCase().trim() : '';
+      const newPosterId = newBounty?.poster_id || newBounty?.user_id;
+
+      if (newTitle && newPosterId) {
+        const existingIdx = this.queue.findIndex(q => {
+          if (q.type !== 'bounty') return false;
+          if (q.status !== 'pending' && q.status !== 'failed') return false;
+          const b = (q.data as BountyQueueData)?.bounty as any;
+          const existingTitle = typeof b?.title === 'string' ? b.title.toLowerCase().trim() : '';
+          const existingPoster = b?.poster_id || b?.user_id;
+          return existingPoster === newPosterId && existingTitle === newTitle;
+        });
+
+        if (existingIdx !== -1) {
+          const existing = this.queue[existingIdx];
+          // Replace payload with the latest submission and reset retry state so it
+          // reflects the user's most recent intent. Preserve the original id so any
+          // optimistic UI references remain stable.
+          const refreshed: QueueItem = {
+            ...existing,
+            data,
+            timestamp: Date.now(),
+            lastAttempt: 0,
+            retryCount: 0,
+            status: 'pending',
+            error: undefined,
+          };
+          this.queue[existingIdx] = refreshed;
+          await this.saveQueue();
+          logger.info(`Deduped queued bounty (poster=${newPosterId}, title="${newTitle}"); reused item ${refreshed.id}`);
+
+          if (this.isOnline) {
+            this.processQueue();
+          }
+
+          return refreshed;
+        }
+      }
+    }
+
     const item: QueueItem = {
       id: `${type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       type,
