@@ -100,6 +100,7 @@ export default function HunterReviewAndVerifyScreen() {
     loadData(routeBountyId);
     loadConversation(routeBountyId);
     loadProofItems();
+    loadActiveDispute(routeBountyId);
 
     // Start timer
     const interval = setInterval(() => {
@@ -108,6 +109,24 @@ export default function HunterReviewAndVerifyScreen() {
 
     return () => clearInterval(interval);
   }, [routeBountyId, startTime]);
+
+  const loadActiveDispute = async (id: string) => {
+    try {
+      const workflowDispute = await disputeService.getDisputeByBountyId(id);
+      if (workflowDispute && (workflowDispute.status === 'open' || workflowDispute.status === 'under_review')) {
+        setHasActiveDispute(true);
+        setActiveDisputeId(workflowDispute.id);
+        return;
+      }
+      const cancellationDispute = await disputeService.getDisputeByCancellationId(id);
+      if (cancellationDispute && (cancellationDispute.status === 'open' || cancellationDispute.status === 'under_review')) {
+        setHasActiveDispute(true);
+        setActiveDisputeId(cancellationDispute.id);
+      }
+    } catch (err) {
+      console.error('Error loading active dispute:', err);
+    }
+  };
 
   const loadData = async (id: string) => {
     try {
@@ -201,6 +220,14 @@ export default function HunterReviewAndVerifyScreen() {
   };
 
   const handleRequestReview = async () => {
+    if (hasActiveDispute) {
+      Alert.alert(
+        'Submission Locked',
+        'A dispute is currently open for this bounty. Submissions are paused until the dispute is resolved by an admin.'
+      );
+      return;
+    }
+
     if (!messageText.trim()) {
       Alert.alert(
         'Completion Message Required',
@@ -509,20 +536,32 @@ export default function HunterReviewAndVerifyScreen() {
         renderItem={renderProofItem}
         ListFooterComponent={() => (
           <>
-            <TouchableOpacity style={styles.addProofButton} onPress={handleAddProof}>
-              <MaterialIcons name="add" size={20} color="#fff" />
-              <Text style={styles.addProofText}>Add Proof</Text>
+            {hasActiveDispute && (
+              <View style={styles.disputeFrozenBox}>
+                <MaterialIcons name="gavel" size={18} color="#fbbf24" />
+                <Text style={styles.disputeFrozenText}>
+                  A dispute has been opened for this bounty. Submitting evidence is paused until an admin resolves the dispute.
+                </Text>
+              </View>
+            )}
+            <TouchableOpacity
+              style={[styles.addProofButton, hasActiveDispute && styles.submitButtonDisabled]}
+              onPress={handleAddProof}
+              disabled={hasActiveDispute}
+            >
+              <MaterialIcons name={hasActiveDispute ? 'lock' : 'add'} size={20} color="#fff" />
+              <Text style={styles.addProofText}>{hasActiveDispute ? 'Locked (Dispute Open)' : 'Add Proof'}</Text>
             </TouchableOpacity>
             <View style={{ height: 12 }} />
             <TouchableOpacity
-              style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+              style={[styles.submitButton, (isSubmitting || hasActiveDispute) && styles.submitButtonDisabled]}
               onPress={handleRequestReview}
-              disabled={isSubmitting}
+              disabled={isSubmitting || hasActiveDispute}
             >
               {isSubmitting ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
-                <Text style={styles.submitButtonText}>Submit</Text>
+                <Text style={styles.submitButtonText}>{hasActiveDispute ? 'Locked (Dispute Open)' : 'Submit'}</Text>
               )}
             </TouchableOpacity>
             <View style={{ height: 12 }} />
@@ -892,6 +931,23 @@ const styles = StyleSheet.create({
   disputeButtonText: {
     color: '#f59e0b',
     fontSize: 14,
+    fontWeight: '600',
+  },
+  disputeFrozenBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: 'rgba(120, 53, 15, 0.35)',
+    borderWidth: 1,
+    borderColor: 'rgba(251, 191, 36, 0.6)',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  disputeFrozenText: {
+    color: '#fde68a',
+    fontSize: 12,
+    flex: 1,
     fontWeight: '600',
   },
 });
