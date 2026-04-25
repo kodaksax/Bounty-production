@@ -45,24 +45,69 @@ export function validateUsername(username: string): { valid: boolean; error?: st
 }
 
 /**
- * Check if username is unique (client-side check)
- * In production, this should be a server-side check
+ * Check if a username is available (unique) for the given user.
+ *
+ * Uniqueness is authoritative against the Supabase `profiles` table so that a
+ * username belongs to at most one auth user across the whole system. The
+ * lookup is case-insensitive (Alice == alice) to match the case-insensitive
+ * unique index on profiles.username.
+ *
+ * When the Supabase check cannot run (offline, tests, RLS error), we fall
+ * back to a best-effort local AsyncStorage check so onboarding remains usable.
+ * The DB UNIQUE constraint is the final gate on writes, so a false negative
+ * here can never cause two accounts to share a username — at worst the user
+ * is asked to pick again at save time.
  */
 export async function isUsernameUnique(username: string, currentUserId?: string): Promise<boolean> {
+  const trimmed = (username || '').trim();
+  if (!trimmed) return false;
+
+  // Authoritative check: Supabase profiles table (case-insensitive)
+  try {
+    // Escape ilike metacharacters (%, _) so usernames containing underscores
+    // (a valid char) do not match wildcards. Backslash must be escaped first.
+    const escaped = trimmed.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id')
+      .ilike('username', escaped)
+      .limit(1)
+      .maybeSingle();
+
+    if (!error) {
+      // No row → username is free. Row belonging to currentUserId → still free for them.
+      if (!data) return true;
+      if (currentUserId && data.id === currentUserId) return true;
+      return false;
+    }
+
+    // Any error from the authoritative query (network, RLS, etc.) → log and
+    // fall through to the local AsyncStorage fallback below. The DB UNIQUE
+    // constraint is the ultimate gate on writes, so a false "available" here
+    // can never cause two accounts to share a username.
+    console.warn('[userProfile] Supabase username uniqueness check failed, falling back to local index:', {
+      code: (error as { code?: string }).code,
+      message: error.message,
+    });
+  } catch (err) {
+    console.warn('[userProfile] Supabase username uniqueness check threw, falling back to local index:', err);
+  }
+
+  // Local fallback (case-insensitive) for offline/test environments
   try {
     const profilesJson = await AsyncStorage.getItem(PROFILES_KEY);
     const profiles: { [key: string]: ProfileData } = profilesJson ? JSON.parse(profilesJson) : {};
 
-    // Check if username exists for a different user
+    const lowered = trimmed.toLowerCase();
     for (const [userId, profile] of Object.entries(profiles)) {
-      if (profile.username === username && userId !== currentUserId) {
+      if (profile.username && profile.username.toLowerCase() === lowered && userId !== currentUserId) {
         return false;
       }
     }
     return true;
   } catch (error) {
     console.error('[userProfile] Error checking username uniqueness:', error);
-    return true; // Optimistic - allow if check fails
+    return true; // Optimistic - allow if check fails; DB UNIQUE will still guard writes
   }
 }
 

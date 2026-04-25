@@ -88,6 +88,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
       // Validate or auto-generate username.
       // The onboarding flow lets users choose their real username; the value set
       // here is a temporary placeholder used only until onboarding completes.
+      // Usernames are case-insensitive and stored lowercase so that the pool
+      // cannot be exhausted by case variants (Alice vs alice) of the same name.
       const providedUsername = typeof rawUsername === 'string' ? rawUsername.trim() : '';
       const hasProvidedUsername = providedUsername.length > 0;
 
@@ -98,7 +100,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
       // Resolve a unique username: explicit (checked once) or auto-generated (up to 5 attempts).
       const MAX_ATTEMPTS = 5;
-      let normalizedUsername = hasProvidedUsername ? providedUsername : '';
+      let normalizedUsername = hasProvidedUsername ? providedUsername.toLowerCase() : '';
       let usernameIsUnique = false;
       // emailLocal is computed once outside the loop — it never changes between attempts.
       const emailLocal = normalizedEmail.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 14);
@@ -109,13 +111,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
           const randomArr = new Uint32Array(1);
           crypto.getRandomValues(randomArr);
           const randomPart = randomArr[0].toString(36);
-          normalizedUsername = `${emailLocal}_${randomPart}`.slice(0, 24);
+          normalizedUsername = `${emailLocal}_${randomPart}`.slice(0, 24).toLowerCase();
         }
 
+        // Case-insensitive uniqueness check to match the LOWER(username) unique
+        // index on profiles. Without ilike, `Alice` and `alice` could both pass
+        // this check and only collide later at the DB write.
         const { data: existingUser, error: usernameCheckError } = await supabase
           .from('profiles')
           .select('id')
-          .eq('username', normalizedUsername)
+          .ilike('username', normalizedUsername)
           .maybeSingle();
 
         if (usernameCheckError) {
