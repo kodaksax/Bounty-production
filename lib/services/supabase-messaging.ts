@@ -27,6 +27,31 @@ import { logClientError } from './monitoring';
 const CONVERSATIONS_CACHE_PREFIX = '@bountyexpo:conversations_cache_';
 const MESSAGES_CACHE_PREFIX = '@bountyexpo:messages_';
 
+// Legacy, non-user-scoped cache keys from before the per-user fix. We delete
+// these on first use so stale entries from another account cannot be read by
+// any code path and don't sit in AsyncStorage indefinitely (this layer has no
+// TTL/expiry of its own). Cleanup is best-effort and runs at most once per
+// process.
+const LEGACY_CONVERSATIONS_CACHE_KEY = '@bountyexpo:conversations_cache';
+const LEGACY_CACHED_DATA_CONVERSATIONS_KEY = 'cache_v1_conversations_list';
+let legacyCacheCleanupPromise: Promise<void> | null = null;
+
+function cleanupLegacyConversationCaches(): Promise<void> {
+  if (!legacyCacheCleanupPromise) {
+    legacyCacheCleanupPromise = (async () => {
+      try {
+        await AsyncStorage.multiRemove([
+          LEGACY_CONVERSATIONS_CACHE_KEY,
+          LEGACY_CACHED_DATA_CONVERSATIONS_KEY,
+        ]);
+      } catch {
+        // Best-effort; never block caching on cleanup.
+      }
+    })();
+  }
+  return legacyCacheCleanupPromise;
+}
+
 // EventEmitter for real-time updates to UI
 const emitter = new EventEmitter();
 emitter.setMaxListeners(50); // Increase limit for multiple subscriptions
@@ -43,6 +68,8 @@ async function cacheConversations(
   conversations: Conversation[]
 ): Promise<void> {
   if (!userId) return;
+  // Fire-and-forget; ensures legacy non-user-scoped keys are eventually purged.
+  void cleanupLegacyConversationCaches();
   try {
     await AsyncStorage.setItem(
       `${CONVERSATIONS_CACHE_PREFIX}${userId}`,
