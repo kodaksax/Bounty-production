@@ -100,11 +100,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const MAX_ATTEMPTS = 5;
       let normalizedUsername = hasProvidedUsername ? providedUsername : '';
       let usernameIsUnique = false;
+      // emailLocal is computed once outside the loop — it never changes between attempts.
+      const emailLocal = normalizedEmail.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 14);
 
       for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         if (!hasProvidedUsername) {
-          // Auto-generate: base (≤14 chars) + '_' + crypto random suffix (≤7 chars) ≤ 22 chars total.
-          const emailLocal = normalizedEmail.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 14);
+          // Auto-generate: base (≤14 chars) + '_' + crypto random suffix (up to 7 chars) ≤ 24 chars.
           const randomArr = new Uint32Array(1);
           crypto.getRandomValues(randomArr);
           const randomPart = randomArr[0].toString(36);
