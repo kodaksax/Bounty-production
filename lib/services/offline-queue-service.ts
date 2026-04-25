@@ -190,7 +190,9 @@ class OfflineQueueService {
           };
           this.queue[existingIdx] = refreshed;
           await this.saveQueue();
-          logger.info(`Deduped queued bounty (poster=${newPosterId}, title="${newTitle}"); reused item ${refreshed.id}`);
+          // Avoid logging user-generated content (title) or poster id; log only
+          // a non-identifying length and the queue item id for traceability.
+          logger.info(`Deduped queued bounty (titleLen=${newTitle.length}); reused item ${refreshed.id}`);
 
           if (this.isOnline) {
             this.processQueue();
