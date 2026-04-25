@@ -26,10 +26,15 @@ export function useConversations(): UseConversationsResult {
     currentUserId && currentUserId !== '00000000-0000-0000-0000-000000000001'
   );
 
-  const cacheKey = useMemo(
-    () => (hasValidUser ? CACHE_KEYS.CONVERSATIONS_LIST : 'conversations_guest'),
-    [hasValidUser]
-  );
+  const cacheKey = useMemo(() => {
+    // Cache must be scoped to the current user so a previous account's
+    // conversations cannot leak into the new session (see "Staging inbox
+    // dataleak").
+    if (hasValidUser && currentUserId) {
+      return CACHE_KEYS.CONVERSATIONS_LIST(currentUserId);
+    }
+    return 'conversations_guest';
+  }, [hasValidUser, currentUserId]);
 
   const fetchFn = useCallback(async () => {
     if (!hasValidUser) return [];

@@ -20,7 +20,9 @@ const FOREGROUND_EVENT = 'foreground';
 export const CACHE_KEYS = {
   BOUNTIES_LIST: 'bounties_list',
   BOUNTY_DETAIL: (id: string | number) => `bounty_${id}`,
-  CONVERSATIONS_LIST: 'conversations_list',
+  // User-scoped to prevent inbox data leaks when switching accounts without a
+  // cold app restart. See: "Staging inbox dataleak" issue.
+  CONVERSATIONS_LIST: (userId: string) => `conversations_list_${userId}`,
   CONVERSATION_MESSAGES: (id: string) => `conversation_${id}_messages`,
   USER_PROFILE: (id: string) => `user_profile_${id}`,
   MY_BOUNTIES: 'my_bounties',

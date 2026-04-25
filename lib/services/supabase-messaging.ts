@@ -20,9 +20,37 @@ import { supabase } from '../supabase';
 import type { Conversation, Message } from '../types';
 import { logClientError } from './monitoring';
 
-// Storage keys for local cache
-const CONVERSATIONS_CACHE_KEY = '@bountyexpo:conversations_cache';
+// Storage keys for local cache. Conversation list cache is scoped per user so
+// that when accounts are switched (without a cold app restart) the previous
+// user's conversations cannot be served to the new user. See: "Staging inbox
+// dataleak" issue.
+const CONVERSATIONS_CACHE_PREFIX = '@bountyexpo:conversations_cache_';
 const MESSAGES_CACHE_PREFIX = '@bountyexpo:messages_';
+
+// Legacy, non-user-scoped cache keys from before the per-user fix. We delete
+// these on first use so stale entries from another account cannot be read by
+// any code path and don't sit in AsyncStorage indefinitely (this layer has no
+// TTL/expiry of its own). Cleanup is best-effort and runs at most once per
+// process.
+const LEGACY_CONVERSATIONS_CACHE_KEY = '@bountyexpo:conversations_cache';
+const LEGACY_CACHED_DATA_CONVERSATIONS_KEY = 'cache_v1_conversations_list';
+let legacyCacheCleanupPromise: Promise<void> | null = null;
+
+function cleanupLegacyConversationCaches(): Promise<void> {
+  if (!legacyCacheCleanupPromise) {
+    legacyCacheCleanupPromise = (async () => {
+      try {
+        await AsyncStorage.multiRemove([
+          LEGACY_CONVERSATIONS_CACHE_KEY,
+          LEGACY_CACHED_DATA_CONVERSATIONS_KEY,
+        ]);
+      } catch {
+        // Best-effort; never block caching on cleanup.
+      }
+    })();
+  }
+  return legacyCacheCleanupPromise;
+}
 
 // EventEmitter for real-time updates to UI
 const emitter = new EventEmitter();
@@ -32,22 +60,38 @@ emitter.setMaxListeners(50); // Increase limit for multiple subscriptions
 const subscriptions: Map<string, RealtimeChannel> = new Map();
 
 /**
- * Cache conversations locally for fast boot
+ * Cache conversations locally for fast boot. Scoped per-user to prevent
+ * cross-account inbox leaks.
  */
-async function cacheConversations(conversations: Conversation[]): Promise<void> {
+async function cacheConversations(
+  userId: string,
+  conversations: Conversation[]
+): Promise<void> {
+  if (!userId) return;
+  // Fire-and-forget; ensures legacy non-user-scoped keys are eventually purged.
+  void cleanupLegacyConversationCaches();
   try {
-    await AsyncStorage.setItem(CONVERSATIONS_CACHE_KEY, JSON.stringify(conversations));
+    await AsyncStorage.setItem(
+      `${CONVERSATIONS_CACHE_PREFIX}${userId}`,
+      JSON.stringify(conversations)
+    );
   } catch (error) {
     console.error('Error caching conversations:', error);
   }
 }
 
 /**
- * Load conversations from local cache
+ * Load conversations from local cache for a given user. Returns an empty list
+ * when no userId is provided so we never accidentally serve another user's
+ * cached conversations.
  */
-async function loadCachedConversations(): Promise<Conversation[]> {
+async function loadCachedConversations(userId: string): Promise<Conversation[]> {
+  // Defensive: never read from a non-user-scoped key. Without a userId we
+  // cannot safely resolve "this user's" cached conversations and returning
+  // anything else would risk surfacing another account's inbox.
+  if (!userId) return [];
   try {
-    const json = await AsyncStorage.getItem(CONVERSATIONS_CACHE_KEY);
+    const json = await AsyncStorage.getItem(`${CONVERSATIONS_CACHE_PREFIX}${userId}`);
     return json ? JSON.parse(json) : [];
   } catch (error) {
     console.error('Error loading cached conversations:', error);
@@ -278,14 +322,14 @@ export async function fetchConversations(userId: string): Promise<Conversation[]
       };
     });
 
-    // Cache the conversations
-    await cacheConversations(enrichedConversations);
+    // Cache the conversations (scoped per user)
+    await cacheConversations(userId, enrichedConversations);
 
     return enrichedConversations;
   } catch (error) {
     console.error('Error fetching conversations:', error);
-    // Return cached data on error
-    return await loadCachedConversations();
+    // Return cached data on error (only this user's cache)
+    return await loadCachedConversations(userId);
   }
 }
 

@@ -1,5 +1,6 @@
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { useConversations } from '../../../hooks/useConversations';
+import { CACHE_KEYS } from '../../../lib/services/cached-data-service';
 import * as supabaseMessaging from '../../../lib/services/supabase-messaging';
 import * as dataUtils from '../../../lib/utils/data-utils';
 
@@ -69,5 +70,19 @@ describe('useConversations', () => {
 
     // Error should be set to the rejected error's message
     expect(result.current.error).toBe('Failed to fetch');
+  });
+
+  it('uses a per-user cache key so conversations cannot leak across accounts', () => {
+    // Regression test for "Staging inbox dataleak": the conversations cache key
+    // must include the user id so a different user logging in (without a cold
+    // restart) cannot read another user's cached inbox.
+    expect(typeof CACHE_KEYS.CONVERSATIONS_LIST).toBe('function');
+
+    const userAKey = CACHE_KEYS.CONVERSATIONS_LIST('user-a');
+    const userBKey = CACHE_KEYS.CONVERSATIONS_LIST('user-b');
+
+    expect(userAKey).toContain('user-a');
+    expect(userBKey).toContain('user-b');
+    expect(userAKey).not.toBe(userBKey);
   });
 });
