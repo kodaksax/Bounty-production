@@ -16,6 +16,11 @@ import { generateCorrelationId, parseAuthError } from '../../lib/utils/auth-erro
 import { suggestEmailCorrection, validateEmail } from '../../lib/utils/auth-validation'
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation'
 
+// iOS Password AutoFill rules for the sign-up password fields.
+// Kept in sync with the client-side validation in `validateForm` so the
+// system-generated "Strong Password" satisfies our requirements.
+const IOS_NEW_PASSWORD_RULES = 'minlength: 8; required: lower; required: upper; required: digit;'
+
 export default function SignUpRoute() {
   return <SignUpForm />
 }
@@ -54,11 +59,13 @@ export function SignUpForm() {
     const emailError = validateEmail(email)
     if (emailError) errors.email = emailError
 
-    // Validate password - must meet strong password requirements
+    // Validate password - at least 8 chars with uppercase, lowercase, and a number.
+    // Requirements intentionally match iOS's auto-generated "Strong Password" format
+    // (letters + digits + hyphens) so Apple's password autofill works on sign-up.
     if (!password) {
       errors.password = 'Password is required'
-    } else if (!ValidationPatterns.strongPassword.test(password)) {
-      errors.password = 'Password must be at least 8 characters with uppercase, lowercase, number, and special character (@$!%*?&)'
+    } else if (!ValidationPatterns.password.test(password)) {
+      errors.password = 'Password must be at least 8 characters with uppercase, lowercase, and a number'
     }
 
     // Validate password match
@@ -309,6 +316,8 @@ export function SignUpForm() {
                 }}
                 placeholder="Choose a username (3-24 chars)"
                 autoCapitalize="none"
+                autoComplete="username-new"
+                textContentType={Platform.OS === 'ios' ? 'username' : undefined}
                 editable={!isLoading}
                 className={`w-full bg-white/10 rounded px-3 py-3 text-white ${fieldErrors.username ? 'border border-red-400' : ''}`}
                 placeholderTextColor="rgba(255,255,255,0.4)"
@@ -376,6 +385,7 @@ export function SignUpForm() {
                   secureTextEntry={!showPassword}
                   autoComplete="password-new"
                   textContentType={Platform.OS === 'ios' ? 'newPassword' : undefined}
+                  passwordRules={Platform.OS === 'ios' ? IOS_NEW_PASSWORD_RULES : undefined}
                   editable={!isLoading}
                   className={`w-full bg-white/10 rounded px-3 py-3 text-white pr-12 ${fieldErrors.password ? 'border border-red-400' : ''}`}
                   placeholderTextColor="rgba(255,255,255,0.4)"
@@ -392,7 +402,7 @@ export function SignUpForm() {
                 </TouchableOpacity>
               </View>
               {fieldErrors.password ? <ValidationMessage message={fieldErrors.password} /> : null}
-              <Text className="text-xs text-white/60 mt-1">Must include uppercase, lowercase, number, and special character</Text>
+              <Text className="text-xs text-white/60 mt-1">Must include uppercase, lowercase, and a number</Text>
             </View>
 
             <View>
@@ -411,6 +421,7 @@ export function SignUpForm() {
                   secureTextEntry={!showConfirmPassword}
                   autoComplete="password-new"
                   textContentType={Platform.OS === 'ios' ? 'newPassword' : undefined}
+                  passwordRules={Platform.OS === 'ios' ? IOS_NEW_PASSWORD_RULES : undefined}
                   editable={!isLoading}
                   className={`w-full bg-white/10 rounded px-3 py-3 text-white pr-12 ${fieldErrors.confirmPassword ? 'border border-red-400' : ''}`}
                   placeholderTextColor="rgba(255,255,255,0.4)"
