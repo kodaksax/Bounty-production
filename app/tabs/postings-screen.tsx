@@ -117,8 +117,8 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   const { balance, deposit, createEscrow, refundEscrow } = useWallet()
   // Filter by status or request state (applied, in_progress, completed, rejected, open, etc.)
   // Use separate filters per-tab so toggling one doesn't unexpectedly affect the other.
-  const [statusFilterInProgress, setStatusFilterInProgress] = useState<'all' | 'applied' | 'in_progress' | 'completed' | 'rejected'>('all')
-  const [statusFilterMyPostings, setStatusFilterMyPostings] = useState<'all' | 'open' | 'in_progress' | 'completed' | 'archived'>('all')
+  const [statusFilterInProgress, setStatusFilterInProgress] = useState<'all' | 'review' | 'applied' | 'in_progress' | 'rejected'>('all')
+  const [statusFilterMyPostings, setStatusFilterMyPostings] = useState<'all' | 'review' | 'open' | 'in_progress'>('all')
   // Keep the hunter's requests so we can filter In Progress by request status (applied/accepted/rejected)
   const [hunterRequests, setHunterRequests] = useState<BountyRequestWithDetails[]>([])
   // Edit/Delete state
@@ -655,16 +655,53 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   const containerPaddingTop = useMemo(() => ({ paddingTop: Math.max(0, headerHeight - (HEADER_TOP_OFFSET - 12)) }), [headerHeight])
   const listContentPadding = useMemo(() => ({ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }), [insets.bottom])
 
+  // Map of bountyId -> count of pending requests (for poster "Review" badge)
+  const pendingRequestsByBounty = React.useMemo(() => {
+    const m = new Map<string, number>()
+    bountyRequests.forEach((r) => {
+      if (r.status !== 'pending') return
+      const bId = r?.bounty?.id ?? r?.bounty_id
+      if (bId === undefined || bId === null) return
+      const key = String(bId)
+      m.set(key, (m.get(key) ?? 0) + 1)
+    })
+    return m
+  }, [bountyRequests])
+
+  // Predicates for "Review needed" filters — keep these centralized so the chip
+  // count, accessibility label, and list filter all stay in lockstep.
+  const needsHunterReview = React.useCallback(
+    (b: Bounty) => b.status === 'in_progress' && requestStatusMap.get(String(b.id)) === 'accepted',
+    [requestStatusMap]
+  )
+  const needsPosterReview = React.useCallback(
+    (b: Bounty) => (b.status === 'open' && (pendingRequestsByBounty.get(String(b.id)) ?? 0) > 0) || b.status === 'completed',
+    [pendingRequestsByBounty]
+  )
+
   // Derived list for In Progress tab considering the selected status filter
   const displayedInProgress = React.useMemo(() => {
     if (statusFilterInProgress === 'all') return inProgressBounties
+    // 'review' surfaces bounties that need the hunter's action: assigned/in-progress work to deliver
+    if (statusFilterInProgress === 'review') return inProgressBounties.filter(needsHunterReview)
     if (statusFilterInProgress === 'applied') return inProgressBounties.filter(b => requestStatusMap.get(String(b.id)) === 'pending')
     if (statusFilterInProgress === 'rejected') return inProgressBounties.filter(b => requestStatusMap.get(String(b.id)) === 'rejected')
     if (statusFilterInProgress === 'in_progress') return inProgressBounties.filter(b => b.status === 'in_progress')
-    if (statusFilterInProgress === 'completed') return inProgressBounties.filter(b => b.status === 'completed')
     // fallback
     return inProgressBounties
-  }, [inProgressBounties, statusFilterInProgress, requestStatusMap])
+  }, [inProgressBounties, statusFilterInProgress, requestStatusMap, needsHunterReview])
+
+  // Count of bounties needing the hunter's review/action — drives the badge on the In Progress "Review" chip
+  const inProgressReviewCount = React.useMemo(
+    () => inProgressBounties.filter(needsHunterReview).length,
+    [inProgressBounties, needsHunterReview]
+  )
+
+  // Count of My Postings needing the poster's review/action: open w/ pending applicants OR completed (release payment)
+  const myPostingsReviewCount = React.useMemo(
+    () => myBounties.filter(needsPosterReview).length,
+    [myBounties, needsPosterReview]
+  )
 
   const renderRequestItem = React.useCallback(({ item: request }: { item: BountyRequestWithDetails }) => (
     <ApplicantCard
@@ -875,20 +912,26 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                     <View>
                       <BountyWorkflowGuide variant="hunter-inprogress" />
                       <View className="flex-row gap-2 mb-1">
-                        {(['all', 'applied', 'in_progress', 'completed', 'rejected'] as const).map((f) => {
-                          const label = f === 'all' ? 'All' : f === 'applied' ? 'Applied' : f === 'in_progress' ? 'In Progress' : f === 'completed' ? 'Completed' : 'Rejected'
+                        {(['all', 'review', 'applied', 'in_progress', 'rejected'] as const).map((f) => {
+                          const label = f === 'all' ? 'All' : f === 'review' ? 'Review' : f === 'applied' ? 'Applied' : f === 'in_progress' ? 'In Progress' : 'Rejected'
                           const selected = statusFilterInProgress === f
+                          const count = f === 'review' ? inProgressReviewCount : 0
                             return (
                             <TouchableOpacity
                               key={f}
                               onPress={() => setStatusFilterInProgress(f)}
-                              className={cn('px-3 py-1.5 rounded-full border', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}
+                              className={cn('px-3 py-1.5 rounded-full border flex-row items-center', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}
                               accessibilityRole="button"
-                              accessibilityLabel={`Filter by ${label} work in progress`}
+                              accessibilityLabel={f === 'review' ? `Filter by work needing your review${count > 0 ? `, ${count} item${count === 1 ? '' : 's'}` : ''}` : `Filter by ${label} work in progress`}
                               accessibilityState={{ selected }}
-                              accessibilityHint={selected ? 'Currently active filter' : `Tap to show only ${label} work`}
+                              accessibilityHint={selected ? 'Currently active filter' : f === 'review' ? 'Tap to show only bounties that need your action' : `Tap to show only ${label} work`}
                             >
                               <Text className={cn('text-xs', selected ? 'text-white font-medium' : 'text-emerald-200')}>{label}</Text>
+                              {f === 'review' && count > 0 && (
+                                <View className="ml-1.5 px-1.5 rounded-full bg-amber-400 min-w-[18px] items-center">
+                                  <Text className="text-[10px] font-bold text-emerald-900">{count}</Text>
+                                </View>
+                              )}
                             </TouchableOpacity>
                           )
                         })}
@@ -1001,27 +1044,37 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
               ) : activeTab === "myPostings" ? (
                 <FlatList
                   ref={myPostingsListRef}
-                  data={myBounties.filter(b => statusFilterMyPostings === 'all' || b.status === statusFilterMyPostings)}
+                  data={myBounties.filter(b => {
+                    if (statusFilterMyPostings === 'all') return true
+                    if (statusFilterMyPostings === 'review') return needsPosterReview(b)
+                    return b.status === statusFilterMyPostings
+                  })}
                   keyExtractor={keyExtractorBounty}
                   extraData={{ myBounties, expandedMap }}
                   ListHeaderComponent={(
                     <View>
                       <BountyWorkflowGuide variant="poster-postings" />
                       <View className="flex-row gap-2 mb-1">
-                        {(['all', 'open', 'in_progress', 'completed', 'archived'] as const).map((f) => {
-                          const label = f === 'all' ? 'All' : f === 'open' ? 'Open' : f === 'in_progress' ? 'In Progress' : f === 'completed' ? 'Completed' : 'Archived'
+                        {(['all', 'review', 'open', 'in_progress'] as const).map((f) => {
+                          const label = f === 'all' ? 'All' : f === 'review' ? 'Review' : f === 'open' ? 'Open' : 'In Progress'
                           const selected = statusFilterMyPostings === f
+                          const count = f === 'review' ? myPostingsReviewCount : 0
                             return (
                             <TouchableOpacity
                               key={f}
                               onPress={() => setStatusFilterMyPostings(f)}
-                              className={cn('px-3 py-1.5 rounded-full border', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}
+                              className={cn('px-3 py-1.5 rounded-full border flex-row items-center', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}
                               accessibilityRole="button"
-                              accessibilityLabel={`Filter by ${label} postings`}
+                              accessibilityLabel={f === 'review' ? `Filter by postings needing your review${count > 0 ? `, ${count} item${count === 1 ? '' : 's'}` : ''}` : `Filter by ${label} postings`}
                               accessibilityState={{ selected }}
-                              accessibilityHint={selected ? 'Currently active filter' : `Tap to show only ${label} bounties`}
+                              accessibilityHint={selected ? 'Currently active filter' : f === 'review' ? 'Tap to show only postings that need your action' : `Tap to show only ${label} bounties`}
                             >
                               <Text className={cn('text-xs', selected ? 'text-white font-medium' : 'text-emerald-200')}>{label}</Text>
+                              {f === 'review' && count > 0 && (
+                                <View className="ml-1.5 px-1.5 rounded-full bg-amber-400 min-w-[18px] items-center">
+                                  <Text className="text-[10px] font-bold text-emerald-900">{count}</Text>
+                                </View>
+                              )}
                             </TouchableOpacity>
                           )
                         })}
