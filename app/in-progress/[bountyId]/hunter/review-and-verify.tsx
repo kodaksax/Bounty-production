@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DisputeFrozenBanner } from '../../../../components/ui/dispute-frozen-banner';
 import { HunterDashboardSkeleton } from '../../../../components/ui/skeleton-loaders';
 import { WorkflowDisputeModal } from '../../../../components/workflow-dispute-modal';
 import { useAttachmentUpload } from '../../../../hooks/use-attachment-upload';
@@ -100,6 +101,7 @@ export default function HunterReviewAndVerifyScreen() {
     loadData(routeBountyId);
     loadConversation(routeBountyId);
     loadProofItems();
+    loadActiveDispute(routeBountyId);
 
     // Start timer
     const interval = setInterval(() => {
@@ -108,6 +110,22 @@ export default function HunterReviewAndVerifyScreen() {
 
     return () => clearInterval(interval);
   }, [routeBountyId, startTime]);
+
+  const loadActiveDispute = async (id: string) => {
+    // Always reset first so this works correctly if the screen is reused
+    // for a different bountyId or refreshed after an admin resolved the dispute.
+    setHasActiveDispute(false);
+    setActiveDisputeId(null);
+    try {
+      const workflowDispute = await disputeService.getDisputeByBountyId(id);
+      if (workflowDispute && (workflowDispute.status === 'open' || workflowDispute.status === 'under_review')) {
+        setHasActiveDispute(true);
+        setActiveDisputeId(workflowDispute.id);
+      }
+    } catch (err) {
+      console.error('Error loading active dispute:', err);
+    }
+  };
 
   const loadData = async (id: string) => {
     try {
@@ -201,6 +219,14 @@ export default function HunterReviewAndVerifyScreen() {
   };
 
   const handleRequestReview = async () => {
+    if (hasActiveDispute) {
+      Alert.alert(
+        'Submission Locked',
+        'A dispute is currently open for this bounty. Submissions are paused until the dispute is resolved by an admin.'
+      );
+      return;
+    }
+
     if (!messageText.trim()) {
       Alert.alert(
         'Completion Message Required',
@@ -509,20 +535,27 @@ export default function HunterReviewAndVerifyScreen() {
         renderItem={renderProofItem}
         ListFooterComponent={() => (
           <>
-            <TouchableOpacity style={styles.addProofButton} onPress={handleAddProof}>
-              <MaterialIcons name="add" size={20} color="#fff" />
-              <Text style={styles.addProofText}>Add Proof</Text>
+            {hasActiveDispute && (
+              <DisputeFrozenBanner message="A dispute has been opened for this bounty. Submitting evidence is paused until an admin resolves the dispute." />
+            )}
+            <TouchableOpacity
+              style={[styles.addProofButton, hasActiveDispute && styles.submitButtonDisabled]}
+              onPress={handleAddProof}
+              disabled={hasActiveDispute}
+            >
+              <MaterialIcons name={hasActiveDispute ? 'lock' : 'add'} size={20} color="#fff" />
+              <Text style={styles.addProofText}>{hasActiveDispute ? 'Locked (Dispute Open)' : 'Add Proof'}</Text>
             </TouchableOpacity>
             <View style={{ height: 12 }} />
             <TouchableOpacity
-              style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+              style={[styles.submitButton, (isSubmitting || hasActiveDispute) && styles.submitButtonDisabled]}
               onPress={handleRequestReview}
-              disabled={isSubmitting}
+              disabled={isSubmitting || hasActiveDispute}
             >
               {isSubmitting ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
-                <Text style={styles.submitButtonText}>Submit</Text>
+                <Text style={styles.submitButtonText}>{hasActiveDispute ? 'Locked (Dispute Open)' : 'Submit'}</Text>
               )}
             </TouchableOpacity>
             <View style={{ height: 12 }} />

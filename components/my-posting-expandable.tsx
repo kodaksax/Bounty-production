@@ -34,6 +34,7 @@ import { PosterReviewModal } from './poster-review-modal'
 import { StaleBountyAlert } from './stale-bounty-alert'
 import { AnimatedSection } from './ui/animated-section'
 import { AttachmentsList } from './ui/attachments-list'
+import { DisputeFrozenBanner } from './ui/dispute-frozen-banner'
 import { MessageBar } from './ui/message-bar'
 import { RatingStars } from './ui/rating-stars'
 import { RevisionFeedbackBanner } from './ui/revision-feedback-banner'
@@ -432,8 +433,13 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           }
         } catch { }
 
-        // Check for active dispute (both cancellation-based and workflow-stage)
+        // Check for active dispute (both cancellation-based and workflow-stage).
+        // Always reset first so resolved disputes (or refreshed cards) don't
+        // remain stuck in the locked state.
         try {
+          dispatchUi({ type: 'set', key: 'hasDispute', value: false })
+          dispatchUi({ type: 'set', key: 'activeDisputeId', value: null })
+
           // First check for workflow-stage disputes
           const workflowDispute = await disputeService.getDisputeByBountyId(String(bounty.id))
           if (!mounted) return
@@ -441,12 +447,16 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
             dispatchUi({ type: 'set', key: 'hasDispute', value: true })
             dispatchUi({ type: 'set', key: 'activeDisputeId', value: workflowDispute.id })
           } else {
-            // Fallback: check cancellation-based disputes
-            const dispute = await disputeService.getDisputeByCancellationId(String(bounty.id))
+            // Fallback: check cancellation-based disputes (looked up by cancellation id)
+            const cancellation = await cancellationService.getCancellationByBountyId(String(bounty.id))
             if (!mounted) return
-            if (dispute && (dispute.status === 'open' || dispute.status === 'under_review')) {
-              dispatchUi({ type: 'set', key: 'hasDispute', value: true })
-              dispatchUi({ type: 'set', key: 'activeDisputeId', value: dispute.id })
+            if (cancellation?.id) {
+              const dispute = await disputeService.getDisputeByCancellationId(String(cancellation.id))
+              if (!mounted) return
+              if (dispute && (dispute.status === 'open' || dispute.status === 'under_review')) {
+                dispatchUi({ type: 'set', key: 'hasDispute', value: true })
+                dispatchUi({ type: 'set', key: 'activeDisputeId', value: dispute.id })
+              }
             }
           }
         } catch { }
@@ -648,6 +658,14 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   const handleSubmitCompletion = async () => {
     if (!currentUserId) {
       Alert.alert('Sign In Required', 'Your session is missing. Please sign in again and retry.')
+      return
+    }
+
+    if (hasDispute) {
+      Alert.alert(
+        'Submission Locked',
+        'A dispute is currently open for this bounty. Submissions are paused until the dispute is resolved by an admin.'
+      )
       return
     }
 
@@ -949,12 +967,13 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                 )}
                 {isOwner && hasSubmission && (
                   <TouchableOpacity
-                    style={styles.headerReviewBtn}
+                    style={[styles.headerReviewBtn, hasDispute && styles.buttonDisabled]}
                     onPress={() => dispatchUi({ type: 'set', key: 'showReviewModal', value: true })}
+                    disabled={hasDispute}
                     accessibilityRole="button"
-                    accessibilityLabel="Open review modal"
+                    accessibilityLabel={hasDispute ? 'Review locked: dispute open' : 'Open review modal'}
                   >
-                    <MaterialIcons name="rate-review" size={14} color="#052e1b" />
+                    <MaterialIcons name={hasDispute ? 'lock' : 'rate-review'} size={14} color="#052e1b" />
                   </TouchableOpacity>
                 )}
               </View>
@@ -992,14 +1011,19 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                 <View style={{ gap: 16 }}>
                   {/* Poster view: Message bar, attachments, rating */}
 
+                  {hasDispute && (
+                    <DisputeFrozenBanner message="A dispute has been opened for this bounty. The submission and review flow is paused until an admin resolves the dispute." />
+                  )}
+
                   {/* Show review button if submission is pending */}
                   {hasSubmission && (
                     <TouchableOpacity
-                      style={styles.reviewSubmissionBtn}
+                      style={[styles.reviewSubmissionBtn, hasDispute && styles.buttonDisabled]}
                       onPress={() => dispatchUi({ type: 'set', key: 'showReviewModal', value: true })}
+                      disabled={hasDispute}
                     >
-                      <MaterialIcons name="rate-review" size={20} color="#fff" />
-                      <Text style={styles.reviewSubmissionText}>Review Submission</Text>
+                      <MaterialIcons name={hasDispute ? 'lock' : 'rate-review'} size={20} color="#fff" />
+                      <Text style={styles.reviewSubmissionText}>{hasDispute ? 'Locked (Dispute Open)' : 'Review Submission'}</Text>
                     </TouchableOpacity>
                   )}
 
@@ -1081,6 +1105,10 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                     />
                   )}
 
+                  {hasDispute && (
+                    <DisputeFrozenBanner message="A dispute has been opened for this bounty. Submitting evidence and other workflow actions are paused until an admin resolves the dispute." />
+                  )}
+
                   <View style={styles.infoBox}>
                     <MaterialIcons name="info-outline" size={18} color="#6ee7b7" />
                     <Text style={styles.infoText}>
@@ -1091,10 +1119,18 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                   <AttachmentsList attachments={attachments} />
 
                   <TouchableOpacity
-                    style={[styles.primaryBtn, (readyToSubmitPressed || !!readyRecord) && styles.buttonDisabled]}
+                    style={[styles.primaryBtn, (readyToSubmitPressed || !!readyRecord || hasDispute) && styles.buttonDisabled]}
                     onPress={async () => {
                       if (!currentUserId) {
                         Alert.alert('Sign In Required', 'Your session is missing. Please sign in again and retry.')
+                        return
+                      }
+
+                      if (hasDispute) {
+                        Alert.alert(
+                          'Action Locked',
+                          'A dispute is currently open for this bounty. The submission flow is paused until the dispute is resolved by an admin.'
+                        )
                         return
                       }
 
@@ -1126,10 +1162,10 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                         ]
                       )
                     }}
-                    disabled={readyToSubmitPressed || !!readyRecord}
+                    disabled={readyToSubmitPressed || !!readyRecord || hasDispute}
                   >
                     <Text style={styles.primaryText}>Ready to Submit</Text>
-                    <MaterialIcons name={(readyToSubmitPressed || !!readyRecord) ? 'lock' : 'arrow-forward'} size={18} color="#fff" />
+                    <MaterialIcons name={(readyToSubmitPressed || !!readyRecord || hasDispute) ? 'lock' : 'arrow-forward'} size={18} color="#fff" />
                   </TouchableOpacity>
 
                   <View style={styles.hunterToolsSection}>
@@ -1204,6 +1240,10 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
               onToggle={() => dispatchUi({ type: 'set', key: 'reviewExpanded', value: !reviewExpanded })}
             >
               <View style={{ gap: 16 }}>
+                {hasDispute && (
+                  <DisputeFrozenBanner message="A dispute has been opened for this bounty. Reviewing or releasing the bounty is paused until an admin resolves the dispute." />
+                )}
+
                 <View style={styles.infoBox}>
                   <MaterialIcons name="rate-review" size={18} color="#6ee7b7" />
                   <Text style={styles.infoText}>
@@ -1212,11 +1252,12 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                 </View>
 
                 <TouchableOpacity
-                  style={styles.reviewSubmissionBtn}
+                  style={[styles.reviewSubmissionBtn, hasDispute && styles.buttonDisabled]}
                   onPress={() => dispatchUi({ type: 'set', key: 'showReviewModal', value: true })}
+                  disabled={hasDispute}
                 >
-                  <MaterialIcons name="rate-review" size={20} color="#fff" />
-                  <Text style={styles.reviewSubmissionText}>Review Submission</Text>
+                  <MaterialIcons name={hasDispute ? 'lock' : 'rate-review'} size={20} color="#fff" />
+                  <Text style={styles.reviewSubmissionText}>{hasDispute ? 'Locked (Dispute Open)' : 'Review Submission'}</Text>
                 </TouchableOpacity>
                 {/* Full review screen removed (legacy) - keep modal only */}
               </View>
@@ -1239,12 +1280,20 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
               <View style={{ gap: 16 }}>
                 {/* If a submission is pending, show waiting state */}
                 {(submissionPending || hasSubmission) ? (
-                  <View style={styles.infoBox}>
-                    <MaterialIcons name="hourglass-top" size={18} color="#6ee7b7" />
-                    <Text style={styles.infoText}>Waiting for poster to review your submission.</Text>
-                  </View>
+                  <>
+                    {hasDispute && (
+                      <DisputeFrozenBanner message="A dispute has been opened for this bounty. The flow is paused until an admin resolves the dispute." />
+                    )}
+                    <View style={styles.infoBox}>
+                      <MaterialIcons name="hourglass-top" size={18} color="#6ee7b7" />
+                      <Text style={styles.infoText}>Waiting for poster to review your submission.</Text>
+                    </View>
+                  </>
                 ) : (
                   <>
+                    {hasDispute && (
+                      <DisputeFrozenBanner message="A dispute has been opened for this bounty. Submitting evidence is paused until an admin resolves the dispute." />
+                    )}
                     {/* Message Input */}
                     <View>
                       <Text style={styles.sectionTitle}>Message (cont):</Text>
@@ -1289,25 +1338,29 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                         </TouchableOpacity>
                       ))}
                       <TouchableOpacity
-                        style={[styles.addFileBtn, !(readyToSubmitPressed || !!readyRecord) && styles.buttonDisabled]}
+                        style={[styles.addFileBtn, (!(readyToSubmitPressed || !!readyRecord) || hasDispute) && styles.buttonDisabled]}
                         onPress={handleAddProof}
-                        disabled={!(readyToSubmitPressed || !!readyRecord)}
+                        disabled={!(readyToSubmitPressed || !!readyRecord) || hasDispute}
                       >
-                        <MaterialIcons name={(readyToSubmitPressed || !!readyRecord) ? 'add' : 'lock'} size={20} color="#10b981" />
-                        <Text style={styles.addFileText}>{(readyToSubmitPressed || !!readyRecord) ? 'Add File' : 'Locked'}</Text>
+                        <MaterialIcons name={(readyToSubmitPressed || !!readyRecord) && !hasDispute ? 'add' : 'lock'} size={20} color="#10b981" />
+                        <Text style={styles.addFileText}>
+                          {hasDispute
+                            ? 'Locked (Dispute Open)'
+                            : (readyToSubmitPressed || !!readyRecord) ? 'Add File' : 'Locked'}
+                        </Text>
                       </TouchableOpacity>
                     </View>
 
                     {/* Submit Button */}
                     <TouchableOpacity
-                      style={[styles.primaryBtn, isSubmitting && styles.buttonDisabled]}
+                      style={[styles.primaryBtn, (isSubmitting || hasDispute) && styles.buttonDisabled]}
                       onPress={handleSubmitCompletion}
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || hasDispute}
                     >
                       {isSubmitting ? (
                         <ActivityIndicator size="small" color="#fff" />
                       ) : (
-                        <Text style={styles.primaryText}>Submit</Text>
+                        <Text style={styles.primaryText}>{hasDispute ? 'Locked (Dispute Open)' : 'Submit'}</Text>
                       )}
                     </TouchableOpacity>
                   </>
