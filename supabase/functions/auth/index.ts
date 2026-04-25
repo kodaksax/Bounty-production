@@ -118,7 +118,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
           return jsonResponse({ error: 'Username already taken' }, 409);
         }
         // Collision on auto-generated name: append extra random entropy and retry once
-        normalizedUsername = `${normalizedUsername}_${Math.random().toString(36).slice(2, 6)}`;
+        const randomSuffix = crypto
+          .getRandomValues(new Uint32Array(1))[0]
+          .toString(36)
+          .slice(0, 4)
+          .padEnd(4, '0');
+        normalizedUsername = `${normalizedUsername}_${randomSuffix}`;
       }
 
       console.log('[auth/register] creating auth user', {
