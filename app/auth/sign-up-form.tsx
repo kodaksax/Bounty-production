@@ -4,7 +4,8 @@ import { ValidationMessage } from 'app/components/ValidationMessage'
 import type { Href } from 'expo-router'
 import { useRouter } from 'expo-router'
 import { useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, ScrollView, SafeAreaView, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { PRIVACY_TEXT } from '../../assets/legal/privacy'
 import { TERMS_TEXT } from '../../assets/legal/terms'
 import { BrandingLogo } from '../../components/ui/branding-logo'
@@ -440,11 +441,19 @@ export function SignUpForm() {
                 </TouchableOpacity>
                 <View className="flex-1 flex-row flex-wrap">
                   <Text className="text-white/90">I accept the </Text>
-                  <TouchableOpacity onPress={() => setLegalModal('terms')}>
+                  <TouchableOpacity
+                    onPress={() => setLegalModal('terms')}
+                    accessibilityRole="link"
+                    accessibilityLabel="View Terms of Service"
+                  >
                     <Text className="text-white underline">Terms of Service</Text>
                   </TouchableOpacity>
                   <Text className="text-white/90"> and </Text>
-                  <TouchableOpacity onPress={() => setLegalModal('privacy')}>
+                  <TouchableOpacity
+                    onPress={() => setLegalModal('privacy')}
+                    accessibilityRole="link"
+                    accessibilityLabel="View Privacy Policy"
+                  >
                     <Text className="text-white underline">Privacy Policy</Text>
                   </TouchableOpacity>
                 </View>
