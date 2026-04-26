@@ -59,11 +59,16 @@ function extractSvgXml(qrCode?: string): string | null {
     const payload = trimmed.slice(commaIdx + 1);
     try {
       if (meta.includes(';base64')) {
-        // atob is available on modern RN/Hermes; decodeURIComponent guards
-        // against any URI escaping after base64 decoding.
-        // eslint-disable-next-line no-undef
-        const decoded = typeof atob === 'function' ? atob(payload) : Buffer.from(payload, 'base64').toString('utf8');
-        return decoded;
+        // `atob` is available globally on Hermes (the JS engine used by this
+        // app per `app.json` -> `expo-build-properties.useHermesV1: true`).
+        // `Buffer` is intentionally NOT used here because it is not part of
+        // the React Native global scope without a polyfill.
+        const globalAtob = (globalThis as { atob?: (s: string) => string }).atob;
+        if (typeof globalAtob === 'function') {
+          return globalAtob(payload);
+        }
+        console.warn('[TotpEnrollmentModal] base64 QR payload but no atob available');
+        return null;
       }
       return decodeURIComponent(payload);
     } catch (e) {
@@ -277,7 +282,7 @@ export function TotpEnrollmentModal({
                 {isVerifying ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text style={{ color: '#fff', fontWeight: '600' }}>Verify &amp; Enable</Text>
+                  <Text style={{ color: '#fff', fontWeight: '600' }}>Verify & Enable</Text>
                 )}
               </TouchableOpacity>
             </View>

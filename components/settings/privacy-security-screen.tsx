@@ -218,13 +218,19 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
       if (error) throw error;
 
       if (data?.id && data.totp) {
+        // `qr_code` is documented in supabase-js v2 enroll responses but the
+        // typings have lagged across versions, so read it through a narrow
+        // helper type instead of an unchecked cast.
+        const totpPayload = data.totp as {
+          secret: string;
+          uri: string;
+          qr_code?: string;
+        };
         setEnrollFactorId(data.id);
         setEnrollTotp({
-          secret: data.totp.secret,
-          uri: data.totp.uri,
-          // qr_code is present on recent supabase-js versions; fall back to
-          // undefined and the modal will show the manual secret instead.
-          qr_code: (data.totp as { qr_code?: string }).qr_code,
+          secret: totpPayload.secret,
+          uri: totpPayload.uri,
+          qr_code: typeof totpPayload.qr_code === 'string' ? totpPayload.qr_code : undefined,
         });
         setEnrollError(null);
         setEnrollModalVisible(true);
