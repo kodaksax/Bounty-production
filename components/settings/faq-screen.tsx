@@ -8,7 +8,7 @@ interface FAQScreenProps { onBack: () => void }
 const FAQS = [
   { q: 'How does escrow work?', a: 'Funds are reserved when a bounty is accepted and released on completion.' },
   { q: 'Can I cancel a bounty?', a: 'Open bounties may be archived. Funded disputes will have a formal flow later.' },
-  { q: 'What fees apply?', a: 'Currently no platform fees in this prototype. Future versions may apply a small service fee.' },
+  { q: 'What fees apply?', a: 'A 10% platform service fee is deducted from the bounty amount when funds are released to the hunter on completion. Standard Stripe processing fees (typically 2.9% + $0.30 on card transactions) may also apply when funding your wallet. The exact totals are shown before you confirm.' },
   { q: 'How do I report abuse?', a: 'Use Contact Support with detailed information. Our moderation team reviews all reports promptly.' },
 ];
 

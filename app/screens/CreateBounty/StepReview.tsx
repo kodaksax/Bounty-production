@@ -359,12 +359,18 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
               {/* Fees */}
               <View className="bg-emerald-700/30 rounded-lg p-4 mb-4">
                 <Text className="text-emerald-100 font-semibold mb-2">
-                  Service Fee: 2.9% + $0.30
+                  Platform Fee: 10% on completion
+                </Text>
+                <Text className="text-emerald-200/70 text-sm mb-2">
+                  A 10% service fee is deducted from the bounty amount when work
+                  is completed and funds are released to the hunter. You pay only
+                  the bounty amount up front; the fee comes out of the hunter
+                  payout, not in addition to your escrow.
                 </Text>
                 <Text className="text-emerald-200/70 text-sm">
-                  Standard payment processing fee. You
-                  {"'"}
-                  ll see the exact amount before confirming.
+                  Standard payment-processor fees from Stripe (typically 2.9% +
+                  $0.30 on card transactions) may also apply when funding your
+                  wallet. The exact total is shown before you confirm.
                 </Text>
               </View>
 
