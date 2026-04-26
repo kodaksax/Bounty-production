@@ -17,12 +17,8 @@
         "NSPhotoLibraryAddUsageDescription": "BOUNTY saves selected images to your library when needed.",
         "NSCameraUsageDescription": "BOUNTY needs camera access to take photos for your profile or posts.",
         "NSLocationWhenInUseUsageDescription": "BOUNTY uses your location to show nearby bounties and help you find local opportunities.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "BOUNTY uses your location in the background to keep nearby bounties and time-sensitive matches accurate even when the app is not active.",
         "NSMicrophoneUsageDescription": "BOUNTY needs microphone access for voice messages.",
-        "NSContactsUsageDescription": "BOUNTY needs access to your contacts to help you invite friends.",
-        "UIBackgroundModes": [
-          "location"
-        ]
+        "NSContactsUsageDescription": "BOUNTY needs access to your contacts to help you invite friends."
       },
       "associatedDomains": [
         "applinks:bountyfinder.app",
