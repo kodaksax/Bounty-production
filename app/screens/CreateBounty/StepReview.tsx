@@ -1,6 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import { formatCategoryLabel } from 'lib/utils/data-utils';
+import { PLATFORM_FEE_PERCENTAGE } from 'lib/wallet-context';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +10,15 @@ import { EscrowExplainer } from '../../../components/ui/escrow-explainer';
 import { TrustBadgesCompact } from '../../../components/ui/trust-badges';
 import { useAuthContext } from '../../../hooks/use-auth-context';
 import type { Attachment } from '../../../lib/types';
+
+/**
+ * Display string for the platform fee percentage. Derived from
+ * `PLATFORM_FEE_PERCENTAGE` (the source of truth used at completion time)
+ * so this disclosure can never drift from the actual deduction.
+ */
+const PLATFORM_FEE_DISPLAY = `${(PLATFORM_FEE_PERCENTAGE * 100).toFixed(
+  Number.isInteger(PLATFORM_FEE_PERCENTAGE * 100) ? 0 : 1
+)}%`;
 
 interface StepReviewProps {
   draft: BountyDraft;
@@ -359,12 +369,18 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
               {/* Fees */}
               <View className="bg-emerald-700/30 rounded-lg p-4 mb-4">
                 <Text className="text-emerald-100 font-semibold mb-2">
-                  Service Fee: 2.9% + $0.30
+                  Platform Fee: {PLATFORM_FEE_DISPLAY} on completion
+                </Text>
+                <Text className="text-emerald-200/70 text-sm mb-2">
+                  A {PLATFORM_FEE_DISPLAY} service fee is deducted from the bounty
+                  amount when work is completed and funds are released to the
+                  hunter. You pay only the bounty amount up front; the fee comes
+                  out of the hunter payout, not in addition to your escrow.
                 </Text>
                 <Text className="text-emerald-200/70 text-sm">
-                  Standard payment processing fee. You
-                  {"'"}
-                  ll see the exact amount before confirming.
+                  Standard payment-processor fees from Stripe (typically 2.9% +
+                  $0.30 on card transactions) may also apply when funding your
+                  wallet. The exact total is shown before you confirm.
                 </Text>
               </View>
 
