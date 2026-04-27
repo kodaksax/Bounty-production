@@ -651,81 +651,43 @@ describe('POST /wallet/refund', () => {
 });
 
 // ---------------------------------------------------------------------------
-describe('POST /connect/bank-accounts', () => {
-  const validBody = {
+describe('POST /connect/bank-accounts (deprecated — manual bank entry removed)', () => {
+  const sampleBody = {
     accountHolderName: 'Jane Doe',
     routingNumber: '110000000',
     accountNumber: '000123456789',
     accountType: 'checking' as const,
   };
 
-  it('adds a bank account successfully', async () => {
+  it('returns 410 Gone with a migration hint, regardless of the body', async () => {
+    const reply = mockReply();
+    await handlers['POST:/connect/bank-accounts'](
+      { userId: 'user-1', body: sampleBody },
+      reply
+    );
+    expect(reply._code).toBe(410);
+    expect(reply._body).toMatchObject({
+      code: 'manual_bank_entry_deprecated',
+      migrate_to: '/functions/v1/payments/create-financial-connections-session',
+    });
+  });
+
+  it('does NOT call the legacy consolidatedStripeConnectService.addBankAccount', async () => {
     const {
       consolidatedStripeConnectService,
     } = require('../../../services/api/src/services/consolidated-stripe-connect-service');
-    consolidatedStripeConnectService.addBankAccount.mockResolvedValue({
-      id: 'ba_test',
-      last4: '6789',
-    });
-
-    const result = await handlers['POST:/connect/bank-accounts'](
-      { userId: 'user-1', body: validBody },
+    consolidatedStripeConnectService.addBankAccount.mockClear();
+    await handlers['POST:/connect/bank-accounts'](
+      { userId: 'user-1', body: sampleBody },
       mockReply()
     );
-    expect(result.success).toBe(true);
-    expect(result.bankAccount.id).toBe('ba_test');
+    expect(consolidatedStripeConnectService.addBankAccount).not.toHaveBeenCalled();
   });
 
-  it('returns 400 when required fields missing', async () => {
+  it('still returns 410 even when userId is missing (route is fully removed for clients)', async () => {
     const reply = mockReply();
-    await handlers['POST:/connect/bank-accounts'](
-      { userId: 'user-1', body: { accountHolderName: 'Jane' } },
-      reply
-    );
-    expect(reply._code).toBe(400);
-  });
-
-  it('returns 400 on invalid routing number length', async () => {
-    const reply = mockReply();
-    await handlers['POST:/connect/bank-accounts'](
-      { userId: 'user-1', body: { ...validBody, routingNumber: '12345' } },
-      reply
-    );
-    expect(reply._code).toBe(400);
-  });
-
-  it('returns 400 on invalid account number length', async () => {
-    const reply = mockReply();
-    await handlers['POST:/connect/bank-accounts'](
-      { userId: 'user-1', body: { ...validBody, accountNumber: '123' } },
-      reply
-    );
-    expect(reply._code).toBe(400);
-  });
-
-  it('returns 400 on invalid account type', async () => {
-    const reply = mockReply();
-    await handlers['POST:/connect/bank-accounts'](
-      { userId: 'user-1', body: { ...validBody, accountType: 'business' } },
-      reply
-    );
-    expect(reply._code).toBe(400);
-  });
-
-  it('returns 401 when userId missing', async () => {
-    const reply = mockReply();
-    await handlers['POST:/connect/bank-accounts']({ userId: undefined, body: validBody }, reply);
-    expect(reply._code).toBe(401);
-  });
-
-  it('returns 500 on service error', async () => {
-    const {
-      consolidatedStripeConnectService,
-    } = require('../../../services/api/src/services/consolidated-stripe-connect-service');
-    consolidatedStripeConnectService.addBankAccount.mockRejectedValue(new Error('Stripe error'));
-    const reply = mockReply();
-    await handlers['POST:/connect/bank-accounts']({ userId: 'user-1', body: validBody }, reply);
-    expect(reply._code).toBe(500);
+    await handlers['POST:/connect/bank-accounts']({ userId: undefined, body: sampleBody }, reply);
+    expect(reply._code).toBe(410);
   });
 });
 

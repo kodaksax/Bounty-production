@@ -356,7 +356,7 @@ export async function invokePayments<T>(
 
 export interface StripePaymentMethod {
   id: string;
-  type: 'card' | string;
+  type: 'card' | 'us_bank_account' | string;
   card: {
     brand: string;
     last4: string;
@@ -367,6 +367,19 @@ export interface StripePaymentMethod {
     country?: string;
     fingerprint?: string;
     funding?: string;
+  };
+  /**
+   * Present when `type === 'us_bank_account'`. Populated from the linked
+   * `payment_methods` row by the Edge Function.
+   */
+  us_bank_account?: {
+    bank_name: string | null;
+    last4: string | null;
+    account_type: string | null;
+    fc_account_id: string | null;
+    stripe_external_account_id: string | null;
+    verification_status: 'verified' | 'pending_microdeposits' | 'failed' | null;
+    is_default: boolean;
   };
   // Optional billing details (SDK may include this)
   billing_details?: {

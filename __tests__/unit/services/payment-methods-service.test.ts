@@ -43,7 +43,7 @@ jest.mock('../../../lib/utils/network-connectivity', () => ({
 }));
 
 jest.mock('../../../lib/services/analytics-service', () => ({
-  analyticsService: { trackEvent: jest.fn() },
+  analyticsService: { trackEvent: jest.fn().mockResolvedValue(undefined) },
 }));
 
 jest.mock('../../../lib/services/performance-service', () => ({
@@ -418,5 +418,234 @@ describe('paymentMethodsService.listPaymentMethods: direct DB fallback', () => {
     mockSupabase.from.mockReturnValue(chain);
 
     await expect(paymentMethodsService.listPaymentMethods('auth')).rejects.toBeInstanceOf(Error);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Stripe Financial Connections (us_bank_account linking)
+// ---------------------------------------------------------------------------
+
+describe('paymentMethodsService.linkBankWithFinancialConnections', () => {
+  const ORIG_FETCH = global.fetch;
+
+  beforeEach(() => {
+    for (const k of Object.keys(mockSdk)) delete (mockSdk as any)[k];
+    jest.clearAllMocks();
+  });
+  afterEach(() => {
+    global.fetch = ORIG_FETCH;
+  });
+
+  function mockFetchSequence(responses: Array<{ ok: boolean; status?: number; body: any }>) {
+    let idx = 0;
+    global.fetch = jest.fn(async () => {
+      const res = responses[idx++];
+      return {
+        ok: res.ok,
+        status: res.status ?? (res.ok ? 200 : 400),
+        text: async () => JSON.stringify(res.body),
+        json: async () => res.body,
+        headers: { get: () => null },
+      } as any;
+    });
+  }
+
+  it('throws when authToken is missing', async () => {
+    await expect(
+      paymentMethodsService.linkBankWithFinancialConnections('')
+    ).rejects.toMatchObject({ message: expect.stringMatching(/Authentication required/i) });
+  });
+
+  it('throws when the platform SDK lacks Financial Connections support', async () => {
+    // No collectFinancialConnectionsAccounts on mock SDK.
+    mockFetchSequence([
+      { ok: true, body: { clientSecret: 'fcsess_secret_abc', sessionId: 'fcsess_123' } },
+    ]);
+
+    await expect(
+      paymentMethodsService.linkBankWithFinancialConnections('valid_token')
+    ).rejects.toMatchObject({
+      message: expect.stringMatching(/not available|update the app/i),
+    });
+  });
+
+  it('happy path: creates session, presents sheet, attaches PMs and returns linked banks', async () => {
+    (mockSdk as any).collectFinancialConnectionsAccounts = jest.fn().mockResolvedValue({
+      session: {
+        id: 'fcsess_123',
+        accounts: { data: [{ id: 'fca_abc', last4: '6789', institution_name: 'Chase' }] },
+      },
+    });
+
+    mockFetchSequence([
+      // 1) create-financial-connections-session
+      { ok: true, body: { clientSecret: 'fcsess_secret_abc', sessionId: 'fcsess_123' } },
+      // 2) financial-connections-complete
+      {
+        ok: true,
+        body: {
+          linkedBanks: [
+            {
+              stripe_payment_method_id: 'pm_bank_1',
+              type: 'us_bank_account',
+              bank_name: 'Chase',
+              bank_last4: '6789',
+              account_type: 'checking',
+              fc_account_id: 'fca_abc',
+              stripe_external_account_id: 'ba_xyz',
+              verification_status: 'verified',
+              is_default: true,
+              created: 1700000000,
+            },
+          ],
+        },
+      },
+    ]);
+
+    const result = await paymentMethodsService.linkBankWithFinancialConnections('valid_token', {
+      setAsDefault: true,
+    });
+
+    expect((mockSdk as any).collectFinancialConnectionsAccounts).toHaveBeenCalledWith(
+      'fcsess_secret_abc'
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('pm_bank_1');
+    expect(result[0].type).toBe('us_bank_account');
+    expect(result[0].us_bank_account?.bank_name).toBe('Chase');
+    expect(result[0].us_bank_account?.last4).toBe('6789');
+    expect(result[0].us_bank_account?.is_default).toBe(true);
+  });
+
+  it('surfaces a Canceled error when the user dismisses the sheet', async () => {
+    (mockSdk as any).collectFinancialConnectionsAccounts = jest.fn().mockResolvedValue({
+      error: { code: 'Canceled', message: 'User cancelled the flow' },
+    });
+    mockFetchSequence([
+      { ok: true, body: { clientSecret: 'fcsess_secret_abc', sessionId: 'fcsess_123' } },
+    ]);
+
+    await expect(
+      paymentMethodsService.linkBankWithFinancialConnections('valid_token')
+    ).rejects.toMatchObject({
+      code: 'Canceled',
+    });
+  });
+
+  it('throws when no accounts were returned by the FC sheet', async () => {
+    (mockSdk as any).collectFinancialConnectionsAccounts = jest
+      .fn()
+      .mockResolvedValue({ session: { id: 'fcsess_123', accounts: { data: [] } } });
+    mockFetchSequence([
+      { ok: true, body: { clientSecret: 'fcsess_secret_abc', sessionId: 'fcsess_123' } },
+    ]);
+
+    await expect(
+      paymentMethodsService.linkBankWithFinancialConnections('valid_token')
+    ).rejects.toMatchObject({
+      message: expect.stringMatching(/No bank account/i),
+    });
+  });
+});
+
+describe('paymentMethodsService.createAchDeposit', () => {
+  const ORIG_FETCH = global.fetch;
+
+  beforeEach(() => {
+    for (const k of Object.keys(mockSdk)) delete (mockSdk as any)[k];
+    jest.clearAllMocks();
+  });
+  afterEach(() => {
+    global.fetch = ORIG_FETCH;
+  });
+
+  it('rejects without an auth token', async () => {
+    await expect(
+      paymentMethodsService.createAchDeposit(
+        { amount: 25, paymentMethodId: 'pm_bank_1' },
+        ''
+      )
+    ).rejects.toMatchObject({ message: expect.stringMatching(/Authentication required/i) });
+  });
+
+  it('rejects when paymentMethodId is missing', async () => {
+    await expect(
+      paymentMethodsService.createAchDeposit(
+        { amount: 25, paymentMethodId: '' },
+        'valid_token'
+      )
+    ).rejects.toMatchObject({ message: expect.stringMatching(/paymentMethodId/i) });
+  });
+
+  it('rejects on non-positive amounts', async () => {
+    await expect(
+      paymentMethodsService.createAchDeposit(
+        { amount: 0, paymentMethodId: 'pm_bank_1' },
+        'valid_token'
+      )
+    ).rejects.toMatchObject({ message: expect.stringMatching(/Invalid amount/i) });
+  });
+
+  it('forwards us_bank_account params and returns processing status on the happy path', async () => {
+    let capturedBody: any = null;
+    global.fetch = jest.fn(async (_url: any, init: any) => {
+      capturedBody = JSON.parse(init.body);
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            clientSecret: 'pi_xxx_secret_yyy',
+            paymentIntentId: 'pi_xxx',
+            status: 'processing',
+            requiresAction: false,
+            nextAction: null,
+          }),
+        json: async () => ({}),
+        headers: { get: () => null },
+      } as any;
+    });
+
+    const result = await paymentMethodsService.createAchDeposit(
+      { amount: 25.5, paymentMethodId: 'pm_bank_1' },
+      'valid_token'
+    );
+
+    expect(capturedBody).toMatchObject({
+      amountCents: 2550,
+      paymentMethodId: 'pm_bank_1',
+      paymentMethodType: 'us_bank_account',
+      confirm: true,
+      metadata: { purpose: 'wallet_deposit' },
+    });
+    expect(result.paymentIntentId).toBe('pi_xxx');
+    expect(result.status).toBe('processing');
+    expect(result.requiresAction).toBe(false);
+  });
+
+  it('passes through requiresAction for microdeposit fallback', async () => {
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          clientSecret: 'pi_xxx_secret_yyy',
+          paymentIntentId: 'pi_xxx',
+          status: 'requires_action',
+          requiresAction: true,
+          nextAction: { type: 'verify_with_microdeposits' },
+        }),
+      json: async () => ({}),
+      headers: { get: () => null },
+    } as any));
+
+    const result = await paymentMethodsService.createAchDeposit(
+      { amount: 10, paymentMethodId: 'pm_bank_1' },
+      'valid_token'
+    );
+
+    expect(result.status).toBe('requires_action');
+    expect(result.requiresAction).toBe(true);
+    expect(result.nextAction).toEqual({ type: 'verify_with_microdeposits' });
   });
 });

@@ -5,551 +5,232 @@ import { useState } from "react"
 import {
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native"
 import { useAuthContext } from "../hooks/use-auth-context"
-import { API_BASE_URL } from "../lib/config/api"
-import { API_TIMEOUTS } from "../lib/config/network"
-import { HTTP_NOT_FOUND, HTTP_NOT_IMPLEMENTED } from "../lib/constants/http-status"
 import { stripeService } from "../lib/services/stripe-service"
-import { theme } from "../lib/theme"
-import { fetchWithTimeout } from "../lib/utils/fetch-with-timeout"
+import type { StripePaymentMethod } from "../lib/services/stripe-internal"
+
+/**
+ * Payload passed to the optional `onSave` callback once Financial Connections
+ * has linked one or more banks. Manual entry fields have been removed — bank
+ * linking now goes through Stripe FC exclusively.
+ */
+export interface BankAccountData {
+  /** Newly-linked us_bank_account payment methods returned by Financial Connections. */
+  linkedBanks: StripePaymentMethod[]
+}
 
 interface AddBankAccountModalProps {
   onBack: () => void
   onSave?: (bankData: BankAccountData) => void
   /**
    * When embedded is true the component renders inline (no backdrop/sheet)
-   * This is used when the AddBankAccountModal is shown inside another modal
-   * (e.g. PaymentMethodsModal). Default: false
+   * — used when this modal is shown inside another modal (e.g. PaymentMethodsModal).
    */
   embedded?: boolean
 }
 
-export interface BankAccountData {
-  accountHolderName: string
-  accountNumber: string
-  routingNumber: string
-  accountType: 'checking' | 'savings'
-}
-
-export function AddBankAccountModal({ onBack, onSave, embedded = false }: AddBankAccountModalProps) {
-  const [accountHolderName, setAccountHolderName] = useState("")
-  const [routingNumber, setRoutingNumber] = useState("")
-  const [accountNumber, setAccountNumber] = useState("")
-  const [accountNumberConfirm, setAccountNumberConfirm] = useState("")
-  const [accountType, setAccountType] = useState<'checking' | 'savings'>('checking')
+/**
+ * Bank linking via Stripe Financial Connections.
+ *
+ * Replaces the previous manual routing/account number form. A single tap opens
+ * Stripe's secure UI; on success the linked bank powers both deposits (as a
+ * us_bank_account PaymentMethod attached to the user's Customer) and
+ * withdrawals (mirrored as an external account on the user's Connect account).
+ */
+export function AddBankAccountModal({
+  onBack,
+  onSave,
+  embedded = false,
+}: AddBankAccountModalProps) {
   const [isLoading, setIsLoading] = useState(false)
-  const [errors, setErrors] = useState<{ [key: string]: string }>({})
   const { session } = useAuthContext()
 
-  const validateRoutingNumber = (value: string): boolean => {
-    // US routing numbers are 9 digits
-    if (value.length !== 9) return false
-
-    // ABA routing number checksum validation
-    const digits = value.split('').map(Number)
-    const checksum = (
-      3 * (digits[0] + digits[3] + digits[6]) +
-      7 * (digits[1] + digits[4] + digits[7]) +
-      (digits[2] + digits[5] + digits[8])
-    ) % 10
-
-    return checksum === 0
-  }
-
-  const handleRoutingNumberChange = (value: string) => {
-    const digitsOnly = value.replace(/\D/g, "").slice(0, 9)
-    setRoutingNumber(digitsOnly)
-
-    if (errors.routingNumber) {
-      setErrors(prev => {
-        const { routingNumber, ...rest } = prev
-        return rest
-      })
-    }
-
-    if (digitsOnly.length === 9 && !validateRoutingNumber(digitsOnly)) {
-      setErrors(prev => ({ ...prev, routingNumber: 'Invalid routing number' }))
-    }
-  }
-
-  const handleAccountNumberChange = (value: string) => {
-    const digitsOnly = value.replace(/\D/g, "").slice(0, 17) // Max 17 digits for US accounts
-    setAccountNumber(digitsOnly)
-
-    if (errors.accountNumber) {
-      setErrors(prev => {
-        const { accountNumber, ...rest } = prev
-        return rest
-      })
-    }
-  }
-
-  const handleAccountNumberConfirmChange = (value: string) => {
-    const digitsOnly = value.replace(/\D/g, "").slice(0, 17)
-    setAccountNumberConfirm(digitsOnly)
-
-    if (errors.accountNumberConfirm) {
-      setErrors(prev => {
-        const { accountNumberConfirm, ...rest } = prev
-        return rest
-      })
-    }
-
-    if (digitsOnly.length > 0 && accountNumber !== digitsOnly) {
-      setErrors(prev => ({ ...prev, accountNumberConfirm: 'Account numbers do not match' }))
-    }
-  }
-
-  const handleSave = async () => {
+  const handleLinkBank = async () => {
+    if (isLoading) return
     setIsLoading(true)
-    setErrors({})
-
     try {
-      // Validate all fields
-      const validationErrors: { [key: string]: string } = {}
-
-      if (!accountHolderName.trim()) {
-        validationErrors.accountHolderName = 'Please enter the account holder name'
-      }
-
-      if (!routingNumber || routingNumber.length !== 9) {
-        validationErrors.routingNumber = 'Please enter a valid 9-digit routing number'
-      } else if (!validateRoutingNumber(routingNumber)) {
-        validationErrors.routingNumber = 'Invalid routing number checksum'
-      }
-
-      if (!accountNumber || accountNumber.length < 4) {
-        validationErrors.accountNumber = 'Please enter a valid account number'
-      }
-
-      if (accountNumber !== accountNumberConfirm) {
-        validationErrors.accountNumberConfirm = 'Account numbers must match'
-      }
-
-      if (Object.keys(validationErrors).length > 0) {
-        setErrors(validationErrors)
-        return
-      }
-
       if (!session?.access_token) {
         throw new Error('Not authenticated. Please sign in again.')
       }
 
-      // Create bank account on Connect account for payouts
-      const response = await fetchWithTimeout(`${API_BASE_URL}/connect/bank-accounts`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          accountHolderName,
-          routingNumber,
-          accountNumber,
-          accountType,
-        }),
-        timeout: API_TIMEOUTS.LONG, // 30 seconds for payment operations
-        retries: 2,
-      })
+      const linkedBanks = await stripeService.linkBankWithFinancialConnections(
+        session.access_token,
+        { setAsDefault: true }
+      )
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-
-        // Check for common error scenarios using constants
-        if (response.status === HTTP_NOT_FOUND) {
-          throw new Error('Payment service unavailable. Please ensure the API server is running and configured correctly.')
-        }
-
-        if (response.status === HTTP_NOT_IMPLEMENTED) {
-          throw new Error('Payment service not configured. Please contact support.')
-        }
-
-        // Handle Connect account requirement
-        if (errorData.requiresOnboarding) {
-          throw new Error('Please complete Stripe Connect onboarding before adding a bank account.')
-        }
-
-        throw new Error(errorData.error || `Failed to add bank account (${response.status})`)
+      if (!linkedBanks || linkedBanks.length === 0) {
+        // Should not happen — the service throws on cancellation.
+        return
       }
 
-      // Parse response to get bank account data
-      const responseData = await response.json()
+      const first = linkedBanks[0]
+      const bankName = first.us_bank_account?.bank_name ?? 'Your bank'
+      const last4 = first.us_bank_account?.last4 ?? ''
 
-      // Show success message with verification info
-      const verificationMessage = responseData.bankAccount?.verified
-        ? 'Bank account added and verified!'
-        : 'Bank account added successfully! Verification may take 1-2 business days.'
-
-      Alert.alert('Success', verificationMessage, [
-        { text: 'OK', onPress: onBack }
-      ])
-
-    } catch (error) {
-      console.error('[AddBankAccountModal] Error adding bank account:', error)
-      const errorMessage = stripeService.parseStripeError(error)
-      Alert.alert('Error', errorMessage)
+      Alert.alert(
+        'Bank Linked',
+        last4
+          ? `${bankName} •••• ${last4} is ready for deposits and withdrawals.`
+          : `${bankName} is ready for deposits and withdrawals.`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              onSave?.({ linkedBanks })
+              onBack()
+            },
+          },
+        ]
+      )
+    } catch (error: any) {
+      // Cancellations come back as `card_error` with code 'Canceled' from
+      // collectFinancialConnectionsAccounts — surface them as a soft no-op.
+      const code = error?.code ?? error?.error?.code
+      if (code === 'Canceled') {
+        return
+      }
+      const message =
+        error?.message ?? 'We couldn’t link your bank account. Please try again.'
+      Alert.alert('Bank Linking Failed', String(message))
     } finally {
       setIsLoading(false)
     }
   }
 
-  const isFormValid =
-    accountHolderName.trim() !== "" &&
-    routingNumber.length === 9 &&
-    accountNumber.length >= 4 &&
-    accountNumber === accountNumberConfirm &&
-    Object.keys(errors).length === 0
+  const Body = (
+    <ScrollView
+      contentContainerStyle={styles.contentContainer}
+      keyboardShouldPersistTaps="handled"
+    >
+      <View style={styles.heroIconWrap}>
+        <MaterialIcons name="account-balance" size={48} color="#fff" />
+      </View>
+
+      <Text style={styles.heroTitle}>Link your bank securely</Text>
+      <Text style={styles.heroSubtitle}>
+        We use Stripe Financial Connections so you never share routing or account
+        numbers with us. The same linked bank can be used for both deposits and
+        withdrawals.
+      </Text>
+
+      <View style={styles.bulletList}>
+        <View style={styles.bulletRow}>
+          <MaterialIcons name="lock" size={18} color="#6ee7b7" />
+          <Text style={styles.bulletText}>Bank-grade encryption end-to-end.</Text>
+        </View>
+        <View style={styles.bulletRow}>
+          <MaterialIcons name="bolt" size={18} color="#6ee7b7" />
+          <Text style={styles.bulletText}>
+            Instant verification when your bank supports it; otherwise tiny
+            test deposits arrive in 1–2 business days.
+          </Text>
+        </View>
+        <View style={styles.bulletRow}>
+          <MaterialIcons name="sync" size={18} color="#6ee7b7" />
+          <Text style={styles.bulletText}>
+            Reusable for deposits and payouts. Link once, use forever.
+          </Text>
+        </View>
+      </View>
+
+      <TouchableOpacity
+        onPress={handleLinkBank}
+        disabled={isLoading}
+        style={[styles.primaryButton, isLoading && styles.primaryButtonDisabled]}
+        accessibilityRole="button"
+        accessibilityLabel="Link bank with Stripe"
+        accessibilityState={{ disabled: isLoading }}
+      >
+        {isLoading ? (
+          <>
+            <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 8 }} />
+            <Text style={styles.primaryButtonText}>Opening secure form…</Text>
+          </>
+        ) : (
+          <Text style={styles.primaryButtonText}>Link Bank with Stripe</Text>
+        )}
+      </TouchableOpacity>
+
+      <View style={styles.securityNotice}>
+        <MaterialIcons name="verified-user" size={16} color="#6ee7b7" />
+        <Text style={styles.securityText}>
+          Powered by Stripe — supports thousands of US banks. We never see your
+          credentials.
+        </Text>
+      </View>
+    </ScrollView>
+  )
 
   if (embedded) {
-    // Render inline when embedded inside another modal
     return (
       <View style={embeddedStyles.container}>
         <View style={embeddedStyles.navBar}>
-          <TouchableOpacity onPress={onBack} style={embeddedStyles.backButton} accessibilityRole="button" accessibilityLabel="Back">
+          <TouchableOpacity
+            onPress={onBack}
+            style={embeddedStyles.backButton}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+          >
             <MaterialIcons name="arrow-back" size={22} color="#fff" />
           </TouchableOpacity>
-          <Text style={embeddedStyles.title}>Add Bank Account</Text>
+          <Text style={embeddedStyles.title}>Link Bank Account</Text>
           <View style={{ width: 44 }} />
         </View>
-
-        <ScrollView contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
-          <View style={styles.infoBox}>
-            <MaterialIcons name="info-outline" size={20} color="#10b981" />
-            <Text style={styles.infoText}>
-              Bank accounts are verified via micro-deposits. This typically takes 1-2 business days.
-            </Text>
-          </View>
-
-          <View style={styles.formFieldBlock}>
-            <Text style={styles.fieldLabel}>Account Holder Name</Text>
-            <TextInput
-              value={accountHolderName}
-              onChangeText={(text) => {
-                setAccountHolderName(text)
-                if (errors.accountHolderName) {
-                  setErrors(prev => {
-                    const { accountHolderName, ...rest } = prev
-                    return rest
-                  })
-                }
-              }}
-              placeholder="John Doe"
-              autoComplete="name"
-              style={[styles.textInput, errors.accountHolderName && styles.textInputError]}
-              placeholderTextColor="rgba(255,255,255,0.35)"
-              accessibilityLabel="Account holder name"
-              accessibilityHint="Enter the name on your bank account"
-            />
-            {errors.accountHolderName && <Text style={styles.errorText}>{errors.accountHolderName}</Text>}
-          </View>
-
-          <View style={styles.formFieldBlock}>
-            <Text style={styles.fieldLabel}>Routing Number</Text>
-            <TextInput
-              value={routingNumber}
-              onChangeText={handleRoutingNumberChange}
-              placeholder="123456789"
-              maxLength={9}
-              keyboardType="numeric"
-              autoComplete="off"
-              style={[styles.textInput, errors.routingNumber && styles.textInputError]}
-              placeholderTextColor="rgba(255,255,255,0.35)"
-              accessibilityLabel="Routing number"
-              accessibilityHint="Enter your 9-digit bank routing number"
-            />
-            {errors.routingNumber && <Text style={styles.errorText}>{errors.routingNumber}</Text>}
-            <Text style={styles.helperText}>Found on your check or bank statement</Text>
-          </View>
-
-          <View style={styles.formFieldBlock}>
-            <Text style={styles.fieldLabel}>Account Number</Text>
-            <TextInput
-              value={accountNumber}
-              onChangeText={handleAccountNumberChange}
-              placeholder="000123456789"
-              maxLength={17}
-              keyboardType="numeric"
-              autoComplete="off"
-              secureTextEntry
-              style={[styles.textInput, errors.accountNumber && styles.textInputError]}
-              placeholderTextColor="rgba(255,255,255,0.35)"
-              accessibilityLabel="Account number"
-              accessibilityHint="Enter your bank account number"
-            />
-            {errors.accountNumber && <Text style={styles.errorText}>{errors.accountNumber}</Text>}
-          </View>
-
-          <View style={styles.formFieldBlock}>
-            <Text style={styles.fieldLabel}>Confirm Account Number</Text>
-            <TextInput
-              value={accountNumberConfirm}
-              onChangeText={handleAccountNumberConfirmChange}
-              placeholder="000123456789"
-              maxLength={17}
-              keyboardType="numeric"
-              autoComplete="off"
-              secureTextEntry
-              style={[styles.textInput, errors.accountNumberConfirm && styles.textInputError]}
-              placeholderTextColor="rgba(255,255,255,0.35)"
-              accessibilityLabel="Confirm account number"
-              accessibilityHint="Re-enter your bank account number to confirm"
-            />
-            {errors.accountNumberConfirm && <Text style={styles.errorText}>{errors.accountNumberConfirm}</Text>}
-          </View>
-
-          <View style={styles.formFieldBlock}>
-            <Text style={styles.fieldLabel}>Account Type</Text>
-            <View style={styles.accountTypeContainer}>
-              <TouchableOpacity
-                style={[styles.accountTypeButton, accountType === 'checking' && styles.accountTypeButtonActive]}
-                onPress={() => setAccountType('checking')}
-                accessibilityRole="radio"
-                accessibilityState={{ checked: accountType === 'checking' }}
-                accessibilityLabel="Checking account"
-              >
-                <MaterialIcons
-                  name={accountType === 'checking' ? 'radio-button-checked' : 'radio-button-unchecked'}
-                  size={22}
-                  color="#fff"
-                />
-                <Text style={styles.accountTypeText}>Checking</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.accountTypeButton, accountType === 'savings' && styles.accountTypeButtonActive]}
-                onPress={() => setAccountType('savings')}
-                accessibilityRole="radio"
-                accessibilityState={{ checked: accountType === 'savings' }}
-                accessibilityLabel="Savings account"
-              >
-                <MaterialIcons
-                  name={accountType === 'savings' ? 'radio-button-checked' : 'radio-button-unchecked'}
-                  size={22}
-                  color="#fff"
-                />
-                <Text style={styles.accountTypeText}>Savings</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <TouchableOpacity
-            onPress={handleSave}
-            disabled={!isFormValid || isLoading}
-            style={[styles.primaryButton, (!isFormValid || isLoading) && styles.primaryButtonDisabled]}
-            accessibilityRole="button"
-            accessibilityLabel="Add bank account"
-            accessibilityState={{ disabled: !isFormValid || isLoading }}
-          >
-            {isLoading ? (
-              <>
-                <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 8 }} />
-                <Text style={styles.primaryButtonText}>Adding Account...</Text>
-              </>
-            ) : (
-              <Text style={styles.primaryButtonText}>Add Bank Account</Text>
-            )}
-          </TouchableOpacity>
-
-          <View style={styles.securityNotice}>
-            <MaterialIcons name="lock" size={16} color="#6ee7b7" />
-            <Text style={styles.securityText}>
-              Your bank details are encrypted and securely transmitted to Stripe. We never store your full account number.
-            </Text>
-          </View>
-        </ScrollView>
+        {Body}
       </View>
     )
   }
 
-  // Non-embedded: render as overlay bottom sheet
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={styles.overlayContainer}
-    >
+    <View style={styles.overlayContainer}>
       <View style={styles.sheet}>
-        {/* iOS-style nav bar */}
         <View style={styles.navBar}>
           <TouchableOpacity
             accessibilityRole="button"
-            accessibilityLabel="Close add bank account"
+            accessibilityLabel="Close link bank account"
             onPress={onBack}
             style={styles.navButton}
           >
             <MaterialIcons name="close" size={24} color="#fff" />
           </TouchableOpacity>
-          <Text style={styles.navTitle}>Add Bank Account</Text>
+          <Text style={styles.navTitle}>Link Bank Account</Text>
           <View style={styles.navButtonPlaceholder} />
         </View>
-
-        <ScrollView
-          style={styles.contentScroll}
-          contentContainerStyle={styles.contentContainer}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.infoBox}>
-            <MaterialIcons name="info-outline" size={20} color="#10b981" />
-            <Text style={styles.infoText}>
-              Bank accounts are verified via micro-deposits. This typically takes 1-2 business days.
-            </Text>
-          </View>
-
-          <View style={styles.formFieldBlock}>
-            <Text style={styles.fieldLabel}>Account Holder Name</Text>
-            <TextInput
-              value={accountHolderName}
-              onChangeText={(text) => {
-                setAccountHolderName(text)
-                if (errors.accountHolderName) {
-                  setErrors(prev => {
-                    const { accountHolderName, ...rest } = prev
-                    return rest
-                  })
-                }
-              }}
-              placeholder="John Doe"
-              autoComplete="name"
-              style={[styles.textInput, errors.accountHolderName && styles.textInputError]}
-              placeholderTextColor="rgba(255,255,255,0.35)"
-              accessibilityLabel="Account holder name"
-              accessibilityHint="Enter the name on your bank account"
-            />
-            {errors.accountHolderName && <Text style={styles.errorText}>{errors.accountHolderName}</Text>}
-          </View>
-
-          <View style={styles.formFieldBlock}>
-            <Text style={styles.fieldLabel}>Routing Number</Text>
-            <TextInput
-              value={routingNumber}
-              onChangeText={handleRoutingNumberChange}
-              placeholder="123456789"
-              maxLength={9}
-              keyboardType="numeric"
-              autoComplete="off"
-              style={[styles.textInput, errors.routingNumber && styles.textInputError]}
-              placeholderTextColor="rgba(255,255,255,0.35)"
-              accessibilityLabel="Routing number"
-              accessibilityHint="Enter your 9-digit bank routing number"
-            />
-            {errors.routingNumber && <Text style={styles.errorText}>{errors.routingNumber}</Text>}
-            <Text style={styles.helperText}>Found on your check or bank statement</Text>
-          </View>
-
-          <View style={styles.formFieldBlock}>
-            <Text style={styles.fieldLabel}>Account Number</Text>
-            <TextInput
-              value={accountNumber}
-              onChangeText={handleAccountNumberChange}
-              placeholder="000123456789"
-              maxLength={17}
-              keyboardType="numeric"
-              autoComplete="off"
-              secureTextEntry
-              style={[styles.textInput, errors.accountNumber && styles.textInputError]}
-              placeholderTextColor="rgba(255,255,255,0.35)"
-              accessibilityLabel="Account number"
-              accessibilityHint="Enter your bank account number"
-            />
-            {errors.accountNumber && <Text style={styles.errorText}>{errors.accountNumber}</Text>}
-          </View>
-
-          <View style={styles.formFieldBlock}>
-            <Text style={styles.fieldLabel}>Confirm Account Number</Text>
-            <TextInput
-              value={accountNumberConfirm}
-              onChangeText={handleAccountNumberConfirmChange}
-              placeholder="000123456789"
-              maxLength={17}
-              keyboardType="numeric"
-              autoComplete="off"
-              secureTextEntry
-              style={[styles.textInput, errors.accountNumberConfirm && styles.textInputError]}
-              placeholderTextColor="rgba(255,255,255,0.35)"
-              accessibilityLabel="Confirm account number"
-              accessibilityHint="Re-enter your bank account number to confirm"
-            />
-            {errors.accountNumberConfirm && <Text style={styles.errorText}>{errors.accountNumberConfirm}</Text>}
-          </View>
-
-          <View style={styles.formFieldBlock}>
-            <Text style={styles.fieldLabel}>Account Type</Text>
-            <View style={styles.accountTypeContainer}>
-              <TouchableOpacity
-                style={[styles.accountTypeButton, accountType === 'checking' && styles.accountTypeButtonActive]}
-                onPress={() => setAccountType('checking')}
-                accessibilityRole="radio"
-                accessibilityState={{ checked: accountType === 'checking' }}
-                accessibilityLabel="Checking account"
-              >
-                <MaterialIcons
-                  name={accountType === 'checking' ? 'radio-button-checked' : 'radio-button-unchecked'}
-                  size={22}
-                  color="#fff"
-                />
-                <Text style={styles.accountTypeText}>Checking</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.accountTypeButton, accountType === 'savings' && styles.accountTypeButtonActive]}
-                onPress={() => setAccountType('savings')}
-                accessibilityRole="radio"
-                accessibilityState={{ checked: accountType === 'savings' }}
-                accessibilityLabel="Savings account"
-              >
-                <MaterialIcons
-                  name={accountType === 'savings' ? 'radio-button-checked' : 'radio-button-unchecked'}
-                  size={22}
-                  color="#fff"
-                />
-                <Text style={styles.accountTypeText}>Savings</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <TouchableOpacity
-            onPress={handleSave}
-            disabled={!isFormValid || isLoading}
-            style={[styles.primaryButton, (!isFormValid || isLoading) && styles.primaryButtonDisabled]}
-            accessibilityRole="button"
-            accessibilityLabel="Add bank account"
-            accessibilityState={{ disabled: !isFormValid || isLoading }}
-          >
-            {isLoading ? (
-              <>
-                <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 8 }} />
-                <Text style={styles.primaryButtonText}>Adding Account...</Text>
-              </>
-            ) : (
-              <Text style={styles.primaryButtonText}>Add Bank Account</Text>
-            )}
-          </TouchableOpacity>
-
-          <View style={styles.securityNotice}>
-            <MaterialIcons name="lock" size={16} color="#6ee7b7" />
-            <Text style={styles.securityText}>
-              Your bank details are encrypted and securely transmitted to Stripe. We never store your full account number.
-            </Text>
-          </View>
-        </ScrollView>
+        {Body}
       </View>
-    </KeyboardAvoidingView>
+    </View>
   )
 }
 
 const embeddedStyles = StyleSheet.create({
   container: { paddingBottom: 24 },
-  navBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12 },
-  backButton: { padding: 8, minWidth: 44, minHeight: 44, justifyContent: 'center', alignItems: 'center' },
-  title: { color: '#fff', fontSize: 18, fontWeight: '600', textAlign: 'center', flex: 1 },
+  navBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  backButton: {
+    padding: 8,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  title: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+    flex: 1,
+  },
 })
 
 const styles = StyleSheet.create({
@@ -582,83 +263,52 @@ const styles = StyleSheet.create({
   },
   navButtonPlaceholder: { width: 44, height: 44 },
   navTitle: { color: '#fff', fontSize: 18, fontWeight: '600', letterSpacing: 0.5 },
-  contentScroll: { flex: 1 },
   contentContainer: { paddingHorizontal: 20, paddingBottom: 40 },
-  infoBox: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(16,185,129,0.2)',
-    borderRadius: 12,
-    padding: 12,
+  heroIconWrap: {
+    alignSelf: 'center',
+    marginTop: 8,
+    marginBottom: 16,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(16,185,129,0.25)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  heroTitle: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  heroSubtitle: {
+    color: '#d1fae5',
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
     marginBottom: 20,
   },
-  infoText: {
-    flex: 1,
-    color: '#d1fae5',
-    fontSize: 13,
-    lineHeight: 18,
-    marginLeft: 8,
-  },
-  formFieldBlock: { marginBottom: 18 },
-  fieldLabel: { color: '#d1fae5', fontSize: 13, marginBottom: 6, fontWeight: '500' },
-  textInput: {
-    backgroundColor: 'rgba(4,120,87,0.55)',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    color: '#fff',
-    fontSize: 15,
-  },
-  textInputError: { borderWidth: 1, borderColor: '#f87171' },
-  errorText: { color: '#fca5a5', fontSize: 11, marginTop: 6 },
-  helperText: { color: '#6ee7b7', fontSize: 11, marginTop: 6, fontStyle: 'italic' },
-  accountTypeContainer: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  accountTypeButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(4,120,87,0.55)',
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-  },
-  accountTypeButtonActive: {
-    backgroundColor: '#047857',
-    borderWidth: 2,
-    borderColor: '#10b981',
-  },
-  accountTypeText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
+  bulletList: { marginBottom: 24, gap: 10 },
+  bulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  bulletText: { color: '#d1fae5', fontSize: 13, lineHeight: 18, flex: 1 },
   primaryButton: {
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#065f46',
-    borderRadius: 28,
+    justifyContent: 'center',
+    backgroundColor: '#10b981',
+    borderRadius: 14,
     paddingVertical: 14,
-    marginTop: 8,
-    ...theme.shadows.emerald,
+    marginBottom: 16,
   },
-  primaryButtonDisabled: { opacity: 0.55 },
-  primaryButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  primaryButtonDisabled: { opacity: 0.6 },
+  primaryButtonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   securityNotice: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 20,
-    paddingHorizontal: 8,
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
   },
-  securityText: {
-    flex: 1,
-    color: '#6ee7b7',
-    fontSize: 12,
-    lineHeight: 16,
-    marginLeft: 8,
-  },
-});
+  securityText: { color: '#a7f3d0', fontSize: 11, textAlign: 'center', flex: 1 },
+})

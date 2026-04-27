@@ -37,6 +37,13 @@ export type AnalyticsEvent =
   | 'setup_intent_created'
   | 'setup_intent_confirmed'
   | 'setup_intent_failed'
+  // ACH / Financial Connections events
+  | 'ach_link_started'
+  | 'ach_link_completed'
+  | 'ach_link_failed'
+  | 'ach_link_cancelled'
+  | 'ach_deposit_started'
+  | 'ach_deposit_failed'
   // Messaging events
   | 'message_sent'
   | 'conversation_started'
