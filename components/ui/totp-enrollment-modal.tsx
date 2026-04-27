@@ -115,12 +115,23 @@ export function TotpEnrollmentModal({
     }
   };
 
+  // While verification is in flight, ignore the Android hardware back button
+  // (and other Modal close requests). Cancelling at that moment would race
+  // with `challengeAndVerify` and could unenroll a factor that just got
+  // verified server-side, leaving UI/back-end state inconsistent.
+  const handleRequestClose = () => {
+    if (isVerifying) {
+      return;
+    }
+    onCancel();
+  };
+
   return (
     <Modal
       visible={visible}
       transparent
       animationType="fade"
-      onRequestClose={onCancel}
+      onRequestClose={handleRequestClose}
       accessibilityViewIsModal
     >
       <View
@@ -200,7 +211,7 @@ export function TotpEnrollmentModal({
                     borderRadius: 8,
                     letterSpacing: 1,
                   }}
-                  accessibilityLabel={`Manual setup key ${totp.secret}`}
+                  accessibilityLabel="Manual setup key"
                 >
                   {totp.secret}
                 </Text>

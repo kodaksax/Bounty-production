@@ -1,6 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { BrandingLogo } from 'components/ui/branding-logo';
-import { MfaCodeModal } from 'components/ui/mfa-code-modal';
 import { TotpEnrollmentModal } from 'components/ui/totp-enrollment-modal';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -39,11 +38,6 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [isEnabling2FA, setIsEnabling2FA] = useState(false);
   const [emailVerified, setEmailVerified] = useState(false);
-  // Modal state for cross-platform TOTP code entry (replaces Alert.prompt)
-  const [mfaModalVisible, setMfaModalVisible] = useState(false);
-  const [mfaModalFactorId, setMfaModalFactorId] = useState<string | null>(null);
-  const [mfaModalError, setMfaModalError] = useState<string | null>(null);
-  const [mfaVerifying, setMfaVerifying] = useState(false);
   // Enrollment modal: shows the QR code + manual secret + verification field.
   // We must render the QR before asking for a code; otherwise the user has no
   // way to register the account in their authenticator app.
@@ -295,49 +289,6 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
     }
   };
 
-  const handleMfaModalVerify = async (code: string) => {
-    if (!mfaModalFactorId) return;
-    setMfaVerifying(true);
-    setMfaModalError(null);
-    try {
-      const { data, error } = await supabase.auth.mfa.challengeAndVerify({
-        factorId: mfaModalFactorId,
-        code,
-      });
-      if (error) throw error;
-      if (data) {
-        setTwoFactorEnabled(true);
-        setMfaModalVisible(false);
-        Alert.alert('Success', 'Two-factor authentication has been enabled!');
-      }
-    } catch (error: any) {
-      console.error('[privacy-security] Error verifying 2FA:', error);
-      setMfaModalError('Invalid code. Please try again.');
-    } finally {
-      setMfaVerifying(false);
-      setIsEnabling2FA(false);
-    }
-  };
-
-  const handleMfaModalCancel = async () => {
-    if (!mfaModalFactorId) {
-      setMfaModalVisible(false);
-      setIsEnabling2FA(false);
-      return;
-    }
-
-    try {
-      const { error } = await supabase.auth.mfa.unenroll({ factorId: mfaModalFactorId });
-      if (error) throw error;
-      setMfaModalVisible(false);
-      setMfaModalFactorId(null);
-      setIsEnabling2FA(false);
-    } catch (error: any) {
-      console.error('[privacy-security] Error cancelling 2FA setup:', error);
-      Alert.alert('Error', 'Failed to cancel 2FA setup. Please try again.');
-    }
-  };
-
   const handleDisable2FA = async () => {
     Alert.alert(
       'Disable Two-Factor Authentication',
@@ -372,13 +323,6 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
 
   return (
     <View className="flex-1 bg-emerald-600">
-      <MfaCodeModal
-        visible={mfaModalVisible}
-        isLoading={mfaVerifying}
-        error={mfaModalError}
-        onVerify={handleMfaModalVerify}
-        onCancel={handleMfaModalCancel}
-      />
       <TotpEnrollmentModal
         visible={enrollModalVisible}
         totp={enrollTotp}
