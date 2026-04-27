@@ -1,5 +1,7 @@
 # Google OAuth Redirect URI Configuration - Quick Fix Guide
 
+> 📖 For full setup of Google **and** Apple sign-in across dev/staging/production, see [`SOCIAL_AUTH_SETUP.md`](./SOCIAL_AUTH_SETUP.md). This document is a focused fix guide for the redirect-URI error.
+
 **Problem**: Google Sign-in fails with "Error 400: invalid_request" due to redirect URI mismatch.
 
 **Root Cause**: Google OAuth requires exact URI matches. Wildcard URIs and dynamic IPs are rejected.
