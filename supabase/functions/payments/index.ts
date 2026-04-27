@@ -213,23 +213,88 @@ interface LinkedBankRow {
 
 /**
  * Mirror a Financial Connections account onto the user's Stripe Connect account
- * as a payout-eligible external bank account. Idempotent: if an external account
- * already exists for the same FC account it is returned unchanged.
+ * as a payout-eligible external bank account.
+ *
+ * Idempotent in two ways:
+ *   1. If a `payment_methods` row for this user already records a
+ *      `stripe_external_account_id` for the same `fcAccountId`, we re-fetch
+ *      that external account from Stripe and reuse it (no new token, no new
+ *      external account created).
+ *   2. Otherwise we list existing external accounts on the Connect account and
+ *      look for one whose underlying FC fingerprint matches the linked FC
+ *      account before creating a fresh one. This prevents orphaned payout
+ *      destinations when this function is retried after a partial failure.
  *
  * Returns the external account id (ba_*) on success, or null when the user has
  * no Connect account yet (deposit-only linking is still allowed).
  */
 async function mirrorFcAccountToConnect(params: {
   stripe: Stripe
+  supabaseAdmin: any
+  userId: string
   connectAccountId: string | null
   fcAccountId: string
 }): Promise<string | null> {
-  const { stripe, connectAccountId, fcAccountId } = params
+  const { stripe, supabaseAdmin, userId, connectAccountId, fcAccountId } = params
   if (!connectAccountId) return null
 
-  // Create a single-use bank-account token from the FC account, then attach as
-  // an external account on the connected account. Stripe deduplicates the
-  // underlying bank record by fingerprint so repeated calls are safe.
+  // (1) DB-side idempotency: reuse the previously mirrored external account
+  // when we already have one recorded for this user + FC account.
+  try {
+    const { data: existingRow } = await withDbTimeout(
+      supabaseAdmin
+        .from('payment_methods')
+        .select('stripe_external_account_id')
+        .eq('user_id', userId)
+        .eq('fc_account_id', fcAccountId)
+        .not('stripe_external_account_id', 'is', null)
+        .maybeSingle(),
+    ) as any
+    const existingId: string | null = existingRow?.stripe_external_account_id ?? null
+    if (existingId) {
+      try {
+        // Confirm it still exists on the Connect account; if so, reuse.
+        await stripe.accounts.retrieveExternalAccount(connectAccountId, existingId)
+        return existingId
+      } catch (retrieveErr: any) {
+        if (retrieveErr?.code !== 'resource_missing') {
+          throw retrieveErr
+        }
+        // Stale row — the external account was removed out-of-band. Fall through
+        // and create a new one below.
+      }
+    }
+  } catch (lookupErr) {
+    console.warn('[payments] mirrorFcAccountToConnect: DB lookup failed', { userId, lookupErr })
+  }
+
+  // (2) Stripe-side idempotency: scan existing external accounts for one
+  // already linked to this FC account so a retry doesn't double-create.
+  try {
+    const externals = await stripe.accounts.listExternalAccounts(connectAccountId, {
+      object: 'bank_account',
+      limit: 100,
+    })
+    const match = (externals.data ?? []).find((ea: any) => {
+      // Stripe stores the linked FC account on the bank_account when one was
+      // used as the source. Field name varies by API version, so check both.
+      return (
+        ea?.financial_connections_account === fcAccountId ||
+        ea?.metadata?.financial_connections_account === fcAccountId
+      )
+    })
+    if (match?.id) {
+      return match.id as string
+    }
+  } catch (listErr) {
+    console.warn('[payments] mirrorFcAccountToConnect: list external accounts failed', {
+      userId,
+      listErr,
+    })
+  }
+
+  // No existing mirror found — create one. Stripe deduplicates the underlying
+  // bank record by fingerprint so this remains safe under benign retries.
   const token = await stripe.tokens.create({
     bank_account: {
       financial_connections_account: fcAccountId,
@@ -349,13 +414,12 @@ Deno.serve(async (req: Request) => {
       if (metadata.bounty_id) sanitizedMetadata.bounty_id = sanitizeText(metadata.bounty_id)
       if (metadata.description) sanitizedMetadata.description = sanitizeText(metadata.description)
 
-      // ACH (us_bank_account) branch — explicit so we can attach the saved PM,
-      // capture an online mandate, and prefer instant verification with a
-      // microdeposit fallback.
-      const isAch =
-        sanitizeText(paymentMethodType ?? '').toLowerCase() === 'us_bank_account' ||
-        (typeof paymentMethodId === 'string' && paymentMethodId.startsWith('pm_') &&
-          sanitizeText(paymentMethodType ?? '').toLowerCase() !== 'card')
+      // ACH (us_bank_account) branch — explicit opt-in only so a missing
+      // paymentMethodType never accidentally routes a card PaymentIntent into
+      // this flow. Callers must pass paymentMethodType: 'us_bank_account' to
+      // use a saved bank.
+      const paymentMethodTypeNormalized = sanitizeText(paymentMethodType ?? '').toLowerCase()
+      const isAch = paymentMethodTypeNormalized === 'us_bank_account'
 
       if (isAch) {
         if (!paymentMethodId || typeof paymentMethodId !== 'string') {
@@ -635,6 +699,8 @@ Deno.serve(async (req: Request) => {
         try {
           externalAccountId = await mirrorFcAccountToConnect({
             stripe,
+            supabaseAdmin,
+            userId,
             connectAccountId,
             fcAccountId,
           })
@@ -650,26 +716,35 @@ Deno.serve(async (req: Request) => {
         // 3) Upsert into payment_methods. Use stripe_payment_method_id as the
         // unique key (the table has a UNIQUE constraint on it).
         //
-        // Verification status comes from the PaymentMethod itself: Stripe sets
-        // us_bank_account.status_details.blocked when the account can't be used,
-        // and the underlying us_bank_account verification_status reflects whether
-        // microdeposits are still pending. When in doubt, fall back to
-        // 'pending_microdeposits' so the client knows not to attempt deposits yet.
+        // Verification status must come from the Stripe PaymentMethod's
+        // us_bank_account.status / verification_status fields so our DB mirrors
+        // what Stripe will enforce for bank debits. When Stripe reports an
+        // in-progress or unknown state, fall back to 'pending_microdeposits'.
         let verificationStatus: 'verified' | 'pending_microdeposits' | 'failed' =
           'pending_microdeposits'
         const usbankPm = (paymentMethod as any).us_bank_account
-        const fcPermissions: string[] = (fcAccount as any)?.permissions ?? []
-        const blocked = (usbankPm?.status_details as any)?.blocked
-        if (blocked) {
-          verificationStatus = 'failed'
-        } else if (
-          // Instant verification successful: FC linked the account with the
-          // payment_method permission and Stripe issued an immediately-usable PM.
-          fcPermissions.includes('payment_method') &&
-          !blocked
+        const bankStatus =
+          typeof usbankPm?.status === 'string' ? usbankPm.status : null
+        const bankVerificationStatus =
+          typeof usbankPm?.verification_status === 'string'
+            ? usbankPm.verification_status
+            : null
+        const blocked = (usbankPm?.status_details as any)?.blocked === true
+
+        if (
+          bankStatus === 'verified' ||
+          bankVerificationStatus === 'verified'
         ) {
           verificationStatus = 'verified'
+        } else if (
+          bankStatus === 'verification_failed' ||
+          bankStatus === 'errored' ||
+          bankVerificationStatus === 'failed' ||
+          blocked
+        ) {
+          verificationStatus = 'failed'
         }
+        // else: in-progress / unknown state → keep default 'pending_microdeposits'.
 
         const upsertRow = {
           user_id: userId,

@@ -704,17 +704,22 @@ class PaymentMethodsService {
 
       const result = await sdk.collectFinancialConnectionsAccounts(clientSecret);
       if (result?.error) {
-        analyticsService
-          .trackEvent('ach_link_failed', {
-            sessionId,
-            code: result.error.code,
-            message: result.error.message,
-          })
-          .catch(() => {
-            /* fire-and-forget */
-          });
-        // User cancellations come back with a "Canceled" code — surface a
-        // friendly StripeError so callers can treat them as soft failures.
+        // Cancellations are a normal user action, not a failure. Track them
+        // separately so dashboards don't conflate them with real errors. Real
+        // errors are tracked exactly once in the outer catch below.
+        const isUserCancellation = result.error.code === 'Canceled';
+        if (isUserCancellation) {
+          analyticsService
+            .trackEvent('ach_link_cancelled', {
+              sessionId,
+              code: result.error.code,
+              message: result.error.message,
+            })
+            .catch(() => {
+              /* fire-and-forget */
+            });
+        }
+        // Surface as a friendly StripeError so callers can branch on `code`.
         throw {
           type: 'card_error',
           code: result.error.code,
@@ -793,13 +798,18 @@ class PaymentMethodsService {
     } catch (error) {
       logger.error('[StripeService] Error linking bank via Financial Connections:', { error });
 
-      analyticsService
-        .trackEvent('ach_link_failed', {
-          error: getNetworkErrorMessage(error),
-        })
-        .catch(() => {
-          /* fire-and-forget */
-        });
+      // Don't double-track: cancellations are reported separately above.
+      const errorCode = (error as { code?: string } | undefined)?.code;
+      const isUserCancellation = errorCode === 'Canceled';
+      if (!isUserCancellation) {
+        analyticsService
+          .trackEvent('ach_link_failed', {
+            error: getNetworkErrorMessage(error),
+          })
+          .catch(() => {
+            /* fire-and-forget */
+          });
+      }
 
       await performanceService.endMeasurement('financial_connections_link', {
         success: false,

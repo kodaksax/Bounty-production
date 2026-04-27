@@ -41,6 +41,7 @@ export type AnalyticsEvent =
   | 'ach_link_started'
   | 'ach_link_completed'
   | 'ach_link_failed'
+  | 'ach_link_cancelled'
   | 'ach_deposit_started'
   | 'ach_deposit_failed'
   // Messaging events
