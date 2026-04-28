@@ -95,6 +95,24 @@ export function useAcceptRequest({
         // Handle structured errors from the server/edge function
         const status = (acceptErr && (acceptErr as any).status) || null
         console.error('Accept request failed for', requestId, acceptErr)
+        // Capture the full structured RPC/PostgREST error to client_logs so
+        // production-only failures (which the generic "Accept Failed" alert
+        // masks) can be diagnosed without device console access. The PostgREST
+        // error object exposes code/message/details/hint; we also forward any
+        // nested rpc payload attached upstream in bounty-request-service.
+        try {
+          const rpc = (acceptErr as any)?.rpc ?? null
+          await logClientError('acceptRequest failed', {
+            requestId: String(requestId),
+            status,
+            errName: acceptErr?.name,
+            errMessage: acceptErr?.message,
+            errCode: acceptErr?.code ?? rpc?.code,
+            errDetails: rpc?.details,
+            errHint: rpc?.hint,
+            rpcMessage: rpc?.message,
+          })
+        } catch { /* monitoring is best-effort */ }
         if (status === 409) {
           Alert.alert('Conflict', 'This bounty was updated elsewhere. Refresh and try again.')
         } else if (status === 403) {
