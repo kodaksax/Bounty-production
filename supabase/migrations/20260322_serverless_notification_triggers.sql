@@ -151,7 +151,7 @@ BEGIN
   IF (OLD.status != 'completed' AND NEW.status = 'completed') THEN
     INSERT INTO public.notifications_outbox (recipients, title, body, data, bounty_id)
     VALUES (
-      jsonb_build_array(NEW.creator_id),
+      jsonb_build_array(NEW.poster_id),
       'Review Needed',
       'Bounty "' || NEW.title || '" has been submitted for review',
       jsonb_build_object('bounty_id', NEW.id, 'type', 'review_needed'),
@@ -159,11 +159,11 @@ BEGIN
     );
   END IF;
 
-  -- Scenario B: General Status Update (Notify Hunter)
-  IF (OLD.status != NEW.status AND NEW.status != 'completed' AND NEW.hunter_id IS NOT NULL) THEN
+  -- Scenario B: General Status Update (Notify Hunter via accepted_by)
+  IF (OLD.status != NEW.status AND NEW.status != 'completed' AND NEW.accepted_by IS NOT NULL) THEN
     INSERT INTO public.notifications_outbox (recipients, title, body, data, bounty_id)
     VALUES (
-      jsonb_build_array(NEW.hunter_id),
+      jsonb_build_array(NEW.accepted_by),
       'Bounty Update',
       'Bounty "' || NEW.title || '" status is now: ' || NEW.status,
       jsonb_build_object('bounty_id', NEW.id, 'type', 'update'),
@@ -173,7 +173,7 @@ BEGIN
 
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 DROP TRIGGER IF EXISTS trg_bounty_status_notification ON public.bounties;
 CREATE TRIGGER trg_bounty_status_notification
