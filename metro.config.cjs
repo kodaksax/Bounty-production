@@ -23,7 +23,8 @@ try {
   const { getDefaultConfig } = require('expo/metro-config');
   const defaultConfig = getDefaultConfig(projectRoot);
 
-  const originalResolver = (defaultConfig.resolver && defaultConfig.resolver.resolveRequest) || resolve;
+  const originalResolver =
+    (defaultConfig.resolver && defaultConfig.resolver.resolveRequest) || resolve;
 
   // Custom resolver: on web, route @stripe/stripe-react-native to a local web stub
   const resolveRequest = (context, realModuleName, platform, moduleName) => {
@@ -34,25 +35,40 @@ try {
         filePath: path.resolve(projectRoot, 'lib/services/stripe-mock.web.js'),
       };
     }
+    if (platform === 'web' && targetName === 'react-native-url-polyfill/auto') {
+      return {
+        type: 'sourceFile',
+        filePath: path.resolve(projectRoot, 'stubs/react-native-url-polyfill-auto.web.js'),
+      };
+    }
 
     return originalResolver(context, realModuleName, platform, moduleName);
   };
 
   let finalConfig = Object.assign({}, defaultConfig, {
     resolver: Object.assign({}, defaultConfig.resolver || {}, {
-      extraNodeModules: Object.assign({}, (defaultConfig.resolver && defaultConfig.resolver.extraNodeModules) || {}, aliasExtraNodeModules),
-      sourceExts: Array.from(new Set([].concat((defaultConfig.resolver && defaultConfig.resolver.sourceExts) || [], ['cjs']))),
-      nodeModulesPaths: [
-        path.resolve(projectRoot, 'node_modules'),
-      ],
+      extraNodeModules: Object.assign(
+        {},
+        (defaultConfig.resolver && defaultConfig.resolver.extraNodeModules) || {},
+        aliasExtraNodeModules
+      ),
+      sourceExts: Array.from(
+        new Set(
+          [].concat((defaultConfig.resolver && defaultConfig.resolver.sourceExts) || [], ['cjs'])
+        )
+      ),
+      nodeModulesPaths: [path.resolve(projectRoot, 'node_modules')],
       resolveRequest,
     }),
-    watchFolders: Array.from(new Set([].concat(defaultConfig.watchFolders || [], [path.resolve(projectRoot)]))),
+    watchFolders: Array.from(
+      new Set([].concat(defaultConfig.watchFolders || [], [path.resolve(projectRoot)]))
+    ),
   });
 
   try {
     const { withNativeWind } = require('nativewind/metro');
-    if (typeof withNativeWind === 'function') finalConfig = withNativeWind(finalConfig, { input: './global.css' });
+    if (typeof withNativeWind === 'function')
+      finalConfig = withNativeWind(finalConfig, { input: './global.css' });
     console.warn('[metro.config] nativewind/metro applied to Metro config');
   } catch (e) {
     console.warn('[metro.config] nativewind/metro not applied:', e && e.message ? e.message : e);
@@ -60,6 +76,15 @@ try {
 
   module.exports = finalConfig;
 } catch (err) {
-  console.warn('[metro.config] Failed to load expo/metro-config; using fallback config.', err && err.message ? err.message : err);
-  module.exports = { resolver: { extraNodeModules: aliasExtraNodeModules, sourceExts: ['js', 'json', 'ts', 'tsx', 'jsx', 'cjs'] }, watchFolders: [path.resolve(projectRoot)] };
+  console.warn(
+    '[metro.config] Failed to load expo/metro-config; using fallback config.',
+    err && err.message ? err.message : err
+  );
+  module.exports = {
+    resolver: {
+      extraNodeModules: aliasExtraNodeModules,
+      sourceExts: ['js', 'json', 'ts', 'tsx', 'jsx', 'cjs'],
+    },
+    watchFolders: [path.resolve(projectRoot)],
+  };
 }
