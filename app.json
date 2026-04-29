@@ -2,7 +2,7 @@
   "expo": {
     "name": "BOUNTY",
     "slug": "BOUNTYExpo",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/images/brandmark-design (3).png",
     "scheme": "bountyexpo-workspace",
