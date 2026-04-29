@@ -2,12 +2,12 @@
 import { MaterialIcons } from '@expo/vector-icons'
 import { ValidationMessage } from 'app/components/ValidationMessage'
 import * as AppleAuthentication from 'expo-apple-authentication'
-import { ResponseType, makeRedirectUri } from 'expo-auth-session'
+import { ResponseType } from 'expo-auth-session'
 import { useIdTokenAuthRequest } from 'expo-auth-session/providers/google'
 import { Image } from 'expo-image'
 import { useRouter } from 'expo-router'
 import * as WebBrowser from 'expo-web-browser'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { ErrorBanner } from '../../components/error-banner'
 import { AnimatedScreen } from '../../components/ui/animated-screen'
@@ -300,31 +300,16 @@ export function SignInForm() {
     process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
   )
 
-  // Redirect URI configuration for Google OAuth
-  // Google rejects wildcard URIs, so we use specific schemes
-  const redirectUri = useMemo(() => {
-    // Try to use Expo's auth proxy for most reliable OAuth in development
-    // Falls back to custom scheme for production
-    const uri = makeRedirectUri({
-      // useProxy: true would use https://auth.expo.io/@username/slug
-      // but requires Expo account setup. For now, use custom scheme.
-      scheme: 'bountyexpo-workspace',
-      path: 'auth/callback'
-    });
-    console.log('[Google Auth] Redirect URI:', uri);
-
-    // Log warning if using dynamic exp:// URI (will fail without exact match in Google Console)
-    if (uri.startsWith('exp://') && !uri.includes('localhost') && !uri.includes('127.0.0.1')) {
-      console.warn(
-        '[Google Auth] Using dynamic exp:// URI. This will fail unless you add ' +
-        'the exact URI to Google Cloud Console. Current URI:', uri
-      );
-      console.warn('[Google Auth] To fix: Add this exact URI to your Google OAuth client redirect URIs');
-    }
-
-    return uri;
-  }, [])
-
+  // NOTE: Do NOT pass a custom `redirectUri` here. Google's iOS OAuth client
+  // only accepts the reversed-client-id scheme (com.googleusercontent.apps.*),
+  // its Android client validates by package name + SHA-1 (no redirect URI),
+  // and the Web client requires a pre-registered HTTPS URI. The
+  // `expo-auth-session/providers/google` provider auto-derives the correct
+  // redirect per platform from the platform-specific client IDs below.
+  // Forcing a custom scheme like `bountyexpo-workspace://auth/callback`
+  // causes Google to reject the request with "Error 400: invalid_request"
+  // ("Access blocked: Authorization Error").
+  //
   // IMPORTANT: always pass iosClientId/androidClientId/webClientId so the hook doesn’t throw on iOS
   const [request, response, promptAsync] = useIdTokenAuthRequest({
     responseType: ResponseType.IdToken,
@@ -336,7 +321,6 @@ export function SignInForm() {
     iosClientId: iosGoogleClientId,
     androidClientId: androidGoogleClientId,
     webClientId: webGoogleClientId,
-    redirectUri,
     scopes: ['openid', 'email', 'profile'],
   })
 
