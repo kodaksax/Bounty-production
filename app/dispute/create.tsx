@@ -172,7 +172,7 @@ export default function CreateDisputeScreen() {
           <MaterialIcons name="info-outline" size={20} color="#3b82f6" />
           <Text style={styles.infoBannerText}>
             Disputes are reviewed by admins who will make a fair decision based on the evidence
-            provided.
+            provided. We respond to every dispute within 24 hours.
           </Text>
         </View>
 

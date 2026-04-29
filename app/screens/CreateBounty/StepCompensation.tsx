@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EscrowExplainer } from '../../../components/ui/escrow-explainer';
+import { HIGH_VALUE_BOUNTY_THRESHOLD, HighValueBountyNotice } from '../../../components/ui/high-value-bounty-notice';
 import { getInsufficientBalanceMessage, validateAmount, validateBalance } from '../../../lib/utils/bounty-validation';
 import { useWallet } from '../../../lib/wallet-context';
 
@@ -255,6 +256,11 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
                 )}
               </View>
             </View>
+
+            {/* High-Value Bounty Notice */}
+            {draft.amount >= HIGH_VALUE_BOUNTY_THRESHOLD && (
+              <HighValueBountyNotice />
+            )}
 
             {/* Escrow Info - Enhanced with interactive explanation */}
             <View className="mb-6">

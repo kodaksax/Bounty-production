@@ -83,7 +83,7 @@ const slides: SlideData[] = [
     id: '7',
     icon: 'security',
     title: 'Safe & Secure',
-    description: 'Payments protected by escrow. Verified profiles and ratings. Phone verification adds extra security. Your money is always safe.',
+    description: 'Payments protected by escrow. Verified profiles and ratings. Disputes resolved within 24 hours. Phone verification adds extra security. Your money is always safe.',
     color: '#a7f3d0',
   },
 ];
@@ -164,6 +164,19 @@ export default function OnboardingCarousel() {
 
           <Text style={styles.title}>{item.title}</Text>
           <Text style={styles.description}>{item.description}</Text>
+
+          {/* On the last (Safe & Secure) slide, show a "Learn more" link */}
+          {index === slides.length - 1 && (
+            <TouchableOpacity
+              style={styles.safetyLink}
+              onPress={() => router.push('/legal/safety')}
+              accessibilityRole="link"
+              accessibilityLabel="How Bounty stays safe"
+            >
+              <MaterialIcons name="shield" size={14} color="#a7f3d0" />
+              <Text style={styles.safetyLinkText}>How Bounty stays safe →</Text>
+            </TouchableOpacity>
+          )}
         </Animated.View>
       </View>
     );
@@ -384,6 +397,23 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 24,
     paddingHorizontal: 20,
+  },
+  safetyLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(167,243,208,0.4)',
+    backgroundColor: 'rgba(5,46,27,0.4)',
+  },
+  safetyLinkText: {
+    fontSize: 13,
+    color: '#a7f3d0',
+    fontWeight: '600',
   },
   dotsContainer: {
     flexDirection: 'row',

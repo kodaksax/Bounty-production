@@ -41,7 +41,7 @@ const PLATFORM_BADGES: TrustBadge[] = [
     id: 'dispute-resolution',
     icon: 'gavel',
     title: 'Dispute Resolution',
-    description: 'Our dedicated support team helps mediate any disputes between posters and hunters. We ensure fair outcomes for both parties.',
+    description: 'Our dedicated support team responds to every dispute within 24 hours and aims to resolve most cases within 3 business days. We ensure fair outcomes for both parties.',
     color: '#8b5cf6', // violet-500
   },
   {

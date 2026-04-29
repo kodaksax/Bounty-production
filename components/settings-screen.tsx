@@ -151,6 +151,16 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
         />
 
         <SettingsCard
+          title="Trust & Safety"
+          description="Learn how Bounty protects your money with escrow, what rules apply to high-value bounties, and our 24-hour dispute response commitment."
+          primaryLabel="View"
+          onPrimary={() => {
+            router.push('/legal/safety');
+          }}
+          icon="shield"
+        />
+
+        <SettingsCard
           title="Community Guidelines"
           description="Learn about our community standards for safety, trust, and respectful behavior."
           primaryLabel="View Guidelines"
