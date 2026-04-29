@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-/** Bounty amounts at or above this threshold trigger the high-value notice. */
+/** Threshold in USD — bounties at or above this amount trigger extra safeguards. */
 export const HIGH_VALUE_BOUNTY_THRESHOLD = 100;
 
 /**

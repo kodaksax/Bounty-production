@@ -14,7 +14,7 @@ export default function SafetyRoute() {
           <MaterialIcons name="shield" size={24} color="#fff" />
           <Text className="text-lg font-bold tracking-wider ml-2 text-white">How Bounty Stays Safe</Text>
         </View>
-        <TouchableOpacity onPress={() => router.back()} className="p-2" accessibilityRole="button" accessibilityLabel="Back">
+        <TouchableOpacity onPress={() => router.back()} className="p-2" accessibilityRole="button" accessibilityLabel="Go back">
           <MaterialIcons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
       </View>
