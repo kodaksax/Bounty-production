@@ -25,7 +25,9 @@ interface ErrorBoundaryProps {
 
 interface ErrorBoundaryState {
   hasError: boolean;
-  error: Error | null;
+  // React error boundaries can receive non-Error throwables (strings, plain
+  // objects, etc.). Type as `unknown` so the fallback UI never assumes shape.
+  error: unknown;
   componentStack: string | null;
 }
 
@@ -159,7 +161,7 @@ function DefaultErrorFallback({
   onReset,
 }: {
   error: UserFriendlyError;
-  rawError?: Error | null;
+  rawError?: unknown;
   componentStack?: string | null;
   onReset: () => void;
 }) {
@@ -240,7 +242,7 @@ function DefaultErrorFallback({
                 activeOpacity={0.7}
                 style={styles.devToggleRow}
               >
-                <Text style={styles.devTitle}>
+                <Text style={styles.devToggleLabel}>
                   {showDetails ? 'Hide technical details' : 'Show technical details'}
                 </Text>
                 <MaterialIcons
@@ -265,30 +267,110 @@ function DefaultErrorFallback({
 /**
  * Build a human-readable, copy-friendly technical-details string for the
  * fallback UI. Returns null if there is nothing useful to display.
+ *
+ * Hardened against non-Error throwables (strings, plain objects, null) — React
+ * only types `componentDidCatch`'s argument as `Error`, but JS allows anything
+ * to be thrown. This function must never crash the fallback UI itself.
+ *
+ * Sensitive substrings (URL query params, Bearer/JWT tokens, Stripe API keys)
+ * are redacted before rendering so the panel — which is now visible in
+ * release builds for triage — does not leak secrets/PII into a screenshot or
+ * support copy-paste.
  */
 const MAX_STACK_LINES = 8;
 
-function formatTechnicalDetails(error: Error | null, componentStack: string | null): string | null {
-  if (!error && !componentStack) return null;
+const SENSITIVE_VALUE_PATTERNS: ReadonlyArray<readonly [RegExp, string]> = [
+  // Authorization headers / token strings
+  [/\bBearer\s+[A-Za-z0-9\-._~+/]+=*/gi, 'Bearer [REDACTED]'],
+  [/\bJWT\s+[A-Za-z0-9\-._~+/]+=*/gi, 'JWT [REDACTED]'],
+  // Stripe API keys (live and test)
+  [/\bsk_(?:live|test)_[A-Za-z0-9]+/gi, 'sk_[REDACTED]'],
+  [/\bpk_(?:live|test)_[A-Za-z0-9]+/gi, 'pk_[REDACTED]'],
+];
+
+function safeToString(value: unknown): string {
+  try {
+    return String(value);
+  } catch {
+    return '[unstringifiable thrown value]';
+  }
+}
+
+function stripUrlQueryParams(value: string): string {
+  // Only the query/fragment portion is redacted; the path is preserved so
+  // stack frames still point at the failing endpoint or asset.
+  return value.replace(/https?:\/\/[^\s)]+/gi, (match) => {
+    const queryIndex = match.indexOf('?');
+    if (queryIndex === -1) return match;
+
+    const hashIndex = match.indexOf('#', queryIndex);
+    if (hashIndex === -1) {
+      return `${match.slice(0, queryIndex)}?[REDACTED]`;
+    }
+    return `${match.slice(0, queryIndex)}?[REDACTED]${match.slice(hashIndex)}`;
+  });
+}
+
+export function redactSensitiveTechnicalDetails(value: string): string {
+  let sanitized = stripUrlQueryParams(value);
+  for (const [pattern, replacement] of SENSITIVE_VALUE_PATTERNS) {
+    sanitized = sanitized.replace(pattern, replacement);
+  }
+  return sanitized;
+}
+
+function getThrowableDetails(error: unknown): {
+  name: string;
+  message: string;
+  stack: string | null;
+} {
+  if (error instanceof Error) {
+    return {
+      name: error.name || 'Error',
+      message: error.message || safeToString(error),
+      stack: typeof error.stack === 'string' && error.stack ? error.stack : null,
+    };
+  }
+
+  if (typeof error === 'object' && error !== null) {
+    const maybeError = error as { name?: unknown; message?: unknown; stack?: unknown };
+    const name =
+      typeof maybeError.name === 'string' && maybeError.name ? maybeError.name : 'Error';
+    const message =
+      typeof maybeError.message === 'string' && maybeError.message
+        ? maybeError.message
+        : safeToString(error);
+    const stack =
+      typeof maybeError.stack === 'string' && maybeError.stack ? maybeError.stack : null;
+    return { name, message, stack };
+  }
+
+  return { name: 'Error', message: safeToString(error), stack: null };
+}
+
+export function formatTechnicalDetails(
+  error: unknown,
+  componentStack: string | null
+): string | null {
+  if (error == null && !componentStack) return null;
   const parts: string[] = [];
-  if (error) {
-    const name = error.name || 'Error';
-    const message = error.message || String(error);
-    parts.push(`${name}: ${message}`);
-    if (typeof error.stack === 'string' && error.stack) {
+  if (error != null) {
+    const { name, message, stack } = getThrowableDetails(error);
+    parts.push(redactSensitiveTechnicalDetails(`${name}: ${message}`));
+    if (stack) {
       // Trim long stacks so the panel stays scrollable but still useful for
       // pinpointing the failing module. First few frames typically identify
       // the offending file.
-      const stackLines = error.stack.split('\n').slice(0, MAX_STACK_LINES).join('\n');
+      const stackLines = redactSensitiveTechnicalDetails(
+        stack.split('\n').slice(0, MAX_STACK_LINES).join('\n')
+      );
       parts.push(stackLines);
     }
   }
   if (componentStack) {
-    const compLines = componentStack
-      .split('\n')
-      .filter(Boolean)
-      .slice(0, MAX_STACK_LINES)
-      .join('\n');
+    const compLines = redactSensitiveTechnicalDetails(
+      componentStack.split('\n').filter(Boolean).slice(0, MAX_STACK_LINES).join('\n')
+    );
     if (compLines) {
       parts.push(`Component stack:\n${compLines}`);
     }
@@ -411,16 +493,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     minHeight: SIZING.MIN_TOUCH_TARGET,
   },
-  devTitle: {
+  devToggleLabel: {
     color: '#fff',
     fontSize: TYPOGRAPHY.SIZE_SMALL,
     fontWeight: '700',
-    marginBottom: SPACING.COMPACT_GAP,
   },
   devText: {
     color: '#fff',
     fontSize: TYPOGRAPHY.SIZE_SMALL,
     fontFamily: 'monospace',
     opacity: 0.8,
+    marginTop: SPACING.COMPACT_GAP,
   },
 });
