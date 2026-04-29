@@ -5,7 +5,7 @@
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
-import React, { Component, ReactNode } from 'react';
+import React, { Component, ReactNode, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { COLORS, SIZING, SPACING, TYPOGRAPHY } from './constants/accessibility';
 import { getSentry } from './services/sentry-init';
@@ -25,7 +25,10 @@ interface ErrorBoundaryProps {
 
 interface ErrorBoundaryState {
   hasError: boolean;
-  error: Error | null;
+  // React error boundaries can receive non-Error throwables (strings, plain
+  // objects, etc.). Type as `unknown` so the fallback UI never assumes shape.
+  error: unknown;
+  componentStack: string | null;
 }
 
 /**
@@ -38,6 +41,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     this.state = {
       hasError: false,
       error: null,
+      componentStack: null,
     };
   }
 
@@ -47,6 +51,14 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    // Capture the React component stack so the fallback UI can surface it for
+    // diagnostics in release builds (where stack traces are otherwise hidden).
+    try {
+      this.setState({ componentStack: errorInfo.componentStack ?? null });
+    } catch {
+      // ignore — the boundary is already showing a fallback regardless
+    }
+
     // Log error details to console in development
     if (__DEV__) {
       console.error('[ErrorBoundary] Caught error:', error);
@@ -91,6 +103,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     this.setState({
       hasError: false,
       error: null,
+      componentStack: null,
     });
   };
 
@@ -117,7 +130,14 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       }
 
       // Default fallback UI
-      return <DefaultErrorFallback error={userError} onReset={this.resetError} />;
+      return (
+        <DefaultErrorFallback
+          error={userError}
+          rawError={this.state.error}
+          componentStack={this.state.componentStack}
+          onReset={this.resetError}
+        />
+      );
     }
 
     return this.props.children;
@@ -126,17 +146,30 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
 /**
  * Default error fallback UI
- * Shows user-friendly error message with retry option
+ * Shows user-friendly error message with retry option, plus a collapsible
+ * technical-details panel that stays available in release builds. Surfacing
+ * the underlying error message + first stack frames is intentional: without
+ * it, users hitting an unrecoverable startup error in a release build (where
+ * `__DEV__` is false and Sentry may not yet have initialised) have no way to
+ * report what actually went wrong. The details are hidden behind a disclosure
+ * so the friendly UI is unchanged for users who don't tap into them.
  */
 function DefaultErrorFallback({
   error,
+  rawError,
+  componentStack,
   onReset,
 }: {
   error: UserFriendlyError;
+  rawError?: unknown;
+  componentStack?: string | null;
   onReset: () => void;
 }) {
   const iconName = getIconForErrorType(error.type);
   const iconColor = error.type === 'validation' ? '#f59e0b' : '#dc2626';
+  const [showDetails, setShowDetails] = useState(false);
+
+  const technicalDetails = formatTechnicalDetails(rawError ?? null, componentStack ?? null);
 
   return (
     <View style={styles.container}>
@@ -196,19 +229,175 @@ function DefaultErrorFallback({
             )}
           </View>
 
-          {/* Development-only error details */}
-          {__DEV__ && (
+          {/* Technical details — collapsible. Available in release builds so
+              users can capture / share the underlying error when triaging
+              startup crashes that the friendly message has sanitised away. */}
+          {technicalDetails ? (
             <View style={styles.devInfo}>
-              <Text style={styles.devTitle}>Development Info:</Text>
-              <Text style={styles.devText} selectable>
-                Error Type: {error.type}
-              </Text>
+              <TouchableOpacity
+                onPress={() => setShowDetails((v) => !v)}
+                accessibilityRole="button"
+                accessibilityLabel={showDetails ? 'Hide technical details' : 'Show technical details'}
+                accessibilityHint="Toggles a panel containing the raw error message and stack trace"
+                activeOpacity={0.7}
+                style={styles.devToggleRow}
+              >
+                <Text style={styles.devToggleLabel}>
+                  {showDetails ? 'Hide technical details' : 'Show technical details'}
+                </Text>
+                <MaterialIcons
+                  name={showDetails ? 'expand-less' : 'expand-more'}
+                  size={20}
+                  color="#fff"
+                />
+              </TouchableOpacity>
+              {showDetails && (
+                <Text style={styles.devText} selectable>
+                  {technicalDetails}
+                </Text>
+              )}
             </View>
-          )}
+          ) : null}
         </View>
       </ScrollView>
     </View>
   );
+}
+
+/**
+ * Build a human-readable, copy-friendly technical-details string for the
+ * fallback UI. Returns null if there is nothing useful to display.
+ *
+ * Hardened against non-Error throwables (strings, plain objects, null) — React
+ * only types `componentDidCatch`'s argument as `Error`, but JS allows anything
+ * to be thrown. This function must never crash the fallback UI itself.
+ *
+ * Sensitive substrings (URL query params, Bearer/JWT tokens, Stripe API keys)
+ * are redacted before rendering so the panel — which is now visible in
+ * release builds for triage — does not leak secrets/PII into a screenshot or
+ * support copy-paste.
+ */
+const MAX_STACK_LINES = 8;
+
+const SENSITIVE_VALUE_PATTERNS: ReadonlyArray<readonly [RegExp, string]> = [
+  // Authorization headers / token strings
+  [/\bBearer\s+[A-Za-z0-9\-._~+/]+=*/gi, 'Bearer [REDACTED]'],
+  [/\bJWT\s+[A-Za-z0-9\-._~+/]+=*/gi, 'JWT [REDACTED]'],
+  // Bare JWTs (three base64url segments separated by dots, starting with the
+  // canonical `eyJ` prefix that decodes to `{"`). Catches tokens leaked into
+  // URLs, headers, or error messages without an explicit `Bearer`/`JWT` label.
+  [/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '[JWT_REDACTED]'],
+  // Stripe API keys (live and test)
+  [/\bsk_(?:live|test)_[A-Za-z0-9]+/gi, 'sk_[REDACTED]'],
+  [/\bpk_(?:live|test)_[A-Za-z0-9]+/gi, 'pk_[REDACTED]'],
+];
+
+function safeToString(value: unknown): string {
+  try {
+    return String(value);
+  } catch {
+    return '[unstringifiable thrown value]';
+  }
+}
+
+function stripUrlQueryParams(value: string): string {
+  // Redact both query string AND fragment because OAuth implicit-flow tokens
+  // arrive in the fragment (e.g. `#access_token=…&id_token=…`) and other
+  // services occasionally push session IDs there too. The path is preserved
+  // so stack frames still pinpoint the failing endpoint or asset.
+  return value.replace(/https?:\/\/[^\s)]+/gi, (match) => {
+    const queryIndex = match.indexOf('?');
+    const hashIndex = match.indexOf('#');
+
+    if (queryIndex === -1 && hashIndex === -1) return match;
+
+    // Whichever marker comes first determines where the path ends.
+    const cutIndex =
+      queryIndex === -1
+        ? hashIndex
+        : hashIndex === -1
+          ? queryIndex
+          : Math.min(queryIndex, hashIndex);
+
+    const base = match.slice(0, cutIndex);
+    const hasQuery = queryIndex !== -1;
+    const hasHash = hashIndex !== -1;
+
+    if (hasQuery && hasHash) {
+      return `${base}?[REDACTED]#[REDACTED]`;
+    }
+    if (hasQuery) {
+      return `${base}?[REDACTED]`;
+    }
+    return `${base}#[REDACTED]`;
+  });
+}
+
+export function redactSensitiveTechnicalDetails(value: string): string {
+  let sanitized = stripUrlQueryParams(value);
+  for (const [pattern, replacement] of SENSITIVE_VALUE_PATTERNS) {
+    sanitized = sanitized.replace(pattern, replacement);
+  }
+  return sanitized;
+}
+
+function getThrowableDetails(error: unknown): {
+  name: string;
+  message: string;
+  stack: string | null;
+} {
+  if (error instanceof Error) {
+    return {
+      name: error.name || 'Error',
+      message: error.message || safeToString(error),
+      stack: typeof error.stack === 'string' && error.stack ? error.stack : null,
+    };
+  }
+
+  if (typeof error === 'object' && error !== null) {
+    const maybeError = error as { name?: unknown; message?: unknown; stack?: unknown };
+    const name =
+      typeof maybeError.name === 'string' && maybeError.name ? maybeError.name : 'Error';
+    const message =
+      typeof maybeError.message === 'string' && maybeError.message
+        ? maybeError.message
+        : safeToString(error);
+    const stack =
+      typeof maybeError.stack === 'string' && maybeError.stack ? maybeError.stack : null;
+    return { name, message, stack };
+  }
+
+  return { name: 'Error', message: safeToString(error), stack: null };
+}
+
+export function formatTechnicalDetails(
+  error: unknown,
+  componentStack: string | null
+): string | null {
+  if (error == null && !componentStack) return null;
+  const parts: string[] = [];
+  if (error != null) {
+    const { name, message, stack } = getThrowableDetails(error);
+    parts.push(redactSensitiveTechnicalDetails(`${name}: ${message}`));
+    if (stack) {
+      // Trim long stacks so the panel stays scrollable but still useful for
+      // pinpointing the failing module. First few frames typically identify
+      // the offending file.
+      const stackLines = redactSensitiveTechnicalDetails(
+        stack.split('\n').slice(0, MAX_STACK_LINES).join('\n')
+      );
+      parts.push(stackLines);
+    }
+  }
+  if (componentStack) {
+    const compLines = redactSensitiveTechnicalDetails(
+      componentStack.split('\n').filter(Boolean).slice(0, MAX_STACK_LINES).join('\n')
+    );
+    if (compLines) {
+      parts.push(`Component stack:\n${compLines}`);
+    }
+  }
+  return parts.join('\n\n');
 }
 
 /**
@@ -320,16 +509,22 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     width: '100%',
   },
-  devTitle: {
+  devToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: SIZING.MIN_TOUCH_TARGET,
+  },
+  devToggleLabel: {
     color: '#fff',
     fontSize: TYPOGRAPHY.SIZE_SMALL,
     fontWeight: '700',
-    marginBottom: SPACING.COMPACT_GAP,
   },
   devText: {
     color: '#fff',
     fontSize: TYPOGRAPHY.SIZE_SMALL,
     fontFamily: 'monospace',
     opacity: 0.8,
+    marginTop: SPACING.COMPACT_GAP,
   },
 });
