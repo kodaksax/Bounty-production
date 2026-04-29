@@ -3,6 +3,7 @@
     "name": "BOUNTY",
     "slug": "BOUNTYExpo",
     "version": "1.0.3",
+    "platforms": ["ios", "android"],
     "orientation": "portrait",
     "icon": "./assets/images/brandmark-design (3).png",
     "scheme": "bountyexpo-workspace",
@@ -20,20 +21,13 @@
         "NSMicrophoneUsageDescription": "BOUNTY needs microphone access for voice messages.",
         "NSContactsUsageDescription": "BOUNTY needs access to your contacts to help you invite friends."
       },
-      "associatedDomains": [
-        "applinks:bountyfinder.app",
-        "applinks:*.bountyfinder.app"
-      ],
+      "associatedDomains": ["applinks:bountyfinder.app", "applinks:*.bountyfinder.app"],
       "config": {
         "usesNonExemptEncryption": false
       },
       "entitlements": {
-        "com.apple.developer.applesignin": [
-          "Default"
-        ],
-        "com.apple.developer.in-app-payments": [
-          "merchant.com.bountyexpo-workspace"
-        ]
+        "com.apple.developer.applesignin": ["Default"],
+        "com.apple.developer.in-app-payments": ["merchant.com.bountyexpo-workspace"]
       }
     },
     "android": {
@@ -54,10 +48,7 @@
               "pathPrefix": "/auth"
             }
           ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
+          "category": ["BROWSABLE", "DEFAULT"]
         },
         {
           "action": "VIEW",
@@ -69,10 +60,7 @@
               "pathPrefix": "/wallet/connect"
             }
           ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
+          "category": ["BROWSABLE", "DEFAULT"]
         }
       ]
     },
