@@ -266,6 +266,8 @@ function DefaultErrorFallback({
  * Build a human-readable, copy-friendly technical-details string for the
  * fallback UI. Returns null if there is nothing useful to display.
  */
+const MAX_STACK_LINES = 8;
+
 function formatTechnicalDetails(error: Error | null, componentStack: string | null): string | null {
   if (!error && !componentStack) return null;
   const parts: string[] = [];
@@ -277,12 +279,16 @@ function formatTechnicalDetails(error: Error | null, componentStack: string | nu
       // Trim long stacks so the panel stays scrollable but still useful for
       // pinpointing the failing module. First few frames typically identify
       // the offending file.
-      const stackLines = error.stack.split('\n').slice(0, 8).join('\n');
+      const stackLines = error.stack.split('\n').slice(0, MAX_STACK_LINES).join('\n');
       parts.push(stackLines);
     }
   }
   if (componentStack) {
-    const compLines = componentStack.split('\n').filter(Boolean).slice(0, 8).join('\n');
+    const compLines = componentStack
+      .split('\n')
+      .filter(Boolean)
+      .slice(0, MAX_STACK_LINES)
+      .join('\n');
     if (compLines) {
       parts.push(`Component stack:\n${compLines}`);
     }
