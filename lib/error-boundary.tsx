@@ -283,6 +283,10 @@ const SENSITIVE_VALUE_PATTERNS: ReadonlyArray<readonly [RegExp, string]> = [
   // Authorization headers / token strings
   [/\bBearer\s+[A-Za-z0-9\-._~+/]+=*/gi, 'Bearer [REDACTED]'],
   [/\bJWT\s+[A-Za-z0-9\-._~+/]+=*/gi, 'JWT [REDACTED]'],
+  // Bare JWTs (three base64url segments separated by dots, starting with the
+  // canonical `eyJ` prefix that decodes to `{"`). Catches tokens leaked into
+  // URLs, headers, or error messages without an explicit `Bearer`/`JWT` label.
+  [/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '[JWT_REDACTED]'],
   // Stripe API keys (live and test)
   [/\bsk_(?:live|test)_[A-Za-z0-9]+/gi, 'sk_[REDACTED]'],
   [/\bpk_(?:live|test)_[A-Za-z0-9]+/gi, 'pk_[REDACTED]'],
@@ -297,17 +301,35 @@ function safeToString(value: unknown): string {
 }
 
 function stripUrlQueryParams(value: string): string {
-  // Only the query/fragment portion is redacted; the path is preserved so
-  // stack frames still point at the failing endpoint or asset.
+  // Redact both query string AND fragment because OAuth implicit-flow tokens
+  // arrive in the fragment (e.g. `#access_token=…&id_token=…`) and other
+  // services occasionally push session IDs there too. The path is preserved
+  // so stack frames still pinpoint the failing endpoint or asset.
   return value.replace(/https?:\/\/[^\s)]+/gi, (match) => {
     const queryIndex = match.indexOf('?');
-    if (queryIndex === -1) return match;
+    const hashIndex = match.indexOf('#');
 
-    const hashIndex = match.indexOf('#', queryIndex);
-    if (hashIndex === -1) {
-      return `${match.slice(0, queryIndex)}?[REDACTED]`;
+    if (queryIndex === -1 && hashIndex === -1) return match;
+
+    // Whichever marker comes first determines where the path ends.
+    const cutIndex =
+      queryIndex === -1
+        ? hashIndex
+        : hashIndex === -1
+          ? queryIndex
+          : Math.min(queryIndex, hashIndex);
+
+    const base = match.slice(0, cutIndex);
+    const hasQuery = queryIndex !== -1;
+    const hasHash = hashIndex !== -1;
+
+    if (hasQuery && hasHash) {
+      return `${base}?[REDACTED]#[REDACTED]`;
     }
-    return `${match.slice(0, queryIndex)}?[REDACTED]${match.slice(hashIndex)}`;
+    if (hasQuery) {
+      return `${base}?[REDACTED]`;
+    }
+    return `${base}#[REDACTED]`;
   });
 }
 

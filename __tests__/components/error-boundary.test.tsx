@@ -70,11 +70,30 @@ describe('redactSensitiveTechnicalDetails', () => {
     expect(out).not.toContain('token=secret');
   });
 
-  it('preserves URL fragments after the redacted query', () => {
+  it('redacts URL fragments (OAuth implicit-flow tokens live there)', () => {
     const out = redactSensitiveTechnicalDetails(
-      'see https://example.com/x?secret=1#anchor'
+      'see https://example.com/x?secret=1#access_token=abc'
     );
-    expect(out).toContain('https://example.com/x?[REDACTED]#anchor');
+    // Both query and fragment are redacted; path is preserved.
+    expect(out).toContain('https://example.com/x?[REDACTED]#[REDACTED]');
+    expect(out).not.toContain('access_token=abc');
+    expect(out).not.toContain('secret=1');
+  });
+
+  it('redacts a fragment-only URL even when there is no query string', () => {
+    const out = redactSensitiveTechnicalDetails(
+      'callback at https://example.com/cb#id_token=xyz'
+    );
+    expect(out).toContain('https://example.com/cb#[REDACTED]');
+    expect(out).not.toContain('id_token=xyz');
+  });
+
+  it('redacts bare JWTs without a Bearer/JWT prefix', () => {
+    const out = redactSensitiveTechnicalDetails(
+      'token=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signature_value'
+    );
+    expect(out).toContain('[JWT_REDACTED]');
+    expect(out).not.toContain('eyJhbGciOiJIUzI1NiJ9');
   });
 
   it('does not redact plain text without sensitive markers', () => {
@@ -225,7 +244,7 @@ describe('ErrorBoundary fallback UI', () => {
   it('does not crash on non-Error throwables', () => {
     const { getByText, getAllByText, getByLabelText } = render(
       <ErrorBoundary>
-        <Boom error={'Cannot read property string of undefined' as unknown as Error} />
+        <Boom error={'Cannot read property string of undefined'} />
       </ErrorBoundary>
     );
 
