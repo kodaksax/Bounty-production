@@ -15,9 +15,9 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RealtimeChannel } from '@supabase/supabase-js';
-import { EventEmitter } from 'events';
 import { supabase } from '../supabase';
 import type { Conversation, Message } from '../types';
+import { EventEmitter } from '../utils/event-emitter';
 import { logClientError } from './monitoring';
 
 // Storage keys for local cache. Conversation list cache is scoped per user so
@@ -63,10 +63,7 @@ const subscriptions: Map<string, RealtimeChannel> = new Map();
  * Cache conversations locally for fast boot. Scoped per-user to prevent
  * cross-account inbox leaks.
  */
-async function cacheConversations(
-  userId: string,
-  conversations: Conversation[]
-): Promise<void> {
+async function cacheConversations(userId: string, conversations: Conversation[]): Promise<void> {
   if (!userId) return;
   // Fire-and-forget; ensures legacy non-user-scoped keys are eventually purged.
   void cleanupLegacyConversationCaches();

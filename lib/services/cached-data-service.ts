@@ -7,8 +7,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import { AppState, AppStateStatus } from 'react-native';
-import { EventEmitter } from 'events';
 import { logger } from '../utils/error-logger';
+import { EventEmitter } from '../utils/event-emitter';
 
 const CACHE_PREFIX = 'cache_v1_';
 const CACHE_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -88,7 +88,9 @@ class CachedDataService {
     return () => this.events.off(REVALIDATION_EVENT, handler);
   }
 
-  onForeground(callback: (key: string, meta: { age: number; timestamp: number; expiresAt: number }) => void): () => void {
+  onForeground(
+    callback: (key: string, meta: { age: number; timestamp: number; expiresAt: number }) => void
+  ): () => void {
     const handler = (eventKey: string, meta: any) => {
       callback(eventKey, meta);
     };
@@ -182,11 +184,7 @@ class CachedDataService {
   /**
    * Store data in cache
    */
-  async setCache<T>(
-    key: string,
-    data: T,
-    options: CacheOptions = {}
-  ): Promise<void> {
+  async setCache<T>(key: string, data: T, options: CacheOptions = {}): Promise<void> {
     try {
       const ttl = options.ttl || CACHE_EXPIRY_MS;
       const entry: CacheEntry<T> = {
@@ -321,9 +319,7 @@ class CachedDataService {
   async clearPattern(pattern: string): Promise<void> {
     try {
       const allKeys = await AsyncStorage.getAllKeys();
-      const matchingKeys = allKeys.filter(k =>
-        k.startsWith(CACHE_PREFIX) && k.includes(pattern)
-      );
+      const matchingKeys = allKeys.filter(k => k.startsWith(CACHE_PREFIX) && k.includes(pattern));
 
       // Clear from memory cache
       for (const key of this.memoryCache.keys()) {
@@ -349,9 +345,7 @@ class CachedDataService {
   ): Promise<void> {
     try {
       const results = await Promise.allSettled(
-        items.map(({ key, fetchFn, ttl }) =>
-          this.fetchWithCache(key, fetchFn, { ttl })
-        )
+        items.map(({ key, fetchFn, ttl }) => this.fetchWithCache(key, fetchFn, { ttl }))
       );
 
       const successful = results.filter(r => r.status === 'fulfilled').length;
