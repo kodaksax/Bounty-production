@@ -130,7 +130,7 @@ export function SignUpForm() {
           'Content-Type': 'application/json',
           ...(anonKey ? { apikey: anonKey, Authorization: `Bearer ${anonKey}` } : {}),
         },
-        body: JSON.stringify({ email: normalizedEmail, password }),
+        body: JSON.stringify({ email: normalizedEmail, password, username }),
       });
 
       if (!registerRes.ok) {
