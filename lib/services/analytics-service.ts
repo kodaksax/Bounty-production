@@ -5,14 +5,8 @@ import { Platform } from 'react-native';
 import getMixpanel, {
   identify as mixpanelIdentify,
   initMixpanel,
-  isMixpanelReady,
   track as mixpanelTrack,
 } from '../mixpanel';
-
-// When running inside Expo Go some native packages (Mixpanel/Sentry) may not be
-// present. Use a loose alias for Mixpanel to avoid TypeScript errors when the
-// package isn't available at compile/runtime in lightweight dev environments.
-type Mixpanel = any;
 
 // Track key user events according to requirements
 export type AnalyticsEvent =
@@ -79,15 +73,19 @@ export interface AnalyticsProperties {
 }
 
 class AnalyticsService {
-  private mixpanel: Mixpanel | null = null;
   private initialized = false;
   private userId: string | null = null;
 
   /**
-   * Initialize analytics services
-   * @param mixpanelToken - Mixpanel project token (optional; kept for API
-   *   compatibility — the underlying native SDK is initialized by
-   *   `lib/mixpanel.initMixpanel()` which reads the token from env).
+   * Initialize analytics services. This delegates to the shared Mixpanel
+   * singleton in `lib/mixpanel.ts` so every analytics surface (this service
+   * + direct `track()` callers) shares a single SDK instance.
+   *
+   * @param mixpanelToken - Optional Mixpanel project token. Currently
+   *   unused: the underlying native SDK reads its token from env
+   *   (`EXPO_PUBLIC_MIXPANEL_TOKEN`). The parameter is kept for API
+   *   compatibility with existing callers. Passing the literal
+   *   placeholder `'YOUR_MIXPANEL_TOKEN'` skips initialization entirely.
    */
   async initialize(mixpanelToken?: string): Promise<void> {
     if (this.initialized) {
@@ -95,20 +93,15 @@ class AnalyticsService {
     }
 
     try {
-      // Delegate native Mixpanel initialization to the shared singleton in
-      // `lib/mixpanel.ts`. This guarantees that all analytics surfaces
-      // (analyticsService + direct `track()` callers) talk to the same
-      // SDK instance instead of creating two parallel ones.
-      if (!mixpanelToken || mixpanelToken !== 'YOUR_MIXPANEL_TOKEN') {
+      const isPlaceholderToken = mixpanelToken === 'YOUR_MIXPANEL_TOKEN';
+      if (!isPlaceholderToken) {
         try {
           await initMixpanel();
-          this.mixpanel = isMixpanelReady() ? true : null;
         } catch (e: any) {
           // If mixpanel native package isn't installed or available in this runtime
           // (e.g., Expo Go), just warn and continue — analytics remains optional.
           // eslint-disable-next-line no-console
           console.warn('[Analytics] mixpanel-react-native not available:', e?.message || e);
-          this.mixpanel = null;
         }
       }
 
