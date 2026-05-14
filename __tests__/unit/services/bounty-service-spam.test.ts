@@ -162,15 +162,21 @@ describe('Bounty Service - Spam Prevention', () => {
     });
   });
 
-  describe('Duplicate Detection', () => {
-    it('should block creation for exact duplicate titles', async () => {
+  describe('Duplicate Detection (idempotent retry protection)', () => {
+    it('should return existing bounty when exact-title duplicate is found within retry window', async () => {
       // Mock rate limit check to pass
       const rateLimitChain = createMockQueryChain({ count: 0, error: null });
-      
-      // Mock duplicate check to return existing bounty with same title
-      const duplicateChain = createMockQueryChain({ 
-        data: [{ title: 'Fix My Website' }], 
-        error: null 
+
+      // Mock duplicate check to return existing bounty with same title (full row)
+      const existingBounty = {
+        id: 42,
+        title: 'Fix My Website',
+        poster_id: 'user-123',
+        created_at: new Date().toISOString(),
+      };
+      const duplicateChain = createMockQueryChain({
+        data: [existingBounty],
+        error: null,
       });
 
       let callCount = 0;
@@ -182,21 +188,28 @@ describe('Bounty Service - Spam Prevention', () => {
 
       const bounty = createTestBounty({ title: 'Fix My Website' });
 
-      await expect(bountyService.create(bounty)).rejects.toThrow(
-        'Duplicate content detected'
-      );
+      // Idempotent retry: should NOT throw a duplicate error, should return the
+      // existing bounty so the UI shows success (this is the false-duplicate fix).
+      const result = await bountyService.create(bounty);
+      expect(result).toEqual(existingBounty);
 
       expect(logger.warning).toHaveBeenCalledWith(
-        'Duplicate bounty detected',
-        expect.objectContaining({ posterId: 'user-123', title: 'Fix My Website' })
+        'Idempotent retry detected for bounty creation - returning existing bounty',
+        expect.objectContaining({ posterId: 'user-123', title: 'Fix My Website', existingId: 42 })
       );
     });
 
-    it('should block creation for case-insensitive duplicate titles', async () => {
+    it('should return existing bounty for case-insensitive duplicate within retry window', async () => {
       const rateLimitChain = createMockQueryChain({ count: 0, error: null });
-      const duplicateChain = createMockQueryChain({ 
-        data: [{ title: 'fix my website' }], 
-        error: null 
+      const existingBounty = {
+        id: 7,
+        title: 'fix my website',
+        poster_id: 'user-123',
+        created_at: new Date().toISOString(),
+      };
+      const duplicateChain = createMockQueryChain({
+        data: [existingBounty],
+        error: null,
       });
 
       let callCount = 0;
@@ -208,9 +221,8 @@ describe('Bounty Service - Spam Prevention', () => {
 
       const bounty = createTestBounty({ title: 'FIX MY WEBSITE' });
 
-      await expect(bountyService.create(bounty)).rejects.toThrow(
-        'Duplicate content detected'
-      );
+      const result = await bountyService.create(bounty);
+      expect(result).toEqual(existingBounty);
     });
 
     it('should allow creation for different titles', async () => {
@@ -322,11 +334,17 @@ describe('Bounty Service - Spam Prevention', () => {
       }
     });
 
-    it('should handle trimmed and whitespace titles correctly', async () => {
+    it('should handle trimmed and whitespace titles correctly (idempotent retry)', async () => {
       const rateLimitChain = createMockQueryChain({ count: 0, error: null });
-      const duplicateChain = createMockQueryChain({ 
-        data: [{ title: '  Fix My Website  ' }], 
-        error: null 
+      const existingBounty = {
+        id: 11,
+        title: '  Fix My Website  ',
+        poster_id: 'user-123',
+        created_at: new Date().toISOString(),
+      };
+      const duplicateChain = createMockQueryChain({
+        data: [existingBounty],
+        error: null,
       });
 
       let callCount = 0;
@@ -338,10 +356,10 @@ describe('Bounty Service - Spam Prevention', () => {
 
       const bounty = createTestBounty({ title: 'Fix My Website' });
 
-      // Should detect duplicate even with whitespace differences
-      await expect(bountyService.create(bounty)).rejects.toThrow(
-        'Duplicate content detected'
-      );
+      // Whitespace-only title differences should still match the existing
+      // bounty within the retry window and be returned as idempotent success.
+      const result = await bountyService.create(bounty);
+      expect(result).toEqual(existingBounty);
     });
   });
 

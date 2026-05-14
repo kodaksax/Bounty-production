@@ -241,17 +241,35 @@ describe('Bounty Creation Integration Tests', () => {
   });
 
   describe('Bounty Creation Error Handling', () => {
-    it('should handle duplicate bounty detection', async () => {
+    it('should treat exact-title retry within window as idempotent success (no false duplicate error)', async () => {
+      // This is the regression test for the "false Duplicate Bounty error
+      // while bounty actually created" bug: a retry after a successful insert
+      // must NOT raise a duplicate error - it must return the existing bounty.
+
       // Mock rate limit check to pass
       const mockCountResult = { count: 0, error: null };
       const mockGte = jest.fn().mockResolvedValue(mockCountResult);
       const mockEq = jest.fn().mockReturnValue({ gte: mockGte });
       const mockSelectCount = jest.fn().mockReturnValue({ eq: mockEq });
 
-      // Mock duplicate check to find existing bounty
-      const mockDupResult = { 
-        data: [{ title: 'Duplicate Title' }], 
-        error: null 
+      // Mock duplicate check to find existing bounty (just-created on the
+      // first attempt). The full row is returned so callers can treat as success.
+      const existingBounty = {
+        id: 999,
+        title: 'Duplicate Title',
+        description: 'Test description',
+        amount: 50,
+        is_for_honor: false,
+        poster_id: mockUserId,
+        status: 'open',
+        location: '',
+        timeline: '',
+        skills_required: '',
+        created_at: new Date().toISOString(),
+      };
+      const mockDupResult = {
+        data: [existingBounty],
+        error: null,
       };
       const mockGte2 = jest.fn().mockResolvedValue(mockDupResult);
       const mockEq2 = jest.fn().mockReturnValue({ gte: mockGte2 });
@@ -276,7 +294,9 @@ describe('Bounty Creation Integration Tests', () => {
         skills_required: '',
       };
 
-      await expect(bountyService.create(bountyData)).rejects.toThrow('Duplicate content detected');
+      // Must not throw - must return existing bounty (idempotent retry).
+      const result = await bountyService.create(bountyData);
+      expect(result).toEqual(existingBounty);
     });
   });
 });
