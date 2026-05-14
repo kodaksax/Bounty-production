@@ -2,6 +2,12 @@
 // Lazily require native modules to avoid top-level native imports that break
 // when running inside Expo Go (which may not include those native modules).
 import { Platform } from 'react-native';
+import getMixpanel, {
+  identify as mixpanelIdentify,
+  initMixpanel,
+  isMixpanelReady,
+  track as mixpanelTrack,
+} from '../mixpanel';
 
 // When running inside Expo Go some native packages (Mixpanel/Sentry) may not be
 // present. Use a loose alias for Mixpanel to avoid TypeScript errors when the
@@ -9,17 +15,23 @@ import { Platform } from 'react-native';
 type Mixpanel = any;
 
 // Track key user events according to requirements
-export type AnalyticsEvent = 
+export type AnalyticsEvent =
+  // App lifecycle / acquisition funnel
+  | 'app_opened'
   // Auth events
   | 'user_signed_up'
   | 'user_logged_in'
   | 'user_logged_out'
   | 'email_verified'
+  // Identity verification (Stripe Connect KYC)
+  | 'identity_submitted'
+  | 'identity_verified'
   // Bounty events
   | 'bounty_created'
   | 'bounty_queued'
   | 'bounty_viewed'
   | 'bounty_accepted'
+  | 'bounty_claimed'
   | 'bounty_completed'
   | 'bounty_cancelled'
   // Payment events
@@ -33,6 +45,10 @@ export type AnalyticsEvent =
   | 'payment_method_saved'
   | 'escrow_funded'
   | 'escrow_released'
+  // Payout (withdrawal) events
+  | 'payout_initiated'
+  | 'payout_success'
+  | 'payout_failed'
   // SetupIntent events
   | 'setup_intent_created'
   | 'setup_intent_confirmed'
@@ -51,6 +67,9 @@ export type AnalyticsEvent =
   // Profile events
   | 'profile_viewed'
   | 'profile_updated'
+  // Dispute events
+  | 'dispute_opened'
+  | 'dispute_resolved'
   // Search events
   | 'search_performed'
   | 'filter_applied';
@@ -66,29 +85,31 @@ class AnalyticsService {
 
   /**
    * Initialize analytics services
-   * @param mixpanelToken - Mixpanel project token
-   * @param sentryDsn - Sentry DSN (optional, handled by Sentry.init)
+   * @param mixpanelToken - Mixpanel project token (optional; kept for API
+   *   compatibility — the underlying native SDK is initialized by
+   *   `lib/mixpanel.initMixpanel()` which reads the token from env).
    */
-  async initialize(mixpanelToken: string): Promise<void> {
+  async initialize(mixpanelToken?: string): Promise<void> {
     if (this.initialized) {
       return;
     }
 
     try {
-      // Initialize Mixpanel lazily to avoid requiring native module at import time
-      if (mixpanelToken && mixpanelToken !== 'YOUR_MIXPANEL_TOKEN') {
+      // Delegate native Mixpanel initialization to the shared singleton in
+      // `lib/mixpanel.ts`. This guarantees that all analytics surfaces
+      // (analyticsService + direct `track()` callers) talk to the same
+      // SDK instance instead of creating two parallel ones.
+      if (!mixpanelToken || mixpanelToken !== 'YOUR_MIXPANEL_TOKEN') {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
-          const { Mixpanel } = require('mixpanel-react-native');
-          const trackAutomaticEvents = Platform.OS === 'web' ? false : true;
-          this.mixpanel = await Mixpanel.init(mixpanelToken, trackAutomaticEvents);
+          await initMixpanel();
+          this.mixpanel = isMixpanelReady() ? true : null;
         } catch (e: any) {
-            // If mixpanel native package isn't installed or available in this runtime
-            // (e.g., Expo Go), just warn and continue — analytics remains optional.
-            // eslint-disable-next-line no-console
-            console.warn('[Analytics] mixpanel-react-native not available:', e?.message || e);
-            this.mixpanel = null;
-          }
+          // If mixpanel native package isn't installed or available in this runtime
+          // (e.g., Expo Go), just warn and continue — analytics remains optional.
+          // eslint-disable-next-line no-console
+          console.warn('[Analytics] mixpanel-react-native not available:', e?.message || e);
+          this.mixpanel = null;
+        }
       }
 
       this.initialized = true;
@@ -113,12 +134,11 @@ class AnalyticsService {
     this.userId = userId;
 
     try {
-      // Set user in Mixpanel
-      if (this.mixpanel) {
-        await this.mixpanel.identify(userId);
-        if (properties) {
-          await this.mixpanel.getPeople().set(properties);
-        }
+      // Identify in Mixpanel via the shared singleton.
+      try {
+        mixpanelIdentify(userId, properties);
+      } catch {
+        // ignore — mixpanel may not be ready
       }
 
       // Set user in Sentry
@@ -156,9 +176,12 @@ class AnalyticsService {
         userId: this.userId,
       };
 
-      // Track in Mixpanel
-      if (this.mixpanel) {
-        await this.mixpanel.track(event, enrichedProperties);
+      // Track in Mixpanel via the shared singleton. The helper is a no-op when
+      // the native SDK hasn't initialized yet (e.g. in Expo Go).
+      try {
+        mixpanelTrack(event, enrichedProperties);
+      } catch {
+        // ignore — never let analytics failures bubble up to the caller
       }
 
       // Add breadcrumb to Sentry for context (if available)
@@ -193,8 +216,16 @@ class AnalyticsService {
    */
   async updateUserProperties(properties: AnalyticsProperties): Promise<void> {
     try {
-      if (this.mixpanel) {
-        await this.mixpanel.getPeople().set(properties);
+      try {
+        const mp = getMixpanel();
+        if (mp) {
+          const people = typeof mp.getPeople === 'function' ? mp.getPeople() : mp.people;
+          if (people && typeof people.set === 'function') {
+            await people.set(properties);
+          }
+        }
+      } catch {
+        // ignore — mixpanel may not be ready
       }
 
       try {
@@ -224,8 +255,12 @@ class AnalyticsService {
    */
   async incrementUserProperty(property: string, value: number = 1): Promise<void> {
     try {
-      if (this.mixpanel) {
-        await this.mixpanel.getPeople().increment(property, value);
+      const mp = getMixpanel();
+      if (mp) {
+        const people = typeof mp.getPeople === 'function' ? mp.getPeople() : mp.people;
+        if (people && typeof people.increment === 'function') {
+          await people.increment(property, value);
+        }
       }
     } catch (error) {
       console.error('[Analytics] Failed to increment user property:', error);
@@ -251,8 +286,10 @@ class AnalyticsService {
         ...properties,
       };
 
-      if (this.mixpanel) {
-        await this.mixpanel.track('screen_view', screenProperties);
+      try {
+        mixpanelTrack('screen_view', screenProperties);
+      } catch {
+        // ignore
       }
 
       try {
@@ -293,8 +330,10 @@ class AnalyticsService {
         duration_ms: duration,
       };
 
-      if (this.mixpanel) {
-        await this.mixpanel.track(eventName, timingProperties);
+      try {
+        mixpanelTrack(eventName, timingProperties);
+      } catch {
+        // ignore
       }
 
     } catch (error) {
@@ -316,8 +355,13 @@ class AnalyticsService {
     try {
       this.userId = null;
 
-      if (this.mixpanel) {
-        await this.mixpanel.reset();
+      try {
+        const mp = getMixpanel();
+        if (mp && typeof mp.reset === 'function') {
+          await mp.reset();
+        }
+      } catch {
+        // ignore
       }
 
       try {
@@ -345,8 +389,9 @@ class AnalyticsService {
    */
   async flush(): Promise<void> {
     try {
-      if (this.mixpanel) {
-        await this.mixpanel.flush();
+      const mp = getMixpanel();
+      if (mp && typeof mp.flush === 'function') {
+        await mp.flush();
       }
     } catch (error) {
       console.error('[Analytics] Failed to flush events:', error);

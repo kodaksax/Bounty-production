@@ -16,6 +16,7 @@ import { useAuthContext } from '../hooks/use-auth-context';
 import { useEmailVerification } from '../hooks/use-email-verification';
 import { API_BASE_URL } from '../lib/config/api';
 import { MIN_WITHDRAWAL_AMOUNT } from '../lib/constants';
+import { analyticsService } from '../lib/services/analytics-service';
 import { useStripe } from '../lib/stripe-context';
 import { theme } from '../lib/theme';
 import { useWallet } from '../lib/wallet-context';
@@ -231,6 +232,17 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
       if (hasBankAccount) {
         const idempotencyKey = idempotencyKeyRef.current;
 
+        // Funnel: user has confirmed amount + bank account, about to call Stripe.
+        try {
+          await analyticsService.trackEvent('payout_initiated', {
+            amount: withdrawalAmount,
+            currency: 'usd',
+            method: 'stripe_connect_bank',
+          });
+        } catch {
+          /* analytics is best-effort */
+        }
+
         // Use Stripe Connect transfer to bank account
         const response = await fetch(`${API_BASE_URL}/connect/transfer`, {
           method: 'POST',
@@ -258,6 +270,20 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
         // Rotate key so the next withdrawal gets a fresh idempotency key.
         idempotencyKeyRef.current = `withdraw_${session?.user?.id ?? 'u'}_${Date.now()}`;
 
+        // Funnel: Stripe accepted the transfer request. Final settlement to
+        // the user's bank is async (1-2 business days) and reported by webhook.
+        try {
+          await analyticsService.trackEvent('payout_success', {
+            amount: withdrawalAmount,
+            currency: 'usd',
+            method: 'stripe_connect_bank',
+            transferId: transferId ? String(transferId) : undefined,
+            transactionId: transactionId ? String(transactionId) : undefined,
+          });
+        } catch {
+          /* analytics is best-effort */
+        }
+
         // Show success message
         Alert.alert(
           'Withdrawal Initiated',
@@ -267,6 +293,16 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
         );
       } else {
         // Use payment method (card refund - requires original payment)
+        try {
+          await analyticsService.trackEvent('payout_initiated', {
+            amount: withdrawalAmount,
+            currency: 'usd',
+            method: 'payment_method_refund',
+          });
+        } catch {
+          /* analytics is best-effort */
+        }
+
         const success = await withdraw(withdrawalAmount, {
           method:
             paymentMethods.find(pm => pm.id === selectedMethod)?.card.brand.toUpperCase() || 'Card',
@@ -275,17 +311,46 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
         });
 
         if (success) {
+          try {
+            await analyticsService.trackEvent('payout_success', {
+              amount: withdrawalAmount,
+              currency: 'usd',
+              method: 'payment_method_refund',
+            });
+          } catch {
+            /* analytics is best-effort */
+          }
           Alert.alert(
             'Withdrawal Initiated',
             `$${withdrawalAmount.toFixed(2)} withdrawal has been initiated. It may take 1-3 business days to process.\n\nNote: For faster withdrawals, consider connecting your bank account.`,
             [{ text: 'OK', onPress: onBack }]
           );
         } else {
+          try {
+            await analyticsService.trackEvent('payout_failed', {
+              amount: withdrawalAmount,
+              currency: 'usd',
+              method: 'payment_method_refund',
+              reason: 'insufficient_balance_or_invalid',
+            });
+          } catch {
+            /* analytics is best-effort */
+          }
           Alert.alert('Withdrawal Failed', 'Insufficient balance or invalid withdrawal amount.');
         }
       }
     } catch (error: any) {
       console.error('Withdrawal error:', error);
+      try {
+        await analyticsService.trackEvent('payout_failed', {
+          amount: withdrawalAmount,
+          currency: 'usd',
+          method: hasBankAccount ? 'stripe_connect_bank' : 'payment_method_refund',
+          reason: error?.message ? String(error.message).slice(0, 200) : 'unknown',
+        });
+      } catch {
+        /* analytics is best-effort */
+      }
       Alert.alert('Error', error.message || 'Failed to process withdrawal. Please try again.', [
         { text: 'OK' },
       ]);
