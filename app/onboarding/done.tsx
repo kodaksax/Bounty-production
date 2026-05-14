@@ -424,7 +424,9 @@ export default function DoneScreen() {
           </TouchableOpacity>
         </Animated.View>
 
+        {/* Progress indicator — step 5 of 5 */}
         <View style={styles.progressContainer}>
+          <View style={styles.progressDot} />
           <View style={styles.progressDot} />
           <View style={styles.progressDot} />
           <View style={styles.progressDot} />

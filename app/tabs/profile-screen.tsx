@@ -15,7 +15,7 @@ import { bountyService } from "lib/services/bounty-service";
 import { CURRENT_USER_ID } from "lib/utils/data-utils";
 // Remove static CURRENT_USER_ID usage; we'll derive from authenticated session
 // import { CURRENT_USER_ID } from "lib/utils/data-utils";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import * as React from "react";
 import { useEffect, useRef, useState } from "react";
 import { Platform, RefreshControl, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -27,6 +27,7 @@ import { useNormalizedProfile } from "../../hooks/useNormalizedProfile";
 
 // Update the ProfileScreen component to include real-time statistics
 export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
+  const router = useRouter();
   const [isEditing, setIsEditing] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
@@ -391,6 +392,39 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
               bio: authProfile?.about,
             }}
           />
+          {/* Entry point for users who skipped or were rejected during onboarding to
+              complete ID verification later. Hidden once status is pending/verified. */}
+          {isOwnProfile && (
+            authProfile?.id_verification_status === undefined ||
+            authProfile?.id_verification_status === 'unverified' ||
+            authProfile?.id_verification_status === 'rejected'
+          ) && (
+            <TouchableOpacity
+              style={styles.verifyIdentityRow}
+              onPress={() => router.push('/verification/upload-id')}
+              accessibilityRole="button"
+              accessibilityLabel={
+                authProfile?.id_verification_status === 'rejected'
+                  ? 'Resubmit ID verification'
+                  : 'Verify your identity'
+              }
+            >
+              <MaterialIcons name="verified-user" size={20} color="#a7f3d0" />
+              <View style={styles.verifyIdentityTextWrap}>
+                <Text style={styles.verifyIdentityTitle}>
+                  {authProfile?.id_verification_status === 'rejected'
+                    ? 'Resubmit ID verification'
+                    : 'Verify your identity'}
+                </Text>
+                <Text style={styles.verifyIdentitySubtitle}>
+                  {authProfile?.id_verification_status === 'rejected'
+                    ? 'Your previous submission was rejected. Tap to try again.'
+                    : 'Unlock trust badges and faster payouts.'}
+                </Text>
+              </View>
+              <MaterialIcons name="chevron-right" size={20} color="rgba(255,255,255,0.6)" />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Platform Security & Trust Badges */}
@@ -437,6 +471,31 @@ const styles = StyleSheet.create({
   section: {
     paddingHorizontal: 16,
     paddingVertical: 12,
+  },
+  verifyIdentityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: 'rgba(5,46,27,0.45)',
+    borderWidth: 1,
+    borderColor: 'rgba(167,243,208,0.3)',
+  },
+  verifyIdentityTextWrap: {
+    flex: 1,
+  },
+  verifyIdentityTitle: {
+    color: '#a7f3d0',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  verifyIdentitySubtitle: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 12,
+    marginTop: 2,
   },
   sectionHeader: {
     flexDirection: "row",

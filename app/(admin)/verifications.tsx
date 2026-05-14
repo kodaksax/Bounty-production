@@ -10,9 +10,9 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   Image,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -119,6 +119,106 @@ export default function AdminVerificationsScreen() {
     </View>
   );
 
+  const renderItem = ({ item }: { item: VerificationItem }) => {
+    const label = item.display_name || item.username || item.id.slice(0, 8);
+    const acting = actingOn === item.id;
+    // Require both ID front and selfie to approve. `review-id` marks a
+    // profile `pending` even when only the ID is uploaded, so we guard the
+    // approve action here to avoid verifying a user without a selfie.
+    const hasRequiredEvidence = !!item.id_front_url && !!item.selfie_url;
+    const canApprove = !acting && hasRequiredEvidence;
+    return (
+      <AdminCard style={styles.card}>
+        <View style={styles.cardHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.userName}>{label}</Text>
+            {item.username && item.display_name ? (
+              <Text style={styles.userHandle}>@{item.username}</Text>
+            ) : null}
+            {item.id_submitted_at ? (
+              <Text style={styles.submittedAt}>
+                Submitted {new Date(item.id_submitted_at).toLocaleString()}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+
+        <View style={styles.imagesRow}>
+          <View style={styles.imageBlock}>
+            <Text style={styles.imageLabel}>ID Front</Text>
+            {item.id_front_url ? (
+              <Image source={{ uri: item.id_front_url }} style={styles.docImage} resizeMode="contain" />
+            ) : (
+              <View style={[styles.docImage, styles.missingImage]}>
+                <MaterialIcons name="image-not-supported" size={24} color="rgba(255,255,255,0.4)" />
+              </View>
+            )}
+          </View>
+          <View style={styles.imageBlock}>
+            <Text style={styles.imageLabel}>Selfie</Text>
+            {item.selfie_url ? (
+              <Image source={{ uri: item.selfie_url }} style={styles.docImage} resizeMode="contain" />
+            ) : (
+              <View style={[styles.docImage, styles.missingImage]}>
+                <MaterialIcons name="image-not-supported" size={24} color="rgba(255,255,255,0.4)" />
+              </View>
+            )}
+          </View>
+        </View>
+
+        {item.id_back_url && (
+          <View style={styles.backRow}>
+            <Text style={styles.imageLabel}>ID Back</Text>
+            <Image source={{ uri: item.id_back_url }} style={styles.backImage} resizeMode="contain" />
+          </View>
+        )}
+
+        {!hasRequiredEvidence && (
+          <View style={styles.warningBox}>
+            <MaterialIcons name="warning-amber" size={16} color="#fbbf24" />
+            <Text style={styles.warningText}>
+              {!item.id_front_url && !item.selfie_url
+                ? 'ID and selfie are missing. Reject and ask the user to resubmit.'
+                : !item.id_front_url
+                  ? 'ID image is missing. Approval is disabled.'
+                  : 'Selfie is missing. Approval is disabled.'}
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.actions}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.rejectButton, acting && styles.disabled]}
+            onPress={() => confirmReject(item.id, label)}
+            disabled={acting}
+            accessibilityRole="button"
+            accessibilityLabel={`Reject verification for ${label}`}
+          >
+            <MaterialIcons name="close" size={18} color="#fecaca" />
+            <Text style={styles.rejectText}>Reject</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.approveButton, !canApprove && styles.disabled]}
+            onPress={() => confirmApprove(item.id, label)}
+            disabled={!canApprove}
+            accessibilityRole="button"
+            accessibilityLabel={`Approve verification for ${label}`}
+            accessibilityState={{ disabled: !canApprove }}
+          >
+            {acting ? (
+              <ActivityIndicator size="small" color="#052e1b" />
+            ) : (
+              <>
+                <MaterialIcons name="check" size={18} color="#052e1b" />
+                <Text style={styles.approveText}>Approve</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      </AdminCard>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <AdminHeader title="ID Verifications" />
@@ -129,103 +229,29 @@ export default function AdminVerificationsScreen() {
           <Text style={styles.loadingText}>Loading queue…</Text>
         </View>
       ) : (
-        <ScrollView
+        <FlatList
+          data={items}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
           contentContainerStyle={styles.scrollContent}
           refreshControl={<RefreshControl refreshing={false} onRefresh={loadQueue} tintColor="#00dc50" />}
-        >
-          {error && (
-            <View style={styles.errorBox}>
-              <MaterialIcons name="error-outline" size={20} color="#fecaca" />
-              <Text style={styles.errorText}>{error}</Text>
-              <TouchableOpacity onPress={loadQueue}>
-                <Text style={styles.retryText}>Retry</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {!error && items.length === 0 && renderEmpty()}
-
-          {items.map((item) => {
-            const label = item.display_name || item.username || item.id.slice(0, 8);
-            const acting = actingOn === item.id;
-            return (
-              <AdminCard key={item.id} style={styles.card}>
-                <View style={styles.cardHeader}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.userName}>{label}</Text>
-                    {item.username && item.display_name ? (
-                      <Text style={styles.userHandle}>@{item.username}</Text>
-                    ) : null}
-                    {item.id_submitted_at ? (
-                      <Text style={styles.submittedAt}>
-                        Submitted {new Date(item.id_submitted_at).toLocaleString()}
-                      </Text>
-                    ) : null}
-                  </View>
-                </View>
-
-                <View style={styles.imagesRow}>
-                  <View style={styles.imageBlock}>
-                    <Text style={styles.imageLabel}>ID Front</Text>
-                    {item.id_front_url ? (
-                      <Image source={{ uri: item.id_front_url }} style={styles.docImage} />
-                    ) : (
-                      <View style={[styles.docImage, styles.missingImage]}>
-                        <MaterialIcons name="image-not-supported" size={24} color="rgba(255,255,255,0.4)" />
-                      </View>
-                    )}
-                  </View>
-                  <View style={styles.imageBlock}>
-                    <Text style={styles.imageLabel}>Selfie</Text>
-                    {item.selfie_url ? (
-                      <Image source={{ uri: item.selfie_url }} style={styles.docImage} />
-                    ) : (
-                      <View style={[styles.docImage, styles.missingImage]}>
-                        <MaterialIcons name="image-not-supported" size={24} color="rgba(255,255,255,0.4)" />
-                      </View>
-                    )}
-                  </View>
-                </View>
-
-                {item.id_back_url && (
-                  <View style={styles.backRow}>
-                    <Text style={styles.imageLabel}>ID Back</Text>
-                    <Image source={{ uri: item.id_back_url }} style={styles.backImage} />
-                  </View>
-                )}
-
-                <View style={styles.actions}>
-                  <TouchableOpacity
-                    style={[styles.actionButton, styles.rejectButton, acting && styles.disabled]}
-                    onPress={() => confirmReject(item.id, label)}
-                    disabled={acting}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Reject verification for ${label}`}
-                  >
-                    <MaterialIcons name="close" size={18} color="#fecaca" />
-                    <Text style={styles.rejectText}>Reject</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.actionButton, styles.approveButton, acting && styles.disabled]}
-                    onPress={() => confirmApprove(item.id, label)}
-                    disabled={acting}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Approve verification for ${label}`}
-                  >
-                    {acting ? (
-                      <ActivityIndicator size="small" color="#052e1b" />
-                    ) : (
-                      <>
-                        <MaterialIcons name="check" size={18} color="#052e1b" />
-                        <Text style={styles.approveText}>Approve</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              </AdminCard>
-            );
-          })}
-        </ScrollView>
+          ListHeaderComponent={
+            error ? (
+              <View style={styles.errorBox}>
+                <MaterialIcons name="error-outline" size={20} color="#fecaca" />
+                <Text style={styles.errorText}>{error}</Text>
+                <TouchableOpacity onPress={loadQueue}>
+                  <Text style={styles.retryText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null
+          }
+          ListEmptyComponent={!error ? renderEmpty : null}
+          initialNumToRender={4}
+          maxToRenderPerBatch={4}
+          windowSize={5}
+          removeClippedSubviews
+        />
       )}
     </View>
   );
@@ -324,6 +350,7 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     borderRadius: 8,
     backgroundColor: 'rgba(0,0,0,0.3)',
+    resizeMode: 'contain',
   },
   missingImage: {
     justifyContent: 'center',
@@ -334,10 +361,27 @@ const styles = StyleSheet.create({
   },
   backImage: {
     width: '100%',
-    height: 120,
+    height: 160,
     borderRadius: 8,
     backgroundColor: 'rgba(0,0,0,0.3)',
-    resizeMode: 'cover',
+    resizeMode: 'contain',
+  },
+  warningBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(120,53,15,0.4)',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(251,191,36,0.3)',
+  },
+  warningText: {
+    flex: 1,
+    color: '#fde68a',
+    fontSize: 12,
+    lineHeight: 16,
   },
   actions: {
     flexDirection: 'row',

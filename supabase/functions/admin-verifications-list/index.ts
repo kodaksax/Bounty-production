@@ -13,7 +13,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 }
 
 const BUCKET = 'verification-docs'
@@ -49,7 +49,11 @@ Deno.serve(async (req: Request) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
-  if (req.method !== 'GET') {
+  // Accept GET (semantically correct for a read-only listing) and POST
+  // (because `supabase.functions.invoke(...)` issues a POST by default and
+  // the SDK we use does not expose an HTTP method override). The function
+  // is read-only and ignores any request body.
+  if (req.method !== 'GET' && req.method !== 'POST') {
     return jsonResponse({ error: 'Method not allowed' }, 405)
   }
 

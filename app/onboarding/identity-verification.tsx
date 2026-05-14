@@ -16,6 +16,8 @@
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
@@ -39,7 +41,41 @@ import { compressImage } from '../../lib/utils/image-utils';
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/heic'];
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB — matches bucket limit
 
+// Cache key prefix used by storageService when it falls back to AsyncStorage.
+// Kept in sync with lib/services/storage-service.ts (STORAGE_PREFIX).
+const STORAGE_FALLBACK_PREFIX = 'attachment-cache-';
+
 type UploadStep = 'idle' | 'uploading-id' | 'uploading-selfie' | 'submitting' | 'submitted';
+
+/**
+ * Remove a compressed-image cache file produced by `compressImage`. Sensitive
+ * identity documents should not linger on-device after upload. Best-effort
+ * only — failure to delete is logged but not surfaced to the user.
+ */
+async function deleteCachedImage(uri: string | null, originalUri: string | null): Promise<void> {
+  if (!uri || uri === originalUri) return;
+  try {
+    await FileSystem.deleteAsync(uri, { idempotent: true });
+  } catch (e) {
+    console.warn('[IdentityVerification] Failed to delete cached image:', e);
+  }
+}
+
+/**
+ * Defensively remove any local AsyncStorage fallback artifact for an
+ * uploaded verification document. `storageService.deleteFile` only clears
+ * the AsyncStorage key when Supabase is unconfigured, so when an upload
+ * silently fell back to local storage we need to clear the key directly.
+ */
+async function purgeFallbackArtifact(path: string): Promise<void> {
+  try {
+    if (AsyncStorage && typeof AsyncStorage.removeItem === 'function') {
+      await AsyncStorage.removeItem(STORAGE_FALLBACK_PREFIX + path);
+    }
+  } catch (e) {
+    console.warn('[IdentityVerification] Failed to clear fallback artifact:', e);
+  }
+}
 
 function uriToMime(uri: string): string {
   const ext = uri.split('.').pop()?.toLowerCase() ?? '';
@@ -176,11 +212,17 @@ export default function IdentityVerificationScreen() {
       return;
     }
 
+    const idPath = `${userId}/id-front.jpg`;
+    const selfiePath = `${userId}/selfie.jpg`;
+    let idUploadUri: string | null = null;
+    let selfieUploadUri: string | null = null;
+    let idUploadedRemotely = false;
+
     try {
       // Compress before upload to keep mobile uploads reasonable.
       // Falls back to original URI if compression fails.
       setStep('uploading-id');
-      let idUploadUri = idImage;
+      idUploadUri = idImage;
       try {
         const compressed = await compressImage(idImage, 0.7, 'jpeg');
         idUploadUri = compressed.uri;
@@ -190,18 +232,19 @@ export default function IdentityVerificationScreen() {
 
       const idResult = await storageService.uploadFile(idUploadUri, {
         bucket: 'verification-docs',
-        path: `${userId}/id-front.jpg`,
+        path: idPath,
       });
       if (!idResult.success || idResult.fallbackToLocal) {
         if (idResult.fallbackToLocal) {
           // Don't keep sensitive ID images in AsyncStorage.
-          await storageService.deleteFile('verification-docs', `${userId}/id-front.jpg`);
+          await purgeFallbackArtifact(idPath);
         }
         throw new Error(idResult.error ?? 'Failed to upload ID to secure storage');
       }
+      idUploadedRemotely = true;
 
       setStep('uploading-selfie');
-      let selfieUploadUri = selfieImage;
+      selfieUploadUri = selfieImage;
       try {
         const compressed = await compressImage(selfieImage, 0.75, 'jpeg');
         selfieUploadUri = compressed.uri;
@@ -211,11 +254,11 @@ export default function IdentityVerificationScreen() {
 
       const selfieResult = await storageService.uploadFile(selfieUploadUri, {
         bucket: 'verification-docs',
-        path: `${userId}/selfie.jpg`,
+        path: selfiePath,
       });
       if (!selfieResult.success || selfieResult.fallbackToLocal) {
         if (selfieResult.fallbackToLocal) {
-          await storageService.deleteFile('verification-docs', `${userId}/selfie.jpg`);
+          await purgeFallbackArtifact(selfiePath);
         }
         throw new Error(selfieResult.error ?? 'Failed to upload selfie to secure storage');
       }
@@ -249,9 +292,23 @@ export default function IdentityVerificationScreen() {
 
       setStep('submitted');
     } catch (error) {
+      // Roll back any partial uploads so we don't leave orphaned sensitive
+      // documents in storage when the submission wasn't actually queued.
+      if (idUploadedRemotely) {
+        try {
+          await storageService.deleteFile('verification-docs', idPath);
+        } catch (e) {
+          console.warn('[IdentityVerification] Failed to clean up uploaded ID after failure:', e);
+        }
+      }
       const message = error instanceof Error ? error.message : 'An unexpected error occurred.';
       setErrorMessage(message);
       setStep('idle');
+    } finally {
+      // Always remove the locally compressed images from the app cache so a
+      // sensitive copy doesn't linger on-device.
+      await deleteCachedImage(idUploadUri, idImage);
+      await deleteCachedImage(selfieUploadUri, selfieImage);
     }
   };
 
@@ -428,12 +485,13 @@ export default function IdentityVerificationScreen() {
           <Text style={styles.skipButtonText}>Skip for now</Text>
         </TouchableOpacity>
 
-        {/* Progress dots — last step before done */}
+        {/* Progress dots — step 4 of 5 (username → details → phone → identity → done) */}
         <View style={styles.progressContainer}>
           <View style={styles.progressDot} />
           <View style={styles.progressDot} />
           <View style={styles.progressDot} />
           <View style={[styles.progressDot, styles.progressDotActive]} />
+          <View style={styles.progressDot} />
         </View>
       </ScrollView>
     </View>

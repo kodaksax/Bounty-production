@@ -242,11 +242,12 @@ export default function PhoneScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Progress indicator */}
+        {/* Progress indicator — step 3 of 5 */}
         <View style={styles.progressContainer}>
           <View style={styles.progressDot} />
           <View style={styles.progressDot} />
           <View style={[styles.progressDot, styles.progressDotActive]} />
+          <View style={styles.progressDot} />
           <View style={styles.progressDot} />
         </View>
       </ScrollView>
