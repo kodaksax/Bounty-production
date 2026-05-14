@@ -337,6 +337,9 @@ export default function IdentityVerificationScreen() {
         {/* ID upload */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>1. Government-issued ID</Text>
+          <Text style={styles.helperText}>
+            Driver{'\u2019'}s license, passport, or national ID — front side.
+          </Text>
           <TouchableOpacity
             style={styles.uploadBox}
             onPress={pickIdImage}
@@ -495,6 +498,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#a7f3d0',
+    marginBottom: SPACING.ELEMENT_GAP,
+  },
+  helperText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.7)',
+    marginTop: -SPACING.COMPACT_GAP,
     marginBottom: SPACING.ELEMENT_GAP,
   },
   uploadBox: {
