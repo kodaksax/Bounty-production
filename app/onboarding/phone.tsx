@@ -97,7 +97,7 @@ export default function PhoneScreen() {
     }
   };
 
-  const handleSkip = () => router.push('/onboarding/done');
+  const handleSkip = () => router.push('/onboarding/identity-verification');
 
   const handleBack = () => {
     router.back();

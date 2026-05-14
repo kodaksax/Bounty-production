@@ -42,6 +42,7 @@ export const ROUTES = {
     USERS: '/(admin)/users',
     USER_DETAIL: (id: string | number) => `/(admin)/user/${id}` as const,
     BLOCKED_USERS: '/(admin)/blocked-users',
+    VERIFICATIONS: '/(admin)/verifications',
     
     // Bounty Management
     BOUNTIES: '/(admin)/bounties',

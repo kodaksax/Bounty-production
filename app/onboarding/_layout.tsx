@@ -22,6 +22,7 @@ export default function OnboardingLayout() {
         <Stack.Screen name="username" />
         <Stack.Screen name="details" />
         <Stack.Screen name="phone" />
+        <Stack.Screen name="identity-verification" />
         <Stack.Screen name="done" />
       </Stack>
     </OnboardingProvider>
