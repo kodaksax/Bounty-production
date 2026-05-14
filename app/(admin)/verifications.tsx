@@ -350,7 +350,6 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     borderRadius: 8,
     backgroundColor: 'rgba(0,0,0,0.3)',
-    resizeMode: 'contain',
   },
   missingImage: {
     justifyContent: 'center',
@@ -364,7 +363,6 @@ const styles = StyleSheet.create({
     height: 160,
     borderRadius: 8,
     backgroundColor: 'rgba(0,0,0,0.3)',
-    resizeMode: 'contain',
   },
   warningBox: {
     flexDirection: 'row',
