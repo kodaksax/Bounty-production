@@ -142,12 +142,14 @@ describe('bountyService.createBounty (wrapper idempotency)', () => {
 
     // Exactly one insert was issued for the two concurrent calls.
     expect(baseBountyService.create).toHaveBeenCalledTimes(1);
-    // Exactly one of the two calls is treated as the original create; the
-    // other is a deduplicated replay. Both receive the same bounty.
+    // Both callers receive the exact same bounty object (same identity).
+    expect(r1.bounty).toBe(r2.bounty);
     expect(r1.bounty).toEqual(bounty);
-    expect(r2.bounty).toEqual(bounty);
-    const createdFlags = [r1.created, r2.created].sort();
-    expect(createdFlags).toEqual([false, true]);
+    // Exactly one of the two calls is treated as the original create; the
+    // other is a deduplicated replay.
+    const createdFlags = [r1.created, r2.created];
+    expect(createdFlags.filter(c => c === true)).toHaveLength(1);
+    expect(createdFlags.filter(c => c === false)).toHaveLength(1);
   });
 
   it('treats drafts with different titles as separate creates (not a replay)', async () => {
