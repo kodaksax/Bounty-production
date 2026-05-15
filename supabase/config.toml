@@ -129,3 +129,10 @@ verify_jwt = false
 # so it must NOT require a Supabase JWT.
 [functions.webhooks]
 verify_jwt = false
+
+# admin-verifications-list: handles its own auth via supabaseAdmin.auth.getUser(token)
+# and gates on the admin role claim. Without this override the gateway can
+# reject valid user JWTs before the function is reached, preventing admins
+# from loading the verification queue.
+[functions.admin-verifications-list]
+verify_jwt = false
