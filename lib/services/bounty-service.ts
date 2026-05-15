@@ -748,8 +748,13 @@ export const bountyService = {
   },
 
   /**
-   * Create a new bounty with offline support
-   * Includes spam prevention: rate limiting (max 10/day) and duplicate detection
+   * Create a new bounty with offline support.
+   * Includes spam prevention via rate limiting (max 10/day). Idempotent retry
+   * protection (handling double-tap / network-retry races where the insert
+   * succeeded but the response was lost on the client) is implemented in the
+   * wrapper at app/services/bountyService.ts so it can return a `created` flag
+   * to callers (preventing double-funded escrow) and atomically de-duplicate
+   * concurrent submissions for the same draft.
    */
   async create(bounty: Omit<Bounty, 'id' | 'created_at'>): Promise<Bounty | null> {
     try {
@@ -789,45 +794,6 @@ export const bountyService = {
           logger.warning('Rate limit check failed, proceeding with creation', {
             error: rateLimitError,
           });
-        }
-      }
-
-      // Spam prevention: duplicate detection - check for similar titles in last 24 hours
-      if (posterId && bounty.title && isSupabaseConfigured) {
-        try {
-          const oneDayAgo = new Date();
-          oneDayAgo.setDate(oneDayAgo.getDate() - 1);
-
-          const { data: recentBounties, error: dupError } = await supabase
-            .from('bounties')
-            .select('title')
-            .eq('poster_id', posterId)
-            .gte('created_at', oneDayAgo.toISOString());
-
-          if (!dupError && recentBounties && recentBounties.length > 0) {
-            const normalizedNewTitle = bounty.title.toLowerCase().trim();
-            const isDuplicate = recentBounties.some((b: { title: string }) => {
-              const existingTitle = (b.title || '').toLowerCase().trim();
-              // Only check for exact match to avoid false positives
-              return existingTitle === normalizedNewTitle;
-            });
-
-            if (isDuplicate) {
-              logger.warning('Duplicate bounty detected', { posterId, title: bounty.title });
-              throw new Error(
-                'Duplicate content detected: A similar bounty was recently posted. Please create unique content.'
-              );
-            }
-          }
-        } catch (dupError) {
-          if (
-            dupError instanceof Error &&
-            dupError.message.includes('Duplicate content detected')
-          ) {
-            throw dupError;
-          }
-          // Log but don't block if duplicate check fails
-          logger.warning('Duplicate check failed, proceeding with creation', { error: dupError });
         }
       }
 
