@@ -38,6 +38,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthContext } from '../../../hooks/use-auth-context';
 import { API_BASE_URL } from '../../../lib/config/api';
 import { CONNECT_REFRESH_URL, CONNECT_RETURN_URL } from '../../../lib/config/app';
+import { analyticsService } from '../../../lib/services/analytics-service';
 import { supabase } from '../../../lib/supabase';
 import { colors } from '../../../lib/theme';
 
@@ -113,6 +114,17 @@ export default function ConnectOnboardingScreen() {
       // authoritative capability state shortly after.
       const userId = session?.user?.id;
       if (userId && result.type === 'success') {
+        // The hosted onboarding redirected back to our return URL, which
+        // Stripe only does after the user has submitted their identity /
+        // KYC details. Track this funnel step regardless of whether the
+        // account is fully verified yet.
+        try {
+          await analyticsService.trackEvent('identity_submitted', {
+            source: 'stripe_connect_onboarding',
+          });
+        } catch {
+          /* analytics is best-effort */
+        }
         try {
           await supabase.from('profiles').update({ onboarding_complete: true }).eq('id', userId);
         } catch (err) {
@@ -121,13 +133,37 @@ export default function ConnectOnboardingScreen() {
       }
 
       try {
-        await fetch(`${API_BASE_URL}/connect/verify-onboarding`, {
+        const verifyRes = await fetch(`${API_BASE_URL}/connect/verify-onboarding`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
         });
+
+        // If Stripe reports the account is fully onboarded (charges + payouts
+        // enabled), emit the "verified" funnel event. We rely on Stripe's
+        // capability flags rather than our own optimistic state so the funnel
+        // accurately reflects KYC completion.
+        if (verifyRes.ok) {
+          try {
+            const body = (await verifyRes.json()) as {
+              onboarded?: boolean;
+              chargesEnabled?: boolean;
+              payoutsEnabled?: boolean;
+              detailsSubmitted?: boolean;
+            };
+            if (body?.onboarded) {
+              await analyticsService.trackEvent('identity_verified', {
+                source: 'stripe_connect_onboarding',
+                chargesEnabled: !!body.chargesEnabled,
+                payoutsEnabled: !!body.payoutsEnabled,
+              });
+            }
+          } catch {
+            /* non-JSON or analytics failure — best-effort */
+          }
+        }
       } catch (err) {
         console.warn('[connect-onboarding] verify-onboarding refresh failed', err);
       }

@@ -24,6 +24,7 @@ import { config } from '../../lib/config';
 import { API_BASE_URL } from '../../lib/config/api';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
+import { analyticsService } from '../../lib/services/analytics-service';
 import { generateCorrelationId, parseAuthError } from '../../lib/utils/auth-errors';
 import { suggestEmailCorrection, validateEmail } from '../../lib/utils/auth-validation';
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation';
@@ -241,6 +242,18 @@ export function SignUpForm() {
         }
 
         const session = signInData.session;
+
+        // Track the signup funnel event as soon as registration + sign-in
+        // succeed. We track regardless of whether a session was returned
+        // (email-confirmation flow still counts as a signup conversion).
+        try {
+          await analyticsService.trackEvent('user_signed_up', {
+            method: 'email',
+            hasSession: !!session,
+          });
+        } catch {
+          /* analytics is best-effort */
+        }
 
         // Clear form data for security
         setEmail('');

@@ -16,6 +16,7 @@ import { BackgroundColorProvider, useBackgroundColor } from '../lib/context/Back
 import { NotificationProvider } from '../lib/context/notification-context';
 import { ErrorBoundary } from '../lib/error-boundary';
 import { initMixpanel, track } from "../lib/mixpanel";
+import { analyticsService } from "../lib/services/analytics-service";
 import { StripeProvider } from '../lib/stripe-context';
 import { WalletProvider } from '../lib/wallet-context';
 import AuthProvider from '../providers/auth-provider';
@@ -205,6 +206,11 @@ function RootLayout({ children }: { children: React.ReactNode }) {
       try {
         await Promise.race([initMixpanel(), new Promise(r => setTimeout(r, 2000))]);
         try { track('Page View', { screen: 'root' }); } catch { /* ignore */ }
+        // Initialize the unified analytics surface (delegates to the same
+        // Mixpanel singleton) and emit the funnel "install/visit" event so
+        // we can measure acquisition → activation drop-off.
+        try { await analyticsService.initialize(); } catch { /* ignore */ }
+        try { await analyticsService.trackEvent('app_opened', { phase: 'startup' }); } catch { /* ignore */ }
       } catch (e) {
         // eslint-disable-next-line no-console
         console.error('[Mixpanel] init failed', e);
