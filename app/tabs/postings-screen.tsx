@@ -12,7 +12,7 @@ import type { Bounty } from "lib/services/database.types"
 import { cn } from "lib/utils"
 import * as React from "react"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { ActivityIndicator, Alert, Animated, FlatList, Keyboard, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from "react-native"
+import { ActivityIndicator, Alert, Animated, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { AddBountyAmountScreen } from "../../components/add-bounty-amount-screen"
 import { AddMoneyScreen } from "../../components/add-money-screen"
@@ -720,8 +720,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   }
 
   return (
-    <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
-      <View className="flex-1 bg-emerald-600">
+    <View className="flex-1 bg-emerald-600">
         {/* Fixed Header (overlay) - measured height to align content under tabs */}
         <View
           onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
@@ -1321,7 +1320,6 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
           />
         )}
       </View>
-    </TouchableWithoutFeedback>
   )
 }
 
