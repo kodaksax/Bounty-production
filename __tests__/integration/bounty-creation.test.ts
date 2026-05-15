@@ -241,45 +241,51 @@ describe('Bounty Creation Integration Tests', () => {
   });
 
   describe('Bounty Creation Error Handling', () => {
-    it('should treat exact-title retry within window as idempotent success (no false duplicate error)', async () => {
-      // This is the regression test for the "false Duplicate Bounty error
-      // while bounty actually created" bug: a retry after a successful insert
-      // must NOT raise a duplicate error - it must return the existing bounty.
-
-      // Mock rate limit check to pass
+    it('should NOT throw a false-duplicate error when called twice with the same title (base service no longer does title-based duplicate detection)', async () => {
+      // Regression test for the false "Duplicate Bounty" bug. The base service
+      // must NEVER throw "Duplicate content detected" — idempotency is the
+      // responsibility of the wrapper at app/services/bountyService.ts which
+      // keys on a full-payload fingerprint and returns a `created` flag so
+      // callers can avoid double-funding escrow. Here we just verify the base
+      // create() succeeds for a payload identical to a recent one, with no
+      // false-positive throw.
       const mockCountResult = { count: 0, error: null };
       const mockGte = jest.fn().mockResolvedValue(mockCountResult);
       const mockEq = jest.fn().mockReturnValue({ gte: mockGte });
       const mockSelectCount = jest.fn().mockReturnValue({ eq: mockEq });
 
-      // Mock duplicate check to find existing bounty (just-created on the
-      // first attempt). The full row is returned so callers can treat as success.
-      const existingBounty = {
-        id: 999,
-        title: 'Duplicate Title',
-        description: 'Test description',
-        amount: 50,
-        is_for_honor: false,
-        poster_id: mockUserId,
-        status: 'open',
-        location: '',
-        timeline: '',
-        skills_required: '',
-        created_at: new Date().toISOString(),
-      };
-      const mockDupResult = {
-        data: [existingBounty],
+      const mockInsertResult = {
+        data: {
+          id: 999,
+          title: 'Duplicate Title',
+          description: 'Test description',
+          amount: 50,
+          is_for_honor: false,
+          poster_id: mockUserId,
+          status: 'open',
+          location: '',
+          timeline: '',
+          skills_required: '',
+          created_at: new Date().toISOString(),
+        } as Bounty,
         error: null,
       };
-      const mockGte2 = jest.fn().mockResolvedValue(mockDupResult);
-      const mockEq2 = jest.fn().mockReturnValue({ gte: mockGte2 });
-      const mockSelectDup = jest.fn().mockReturnValue({ eq: mockEq2 });
+      const mockSingle = jest.fn().mockResolvedValue(mockInsertResult);
+      const mockSelect = jest.fn().mockReturnValue({ single: mockSingle });
+      const mockInsert = jest.fn().mockReturnValue({ select: mockSelect });
+      const mockMaybeSingle = jest
+        .fn()
+        .mockResolvedValue({ data: { username: 'testuser' }, error: null });
+      const mockProfileEq = jest.fn().mockReturnValue({ maybeSingle: mockMaybeSingle });
+      const mockProfileSelect = jest.fn().mockReturnValue({ eq: mockProfileEq });
 
       let callCount = 0;
-      mockSupabase.from.mockImplementation(() => {
+      mockSupabase.from.mockImplementation((table: string) => {
         callCount++;
+        // 1: rate-limit count; 2: profiles lookup; 3: insert
         if (callCount === 1) return { select: mockSelectCount };
-        else return { select: mockSelectDup };
+        if (table === 'profiles') return { select: mockProfileSelect };
+        return { insert: mockInsert };
       });
 
       const bountyData: Omit<Bounty, 'id' | 'created_at'> = {
@@ -294,9 +300,9 @@ describe('Bounty Creation Integration Tests', () => {
         skills_required: '',
       };
 
-      // Must not throw - must return existing bounty (idempotent retry).
       const result = await bountyService.create(bountyData);
-      expect(result).toEqual(existingBounty);
+      expect(result).not.toBeNull();
+      expect(result?.title).toBe('Duplicate Title');
     });
   });
 });

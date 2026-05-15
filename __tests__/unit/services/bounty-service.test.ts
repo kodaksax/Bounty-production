@@ -285,13 +285,7 @@ describe('bountyService', () => {
           eq: jest.fn(() => ({ gte: jest.fn(() => Promise.resolve({ count: 0, error: null })) })),
         })),
       }))
-      // 2: duplicate check
-      .mockImplementationOnce(() => ({
-        select: jest.fn(() => ({
-          eq: jest.fn(() => ({ gte: jest.fn(() => Promise.resolve({ data: [], error: null })) })),
-        })),
-      }))
-      // 3: profile lookup
+      // 2: profile lookup (base service no longer performs a duplicate check)
       .mockImplementationOnce(() => ({
         select: jest.fn(() => ({
           eq: jest.fn(() => ({
@@ -301,7 +295,7 @@ describe('bountyService', () => {
           })),
         })),
       }))
-      // 4: insert
+      // 3: insert
       .mockImplementationOnce(() => ({
         insert: jest.fn(() => ({
           select: jest.fn(() => ({

@@ -748,12 +748,13 @@ export const bountyService = {
   },
 
   /**
-   * Create a new bounty with offline support
-   * Includes spam prevention (rate limiting, max 10/day) and idempotent retry
-   * protection: if the same poster submits an identical title within a short
-   * window, the existing bounty is returned instead of throwing a false-duplicate
-   * error (handles double-tap / network-retry races where the insert succeeded
-   * but the response was lost on the client).
+   * Create a new bounty with offline support.
+   * Includes spam prevention via rate limiting (max 10/day). Idempotent retry
+   * protection (handling double-tap / network-retry races where the insert
+   * succeeded but the response was lost on the client) is implemented in the
+   * wrapper at app/services/bountyService.ts so it can return a `created` flag
+   * to callers (preventing double-funded escrow) and atomically de-duplicate
+   * concurrent submissions for the same draft.
    */
   async create(bounty: Omit<Bounty, 'id' | 'created_at'>): Promise<Bounty | null> {
     try {
@@ -793,56 +794,6 @@ export const bountyService = {
           logger.warning('Rate limit check failed, proceeding with creation', {
             error: rateLimitError,
           });
-        }
-      }
-
-      // Idempotency / retry-race protection: if the same poster created a bounty with
-      // the exact same (normalized) title within a short window, treat this call as a
-      // retry of the original insert and return the existing bounty as success.
-      //
-      // This fixes the "false Duplicate Bounty error while bounty actually created"
-      // bug caused by network retries / double-tap submits after a successful insert
-      // whose response was lost or delayed on the client. Throwing here would surface
-      // a misleading error even though the bounty exists in the DB.
-      //
-      // Note: the window is intentionally short (seconds, not 24h) so that users who
-      // legitimately want to repost a similar bounty later are NOT blocked.
-      const DUPLICATE_RETRY_WINDOW_MS = 60_000; // 60 seconds
-      if (posterId && bounty.title && isSupabaseConfigured) {
-        try {
-          const windowStart = new Date(Date.now() - DUPLICATE_RETRY_WINDOW_MS);
-
-          const { data: recentBounties, error: dupError } = await supabase
-            .from('bounties')
-            .select('*')
-            .eq('poster_id', posterId)
-            .gte('created_at', windowStart.toISOString());
-
-          if (!dupError && recentBounties && recentBounties.length > 0) {
-            const normalizedNewTitle = bounty.title.toLowerCase().trim();
-            const existing = (recentBounties as Bounty[]).find(b => {
-              const existingTitle = (b?.title || '').toLowerCase().trim();
-              return existingTitle === normalizedNewTitle;
-            });
-
-            if (existing) {
-              // Treat as idempotent retry: return the already-created bounty as success.
-              logger.warning(
-                'Idempotent retry detected for bounty creation - returning existing bounty',
-                {
-                  posterId,
-                  title: bounty.title,
-                  existingId: existing.id,
-                  windowMs: DUPLICATE_RETRY_WINDOW_MS,
-                }
-              );
-              return existing;
-            }
-          }
-        } catch (dupError) {
-          // Log but don't block if duplicate check fails - never let this check
-          // produce a false-duplicate error to the user.
-          logger.warning('Duplicate check failed, proceeding with creation', { error: dupError });
         }
       }
 
