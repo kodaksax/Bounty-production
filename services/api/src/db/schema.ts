@@ -43,6 +43,7 @@ export const bounties = pgTable('bounties', {
   is_for_honor: boolean('is_for_honor').default(false).notNull(),
   status: text('status').notNull().default('open'),
   payment_intent_id: text('payment_intent_id'), // Store Stripe PaymentIntent ID for escrow
+  client_request_id: text('client_request_id'), // Idempotency key for create requests
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   is_stale: boolean('is_stale').default(false).notNull(), // Flag for stale bounties (hunter deleted)

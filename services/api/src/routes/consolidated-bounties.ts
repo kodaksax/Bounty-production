@@ -77,6 +77,7 @@ const baseBountySchema = z.object({
     .datetime()
     .optional(),
   idempotencyKey: z.string().optional(),
+  client_request_id: z.string().optional(),
 });
 
 // Derive refined and partial schemas
@@ -94,6 +95,38 @@ const createBountySchema = baseBountySchema.refine(data => {
 
 // Schema for updating a bounty (partial)
 const updateBountySchema = baseBountySchema.partial();
+
+function isClientRequestIdSchemaError(error: any): boolean {
+  const message = String(error?.message || error || '');
+  return /client_request_id/i.test(message) && /column|schema|cache|not found|does not exist/i.test(message);
+}
+
+function isUniqueViolation(error: any): boolean {
+  const message = String(error?.message || error || '');
+  return error?.code === '23505' || /duplicate key|unique constraint|already exists/i.test(message);
+}
+
+async function findExistingBountyByClientRequestId(
+  supabase: any,
+  userId: string,
+  clientRequestId?: string
+) {
+  if (!clientRequestId) return null;
+
+  const { data, error } = await supabase
+    .from('bounties')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('client_request_id', clientRequestId)
+    .maybeSingle();
+
+  if (error) {
+    if (isClientRequestIdSchemaError(error)) return null;
+    throw error;
+  }
+
+  return data || null;
+}
 
 // Schema for listing bounties with filters
 const listBountiesSchema = z.object({
@@ -144,6 +177,7 @@ interface Bounty {
   created_at: string;
   updated_at: string;
   due_date?: string | null;
+  client_request_id?: string | null;
 }
 
 /**
@@ -472,21 +506,16 @@ export async function registerConsolidatedBountyRoutes(
     asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
       const userId = request.userId!;
       const body = createBountySchema.parse(request.body);
-      const { idempotencyKey } = body;
-
-      if (idempotencyKey) {
-        const isDuplicate = await checkIdempotencyKey(idempotencyKey);
-        if (isDuplicate) {
-          return reply.code(409).send({
-            error: 'Duplicate request detected',
-            code: 'duplicate_transaction'
-          });
-        }
-        await storeIdempotencyKey(idempotencyKey);
-      }
+      const clientRequestId = body.client_request_id || body.idempotencyKey;
 
       request.log.info(
-        { userId, title: body.title, amount: body.amount, isForHonor: body.isForHonor },
+        {
+          userId,
+          title: body.title,
+          amount: body.amount,
+          isForHonor: body.isForHonor,
+          clientRequestId,
+        },
         'Creating bounty'
       );
 
@@ -495,6 +524,30 @@ export async function registerConsolidatedBountyRoutes(
 
       try {
         const supabase = getSupabaseAdmin();
+
+        if (clientRequestId) {
+          const existing = await findExistingBountyByClientRequestId(
+            supabase,
+            userId,
+            clientRequestId
+          );
+          if (existing) {
+            request.log.info(
+              { userId, bountyId: existing.id, clientRequestId },
+              'Returning existing bounty for idempotent create request'
+            );
+            return reply.code(200).send(existing);
+          }
+
+          const isDuplicate = await checkIdempotencyKey(clientRequestId);
+          if (isDuplicate) {
+            return reply.code(409).send({
+              error: 'Bounty creation is already in progress',
+              code: 'request_in_progress',
+            });
+          }
+          await storeIdempotencyKey(clientRequestId);
+        }
 
         // For paid bounties (non-honor with amount > 0), check wallet balance
         if (!body.isForHonor && body.amount > 0) {
@@ -528,6 +581,7 @@ export async function registerConsolidatedBountyRoutes(
           amount: body.amount,
           isForHonor: body.isForHonor,
           status: 'open',
+          client_request_id: clientRequestId,
         };
 
         // Add optional fields
@@ -555,13 +609,43 @@ export async function registerConsolidatedBountyRoutes(
 
         try {
           // Create the bounty via Supabase first
-          const { data: bounty, error } = await supabase
+          let { data: bounty, error } = await supabase
             .from('bounties')
             .insert(bountyData)
             .select()
             .single();
 
+          if (error && clientRequestId && isClientRequestIdSchemaError(error)) {
+            request.log.warn(
+              { error: error.message, userId, clientRequestId },
+              'client_request_id column unavailable, retrying bounty insert without it'
+            );
+            const retryBountyData = { ...bountyData };
+            delete (retryBountyData as any).client_request_id;
+            const retry = await supabase
+              .from('bounties')
+              .insert(retryBountyData)
+              .select()
+              .single();
+            bounty = retry.data;
+            error = retry.error;
+          }
+
           if (error) {
+            if (clientRequestId && isUniqueViolation(error)) {
+              const existing = await findExistingBountyByClientRequestId(
+                supabase,
+                userId,
+                clientRequestId
+              );
+              if (existing) {
+                request.log.info(
+                  { userId, bountyId: existing.id, clientRequestId },
+                  'Resolved bounty create unique conflict to existing bounty'
+                );
+                return reply.code(200).send(existing);
+              }
+            }
             request.log.error({ error: error.message, userId }, 'Bounty creation failed');
             throw new Error(error.message);
           }
@@ -573,7 +657,7 @@ export async function registerConsolidatedBountyRoutes(
                 bounty.id,
                 userId,
                 body.amount,
-                idempotencyKey
+                clientRequestId
               );
 
               request.log.info(
@@ -631,7 +715,7 @@ export async function registerConsolidatedBountyRoutes(
       } catch (error) {
         // Handle idempotency key cleanup
         if (createBountySchema.safeParse(request.body).success) {
-          const key = (request.body as any).idempotencyKey;
+          const key = (request.body as any).client_request_id || (request.body as any).idempotencyKey;
           if (key) await removeIdempotencyKey(key);
         }
 

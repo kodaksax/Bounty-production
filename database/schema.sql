@@ -94,6 +94,7 @@ CREATE TABLE bounties (
     is_time_sensitive boolean NOT NULL DEFAULT FALSE,
     deadline timestamptz NULL,
     attachments_json jsonb,
+    client_request_id text,
     created_at timestamptz NOT NULL DEFAULT NOW(),
     updated_at timestamptz NOT NULL DEFAULT NOW()
 );
@@ -184,6 +185,7 @@ FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 -- Indexes: include poster/hunter indexes to support joins
 CREATE INDEX idx_bounties_user_id ON bounties(user_id);
 CREATE INDEX IF NOT EXISTS idx_bounties_poster_id ON bounties(poster_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bounties_poster_client_request_id ON bounties(poster_id, client_request_id) WHERE client_request_id IS NOT NULL;
 CREATE INDEX idx_bounties_status ON bounties(status);
 CREATE INDEX idx_bounties_created_at ON bounties(created_at);
 CREATE INDEX idx_bounty_requests_bounty_id ON bounty_requests(bounty_id);

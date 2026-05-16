@@ -208,6 +208,18 @@ export function getUserFriendlyError(error: any): UserFriendlyError {
     return getPaymentUserFriendlyError(error);
   }
 
+  // True duplicate bounty errors should be explicit and actionable. They should
+  // not fall through to the generic technical-detail sanitizer.
+  if (/duplicate content detected|similar bounty|duplicate bounty/i.test(errorMessage)) {
+    return {
+      type: 'validation',
+      title: 'Similar Bounty Found',
+      message: 'A similar bounty was already posted. Edit the title or details before posting again.',
+      action: 'Edit Bounty',
+      retryable: false,
+    };
+  }
+
   // Validation errors
   if (error?.status === 400 || error?.type === 'validation') {
     // Sanitize validation messages that might contain technical details

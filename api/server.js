@@ -764,7 +764,9 @@ app.post('/api/bounties', async (req, res) => {
       work_type,
       is_time_sensitive,
       deadline,
-      attachments_json
+      attachments_json,
+      client_request_id,
+      idempotencyKey
     } = validation.data;
     
     // Additional business logic validation
@@ -776,6 +778,28 @@ app.post('/api/bounties', async (req, res) => {
     
     // Resolve posterId: prefer poster_id, fall back to legacy user_id if provided
     let posterId = poster_id || validation.data.user_id || null;
+    const clientRequestId = client_request_id || idempotencyKey || req.get('Idempotency-Key') || null;
+
+    if (posterId && clientRequestId) {
+      try {
+        const [existingRows] = await conn.execute(
+          'SELECT * FROM bounties WHERE poster_id = ? AND client_request_id = ? LIMIT 1',
+          [posterId, clientRequestId]
+        );
+        if (existingRows && existingRows.length > 0) {
+          console.log('[create bounty] idempotent replay returning existing bounty', {
+            posterId,
+            clientRequestId,
+            bountyId: existingRows[0].id,
+          });
+          return res.status(200).json(existingRows[0]);
+        }
+      } catch (lookupErr) {
+        if (!/client_request_id|unknown column|no such column/i.test((lookupErr && lookupErr.message) || '')) {
+          console.warn('[create bounty] idempotency lookup failed:', (lookupErr && lookupErr.message) || lookupErr);
+        }
+      }
+    }
 
     // Ensure we have a username to satisfy DB NOT NULL constraints on bounties.username.
     // If the profile does not exist, create a minimal profile row so the profile shown
@@ -819,17 +843,48 @@ app.post('/api/bounties', async (req, res) => {
       }
     }
 
-    const [result] = await conn.execute(`
-      INSERT INTO bounties (
-        title, description, amount, is_for_honor, location, 
-        timeline, skills_required, poster_id, username, work_type, 
-        is_time_sensitive, deadline, attachments_json, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      title, description, amount || 0, is_for_honor || false, location,
-      timeline, skills_required, posterId, posterUsername, work_type || 'online',
-      is_time_sensitive || false, deadline, attachments_json, 'open'
-    ]);
+    const insertBounty = async (includeClientRequestId) => {
+      const columns = [
+        'title', 'description', 'amount', 'is_for_honor', 'location',
+        'timeline', 'skills_required', 'poster_id', 'username', 'work_type',
+        'is_time_sensitive', 'deadline', 'attachments_json', 'status',
+      ];
+      const values = [
+        title, description, amount || 0, is_for_honor || false, location,
+        timeline, skills_required, posterId, posterUsername, work_type || 'online',
+        is_time_sensitive || false, deadline, attachments_json, 'open',
+      ];
+      if (includeClientRequestId) {
+        columns.push('client_request_id');
+        values.push(clientRequestId);
+      }
+      const placeholders = columns.map(() => '?').join(', ');
+      return conn.execute(
+        `INSERT INTO bounties (${columns.join(', ')}) VALUES (${placeholders})`,
+        values
+      );
+    };
+
+    let result;
+    try {
+      [result] = await insertBounty(Boolean(clientRequestId));
+    } catch (insertErr) {
+      if (clientRequestId && /client_request_id|unknown column|no such column/i.test((insertErr && insertErr.message) || '')) {
+        console.warn('[create bounty] retrying insert without client_request_id:', insertErr.message);
+        [result] = await insertBounty(false);
+      } else if (clientRequestId && /duplicate|unique/i.test((insertErr && insertErr.message) || '')) {
+        const [existingRows] = await conn.execute(
+          'SELECT * FROM bounties WHERE poster_id = ? AND client_request_id = ? LIMIT 1',
+          [posterId, clientRequestId]
+        );
+        if (existingRows && existingRows.length > 0) {
+          return res.status(200).json(existingRows[0]);
+        }
+        throw insertErr;
+      } else {
+        throw insertErr;
+      }
+    }
     
     // Fetch and return the created bounty
     const [rows] = await conn.execute('SELECT * FROM bounties WHERE id = ?', [result.insertId]);
@@ -859,19 +914,45 @@ app.post('/api/supabase/bounties', async (req, res) => {
       location: String(input.location || ''),
       timeline: String(input.timeline || ''),
       skills_required: String(input.skills_required || ''),
-  // support legacy `user_id` by mapping to `poster_id`
-  poster_id: String(input.poster_id || input.user_id || '').trim(),
+      // support legacy `user_id` by mapping to `poster_id`
+      poster_id: String(input.poster_id || input.user_id || '').trim(),
       status: input.status || 'open',
       work_type: input.work_type || 'online',
       is_time_sensitive: Boolean(input.is_time_sensitive || false),
       deadline: input.deadline || null,
       attachments_json: input.attachments_json || null,
+      client_request_id: input.client_request_id || input.idempotencyKey || req.get('Idempotency-Key') || null,
     }
 
     if (!record.title) return res.status(400).json({ error: 'title is required' })
     if (!record.description) return res.status(400).json({ error: 'description is required' })
     if (!record.is_for_honor && (!record.amount || record.amount <= 0)) return res.status(400).json({ error: 'amount must be > 0 for paid bounties' })
-  if (!record.poster_id) return res.status(400).json({ error: 'poster_id is required' })
+    if (!record.poster_id) return res.status(400).json({ error: 'poster_id is required' })
+
+    if (record.client_request_id) {
+      try {
+        const { data: existing, error: existingErr } = await supabaseAdmin
+          .from('bounties')
+          .select('*')
+          .eq('poster_id', record.poster_id)
+          .eq('client_request_id', record.client_request_id)
+          .maybeSingle()
+
+        if (!existingErr && existing) {
+          console.log('[relay supabase/bounties] idempotent replay returning existing bounty', {
+            posterId: record.poster_id,
+            clientRequestId: record.client_request_id,
+            bountyId: existing.id,
+          })
+          return res.status(200).json(existing)
+        }
+        if (existingErr && !/client_request_id|column|schema|does not exist|not found/i.test(existingErr.message || '')) {
+          console.warn('[relay supabase/bounties] idempotency lookup failed:', existingErr.message)
+        }
+      } catch (lookupErr) {
+        console.warn('[relay supabase/bounties] idempotency lookup threw:', lookupErr?.message || lookupErr)
+      }
+    }
 
     // Ensure profile exists to satisfy potential FK constraints
     try {
@@ -911,13 +992,35 @@ app.post('/api/supabase/bounties', async (req, res) => {
       record.username = record.username || '@Jon_Doe'
     }
 
-    const { data, error } = await supabaseAdmin
+    let { data, error } = await supabaseAdmin
       .from('bounties')
       .insert(Object.assign({}, record, { user_id: record.poster_id }))
       .select('*')
       .single()
 
+    if (error && record.client_request_id && /client_request_id|column|schema|does not exist|not found/i.test(error.message || '')) {
+      console.warn('[relay supabase/bounties] retrying insert without client_request_id:', error.message)
+      const retryRecord = Object.assign({}, record, { user_id: record.poster_id })
+      delete retryRecord.client_request_id
+      const retry = await supabaseAdmin
+        .from('bounties')
+        .insert(retryRecord)
+        .select('*')
+        .single()
+      data = retry.data
+      error = retry.error
+    }
+
     if (error) {
+      if (record.client_request_id && /duplicate|unique|23505/i.test(error.message || '')) {
+        const { data: existing } = await supabaseAdmin
+          .from('bounties')
+          .select('*')
+          .eq('poster_id', record.poster_id)
+          .eq('client_request_id', record.client_request_id)
+          .maybeSingle()
+        if (existing) return res.status(200).json(existing)
+      }
       return res.status(400).json({ error: error.message })
     }
 

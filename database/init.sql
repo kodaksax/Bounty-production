@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS bounties (
     status VARCHAR(20) DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'completed', 'archived')),
     poster_id UUID REFERENCES users(id) ON DELETE CASCADE,
     hunter_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    client_request_id TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -40,6 +41,7 @@ CREATE TABLE IF NOT EXISTS outbox_events (
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_bounties_status ON bounties(status);
 CREATE INDEX IF NOT EXISTS idx_bounties_poster_id ON bounties(poster_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bounties_poster_client_request_id ON bounties(poster_id, client_request_id) WHERE client_request_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_bounties_hunter_id ON bounties(hunter_id);
 CREATE INDEX IF NOT EXISTS idx_outbox_events_processed ON outbox_events(processed_at);
 CREATE INDEX IF NOT EXISTS idx_outbox_events_created ON outbox_events(created_at);
