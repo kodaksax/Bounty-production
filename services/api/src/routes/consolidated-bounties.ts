@@ -201,6 +201,53 @@ function validateStatusTransition(
   return { valid: true };
 }
 
+const RECENT_CREATE_RETRY_WINDOW_MS = 2 * 60 * 1000;
+
+function normalizeDuplicateValue(value: unknown): string {
+  if (Array.isArray(value)) {
+    return value.map(item => String(item ?? '').trim()).filter(Boolean).join(',').toLowerCase();
+  }
+  return String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function normalizeDuplicateAmount(value: unknown): number {
+  const amount = Number(value ?? 0);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function matchesCreateRequest(existing: any, body: z.infer<typeof createBountySchema>): boolean {
+  return (
+    normalizeDuplicateValue(existing?.title) === normalizeDuplicateValue(body.title) &&
+    normalizeDuplicateValue(existing?.description) === normalizeDuplicateValue(body.description) &&
+    normalizeDuplicateAmount(existing?.amount) === normalizeDuplicateAmount(body.amount) &&
+    Boolean(existing?.is_for_honor) === Boolean(body.isForHonor) &&
+    normalizeDuplicateValue(existing?.location) === normalizeDuplicateValue(body.location) &&
+    normalizeDuplicateValue(existing?.category) === normalizeDuplicateValue(body.category) &&
+    normalizeDuplicateValue(existing?.skills_required) === normalizeDuplicateValue(body.skills_required)
+  );
+}
+
+async function findRecentMatchingBounty(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  userId: string,
+  body: z.infer<typeof createBountySchema>
+): Promise<any | null> {
+  const retryWindowStart = new Date(Date.now() - RECENT_CREATE_RETRY_WINDOW_MS).toISOString();
+  const { data, error } = await supabase
+    .from('bounties')
+    .select('id,user_id,title,description,amount,is_for_honor,location,category,skills_required,status,created_at,updated_at')
+    .eq('user_id', userId)
+    .gte('created_at', retryWindowStart)
+    .order('created_at', { ascending: false })
+    .limit(5);
+
+  if (error || !data) {
+    return null;
+  }
+
+  return data.find((row: any) => matchesCreateRequest(row, body)) ?? null;
+}
+
 /**
  * Register all consolidated bounty routes
  */
@@ -477,6 +524,19 @@ export async function registerConsolidatedBountyRoutes(
       if (idempotencyKey) {
         const isDuplicate = await checkIdempotencyKey(idempotencyKey);
         if (isDuplicate) {
+          const existingBounty = await findRecentMatchingBounty(getSupabaseAdmin(), userId, body);
+          if (existingBounty) {
+            request.log.info(
+              { userId, bountyId: existingBounty.id, idempotencyKey },
+              'Idempotent bounty create retry resolved to existing bounty'
+            );
+            reply.code(200);
+            return {
+              ...existingBounty,
+              idempotent: true,
+            };
+          }
+
           return reply.code(409).send({
             error: 'Duplicate request detected',
             code: 'duplicate_transaction'
@@ -505,6 +565,9 @@ export async function registerConsolidatedBountyRoutes(
               { userId, required: body.amount, available: balance },
               'Insufficient wallet balance for bounty creation'
             );
+            if (idempotencyKey) {
+              await removeIdempotencyKey(idempotencyKey);
+            }
             return reply.code(400).send({
               error: 'Insufficient wallet balance',
               required: body.amount,

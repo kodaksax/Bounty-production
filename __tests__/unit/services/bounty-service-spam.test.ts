@@ -163,13 +163,25 @@ describe('Bounty Service - Spam Prevention', () => {
   });
 
   describe('Duplicate Detection', () => {
-    it('should block creation for exact duplicate titles', async () => {
+    it('should block creation for an exact duplicate payload outside the retry window', async () => {
       // Mock rate limit check to pass
       const rateLimitChain = createMockQueryChain({ count: 0, error: null });
       
-      // Mock duplicate check to return existing bounty with same title
+      // Mock duplicate check to return an older bounty with the same payload
       const duplicateChain = createMockQueryChain({ 
-        data: [{ title: 'Fix My Website' }], 
+        data: [{
+          id: 10,
+          title: 'Fix My Website',
+          description: 'Test description with sufficient length',
+          amount: 100,
+          is_for_honor: false,
+          location: 'Test Location',
+          work_type: '',
+          category: '',
+          timeline: '1 week',
+          skills_required: 'Testing',
+          created_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+        }],
         error: null 
       });
 
@@ -192,10 +204,63 @@ describe('Bounty Service - Spam Prevention', () => {
       );
     });
 
-    it('should block creation for case-insensitive duplicate titles', async () => {
+    it('should resolve a recent exact duplicate payload as an idempotent success', async () => {
+      const rateLimitChain = createMockQueryChain({ count: 0, error: null });
+      const existingBounty = {
+        id: 10,
+        title: 'Fix My Website',
+        description: 'Test description with sufficient length',
+        amount: 100,
+        is_for_honor: false,
+        location: 'Test Location',
+        work_type: '',
+        category: '',
+        timeline: '1 week',
+        skills_required: 'Testing',
+        poster_id: 'user-123',
+        status: 'open',
+        created_at: new Date(Date.now() - 30 * 1000).toISOString(),
+      };
+      const duplicateChain = createMockQueryChain({ 
+        data: [existingBounty],
+        error: null 
+      });
+
+      let callCount = 0;
+      supabase.from.mockImplementation((table: string) => {
+        callCount++;
+        if (callCount === 1) return rateLimitChain;
+        return duplicateChain;
+      });
+
+      const bounty = createTestBounty({ title: 'Fix My Website' });
+
+      await expect(bountyService.create(bounty)).resolves.toEqual(
+        expect.objectContaining({ id: 10, title: 'Fix My Website' })
+      );
+      expect(logger.warning).toHaveBeenCalledWith(
+        'Duplicate bounty retry resolved as existing success',
+        expect.objectContaining({ posterId: 'user-123', title: 'Fix My Website', bountyId: 10 })
+      );
+      expect(supabase.from).toHaveBeenCalledTimes(2);
+    });
+
+    it('should block creation for case-insensitive exact duplicate payloads outside the retry window', async () => {
       const rateLimitChain = createMockQueryChain({ count: 0, error: null });
       const duplicateChain = createMockQueryChain({ 
-        data: [{ title: 'fix my website' }], 
+        data: [{
+          id: 11,
+          title: 'fix my website',
+          description: 'Test description with sufficient length',
+          amount: 100,
+          is_for_honor: false,
+          location: 'Test Location',
+          work_type: '',
+          category: '',
+          timeline: '1 week',
+          skills_required: 'Testing',
+          created_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+        }],
         error: null 
       });
 
@@ -211,6 +276,43 @@ describe('Bounty Service - Spam Prevention', () => {
       await expect(bountyService.create(bounty)).rejects.toThrow(
         'Duplicate content detected'
       );
+    });
+
+    it('should allow creation when the title matches but the payload is different', async () => {
+      const rateLimitChain = createMockQueryChain({ count: 0, error: null });
+      const duplicateChain = createMockQueryChain({ 
+        data: [{
+          title: 'Fix My Website',
+          description: 'A different existing bounty description',
+          amount: 25,
+          is_for_honor: false,
+          location: 'Remote',
+          work_type: '',
+          category: '',
+          timeline: '2 weeks',
+          skills_required: 'Frontend',
+          created_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+        }], 
+        error: null 
+      });
+      const profileChain = createMockQueryChain({ data: { username: 'testuser' }, error: null });
+      const insertChain = createMockQueryChain({ 
+        data: { id: 1, title: 'Fix My Website' }, 
+        error: null 
+      });
+
+      let callCount = 0;
+      supabase.from.mockImplementation((table: string) => {
+        callCount++;
+        if (table === 'bounties' && callCount === 1) return rateLimitChain;
+        if (table === 'bounties' && callCount === 2) return duplicateChain;
+        if (table === 'profiles') return profileChain;
+        return insertChain;
+      });
+
+      const bounty = createTestBounty({ title: 'Fix My Website' });
+
+      await expect(bountyService.create(bounty)).resolves.toBeDefined();
     });
 
     it('should allow creation for different titles', async () => {
@@ -325,7 +427,19 @@ describe('Bounty Service - Spam Prevention', () => {
     it('should handle trimmed and whitespace titles correctly', async () => {
       const rateLimitChain = createMockQueryChain({ count: 0, error: null });
       const duplicateChain = createMockQueryChain({ 
-        data: [{ title: '  Fix My Website  ' }], 
+        data: [{
+          id: 12,
+          title: '  Fix My Website  ',
+          description: 'Test description with sufficient length',
+          amount: 100,
+          is_for_honor: false,
+          location: 'Test Location',
+          work_type: '',
+          category: '',
+          timeline: '1 week',
+          skills_required: 'Testing',
+          created_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+        }], 
         error: null 
       });
 
