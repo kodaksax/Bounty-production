@@ -473,6 +473,7 @@ Bounty acceptance, completion, cancellation, disputes, hunter flows, and posting
 - [Hunter Flow Complete](bounty-flows/HUNTER_FLOW_COMPLETE.md)
 - [Postings Enhancement Readme](bounty-flows/POSTINGS_ENHANCEMENT_README.md)
 - [Postings Enhancement Summary](bounty-flows/POSTINGS_ENHANCEMENT_SUMMARY.md)
+- [Postings Screen Developer Guide](bounty-flows/POSTINGS_SCREEN_DEVELOPER_GUIDE.md)
 - [Request Acceptance Fix](bounty-flows/REQUEST_ACCEPTANCE_FIX.md)
 - [Stale Bounty System](bounty-flows/STALE_BOUNTY_SYSTEM.md)
 - [Stale Bounty Visual Guide](bounty-flows/STALE_BOUNTY_VISUAL_GUIDE.md)
