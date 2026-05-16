@@ -296,11 +296,11 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   }, [loadMyBounties, loadInProgress])
 
   const tabs = [
-    { id: "new", label: "New" },
-    { id: "inProgress", label: "In Progress" },
-    { id: "myPostings", label: "My Postings" },
-    { id: "requests", label: "Requests" },
-  ]
+    { id: "new", label: "New Bounty", shortLabel: "New", icon: "add-circle-outline" },
+    { id: "inProgress", label: "In Progress", shortLabel: "Work", icon: "play-circle-outline" },
+    { id: "myPostings", label: "My Postings", shortLabel: "Posts", icon: "assignment" },
+    { id: "requests", label: "Requests", shortLabel: "Requests", icon: "people-outline" },
+  ] as const
 
   // Count of unreviewed (pending) requests — drives the badge on the Requests tab
   const pendingRequestCount = React.useMemo(
@@ -704,6 +704,13 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
     [myBounties, needsPosterReview]
   )
 
+  const getTabBadgeCount = React.useCallback((tabId: string) => {
+    if (tabId === 'requests') return pendingRequestCount
+    if (tabId === 'inProgress') return inProgressReviewCount
+    if (tabId === 'myPostings') return myPostingsReviewCount
+    return 0
+  }, [inProgressReviewCount, myPostingsReviewCount, pendingRequestCount])
+
   const renderRequestItem = React.useCallback(({ item: request }: { item: BountyRequestWithDetails }) => (
     <ApplicantCard
       request={request}
@@ -797,6 +804,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
             <View className="flex-row items-center rounded-full bg-emerald-700/40 p-1 border border-emerald-500/30">
               {tabs.map((tab, idx) => {
                 const isActive = activeTab === tab.id
+                const badgeCount = getTabBadgeCount(tab.id)
                 return (
                   <TouchableOpacity
                     key={tab.id}
@@ -815,24 +823,30 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                     }}
                     accessibilityRole="tab"
                     accessibilityLabel={
-                      tab.id === 'requests' && pendingRequestCount > 0
-                        ? `${tab.label}, ${pendingRequestCount} pending`
+                      badgeCount > 0
+                        ? `${tab.label}, ${badgeCount} need attention`
                         : tab.label
                     }
                     accessibilityState={{ selected: isActive }}
                     accessibilityHint={`Switch to ${tab.label} tab`}
                   >
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <MaterialIcons
+                        name={tab.icon as keyof typeof MaterialIcons.glyphMap}
+                        size={14}
+                        color={isActive ? '#047857' : 'rgba(167, 243, 208, 0.75)'}
+                        accessibilityElementsHidden={true}
+                      />
                       <Text
                         className={cn(
-                          "text-xs font-semibold tracking-wide",
+                          "text-xs font-semibold tracking-wide ml-1",
                           isActive ? "text-emerald-700" : "text-emerald-200/70"
                         )}
                         numberOfLines={1}
                       >
-                        {tab.label.toUpperCase()}
+                        {tab.shortLabel.toUpperCase()}
                       </Text>
-                      {tab.id === 'requests' && pendingRequestCount > 0 && (
+                      {badgeCount > 0 && (
                         <View
                           style={{
                             marginLeft: 4,
@@ -846,7 +860,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                           }}
                         >
                           <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', lineHeight: 12 }}>
-                            {pendingRequestCount > 99 ? '99+' : pendingRequestCount}
+                            {badgeCount > 99 ? '99+' : badgeCount}
                           </Text>
                         </View>
                       )}

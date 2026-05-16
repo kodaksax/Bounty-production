@@ -131,8 +131,7 @@ interface BountyWorkflowGuideProps {
  */
 export function BountyWorkflowGuide({ variant }: BountyWorkflowGuideProps) {
   const [dismissed, setDismissed] = useState(false);
-  // Start collapsed by default so the guide is rolled up on first view
-  const [collapsed, setCollapsed] = useState(true);
+  const [collapsed, setCollapsed] = useState(false);
 
   if (dismissed) return null;
 
