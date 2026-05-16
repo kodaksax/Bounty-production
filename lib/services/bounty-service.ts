@@ -87,7 +87,35 @@ function logOnce(key: string, level: 'error' | 'warn', message: string, meta?: a
 
 // Spam prevention constants
 const DAILY_BOUNTY_LIMIT = 10; // Maximum bounties a user can create per day
-const MIN_TITLE_LENGTH_FOR_DUPLICATE_CHECK = 10; // Minimum title length for substring matching
+const RECENT_CREATE_RETRY_WINDOW_MS = 2 * 60 * 1000;
+
+function normalizeDuplicateValue(value: unknown): string {
+  return String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function normalizeDuplicateAmount(value: unknown): number {
+  const amount = Number(value ?? 0);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function isRecentlyCreated(row: any): boolean {
+  const createdAt = Date.parse(String(row?.created_at ?? ''));
+  return Number.isFinite(createdAt) && Date.now() - createdAt <= RECENT_CREATE_RETRY_WINDOW_MS;
+}
+
+function isSameBountyPayload(existing: any, incoming: any): boolean {
+  return (
+    normalizeDuplicateValue(existing?.title) === normalizeDuplicateValue(incoming?.title) &&
+    normalizeDuplicateValue(existing?.description) === normalizeDuplicateValue(incoming?.description) &&
+    normalizeDuplicateAmount(existing?.amount) === normalizeDuplicateAmount(incoming?.amount) &&
+    Boolean(existing?.is_for_honor) === Boolean((incoming as any)?.is_for_honor) &&
+    normalizeDuplicateValue(existing?.location) === normalizeDuplicateValue((incoming as any)?.location) &&
+    normalizeDuplicateValue(existing?.work_type) === normalizeDuplicateValue((incoming as any)?.work_type) &&
+    normalizeDuplicateValue(existing?.category) === normalizeDuplicateValue((incoming as any)?.category) &&
+    normalizeDuplicateValue(existing?.timeline) === normalizeDuplicateValue((incoming as any)?.timeline) &&
+    normalizeDuplicateValue(existing?.skills_required) === normalizeDuplicateValue((incoming as any)?.skills_required)
+  );
+}
 
 /**
  * Escape a user-supplied query string before embedding it in a Supabase/PostgREST
@@ -800,19 +828,33 @@ export const bountyService = {
 
           const { data: recentBounties, error: dupError } = await supabase
             .from('bounties')
-            .select('title')
+            .select(
+              'id,title,description,amount,is_for_honor,location,work_type,category,timeline,skills_required,poster_id,user_id,status,created_at,updated_at'
+            )
             .eq('poster_id', posterId)
             .gte('created_at', oneDayAgo.toISOString());
 
           if (!dupError && recentBounties && recentBounties.length > 0) {
             const normalizedNewTitle = bounty.title.toLowerCase().trim();
-            const isDuplicate = recentBounties.some((b: { title: string }) => {
+            const exactDuplicate = recentBounties.find((b: any) => {
               const existingTitle = (b.title || '').toLowerCase().trim();
-              // Only check for exact match to avoid false positives
-              return existingTitle === normalizedNewTitle;
+              return existingTitle === normalizedNewTitle && isSameBountyPayload(b, bounty);
             });
 
-            if (isDuplicate) {
+            if (exactDuplicate && isRecentlyCreated(exactDuplicate)) {
+              logger.warning('Duplicate bounty retry resolved as existing success', {
+                posterId,
+                title: bounty.title,
+                bountyId: exactDuplicate.id,
+              });
+              return {
+                ...exactDuplicate,
+                poster_id: (exactDuplicate as any).poster_id ?? (exactDuplicate as any).user_id,
+                user_id: (exactDuplicate as any).user_id ?? (exactDuplicate as any).poster_id,
+              } as Bounty;
+            }
+
+            if (exactDuplicate) {
               logger.warning('Duplicate bounty detected', { posterId, title: bounty.title });
               throw new Error(
                 'Duplicate content detected: A similar bounty was recently posted. Please create unique content.'
