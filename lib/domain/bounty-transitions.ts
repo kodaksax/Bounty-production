@@ -26,6 +26,8 @@ export const bountyCreateSchema = z.object({
   is_time_sensitive: z.boolean().default(false),
   deadline: z.string().optional(),
   attachments_json: z.string().optional(),
+  client_request_id: z.string().optional(),
+  idempotencyKey: z.string().optional(),
 });
 
 export const bountyUpdateSchema = bountyCreateSchema.partial().omit({ user_id: true });

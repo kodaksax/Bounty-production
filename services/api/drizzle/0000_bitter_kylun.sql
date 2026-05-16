@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS "bounties" (
 	"amount_cents" integer DEFAULT 0 NOT NULL,
 	"is_for_honor" boolean DEFAULT false NOT NULL,
 	"status" text DEFAULT 'open' NOT NULL,
+	"client_request_id" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );

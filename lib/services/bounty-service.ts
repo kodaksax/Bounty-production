@@ -85,9 +85,80 @@ function logOnce(key: string, level: 'error' | 'warn', message: string, meta?: a
   }
 }
 
+function logInfo(message: string, meta?: any) {
+  if (typeof (logger as any).info === 'function') {
+    (logger as any).info(message, meta);
+  } else if (typeof (logger as any).warning === 'function') {
+    (logger as any).warning(message, meta);
+  }
+}
+
 // Spam prevention constants
 const DAILY_BOUNTY_LIMIT = 10; // Maximum bounties a user can create per day
 const MIN_TITLE_LENGTH_FOR_DUPLICATE_CHECK = 10; // Minimum title length for substring matching
+
+interface CreateBountyOptions {
+  idempotencyKey?: string;
+}
+
+function getCreateClientRequestId(bounty: any, options?: CreateBountyOptions): string | undefined {
+  const key = options?.idempotencyKey || bounty?.client_request_id || bounty?.idempotencyKey;
+  return typeof key === 'string' && key.trim() ? key.trim() : undefined;
+}
+
+function isClientRequestIdSchemaError(error: any): boolean {
+  const message = String(error?.message || error || '');
+  return /client_request_id/i.test(message) && /column|schema|cache|not found|does not exist/i.test(message);
+}
+
+function isDuplicateConstraintError(error: any): boolean {
+  const message = String(error?.message || error || '');
+  return (
+    error?.code === '23505' ||
+    /duplicate key|unique constraint|already exists|duplicate/i.test(message)
+  );
+}
+
+function isAmbiguousCreateError(error: any): boolean {
+  const message = String(error?.message || error || '');
+  return /network request failed|failed to fetch|timeout|timed out|abort|TypeError|ECONNRESET|socket hang up/i.test(message);
+}
+
+async function findBountyByClientRequestId(
+  posterId: string | undefined,
+  clientRequestId: string | undefined
+): Promise<Bounty | null> {
+  if (!posterId || !clientRequestId || !isSupabaseConfigured) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('bounties')
+      .select('*')
+      .eq('poster_id', posterId)
+      .eq('client_request_id', clientRequestId)
+      .maybeSingle();
+
+    if (error) {
+      if (!isClientRequestIdSchemaError(error)) {
+        logger.warning('Bounty create idempotency lookup failed', {
+          posterId,
+          clientRequestId,
+          error,
+        });
+      }
+      return null;
+    }
+
+    return (data as Bounty) ?? null;
+  } catch (error) {
+    logger.warning('Bounty create idempotency lookup threw', {
+      posterId,
+      clientRequestId,
+      error,
+    });
+    return null;
+  }
+}
 
 /**
  * Escape a user-supplied query string before embedding it in a Supabase/PostgREST
@@ -751,7 +822,16 @@ export const bountyService = {
    * Create a new bounty with offline support
    * Includes spam prevention: rate limiting (max 10/day) and duplicate detection
    */
-  async create(bounty: Omit<Bounty, 'id' | 'created_at'>): Promise<Bounty | null> {
+  async create(
+    bounty: Omit<Bounty, 'id' | 'created_at'>,
+    options: CreateBountyOptions = {}
+  ): Promise<Bounty | null> {
+    let createContext: {
+      posterId?: string;
+      clientRequestId?: string;
+      title?: string;
+    } = {};
+
     try {
       // Title validation guard — reject empty or too-short titles before any DB work
       const titleError = validateTitle(bounty.title);
@@ -761,6 +841,15 @@ export const bountyService = {
 
       // Spam prevention: rate limiting - max 10 bounties per day
       const posterId = (bounty as any).poster_id || (bounty as any).user_id;
+      const clientRequestId = getCreateClientRequestId(bounty, options);
+      createContext = { posterId, clientRequestId, title: bounty.title };
+
+      logInfo('Bounty create request started', {
+        posterId,
+        clientRequestId,
+        title: bounty.title,
+      });
+
       if (posterId && isSupabaseConfigured) {
         try {
           const oneDayAgo = new Date();
@@ -813,9 +902,19 @@ export const bountyService = {
             });
 
             if (isDuplicate) {
+              const existing = await findBountyByClientRequestId(posterId, clientRequestId);
+              if (existing) {
+                logInfo('Bounty create duplicate check resolved to existing idempotent bounty', {
+                  posterId,
+                  clientRequestId,
+                  bountyId: existing.id,
+                });
+                return existing;
+              }
+
               logger.warning('Duplicate bounty detected', { posterId, title: bounty.title });
               throw new Error(
-                'Duplicate content detected: A similar bounty was recently posted. Please create unique content.'
+                'Duplicate content detected: A similar bounty was already posted.'
               );
             }
           }
@@ -897,6 +996,9 @@ export const bountyService = {
           normalized.poster_id = idVal;
           normalized.user_id = idVal;
         }
+        if (clientRequestId) {
+          normalized.client_request_id = clientRequestId;
+        }
 
         // Attempt to fetch poster's username from profiles so we can satisfy NOT NULL
         // constraints on the Supabase/Postgres side. If this fails, fall back to a
@@ -926,14 +1028,48 @@ export const bountyService = {
         }
 
         // Try direct Supabase insert first (works if RLS permits anon/session)
-        const { data, error } = await supabase
+        let { data, error } = await supabase
           .from('bounties')
           .insert(normalized as any)
           .select('*')
           .single();
 
+        if (error && clientRequestId && isClientRequestIdSchemaError(error)) {
+          logger.warning('Bounty create retrying without client_request_id because the column is unavailable', {
+            posterId,
+            clientRequestId,
+            error,
+          });
+          const retryPayload = { ...normalized };
+          delete retryPayload.client_request_id;
+          const retry = await supabase
+            .from('bounties')
+            .insert(retryPayload as any)
+            .select('*')
+            .single();
+          data = retry.data;
+          error = retry.error;
+        }
+
         if (!error) {
+          logInfo('Bounty create insert succeeded', {
+            posterId,
+            clientRequestId,
+            bountyId: (data as any)?.id,
+          });
           return (data as unknown as Bounty) ?? null;
+        }
+
+        if (clientRequestId && isDuplicateConstraintError(error)) {
+          const existing = await findBountyByClientRequestId(posterId, clientRequestId);
+          if (existing) {
+            logInfo('Bounty create unique conflict resolved to existing bounty', {
+              posterId,
+              clientRequestId,
+              bountyId: existing.id,
+            });
+            return existing;
+          }
         }
         // If direct insert failed, decide whether to fallback to relay or bubble up
         {
@@ -963,6 +1099,7 @@ export const bountyService = {
                 timeline: (normalized as any).timeline ?? '',
                 skills_required: (normalized as any).skills_required ?? '',
                 work_type: (normalized as any).work_type || 'online',
+                idempotencyKey: clientRequestId,
               })
             ),
           });
@@ -988,17 +1125,42 @@ export const bountyService = {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(bounty),
+        body: JSON.stringify({
+          ...bounty,
+          client_request_id: clientRequestId,
+          idempotencyKey: clientRequestId,
+        }),
       });
 
       if (!response.ok) {
         const errorText = await response.text();
+        if (clientRequestId && response.status === 409) {
+          const existing = await findBountyByClientRequestId(posterId, clientRequestId);
+          if (existing) {
+            return existing;
+          }
+        }
         throw new Error(`Failed to create bounty: ${errorText}`);
       }
 
       return await response.json();
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error');
+      if (createContext.clientRequestId && (isAmbiguousCreateError(error) || isDuplicateConstraintError(error))) {
+        const existing = await findBountyByClientRequestId(
+          createContext.posterId,
+          createContext.clientRequestId
+        );
+        if (existing) {
+          logInfo('Bounty create recovered existing bounty after ambiguous error', {
+            posterId: createContext.posterId,
+            clientRequestId: createContext.clientRequestId,
+            bountyId: existing.id,
+            originalError: error.message,
+          });
+          return existing;
+        }
+      }
       logOnce('bounties:create', 'error', 'Error creating bounty (showing once until reload)', {
         bounty,
         error: { message: error.message, stack: error.stack },

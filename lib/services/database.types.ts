@@ -33,6 +33,7 @@ export type Bounty = {
   stale_detected_at?: string;
   // Stripe payment fields for escrow
   payment_intent_id?: string; // Stripe PaymentIntent ID for escrow
+  client_request_id?: string | null; // Client-generated idempotency key for create requests
 }
 
 // Lightweight attachment metadata for client state (stored serialized in attachments_json)

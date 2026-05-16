@@ -320,6 +320,55 @@ describe('bountyService', () => {
     expect((created as any).id).toBe(100);
   });
 
+  it('create returns the existing bounty for an idempotent duplicate submission', async () => {
+    (validateTitle as jest.Mock).mockReturnValue(null);
+
+    supabase.from
+      // 1: rate limit count check
+      .mockImplementationOnce(() => ({
+        select: jest.fn(() => ({
+          eq: jest.fn(() => ({ gte: jest.fn(() => Promise.resolve({ count: 0, error: null })) })),
+        })),
+      }))
+      // 2: duplicate title check sees the already-created bounty
+      .mockImplementationOnce(() => ({
+        select: jest.fn(() => ({
+          eq: jest.fn(() => ({
+            gte: jest.fn(() =>
+              Promise.resolve({ data: [{ title: 'Repeated bounty' }], error: null })
+            ),
+          })),
+        })),
+      }))
+      // 3: idempotency lookup resolves the prior successful create
+      .mockImplementationOnce(() => ({
+        select: jest.fn(() => ({
+          eq: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              maybeSingle: jest.fn(() =>
+                Promise.resolve({
+                  data: { id: 200, title: 'Repeated bounty', poster_id: 'poster-1' },
+                  error: null,
+                })
+              ),
+            })),
+          })),
+        })),
+      }));
+
+    const created = await bountyService.create(
+      {
+        title: 'Repeated bounty',
+        poster_id: 'poster-1',
+      } as any,
+      { idempotencyKey: 'bounty_create_poster_123' }
+    );
+
+    expect(created).not.toBeNull();
+    expect((created as any).id).toBe(200);
+    expect(NetInfo.fetch).not.toHaveBeenCalled();
+  });
+
   it('update returns bounty when Supabase update succeeds', async () => {
     supabase.from.mockImplementationOnce(() => ({
       update: jest.fn(() => ({

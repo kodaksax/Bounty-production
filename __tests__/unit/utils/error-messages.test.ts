@@ -122,6 +122,18 @@ describe('Error Messages', () => {
       });
     });
 
+    describe('Bounty duplicate errors', () => {
+      it('should show an explicit non-retryable duplicate bounty message', () => {
+        const error = { message: 'Duplicate content detected: A similar bounty was already posted.' };
+        const result = getUserFriendlyError(error);
+
+        expect(result.type).toBe('validation');
+        expect(result.title).toBe('Similar Bounty Found');
+        expect(result.action).toBe('Edit Bounty');
+        expect(result.retryable).toBe(false);
+      });
+    });
+
     describe('Supabase errors', () => {
       it('should handle JWT expired errors', () => {
         const error = { message: 'JWT expired' };

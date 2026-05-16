@@ -20,6 +20,11 @@ export interface CreateBountyPayload {
   skills_required?: string;
   poster_id: string;
   status: 'open';
+  client_request_id?: string;
+}
+
+export interface CreateBountyOptions {
+  clientRequestId?: string;
 }
 
 export const bountyService = {
@@ -39,7 +44,7 @@ export const bountyService = {
   /**
    * Create a bounty from draft data
    */
-  async createBounty(draft: BountyDraft): Promise<Bounty | null> {
+  async createBounty(draft: BountyDraft, options: CreateBountyOptions = {}): Promise<Bounty | null> {
     // Start performance measurement
     performanceService.startMeasurement('bounty_create', 'bounty_create', {
       workType: draft.workType,
@@ -68,6 +73,7 @@ export const bountyService = {
         )
       }
 
+      const clientRequestId = options.clientRequestId || draft.clientRequestId;
       const payload: Omit<Bounty, 'id' | 'created_at'> & { attachments?: any[]; category?: string } = {
         title: draft.title,
         description: draft.description,
@@ -81,6 +87,7 @@ export const bountyService = {
         poster_id: getCurrentUserId(),
         user_id: getCurrentUserId(),
         status: 'open',
+        client_request_id: clientRequestId,
         // Include attachments from draft so they get persisted to attachments_json
         attachments: draft.attachments || [],
       };
@@ -110,7 +117,7 @@ export const bountyService = {
       }
 
       // Call the base bounty service to create when online
-      const result = await baseBountyService.create(payload);
+      const result = await baseBountyService.create(payload, { idempotencyKey: clientRequestId });
 
       if (!result) {
         throw new Error('Failed to create bounty');

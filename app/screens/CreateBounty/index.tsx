@@ -1,5 +1,5 @@
 import { StepperHeader } from 'app/components/StepperHeader';
-import { useBountyDraft } from 'app/hooks/useBountyDraft';
+import { type BountyDraft, useBountyDraft } from 'app/hooks/useBountyDraft';
 import { StepCompensation } from 'app/screens/CreateBounty/StepCompensation';
 import { StepDetails } from 'app/screens/CreateBounty/StepDetails';
 import { StepLocation } from 'app/screens/CreateBounty/StepLocation';
@@ -16,7 +16,7 @@ import { offlineQueueService } from 'lib/services/offline-queue-service';
 import { getInsufficientBalanceMessage, validateBalance } from 'lib/utils/bounty-validation';
 import { getUserFriendlyError } from 'lib/utils/error-messages';
 import { useWallet } from 'lib/wallet-context';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -35,6 +35,33 @@ const STEP_TITLES = [
   'Review & Confirm',
 ];
 
+function getDraftSubmissionFingerprint(draft: BountyDraft): string {
+  return JSON.stringify({
+    title: draft.title.trim(),
+    description: draft.description.trim(),
+    amount: draft.isForHonor ? 0 : draft.amount,
+    isForHonor: draft.isForHonor,
+    location: draft.workType === 'in_person' ? draft.location.trim() : '',
+    workType: draft.workType,
+    category: draft.category || '',
+    timeline: draft.timeline || '',
+    skills: draft.skills || '',
+    attachments: (draft.attachments || []).map(attachment => ({
+      name: attachment.name,
+      uri: attachment.uri,
+      remoteUri: attachment.remoteUri,
+      size: attachment.size,
+    })),
+  });
+}
+
+function createBountySubmissionId(userId?: string): string {
+  const compactUserId = (userId || 'anonymous').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24) || 'anonymous';
+  const timestamp = Date.now().toString(36);
+  const random = Math.random().toString(36).slice(2, 10);
+  return `bounty_create_${compactUserId}_${timestamp}_${random}`;
+}
+
 export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateBountyFlowProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const { session } = useAuthContext();
@@ -42,6 +69,28 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
   const insets = useSafeAreaInsets();
   const { createEscrow, balance } = useWallet();
   const { isEmailVerified, canPostBounties, userEmail } = useEmailVerification();
+  const activeSubmissionRef = useRef<{ fingerprint: string; id: string } | null>(null);
+
+  const getSubmissionId = async () => {
+    const fingerprint = getDraftSubmissionFingerprint(draft);
+    if (!activeSubmissionRef.current || activeSubmissionRef.current.fingerprint !== fingerprint) {
+      if (draft.clientRequestId && draft.submissionFingerprint === fingerprint) {
+        activeSubmissionRef.current = {
+          fingerprint,
+          id: draft.clientRequestId,
+        };
+        return activeSubmissionRef.current.id;
+      }
+
+      const id = createBountySubmissionId(session?.user?.id);
+      activeSubmissionRef.current = {
+        fingerprint,
+        id,
+      };
+      await saveDraft({ clientRequestId: id, submissionFingerprint: fingerprint });
+    }
+    return activeSubmissionRef.current.id;
+  };
 
   // Use form submission hook with debouncing
   const {
@@ -64,7 +113,8 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
       }
 
       // Create the bounty first (before deducting funds to prevent loss on failure)
-      const result = await bountyService.createBounty(draft);
+      const submissionId = await getSubmissionId();
+      const result = await bountyService.createBounty(draft, { clientRequestId: submissionId });
 
       if (!result) {
         throw new Error('Failed to create bounty');
@@ -91,6 +141,7 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
 
       // Clear draft on success
       await clearDraft();
+      activeSubmissionRef.current = null;
 
       const isOnline = offlineQueueService.getOnlineStatus();
 

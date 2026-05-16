@@ -31,6 +31,8 @@ export interface BountyDraft {
   timeline?: string;
   skills?: string;
   attachments?: Attachment[];
+  clientRequestId?: string;
+  submissionFingerprint?: string;
 }
 
 const defaultDraft: BountyDraft = {
