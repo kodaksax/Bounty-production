@@ -72,6 +72,7 @@ export function useBountyForm({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [postSuccess, setPostSuccess] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
+  const isSubmittingRef = useRef(false)
   const postButtonRef = useRef<any>(null)
   const lowBalanceAnim = useRef(new Animated.Value(0)).current
 
@@ -106,6 +107,10 @@ export function useBountyForm({
 
   // Handle the actual bounty posting after confirmation
   const handlePostBounty = async () => {
+    if (isSubmittingRef.current) {
+      return
+    }
+
     // Email verification gate: Double-check before submitting
     if (!isEmailVerified) {
       Alert.alert(
@@ -122,6 +127,7 @@ export function useBountyForm({
     }
 
     try {
+      isSubmittingRef.current = true
       setIsSubmitting(true)
 
       // Validate balance BEFORE posting bounty for paid bounties
@@ -224,6 +230,7 @@ export function useBountyForm({
       setShowConfirmationCard(false)
       onError?.(msg)
     } finally {
+      isSubmittingRef.current = false
       setIsSubmitting(false)
     }
   }
