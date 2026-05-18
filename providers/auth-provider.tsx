@@ -411,6 +411,23 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         previousUserIdRef.current = incomingUserId
       }
 
+      // If the authenticated user is changing (sign-in, user switch, or sign-out),
+      // re-arm the loading gate so downstream consumers like `useAppBootstrap`
+      // remain in their "loading" state until the profile fetch below completes.
+      // Without this, there is a render window where `session` is the new user
+      // but `profile` is still null/stale, which causes the root navigator to
+      // make a routing decision (e.g. into onboarding) before the profile has
+      // been hydrated — producing a visible onboarding flash for returning users.
+      // The `isMountedRef.current` guard mirrors every other setState in this
+      // handler and avoids "setState on unmounted component" warnings if the
+      // listener fires after teardown. Sign-out is also a user change
+      // (incomingUserId=null !== outgoingUserId) and benefits from the same
+      // gate: useAppBootstrap moves loading → unauthenticated cleanly.
+      const isUserChange = incomingUserId !== outgoingUserId
+      if (isUserChange && isMountedRef.current) {
+        setIsLoading(true)
+      }
+
       // Now update the session in state (after cleanup if applicable)
       setSession(session)
       sessionIdRef.current = incomingUserId
