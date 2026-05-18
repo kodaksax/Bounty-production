@@ -872,6 +872,32 @@ describe('Consolidated Wallet Service', () => {
       });
     });
 
+    it('throws NotFoundError when a legacy bounty amount is invalid', async () => {
+      const admin = makeAdmin([
+        { data: null, error: null }, // no existing release
+        { data: null, error: { message: 'not found' } }, // no escrow tx
+        { data: { amount: 0, is_for_honor: false, user_id: 'poster1' }, error: null },
+      ]);
+      const svc = buildService(admin);
+
+      await expect(svc.releaseEscrow('b1', 'hunter1')).rejects.toMatchObject({
+        name: 'NotFoundError',
+      });
+    });
+
+    it('throws NotFoundError when a legacy bounty has no poster', async () => {
+      const admin = makeAdmin([
+        { data: null, error: null }, // no existing release
+        { data: null, error: { message: 'not found' } }, // no escrow tx
+        { data: { amount: 10000, is_for_honor: false, user_id: null }, error: null },
+      ]);
+      const svc = buildService(admin);
+
+      await expect(svc.releaseEscrow('b1', 'hunter1')).rejects.toMatchObject({
+        name: 'NotFoundError',
+      });
+    });
+
     it('uses an existing legacy bounty_posted debit without charging the poster again', async () => {
       const legacyDebitTx = {
         id: 'legacy-posted-1',
