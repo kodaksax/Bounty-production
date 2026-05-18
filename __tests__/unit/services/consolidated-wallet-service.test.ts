@@ -872,6 +872,56 @@ describe('Consolidated Wallet Service', () => {
       });
     });
 
+    it('uses an existing legacy bounty_posted debit without charging the poster again', async () => {
+      const legacyDebitTx = {
+        id: 'legacy-posted-1',
+        user_id: 'poster1',
+        bounty_id: 'b1',
+        type: 'bounty_posted',
+        amount: -10000,
+        description: 'Legacy bounty debit',
+        status: 'completed',
+        metadata: {},
+        created_at: '2024-01-01',
+      };
+      const admin = makeAdmin(
+        [
+          { data: null, error: null }, // no existing release
+          { data: null, error: { message: 'not found' } }, // no escrow tx
+          { data: { amount: 10000, is_for_honor: false, user_id: 'poster1' }, error: null },
+          { data: legacyDebitTx, error: null }, // legacy bounty_posted debit already exists
+          { data: releaseTx, error: null }, // release insert
+          { error: null }, // platform_ledger insert
+          { data: { stripe_connect_account_id: null }, error: null }, // profile
+        ],
+        [{ data: null, error: null }] // release updateBalance
+      );
+      const svc = buildService(admin);
+
+      const result = await svc.releaseEscrow('b1', 'hunter1');
+
+      expect(result.type).toBe('release');
+      expect(admin.rpc).toHaveBeenCalledTimes(1);
+      expect(admin.rpc).toHaveBeenCalledWith('update_balance', {
+        p_user_id: 'hunter1',
+        p_amount: 9500,
+      });
+    });
+
+    it('throws ExternalServiceError when legacy poster debit validation fails', async () => {
+      const admin = makeAdmin([
+        { data: null, error: null }, // no existing release
+        { data: null, error: { message: 'not found' } }, // no escrow tx
+        { data: { amount: 10000, is_for_honor: false, user_id: 'poster1' }, error: null },
+        { data: null, error: { message: 'legacy lookup failed' } },
+      ]);
+      const svc = buildService(admin);
+
+      await expect(svc.releaseEscrow('b1', 'hunter1')).rejects.toMatchObject({
+        name: 'ExternalServiceError',
+      });
+    });
+
     it('initiates Stripe transfer when hunter has a connected account', async () => {
       const admin = makeAdmin(
         [
