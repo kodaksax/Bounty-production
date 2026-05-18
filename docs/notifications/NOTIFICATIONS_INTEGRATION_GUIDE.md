@@ -5,14 +5,16 @@ The notifications system is now implemented in BOUNTYExpo with support for both 
 
 **NEW:** User preferences are now integrated! Users can control which notification types they receive through the Settings → Notification Center, and these preferences are enforced by the backend before sending push notifications.
 
+**Architecture update:** Notification persistence, push-token management, and notification-preference CRUD are now handled exclusively through Supabase (`@supabase/supabase-js`) in the backend notification service.
+
 ## Architecture
 
 ### Backend Components
 - **Database Tables**: 
-  - `notifications` - stores notification history (see migration: `services/api/migrations/20251103_add_notifications_tables.sql`)
-  - `push_tokens` - stores Expo push tokens
-  - `notification_preferences` - stores user preferences for each notification type (see migration: `services/api/migrations/20251105_add_notification_preferences.sql`)
-- **Notification Service**: `services/api/src/services/notification-service.ts`
+  - `notifications` - stores notification history (read/write through Supabase)
+  - `push_tokens` - stores Expo push tokens (read/write through Supabase)
+  - `notification_preferences` - stores user preferences for each notification type (read/write through Supabase)
+- **Notification Service**: `services/api/src/services/notification-service.ts` (Supabase-exclusive CRUD path for notifications/tokens/preferences)
 - **API Routes**: `services/api/src/routes/notifications.ts`
 
 ### Frontend Components

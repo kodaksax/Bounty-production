@@ -182,6 +182,27 @@ describe('NotificationService (backend)', () => {
       const sendPushSpy = jest.spyOn(service, 'sendPushNotification').mockResolvedValue();
       // Mock isNotificationEnabled to return true
       (service as any).isNotificationEnabled = jest.fn().mockResolvedValue(true);
+      (service as any).getSupabaseClient = jest.fn(() => ({
+        from: jest.fn(() => ({
+          insert: jest.fn(() => ({
+            select: jest.fn(() => ({
+              single: jest.fn().mockResolvedValue({
+                data: {
+                  id: 'notif-4',
+                  user_id: 'user-4',
+                  type: 'payment',
+                  title: 'Payment Received',
+                  body: 'You got paid',
+                  data: { bountyId: 'b-1' },
+                  read: false,
+                  created_at: new Date().toISOString(),
+                },
+                error: null,
+              }),
+            })),
+          })),
+        })),
+      }));
 
       await service.createNotification({
         userId: 'user-4',
@@ -197,6 +218,74 @@ describe('NotificationService (backend)', () => {
         'You got paid',
         expect.objectContaining({ notificationType: 'payment' })
       );
+    });
+  });
+
+  describe('Supabase notification data path', () => {
+    it('registerPushToken writes through Supabase push_tokens table', async () => {
+      const insertMock = jest.fn().mockResolvedValue({ error: null });
+      const fromMock = jest.fn(() => ({
+        delete: jest.fn(() => ({
+          eq: jest.fn(() => ({
+            neq: jest.fn().mockResolvedValue({ error: null }),
+          })),
+        })),
+        select: jest.fn(() => ({
+          eq: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              limit: jest.fn().mockResolvedValue({ data: [], error: null }),
+            })),
+          })),
+        })),
+        insert: insertMock,
+      }));
+
+      (service as any).getSupabaseClient = jest.fn(() => ({ from: fromMock }));
+      (service as any).resolvePushTokenOwnerColumn = jest.fn().mockResolvedValue('profile_id');
+      (service as any).ensureUserProfile = jest.fn().mockResolvedValue(true);
+
+      await service.registerPushToken('user-9', 'ExpoPushToken[xyz123]', 'device-1');
+
+      expect(insertMock).toHaveBeenCalledWith(expect.objectContaining({
+        profile_id: 'user-9',
+        token: 'ExpoPushToken[xyz123]',
+        device_id: 'device-1',
+      }));
+    });
+
+    it('getPreferences normalizes legacy Supabase preference columns', async () => {
+      const maybeSingleMock = jest.fn().mockResolvedValue({
+        data: {
+          user_id: 'user-10',
+          applications: false,
+          acceptances: true,
+          completions: false,
+          payments: true,
+          messages: false,
+          in_app_enabled: true,
+        },
+        error: null,
+      });
+      const fromMock = jest.fn(() => ({
+        select: jest.fn(() => ({
+          eq: jest.fn(() => ({
+            maybeSingle: maybeSingleMock,
+          })),
+        })),
+      }));
+
+      (service as any).getSupabaseClient = jest.fn(() => ({ from: fromMock }));
+
+      const prefs = await service.getPreferences('user-10');
+      expect(prefs).toEqual(expect.objectContaining({
+        user_id: 'user-10',
+        applications_enabled: false,
+        acceptances_enabled: true,
+        completions_enabled: false,
+        payments_enabled: true,
+        messages_enabled: false,
+        system_enabled: true,
+      }));
     });
   });
 });
