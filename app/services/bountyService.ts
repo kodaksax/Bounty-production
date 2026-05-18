@@ -22,6 +22,72 @@ export interface CreateBountyPayload {
   status: 'open';
 }
 
+/**
+ * Result of createBounty(). `created` is `false` when the call was deduplicated
+ * against a recent identical submission from the same poster (idempotent retry);
+ * callers MUST use this flag to avoid double-funding escrow or otherwise repeating
+ * side effects on retried submissions.
+ */
+export interface CreateBountyResult {
+  bounty: Bounty;
+  created: boolean;
+}
+
+/**
+ * Idempotency cache: maps a stable per-draft fingerprint to either an in-flight
+ * create promise (so concurrent double-tap calls share a single insert) or a
+ * recently completed result (so a retry started after the original succeeded
+ * returns the same bounty instead of creating a duplicate).
+ *
+ * Scoped at module level so it survives across React re-renders for the same
+ * JS runtime (single-process). Cross-device / cross-process atomic protection
+ * would require a server-side idempotency key store.
+ */
+const IDEMPOTENCY_TTL_MS = 60_000;
+const inFlightCreates = new Map<string, Promise<Bounty>>();
+const recentCreates = new Map<string, { bounty: Bounty; expiresAt: number }>();
+
+/**
+ * Build a stable fingerprint over the full draft so different bounties get
+ * different keys. Two submissions are treated as retries of each other ONLY
+ * when every user-visible field matches — protects against silently returning
+ * an old row when the user actually edited something (description, amount, etc.)
+ * before resubmitting.
+ */
+function computeDraftFingerprint(posterId: string, draft: BountyDraft): string {
+  const normalize = (v: unknown) =>
+    typeof v === 'string' ? v.trim().toLowerCase() : v === undefined || v === null ? '' : String(v);
+  const parts = [
+    posterId,
+    normalize(draft.title),
+    normalize(draft.description),
+    String(draft.isForHonor ? 0 : Number(draft.amount) || 0),
+    draft.isForHonor ? '1' : '0',
+    normalize(draft.workType),
+    normalize(draft.location),
+    normalize(draft.timeline),
+    normalize(draft.skills),
+    normalize(draft.category),
+  ];
+  return parts.join('|');
+}
+
+function pruneExpiredRecent(now: number): void {
+  for (const [key, entry] of recentCreates) {
+    if (entry.expiresAt <= now) {
+      recentCreates.delete(key);
+    }
+  }
+}
+
+/**
+ * Exposed for tests. Clears all in-process idempotency state.
+ */
+export function __resetIdempotencyCacheForTests(): void {
+  inFlightCreates.clear();
+  recentCreates.clear();
+}
+
 export const bountyService = {
   /**
    * Delete a bounty by ID
@@ -37,9 +103,19 @@ export const bountyService = {
   },
 
   /**
-   * Create a bounty from draft data
+   * Create a bounty from draft data.
+   *
+   * Returns `{ bounty, created }`. `created === false` means this call was a
+   * deduplicated retry of a very recent identical submission from the same
+   * poster — callers MUST NOT re-run side effects like funding escrow when
+   * `created` is false (the original call already did so).
+   *
+   * Idempotency is keyed on a fingerprint of the full draft payload, so two
+   * different bounties (even with the same title) get different keys and are
+   * never collapsed. Concurrent in-process calls for the same fingerprint
+   * share a single insert promise (atomic same-process dedup).
    */
-  async createBounty(draft: BountyDraft): Promise<Bounty | null> {
+  async createBounty(draft: BountyDraft): Promise<CreateBountyResult> {
     // Start performance measurement
     performanceService.startMeasurement('bounty_create', 'bounty_create', {
       workType: draft.workType,
@@ -68,6 +144,8 @@ export const bountyService = {
         )
       }
 
+      const posterId = getCurrentUserId();
+
       const payload: Omit<Bounty, 'id' | 'created_at'> & { attachments?: any[]; category?: string } = {
         title: draft.title,
         description: draft.description,
@@ -78,8 +156,8 @@ export const bountyService = {
         category: draft.category || undefined,
         timeline: draft.timeline || '',
         skills_required: draft.skills || '',
-        poster_id: getCurrentUserId(),
-        user_id: getCurrentUserId(),
+        poster_id: posterId,
+        user_id: posterId,
         status: 'open',
         // Include attachments from draft so they get persisted to attachments_json
         attachments: draft.attachments || [],
@@ -102,18 +180,73 @@ export const bountyService = {
         }
 
         // Return optimistic temp bounty so UI can proceed
-        return {
+        const tempBounty = {
           ...payload,
           id: tempId,
           created_at: new Date().toISOString(),
         } as unknown as Bounty;
+        return { bounty: tempBounty, created: true };
       }
 
-      // Call the base bounty service to create when online
-      const result = await baseBountyService.create(payload);
+      // Idempotent retry protection (online path only).
+      // Keyed on the full draft fingerprint — different drafts never collapse.
+      const fingerprint = posterId ? computeDraftFingerprint(posterId, draft) : '';
+      const now = Date.now();
+      pruneExpiredRecent(now);
 
-      if (!result) {
-        throw new Error('Failed to create bounty');
+      if (fingerprint) {
+        // 1) Same fingerprint already completed within TTL → idempotent replay.
+        const cached = recentCreates.get(fingerprint);
+        if (cached && cached.expiresAt > now) {
+          await performanceService.endMeasurement('bounty_create', {
+            success: true,
+            bountyId: cached.bounty.id,
+            replayed: true,
+          } as any);
+          return { bounty: cached.bounty, created: false };
+        }
+
+        // 2) Same fingerprint currently in flight → share the existing promise
+        //    (atomic dedup of concurrent double-tap submissions in this process).
+        const inFlight = inFlightCreates.get(fingerprint);
+        if (inFlight) {
+          const bounty = await inFlight;
+          await performanceService.endMeasurement('bounty_create', {
+            success: true,
+            bountyId: bounty.id,
+            replayed: true,
+          } as any);
+          return { bounty, created: false };
+        }
+      }
+
+      // First-time submission for this fingerprint: register the in-flight promise
+      // BEFORE awaiting so concurrent callers can join it.
+      const createPromise = baseBountyService.create(payload).then((res) => {
+        if (!res) {
+          throw new Error('Failed to create bounty');
+        }
+        return res;
+      });
+      if (fingerprint) {
+        inFlightCreates.set(fingerprint, createPromise);
+      }
+
+      let result: Bounty;
+      try {
+        result = await createPromise;
+      } finally {
+        if (fingerprint) {
+          inFlightCreates.delete(fingerprint);
+        }
+      }
+
+      // Cache the successful result so any subsequent retry within TTL is replayed.
+      if (fingerprint) {
+        recentCreates.set(fingerprint, {
+          bounty: result,
+          expiresAt: Date.now() + IDEMPOTENCY_TTL_MS,
+        });
       }
 
       // Track bounty creation event
@@ -138,7 +271,7 @@ export const bountyService = {
         bountyId: result.id,
       });
 
-      return result;
+      return { bounty: result, created: true };
     } catch (error) {
       console.error('Error creating bounty:', error);
 

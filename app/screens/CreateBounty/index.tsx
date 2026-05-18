@@ -63,21 +63,25 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
         throw new Error(getInsufficientBalanceMessage(draft.amount, balance));
       }
 
-      // Create the bounty first (before deducting funds to prevent loss on failure)
-      const result = await bountyService.createBounty(draft);
+      // Create the bounty first (before deducting funds to prevent loss on failure).
+      // The service may return `created: false` when this submission is an
+      // idempotent retry of a recent identical create (double-tap / network
+      // retry). In that case the original call already funded escrow, so we
+      // must NOT fund escrow again.
+      const { bounty: createdBounty, created } = await bountyService.createBounty(draft);
 
-      if (!result) {
+      if (!createdBounty) {
         throw new Error('Failed to create bounty');
       }
 
-      // Only create escrow after successful bounty creation (for non-honor bounties)
-      if (!draft.isForHonor && draft.amount > 0) {
+      // Only create escrow for fresh creates of paid bounties.
+      if (created && !draft.isForHonor && draft.amount > 0) {
         try {
-          await createEscrow(result.id, draft.amount, draft.title, session?.user?.id ?? '');
+          await createEscrow(createdBounty.id, draft.amount, draft.title, session?.user?.id ?? '');
         } catch (escrowError) {
           // If escrow creation fails, delete the bounty to maintain consistency
           try {
-            await bountyService.deleteBounty(result.id);
+            await bountyService.deleteBounty(createdBounty.id);
             console.error('Bounty creation rolled back due to failed escrow:', escrowError);
           } catch (deleteErr) {
             console.error('Failed to delete bounty after escrow failure:', deleteErr);
@@ -97,7 +101,7 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
       if (Platform.OS === 'web') {
         // Alert.alert is a no-op on web — navigate immediately after success
         if (onComplete) {
-          onComplete(result.id.toString());
+          onComplete(createdBounty.id.toString());
         }
       } else {
         Alert.alert(
@@ -110,7 +114,7 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
               text: isOnline ? 'View Bounty' : 'OK',
               onPress: () => {
                 if (onComplete) {
-                  onComplete(result.id.toString());
+                  onComplete(createdBounty.id.toString());
                 }
               },
             },

@@ -162,146 +162,6 @@ describe('Bounty Service - Spam Prevention', () => {
     });
   });
 
-  describe('Duplicate Detection', () => {
-    it('should block creation for exact duplicate titles', async () => {
-      // Mock rate limit check to pass
-      const rateLimitChain = createMockQueryChain({ count: 0, error: null });
-      
-      // Mock duplicate check to return existing bounty with same title
-      const duplicateChain = createMockQueryChain({ 
-        data: [{ title: 'Fix My Website' }], 
-        error: null 
-      });
-
-      let callCount = 0;
-      supabase.from.mockImplementation((table: string) => {
-        callCount++;
-        if (callCount === 1) return rateLimitChain;
-        return duplicateChain;
-      });
-
-      const bounty = createTestBounty({ title: 'Fix My Website' });
-
-      await expect(bountyService.create(bounty)).rejects.toThrow(
-        'Duplicate content detected'
-      );
-
-      expect(logger.warning).toHaveBeenCalledWith(
-        'Duplicate bounty detected',
-        expect.objectContaining({ posterId: 'user-123', title: 'Fix My Website' })
-      );
-    });
-
-    it('should block creation for case-insensitive duplicate titles', async () => {
-      const rateLimitChain = createMockQueryChain({ count: 0, error: null });
-      const duplicateChain = createMockQueryChain({ 
-        data: [{ title: 'fix my website' }], 
-        error: null 
-      });
-
-      let callCount = 0;
-      supabase.from.mockImplementation((table: string) => {
-        callCount++;
-        if (callCount === 1) return rateLimitChain;
-        return duplicateChain;
-      });
-
-      const bounty = createTestBounty({ title: 'FIX MY WEBSITE' });
-
-      await expect(bountyService.create(bounty)).rejects.toThrow(
-        'Duplicate content detected'
-      );
-    });
-
-    it('should allow creation for different titles', async () => {
-      const rateLimitChain = createMockQueryChain({ count: 0, error: null });
-      const duplicateChain = createMockQueryChain({ 
-        data: [{ title: 'Build Mobile App' }], 
-        error: null 
-      });
-      const profileChain = createMockQueryChain({ data: { username: 'testuser' }, error: null });
-      const insertChain = createMockQueryChain({ 
-        data: { id: 1, title: 'Fix My Website' }, 
-        error: null 
-      });
-
-      let callCount = 0;
-      supabase.from.mockImplementation((table: string) => {
-        callCount++;
-        if (table === 'bounties' && callCount === 1) return rateLimitChain;
-        if (table === 'bounties' && callCount === 2) return duplicateChain;
-        if (table === 'profiles') return profileChain;
-        return insertChain;
-      });
-
-      const bounty = createTestBounty({ title: 'Fix My Website' });
-
-      // Should not throw duplicate error
-      try {
-        await bountyService.create(bounty);
-      } catch (error: any) {
-        expect(error.message).not.toContain('Duplicate content detected');
-      }
-    });
-
-    it('should gracefully proceed when duplicate check fails', async () => {
-      const rateLimitChain = createMockQueryChain({ count: 0, error: null });
-      const errorChain = createMockQueryChain({ data: null, error: { message: 'Database error' } });
-      const profileChain = createMockQueryChain({ data: { username: 'testuser' }, error: null });
-      const insertChain = createMockQueryChain({ 
-        data: { id: 1, title: 'Test Bounty' }, 
-        error: null 
-      });
-
-      let callCount = 0;
-      supabase.from.mockImplementation((table: string) => {
-        callCount++;
-        if (table === 'bounties' && callCount === 1) return rateLimitChain;
-        if (table === 'bounties' && callCount === 2) return errorChain;
-        if (table === 'profiles') return profileChain;
-        return insertChain;
-      });
-
-      const bounty = createTestBounty();
-
-      // Should not throw duplicate error - should proceed despite check failure
-      try {
-        await bountyService.create(bounty);
-      } catch (error: any) {
-        expect(error.message).not.toContain('Duplicate content detected');
-      }
-    });
-
-    it('should allow creation when no recent bounties exist', async () => {
-      const rateLimitChain = createMockQueryChain({ count: 0, error: null });
-      const duplicateChain = createMockQueryChain({ data: [], error: null });
-      const profileChain = createMockQueryChain({ data: { username: 'testuser' }, error: null });
-      const insertChain = createMockQueryChain({ 
-        data: { id: 1, title: 'Test Bounty' }, 
-        error: null 
-      });
-
-      let callCount = 0;
-      supabase.from.mockImplementation((table: string) => {
-        callCount++;
-        if (table === 'bounties' && callCount === 1) return rateLimitChain;
-        if (table === 'bounties' && callCount === 2) return duplicateChain;
-        if (table === 'profiles') return profileChain;
-        return insertChain;
-      });
-
-      const bounty = createTestBounty({ title: 'Brand New Bounty' });
-
-      // Should not throw any spam prevention error
-      try {
-        await bountyService.create(bounty);
-      } catch (error: any) {
-        expect(error.message).not.toContain('Rate limit exceeded');
-        expect(error.message).not.toContain('Duplicate content detected');
-      }
-    });
-  });
-
   describe('Edge Cases', () => {
     it('should skip spam checks when poster_id is not provided', async () => {
       const insertChain = createMockQueryChain({ 
@@ -320,28 +180,6 @@ describe('Bounty Service - Spam Prevention', () => {
         expect(error.message).not.toContain('Rate limit exceeded');
         expect(error.message).not.toContain('Duplicate content detected');
       }
-    });
-
-    it('should handle trimmed and whitespace titles correctly', async () => {
-      const rateLimitChain = createMockQueryChain({ count: 0, error: null });
-      const duplicateChain = createMockQueryChain({ 
-        data: [{ title: '  Fix My Website  ' }], 
-        error: null 
-      });
-
-      let callCount = 0;
-      supabase.from.mockImplementation((table: string) => {
-        callCount++;
-        if (callCount === 1) return rateLimitChain;
-        return duplicateChain;
-      });
-
-      const bounty = createTestBounty({ title: 'Fix My Website' });
-
-      // Should detect duplicate even with whitespace differences
-      await expect(bountyService.create(bounty)).rejects.toThrow(
-        'Duplicate content detected'
-      );
     });
   });
 
@@ -377,7 +215,6 @@ describe('Bounty Service - Spam Prevention', () => {
     it('should accept bounty with valid title (>= 5 trimmed chars)', async () => {
       // Set up mocks so the create call progresses past title validation
       const rateLimitChain = createMockQueryChain({ count: 0, error: null });
-      const duplicateChain = createMockQueryChain({ data: [], error: null });
       const profileChain = createMockQueryChain({ data: { username: 'testuser' }, error: null });
       const insertChain = createMockQueryChain({
         data: { id: 1, title: 'Valid Title' },
@@ -388,7 +225,6 @@ describe('Bounty Service - Spam Prevention', () => {
       supabase.from.mockImplementation((table: string) => {
         callCount++;
         if (table === 'bounties' && callCount === 1) return rateLimitChain;
-        if (table === 'bounties' && callCount === 2) return duplicateChain;
         if (table === 'profiles') return profileChain;
         return insertChain;
       });
@@ -398,10 +234,12 @@ describe('Bounty Service - Spam Prevention', () => {
       // Should successfully create a bounty and not throw a title validation error
       await expect(bountyService.create(bounty)).resolves.toBeDefined();
 
-      // Ensure the Supabase chains were actually invoked (rate limit, duplicate check, profile, insert)
+      // Ensure the Supabase chains were actually invoked (rate limit, profile, insert).
+      // The base service no longer performs a separate title-based duplicate check —
+      // idempotency is handled in the wrapper at app/services/bountyService.ts.
       expect(supabase.from).toHaveBeenCalledWith('bounties');
       expect(supabase.from).toHaveBeenCalledWith('profiles');
-      expect(supabase.from).toHaveBeenCalledTimes(4);
+      expect(supabase.from).toHaveBeenCalledTimes(3);
     });
   });
 });
