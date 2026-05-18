@@ -275,8 +275,9 @@ export class NotificationService {
    * Get notifications for a user
    */
   async getNotifications(userId: string, limit: number = 50, offset: number = 0): Promise<NotificationData[]> {
+    if (limit <= 0) return [];
     const supabase = this.getSupabaseClient();
-    const upper = offset + Math.max(limit, 1) - 1;
+    const upper = offset + limit - 1;
     const { data, error } = await supabase
       .from('notifications')
       .select('*')
@@ -520,7 +521,8 @@ export class NotificationService {
       }
       if (tokensError) throw tokensError;
 
-      const activeTokens = (tokens || []).filter((entry) => entry.enabled !== false);
+      type PushTokenRecord = { id: string; token: string; enabled?: boolean };
+      const activeTokens: PushTokenRecord[] = (tokens || []).filter((entry) => entry.enabled !== false);
 
       if (activeTokens.length === 0) {
         console.log(`No push tokens found for user ${userId}`);
@@ -540,7 +542,7 @@ export class NotificationService {
       const channelId = getAndroidChannelId(notificationType);
 
       // Filter to valid tokens and keep track of which token record each message corresponds to
-      const validTokenEntries = activeTokens.filter((t: any) => Expo.isExpoPushToken(t.token));
+      const validTokenEntries = activeTokens.filter((t) => Expo.isExpoPushToken(t.token));
 
       // Prepare messages
       const pushMessages: ExpoPushMessage[] = validTokenEntries
