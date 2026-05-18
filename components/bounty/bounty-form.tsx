@@ -13,7 +13,7 @@ import { Label } from "components/ui/label";
 import { Textarea } from "components/ui/textarea";
 import { LEGACY_API_BASE_URL } from "lib/config/network";
 import type { BountyFormValues } from "lib/types"; // Assuming you move types here
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { z } from "zod";
 
 // This schema was previously in lib/supabase/schema.
@@ -55,14 +55,18 @@ export function BountyForm({ defaultValues, onSuccess, isEditMode = false, bount
 
   const [errors, setErrors] = useState<z.ZodIssue[]>([])
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const idempotencyKeyRef = useRef(`bounty_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`)
 
   const handleCheckboxChange = (name: string, checked: boolean) => {
     setFormData((prev) => ({ ...prev, [name]: checked }))
   }
 
   const handleSubmit = async () => {
+    if (isSubmitting) return
+
     setErrors([])
     setSubmitError(null)
+    setIsSubmitting(true)
 
     try {
       // Validate the form data
@@ -79,8 +83,6 @@ export function BountyForm({ defaultValues, onSuccess, isEditMode = false, bount
       //   return;
       // }
 
-      setIsSubmitting(true)
-
       const endpoint = isEditMode
         ? `${LEGACY_API_BASE_URL}/api/bounties/${bountyId}`
         : `${LEGACY_API_BASE_URL}/api/bounties`
@@ -91,17 +93,44 @@ export function BountyForm({ defaultValues, onSuccess, isEditMode = false, bount
         method,
         headers: {
           "Content-Type": "application/json",
+          "X-Idempotency-Key": idempotencyKeyRef.current,
           // "Authorization": `Bearer ${authToken}`,
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          idempotencyKey: idempotencyKeyRef.current,
+        }),
       })
 
-      const result = await response.json()
+      const result = await response.json().catch(() => ({} as any))
 
       if (!response.ok) {
-        setSubmitError(result.message || "Failed to save bounty")
+        const rawMessage = String((result as any)?.message || (result as any)?.error || "Failed to save bounty")
+        const normalized = rawMessage.toLowerCase()
+
+        if (response.status === 409 || normalized.includes("duplicate")) {
+          if ((result as any)?.bounty || (result as any)?.existingBounty || normalized.includes("already posted")) {
+            if (onSuccess) {
+              onSuccess((result as any)?.bounty || (result as any)?.existingBounty || result)
+            } else {
+              ;(navigation as any).navigate("Dashboard")
+            }
+            return
+          }
+          setSubmitError("A similar bounty was already posted.")
+          return
+        }
+
+        if (response.status >= 500) {
+          setSubmitError("Server temporarily unavailable. Please retry.")
+          return
+        }
+
+        setSubmitError(rawMessage)
         return
       }
+
+      idempotencyKeyRef.current = `bounty_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
 
       // Handle success
       if (onSuccess) {
