@@ -437,6 +437,7 @@ Push notifications, notification fixes, and setup guides
 - [Notifications Setup Guide](notifications/NOTIFICATIONS_SETUP_GUIDE.md)
 - [Notification Fix Quick Reference](notifications/NOTIFICATION_FIX_QUICK_REFERENCE.md)
 - [Push Notification Troubleshooting](notifications/PUSH_NOTIFICATION_TROUBLESHOOTING.md)
+- [Push Notifications Test Procedures](notifications/PUSH_NOTIFICATIONS_TEST_PROCEDURES.md)
 - [Push Token Fix Flow](notifications/PUSH_TOKEN_FIX_FLOW.md)
 - [Push Token Fix Summary](notifications/PUSH_TOKEN_FIX_SUMMARY.md)
 - [Push Token Fix Visual](notifications/PUSH_TOKEN_FIX_VISUAL.md)
