@@ -141,17 +141,20 @@ For every case, capture:
 ### Case 3 – Bounty Request Rejected
 Validated as a side effect of Case 2, and explicitly:
 1. Poster opens applicants list and taps **Reject** on a specific request.
-2. That Hunter receives a push on **Bounties**: "Your request was not selected".
+2. That Hunter receives a push on **Bounties**: "Your request was not selected", body contains the bounty title.
+3. Tap → opens the bounty detail (read-only for the rejected Hunter).
 
 ### Case 4 – Bounty Cancelled (Refund Path)
 **Pre:** Bounty has an accepted Hunter and escrow funded.
 1. Poster cancels the bounty (path that invokes `refund-service`).
-2. Hunter receives a push on **Bounties** and an in-app notification.
+2. Hunter receives a push on **Bounties** and an in-app notification whose title contains "cancelled" and body contains the bounty title.
 3. Hunter's wallet shows the released escrow (separate test, but the push must mention cancellation, not payment).
+4. Tap → opens the (now cancelled) bounty detail.
 
 ### Case 5 – Bounty Marked Completed
 1. Hunter marks the bounty completed (or completion is auto-triggered).
-2. Poster receives a push on **Bounties**: "Bounty completed".
+2. Poster receives a push on **Bounties**: "Bounty completed", body contains the bounty title.
+3. Tap → opens the bounty detail / completion summary.
 
 ### Case 6 – Bounty Ready for Review
 1. Hunter submits work for review.
@@ -173,15 +176,18 @@ Validated as a side effect of Case 2, and explicitly:
    ```bash
    cd services/api && pnpm exec tsx -e "import('./src/services/stale-bounty-service').then(m => m.runStaleBountyCheck())"
    ```
-2. Poster of any stale bounty receives a push on **Bounties**: "Your bounty is going stale".
+2. Poster of any stale bounty receives a push on **Bounties**: "Your bounty is going stale", body contains the bounty title.
+3. Tap → opens the bounty detail so the Poster can edit/repost/cancel.
 
 ### Case 10 – Stale Bounty Cancelled (auto-cancel)
 1. Run the stale job past the auto-cancel threshold.
-2. Poster receives "Your stale bounty was cancelled and refunded".
+2. Poster receives a push on **Bounties**: "Your stale bounty was cancelled and refunded", body contains the bounty title.
+3. Tap → opens the cancelled bounty detail; Wallet shows refund entry.
 
 ### Case 11 – Stale Bounty Reposted
 1. Run the stale job with auto-repost enabled.
-2. Poster receives "Your bounty was reposted".
+2. Poster receives a push on **Bounties**: "Your bounty was reposted", body contains the bounty title.
+3. Tap → opens the new (reposted) bounty's detail screen.
 
 ### Case 12 – Escrow Released (Payment)
 1. Trigger completion-release for an in-progress bounty (Case 7 or `completion-release-service.releaseEscrow(bountyId)`).
@@ -214,6 +220,7 @@ Validated as a side effect of Case 2, and explicitly:
 ### Case 16 – New Follower
 1. User A follows User B.
 2. User B receives a push on the **default** channel: "<A> followed you".
+3. Tap → opens User A's profile screen.
 
 ---
 
