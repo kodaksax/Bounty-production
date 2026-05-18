@@ -318,6 +318,111 @@ describe('Authentication State Persistence', () => {
         expect(authProfileService.setSession).toHaveBeenCalled();
       });
     });
+
+    it('should re-arm isLoading=true on SIGNED_IN so consumers do not route before profile is hydrated', async () => {
+      // Regression test for "Returning Users Re-enter Onboarding Flow After Sign-In".
+      // The bug: AuthProvider updated `session` immediately on SIGNED_IN but
+      // `isLoading` stayed false (it had been cleared on the sign-in form).
+      // During the awaited profile fetch, downstream consumers (e.g.
+      // useAppBootstrap) saw (session=new, isLoading=false, profile=null) and
+      // routed to /onboarding before the profile arrived.  The fix re-arms
+      // isLoading=true on user changes so consumers stay in the loading gate
+      // until the profile fetch completes.
+
+      // Use real timers for the entire test so awaited promises and RTL's
+      // waitFor polling actually progress.
+      jest.useRealTimers();
+
+      // No initial session — sign-in form is rendered, isLoading will settle to false.
+      (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+        data: { session: null },
+        error: null,
+      });
+
+      let authStateChangeCallback: any;
+      (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((cb: any) => {
+        authStateChangeCallback = cb;
+        return { data: { subscription: { unsubscribe: jest.fn() } } };
+      });
+
+      const { authProfileService } = require('../../lib/services/auth-profile-service');
+
+      // Resolve setSession only when we release the gate.
+      let releaseSetSession: () => void = () => {};
+      const setSessionGate = new Promise<void>((resolve) => {
+        releaseSetSession = resolve;
+      });
+      (authProfileService.setSession as jest.Mock).mockImplementation(async (session: any) => {
+        if (session) {
+          await setSessionGate;
+        }
+      });
+      (authProfileService.subscribe as jest.Mock).mockImplementation(() => jest.fn());
+
+      const React = require('react');
+      const { useAuthContext } = require('../../hooks/use-auth-context');
+
+      // Probe component captures isLoading on every render so we can assert
+      // its value at the moment SIGNED_IN is in-flight.
+      const renderLog: { isLoading: boolean; userId: string | null | undefined }[] = [];
+      const Probe = () => {
+        const { isLoading, session } = useAuthContext();
+        renderLog.push({ isLoading, userId: session?.user?.id ?? null });
+        return null;
+      };
+
+      render(
+        React.createElement(AuthProvider, null, React.createElement(Probe))
+      );
+
+      // Wait for initial fetchSession() to settle to unauthenticated/isLoading=false.
+      await waitFor(() => {
+        expect(
+          renderLog.some((entry) => entry.isLoading === false && entry.userId === null)
+        ).toBe(true);
+      });
+
+      // Now simulate SIGNED_IN for a fresh user.  setSession is gated so
+      // profile fetch does not resolve until we release it — this models
+      // the real-world async profile fetch window.
+      const newSession = {
+        access_token: 'new_token',
+        refresh_token: 'r',
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+        user: { id: 'returning-user-1', email: 'r@example.com', email_confirmed_at: '2024-01-01T00:00:00Z' },
+      };
+
+      // Fire the SIGNED_IN event (do not await — the await inside is gated).
+      const inFlight = authStateChangeCallback('SIGNED_IN', newSession);
+
+      // While setSession is pending, isLoading MUST be true for consumers.
+      // Without the fix, a render would land with (userId=new, isLoading=false).
+      await waitFor(() => {
+        const sawLoadingForNewUser = renderLog.some(
+          (entry) => entry.isLoading === true && entry.userId === 'returning-user-1'
+        );
+        expect(sawLoadingForNewUser).toBe(true);
+      });
+
+      // Crucially, no render should ever have observed isLoading=false with
+      // the new user — that would indicate the gap during which the root
+      // navigator made a routing decision pre-profile-hydration.
+      const prematureUnload = renderLog.find(
+        (entry) => entry.isLoading === false && entry.userId === 'returning-user-1'
+      );
+      expect(prematureUnload).toBeUndefined();
+
+      // Release the profile fetch and let the handler complete.
+      releaseSetSession();
+      await inFlight;
+
+      // Finally isLoading flips back to false with the new user in session.
+      await waitFor(() => {
+        const last = renderLog[renderLog.length - 1];
+        expect(last.isLoading).toBe(false);
+        expect(last.userId).toBe('returning-user-1');
+      });
+    });
   });
 
   describe('Automatic Token Refresh', () => {
