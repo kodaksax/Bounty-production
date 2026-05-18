@@ -127,30 +127,49 @@ Visual dashboard displaying:
 
 ## Tracked Events
 
-### Authentication
-- `user_signed_up`: User registration
+These cover the core acquisition → activation → monetization funnel:
+
+### App lifecycle (acquisition)
+- `app_opened`: App started / cold launch (proxy for "install/visit")
+
+### Authentication (activation)
+- `user_signed_up`: New user successfully registered
 - `user_logged_in`: User login (with method: email, google, apple)
 - `user_logged_out`: User logout
 - `email_verified`: Email verification completed
 
-### Bounty Actions
+### Identity verification (Stripe Connect KYC)
+- `identity_submitted`: User completed Stripe Connect onboarding form and
+  Stripe redirected back to the app (identity / KYC details submitted)
+- `identity_verified`: `/connect/verify-onboarding` reports `onboarded === true`
+  (i.e., Stripe `charges_enabled` + `payouts_enabled` are both true)
+
+### Bounty Actions (engagement)
 - `bounty_created`: New bounty posted (with metadata: work type, amount, location, etc.)
 - `bounty_viewed`: Bounty detail viewed
-- `bounty_accepted`: Hunter accepts bounty
-- `bounty_completed`: Bounty marked complete
+- `bounty_accepted` / `bounty_claimed`: Hunter accepted bounty (both names emitted)
+- `bounty_completed`: Bounty marked complete (via payout release or manual mark-complete)
 - `bounty_cancelled`: Bounty cancelled
 
-### Payment Events
+### Payment / Payout Events (monetization)
 - `payment_initiated`: Payment intent created (with amount, currency)
 - `payment_completed`: Payment successfully processed
 - `payment_failed`: Payment processing failed (with error details)
 - `escrow_funded`: Funds added to escrow
 - `escrow_released`: Funds released from escrow
+- `payout_initiated`: Withdrawal attempt started (before `/connect/transfer` POST)
+- `payout_success`: Stripe accepted the withdrawal transfer
+- `payout_failed`: Withdrawal failed (with reason)
 
 ### Messaging Events
 - `message_sent`: Message sent (with conversation ID, message length)
-- `conversation_started`: New conversation initiated (with participant count, type)
+- `conversation_started`: New conversation initiated — also covers "chat started"
+  for accepted bounties
 - `conversation_viewed`: Conversation opened
+
+### Dispute Events
+- `dispute_opened`: Dispute filed (after wallet hold placed)
+- `dispute_resolved`: Dispute closed with a resolution / winner
 
 ### Profile Events
 - `profile_viewed`: User profile viewed
@@ -159,6 +178,26 @@ Visual dashboard displaying:
 ### Search Events
 - `search_performed`: Search executed
 - `filter_applied`: Search filters applied
+
+## Funnel Mapping
+
+The following maps the required funnel steps to the events emitted in code:
+
+| Funnel step       | Event(s)                                  | Source                                                                 |
+| ----------------- | ----------------------------------------- | ---------------------------------------------------------------------- |
+| install / visit   | `app_opened`                              | `app/_layout.tsx` (startup)                                            |
+| signup            | `user_signed_up`                          | `app/auth/sign-up-form.tsx` (after `auth/register` + sign-in)          |
+| ID submitted      | `identity_submitted`                      | `app/wallet/connect/embedded-onboarding.tsx` (Stripe redirect success) |
+| verified          | `identity_verified`                       | `app/wallet/connect/embedded-onboarding.tsx` (`verify-onboarding` ok)  |
+| bounty posted     | `bounty_created`                          | `app/services/bountyService.ts`                                        |
+| bounty claimed    | `bounty_claimed` (+ `bounty_accepted`)    | `hooks/useAcceptRequest.ts`                                            |
+| chat started      | `conversation_started`                    | `lib/services/message-service.ts`                                      |
+| marked complete   | `bounty_completed`                        | `app/postings/[bountyId]/payout.tsx`                                   |
+| payout initiated  | `payout_initiated`                        | `components/withdraw-screen.tsx`, `components/withdraw-with-bank-screen.tsx` |
+| payout success    | `payout_success`                          | `components/withdraw-screen.tsx`, `components/withdraw-with-bank-screen.tsx` |
+| dispute opened    | `dispute_opened`                          | `lib/services/dispute-service.ts`                                      |
+| dispute resolved  | `dispute_resolved`                        | `lib/services/dispute-service.ts`                                      |
+
 
 ## User Properties
 

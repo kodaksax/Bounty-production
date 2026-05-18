@@ -15,6 +15,7 @@ import { useAuthContext } from '../hooks/use-auth-context';
 import { useEmailVerification } from '../hooks/use-email-verification';
 import { API_BASE_URL } from '../lib/config/api';
 import { MIN_WITHDRAWAL_AMOUNT } from '../lib/constants';
+import { analyticsService } from '../lib/services/analytics-service';
 import { theme } from '../lib/theme';
 import { useWallet } from '../lib/wallet-context';
 import { AddBankAccountModal } from './add-bank-account-modal';
@@ -234,6 +235,18 @@ export function WithdrawWithBankScreen({
 
       const idempotencyKey = idempotencyKeyRef.current;
 
+      // Funnel: payout initiated. Tracked before the network call so we can
+      // also measure failure/abandonment rates.
+      try {
+        await analyticsService.trackEvent('payout_initiated', {
+          amount,
+          currency: 'usd',
+          method: 'stripe_connect_bank',
+        });
+      } catch {
+        /* analytics is best-effort */
+      }
+
       const response = await fetch(`${API_BASE_URL}/connect/transfer`, {
         method: 'POST',
         headers: {
@@ -260,6 +273,18 @@ export function WithdrawWithBankScreen({
       // Rotate the idempotency key so the next withdrawal gets a fresh key.
       idempotencyKeyRef.current = `withdraw_${session?.user?.id ?? 'u'}_${Date.now()}`;
 
+      // Funnel: Stripe accepted the transfer. Final bank settlement is async.
+      try {
+        await analyticsService.trackEvent('payout_success', {
+          amount,
+          currency: 'usd',
+          method: 'stripe_connect_bank',
+          transferId: transferId ? String(transferId) : undefined,
+        });
+      } catch {
+        /* analytics is best-effort */
+      }
+
       // Show success
       Alert.alert(
         'Withdrawal Initiated',
@@ -268,6 +293,16 @@ export function WithdrawWithBankScreen({
       );
     } catch (error: any) {
       console.error('Withdrawal error:', error);
+      try {
+        await analyticsService.trackEvent('payout_failed', {
+          amount,
+          currency: 'usd',
+          method: 'stripe_connect_bank',
+          reason: error?.message ? String(error.message).slice(0, 200) : 'unknown',
+        });
+      } catch {
+        /* analytics is best-effort */
+      }
       Alert.alert(
         'Withdrawal Failed',
         error.message || 'Failed to process withdrawal. Please try again.',

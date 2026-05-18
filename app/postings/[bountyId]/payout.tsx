@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ConfettiAnimation, SuccessAnimation } from '../../../components/ui/success-animation';
+import { analyticsService } from '../../../lib/services/analytics-service';
 import { bountyService } from '../../../lib/services/bounty-service';
 import type { Bounty } from '../../../lib/services/database.types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
@@ -106,6 +107,19 @@ export default function PayoutScreen() {
         throw new Error('Failed to update bounty status');
       }
 
+      // Funnel: bounty marked complete via payout release. Tracked here (not in
+      // bounty-service) because completion is fundamentally a user action.
+      try {
+        await analyticsService.trackEvent('bounty_completed', {
+          bountyId: String(bounty.id),
+          via: 'payout_release',
+          isForHonor: false,
+          amount: bounty.amount,
+        });
+      } catch {
+        /* analytics is best-effort */
+      }
+
       // Show success animation with confetti
       setShowSuccessAnimation(true);
       setShowConfetti(true);
@@ -159,6 +173,18 @@ export default function PayoutScreen() {
 
               if (!updated) {
                 throw new Error('Failed to update bounty status');
+              }
+
+              // Funnel: bounty marked complete (without escrow release).
+              try {
+                await analyticsService.trackEvent('bounty_completed', {
+                  bountyId: String(bounty.id),
+                  via: 'mark_complete',
+                  isForHonor: !!bounty.is_for_honor,
+                  amount: bounty.is_for_honor ? 0 : bounty.amount,
+                });
+              } catch {
+                /* analytics is best-effort */
               }
 
               // For honor bounties or manual completion

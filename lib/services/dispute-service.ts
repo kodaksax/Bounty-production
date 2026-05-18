@@ -1,6 +1,7 @@
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
 import { logger } from 'lib/utils/error-logger';
 import type { BountyDispute, LocalDisputeEvidence } from '../types';
+import { analyticsService } from './analytics-service';
 import { bountyService } from './bounty-service';
 import { cancellationService } from './cancellation-service';
 import type { Bounty } from './database.types';
@@ -206,6 +207,22 @@ export const disputeService = {
         createdAt: data.created_at,
         updatedAt: data.updated_at,
       };
+
+      // Funnel: dispute opened. Emit after the wallet hold has been placed
+      // and the cancellation has been linked, so we only count fully-formed
+      // disputes (not rolled-back orphan inserts).
+      try {
+        await analyticsService.trackEvent('dispute_opened', {
+          disputeId: String(data.id),
+          bountyId: String(data.bounty_id),
+          cancellationId: String(cancellationId),
+          initiatorId: String(initiatorId),
+          hasEvidence: !!(evidence && evidence.length > 0),
+          evidenceCount: evidence?.length || 0,
+        });
+      } catch {
+        /* analytics is best-effort */
+      }
 
       // Send notifications to involved parties
       try {
@@ -587,6 +604,23 @@ export const disputeService = {
       if (error) {
         logger.error('Error resolving dispute', { error, disputeId });
         throw error;
+      }
+
+      // Funnel: dispute resolved. Emitted after the DB row is updated and
+      // the wallet hold has been released; escrow side-effects (release/
+      // refund) are best-effort and tracked separately via payment_completed.
+      try {
+        await analyticsService.trackEvent('dispute_resolved', {
+          disputeId: String(disputeId),
+          bountyId: String(dispute.bountyId),
+          initiatorId: String(dispute.initiatorId),
+          winner: winner || undefined,
+          resolvedStatus,
+          isHonorBounty: !!isHonorBounty,
+          hasStripeEscrow: !!hasStripeEscrow,
+        });
+      } catch {
+        /* analytics is best-effort */
       }
 
       // Determine winner label for notifications

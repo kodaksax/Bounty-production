@@ -3,6 +3,7 @@ import { bountyRequestService } from 'lib/services/bounty-request-service'
 import { bountyService } from 'lib/services/bounty-service'
 import type { Bounty } from 'lib/services/database.types'
 import { messageService } from 'lib/services/message-service'
+import { analyticsService } from 'lib/services/analytics-service'
 import { logClientError, logClientInfo } from 'lib/services/monitoring'
 import { navigationIntent } from 'lib/services/navigation-intent'
 import { sendMessage as sendSupabaseMessage } from 'lib/services/supabase-messaging'
@@ -132,6 +133,27 @@ export function useAcceptRequest({
         } catch (fetchErr) {
           console.error('Accept: failed to fetch bounty details', fetchErr)
         }
+      }
+
+      // Funnel: track that the bounty was successfully claimed/accepted.
+      // Emitted as soon as the server confirms the transition; conversation
+      // creation below is best-effort and shouldn't gate the funnel event.
+      try {
+        await analyticsService.trackEvent('bounty_claimed', {
+          bountyId: bountyId != null ? String(bountyId) : undefined,
+          requestId: String(requestId),
+          hunterId: hunterIdForConv ? String(hunterIdForConv) : undefined,
+          isForHonor: !!(request.bounty as any)?.is_for_honor,
+          amount: (request.bounty as any)?.amount ?? undefined,
+        })
+        // Also emit the existing `bounty_accepted` event name so downstream
+        // dashboards that already query that name keep working.
+        await analyticsService.trackEvent('bounty_accepted', {
+          bountyId: bountyId != null ? String(bountyId) : undefined,
+          requestId: String(requestId),
+        })
+      } catch {
+        /* analytics is best-effort */
       }
 
       // Note: Wallet escrow is funded at bounty creation time (see useBountyForm.handlePostBounty).
