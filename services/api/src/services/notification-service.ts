@@ -76,8 +76,37 @@ interface NotificationPreferenceData {
   updated_at?: string;
 }
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
+interface SupabaseNotificationRow {
+  id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  body: string;
+  data?: Record<string, any> | null;
+  read: boolean;
+  created_at: string;
+}
+
+interface SupabasePreferenceRow {
+  id?: string;
+  user_id?: string;
+  applications_enabled?: boolean;
+  acceptances_enabled?: boolean;
+  completions_enabled?: boolean;
+  payments_enabled?: boolean;
+  messages_enabled?: boolean;
+  follows_enabled?: boolean;
+  reminders_enabled?: boolean;
+  system_enabled?: boolean;
+  applications?: boolean;
+  acceptances?: boolean;
+  completions?: boolean;
+  payments?: boolean;
+  messages?: boolean;
+  in_app_enabled?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
 
 export class NotificationService {
   private supabaseClient: SupabaseClient<any> | null = null;
@@ -85,11 +114,13 @@ export class NotificationService {
 
   private getSupabaseClient(): SupabaseClient<any> {
     if (this.supabaseClient) return this.supabaseClient;
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
+    const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
+    if (!supabaseUrl || !supabaseServiceRoleKey) {
       throw new Error('Supabase admin client is not configured for notifications');
     }
 
-    this.supabaseClient = createClient<any>(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    this.supabaseClient = createClient<any>(supabaseUrl, supabaseServiceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
@@ -102,7 +133,7 @@ export class NotificationService {
     return message.includes('column') && message.includes(column.toLowerCase());
   }
 
-  private mapNotificationRow(row: any): NotificationData {
+  private mapNotificationRow(row: SupabaseNotificationRow): NotificationData {
     return {
       id: row.id,
       user_id: row.user_id,
@@ -115,7 +146,7 @@ export class NotificationService {
     };
   }
 
-  private mapPreferenceRow(userId: string, row: any): NotificationPreferenceData {
+  private mapPreferenceRow(userId: string, row: SupabasePreferenceRow): NotificationPreferenceData {
     return {
       id: row?.id,
       user_id: row?.user_id ?? userId,
@@ -344,12 +375,12 @@ export class NotificationService {
         return;
       }
 
-      const insertPayload: Record<string, any> = {
-        [ownerColumn]: userId,
-        token,
-        device_id: deviceId ?? null,
-        enabled: true,
-      };
+      type PushTokenInsertPayload =
+        | { user_id: string; token: string; device_id: string | null; enabled?: boolean }
+        | { profile_id: string; token: string; device_id: string | null; enabled?: boolean };
+      const insertPayload: PushTokenInsertPayload = ownerColumn === 'user_id'
+        ? { user_id: userId, token, device_id: deviceId ?? null, enabled: true }
+        : { profile_id: userId, token, device_id: deviceId ?? null, enabled: true };
       let { error: insertError } = await supabase
         .from('push_tokens')
         .insert(insertPayload);
@@ -473,22 +504,23 @@ export class NotificationService {
       const ownerColumn = await this.resolvePushTokenOwnerColumn();
 
       // Get all push tokens for the user
-      let tokens: Array<{ id: string; token: string; enabled?: boolean }> | null = null;
-      let tokensError: PostgrestError | null = null;
-
-      ({ data: tokens, error: tokensError } = await supabase
+      const initialTokensResult = await supabase
         .from('push_tokens')
         .select('id, token, enabled')
-        .eq(ownerColumn, userId));
-      if (this.isMissingColumnError(tokensError, 'enabled')) {
-        ({ data: tokens, error: tokensError } = await supabase
+        .eq(ownerColumn, userId);
+      let tokens = initialTokensResult.data as Array<{ id: string; token: string; enabled?: boolean }> | null;
+      let tokensError = initialTokensResult.error as PostgrestError | null;
+      if (this.isMissingColumnError(initialTokensResult.error, 'enabled')) {
+        const fallbackTokensResult = await supabase
           .from('push_tokens')
           .select('id, token')
-          .eq(ownerColumn, userId));
+          .eq(ownerColumn, userId);
+        tokens = fallbackTokensResult.data as Array<{ id: string; token: string; enabled?: boolean }> | null;
+        tokensError = fallbackTokensResult.error as PostgrestError | null;
       }
       if (tokensError) throw tokensError;
 
-      const activeTokens = (tokens || []).filter((entry: any) => entry.enabled !== false);
+      const activeTokens = (tokens || []).filter((entry) => entry.enabled !== false);
 
       if (activeTokens.length === 0) {
         console.log(`No push tokens found for user ${userId}`);
