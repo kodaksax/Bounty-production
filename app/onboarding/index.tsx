@@ -6,22 +6,33 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { useAuthProfile } from '../../hooks/useAuthProfile';
 
 const ONBOARDING_KEY = '@bounty_onboarding_complete';
 
 export default function OnboardingIndex() {
   const router = useRouter();
+  const { profile, loading } = useAuthProfile();
 
   useEffect(() => {
+    // Wait until auth profile service has resolved initial state
+    if (loading) return;
     checkOnboardingStatus();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, profile]);
 
   const checkOnboardingStatus = async () => {
     try {
+      // If the authenticated profile already has a username, skip the username step
+      if (profile && profile.username) {
+        router.replace('/onboarding/details');
+        return;
+      }
+
       const hasSeenOnboarding = await AsyncStorage.getItem(ONBOARDING_KEY);
-      
+
       if (hasSeenOnboarding === 'true') {
         // User has seen the carousel before, go directly to username setup
         router.replace('/onboarding/username');

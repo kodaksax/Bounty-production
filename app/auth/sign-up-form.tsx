@@ -23,8 +23,8 @@ import { ValidationPatterns } from '../../hooks/use-form-validation';
 import { config } from '../../lib/config';
 import { API_BASE_URL } from '../../lib/config/api';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
-import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { analyticsService } from '../../lib/services/analytics-service';
+import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { generateCorrelationId, parseAuthError } from '../../lib/utils/auth-errors';
 import { suggestEmailCorrection, validateEmail } from '../../lib/utils/auth-validation';
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation';
@@ -65,6 +65,14 @@ export function SignUpForm() {
     // Validate email
     const emailError = validateEmail(email);
     if (emailError) errors.email = emailError;
+
+    // Validate username (require lowercase letters, numbers and underscores)
+    if (!username) {
+      errors.username = 'Username is required';
+    } else if (!/^[a-z0-9_]{3,24}$/.test(username)) {
+      errors.username =
+        'Username must be 3-24 characters: lowercase letters, numbers, and underscores only';
+    }
 
     // Validate password - at least 8 chars with uppercase, lowercase, and a number.
     // Requirements intentionally match iOS's auto-generated "Strong Password" format
@@ -114,6 +122,7 @@ export function SignUpForm() {
 
       // Register via backend to ensure duplicate-email checks use admin API
       const normalizedEmail = email.trim().toLowerCase();
+      const normalizedUsername = username.trim().toLowerCase();
       // Supabase edge functions require the anon key for unauthenticated calls
       if (!config.supabase.anonKey) {
         console.error('[sign-up] Supabase anon key is missing while Supabase is configured', {
@@ -131,7 +140,7 @@ export function SignUpForm() {
           'Content-Type': 'application/json',
           ...(anonKey ? { apikey: anonKey, Authorization: `Bearer ${anonKey}` } : {}),
         },
-        body: JSON.stringify({ email: normalizedEmail, password, username }),
+        body: JSON.stringify({ email: normalizedEmail, password, username: normalizedUsername }),
       });
 
       if (!registerRes.ok) {
@@ -348,7 +357,8 @@ export function SignUpForm() {
                 <TextInput
                   value={username}
                   onChangeText={text => {
-                    setUsername(text);
+                    // Normalize to lowercase to match onboarding rules
+                    setUsername(text.toLowerCase());
                     if (fieldErrors.username) setFieldErrors(prev => ({ ...prev, username: '' }));
                   }}
                   placeholder="Choose a username (3-24 chars)"
