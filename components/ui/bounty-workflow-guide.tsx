@@ -1,7 +1,8 @@
 // components/ui/bounty-workflow-guide.tsx
 // Dismissible step-by-step workflow guide for poster and hunter bounty card interactions.
 import { MaterialIcons } from '@expo/vector-icons';
-import { useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 type WorkflowVariant = 'poster-postings' | 'poster-requests' | 'hunter-inprogress';
@@ -21,7 +22,7 @@ interface WorkflowConfig {
 const WORKFLOW_CONFIGS: Record<WorkflowVariant, WorkflowConfig> = {
   'poster-postings': {
     title: '📋 Managing Your Bounties',
-    subtitle: 'As a poster, here\'s how to manage your posted bounties:',
+    subtitle: "As a poster, here's how to manage your posted bounties:",
     steps: [
       {
         icon: 'touch-app',
@@ -52,12 +53,12 @@ const WORKFLOW_CONFIGS: Record<WorkflowVariant, WorkflowConfig> = {
   },
   'poster-requests': {
     title: '👥 Reviewing Applications',
-    subtitle: 'Hunters have applied to your bounty. Here\'s what to do:',
+    subtitle: "Hunters have applied to your bounty. Here's what to do:",
     steps: [
       {
         icon: 'person-search',
         iconColor: '#6ee7b7',
-        text: 'Review each applicant\'s profile and application message',
+        text: "Review each applicant's profile and application message",
       },
       {
         icon: 'check-circle',
@@ -83,7 +84,7 @@ const WORKFLOW_CONFIGS: Record<WorkflowVariant, WorkflowConfig> = {
   },
   'hunter-inprogress': {
     title: '🏹 Completing a Bounty',
-    subtitle: 'As a hunter, here\'s how to complete and get paid:',
+    subtitle: "As a hunter, here's how to complete and get paid:",
     steps: [
       {
         icon: 'touch-app',
@@ -130,10 +131,40 @@ interface BountyWorkflowGuideProps {
  * Dismissed state is stored in component local state (resets per session).
  */
 export function BountyWorkflowGuide({ variant }: BountyWorkflowGuideProps) {
-  const [dismissed, setDismissed] = useState(false);
-  // Start collapsed by default so the guide is rolled up on first view
-  const [collapsed, setCollapsed] = useState(true);
+  // `null` means "loading from storage" so we can avoid flashing the guide
+  const [dismissed, setDismissed] = useState<boolean | null>(null);
+  const [collapsed, setCollapsed] = useState<boolean | null>(null);
 
+  useEffect(() => {
+    let mounted = true;
+    const dismissedKey = `BountyWorkflowGuide:dismissed:${variant}`;
+    const collapsedKey = `BountyWorkflowGuide:collapsed:${variant}`;
+
+    (async () => {
+      try {
+        const [rawDismissed, rawCollapsed] = await Promise.all([
+          AsyncStorage.getItem(dismissedKey),
+          AsyncStorage.getItem(collapsedKey),
+        ]);
+
+        if (!mounted) return;
+
+        setDismissed(rawDismissed === 'true' ? true : false);
+        setCollapsed(rawCollapsed === 'true' ? true : false);
+      } catch (err) {
+        if (!mounted) return;
+        setDismissed(false);
+        setCollapsed(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [variant]);
+
+  // Wait for storage to load to avoid showing the guide briefly for users
+  if (dismissed === null || collapsed === null) return null;
   if (dismissed) return null;
 
   const config = WORKFLOW_CONFIGS[variant];
@@ -148,7 +179,13 @@ export function BountyWorkflowGuide({ variant }: BountyWorkflowGuideProps) {
         </View>
         <View style={styles.headerActions}>
           <TouchableOpacity
-            onPress={() => setCollapsed((c) => !c)}
+            onPress={() => {
+              const next = !(collapsed ?? false);
+              setCollapsed(next);
+              AsyncStorage.setItem(`BountyWorkflowGuide:collapsed:${variant}`, String(next)).catch(
+                () => {}
+              );
+            }}
             style={styles.iconButton}
             accessibilityRole="button"
             accessibilityLabel={collapsed ? 'Expand guide' : 'Collapse guide'}
@@ -161,11 +198,16 @@ export function BountyWorkflowGuide({ variant }: BountyWorkflowGuideProps) {
             />
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={() => setDismissed(true)}
+            onPress={() => {
+              setDismissed(true);
+              AsyncStorage.setItem(`BountyWorkflowGuide:dismissed:${variant}`, 'true').catch(
+                () => {}
+              );
+            }}
             style={styles.iconButton}
             accessibilityRole="button"
             accessibilityLabel="Dismiss guide"
-            accessibilityHint="Hide this guide permanently for this session"
+            accessibilityHint="Hide this guide permanently"
           >
             <MaterialIcons name="close" size={18} color="rgba(110, 231, 183, 0.6)" />
           </TouchableOpacity>
@@ -192,7 +234,12 @@ export function BountyWorkflowGuide({ variant }: BountyWorkflowGuideProps) {
 
           <TouchableOpacity
             style={styles.gotItButton}
-            onPress={() => setDismissed(true)}
+            onPress={() => {
+              setDismissed(true);
+              AsyncStorage.setItem(`BountyWorkflowGuide:dismissed:${variant}`, 'true').catch(
+                () => {}
+              );
+            }}
             accessibilityRole="button"
             accessibilityLabel="Got it, dismiss guide"
           >
