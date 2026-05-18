@@ -91,7 +91,8 @@
         "expo-notifications",
         {
           "icon": "./assets/images/bounty-icon.png",
-          "color": "#10b981"
+          "color": "#10b981",
+          "sounds": ["./assets/sounds/notification.wav"]
         }
       ],
       "expo-secure-store",

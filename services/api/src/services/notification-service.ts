@@ -1,7 +1,8 @@
-import { and, count, desc, eq, ne } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
+import { createClient, type PostgrestError, type SupabaseClient } from '@supabase/supabase-js';
 import { Expo, ExpoPushMessage, ExpoPushTicket } from 'expo-server-sdk';
 import { db } from '../db/connection';
-import { conversations, messages, notificationPreferences, notifications, pushTokens, users } from '../db/schema';
+import { conversations, messages } from '../db/schema';
 import { sendPushViaEdge } from './supabase-edge-client';
 
 // Initialize Expo SDK
@@ -60,24 +61,136 @@ export interface NotificationData {
   created_at: Date;
 }
 
+interface NotificationPreferenceData {
+  id?: string;
+  user_id: string;
+  applications_enabled: boolean;
+  acceptances_enabled: boolean;
+  completions_enabled: boolean;
+  payments_enabled: boolean;
+  messages_enabled: boolean;
+  follows_enabled: boolean;
+  reminders_enabled: boolean;
+  system_enabled: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+interface SupabaseNotificationRow {
+  id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  body: string;
+  data?: Record<string, any> | null;
+  read: boolean;
+  created_at: string;
+}
+
+interface SupabasePreferenceRow {
+  id?: string;
+  user_id?: string;
+  applications_enabled?: boolean;
+  acceptances_enabled?: boolean;
+  completions_enabled?: boolean;
+  payments_enabled?: boolean;
+  messages_enabled?: boolean;
+  follows_enabled?: boolean;
+  reminders_enabled?: boolean;
+  system_enabled?: boolean;
+  applications?: boolean;
+  acceptances?: boolean;
+  completions?: boolean;
+  payments?: boolean;
+  messages?: boolean;
+  in_app_enabled?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export class NotificationService {
+  private supabaseClient: SupabaseClient<any> | null = null;
+  private pushTokenOwnerColumn: 'user_id' | 'profile_id' | null = null;
+
+  private getSupabaseClient(): SupabaseClient<any> {
+    if (this.supabaseClient) return this.supabaseClient;
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
+    const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
+    if (!supabaseUrl || !supabaseServiceRoleKey) {
+      throw new Error('Supabase admin client is not configured for notifications');
+    }
+
+    this.supabaseClient = createClient<any>(supabaseUrl, supabaseServiceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    return this.supabaseClient;
+  }
+
+  private isMissingColumnError(error: PostgrestError | null, column: string): boolean {
+    if (!error) return false;
+    const message = `${error.message || ''} ${error.details || ''}`.toLowerCase();
+    return message.includes('column') && message.includes(column.toLowerCase());
+  }
+
+  private mapNotificationRow(row: SupabaseNotificationRow): NotificationData {
+    return {
+      id: row.id,
+      user_id: row.user_id,
+      type: row.type as NotificationType,
+      title: row.title,
+      body: row.body,
+      data: row.data ?? undefined,
+      read: Boolean(row.read),
+      created_at: row.created_at ? new Date(row.created_at) : new Date(),
+    };
+  }
+
+  private mapPreferenceRow(userId: string, row: SupabasePreferenceRow): NotificationPreferenceData {
+    return {
+      id: row?.id,
+      user_id: row?.user_id ?? userId,
+      applications_enabled: row?.applications_enabled ?? row?.applications ?? true,
+      acceptances_enabled: row?.acceptances_enabled ?? row?.acceptances ?? true,
+      completions_enabled: row?.completions_enabled ?? row?.completions ?? true,
+      payments_enabled: row?.payments_enabled ?? row?.payments ?? true,
+      messages_enabled: row?.messages_enabled ?? row?.messages ?? true,
+      follows_enabled: row?.follows_enabled ?? true,
+      reminders_enabled: row?.reminders_enabled ?? true,
+      system_enabled: row?.system_enabled ?? row?.in_app_enabled ?? true,
+      created_at: row?.created_at,
+      updated_at: row?.updated_at,
+    };
+  }
+
+  private async resolvePushTokenOwnerColumn(): Promise<'user_id' | 'profile_id'> {
+    if (this.pushTokenOwnerColumn) return this.pushTokenOwnerColumn;
+
+    const supabase = this.getSupabaseClient();
+    const attempts: Array<'user_id' | 'profile_id'> = ['user_id', 'profile_id'];
+    let lastError: PostgrestError | null = null;
+
+    for (const column of attempts) {
+      const { error } = await supabase.from('push_tokens').select(column).limit(1);
+      if (!error) {
+        this.pushTokenOwnerColumn = column;
+        return column;
+      }
+      if (!this.isMissingColumnError(error, column)) {
+        throw error;
+      }
+      lastError = error;
+    }
+
+    throw lastError || new Error('Unable to determine push_tokens owner column');
+  }
+
   /**
    * Check if user has enabled notifications for a specific type
    */
   private async isNotificationEnabled(userId: string, type: NotificationType): Promise<boolean> {
     try {
-      const prefs = await db
-        .select()
-        .from(notificationPreferences)
-        .where(eq(notificationPreferences.user_id, userId))
-        .limit(1);
-
-      if (prefs.length === 0) {
-        // No preferences set, default to enabled
-        return true;
-      }
-
-      const pref = prefs[0];
+      const pref = await this.getPreferences(userId);
       
       // Map notification type to preference field
       switch (type) {
@@ -131,14 +244,22 @@ export class NotificationService {
       };
     }
 
-    // Insert notification into database
-    const [notification] = await db.insert(notifications).values({
-      user_id: userId,
-      type,
-      title,
-      body,
-      data: data ? data : null,
-    }).returning();
+    const supabase = this.getSupabaseClient();
+    const { data: inserted, error } = await supabase
+      .from('notifications')
+      .insert({
+        user_id: userId,
+        type,
+        title,
+        body,
+        data: data ?? null,
+      })
+      .select('*')
+      .single();
+
+    if (error || !inserted) {
+      throw error || new Error('Failed to create notification');
+    }
 
     // Send push notification if enabled and user preferences allow it
     if (sendPush && isEnabled) {
@@ -147,22 +268,25 @@ export class NotificationService {
       await this.sendPushNotification(userId, title, body, pushData);
     }
 
-    return notification as NotificationData;
+    return this.mapNotificationRow(inserted);
   }
 
   /**
    * Get notifications for a user
    */
   async getNotifications(userId: string, limit: number = 50, offset: number = 0): Promise<NotificationData[]> {
-    const results = await db
-      .select()
-      .from(notifications)
-      .where(eq(notifications.user_id, userId))
-      .orderBy(desc(notifications.created_at))
-      .limit(limit)
-      .offset(offset);
+    if (limit <= 0) return [];
+    const supabase = this.getSupabaseClient();
+    const upper = offset + limit - 1;
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .range(offset, upper);
 
-    return results as NotificationData[];
+    if (error) throw error;
+    return (data || []).map((row) => this.mapNotificationRow(row));
   }
 
   /**
@@ -170,15 +294,15 @@ export class NotificationService {
    */
   async getUnreadCount(userId: string): Promise<number> {
     try {
-      const results = await db
-        .select({ count: count(notifications.id) })
-        .from(notifications)
-        .where(and(
-          eq(notifications.user_id, userId),
-          eq(notifications.read, false)
-        ));
+      const supabase = this.getSupabaseClient();
+      const { count, error } = await supabase
+        .from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('read', false);
 
-      return Number(results[0]?.count ?? 0);
+      if (error) throw error;
+      return count ?? 0;
     } catch (error) {
       console.error(`Error getting unread count for user ${userId}:`, error);
       throw new Error(`Failed to get unread count: ${error instanceof Error ? error.message : String(error)}`);
@@ -190,74 +314,25 @@ export class NotificationService {
    */
   async markAsRead(notificationIds: string[]): Promise<void> {
     if (notificationIds.length === 0) return;
-
-    const { inArray } = await import('drizzle-orm');
-    
-    await db
-      .update(notifications)
-      .set({ read: true })
-      .where(inArray(notifications.id, notificationIds));
+    const supabase = this.getSupabaseClient();
+    const { error } = await supabase
+      .from('notifications')
+      .update({ read: true })
+      .in('id', notificationIds);
+    if (error) throw error;
   }
 
   /**
    * Mark all notifications as read for a user
    */
   async markAllAsRead(userId: string): Promise<void> {
-    await db
-      .update(notifications)
-      .set({ read: true })
-      .where(and(
-        eq(notifications.user_id, userId),
-        eq(notifications.read, false)
-      ));
-  }
-
-  /**
-   * Ensure user profile exists before operations that require it
-   * Creates a minimal profile if one doesn't exist
-   * 
-   * Note: This adds an extra SELECT query for all token registrations, but the performance
-   * impact is minimal for this operation and ensures correctness. For existing users (the 
-   * vast majority after initial rollout), this check will pass immediately.
-   */
-  private async ensureUserProfile(userId: string): Promise<boolean> {
-    try {
-      // Check if profile exists
-      const existingProfile = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
-
-      if (existingProfile.length > 0) {
-        return true;
-      }
-
-      // Profile doesn't exist - create a minimal one
-      console.log(`📝 Creating minimal profile for user ${userId} (triggered by push token registration)`);
-      
-      // Generate a temporary username from user ID (use full UUID without hyphens to avoid collisions)
-      // This is a temporary username that will be replaced during onboarding
-      const username = `user_${userId.replace(/-/g, '')}`;
-      
-      await db.insert(users).values({
-        id: userId,
-        handle: username, // Using 'handle' (maps to 'username' column in DB)
-      });
-      
-      console.log(`✅ Created minimal profile for user ${userId}`);
-      return true;
-    } catch (error) {
-      // If error is due to duplicate key, profile was created concurrently - this is OK
-      const err = error as any;
-      if (err?.code === '23505') {
-        console.log(`ℹ️  Profile for user ${userId} already exists (concurrent creation)`);
-        return true;
-      }
-      
-      console.error(`❌ Error ensuring user profile exists for ${userId}:`, error);
-      return false;
-    }
+    const supabase = this.getSupabaseClient();
+    const { error } = await supabase
+      .from('notifications')
+      .update({ read: true })
+      .eq('user_id', userId)
+      .eq('read', false);
+    if (error) throw error;
   }
 
   /**
@@ -265,69 +340,73 @@ export class NotificationService {
    */
   async registerPushToken(userId: string, token: string, deviceId?: string): Promise<void> {
     try {
-      // Ensure user profile exists before registering push token
-      // This prevents foreign key constraint violations when tokens are registered
-      // before the user profile is created during the signup flow
       const profileExists = await this.ensureUserProfile(userId);
-      
       if (!profileExists) {
         throw new Error(`Failed to ensure user profile exists for ${userId}`);
       }
 
-      // Atomically: remove this token from any other user and upsert for the current user.
-      // Wrapping in a transaction prevents the race condition window between the delete and insert.
-      await db.transaction(async (tx) => {
-        // Remove token from any other user to prevent cross-user notification leakage
-        // (e.g., device shared between accounts, or user re-installs app)
-        await tx
-          .delete(pushTokens)
-          .where(and(
-            eq(pushTokens.token, token),
-            ne(pushTokens.user_id, userId)
-          ));
+      const supabase = this.getSupabaseClient();
+      const ownerColumn = await this.resolvePushTokenOwnerColumn();
 
-        // Check if token already exists for this user
-        const existing = await tx
-          .select()
-          .from(pushTokens)
-          .where(and(
-            eq(pushTokens.user_id, userId),
-            eq(pushTokens.token, token)
-          ))
-          .limit(1);
+      const { error: deleteError } = await supabase
+        .from('push_tokens')
+        .delete()
+        .eq('token', token)
+        .neq(ownerColumn, userId);
+      if (deleteError) throw deleteError;
 
-        if (existing.length > 0) {
-          // Update the existing token's timestamp
-          await tx
-            .update(pushTokens)
-            .set({ 
-              updated_at: new Date(),
-              device_id: deviceId || existing[0].device_id
-            })
-            .where(eq(pushTokens.id, existing[0].id));
-          console.log(`✅ Updated push token for user ${userId}`);
-        } else {
-          // Insert new token
-          await tx.insert(pushTokens).values({
-            user_id: userId,
+      const { data: existing, error: existingError } = await supabase
+        .from('push_tokens')
+        .select('*')
+        .eq(ownerColumn, userId)
+        .eq('token', token)
+        .limit(1);
+      if (existingError) throw existingError;
+
+      if (existing && existing.length > 0) {
+        const { error: updateError } = await supabase
+          .from('push_tokens')
+          .update({
+            updated_at: new Date().toISOString(),
+            device_id: deviceId || existing[0].device_id || null,
+          })
+          .eq('id', existing[0].id);
+        if (updateError) throw updateError;
+        console.log(`✅ Updated push token for user ${userId}`);
+        return;
+      }
+
+      type PushTokenInsertPayload =
+        | { user_id: string; token: string; device_id: string | null; enabled?: boolean }
+        | { profile_id: string; token: string; device_id: string | null; enabled?: boolean };
+      const insertPayload: PushTokenInsertPayload = ownerColumn === 'user_id'
+        ? { user_id: userId, token, device_id: deviceId ?? null, enabled: true }
+        : { profile_id: userId, token, device_id: deviceId ?? null, enabled: true };
+      let { error: insertError } = await supabase
+        .from('push_tokens')
+        .insert(insertPayload);
+      if (this.isMissingColumnError(insertError, 'enabled')) {
+        ({ error: insertError } = await supabase
+          .from('push_tokens')
+          .insert({
+            [ownerColumn]: userId,
             token,
-            device_id: deviceId,
-          });
-          console.log(`✅ Registered new push token for user ${userId}`);
-        }
-      });
+            device_id: deviceId ?? null,
+          }));
+      }
+      if (insertError) throw insertError;
+      console.log(`✅ Registered new push token for user ${userId}`);
     } catch (error) {
       // Log detailed error information for debugging
       console.error(`❌ Error registering push token for user ${userId}:`, error);
       
-      // Check if it's a foreign key constraint error
-      // Drizzle ORM and Postgres errors contain specific codes and constraint names
-      // Note: This should be unreachable now with ensureUserProfile(), but kept as a defensive
-      // safeguard in case the profile is deleted between the check and insert (race condition)
       const err = error as any;
-      if (err?.code === '23503' || // Postgres FK violation code
-          err?.constraint_name?.includes('user_id') ||
-          (error instanceof Error && error.message.includes('foreign key constraint'))) {
+      if (
+        err?.code === '23503' ||
+        err?.code === 'PGRST204' ||
+        err?.constraint_name?.includes('user_id') ||
+        (error instanceof Error && error.message.toLowerCase().includes('foreign key constraint'))
+      ) {
         throw new Error(`User profile issue: Unable to register push token. Please contact support if this persists.`);
       }
       
@@ -337,16 +416,70 @@ export class NotificationService {
   }
 
   /**
+   * Ensure user profile exists before operations that require FK references to profiles.id.
+   */
+  private async ensureUserProfile(userId: string): Promise<boolean> {
+    try {
+      const supabase = this.getSupabaseClient();
+      const { data: existing, error: selectError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (selectError) throw selectError;
+      if (existing?.id) return true;
+
+      console.log(`📝 Creating minimal profile for user ${userId} (triggered by push token registration)`);
+      const username = `user_${userId.replace(/-/g, '')}`;
+
+      const candidateRows = [
+        { id: userId, username },
+        { id: userId, handle: username },
+        { id: userId },
+      ];
+
+      for (const row of candidateRows) {
+        const { error } = await supabase
+          .from('profiles')
+          .upsert(row, { onConflict: 'id' })
+          .select('id')
+          .single();
+        if (!error) {
+          console.log(`✅ Created minimal profile for user ${userId}`);
+          return true;
+        }
+        if (error.code === '23505') return true;
+        if (
+          this.isMissingColumnError(error, 'username') ||
+          this.isMissingColumnError(error, 'handle')
+        ) {
+          continue;
+        }
+      }
+
+      return false;
+    } catch (error) {
+      const err = error as any;
+      if (err?.code === '23505') return true;
+      console.error(`❌ Error ensuring user profile exists for ${userId}:`, error);
+      return false;
+    }
+  }
+
+  /**
    * Delete push notification token (called on logout to prevent cross-user notification leakage)
    */
   async deletePushToken(userId: string, token: string): Promise<void> {
     try {
-      await db
-        .delete(pushTokens)
-        .where(and(
-          eq(pushTokens.user_id, userId),
-          eq(pushTokens.token, token)
-        ));
+      const supabase = this.getSupabaseClient();
+      const ownerColumn = await this.resolvePushTokenOwnerColumn();
+      const { error } = await supabase
+        .from('push_tokens')
+        .delete()
+        .eq(ownerColumn, userId)
+        .eq('token', token);
+      if (error) throw error;
       console.log(`✅ Deleted push token for user ${userId}`);
     } catch (error) {
       console.error(`❌ Error deleting push token for user ${userId}:`, error);
@@ -368,13 +501,30 @@ export class NotificationService {
     data?: Record<string, any>
   ): Promise<void> {
     try {
-      // Get all push tokens for the user
-      const tokens = await db
-        .select()
-        .from(pushTokens)
-        .where(eq(pushTokens.user_id, userId));
+      const supabase = this.getSupabaseClient();
+      const ownerColumn = await this.resolvePushTokenOwnerColumn();
 
-      if (tokens.length === 0) {
+      // Get all push tokens for the user
+      const initialTokensResult = await supabase
+        .from('push_tokens')
+        .select('id, token, enabled')
+        .eq(ownerColumn, userId);
+      let tokens = initialTokensResult.data as Array<{ id: string; token: string; enabled?: boolean }> | null;
+      let tokensError = initialTokensResult.error as PostgrestError | null;
+      if (this.isMissingColumnError(initialTokensResult.error, 'enabled')) {
+        const fallbackTokensResult = await supabase
+          .from('push_tokens')
+          .select('id, token')
+          .eq(ownerColumn, userId);
+        tokens = fallbackTokensResult.data as Array<{ id: string; token: string; enabled?: boolean }> | null;
+        tokensError = fallbackTokensResult.error as PostgrestError | null;
+      }
+      if (tokensError) throw tokensError;
+
+      type PushTokenRecord = { id: string; token: string; enabled?: boolean };
+      const activeTokens: PushTokenRecord[] = (tokens || []).filter((entry) => entry.enabled !== false);
+
+      if (activeTokens.length === 0) {
         console.log(`No push tokens found for user ${userId}`);
         return;
       }
@@ -392,7 +542,7 @@ export class NotificationService {
       const channelId = getAndroidChannelId(notificationType);
 
       // Filter to valid tokens and keep track of which token record each message corresponds to
-      const validTokenEntries = tokens.filter(t => Expo.isExpoPushToken(t.token));
+      const validTokenEntries = activeTokens.filter((t) => Expo.isExpoPushToken(t.token));
 
       // Prepare messages
       const pushMessages: ExpoPushMessage[] = validTokenEntries
@@ -475,8 +625,12 @@ export class NotificationService {
 
     if (staleTokenIds.length === 0) return;
 
-    const { inArray } = await import('drizzle-orm');
-    await db.delete(pushTokens).where(inArray(pushTokens.id, staleTokenIds));
+    const supabase = this.getSupabaseClient();
+    const { error } = await supabase
+      .from('push_tokens')
+      .delete()
+      .in('id', staleTokenIds);
+    if (error) throw error;
     console.log(`✅ Cleaned up ${staleTokenIds.length} stale push token(s)`);
   }
 
@@ -489,25 +643,26 @@ export class NotificationService {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - daysOld);
 
-    // TODO: Implement when drizzle-orm supports lt/lte in delete operations
-    // For now, use a raw SQL query or select + delete approach
-    const oldNotifications = await db
-      .select({ id: notifications.id })
-      .from(notifications)
-      .where(and(
-        eq(notifications.read, true),
-        // Manual date comparison
-      ))
-      .limit(1000); // Limit to prevent performance issues
+    const supabase = this.getSupabaseClient();
+    const cutoffIso = cutoffDate.toISOString();
+    const { data: oldNotifications, error: selectError } = await supabase
+      .from('notifications')
+      .select('id')
+      .eq('read', true)
+      .lt('created_at', cutoffIso)
+      .limit(1000);
+    if (selectError) throw selectError;
 
-    if (oldNotifications.length === 0) return 0;
+    const ids = (oldNotifications || []).map((row: any) => row.id);
+    if (ids.length === 0) return 0;
 
-    const { inArray } = await import('drizzle-orm');
-    await db
-      .delete(notifications)
-      .where(inArray(notifications.id, oldNotifications.map(n => n.id)));
+    const { error: deleteError } = await supabase
+      .from('notifications')
+      .delete()
+      .in('id', ids);
+    if (deleteError) throw deleteError;
 
-    return oldNotifications.length;
+    return ids.length;
   }
 
   // Helper methods for specific notification types
@@ -804,24 +959,59 @@ export class NotificationService {
    */
   async getPreferences(userId: string) {
     try {
-      const prefs = await db
-        .select()
-        .from(notificationPreferences)
-        .where(eq(notificationPreferences.user_id, userId))
-        .limit(1);
+      const supabase = this.getSupabaseClient();
+      const { data: existing, error: selectError } = await supabase
+        .from('notification_preferences')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (selectError) throw selectError;
+      if (existing) return this.mapPreferenceRow(userId, existing);
 
-      if (prefs.length === 0) {
-        // Create default preferences if they don't exist
-        const [newPrefs] = await db
-          .insert(notificationPreferences)
-          .values({
-            user_id: userId,
-          })
-          .returning();
-        return newPrefs;
+      const modernDefaults = {
+        user_id: userId,
+        applications_enabled: true,
+        acceptances_enabled: true,
+        completions_enabled: true,
+        payments_enabled: true,
+        messages_enabled: true,
+        follows_enabled: true,
+        reminders_enabled: true,
+        system_enabled: true,
+      };
+
+      const { data: modernInserted, error: modernInsertError } = await supabase
+        .from('notification_preferences')
+        .insert(modernDefaults)
+        .select('*')
+        .single();
+
+      if (!modernInsertError && modernInserted) {
+        return this.mapPreferenceRow(userId, modernInserted);
       }
 
-      return prefs[0];
+      if (!this.isMissingColumnError(modernInsertError, 'applications_enabled')) {
+        throw modernInsertError;
+      }
+
+      const legacyDefaults = {
+        user_id: userId,
+        applications: true,
+        acceptances: true,
+        completions: true,
+        payments: true,
+        messages: true,
+      };
+      const { data: legacyInserted, error: legacyInsertError } = await supabase
+        .from('notification_preferences')
+        .insert(legacyDefaults)
+        .select('*')
+        .single();
+      if (legacyInsertError || !legacyInserted) {
+        throw legacyInsertError || new Error('Failed to create notification preferences');
+      }
+
+      return this.mapPreferenceRow(userId, legacyInserted);
     } catch (error) {
       console.error('Error getting notification preferences:', error);
       throw error;
@@ -847,18 +1037,48 @@ export class NotificationService {
     try {
       // Ensure preferences exist first
       await this.getPreferences(userId);
+      const supabase = this.getSupabaseClient();
 
-      // Update preferences
-      const [updated] = await db
-        .update(notificationPreferences)
-        .set({
-          ...preferences,
-          updated_at: new Date(),
-        })
-        .where(eq(notificationPreferences.user_id, userId))
-        .returning();
+      const modernPatch = {
+        ...preferences,
+        updated_at: new Date().toISOString(),
+      };
+      const { data: modernUpdated, error: modernUpdateError } = await supabase
+        .from('notification_preferences')
+        .update(modernPatch)
+        .eq('user_id', userId)
+        .select('*')
+        .single();
 
-      return updated;
+      if (!modernUpdateError && modernUpdated) {
+        return this.mapPreferenceRow(userId, modernUpdated);
+      }
+
+      if (!this.isMissingColumnError(modernUpdateError, 'applications_enabled')) {
+        throw modernUpdateError;
+      }
+
+      const legacyPatch = {
+        ...(preferences.applications_enabled !== undefined ? { applications: preferences.applications_enabled } : {}),
+        ...(preferences.acceptances_enabled !== undefined ? { acceptances: preferences.acceptances_enabled } : {}),
+        ...(preferences.completions_enabled !== undefined ? { completions: preferences.completions_enabled } : {}),
+        ...(preferences.payments_enabled !== undefined ? { payments: preferences.payments_enabled } : {}),
+        ...(preferences.messages_enabled !== undefined ? { messages: preferences.messages_enabled } : {}),
+        ...(preferences.system_enabled !== undefined ? { in_app_enabled: preferences.system_enabled } : {}),
+        updated_at: new Date().toISOString(),
+      };
+
+      const { data: legacyUpdated, error: legacyUpdateError } = await supabase
+        .from('notification_preferences')
+        .update(legacyPatch)
+        .eq('user_id', userId)
+        .select('*')
+        .single();
+      if (legacyUpdateError || !legacyUpdated) {
+        throw legacyUpdateError || new Error('Failed to update notification preferences');
+      }
+
+      return this.mapPreferenceRow(userId, legacyUpdated);
     } catch (error) {
       console.error('Error updating notification preferences:', error);
       throw error;
