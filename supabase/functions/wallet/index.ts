@@ -548,7 +548,8 @@ Deno.serve(async (req: Request) => {
           .eq('id', bountyId)
           .single();
         if (bountyErr || !bountyRow) return jsonResponse({ error: 'Bounty not found' }, 404);
-        if ((bountyRow as { user_id: string }).user_id !== userId) {
+        const posterId = (bountyRow as { user_id: string }).user_id;
+        if (posterId !== userId) {
           return jsonResponse({ error: 'Unauthorized to release funds' }, 403);
         }
 
@@ -671,24 +672,96 @@ Deno.serve(async (req: Request) => {
           .maybeSingle();
 
         let totalAmount: number;
+        let escrowTransactionId: string | null = escrowTx
+          ? (escrowTx as WalletTransaction).id
+          : null;
         if (escrowTx) {
           totalAmount = Math.abs((escrowTx as WalletTransaction).amount);
         } else {
-          // Legacy bounty — no escrow record. Use the bounty's stored amount.
-          const bountyAmount = Number((bountyRow as any).amount);
-          if (!bountyAmount || bountyAmount <= 0 || (bountyRow as any).is_for_honor) {
-            console.error(
-              '[wallet] No escrow record and no valid bounty amount for release:',
-              bountyId
-            );
-            return jsonResponse({ error: 'Escrow transaction not found' }, 404);
+          // Legacy bounty — first check whether an older client already recorded
+          // the poster debit with the retired bounty_posted type. If not, create
+          // a real escrow row now so the poster balance is debited before release.
+          const { data: legacyDebitTx, error: legacyDebitErr } = await supabase
+            .from('wallet_transactions')
+            .select('*')
+            .eq('bounty_id', bountyId)
+            .eq('user_id', posterId)
+            .eq('type', 'bounty_posted')
+            .eq('status', 'completed')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (legacyDebitErr) {
+            console.error('[wallet] failed checking legacy poster debit:', {
+              bountyId,
+              posterId,
+              error: legacyDebitErr,
+            });
+            return jsonResponse({ error: 'Failed to validate poster balance state' }, 500);
           }
-          totalAmount = bountyAmount;
-          console.warn(
-            '[wallet] No escrow record found; using bounty amount for release:',
-            bountyId,
-            totalAmount
-          );
+
+          if (legacyDebitTx) {
+            totalAmount = Math.abs((legacyDebitTx as WalletTransaction).amount);
+            escrowTransactionId = (legacyDebitTx as WalletTransaction).id;
+          } else {
+            // No historical debit exists. Use the bounty's stored amount and
+            // atomically create escrow + debit the poster before crediting the hunter.
+            const bountyAmount = Number((bountyRow as any).amount);
+            if (!bountyAmount || bountyAmount <= 0 || (bountyRow as any).is_for_honor) {
+              console.error(
+                '[wallet] No escrow record and no valid bounty amount for release:',
+                bountyId
+              );
+              return jsonResponse({ error: 'Escrow transaction not found' }, 404);
+            }
+
+            const { data: escrowResult, error: escrowErr } = await supabase
+              .rpc('apply_escrow', {
+                p_user_id: posterId,
+                p_bounty_id: bountyId,
+                p_amount: bountyAmount,
+                p_description: `Escrow for bounty ${bountyId}`,
+                p_metadata: {
+                  bounty_id: bountyId,
+                  escrowed_at: new Date().toISOString(),
+                  created_during_release: true,
+                  idempotency_key: `release_backfill_escrow_${bountyId}_${posterId}`,
+                },
+              })
+              .single();
+
+            if (escrowErr) {
+              const errMsg = (escrowErr as { message?: string }).message ?? '';
+              if (escrowErr.code === '23514' || errMsg.toLowerCase().includes('insufficient')) {
+                return jsonResponse({ error: 'Insufficient balance' }, 400);
+              }
+              console.error('[wallet] apply_escrow RPC error during release:', {
+                bountyId,
+                posterId,
+                error: escrowErr,
+              });
+              return jsonResponse({ error: 'Failed to update poster balance' }, 500);
+            }
+
+            const appliedEscrow = escrowResult as {
+              applied: boolean;
+              transaction_id: string | null;
+            };
+            escrowTransactionId = appliedEscrow.transaction_id;
+            totalAmount = bountyAmount;
+            if (!appliedEscrow.applied) {
+              console.warn(
+                '[wallet] release found escrow created by a concurrent request:',
+                bountyId
+              );
+            } else {
+              console.warn(
+                '[wallet] No escrow record found; backfilled poster debit during release:',
+                bountyId,
+                totalAmount
+              );
+            }
+          }
         }
 
         const PLATFORM_FEE_PERCENT = Number(Deno.env.get('PLATFORM_FEE_PERCENT') ?? '5');
@@ -710,7 +783,7 @@ Deno.serve(async (req: Request) => {
               status: 'pending',
               metadata: {
                 bounty_id: bountyId,
-                escrow_transaction_id: escrowTx ? (escrowTx as WalletTransaction).id : null,
+                escrow_transaction_id: escrowTransactionId,
                 platform_fee: platformFee,
                 released_at: new Date().toISOString(),
                 idempotency_key: effectiveKey,
@@ -758,11 +831,28 @@ Deno.serve(async (req: Request) => {
           );
         }
 
+        const { data: posterProfile, error: posterBalanceErr } = await supabase
+          .from('profiles')
+          .select('balance')
+          .eq('id', posterId)
+          .maybeSingle();
+        if (posterBalanceErr) {
+          console.warn('[wallet] release succeeded but poster balance refresh failed:', {
+            bountyId,
+            posterId,
+            error: posterBalanceErr,
+          });
+        }
+
         return jsonResponse({
           success: true,
           transactionId: (releaseTxRow as WalletTransaction).id,
           releaseAmount: hunterAmount,
           platformFee,
+          posterBalance:
+            typeof (posterProfile as Profile | null)?.balance === 'number'
+              ? (posterProfile as Profile).balance
+              : null,
           message: `$${hunterAmount.toFixed(2)} released to hunter.`,
         });
       }

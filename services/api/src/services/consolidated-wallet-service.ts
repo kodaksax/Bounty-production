@@ -908,15 +908,14 @@ export async function releaseEscrow(
     .single();
 
   let totalAmount: number;
+  let escrowTransactionId: string | null = escrowTx?.id ?? null;
 
   if (escrowError || !escrowTx) {
-    // No server-side escrow record found.  This can happen for bounties created
-    // through the legacy client path that deducted funds locally (via withdraw /
-    // bounty_posted) without calling the /wallet/escrow endpoint.  Fall back to
-    // the bounty's stored amount so the release can still proceed.
+    // No server-side escrow record found. First check whether an older client
+    // already recorded the poster debit with the retired bounty_posted type.
     const { data: bountyRecord, error: bountyLookupError } = await admin
       .from('bounties')
-      .select('amount, is_for_honor')
+      .select('amount, is_for_honor, user_id')
       .eq('id', bountyId)
       .single();
 
@@ -929,10 +928,46 @@ export async function releaseEscrow(
       throw new NotFoundError('Escrow transaction', bountyId);
     }
 
-    logger.warn(
-      { bountyId, hunterId, amount: totalAmount },
-      '[releaseEscrow] No escrow record found; falling back to bounty amount for release'
-    );
+    const posterId = bountyRecord.user_id;
+    if (!posterId) {
+      throw new NotFoundError('Poster', bountyId);
+    }
+
+    const { data: legacyDebitTx, error: legacyDebitError } = await admin
+      .from('wallet_transactions')
+      .select('*')
+      .eq('bounty_id', bountyId)
+      .eq('user_id', posterId)
+      .eq('type', 'bounty_posted')
+      .eq('status', 'completed')
+      .maybeSingle();
+
+    if (legacyDebitError) {
+      throw new ExternalServiceError('Supabase', 'Failed to validate legacy poster debit', {
+        error: legacyDebitError.message,
+      });
+    }
+
+    if (legacyDebitTx) {
+      totalAmount = Math.abs(Number(legacyDebitTx.amount));
+      escrowTransactionId = legacyDebitTx.id;
+      logger.warn(
+        { bountyId, hunterId, amount: totalAmount },
+        '[releaseEscrow] No escrow record found; using legacy poster debit for release'
+      );
+    } else {
+      const backfilledEscrow = await createEscrow(
+        bountyId,
+        posterId,
+        totalAmount,
+        `release_backfill_escrow_${bountyId}_${posterId}`
+      );
+      escrowTransactionId = backfilledEscrow.id;
+      logger.warn(
+        { bountyId, hunterId, posterId, amount: totalAmount },
+        '[releaseEscrow] No escrow record found; backfilled poster debit during release'
+      );
+    }
   } else {
     totalAmount = Math.abs(escrowTx.amount);
   }
@@ -955,7 +990,7 @@ export async function releaseEscrow(
         status: 'completed',
         metadata: {
           bounty_id: bountyId,
-          escrow_transaction_id: escrowTx?.id ?? null,
+          escrow_transaction_id: escrowTransactionId,
           platform_fee: platformFee,
           released_at: new Date().toISOString(),
           idempotency_key: effectiveIdempotencyKey,

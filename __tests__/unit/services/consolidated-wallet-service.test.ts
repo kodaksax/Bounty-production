@@ -827,6 +827,51 @@ describe('Consolidated Wallet Service', () => {
       expect(mockStripeTransfersCreate).not.toHaveBeenCalled();
     });
 
+    it('backfills escrow and deducts poster balance before releasing legacy bounty', async () => {
+      const backfilledEscrowTx = {
+        id: 'esc-backfill',
+        user_id: 'poster1',
+        bounty_id: 'b1',
+        type: 'escrow',
+        amount: -10000,
+        description: 'Escrow for bounty b1',
+        status: 'pending',
+        metadata: {},
+        created_at: '2024-01-01',
+      };
+      const admin = makeAdmin(
+        [
+          { data: null, error: null }, // no existing release
+          { data: null, error: { message: 'not found' } }, // no escrow tx
+          { data: { amount: 10000, is_for_honor: false, user_id: 'poster1' }, error: null },
+          { data: null, error: null }, // no legacy bounty_posted debit
+          { data: null, error: null }, // createEscrow: no existing escrow
+          { data: backfilledEscrowTx, error: null }, // createEscrow: insert
+          { error: null }, // createEscrow: mark completed
+          { data: releaseTx, error: null }, // release insert
+          { error: null }, // platform_ledger insert
+          { data: { stripe_connect_account_id: null }, error: null }, // profile
+        ],
+        [
+          { data: null, error: null }, // createEscrow withdrawBalance
+          { data: null, error: null }, // release updateBalance
+        ]
+      );
+      const svc = buildService(admin);
+
+      const result = await svc.releaseEscrow('b1', 'hunter1');
+
+      expect(result.type).toBe('release');
+      expect(admin.rpc).toHaveBeenNthCalledWith(1, 'withdraw_balance', {
+        p_user_id: 'poster1',
+        p_amount: 10000,
+      });
+      expect(admin.rpc).toHaveBeenNthCalledWith(2, 'update_balance', {
+        p_user_id: 'hunter1',
+        p_amount: 9500,
+      });
+    });
+
     it('initiates Stripe transfer when hunter has a connected account', async () => {
       const admin = makeAdmin(
         [

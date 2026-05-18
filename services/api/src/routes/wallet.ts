@@ -608,12 +608,16 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
           hunterId,
           idempotencyKey
         );
+        const { balance: posterBalance } = await ConsolidatedWalletService.getBalance(
+          request.userId
+        );
 
         return {
           success: true,
           transactionId: transaction.id,
           releaseAmount: transaction.amount,
           platformFee: (transaction as any).metadata?.platform_fee ?? null,
+          posterBalance,
           message: `$${transaction.amount.toFixed(2)} released to hunter.`,
         };
       } catch (error: any) {
