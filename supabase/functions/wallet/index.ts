@@ -326,8 +326,20 @@ Deno.serve(async (req: Request) => {
         };
 
         if (!applied) {
+          // Escrow row already exists for this bounty — typically because the
+          // bounty INSERT trigger (fn_reserve_bounty_escrow) already reserved
+          // funds in the same DB transaction.  This is the expected, healthy
+          // outcome under the atomic reservation model; surface it as a 409
+          // with the caller's current balance so the client can refresh local
+          // state without treating it as an error.
           return jsonResponse(
-            { error: 'Escrow already exists for this bounty', code: 'duplicate_transaction' },
+            {
+              error: 'Escrow already exists for this bounty',
+              code: 'duplicate_transaction',
+              transactionId: transaction_id,
+              amount,
+              newBalance: new_balance,
+            },
             409
           );
         }

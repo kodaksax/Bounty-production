@@ -596,6 +596,30 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
           if (!response.ok) {
             const errData = await response.json().catch(() => ({}));
+            // 409 duplicate_transaction is *not* an error after the bounty
+            // INSERT trigger landed (see migration 20260518): the trigger
+            // reserves escrow atomically with the bounty row, so by the time
+            // the client gets here the escrow already exists.  Treat it as a
+            // successful idempotent reservation: pick up the server-provided
+            // newBalance (or fall back to a derived value) and continue.  If
+            // we threw here, the caller (useBountyForm) would mistakenly
+            // delete a bounty whose funds are already correctly held.
+            const errCode = (errData as any).code;
+            if (response.status === 409 && errCode === 'duplicate_transaction') {
+              const dupBalance =
+                typeof (errData as any).newBalance === 'number'
+                  ? (errData as any).newBalance
+                  : Math.max(0, balance - amount);
+              setBalance(dupBalance);
+              await persist(dupBalance);
+              const dupRecord = await logTransaction({
+                type: 'escrow',
+                amount: -amount,
+                details: { title, bounty_id: bountyIdStr, status: 'pending' },
+                escrowStatus: 'funded',
+              });
+              return dupRecord;
+            }
             throw new Error((errData as any).error || 'Failed to create escrow on server');
           }
 
