@@ -677,14 +677,11 @@ export const disputeService = {
               );
 
               if (refundRpcError) {
-                logger.error(
-                  'Failed to refund wallet escrow to poster during dispute resolution',
-                  {
-                    disputeId,
-                    bountyId: dispute.bountyId,
-                    error: refundRpcError,
-                  }
-                );
+                logger.error('Failed to refund wallet escrow to poster during dispute resolution', {
+                  disputeId,
+                  bountyId: dispute.bountyId,
+                  error: refundRpcError,
+                });
               } else {
                 // RPC returns a single row { applied, transaction_id, refund_amount }.
                 const row = Array.isArray(refundData) ? refundData[0] : refundData;
@@ -701,17 +698,39 @@ export const disputeService = {
                 }
               }
             } else {
-              // Hunter wins on a wallet-escrow bounty: payout happens via the
-              // bounty completion flow (releaseFunds), not via dispute
-              // resolution.  Nothing to do here.
-              logger.warning(
-                'Dispute resolved with winner but bounty has no payment_intent_id — escrow action skipped',
-                {
-                  disputeId,
-                  bountyId: dispute.bountyId,
-                  winner,
-                }
+              // Hunter wins on a wallet-escrow bounty: atomically credit the
+              // hunter's balance and insert a `release` ledger row via the
+              // SECURITY DEFINER RPC.  Idempotent — safe to retry.
+              const _pDisputeIdRelease = normalizeDisputeIdParam(disputeId);
+              const { data: releaseData, error: releaseRpcError } = await (supabase as any).rpc(
+                'fn_release_wallet_escrow_for_dispute',
+                { p_dispute_id: _pDisputeIdRelease }
               );
+
+              if (releaseRpcError) {
+                logger.error(
+                  'Failed to release wallet escrow to hunter during dispute resolution',
+                  {
+                    disputeId,
+                    bountyId: dispute.bountyId,
+                    error: releaseRpcError,
+                  }
+                );
+              } else {
+                // RPC returns a single row { applied, transaction_id, release_amount }.
+                const row = Array.isArray(releaseData) ? releaseData[0] : releaseData;
+                if (row?.applied) {
+                  escrowActionExecuted = true;
+                } else {
+                  logger.warning(
+                    'fn_release_wallet_escrow_for_dispute reported no-op (already settled or nothing to release)',
+                    {
+                      disputeId,
+                      bountyId: dispute.bountyId,
+                    }
+                  );
+                }
+              }
             }
           }
         } catch (escrowError) {
