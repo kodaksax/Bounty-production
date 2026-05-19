@@ -45,11 +45,15 @@ SET search_path = public
 AS $$
 DECLARE
   v_bounty_id          UUID;
+  v_dispute_status     TEXT;
+  v_dispute_winner     TEXT;
   v_poster_id          UUID;
   v_bounty_amount      NUMERIC;
   v_is_for_honor       BOOLEAN;
   v_payment_intent_id  TEXT;
   v_escrow_tx_id       UUID;
+  v_escrow_tx_amount   NUMERIC;
+  v_refund_amount      NUMERIC;
   v_existing_settlement UUID;
   v_refund_tx_id       UUID;
 BEGIN
@@ -64,8 +68,8 @@ BEGIN
   -- ── End authorization guard ────────────────────────────────────────────
 
   -- Lock the dispute row.
-  SELECT bounty_id
-    INTO v_bounty_id
+  SELECT bounty_id, status, winner
+    INTO v_bounty_id, v_dispute_status, v_dispute_winner
     FROM public.bounty_disputes
    WHERE id = p_dispute_id
      FOR UPDATE;
@@ -73,6 +77,17 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Dispute % not found', p_dispute_id
       USING ERRCODE = 'P0002';
+  END IF;
+
+  -- Authorization-of-effect guard: only refund when the dispute has actually
+  -- been resolved in the poster's favour. Accepts the canonical resolution
+  -- status set by fn_close_dispute_hold and, as a belt-and-braces check, the
+  -- winner column written by resolveDispute. An accidental or stale call for
+  -- an open / hunter-won / closed dispute must not credit the poster.
+  IF v_dispute_status <> 'resolved_poster_wins'
+     OR COALESCE(v_dispute_winner, '') <> 'poster' THEN
+    RETURN QUERY SELECT FALSE, NULL::UUID, NULL::NUMERIC;
+    RETURN;
   END IF;
 
   IF v_bounty_id IS NULL THEN
@@ -124,10 +139,13 @@ BEGIN
     RETURN;
   END IF;
 
-  -- Find the original escrow tx so the refund references it and uses the
-  -- exact escrowed amount (in case bounty.amount has since drifted).
-  SELECT id
-    INTO v_escrow_tx_id
+  -- Find the original escrow transaction so the refund references it AND
+  -- uses the exact escrowed amount.  We rely on the ledger row's recorded
+  -- amount (not bounties.amount) to guard against drift between the bounty
+  -- value and the actually-held wallet amount.  Stored as a negative outflow,
+  -- so the refund credit is abs(amount).
+  SELECT id, amount
+    INTO v_escrow_tx_id, v_escrow_tx_amount
     FROM public.wallet_transactions
    WHERE bounty_id = v_bounty_id
      AND type      = 'escrow'
@@ -137,6 +155,14 @@ BEGIN
   IF v_escrow_tx_id IS NULL THEN
     -- No escrow row to refund against. Nothing safely refundable.
     RETURN QUERY SELECT FALSE, NULL::UUID, NULL::NUMERIC;
+    RETURN;
+  END IF;
+
+  v_refund_amount := ABS(COALESCE(v_escrow_tx_amount, 0));
+
+  IF v_refund_amount <= 0 THEN
+    -- Escrow tx exists but recorded a zero amount; nothing to refund.
+    RETURN QUERY SELECT FALSE, v_escrow_tx_id, NULL::NUMERIC;
     RETURN;
   END IF;
 
@@ -153,7 +179,7 @@ BEGIN
     v_poster_id,
     v_bounty_id,
     'refund',
-    v_bounty_amount,
+    v_refund_amount,
     format('Dispute %s resolved in poster''s favour; escrow refunded.', p_dispute_id),
     'completed',
     jsonb_build_object(
@@ -169,9 +195,9 @@ BEGIN
   -- Credit the poster's balance in the same transaction.  If this raises,
   -- the wallet_transactions INSERT above is rolled back too, leaving the
   -- ledger consistent.
-  PERFORM public.update_balance(v_poster_id, v_bounty_amount);
+  PERFORM public.update_balance(v_poster_id, v_refund_amount);
 
-  RETURN QUERY SELECT TRUE, v_refund_tx_id, v_bounty_amount;
+  RETURN QUERY SELECT TRUE, v_refund_tx_id, v_refund_amount;
 END;
 $$;
 
