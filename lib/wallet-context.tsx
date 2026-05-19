@@ -872,13 +872,33 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           },
         });
 
+        // Sync balance and transactions from API to reconcile after the release.
+        // The poster's server-side balance was already deducted at escrow creation
+        // (via the bounty INSERT trigger / apply_escrow), so no balance change is
+        // expected here in the normal flow.  Refreshing nonetheless guarantees the
+        // local state matches the server's authoritative view — covering edge
+        // cases (e.g. concurrent wallet activity, dispute holds released, or stale
+        // local state after app resume) where the displayed balance could
+        // otherwise drift after a payout release.  Mirrors the refundEscrow flow
+        // below for consistency.  Non-fatal: a failure here does not invalidate
+        // the successful server release.
+        try {
+          const refreshToken = await getAccessToken();
+          if (refreshToken) {
+            await refreshFromApi(refreshToken);
+          }
+        } catch {
+          // Non-critical: server release already succeeded; local state will
+          // catch up on the next refresh (wallet screen mount, app resume, etc.).
+        }
+
         return true;
       } catch (error) {
         console.error('Error releasing funds:', error);
         return false;
       }
     },
-    [transactions, logTransaction, persistTransactions]
+    [transactions, logTransaction, persistTransactions, refreshFromApi, getAccessToken]
   );
 
   // Refund escrowed funds back to poster when bounty is cancelled
