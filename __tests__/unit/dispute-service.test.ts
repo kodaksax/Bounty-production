@@ -506,6 +506,147 @@ describe('DisputeService', () => {
       expect(logger.warning).toHaveBeenCalled();
     });
 
+    it('should refund poster via fn_refund_wallet_escrow_for_dispute when poster wins a wallet-escrow bounty', async () => {
+      const mockDispute = {
+        id: 'dispute-457',
+        cancellation_id: 'cancel-457',
+        bounty_id: 'bounty-457',
+        initiator_id: 'user-457',
+        reason: 'Wallet-escrow dispute, poster wins',
+        status: 'under_review',
+        created_at: new Date().toISOString(),
+      };
+
+      const mockBounty = {
+        id: 'bounty-457',
+        user_id: 'poster-457',
+        title: 'Wallet-Escrow Bounty',
+        amount: 50000,
+        // No payment_intent_id — wallet-escrow path.
+      };
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'bounty_disputes') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                single: jest.fn().mockResolvedValue({
+                  data: mockDispute,
+                  error: null,
+                }),
+              }),
+            }),
+            update: jest.fn().mockReturnValue({
+              eq: jest.fn().mockResolvedValue({ error: null }),
+            }),
+          };
+        }
+        return {
+          insert: jest.fn().mockResolvedValue({ error: null }),
+        };
+      });
+
+      const { bountyService: mockBountyService } = require('../../lib/services/bounty-service');
+      (mockBountyService.getById as jest.Mock).mockResolvedValue(mockBounty);
+
+      const { paymentService: mockPaymentService } = require('../../lib/services/payment-service');
+
+      // Default mockRpc returns { data: null, error: null } from beforeEach.
+      // Override for the refund RPC so it reports applied=true.
+      mockRpc.mockImplementation((fnName: string) => {
+        if (fnName === 'fn_refund_wallet_escrow_for_dispute') {
+          return Promise.resolve({
+            data: [{ applied: true, transaction_id: 'tx-refund-457', refund_amount: 50000 }],
+            error: null,
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      });
+
+      const result = await disputeService.resolveDispute(
+        'dispute-457',
+        'Poster wins — wallet escrow refunded',
+        'poster'
+      );
+
+      expect(result).toBe(true);
+      // Stripe-side helpers must NOT be called for the wallet-escrow path.
+      expect(mockPaymentService.refundEscrow).not.toHaveBeenCalled();
+      expect(mockPaymentService.releaseEscrow).not.toHaveBeenCalled();
+      // The wallet-escrow refund RPC must be called.
+      expect(mockRpc).toHaveBeenCalledWith(
+        'fn_refund_wallet_escrow_for_dispute',
+        expect.objectContaining({ p_dispute_id: 'dispute-457' })
+      );
+    });
+
+    it('should still resolve when fn_refund_wallet_escrow_for_dispute returns an error', async () => {
+      const mockDispute = {
+        id: 'dispute-458',
+        cancellation_id: 'cancel-458',
+        bounty_id: 'bounty-458',
+        initiator_id: 'user-458',
+        reason: 'Wallet-escrow dispute, refund RPC fails',
+        status: 'under_review',
+        created_at: new Date().toISOString(),
+      };
+
+      const mockBounty = {
+        id: 'bounty-458',
+        user_id: 'poster-458',
+        title: 'Wallet-Escrow Bounty (RPC fails)',
+        amount: 50000,
+      };
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'bounty_disputes') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                single: jest.fn().mockResolvedValue({
+                  data: mockDispute,
+                  error: null,
+                }),
+              }),
+            }),
+            update: jest.fn().mockReturnValue({
+              eq: jest.fn().mockResolvedValue({ error: null }),
+            }),
+          };
+        }
+        return {
+          insert: jest.fn().mockResolvedValue({ error: null }),
+        };
+      });
+
+      const { bountyService: mockBountyService } = require('../../lib/services/bounty-service');
+      (mockBountyService.getById as jest.Mock).mockResolvedValue(mockBounty);
+
+      mockRpc.mockImplementation((fnName: string) => {
+        if (fnName === 'fn_refund_wallet_escrow_for_dispute') {
+          return Promise.resolve({
+            data: null,
+            error: { message: 'refund failed' },
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      });
+
+      const { logger } = require('../../lib/utils/error-logger');
+
+      const result = await disputeService.resolveDispute(
+        'dispute-458',
+        'Poster wins but wallet refund fails',
+        'poster'
+      );
+
+      expect(result).toBe(true);
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to refund wallet escrow to poster during dispute resolution',
+        expect.objectContaining({ disputeId: 'dispute-458' })
+      );
+    });
+
     it('should still resolve when releaseEscrow returns failure', async () => {
       const mockDispute = {
         id: 'dispute-789',

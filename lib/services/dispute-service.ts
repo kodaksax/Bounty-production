@@ -662,14 +662,57 @@ export const disputeService = {
               }
             }
           } else if (bounty && !isHonorBounty && !bounty.payment_intent_id) {
-            logger.warning(
-              'Dispute resolved with winner but bounty has no payment_intent_id — escrow action skipped',
-              {
-                disputeId,
-                bountyId: dispute.bountyId,
-                winner,
+            // Wallet-escrow path (no Stripe PaymentIntent).  Funds were deducted
+            // from the poster's wallet at posting time and live in the wallet
+            // ledger, so Stripe-side refundEscrow is not applicable.
+            if (winner === 'poster') {
+              // Refund the poster atomically via the SECURITY DEFINER RPC,
+              // which inserts the refund wallet_transactions row and credits
+              // profiles.balance in a single transaction.  Idempotent — safe
+              // even if the resolution is retried.
+              const _pDisputeIdRefund = normalizeDisputeIdParam(disputeId);
+              const { data: refundData, error: refundRpcError } = await (supabase as any).rpc(
+                'fn_refund_wallet_escrow_for_dispute',
+                { p_dispute_id: _pDisputeIdRefund }
+              );
+
+              if (refundRpcError) {
+                logger.error(
+                  'Failed to refund wallet escrow to poster during dispute resolution',
+                  {
+                    disputeId,
+                    bountyId: dispute.bountyId,
+                    error: refundRpcError,
+                  }
+                );
+              } else {
+                // RPC returns a single row { applied, transaction_id, refund_amount }.
+                const row = Array.isArray(refundData) ? refundData[0] : refundData;
+                if (row?.applied) {
+                  escrowActionExecuted = true;
+                } else {
+                  logger.warning(
+                    'fn_refund_wallet_escrow_for_dispute reported no-op (already settled or nothing to refund)',
+                    {
+                      disputeId,
+                      bountyId: dispute.bountyId,
+                    }
+                  );
+                }
               }
-            );
+            } else {
+              // Hunter wins on a wallet-escrow bounty: payout happens via the
+              // bounty completion flow (releaseFunds), not via dispute
+              // resolution.  Nothing to do here.
+              logger.warning(
+                'Dispute resolved with winner but bounty has no payment_intent_id — escrow action skipped',
+                {
+                  disputeId,
+                  bountyId: dispute.bountyId,
+                  winner,
+                }
+              );
+            }
           }
         } catch (escrowError) {
           // Log but don't fail the resolution if escrow action fails
