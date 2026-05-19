@@ -508,3 +508,325 @@ describe('Wallet-escrow round-trip — bounty creation + dispute resolution (pos
     expect(ledger).toHaveLength(0);
   });
 });
+
+/**
+ * Symmetric regression tests for fn_release_wallet_escrow_for_dispute
+ * (migration 20260520).
+ *
+ * Bug: When a dispute was resolved in the hunter's favour on a wallet-escrow
+ * bounty (no Stripe payment_intent_id), the dispute resolution flow only
+ * released the poster's balance_on_hold but never credited the hunter,
+ * leaving them unpaid.  The new RPC pays the hunter (less platform fee)
+ * atomically and idempotently.  Modelled in JS here so we can assert the
+ * end-to-end property without a real Postgres instance.
+ */
+describe('Wallet-escrow round-trip — bounty creation + dispute resolution (hunter wins)', () => {
+  type Profile = { id: string; balance: number };
+  type Bounty = {
+    id: string;
+    posterId: string;
+    hunterId?: string | null;
+    amount: number;
+    isForHonor: boolean;
+    paymentIntentId?: string | null;
+  };
+  type Ledger = {
+    bountyId: string;
+    userId: string;
+    type: 'escrow' | 'refund' | 'release';
+    amount: number;
+    status: 'completed';
+  };
+
+  // Mirrors fn_reserve_bounty_escrow (paid bounty INSERT trigger).
+  function insertBountyWithTrigger(
+    profiles: Map<string, Profile>,
+    ledger: Ledger[],
+    bounty: Bounty
+  ): { committed: boolean; reason?: string } {
+    if (bounty.isForHonor || !bounty.amount || bounty.amount <= 0) {
+      return { committed: true };
+    }
+    const profile = profiles.get(bounty.posterId);
+    if (!profile) return { committed: false, reason: 'no_profile' };
+    if (ledger.some(r => r.bountyId === bounty.id && r.type === 'escrow')) {
+      return { committed: true };
+    }
+    if (profile.balance < bounty.amount) {
+      return { committed: false, reason: 'insufficient_funds' };
+    }
+    ledger.push({
+      bountyId: bounty.id,
+      userId: bounty.posterId,
+      type: 'escrow',
+      amount: -bounty.amount,
+      status: 'completed',
+    });
+    profile.balance -= bounty.amount;
+    return { committed: true };
+  }
+
+  const PLATFORM_FEE_PERCENT = 5;
+  function round2(n: number): number {
+    return Math.round(n * 100) / 100;
+  }
+
+  // Mirrors fn_release_wallet_escrow_for_dispute.
+  function releaseWalletEscrowForDispute(
+    profiles: Map<string, Profile>,
+    ledger: Ledger[],
+    dispute: {
+      bountyId: string;
+      status: string;
+      winner: 'poster' | 'hunter' | null;
+    },
+    bounty: Bounty
+  ): { applied: boolean; hunterAmount?: number; platformFee?: number } {
+    // Only release when the dispute resolved in the hunter's favour.
+    if (dispute.status !== 'resolved_hunter_wins' || dispute.winner !== 'hunter') {
+      return { applied: false };
+    }
+    // Honor / non-monetary bounties have nothing to release.
+    if (bounty.isForHonor || !bounty.amount || bounty.amount <= 0) {
+      return { applied: false };
+    }
+    // Stripe-backed bounties pay out via paymentService.releaseEscrow, not
+    // this RPC.
+    if (bounty.paymentIntentId) {
+      return { applied: false };
+    }
+    // A hunter must be assigned to receive the payout.
+    if (!bounty.hunterId) {
+      return { applied: false };
+    }
+    // Idempotency: if a release or refund is already on the ledger for this
+    // bounty, no-op.
+    if (
+      ledger.some(
+        r =>
+          r.bountyId === bounty.id &&
+          (r.type === 'refund' || r.type === 'release') &&
+          r.status === 'completed'
+      )
+    ) {
+      return { applied: false };
+    }
+    const escrow = ledger.find(r => r.bountyId === bounty.id && r.type === 'escrow');
+    if (!escrow) return { applied: false };
+    const totalAmount = Math.abs(escrow.amount);
+    if (totalAmount <= 0) return { applied: false };
+
+    const platformFee = round2((totalAmount * PLATFORM_FEE_PERCENT) / 100);
+    const hunterAmount = round2(totalAmount - platformFee);
+    if (hunterAmount <= 0) return { applied: false };
+
+    const hunterProfile = profiles.get(bounty.hunterId);
+    if (!hunterProfile) return { applied: false };
+    ledger.push({
+      bountyId: bounty.id,
+      userId: bounty.hunterId,
+      type: 'release',
+      amount: hunterAmount,
+      status: 'completed',
+    });
+    hunterProfile.balance = round2(hunterProfile.balance + hunterAmount);
+    return { applied: true, hunterAmount, platformFee };
+  }
+
+  it('issue scenario: hunter wins dispute → hunter is credited (less platform fee)', () => {
+    // Poster starts with $100, posts a $10 wallet-escrow bounty.  Hunter
+    // starts with $0.  Dispute resolved in hunter's favour must credit the
+    // hunter $9.50 (10 - 5% fee) and leave the poster's $90 alone (the
+    // hold is released by fn_close_dispute_hold, not this RPC).
+    const profiles = new Map<string, Profile>([
+      ['poster1', { id: 'poster1', balance: 100 }],
+      ['hunter1', { id: 'hunter1', balance: 0 }],
+    ]);
+    const ledger: Ledger[] = [];
+    const bounty: Bounty = {
+      id: 'bounty1',
+      posterId: 'poster1',
+      hunterId: 'hunter1',
+      amount: 10,
+      isForHonor: false,
+    };
+
+    expect(insertBountyWithTrigger(profiles, ledger, bounty).committed).toBe(true);
+    expect(profiles.get('poster1')!.balance).toBeCloseTo(90, 10);
+
+    const release = releaseWalletEscrowForDispute(
+      profiles,
+      ledger,
+      { bountyId: 'bounty1', status: 'resolved_hunter_wins', winner: 'hunter' },
+      bounty
+    );
+    expect(release.applied).toBe(true);
+    expect(release.hunterAmount).toBeCloseTo(9.5, 10);
+    expect(release.platformFee).toBeCloseTo(0.5, 10);
+
+    // Hunter must be paid; poster is not re-credited.
+    expect(profiles.get('hunter1')!.balance).toBeCloseTo(9.5, 10);
+    expect(profiles.get('poster1')!.balance).toBeCloseTo(90, 10);
+
+    expect(ledger).toHaveLength(2);
+    expect(ledger[1]).toMatchObject({
+      bountyId: 'bounty1',
+      userId: 'hunter1',
+      type: 'release',
+      amount: 9.5,
+      status: 'completed',
+    });
+  });
+
+  it('release RPC is idempotent: a retried resolution does not double-credit', () => {
+    const profiles = new Map<string, Profile>([
+      ['poster1', { id: 'poster1', balance: 100 }],
+      ['hunter1', { id: 'hunter1', balance: 0 }],
+    ]);
+    const ledger: Ledger[] = [];
+    const bounty: Bounty = {
+      id: 'bounty1',
+      posterId: 'poster1',
+      hunterId: 'hunter1',
+      amount: 10,
+      isForHonor: false,
+    };
+    const dispute = {
+      bountyId: 'bounty1',
+      status: 'resolved_hunter_wins',
+      winner: 'hunter' as const,
+    };
+
+    insertBountyWithTrigger(profiles, ledger, bounty);
+    const first = releaseWalletEscrowForDispute(profiles, ledger, dispute, bounty);
+    const second = releaseWalletEscrowForDispute(profiles, ledger, dispute, bounty);
+
+    expect(first.applied).toBe(true);
+    expect(second.applied).toBe(false);
+    expect(profiles.get('hunter1')!.balance).toBeCloseTo(9.5, 10);
+    expect(ledger.filter(r => r.type === 'release')).toHaveLength(1);
+  });
+
+  it('release RPC is a no-op when the dispute did not resolve in the hunter\'s favour', () => {
+    const profiles = new Map<string, Profile>([
+      ['poster1', { id: 'poster1', balance: 100 }],
+      ['hunter1', { id: 'hunter1', balance: 0 }],
+    ]);
+    const ledger: Ledger[] = [];
+    const bounty: Bounty = {
+      id: 'bounty1',
+      posterId: 'poster1',
+      hunterId: 'hunter1',
+      amount: 10,
+      isForHonor: false,
+    };
+
+    insertBountyWithTrigger(profiles, ledger, bounty);
+
+    // Poster wins — hunter must not be credited.
+    const posterWins = releaseWalletEscrowForDispute(
+      profiles,
+      ledger,
+      { bountyId: 'bounty1', status: 'resolved_poster_wins', winner: 'poster' },
+      bounty
+    );
+    expect(posterWins.applied).toBe(false);
+    expect(profiles.get('hunter1')!.balance).toBeCloseTo(0, 10);
+
+    // Open / undecided dispute — hunter must not be credited.
+    const openDispute = releaseWalletEscrowForDispute(
+      profiles,
+      ledger,
+      { bountyId: 'bounty1', status: 'under_review', winner: null },
+      bounty
+    );
+    expect(openDispute.applied).toBe(false);
+    expect(profiles.get('hunter1')!.balance).toBeCloseTo(0, 10);
+  });
+
+  it('Stripe-backed bounties are NOT released via the wallet RPC (handled by paymentService.releaseEscrow)', () => {
+    const profiles = new Map<string, Profile>([
+      ['poster1', { id: 'poster1', balance: 100 }],
+      ['hunter1', { id: 'hunter1', balance: 0 }],
+    ]);
+    const ledger: Ledger[] = [];
+    const stripeBounty: Bounty = {
+      id: 'bounty1',
+      posterId: 'poster1',
+      hunterId: 'hunter1',
+      amount: 10,
+      isForHonor: false,
+      paymentIntentId: 'pi_test_123',
+    };
+
+    const result = releaseWalletEscrowForDispute(
+      profiles,
+      ledger,
+      { bountyId: 'bounty1', status: 'resolved_hunter_wins', winner: 'hunter' },
+      stripeBounty
+    );
+    expect(result.applied).toBe(false);
+    expect(profiles.get('hunter1')!.balance).toBeCloseTo(0, 10);
+    expect(ledger).toHaveLength(0);
+  });
+
+  it('release RPC declines when the bounty has no hunter_id assigned', () => {
+    const profiles = new Map<string, Profile>([['poster1', { id: 'poster1', balance: 100 }]]);
+    const ledger: Ledger[] = [];
+    const bounty: Bounty = {
+      id: 'bounty1',
+      posterId: 'poster1',
+      hunterId: null,
+      amount: 10,
+      isForHonor: false,
+    };
+
+    insertBountyWithTrigger(profiles, ledger, bounty);
+
+    const result = releaseWalletEscrowForDispute(
+      profiles,
+      ledger,
+      { bountyId: 'bounty1', status: 'resolved_hunter_wins', winner: 'hunter' },
+      bounty
+    );
+    expect(result.applied).toBe(false);
+    expect(ledger.filter(r => r.type === 'release')).toHaveLength(0);
+  });
+
+  it('release RPC is a no-op if the bounty was already refunded to the poster', () => {
+    // Simulates the race where a duplicate or contradictory resolution call
+    // arrives after a prior refund/release has already settled the bounty.
+    const profiles = new Map<string, Profile>([
+      ['poster1', { id: 'poster1', balance: 100 }],
+      ['hunter1', { id: 'hunter1', balance: 0 }],
+    ]);
+    const ledger: Ledger[] = [];
+    const bounty: Bounty = {
+      id: 'bounty1',
+      posterId: 'poster1',
+      hunterId: 'hunter1',
+      amount: 10,
+      isForHonor: false,
+    };
+
+    insertBountyWithTrigger(profiles, ledger, bounty);
+    // Pre-existing refund (poster was already made whole by an earlier path).
+    ledger.push({
+      bountyId: 'bounty1',
+      userId: 'poster1',
+      type: 'refund',
+      amount: 10,
+      status: 'completed',
+    });
+
+    const result = releaseWalletEscrowForDispute(
+      profiles,
+      ledger,
+      { bountyId: 'bounty1', status: 'resolved_hunter_wins', winner: 'hunter' },
+      bounty
+    );
+    expect(result.applied).toBe(false);
+    expect(profiles.get('hunter1')!.balance).toBeCloseTo(0, 10);
+    expect(ledger.filter(r => r.type === 'release')).toHaveLength(0);
+  });
+});
