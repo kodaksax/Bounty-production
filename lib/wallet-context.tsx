@@ -596,6 +596,30 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
           if (!response.ok) {
             const errData = await response.json().catch(() => ({}));
+            // 409 duplicate_transaction is *not* an error after the bounty
+            // INSERT trigger landed (see migration 20260518): the trigger
+            // reserves escrow atomically with the bounty row, so by the time
+            // the client gets here the escrow already exists.  Treat it as a
+            // successful idempotent reservation: pick up the server-provided
+            // newBalance (or fall back to a derived value) and continue.  If
+            // we threw here, the caller (useBountyForm) would mistakenly
+            // delete a bounty whose funds are already correctly held.
+            const errCode = (errData as any).code;
+            if (response.status === 409 && errCode === 'duplicate_transaction') {
+              const dupBalance =
+                typeof (errData as any).newBalance === 'number'
+                  ? (errData as any).newBalance
+                  : Math.max(0, balance - amount);
+              setBalance(dupBalance);
+              await persist(dupBalance);
+              const dupRecord = await logTransaction({
+                type: 'escrow',
+                amount: -amount,
+                details: { title, bounty_id: bountyIdStr, status: 'pending' },
+                escrowStatus: 'funded',
+              });
+              return dupRecord;
+            }
             throw new Error((errData as any).error || 'Failed to create escrow on server');
           }
 
@@ -853,9 +877,24 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           },
         });
 
-        const syncToken = await getAccessToken();
-        if (syncToken) {
-          await refreshFromApi(syncToken);
+        // Sync balance and transactions from API to reconcile after the release.
+        // The poster's server-side balance was already deducted at escrow creation
+        // (via the bounty INSERT trigger / apply_escrow), so no balance change is
+        // expected here in the normal flow.  Refreshing nonetheless guarantees the
+        // local state matches the server's authoritative view — covering edge
+        // cases (e.g. concurrent wallet activity, dispute holds released, or stale
+        // local state after app resume) where the displayed balance could
+        // otherwise drift after a payout release.  Mirrors the refundEscrow flow
+        // below for consistency.  Non-fatal: a failure here does not invalidate
+        // the successful server release.
+        try {
+          const refreshToken = await getAccessToken();
+          if (refreshToken) {
+            await refreshFromApi(refreshToken);
+          }
+        } catch {
+          // Non-critical: server release already succeeded; local state will
+          // catch up on the next refresh (wallet screen mount, app resume, etc.).
         }
 
         return true;
