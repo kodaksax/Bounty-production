@@ -701,17 +701,44 @@ export const disputeService = {
                 }
               }
             } else {
-              // Hunter wins on a wallet-escrow bounty: payout happens via the
-              // bounty completion flow (releaseFunds), not via dispute
-              // resolution.  Nothing to do here.
-              logger.warning(
-                'Dispute resolved with winner but bounty has no payment_intent_id — escrow action skipped',
-                {
-                  disputeId,
-                  bountyId: dispute.bountyId,
-                  winner,
-                }
+              // Hunter wins on a wallet-escrow bounty.  The escrow was
+              // debited from the poster's wallet at posting time and lives
+              // in the wallet ledger — Stripe has no record of it.  Release
+              // it to the hunter atomically via the SECURITY DEFINER RPC,
+              // which inserts the release wallet_transactions row, records
+              // the platform fee in platform_ledger, and credits
+              // profiles.balance in a single transaction.  Idempotent —
+              // safe even if the resolution is retried.
+              const _pDisputeIdRelease = normalizeDisputeIdParam(disputeId);
+              const { data: releaseData, error: releaseRpcError } = await (supabase as any).rpc(
+                'fn_release_wallet_escrow_for_dispute',
+                { p_dispute_id: _pDisputeIdRelease }
               );
+
+              if (releaseRpcError) {
+                logger.error(
+                  'Failed to release wallet escrow to hunter during dispute resolution',
+                  {
+                    disputeId,
+                    bountyId: dispute.bountyId,
+                    error: releaseRpcError,
+                  }
+                );
+              } else {
+                // RPC returns a single row { applied, transaction_id, release_amount, platform_fee }.
+                const row = Array.isArray(releaseData) ? releaseData[0] : releaseData;
+                if (row?.applied) {
+                  escrowActionExecuted = true;
+                } else {
+                  logger.warning(
+                    'fn_release_wallet_escrow_for_dispute reported no-op (already settled or nothing to release)',
+                    {
+                      disputeId,
+                      bountyId: dispute.bountyId,
+                    }
+                  );
+                }
+              }
             }
           }
         } catch (escrowError) {
