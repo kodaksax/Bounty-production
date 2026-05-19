@@ -825,6 +825,11 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             // Server returns the net amount after platform fee deduction.
             platformFee = releaseData.platformFee ?? grossAmount * PLATFORM_FEE_PERCENTAGE;
             netAmount = releaseData.releaseAmount ?? grossAmount - platformFee;
+            if (typeof releaseData.posterBalance === 'number') {
+              balanceRef.current = releaseData.posterBalance;
+              setBalance(releaseData.posterBalance);
+              await persist(releaseData.posterBalance);
+            }
           }
         }
 
@@ -898,7 +903,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         return false;
       }
     },
-    [transactions, logTransaction, persistTransactions, refreshFromApi, getAccessToken]
+    [transactions, logTransaction, persistTransactions, getAccessToken, persist, refreshFromApi]
   );
 
   // Refund escrowed funds back to poster when bounty is cancelled

@@ -564,10 +564,12 @@ describe('POST /wallet/release', () => {
   it('releases escrow when requester is bounty creator', async () => {
     mockDbSelect([{ id: 'bounty-abc', creator_id: 'creator-1' }]);
     (WalletService.releaseEscrow as jest.Mock).mockResolvedValue({ id: 'tx-rel', amount: 30 });
+    (WalletService.getBalance as jest.Mock).mockResolvedValue({ balance: 70 });
 
     const result = await handlers['POST:/wallet/release'](makeReq(), mockReply());
     expect(result.success).toBe(true);
     expect(result.releaseAmount).toBe(30);
+    expect(result.posterBalance).toBe(70);
   });
 
   it('returns 403 when requester is not bounty creator', async () => {
