@@ -1,17 +1,17 @@
-import { MaterialIcons } from '@expo/vector-icons'
-import { useRouter } from 'expo-router'
-import { bountyRequestService } from 'lib/services/bounty-request-service'
-import { bountyService } from 'lib/services/bounty-service'
-import { cancellationService } from 'lib/services/cancellation-service'
-import { completionService } from 'lib/services/completion-service'
-import type { Bounty } from 'lib/services/database.types'
-import { disputeService } from 'lib/services/dispute-service'
-import { messageService } from 'lib/services/message-service'
-import { staleBountyService } from 'lib/services/stale-bounty-service'
-import { userProfileService } from 'lib/services/userProfile'
-import type { Attachment, Conversation } from 'lib/types'
-import { getCurrentUserId } from 'lib/utils/data-utils'
-import { useEffect, useMemo, useReducer, useState } from 'react'
+import { MaterialIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { bountyRequestService } from 'lib/services/bounty-request-service';
+import { bountyService } from 'lib/services/bounty-service';
+import { cancellationService } from 'lib/services/cancellation-service';
+import { completionService } from 'lib/services/completion-service';
+import type { Bounty } from 'lib/services/database.types';
+import { disputeService } from 'lib/services/dispute-service';
+import { messageService } from 'lib/services/message-service';
+import { staleBountyService } from 'lib/services/stale-bounty-service';
+import { userProfileService } from 'lib/services/userProfile';
+import type { Attachment, Conversation } from 'lib/types';
+import { getCurrentUserId } from 'lib/utils/data-utils';
+import { useEffect, useMemo, useReducer, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -22,85 +22,99 @@ import {
   TextInput,
   TouchableOpacity,
   UIManager,
-  View
-} from 'react-native'
-import { useAttachmentUpload } from '../hooks/use-attachment-upload'
-import { logClientError } from '../lib/services/monitoring'
+  View,
+} from 'react-native';
+import { useAttachmentUpload } from '../hooks/use-attachment-upload';
+import { logClientError } from '../lib/services/monitoring';
 
-import { useWallet } from '../lib/wallet-context'
-import { AttachmentViewerModal } from './attachment-viewer-modal'
-import { BountyCard } from './bounty-card'
-import { PosterReviewModal } from './poster-review-modal'
-import { StaleBountyAlert } from './stale-bounty-alert'
-import { AnimatedSection } from './ui/animated-section'
-import { AttachmentsList } from './ui/attachments-list'
-import { DisputeFrozenBanner } from './ui/dispute-frozen-banner'
-import { MessageBar } from './ui/message-bar'
-import { RatingStars } from './ui/rating-stars'
-import { RevisionFeedbackBanner } from './ui/revision-feedback-banner'
-import { Stepper } from './ui/stepper'
-import { WorkflowDisputeModal } from './workflow-dispute-modal'
+import { useWallet } from '../lib/wallet-context';
+import { AttachmentViewerModal } from './attachment-viewer-modal';
+import { BountyCard } from './bounty-card';
+import { PosterReviewModal } from './poster-review-modal';
+import { StaleBountyAlert } from './stale-bounty-alert';
+import { AnimatedSection } from './ui/animated-section';
+import { AttachmentsList } from './ui/attachments-list';
+import { DisputeFrozenBanner } from './ui/dispute-frozen-banner';
+import { MessageBar } from './ui/message-bar';
+import { RatingStars } from './ui/rating-stars';
+import { RevisionFeedbackBanner } from './ui/revision-feedback-banner';
+import { Stepper } from './ui/stepper';
+import { WorkflowDisputeModal } from './workflow-dispute-modal';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true)
+  UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
 type Props = {
-  bounty: Bounty
-  currentUserId?: string
-  expanded: boolean
-  onToggle: () => void
-  onEdit?: () => void
-  onDelete?: () => void
-  onWithdrawApplication?: () => void
-  onGoToReview?: (bountyId: string) => void
-  onGoToPayout?: (bountyId: string) => void
-  variant?: 'owner' | 'hunter'
-  isListScrolling?: boolean
-  onExpandedLayout?: () => void
-  onRefresh?: () => void
-}
+  bounty: Bounty;
+  currentUserId?: string;
+  expanded: boolean;
+  onToggle: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  onWithdrawApplication?: () => void;
+  onGoToReview?: (bountyId: string) => void;
+  onGoToPayout?: (bountyId: string) => void;
+  variant?: 'owner' | 'hunter';
+  isListScrolling?: boolean;
+  onExpandedLayout?: () => void;
+  onRefresh?: () => void;
+};
 
 const STAGES = [
   { id: 'apply_work', label: 'Apply & Work', icon: 'work' },
   { id: 'working_progress', label: 'Working Progress', icon: 'trending-up' },
   { id: 'review_verify', label: 'Review & Verify', icon: 'rate-review' },
   { id: 'payout', label: 'Payout', icon: 'account-balance-wallet' },
-]
-const EMPTY_CONVERSATION_NAME = ''
+];
+const EMPTY_CONVERSATION_NAME = '';
 
 type ProofDraftItem = {
-  id: string
-  type: 'image' | 'file'
-  name: string
-  size?: number
-  uri?: string
-  remoteUri?: string
-  mimeType?: string
-}
+  id: string;
+  type: 'image' | 'file';
+  name: string;
+  size?: number;
+  uri?: string;
+  remoteUri?: string;
+  mimeType?: string;
+};
 
-export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onWithdrawApplication, onGoToReview, onGoToPayout, variant, isListScrolling, onExpandedLayout, onRefresh }: Props) {
-  const router = useRouter()
+export function MyPostingExpandable({
+  bounty,
+  currentUserId,
+  expanded,
+  onToggle,
+  onEdit,
+  onDelete,
+  onWithdrawApplication,
+  onGoToReview,
+  onGoToPayout,
+  variant,
+  isListScrolling,
+  onExpandedLayout,
+  onRefresh,
+}: Props) {
+  const router = useRouter();
   type UIState = {
-    conversation: Conversation | null
-    wipExpanded: boolean
-    readyToSubmitPressed: boolean
-    ratingDraft: number
-    showReviewModal: boolean
-    hasSubmission: boolean
-    reviewExpanded: boolean
-    payoutExpanded: boolean
-    showRevisionBanner: boolean
-    hasCancellationRequest: boolean
-    hasDispute: boolean
-    timeElapsed: number
-    hunterName: string
-    localStageOverride: null | 'apply_work' | 'working_progress' | 'review_verify' | 'payout'
-    hunterToolsExpanded: boolean
-    posterToolsExpanded: boolean
-    showDisputeModal: boolean
-    activeDisputeId: string | null
-  }
+    conversation: Conversation | null;
+    wipExpanded: boolean;
+    readyToSubmitPressed: boolean;
+    ratingDraft: number;
+    showReviewModal: boolean;
+    hasSubmission: boolean;
+    reviewExpanded: boolean;
+    payoutExpanded: boolean;
+    showRevisionBanner: boolean;
+    hasCancellationRequest: boolean;
+    hasDispute: boolean;
+    timeElapsed: number;
+    hunterName: string;
+    localStageOverride: null | 'apply_work' | 'working_progress' | 'review_verify' | 'payout';
+    hunterToolsExpanded: boolean;
+    posterToolsExpanded: boolean;
+    showDisputeModal: boolean;
+    activeDisputeId: string | null;
+  };
 
   const initialUIState = (name = 'Hunter'): UIState => ({
     conversation: null,
@@ -121,30 +135,30 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     posterToolsExpanded: false,
     showDisputeModal: false,
     activeDisputeId: null as string | null,
-  })
+  });
 
   type UIAction =
     | { type: 'reset' }
     | {
-      [K in keyof UIState]: {
-        type: 'set'
-        key: K
-        value: UIState[K]
-      }
-    }[keyof UIState]
+        [K in keyof UIState]: {
+          type: 'set';
+          key: K;
+          value: UIState[K];
+        };
+      }[keyof UIState];
 
   function uiReducer(state: UIState, action: UIAction): UIState {
     switch (action.type) {
       case 'reset':
-        return initialUIState()
+        return initialUIState();
       case 'set':
-        return { ...state, [action.key]: action.value }
+        return { ...state, [action.key]: action.value };
       default:
-        return state
+        return state;
     }
   }
 
-  const [uiState, dispatchUi] = useReducer(uiReducer, initialUIState())
+  const [uiState, dispatchUi] = useReducer(uiReducer, initialUIState());
   const {
     conversation,
     wipExpanded,
@@ -164,32 +178,32 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     posterToolsExpanded,
     showDisputeModal,
     activeDisputeId,
-  } = uiState
+  } = uiState;
 
   // Track profile pictures for poster/hunter
-  const [otherPartyAvatar, setOtherPartyAvatar] = useState<string | null>(null)
-  const [otherPartyName, setOtherPartyName] = useState<string>('')
-  const [hiddenByUser, setHiddenByUser] = useState(false)
-  
+  const [otherPartyAvatar, setOtherPartyAvatar] = useState<string | null>(null);
+  const [otherPartyName, setOtherPartyName] = useState<string>('');
+  const [hiddenByUser, setHiddenByUser] = useState(false);
+
   // Viewer state for proof attachments
-  const [selectedProofItem, setSelectedProofItem] = useState<Attachment | null>(null)
-  const [proofViewerVisible, setProofViewerVisible] = useState(false)
+  const [selectedProofItem, setSelectedProofItem] = useState<Attachment | null>(null);
+  const [proofViewerVisible, setProofViewerVisible] = useState(false);
 
   // Track the current user's request for this bounty (if any)
-  const [requestStatus, setRequestStatus] = useState<string | null>(null)
-  const [requestId, setRequestId] = useState<string | null>(null)
+  const [requestStatus, setRequestStatus] = useState<string | null>(null);
+  const [requestId, setRequestId] = useState<string | null>(null);
 
-  type ReadyRecord = { bounty_id: string; hunter_id: string; ready_at: string } | null
+  type ReadyRecord = { bounty_id: string; hunter_id: string; ready_at: string } | null;
 
   type DraftState = {
-    completionMessage: string
-    proofItems: ProofDraftItem[]
-    isSubmitting: boolean
-    submissionPending: boolean
-    readyRecord: ReadyRecord
-    revisionFeedback: string | null
-    hasRevisionRequested: boolean
-  }
+    completionMessage: string;
+    proofItems: ProofDraftItem[];
+    isSubmitting: boolean;
+    submissionPending: boolean;
+    readyRecord: ReadyRecord;
+    revisionFeedback: string | null;
+    hasRevisionRequested: boolean;
+  };
 
   const initialDraft = (bountyId?: string): DraftState => ({
     completionMessage: '',
@@ -199,7 +213,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     readyRecord: null,
     revisionFeedback: null,
     hasRevisionRequested: false,
-  })
+  });
 
   type DraftAction =
     | { type: 'reset'; bountyId?: string }
@@ -210,81 +224,102 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
     | { type: 'setSubmitting'; value: boolean }
     | { type: 'setSubmissionPending'; value: boolean }
     | { type: 'setReadyRecord'; record: ReadyRecord }
-    | { type: 'setRevisionFeedback'; text: string | null }
+    | { type: 'setRevisionFeedback'; text: string | null };
 
   function draftReducer(state: DraftState, action: DraftAction): DraftState {
     switch (action.type) {
       case 'reset':
-        return initialDraft()
+        return initialDraft();
       case 'setMessage':
-        return { ...state, completionMessage: action.message }
+        return { ...state, completionMessage: action.message };
       case 'setProofs':
-        return { ...state, proofItems: action.proofs }
+        return { ...state, proofItems: action.proofs };
       case 'addProofs':
-        return { ...state, proofItems: [...state.proofItems, ...action.proofs] }
+        return { ...state, proofItems: [...state.proofItems, ...action.proofs] };
       case 'removeProof':
-        return { ...state, proofItems: state.proofItems.filter(p => p.id !== action.id) }
+        return { ...state, proofItems: state.proofItems.filter(p => p.id !== action.id) };
       case 'setSubmitting':
-        return { ...state, isSubmitting: action.value }
+        return { ...state, isSubmitting: action.value };
       case 'setSubmissionPending':
-        return { ...state, submissionPending: action.value }
+        return { ...state, submissionPending: action.value };
       case 'setReadyRecord':
-        return { ...state, readyRecord: action.record }
+        return { ...state, readyRecord: action.record };
       case 'setRevisionFeedback':
-        return { ...state, revisionFeedback: action.text, hasRevisionRequested: !!action.text }
+        return { ...state, revisionFeedback: action.text, hasRevisionRequested: !!action.text };
       default:
-        return state
+        return state;
     }
   }
 
-  const [draft, dispatchDraft] = useReducer(draftReducer, initialDraft())
-  const { completionMessage, proofItems, isSubmitting, submissionPending, readyRecord, revisionFeedback, hasRevisionRequested } = draft
+  const [draft, dispatchDraft] = useReducer(draftReducer, initialDraft());
+  const {
+    completionMessage,
+    proofItems,
+    isSubmitting,
+    submissionPending,
+    readyRecord,
+    revisionFeedback,
+    hasRevisionRequested,
+  } = draft;
 
   // Hunter completion submission state
-  const [startTime] = useState(Date.now())
-  const { transactions } = useWallet()
+  const [startTime] = useState(Date.now());
+  const { transactions } = useWallet();
 
   useEffect(() => {
     // Reset non-draft UI state when bounty changes; draft state is reset via reducer
-    dispatchUi({ type: 'reset' })
-    dispatchDraft({ type: 'reset' })
-  }, [bounty.id])
+    dispatchUi({ type: 'reset' });
+    dispatchDraft({ type: 'reset' });
+  }, [bounty.id]);
 
-  // Monitoring: detect mismatches where bounty marked completed but escrow still funded locally
+  // Monitoring: detect mismatches where bounty marked completed but escrow still funded locally.
+  // Suppress when a dispute is active — escrow is intentionally held during dispute resolution.
   useEffect(() => {
     try {
-      if (!bounty) return
-      if (String(bounty.status) !== 'completed') return
-      const escrowStillFunded = transactions.some(tx => tx.type === 'escrow' && String(tx.details?.bounty_id) === String(bounty.id) && tx.escrowStatus === 'funded')
+      if (!bounty) return;
+      if (String(bounty.status) !== 'completed') return;
+      // If there is an open dispute for this bounty, the escrow is legitimately
+      // frozen (pending admin resolution). Do not fire a false-positive alert.
+      if (hasDispute || activeDisputeId) return;
+      const escrowStillFunded = transactions.some(
+        tx =>
+          tx.type === 'escrow' &&
+          String(tx.details?.bounty_id) === String(bounty.id) &&
+          tx.escrowStatus === 'funded'
+      );
       if (escrowStillFunded) {
-        logClientError('Bounty completed but escrow still funded locally', { bountyId: String(bounty.id), bountyStatus: bounty.status })
+        logClientError('Bounty completed but escrow still funded locally', {
+          bountyId: String(bounty.id),
+          bountyStatus: bounty.status,
+        });
       }
     } catch (e) {
       // swallow
     }
-  }, [bounty, transactions])
+  }, [bounty, transactions, hasDispute, activeDisputeId]);
 
   useEffect(() => {
-    let mounted = true
+    let mounted = true;
 
     async function load() {
       try {
-        const list = await messageService.getConversations()
-        if (!mounted) return
-        const effectiveUserId = currentUserId || getCurrentUserId()
+        const list = await messageService.getConversations();
+        if (!mounted) return;
+        const effectiveUserId = currentUserId || getCurrentUserId();
 
         // First try: match by bountyId (preferred)
-        let match = list.find(c => String(c.bountyId) === String(bounty.id)) || null
+        let match = list.find(c => String(c.bountyId) === String(bounty.id)) || null;
 
         // Second try: find a 1:1 conversation between current user and poster
         if (!match && effectiveUserId) {
-          const posterId = bounty.poster_id || bounty.user_id
+          const posterId = bounty.poster_id || bounty.user_id;
           if (posterId) {
-            match = list.find(c => {
-              if (c.isGroup) return false
-              const parts = c.participantIds || []
-              return parts.includes(String(effectiveUserId)) && parts.includes(String(posterId))
-            }) || null
+            match =
+              list.find(c => {
+                if (c.isGroup) return false;
+                const parts = c.participantIds || [];
+                return parts.includes(String(effectiveUserId)) && parts.includes(String(posterId));
+              }) || null;
           }
         }
 
@@ -293,320 +328,376 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         if (!match) {
           try {
             // Importing supabase-fetch directly is safe here for fallback only
-            const supabaseMessaging = await import('../lib/services/supabase-messaging')
-            const supList = await supabaseMessaging.fetchConversations(String(effectiveUserId || ''))
+            const supabaseMessaging = await import('../lib/services/supabase-messaging');
+            const supList = await supabaseMessaging.fetchConversations(
+              String(effectiveUserId || '')
+            );
             if (supList && supList.length > 0) {
-              match = supList.find(c => String(c.bountyId) === String(bounty.id)) || match
+              match = supList.find(c => String(c.bountyId) === String(bounty.id)) || match;
               if (!match && effectiveUserId) {
-                const posterId = bounty.poster_id || bounty.user_id
+                const posterId = bounty.poster_id || bounty.user_id;
                 if (posterId) {
-                  match = supList.find(c => !c.isGroup && (c.participantIds || []).includes(String(effectiveUserId)) && (c.participantIds || []).includes(String(posterId))) || match
+                  match =
+                    supList.find(
+                      c =>
+                        !c.isGroup &&
+                        (c.participantIds || []).includes(String(effectiveUserId)) &&
+                        (c.participantIds || []).includes(String(posterId))
+                    ) || match;
                 }
               }
             }
           } catch (e) {
             // best-effort; if supabase fetch fails, continue silently
-            console.warn('Failed to fetch supabase conversations for fallback lookup', e)
+            console.warn('Failed to fetch supabase conversations for fallback lookup', e);
           }
         }
 
-        dispatchUi({ type: 'set', key: 'conversation', value: match })
+        dispatchUi({ type: 'set', key: 'conversation', value: match });
 
         // Fetch hunter profile if available and we're the owner
-        const hunterId = bounty.accepted_by || readyRecord?.hunter_id
+        const hunterId = bounty.accepted_by || readyRecord?.hunter_id;
         if (hunterId && variant === 'owner') {
           try {
-            const hunterProfile = await userProfileService.getProfile(hunterId)
-            if (!mounted) return
+            const hunterProfile = await userProfileService.getProfile(hunterId);
+            if (!mounted) return;
             if (hunterProfile?.username) {
-              dispatchUi({ type: 'set', key: 'hunterName', value: hunterProfile.username })
+              dispatchUi({ type: 'set', key: 'hunterName', value: hunterProfile.username });
             }
             // Set hunter avatar and name for card display
-            setOtherPartyAvatar(hunterProfile?.avatar || null)
-            setOtherPartyName(hunterProfile?.username || 'Hunter')
+            setOtherPartyAvatar(hunterProfile?.avatar || null);
+            setOtherPartyName(hunterProfile?.username || 'Hunter');
           } catch (error) {
             // Fallback to default "Hunter" if profile fetch fails
-            console.error('[MyPosting] Failed to fetch hunter profile:', error)
+            console.error('[MyPosting] Failed to fetch hunter profile:', error);
           }
         }
 
         // Fetch poster profile if we're the hunter
-        const posterId = bounty.poster_id || bounty.user_id
+        const posterId = bounty.poster_id || bounty.user_id;
         if (posterId && variant === 'hunter') {
-
-                  // Load the current user's request status for this bounty (if hunter)
-                  try {
-                    if (currentUserId) {
-                      const reqs = await bountyRequestService.getAll({ bountyId: String(bounty.id), userId: String(currentUserId) })
-                      if (Array.isArray(reqs) && reqs.length > 0) {
-                        setRequestStatus(reqs[0].status)
-                        setRequestId(String(reqs[0].id))
-                      } else {
-                        setRequestStatus(null)
-                        setRequestId(null)
-                      }
-                    }
-                  } catch (err) {
-                    // ignore request load errors
-                    setRequestStatus(null)
-                    setRequestId(null)
-                  }
+          // Load the current user's request status for this bounty (if hunter)
           try {
-            const posterProfile = await userProfileService.getProfile(String(posterId))
-            if (!mounted) return
+            if (currentUserId) {
+              const reqs = await bountyRequestService.getAll({
+                bountyId: String(bounty.id),
+                userId: String(currentUserId),
+              });
+              if (Array.isArray(reqs) && reqs.length > 0) {
+                setRequestStatus(reqs[0].status);
+                setRequestId(String(reqs[0].id));
+              } else {
+                setRequestStatus(null);
+                setRequestId(null);
+              }
+            }
+          } catch (err) {
+            // ignore request load errors
+            setRequestStatus(null);
+            setRequestId(null);
+          }
+          try {
+            const posterProfile = await userProfileService.getProfile(String(posterId));
+            if (!mounted) return;
             // Set poster avatar and name for card display
-            setOtherPartyAvatar(posterProfile?.avatar || null)
-            setOtherPartyName(posterProfile?.username || 'Poster')
+            setOtherPartyAvatar(posterProfile?.avatar || null);
+            setOtherPartyName(posterProfile?.username || 'Poster');
           } catch (error) {
-            console.error('[MyPosting] Failed to fetch poster profile:', error)
+            console.error('[MyPosting] Failed to fetch poster profile:', error);
           }
         }
 
         // Check if there's a pending submission
         if (bounty.status === 'in_progress' && variant === 'owner') {
-          const submission = await completionService.getSubmission(String(bounty.id))
-          if (!mounted) return
-          const foundSubmission = !!submission && submission.status === 'pending'
-          dispatchUi({ type: 'set', key: 'hasSubmission', value: foundSubmission })
+          const submission = await completionService.getSubmission(String(bounty.id));
+          if (!mounted) return;
+          const foundSubmission = !!submission && submission.status === 'pending';
+          dispatchUi({ type: 'set', key: 'hasSubmission', value: foundSubmission });
           // Auto-expand Review & Verify section when submission is detected
           if (foundSubmission) {
-            dispatchUi({ type: 'set', key: 'reviewExpanded', value: true })
-            dispatchUi({ type: 'set', key: 'wipExpanded', value: false })
+            dispatchUi({ type: 'set', key: 'reviewExpanded', value: true });
+            dispatchUi({ type: 'set', key: 'wipExpanded', value: false });
             // Move the visual stepper to Review & Verify so owner sees where action is needed
-            dispatchUi({ type: 'set', key: 'localStageOverride', value: 'review_verify' })
+            dispatchUi({ type: 'set', key: 'localStageOverride', value: 'review_verify' });
           }
         }
         // For hunters, initialize revision indicator state from latest submission
         if (bounty.status === 'in_progress' && variant === 'hunter') {
           try {
-            const submission = await completionService.getSubmission(String(bounty.id))
-            if (!mounted) return
+            const submission = await completionService.getSubmission(String(bounty.id));
+            if (!mounted) return;
             if (submission) {
               // Only check pending-for-hunter if currentUserId is defined
-              let isPendingForHunter = false
+              let isPendingForHunter = false;
               if (currentUserId) {
-                const hunterId = String(currentUserId)
-                isPendingForHunter = submission.status === 'pending' && submission.hunter_id === hunterId
+                const hunterId = String(currentUserId);
+                isPendingForHunter =
+                  submission.status === 'pending' && submission.hunter_id === hunterId;
               }
 
               if (isPendingForHunter) {
-                dispatchUi({ type: 'set', key: 'hasSubmission', value: true })
-                dispatchDraft({ type: 'setSubmissionPending', value: true })
-                dispatchDraft({ type: 'setProofs', proofs: Array.isArray(submission.proof_items) ? submission.proof_items as ProofDraftItem[] : [] })
-                dispatchDraft({ type: 'setMessage', message: submission.message || '' })
-                dispatchUi({ type: 'set', key: 'reviewExpanded', value: false })
-                dispatchUi({ type: 'set', key: 'payoutExpanded', value: true })
-                dispatchUi({ type: 'set', key: 'showRevisionBanner', value: false })
-                dispatchDraft({ type: 'setRevisionFeedback', text: null })
+                dispatchUi({ type: 'set', key: 'hasSubmission', value: true });
+                dispatchDraft({ type: 'setSubmissionPending', value: true });
+                dispatchDraft({
+                  type: 'setProofs',
+                  proofs: Array.isArray(submission.proof_items)
+                    ? (submission.proof_items as ProofDraftItem[])
+                    : [],
+                });
+                dispatchDraft({ type: 'setMessage', message: submission.message || '' });
+                dispatchUi({ type: 'set', key: 'reviewExpanded', value: false });
+                dispatchUi({ type: 'set', key: 'payoutExpanded', value: true });
+                dispatchUi({ type: 'set', key: 'showRevisionBanner', value: false });
+                dispatchDraft({ type: 'setRevisionFeedback', text: null });
               } else if (submission.status === 'revision_requested') {
-                dispatchDraft({ type: 'setRevisionFeedback', text: submission.poster_feedback || null })
-                dispatchUi({ type: 'set', key: 'showRevisionBanner', value: true })
-                dispatchDraft({ type: 'setProofs', proofs: Array.isArray(submission.proof_items) ? submission.proof_items as ProofDraftItem[] : [] })
-                dispatchDraft({ type: 'setMessage', message: submission.message || '' })
-                dispatchUi({ type: 'set', key: 'localStageOverride', value: 'working_progress' })
-                dispatchUi({ type: 'set', key: 'wipExpanded', value: true })
-                dispatchUi({ type: 'set', key: 'reviewExpanded', value: false })
-                dispatchDraft({ type: 'setSubmissionPending', value: false })
-                dispatchUi({ type: 'set', key: 'hasSubmission', value: false })
+                dispatchDraft({
+                  type: 'setRevisionFeedback',
+                  text: submission.poster_feedback || null,
+                });
+                dispatchUi({ type: 'set', key: 'showRevisionBanner', value: true });
+                dispatchDraft({
+                  type: 'setProofs',
+                  proofs: Array.isArray(submission.proof_items)
+                    ? (submission.proof_items as ProofDraftItem[])
+                    : [],
+                });
+                dispatchDraft({ type: 'setMessage', message: submission.message || '' });
+                dispatchUi({ type: 'set', key: 'localStageOverride', value: 'working_progress' });
+                dispatchUi({ type: 'set', key: 'wipExpanded', value: true });
+                dispatchUi({ type: 'set', key: 'reviewExpanded', value: false });
+                dispatchDraft({ type: 'setSubmissionPending', value: false });
+                dispatchUi({ type: 'set', key: 'hasSubmission', value: false });
               } else {
-                dispatchDraft({ type: 'setSubmissionPending', value: false })
-                dispatchUi({ type: 'set', key: 'hasSubmission', value: false })
-                dispatchUi({ type: 'set', key: 'showRevisionBanner', value: false })
-                dispatchDraft({ type: 'setRevisionFeedback', text: null })
+                dispatchDraft({ type: 'setSubmissionPending', value: false });
+                dispatchUi({ type: 'set', key: 'hasSubmission', value: false });
+                dispatchUi({ type: 'set', key: 'showRevisionBanner', value: false });
+                dispatchDraft({ type: 'setRevisionFeedback', text: null });
               }
             }
-          } catch { }
+          } catch {}
         }
         // Also check ready flag (hunter clicked Ready to Submit)
         try {
-          const ready = await completionService.getReady(String(bounty.id))
-          if (!mounted) return
-          dispatchDraft({ type: 'setReadyRecord', record: ready })
-        } catch { }
+          const ready = await completionService.getReady(String(bounty.id));
+          if (!mounted) return;
+          dispatchDraft({ type: 'setReadyRecord', record: ready });
+        } catch {}
 
         // Check for cancellation request
         try {
-          const cancellation = await cancellationService.getCancellationByBountyId(String(bounty.id))
-          if (!mounted) return
+          const cancellation = await cancellationService.getCancellationByBountyId(
+            String(bounty.id)
+          );
+          if (!mounted) return;
           if (cancellation && cancellation.status === 'pending') {
-            dispatchUi({ type: 'set', key: 'hasCancellationRequest', value: true })
+            dispatchUi({ type: 'set', key: 'hasCancellationRequest', value: true });
           }
-        } catch { }
+        } catch {}
 
         // Check for active dispute (both cancellation-based and workflow-stage).
         // Always reset first so resolved disputes (or refreshed cards) don't
         // remain stuck in the locked state.
         try {
-          dispatchUi({ type: 'set', key: 'hasDispute', value: false })
-          dispatchUi({ type: 'set', key: 'activeDisputeId', value: null })
+          dispatchUi({ type: 'set', key: 'hasDispute', value: false });
+          dispatchUi({ type: 'set', key: 'activeDisputeId', value: null });
 
           // First check for workflow-stage disputes
-          const workflowDispute = await disputeService.getDisputeByBountyId(String(bounty.id))
-          if (!mounted) return
-          if (workflowDispute && (workflowDispute.status === 'open' || workflowDispute.status === 'under_review')) {
-            dispatchUi({ type: 'set', key: 'hasDispute', value: true })
-            dispatchUi({ type: 'set', key: 'activeDisputeId', value: workflowDispute.id })
+          const workflowDispute = await disputeService.getDisputeByBountyId(String(bounty.id));
+          if (!mounted) return;
+          if (
+            workflowDispute &&
+            (workflowDispute.status === 'open' || workflowDispute.status === 'under_review')
+          ) {
+            dispatchUi({ type: 'set', key: 'hasDispute', value: true });
+            dispatchUi({ type: 'set', key: 'activeDisputeId', value: workflowDispute.id });
           } else {
             // Fallback: check cancellation-based disputes (looked up by cancellation id)
-            const cancellation = await cancellationService.getCancellationByBountyId(String(bounty.id))
-            if (!mounted) return
+            const cancellation = await cancellationService.getCancellationByBountyId(
+              String(bounty.id)
+            );
+            if (!mounted) return;
             if (cancellation?.id) {
-              const dispute = await disputeService.getDisputeByCancellationId(String(cancellation.id))
-              if (!mounted) return
+              const dispute = await disputeService.getDisputeByCancellationId(
+                String(cancellation.id)
+              );
+              if (!mounted) return;
               if (dispute && (dispute.status === 'open' || dispute.status === 'under_review')) {
-                dispatchUi({ type: 'set', key: 'hasDispute', value: true })
-                dispatchUi({ type: 'set', key: 'activeDisputeId', value: dispute.id })
+                dispatchUi({ type: 'set', key: 'hasDispute', value: true });
+                dispatchUi({ type: 'set', key: 'activeDisputeId', value: dispute.id });
               }
             }
           }
-        } catch { }
-      } catch { }
+        } catch {}
+      } catch {}
     }
     // Load owner-related state (submission / ready flag) earlier so posters see pending work in list view.
     // Also load for hunters even when the card is not expanded so revision-requested state
     // is available in the compact card (shows badge) without needing to open the card first.
-    if (expanded || variant === 'owner' || variant === 'hunter') load()
+    if (expanded || variant === 'owner' || variant === 'hunter') load();
     return () => {
-      mounted = false
-    }
-  }, [expanded, bounty.id, bounty.status, variant])
+      mounted = false;
+    };
+  }, [expanded, bounty.id, bounty.status, variant]);
 
   // owner detection
   const isOwner = useMemo(() => {
-    if (variant === 'owner') return true
-    if (variant === 'hunter') return false
-    return currentUserId === bounty.user_id
-  }, [variant, currentUserId, bounty.user_id])
+    if (variant === 'owner') return true;
+    if (variant === 'hunter') return false;
+    return currentUserId === bounty.user_id;
+  }, [variant, currentUserId, bounty.user_id]);
 
   // Timer for hunter completion
   useEffect(() => {
     if (!isOwner && bounty.status === 'in_progress' && reviewExpanded) {
       const interval = setInterval(() => {
-        dispatchUi({ type: 'set', key: 'timeElapsed', value: Math.floor((Date.now() - startTime) / 1000) })
-      }, 1000)
-      return () => clearInterval(interval)
+        dispatchUi({
+          type: 'set',
+          key: 'timeElapsed',
+          value: Math.floor((Date.now() - startTime) / 1000),
+        });
+      }, 1000);
+      return () => clearInterval(interval);
     }
-  }, [isOwner, bounty.status, reviewExpanded, startTime])
+  }, [isOwner, bounty.status, reviewExpanded, startTime]);
 
   // Subscribe to ready-state realtime updates so poster's card unlocks immediately
   useEffect(() => {
-    if (!bounty.id) return
-    let unsub: (() => void) | undefined
+    if (!bounty.id) return;
+    let unsub: (() => void) | undefined;
     try {
-      unsub = completionService.subscribeReady(String(bounty.id), (rec) => {
-        dispatchDraft({ type: 'setReadyRecord', record: rec })
+      unsub = completionService.subscribeReady(String(bounty.id), rec => {
+        dispatchDraft({ type: 'setReadyRecord', record: rec });
         if (variant === 'owner' && rec) {
           // If owner sees a ready record, show review submission availability
-          dispatchUi({ type: 'set', key: 'hasSubmission', value: true })
+          dispatchUi({ type: 'set', key: 'hasSubmission', value: true });
         }
-      })
+      });
     } catch (e) {
       // ignore
     }
-    return () => { try { unsub && unsub() } catch { } }
-  }, [bounty.id, variant])
+    return () => {
+      try {
+        unsub && unsub();
+      } catch {}
+    };
+  }, [bounty.id, variant]);
 
   // Subscribe to submission updates so hunter gets pushed back to WIP if poster requests revision
   useEffect(() => {
-    if (!bounty.id) return
-    let unsub: (() => void) | undefined
+    if (!bounty.id) return;
+    let unsub: (() => void) | undefined;
     try {
-      unsub = completionService.subscribeSubmission(String(bounty.id), (submission) => {
+      unsub = completionService.subscribeSubmission(String(bounty.id), submission => {
         if (!submission) {
-          dispatchUi({ type: 'set', key: 'hasSubmission', value: false })
-          dispatchDraft({ type: 'setRevisionFeedback', text: null })
-          dispatchUi({ type: 'set', key: 'showRevisionBanner', value: false })
+          dispatchUi({ type: 'set', key: 'hasSubmission', value: false });
+          dispatchDraft({ type: 'setRevisionFeedback', text: null });
+          dispatchUi({ type: 'set', key: 'showRevisionBanner', value: false });
 
-          return
+          return;
         }
-        const isPending = submission.status === 'pending'
-        dispatchUi({ type: 'set', key: 'hasSubmission', value: isPending })
-        dispatchDraft({ type: 'setProofs', proofs: Array.isArray(submission.proof_items) ? submission.proof_items as ProofDraftItem[] : [] })
-        dispatchDraft({ type: 'setMessage', message: submission.message || '' })
+        const isPending = submission.status === 'pending';
+        dispatchUi({ type: 'set', key: 'hasSubmission', value: isPending });
+        dispatchDraft({
+          type: 'setProofs',
+          proofs: Array.isArray(submission.proof_items)
+            ? (submission.proof_items as ProofDraftItem[])
+            : [],
+        });
+        dispatchDraft({ type: 'setMessage', message: submission.message || '' });
 
         // If poster gets a new submission, auto-expand Review & Verify section
         if (isOwner && isPending) {
-          dispatchUi({ type: 'set', key: 'reviewExpanded', value: true })
-          dispatchUi({ type: 'set', key: 'wipExpanded', value: false })
+          dispatchUi({ type: 'set', key: 'reviewExpanded', value: true });
+          dispatchUi({ type: 'set', key: 'wipExpanded', value: false });
           // Show the stepper on the Review & Verify bubble for owner
-          dispatchUi({ type: 'set', key: 'localStageOverride', value: 'review_verify' })
+          dispatchUi({ type: 'set', key: 'localStageOverride', value: 'review_verify' });
         }
 
         // If the poster requested a revision, and we're the hunter, move back to Work in Progress
         if (!isOwner && submission.status === 'revision_requested') {
           // Store feedback and show banner instead of alert
-          dispatchDraft({ type: 'setRevisionFeedback', text: submission.poster_feedback || 'The poster has requested changes to your work.' })
-          dispatchUi({ type: 'set', key: 'showRevisionBanner', value: true })
-          dispatchUi({ type: 'set', key: 'localStageOverride', value: 'working_progress' })
-          dispatchUi({ type: 'set', key: 'wipExpanded', value: true })
-          dispatchUi({ type: 'set', key: 'reviewExpanded', value: false })
-          dispatchDraft({ type: 'setSubmissionPending', value: false })
-          dispatchUi({ type: 'set', key: 'hasSubmission', value: false })
+          dispatchDraft({
+            type: 'setRevisionFeedback',
+            text: submission.poster_feedback || 'The poster has requested changes to your work.',
+          });
+          dispatchUi({ type: 'set', key: 'showRevisionBanner', value: true });
+          dispatchUi({ type: 'set', key: 'localStageOverride', value: 'working_progress' });
+          dispatchUi({ type: 'set', key: 'wipExpanded', value: true });
+          dispatchUi({ type: 'set', key: 'reviewExpanded', value: false });
+          dispatchDraft({ type: 'setSubmissionPending', value: false });
+          dispatchUi({ type: 'set', key: 'hasSubmission', value: false });
         }
-      })
+      });
     } catch (e) {
       // ignore
     }
-    return () => { try { unsub && unsub() } catch { } }
-  }, [bounty.id, isOwner])
+    return () => {
+      try {
+        unsub && unsub();
+      } catch {}
+    };
+  }, [bounty.id, isOwner]);
 
-  const currentStage: 'apply_work' | 'working_progress' | 'review_verify' | 'payout' = useMemo(() => {
-    if (bounty.status === 'in_progress') return 'working_progress'
-    if (bounty.status === 'completed') return 'payout'
-    // We don't track 'review_verify' in status—user reaches it via flow; keep default as 'apply_work'
-    return 'apply_work'
-  }, [bounty.status])
+  const currentStage: 'apply_work' | 'working_progress' | 'review_verify' | 'payout' =
+    useMemo(() => {
+      if (bounty.status === 'in_progress') return 'working_progress';
+      if (bounty.status === 'completed') return 'payout';
+      // We don't track 'review_verify' in status—user reaches it via flow; keep default as 'apply_work'
+      return 'apply_work';
+    }, [bounty.status]);
 
   // Local override to move the UI to a specific stage when user advances via buttons
 
-
-  const animate = () => LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
+  const animate = () => LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
 
   // Parse attachments from bounty
   const attachments: Attachment[] = useMemo(() => {
-    if (!bounty.attachments_json) return []
+    if (!bounty.attachments_json) return [];
     try {
-      const raw: any = (bounty as any).attachments_json
+      const raw: any = (bounty as any).attachments_json;
       if (typeof raw === 'string') {
-        const parsed = JSON.parse(raw)
-        return Array.isArray(parsed) ? parsed : []
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
       }
-      if (Array.isArray(raw)) return raw as Attachment[]
+      if (Array.isArray(raw)) return raw as Attachment[];
       // If it's an object (unexpected shape), attempt to coerce to array
-      return Array.isArray(raw) ? raw : []
+      return Array.isArray(raw) ? raw : [];
     } catch {
-      return []
+      return [];
     }
-  }, [bounty.attachments_json])
+  }, [bounty.attachments_json]);
 
   const handleSendMessage = async (text: string) => {
     if (__DEV__) {
-      console.log('[handleSendMessage] bounty.accepted_by:', bounty.accepted_by)
-      console.log('[handleSendMessage] conversation:', conversation?.id, conversation?.participantIds)
-      console.log('[handleSendMessage] currentUserId:', currentUserId)
+      console.log('[handleSendMessage] bounty.accepted_by:', bounty.accepted_by);
+      console.log(
+        '[handleSendMessage] conversation:',
+        conversation?.id,
+        conversation?.participantIds
+      );
+      console.log('[handleSendMessage] currentUserId:', currentUserId);
     }
     const resolveCounterpartyId = (): string | null => {
-      const effectiveUserId = currentUserId || getCurrentUserId()
+      const effectiveUserId = currentUserId || getCurrentUserId();
       const participantFallback = effectiveUserId
         ? (conversation?.participantIds || []).find(id => String(id) !== String(effectiveUserId))
-        : null
-      const ownerCounterparty = bounty.accepted_by || readyRecord?.hunter_id || participantFallback
-      const hunterCounterparty = bounty.poster_id || bounty.user_id || participantFallback
-      
+        : null;
+      const ownerCounterparty = bounty.accepted_by || readyRecord?.hunter_id || participantFallback;
+      const hunterCounterparty = bounty.poster_id || bounty.user_id || participantFallback;
+
       if (isOwner) {
-        return ownerCounterparty ? String(ownerCounterparty) : null
+        return ownerCounterparty ? String(ownerCounterparty) : null;
       }
 
-      return hunterCounterparty ? String(hunterCounterparty) : null
-    }
-    
-    const counterpartyId = resolveCounterpartyId()
+      return hunterCounterparty ? String(hunterCounterparty) : null;
+    };
+
+    const counterpartyId = resolveCounterpartyId();
     if (__DEV__) {
-      console.log('[handleSendMessage] counterpartyId:', counterpartyId)
+      console.log('[handleSendMessage] counterpartyId:', counterpartyId);
     }
 
-    let targetConversationId = conversation?.id ? String(conversation.id) : null
-    
+    let targetConversationId = conversation?.id ? String(conversation.id) : null;
 
     if (counterpartyId) {
       try {
@@ -614,83 +705,96 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           [counterpartyId],
           EMPTY_CONVERSATION_NAME,
           String(bounty.id)
-        )
+        );
         if (canonicalConversation?.id) {
-          targetConversationId = String(canonicalConversation.id)
+          targetConversationId = String(canonicalConversation.id);
           if (!conversation || String(conversation.id) !== targetConversationId) {
-            dispatchUi({ type: 'set', key: 'conversation', value: canonicalConversation })
+            dispatchUi({ type: 'set', key: 'conversation', value: canonicalConversation });
           }
         }
       } catch (err) {
-        console.warn('Failed to resolve canonical conversation for quick message', err)
+        console.warn('Failed to resolve canonical conversation for quick message', err);
       }
     }
 
-    if (!targetConversationId) throw new Error('No conversation')
-    await messageService.sendMessage(targetConversationId, text, currentUserId)
-  }
+    if (!targetConversationId) throw new Error('No conversation');
+    await messageService.sendMessage(targetConversationId, text, currentUserId);
+  };
 
   const formatTime = (seconds: number): string => {
-    if (seconds < 60) return `${seconds}s`
-    const minutes = Math.floor(seconds / 60)
-    const remainingSeconds = seconds % 60
-    if (minutes < 60) return `${minutes}m ${remainingSeconds}s`
-    const hours = Math.floor(minutes / 60)
-    const remainingMinutes = minutes % 60
-    return `${hours}h ${remainingMinutes}m`
-  }
+    if (seconds < 60) return `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    if (minutes < 60) return `${minutes}m ${remainingSeconds}s`;
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return `${hours}h ${remainingMinutes}m`;
+  };
 
   const relativeTime = (iso?: string | null) => {
-    if (!iso) return 'just now'
+    if (!iso) return 'just now';
     try {
-      const then = new Date(iso).getTime()
-      const now = Date.now()
-      const delta = Math.floor((now - then) / 1000)
-      if (delta < 60) return `${delta}s ago`
-      if (delta < 3600) return `${Math.floor(delta / 60)}m ago`
-      if (delta < 86400) return `${Math.floor(delta / 3600)}h ago`
-      return `${Math.floor(delta / 86400)}d ago`
+      const then = new Date(iso).getTime();
+      const now = Date.now();
+      const delta = Math.floor((now - then) / 1000);
+      if (delta < 60) return `${delta}s ago`;
+      if (delta < 3600) return `${Math.floor(delta / 60)}m ago`;
+      if (delta < 86400) return `${Math.floor(delta / 3600)}h ago`;
+      return `${Math.floor(delta / 86400)}d ago`;
     } catch {
-      Alert.alert('Sign In Required', 'You need to be signed in to submit your work. Please sign in and try again.')
+      Alert.alert(
+        'Sign In Required',
+        'You need to be signed in to submit your work. Please sign in and try again.'
+      );
     }
-  }
+  };
 
   const handleSubmitCompletion = async () => {
     if (!currentUserId) {
-      Alert.alert('Sign In Required', 'Your session is missing. Please sign in again and retry.')
-      return
+      Alert.alert('Sign In Required', 'Your session is missing. Please sign in again and retry.');
+      return;
     }
 
     if (hasDispute) {
       Alert.alert(
         'Submission Locked',
         'A dispute is currently open for this bounty. Submissions are paused until the dispute is resolved by an admin.'
-      )
-      return
+      );
+      return;
     }
 
     if (!completionMessage.trim()) {
-      Alert.alert('Completion Message Required', 'Please add a message describing your completed work.')
-      return
+      Alert.alert(
+        'Completion Message Required',
+        'Please add a message describing your completed work.'
+      );
+      return;
     }
 
     // Helper for pluralization
-    const proofCount = proofItems.length
-    const proofLabel = proofCount === 1 ? '1 proof item' : `${proofCount} proof items`
+    const proofCount = proofItems.length;
+    const proofLabel = proofCount === 1 ? '1 proof item' : `${proofCount} proof items`;
 
     // Define the actual submission logic
     const performSubmission = async () => {
       try {
-        dispatchDraft({ type: 'setSubmitting', value: true })
+        dispatchDraft({ type: 'setSubmitting', value: true });
 
         // Check for existing pending submission to avoid duplicates
-        const existing = await completionService.getSubmission(String(bounty.id))
-        if (existing && existing.status === 'pending' && existing.hunter_id === String(currentUserId)) {
+        const existing = await completionService.getSubmission(String(bounty.id));
+        if (
+          existing &&
+          existing.status === 'pending' &&
+          existing.hunter_id === String(currentUserId)
+        ) {
           // Already have a pending submission from this hunter — avoid duplicate
-          Alert.alert('Submission Pending', 'You already have a pending submission. Please wait for the poster to review or check your submission.')
-          dispatchDraft({ type: 'setSubmitting', value: false })
-          dispatchUi({ type: 'set', key: 'hasSubmission', value: true })
-          return
+          Alert.alert(
+            'Submission Pending',
+            'You already have a pending submission. Please wait for the poster to review or check your submission.'
+          );
+          dispatchDraft({ type: 'setSubmitting', value: false });
+          dispatchUi({ type: 'set', key: 'hasSubmission', value: true });
+          return;
         }
 
         const resp = await completionService.submitCompletion({
@@ -698,27 +802,27 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           hunter_id: currentUserId,
           message: completionMessage.trim(),
           proof_items: proofItems,
-        })
+        });
 
         if (resp) {
-          Alert.alert('Submission Successful', 'Your work has been submitted for review!')
+          Alert.alert('Submission Successful', 'Your work has been submitted for review!');
           // Lock review UI and show waiting state
-          dispatchDraft({ type: 'setSubmissionPending', value: true })
-          dispatchUi({ type: 'set', key: 'hasSubmission', value: true })
+          dispatchDraft({ type: 'setSubmissionPending', value: true });
+          dispatchUi({ type: 'set', key: 'hasSubmission', value: true });
           // Clear the revision badge on resubmission
-          dispatchDraft({ type: 'setRevisionFeedback', text: null })
-          dispatchUi({ type: 'set', key: 'reviewExpanded', value: false })
-          dispatchUi({ type: 'set', key: 'payoutExpanded', value: true })
+          dispatchDraft({ type: 'setRevisionFeedback', text: null });
+          dispatchUi({ type: 'set', key: 'reviewExpanded', value: false });
+          dispatchUi({ type: 'set', key: 'payoutExpanded', value: true });
           // Trigger parent refresh to update list
-          if (onRefresh) onRefresh()
+          if (onRefresh) onRefresh();
         }
       } catch (err) {
-        console.error('Error submitting completion:', err)
-        Alert.alert('Error', 'Failed to submit completion. Please try again.')
+        console.error('Error submitting completion:', err);
+        Alert.alert('Error', 'Failed to submit completion. Please try again.');
       } finally {
-        dispatchDraft({ type: 'setSubmitting', value: false })
+        dispatchDraft({ type: 'setSubmitting', value: false });
       }
-    }
+    };
 
     // Show different confirmation dialogs based on whether proof is attached
     if (proofItems.length === 0) {
@@ -730,7 +834,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           { text: 'Cancel', style: 'cancel' },
           { text: 'Submit Anyway', style: 'destructive', onPress: performSubmission },
         ]
-      )
+      );
     } else {
       // Proof attached - show confirmation
       Alert.alert(
@@ -740,46 +844,53 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           { text: 'Cancel', style: 'cancel' },
           { text: 'Submit', onPress: performSubmission },
         ]
-      )
+      );
     }
-  }
+  };
 
   // Attachment upload hook for real attachments
-  const { pickAttachment, isUploading: isAttUploading, progress: attProgress } = useAttachmentUpload({
+  const {
+    pickAttachment,
+    isUploading: isAttUploading,
+    progress: attProgress,
+  } = useAttachmentUpload({
     bucket: 'bounty-attachments',
     folder: `bounties/${bounty.id}/proofs`,
     maxSizeMB: 20,
     allowsMultiple: true,
-  })
+  });
 
   const handleAddProof = async () => {
     try {
-      const uploaded = await pickAttachment()
-      if (!uploaded) return
+      const uploaded = await pickAttachment();
+      if (!uploaded) return;
 
       // pickAttachment returns an array of Attachment items when successful.
-      const uploadedArray = Array.isArray(uploaded) ? uploaded : [uploaded]
+      const uploadedArray = Array.isArray(uploaded) ? uploaded : [uploaded];
 
       // Map each uploaded attachment into our proof item shape and persist
-      const newProofs = uploadedArray.map((u) => ({
-        id: u.id,
-        type: u.mimeType?.startsWith('image/') ? 'image' as const : 'file' as const,
-        name: u.name,
-        size: u.size,
-        remoteUri: u.remoteUri,
-        uri: u.uri,
-      } as any))
+      const newProofs = uploadedArray.map(
+        u =>
+          ({
+            id: u.id,
+            type: u.mimeType?.startsWith('image/') ? ('image' as const) : ('file' as const),
+            name: u.name,
+            size: u.size,
+            remoteUri: u.remoteUri,
+            uri: u.uri,
+          }) as any
+      );
 
-      dispatchDraft({ type: 'addProofs', proofs: newProofs })
+      dispatchDraft({ type: 'addProofs', proofs: newProofs });
     } catch (err) {
-      console.error('Error adding proof:', err)
-      Alert.alert('Upload failed', 'Could not add proof. Please try again.')
+      console.error('Error adding proof:', err);
+      Alert.alert('Upload failed', 'Could not add proof. Please try again.');
     }
-  }
+  };
 
   const handleRemoveProof = (id: string) => {
-    dispatchDraft({ type: 'removeProof', id })
-  }
+    dispatchDraft({ type: 'removeProof', id });
+  };
 
   const handleProofPress = (item: ProofDraftItem) => {
     const primaryUri = item.uri || item.remoteUri;
@@ -808,109 +919,123 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
   };
 
   const formatFileSize = (bytes?: number) => {
-    if (!bytes) return '0 KB'
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  }
+    if (!bytes) return '0 KB';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
 
   const currentStageIndex = useMemo(() => {
-    const stageToUse = localStageOverride || currentStage
-    return STAGES.findIndex(s => s.id === stageToUse)
-  }, [currentStage, localStageOverride])
+    const stageToUse = localStageOverride || currentStage;
+    return STAGES.findIndex(s => s.id === stageToUse);
+  }, [currentStage, localStageOverride]);
 
-  const awaitingPosterAction = !isOwner && bounty.status === 'in_progress' && (submissionPending || hasSubmission)
-  const [isProcessing, setIsProcessing] = useState(false)
+  const awaitingPosterAction =
+    !isOwner && bounty.status === 'in_progress' && (submissionPending || hasSubmission);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const handleCancelBounty = () => {
-    router.push(`/bounty/${bounty.id}/cancel`)
-  }
+    router.push(`/bounty/${bounty.id}/cancel`);
+  };
 
   const handleViewCancellation = () => {
-    router.push(`/bounty/${bounty.id}/cancellation-response`)
-  }
+    router.push(`/bounty/${bounty.id}/cancellation-response`);
+  };
 
   const handleViewDispute = () => {
     // If we have a known active dispute, navigate to detail screen
     if (activeDisputeId) {
-      ;(router as any).push(`/dispute/${activeDisputeId}`)
-      return
+      (router as any).push(`/dispute/${activeDisputeId}`);
+      return;
     }
 
     // When opened from hunter tools inside the in-progress flow, include
     // a `from` query so the dispute screen can route back correctly.
     if (variant === 'hunter') {
-      router.push(`/bounty/${bounty.id}/dispute?from=in-progress`) 
-      return
+      router.push(`/bounty/${bounty.id}/dispute?from=in-progress`);
+      return;
     }
 
-    router.push(`/bounty/${bounty.id}/dispute`)
-  }
+    router.push(`/bounty/${bounty.id}/dispute`);
+  };
 
   const handleMessagePoster = async () => {
-    let targetConversationId: string | null = null
+    let targetConversationId: string | null = null;
     try {
-      const posterId = bounty.poster_id || bounty.user_id
+      const posterId = bounty.poster_id || bounty.user_id;
       if (!posterId) {
-        Alert.alert('No Conversation', 'No active conversation found for this bounty yet.')
-        return
+        Alert.alert('No Conversation', 'No active conversation found for this bounty yet.');
+        return;
       }
 
-      const targetConversation = await messageService.getOrCreateConversation([String(posterId)], EMPTY_CONVERSATION_NAME, String(bounty.id))
-      targetConversationId = targetConversation?.id ? String(targetConversation.id) : null
+      const targetConversation = await messageService.getOrCreateConversation(
+        [String(posterId)],
+        EMPTY_CONVERSATION_NAME,
+        String(bounty.id)
+      );
+      targetConversationId = targetConversation?.id ? String(targetConversation.id) : null;
 
       if (!targetConversationId) {
-        Alert.alert('Message Failed', 'We could not open or create a conversation. You can try again or compose a new message manually.')
-        return
+        Alert.alert(
+          'Message Failed',
+          'We could not open or create a conversation. You can try again or compose a new message manually.'
+        );
+        return;
       }
 
-      dispatchUi({ type: 'set', key: 'conversation', value: targetConversation })
-      router.push(`/tabs/messenger/${encodeURIComponent(targetConversationId)}` as any)
+      dispatchUi({ type: 'set', key: 'conversation', value: targetConversation });
+      router.push(`/tabs/messenger/${encodeURIComponent(targetConversationId)}` as any);
     } catch (err) {
-      Alert.alert('Message Failed', 'We could not open or create a conversation. You can try again or compose a new message manually.')
+      Alert.alert(
+        'Message Failed',
+        'We could not open or create a conversation. You can try again or compose a new message manually.'
+      );
     }
-  }
-
-  
+  };
 
   const handleCancelStaleBounty = async (bountyId: number | string) => {
     try {
-      const result = await staleBountyService.cancelStaleBounty(bountyId)
+      const result = await staleBountyService.cancelStaleBounty(bountyId);
       if (result.success) {
         Alert.alert('Success', 'Bounty cancelled successfully. Your funds will be refunded.', [
-          { text: 'OK', onPress: () => onRefresh?.() }
-        ])
+          { text: 'OK', onPress: () => onRefresh?.() },
+        ]);
       } else {
-        Alert.alert('Error', result.error || 'Failed to cancel bounty')
+        Alert.alert('Error', result.error || 'Failed to cancel bounty');
       }
     } catch (error) {
-      Alert.alert('Error', 'An unexpected error occurred')
+      Alert.alert('Error', 'An unexpected error occurred');
     }
-  }
+  };
 
   const handleRepostStaleBounty = async (bountyId: number | string) => {
     try {
-      const result = await staleBountyService.repostStaleBounty(bountyId)
+      const result = await staleBountyService.repostStaleBounty(bountyId);
       if (result.success) {
         Alert.alert('Success', 'Bounty reposted successfully. It is now open for new hunters.', [
-          { text: 'OK', onPress: () => onRefresh?.() }
-        ])
+          { text: 'OK', onPress: () => onRefresh?.() },
+        ]);
       } else {
-        Alert.alert('Error', result.error || 'Failed to repost bounty')
+        Alert.alert('Error', result.error || 'Failed to repost bounty');
       }
     } catch (error) {
-      Alert.alert('Error', 'An unexpected error occurred')
+      Alert.alert('Error', 'An unexpected error occurred');
     }
-  }
+  };
 
-  if (hiddenByUser) return null
+  if (hiddenByUser) return null;
 
   return (
     <View>
       <BountyCard
         bounty={bounty}
         currentUserId={currentUserId}
-        onPress={() => { if (!isListScrolling) { animate(); onToggle(); } }}
+        onPress={() => {
+          if (!isListScrolling) {
+            animate();
+            onToggle();
+          }
+        }}
         onEdit={onEdit}
         onDelete={onDelete}
         onCancel={handleCancelBounty}
@@ -924,7 +1049,11 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         hasDispute={hasDispute}
         otherPartyAvatar={otherPartyAvatar}
         otherPartyName={otherPartyName}
-        otherPartyId={variant === 'owner' ? (bounty.accepted_by || readyRecord?.hunter_id) : (bounty.poster_id || bounty.user_id)}
+        otherPartyId={
+          variant === 'owner'
+            ? bounty.accepted_by || readyRecord?.hunter_id
+            : bounty.poster_id || bounty.user_id
+        }
         requestStatus={requestStatus}
         onWithdrawApplication={onWithdrawApplication}
       />
@@ -936,7 +1065,12 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         </View>
       )}
       {expanded && (
-        <View style={styles.panel} onLayout={() => { if (typeof onExpandedLayout === 'function') onExpandedLayout() }}>
+        <View
+          style={styles.panel}
+          onLayout={() => {
+            if (typeof onExpandedLayout === 'function') onExpandedLayout();
+          }}
+        >
           {/* Show stale bounty alert if bounty is stale and user is the owner */}
           {bounty.is_stale && isOwner && (
             <StaleBountyAlert
@@ -950,7 +1084,10 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           <View style={styles.panelHeader}>
             <Text style={styles.panelTitle}>Progress</Text>
             {bounty.is_for_honor ? (
-              <View style={styles.honorBadge}><MaterialIcons name="favorite" size={14} color="#052e1b" /><Text style={styles.honorBadgeText}>For Honor</Text></View>
+              <View style={styles.honorBadge}>
+                <MaterialIcons name="favorite" size={14} color="#052e1b" />
+                <Text style={styles.honorBadgeText}>For Honor</Text>
+              </View>
             ) : (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Text style={styles.amount}>${bounty.amount}</Text>
@@ -962,7 +1099,9 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                     accessibilityLabel={`Hunter ready, opened review modal`}
                   >
                     <MaterialIcons name="hourglass-top" size={14} color="#052e1b" />
-                    <Text style={styles.readyBadgeText}>{`Hunter Ready · ${relativeTime(readyRecord.ready_at)}`}</Text>
+                    <Text
+                      style={styles.readyBadgeText}
+                    >{`Hunter Ready · ${relativeTime(readyRecord.ready_at)}`}</Text>
                   </TouchableOpacity>
                 )}
                 {isOwner && hasSubmission && (
@@ -971,9 +1110,15 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                     onPress={() => dispatchUi({ type: 'set', key: 'showReviewModal', value: true })}
                     disabled={hasDispute}
                     accessibilityRole="button"
-                    accessibilityLabel={hasDispute ? 'Review locked: dispute open' : 'Open review modal'}
+                    accessibilityLabel={
+                      hasDispute ? 'Review locked: dispute open' : 'Open review modal'
+                    }
                   >
-                    <MaterialIcons name={hasDispute ? 'lock' : 'rate-review'} size={14} color="#052e1b" />
+                    <MaterialIcons
+                      name={hasDispute ? 'lock' : 'rate-review'}
+                      size={14}
+                      color="#052e1b"
+                    />
                   </TouchableOpacity>
                 )}
               </View>
@@ -988,9 +1133,13 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
             <View style={styles.infoBox}>
               <MaterialIcons name="hourglass-empty" size={18} color="#6ee7b7" />
               {isOwner ? (
-                <Text style={styles.infoText}>Awaiting a hunter. Review requests in the Requests tab.</Text>
+                <Text style={styles.infoText}>
+                  Awaiting a hunter. Review requests in the Requests tab.
+                </Text>
               ) : (
-                <Text style={styles.infoText}>Your application is pending. We’ll notify you when the poster accepts.</Text>
+                <Text style={styles.infoText}>
+                  Your application is pending. We’ll notify you when the poster accepts.
+                </Text>
               )}
             </View>
           )}
@@ -1002,8 +1151,8 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
               expanded={wipExpanded}
               onToggle={() => {
                 // If the flow has been advanced (locked), prevent toggling WIP
-                if (readyToSubmitPressed || !!readyRecord) return
-                dispatchUi({ type: 'set', key: 'wipExpanded', value: !wipExpanded })
+                if (readyToSubmitPressed || !!readyRecord) return;
+                dispatchUi({ type: 'set', key: 'wipExpanded', value: !wipExpanded });
               }}
               locked={readyToSubmitPressed || !!readyRecord}
             >
@@ -1019,11 +1168,19 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                   {hasSubmission && (
                     <TouchableOpacity
                       style={[styles.reviewSubmissionBtn, hasDispute && styles.buttonDisabled]}
-                      onPress={() => dispatchUi({ type: 'set', key: 'showReviewModal', value: true })}
+                      onPress={() =>
+                        dispatchUi({ type: 'set', key: 'showReviewModal', value: true })
+                      }
                       disabled={hasDispute}
                     >
-                      <MaterialIcons name={hasDispute ? 'lock' : 'rate-review'} size={20} color="#fff" />
-                      <Text style={styles.reviewSubmissionText}>{hasDispute ? 'Locked (Dispute Open)' : 'Review Submission'}</Text>
+                      <MaterialIcons
+                        name={hasDispute ? 'lock' : 'rate-review'}
+                        size={20}
+                        color="#fff"
+                      />
+                      <Text style={styles.reviewSubmissionText}>
+                        {hasDispute ? 'Locked (Dispute Open)' : 'Review Submission'}
+                      </Text>
                     </TouchableOpacity>
                   )}
 
@@ -1039,14 +1196,20 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
 
                   <RatingStars
                     rating={ratingDraft}
-                    onRatingChange={(v) => dispatchUi({ type: 'set', key: 'ratingDraft', value: v })}
+                    onRatingChange={v => dispatchUi({ type: 'set', key: 'ratingDraft', value: v })}
                     label="Rate This Bounty:"
                   />
                   {/* Poster Flow Tools - message hunter, raise/view dispute */}
                   <View style={styles.posterToolsSection}>
                     <TouchableOpacity
                       style={styles.posterToolsToggle}
-                      onPress={() => dispatchUi({ type: 'set', key: 'posterToolsExpanded', value: !posterToolsExpanded })}
+                      onPress={() =>
+                        dispatchUi({
+                          type: 'set',
+                          key: 'posterToolsExpanded',
+                          value: !posterToolsExpanded,
+                        })
+                      }
                       accessibilityRole="button"
                       accessibilityLabel="Poster flow tools"
                       accessibilityHint="Opens quick tools including dispute and message actions"
@@ -1055,16 +1218,36 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                         <MaterialIcons name="gavel" size={18} color="#a7f3d0" />
                         <Text style={styles.posterToolsToggleText}>Poster Flow Tools</Text>
                       </View>
-                      <MaterialIcons name={posterToolsExpanded ? 'expand-less' : 'expand-more'} size={20} color="#a7f3d0" />
+                      <MaterialIcons
+                        name={posterToolsExpanded ? 'expand-less' : 'expand-more'}
+                        size={20}
+                        color="#a7f3d0"
+                      />
                     </TouchableOpacity>
 
                     {posterToolsExpanded && (
                       <View style={styles.posterToolsMenu}>
-                        <TouchableOpacity style={styles.hunterToolBtnDanger} onPress={
-                          hasDispute ? handleViewDispute : () => dispatchUi({ type: 'set', key: 'showDisputeModal', value: true })
-                        }>
-                          <MaterialIcons name={hasDispute ? 'gavel' : 'report-problem'} size={18} color={hasDispute ? '#f59e0b' : '#fca5a5'} />
-                          <Text style={hasDispute ? styles.hunterToolTextWarning : styles.hunterToolTextDanger}>
+                        <TouchableOpacity
+                          style={styles.hunterToolBtnDanger}
+                          onPress={
+                            hasDispute
+                              ? handleViewDispute
+                              : () =>
+                                  dispatchUi({ type: 'set', key: 'showDisputeModal', value: true })
+                          }
+                        >
+                          <MaterialIcons
+                            name={hasDispute ? 'gavel' : 'report-problem'}
+                            size={18}
+                            color={hasDispute ? '#f59e0b' : '#fca5a5'}
+                          />
+                          <Text
+                            style={
+                              hasDispute
+                                ? styles.hunterToolTextWarning
+                                : styles.hunterToolTextDanger
+                            }
+                          >
                             {hasDispute ? 'View Dispute' : 'Raise Dispute'}
                           </Text>
                         </TouchableOpacity>
@@ -1075,17 +1258,24 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                           bountyId={String(bounty.id)}
                           bountyTitle={bounty.title}
                           initiatorId={currentUserId || ''}
-                          respondentId={String(bounty.accepted_by || (readyRecord ? readyRecord.hunter_id : ''))}
+                          respondentId={String(
+                            bounty.accepted_by || (readyRecord ? readyRecord.hunter_id : '')
+                          )}
                           stage={bounty.status === 'in_progress' ? 'in_progress' : 'review_verify'}
-                          onClose={() => dispatchUi({ type: 'set', key: 'showDisputeModal', value: false })}
-                          onDisputeCreated={(disputeId) => {
+                          onClose={() =>
                             dispatchUi({ type: 'set', key: 'showDisputeModal', value: false })
-                            dispatchUi({ type: 'set', key: 'hasDispute', value: true })
-                            dispatchUi({ type: 'set', key: 'activeDisputeId', value: disputeId })
+                          }
+                          onDisputeCreated={disputeId => {
+                            dispatchUi({ type: 'set', key: 'showDisputeModal', value: false });
+                            dispatchUi({ type: 'set', key: 'hasDispute', value: true });
+                            dispatchUi({ type: 'set', key: 'activeDisputeId', value: disputeId });
                             Alert.alert('Dispute Filed', 'Your dispute has been submitted.', [
-                              { text: 'View', onPress: () => (router as any).push(`/dispute/${disputeId}`) },
+                              {
+                                text: 'View',
+                                onPress: () => (router as any).push(`/dispute/${disputeId}`),
+                              },
                               { text: 'OK' },
-                            ])
+                            ]);
                           }}
                         />
                       </View>
@@ -1100,7 +1290,9 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                   {showRevisionBanner && revisionFeedback && (
                     <RevisionFeedbackBanner
                       feedback={revisionFeedback}
-                      onDismiss={() => dispatchUi({ type: 'set', key: 'showRevisionBanner', value: false })}
+                      onDismiss={() =>
+                        dispatchUi({ type: 'set', key: 'showRevisionBanner', value: false })
+                      }
                       showDismiss={true}
                     />
                   )}
@@ -1112,66 +1304,99 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                   <View style={styles.infoBox}>
                     <MaterialIcons name="info-outline" size={18} color="#6ee7b7" />
                     <Text style={styles.infoText}>
-                      Congrats on being selected! Begin work on the bounty, money is in escrow; once complete press the next button.
+                      Congrats on being selected! Begin work on the bounty, money is in escrow; once
+                      complete press the next button.
                     </Text>
                   </View>
 
                   <AttachmentsList attachments={attachments} />
 
                   <TouchableOpacity
-                    style={[styles.primaryBtn, (readyToSubmitPressed || !!readyRecord || hasDispute) && styles.buttonDisabled]}
+                    style={[
+                      styles.primaryBtn,
+                      (readyToSubmitPressed || !!readyRecord || hasDispute) &&
+                        styles.buttonDisabled,
+                    ]}
                     onPress={async () => {
                       if (!currentUserId) {
-                        Alert.alert('Sign In Required', 'Your session is missing. Please sign in again and retry.')
-                        return
+                        Alert.alert(
+                          'Sign In Required',
+                          'Your session is missing. Please sign in again and retry.'
+                        );
+                        return;
                       }
 
                       if (hasDispute) {
                         Alert.alert(
                           'Action Locked',
                           'A dispute is currently open for this bounty. The submission flow is paused until the dispute is resolved by an admin.'
-                        )
-                        return
+                        );
+                        return;
                       }
 
                       const confirmAndMarkReady = async () => {
                         // Persist ready state and advance UI
-                        const ok = await completionService.markReady(String(bounty.id), currentUserId)
+                        const ok = await completionService.markReady(
+                          String(bounty.id),
+                          currentUserId
+                        );
                         if (ok) {
-                          dispatchUi({ type: 'set', key: 'readyToSubmitPressed', value: true })
-                          dispatchUi({ type: 'set', key: 'wipExpanded', value: false })
-                          dispatchUi({ type: 'set', key: 'reviewExpanded', value: true })
-                          dispatchUi({ type: 'set', key: 'localStageOverride', value: 'review_verify' })
+                          dispatchUi({ type: 'set', key: 'readyToSubmitPressed', value: true });
+                          dispatchUi({ type: 'set', key: 'wipExpanded', value: false });
+                          dispatchUi({ type: 'set', key: 'reviewExpanded', value: true });
+                          dispatchUi({
+                            type: 'set',
+                            key: 'localStageOverride',
+                            value: 'review_verify',
+                          });
                           // update local readyRecord optimistically
-                          const now = new Date().toISOString()
-                          const rec = { bounty_id: String(bounty.id), hunter_id: currentUserId, ready_at: now }
-                          dispatchDraft({ type: 'setReadyRecord', record: rec })
+                          const now = new Date().toISOString();
+                          const rec = {
+                            bounty_id: String(bounty.id),
+                            hunter_id: currentUserId,
+                            ready_at: now,
+                          };
+                          dispatchDraft({ type: 'setReadyRecord', record: rec });
                           // Trigger parent refresh to update list
-                          if (onRefresh) onRefresh()
+                          if (onRefresh) onRefresh();
                         } else {
-                          Alert.alert('Error', 'Failed to mark Ready. Please try again.')
+                          Alert.alert('Error', 'Failed to mark Ready. Please try again.');
                         }
-                      }
+                      };
 
                       Alert.alert(
                         'Confirm Ready',
                         'Are you sure you are ready to submit your work for review? This will lock the Work in Progress section.',
                         [
                           { text: 'Cancel', style: 'cancel' },
-                          { text: 'Ready', onPress: confirmAndMarkReady }
+                          { text: 'Ready', onPress: confirmAndMarkReady },
                         ]
-                      )
+                      );
                     }}
                     disabled={readyToSubmitPressed || !!readyRecord || hasDispute}
                   >
                     <Text style={styles.primaryText}>Ready to Submit</Text>
-                    <MaterialIcons name={(readyToSubmitPressed || !!readyRecord || hasDispute) ? 'lock' : 'arrow-forward'} size={18} color="#fff" />
+                    <MaterialIcons
+                      name={
+                        readyToSubmitPressed || !!readyRecord || hasDispute
+                          ? 'lock'
+                          : 'arrow-forward'
+                      }
+                      size={18}
+                      color="#fff"
+                    />
                   </TouchableOpacity>
 
                   <View style={styles.hunterToolsSection}>
                     <TouchableOpacity
                       style={styles.hunterToolsToggle}
-                      onPress={() => dispatchUi({ type: 'set', key: 'hunterToolsExpanded', value: !hunterToolsExpanded })}
+                      onPress={() =>
+                        dispatchUi({
+                          type: 'set',
+                          key: 'hunterToolsExpanded',
+                          value: !hunterToolsExpanded,
+                        })
+                      }
                       accessibilityRole="button"
                       accessibilityLabel="Hunter flow tools"
                       accessibilityHint="Opens quick tools including dispute and message actions"
@@ -1180,21 +1405,44 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                         <MaterialIcons name="build-circle" size={18} color="#a7f3d0" />
                         <Text style={styles.hunterToolsToggleText}>Hunter Flow Tools</Text>
                       </View>
-                      <MaterialIcons name={hunterToolsExpanded ? 'expand-less' : 'expand-more'} size={20} color="#a7f3d0" />
+                      <MaterialIcons
+                        name={hunterToolsExpanded ? 'expand-less' : 'expand-more'}
+                        size={20}
+                        color="#a7f3d0"
+                      />
                     </TouchableOpacity>
 
                     {hunterToolsExpanded && (
                       <View style={styles.hunterToolsMenu}>
-                        <TouchableOpacity style={styles.hunterToolBtn} onPress={handleMessagePoster}>
+                        <TouchableOpacity
+                          style={styles.hunterToolBtn}
+                          onPress={handleMessagePoster}
+                        >
                           <MaterialIcons name="chat" size={18} color="#6ee7b7" />
                           <Text style={styles.hunterToolText}>Message Poster</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.hunterToolBtnDanger} onPress={
-                          hasDispute ? handleViewDispute : () => dispatchUi({ type: 'set', key: 'showDisputeModal', value: true })
-                        }>
-                          <MaterialIcons name={hasDispute ? 'gavel' : 'report-problem'} size={18} color={hasDispute ? '#f59e0b' : '#fca5a5'} />
-                          <Text style={hasDispute ? styles.hunterToolTextWarning : styles.hunterToolTextDanger}>
+                        <TouchableOpacity
+                          style={styles.hunterToolBtnDanger}
+                          onPress={
+                            hasDispute
+                              ? handleViewDispute
+                              : () =>
+                                  dispatchUi({ type: 'set', key: 'showDisputeModal', value: true })
+                          }
+                        >
+                          <MaterialIcons
+                            name={hasDispute ? 'gavel' : 'report-problem'}
+                            size={18}
+                            color={hasDispute ? '#f59e0b' : '#fca5a5'}
+                          />
+                          <Text
+                            style={
+                              hasDispute
+                                ? styles.hunterToolTextWarning
+                                : styles.hunterToolTextDanger
+                            }
+                          >
                             {hasDispute ? 'View Dispute' : 'Raise Dispute'}
                           </Text>
                         </TouchableOpacity>
@@ -1207,23 +1455,26 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                           initiatorId={currentUserId || ''}
                           respondentId={String(
                             variant === 'hunter'
-                              ? (bounty.poster_id || bounty.user_id)
+                              ? bounty.poster_id || bounty.user_id
                               : bounty.accepted_by || ''
                           )}
                           stage={bounty.status === 'in_progress' ? 'in_progress' : 'review_verify'}
-                          onClose={() => dispatchUi({ type: 'set', key: 'showDisputeModal', value: false })}
-                          onDisputeCreated={(disputeId) => {
+                          onClose={() =>
                             dispatchUi({ type: 'set', key: 'showDisputeModal', value: false })
-                            dispatchUi({ type: 'set', key: 'hasDispute', value: true })
-                            dispatchUi({ type: 'set', key: 'activeDisputeId', value: disputeId })
+                          }
+                          onDisputeCreated={disputeId => {
+                            dispatchUi({ type: 'set', key: 'showDisputeModal', value: false });
+                            dispatchUi({ type: 'set', key: 'hasDispute', value: true });
+                            dispatchUi({ type: 'set', key: 'activeDisputeId', value: disputeId });
                             Alert.alert('Dispute Filed', 'Your dispute has been submitted.', [
-                              { text: 'View', onPress: () => (router as any).push(`/dispute/${disputeId}`) },
+                              {
+                                text: 'View',
+                                onPress: () => (router as any).push(`/dispute/${disputeId}`),
+                              },
                               { text: 'OK' },
-                            ])
+                            ]);
                           }}
                         />
-
-                        
                       </View>
                     )}
                   </View>
@@ -1237,7 +1488,9 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
             <AnimatedSection
               title="Review & Verify"
               expanded={reviewExpanded}
-              onToggle={() => dispatchUi({ type: 'set', key: 'reviewExpanded', value: !reviewExpanded })}
+              onToggle={() =>
+                dispatchUi({ type: 'set', key: 'reviewExpanded', value: !reviewExpanded })
+              }
             >
               <View style={{ gap: 16 }}>
                 {hasDispute && (
@@ -1247,7 +1500,8 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                 <View style={styles.infoBox}>
                   <MaterialIcons name="rate-review" size={18} color="#6ee7b7" />
                   <Text style={styles.infoText}>
-                    The hunter has submitted their work for review. Review the submission and approve or request changes.
+                    The hunter has submitted their work for review. Review the submission and
+                    approve or request changes.
                   </Text>
                 </View>
 
@@ -1256,8 +1510,14 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                   onPress={() => dispatchUi({ type: 'set', key: 'showReviewModal', value: true })}
                   disabled={hasDispute}
                 >
-                  <MaterialIcons name={hasDispute ? 'lock' : 'rate-review'} size={20} color="#fff" />
-                  <Text style={styles.reviewSubmissionText}>{hasDispute ? 'Locked (Dispute Open)' : 'Review Submission'}</Text>
+                  <MaterialIcons
+                    name={hasDispute ? 'lock' : 'rate-review'}
+                    size={20}
+                    color="#fff"
+                  />
+                  <Text style={styles.reviewSubmissionText}>
+                    {hasDispute ? 'Locked (Dispute Open)' : 'Review Submission'}
+                  </Text>
                 </TouchableOpacity>
                 {/* Full review screen removed (legacy) - keep modal only */}
               </View>
@@ -1271,22 +1531,24 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
               expanded={reviewExpanded}
               onToggle={() => {
                 // Prevent toggling open unless readyToSubmitPressed or a readyRecord exists or there's no pending submission
-                if (!readyToSubmitPressed && !readyRecord) return
-                if (submissionPending || hasSubmission) return
-                dispatchUi({ type: 'set', key: 'reviewExpanded', value: !reviewExpanded })
+                if (!readyToSubmitPressed && !readyRecord) return;
+                if (submissionPending || hasSubmission) return;
+                dispatchUi({ type: 'set', key: 'reviewExpanded', value: !reviewExpanded });
               }}
-              locked={!readyToSubmitPressed && !readyRecord || submissionPending || hasSubmission}
+              locked={(!readyToSubmitPressed && !readyRecord) || submissionPending || hasSubmission}
             >
               <View style={{ gap: 16 }}>
                 {/* If a submission is pending, show waiting state */}
-                {(submissionPending || hasSubmission) ? (
+                {submissionPending || hasSubmission ? (
                   <>
                     {hasDispute && (
                       <DisputeFrozenBanner message="A dispute has been opened for this bounty. The flow is paused until an admin resolves the dispute." />
                     )}
                     <View style={styles.infoBox}>
                       <MaterialIcons name="hourglass-top" size={18} color="#6ee7b7" />
-                      <Text style={styles.infoText}>Waiting for poster to review your submission.</Text>
+                      <Text style={styles.infoText}>
+                        Waiting for poster to review your submission.
+                      </Text>
                     </View>
                   </>
                 ) : (
@@ -1302,7 +1564,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                         placeholder="Describe your completed work..."
                         placeholderTextColor="rgba(255,254,245,0.4)"
                         value={completionMessage}
-                        onChangeText={(t) => dispatchDraft({ type: 'setMessage', message: t })}
+                        onChangeText={t => dispatchDraft({ type: 'setMessage', message: t })}
                         multiline
                         numberOfLines={4}
                         maxLength={1000}
@@ -1313,7 +1575,7 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                     {/* Proof Attachments */}
                     <View>
                       <Text style={styles.sectionTitle}>Proof:</Text>
-                      {proofItems.map((item) => (
+                      {proofItems.map(item => (
                         <TouchableOpacity
                           key={item.id}
                           style={styles.proofItem}
@@ -1338,29 +1600,46 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                         </TouchableOpacity>
                       ))}
                       <TouchableOpacity
-                        style={[styles.addFileBtn, (!(readyToSubmitPressed || !!readyRecord) || hasDispute) && styles.buttonDisabled]}
+                        style={[
+                          styles.addFileBtn,
+                          (!(readyToSubmitPressed || !!readyRecord) || hasDispute) &&
+                            styles.buttonDisabled,
+                        ]}
                         onPress={handleAddProof}
                         disabled={!(readyToSubmitPressed || !!readyRecord) || hasDispute}
                       >
-                        <MaterialIcons name={(readyToSubmitPressed || !!readyRecord) && !hasDispute ? 'add' : 'lock'} size={20} color="#10b981" />
+                        <MaterialIcons
+                          name={
+                            (readyToSubmitPressed || !!readyRecord) && !hasDispute ? 'add' : 'lock'
+                          }
+                          size={20}
+                          color="#10b981"
+                        />
                         <Text style={styles.addFileText}>
                           {hasDispute
                             ? 'Locked (Dispute Open)'
-                            : (readyToSubmitPressed || !!readyRecord) ? 'Add File' : 'Locked'}
+                            : readyToSubmitPressed || !!readyRecord
+                              ? 'Add File'
+                              : 'Locked'}
                         </Text>
                       </TouchableOpacity>
                     </View>
 
                     {/* Submit Button */}
                     <TouchableOpacity
-                      style={[styles.primaryBtn, (isSubmitting || hasDispute) && styles.buttonDisabled]}
+                      style={[
+                        styles.primaryBtn,
+                        (isSubmitting || hasDispute) && styles.buttonDisabled,
+                      ]}
                       onPress={handleSubmitCompletion}
                       disabled={isSubmitting || hasDispute}
                     >
                       {isSubmitting ? (
                         <ActivityIndicator size="small" color="#fff" />
                       ) : (
-                        <Text style={styles.primaryText}>{hasDispute ? 'Locked (Dispute Open)' : 'Submit'}</Text>
+                        <Text style={styles.primaryText}>
+                          {hasDispute ? 'Locked (Dispute Open)' : 'Submit'}
+                        </Text>
                       )}
                     </TouchableOpacity>
                   </>
@@ -1374,7 +1653,9 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
             <AnimatedSection
               title="Payout"
               expanded={payoutExpanded}
-              onToggle={() => dispatchUi({ type: 'set', key: 'payoutExpanded', value: !payoutExpanded })}
+              onToggle={() =>
+                dispatchUi({ type: 'set', key: 'payoutExpanded', value: !payoutExpanded })
+              }
             >
               <View style={{ gap: 16 }}>
                 {/* Success Message */}
@@ -1438,132 +1719,145 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
                   </View>
                 )}
 
-                  {/* Archive / Delete actions for completed bounties */}
-                  <View style={styles.actionsContainer}>
-                    {isOwner ? (
-                      <>
-                        <TouchableOpacity
-                          style={[styles.actionButton, styles.archiveButton]}
-                          onPress={async () => {
-                            if (!bounty) return
-                            Alert.alert(
-                              'Archive Bounty',
-                              'Archive this bounty so it is hidden from active listings but retained in your history?',
-                              [
-                                { text: 'Cancel', style: 'cancel' },
-                                {
-                                  text: 'Archive',
-                                  onPress: async () => {
-                                    try {
-                                      setIsProcessing(true)
-                                      const updated = await bountyService.update(String(bounty.id), { status: 'archived' })
-                                      if (!updated) throw new Error('Failed to archive bounty')
-                                      Alert.alert('Archived', 'Bounty archived successfully.')
-                                      onRefresh?.()
-                                    } catch (err) {
-                                      console.error('Error archiving bounty:', err)
-                                      Alert.alert('Error', 'Failed to archive bounty. Please try again.')
-                                    } finally {
-                                      setIsProcessing(false)
-                                    }
+                {/* Archive / Delete actions for completed bounties */}
+                <View style={styles.actionsContainer}>
+                  {isOwner ? (
+                    <>
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.archiveButton]}
+                        onPress={async () => {
+                          if (!bounty) return;
+                          Alert.alert(
+                            'Archive Bounty',
+                            'Archive this bounty so it is hidden from active listings but retained in your history?',
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              {
+                                text: 'Archive',
+                                onPress: async () => {
+                                  try {
+                                    setIsProcessing(true);
+                                    const updated = await bountyService.update(String(bounty.id), {
+                                      status: 'archived',
+                                    });
+                                    if (!updated) throw new Error('Failed to archive bounty');
+                                    Alert.alert('Archived', 'Bounty archived successfully.');
+                                    onRefresh?.();
+                                  } catch (err) {
+                                    console.error('Error archiving bounty:', err);
+                                    Alert.alert(
+                                      'Error',
+                                      'Failed to archive bounty. Please try again.'
+                                    );
+                                  } finally {
+                                    setIsProcessing(false);
                                   }
-                                }
-                              ]
-                            )
-                          }}
-                          disabled={isProcessing}
-                        >
-                          <MaterialIcons name="archive" size={20} color="#fff" />
-                          <Text style={styles.actionButtonText}>Archive</Text>
-                        </TouchableOpacity>
+                                },
+                              },
+                            ]
+                          );
+                        }}
+                        disabled={isProcessing}
+                      >
+                        <MaterialIcons name="archive" size={20} color="#fff" />
+                        <Text style={styles.actionButtonText}>Archive</Text>
+                      </TouchableOpacity>
 
-                        <TouchableOpacity
-                          style={[styles.actionButton, styles.deleteButton]}
-                          onPress={async () => {
-                            if (!bounty) return
-                            Alert.alert(
-                              'Delete Bounty',
-                              'Permanently delete this bounty from active lists? It will remain in your history. This cannot be undone.',
-                              [
-                                { text: 'Cancel', style: 'cancel' },
-                                {
-                                  text: 'Delete',
-                                  style: 'destructive',
-                                  onPress: async () => {
-                                    try {
-                                      setIsProcessing(true)
-                                      const updated = await bountyService.update(String(bounty.id), { status: 'deleted' })
-                                      if (!updated) throw new Error('Failed to delete bounty')
-                                      Alert.alert('Deleted', 'Bounty deleted and removed from active lists.')
-                                      onRefresh?.()
-                                    } catch (err) {
-                                      console.error('Error deleting bounty:', err)
-                                      Alert.alert('Error', 'Failed to delete bounty. Please try again.')
-                                    } finally {
-                                      setIsProcessing(false)
-                                    }
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.deleteButton]}
+                        onPress={async () => {
+                          if (!bounty) return;
+                          Alert.alert(
+                            'Delete Bounty',
+                            'Permanently delete this bounty from active lists? It will remain in your history. This cannot be undone.',
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              {
+                                text: 'Delete',
+                                style: 'destructive',
+                                onPress: async () => {
+                                  try {
+                                    setIsProcessing(true);
+                                    const updated = await bountyService.update(String(bounty.id), {
+                                      status: 'deleted',
+                                    });
+                                    if (!updated) throw new Error('Failed to delete bounty');
+                                    Alert.alert(
+                                      'Deleted',
+                                      'Bounty deleted and removed from active lists.'
+                                    );
+                                    onRefresh?.();
+                                  } catch (err) {
+                                    console.error('Error deleting bounty:', err);
+                                    Alert.alert(
+                                      'Error',
+                                      'Failed to delete bounty. Please try again.'
+                                    );
+                                  } finally {
+                                    setIsProcessing(false);
                                   }
-                                }
-                              ]
-                            )
-                          }}
-                          disabled={isProcessing}
-                        >
-                          <MaterialIcons name="delete" size={20} color="#fff" />
-                          <Text style={styles.actionButtonText}>Delete</Text>
-                        </TouchableOpacity>
-                      </>
-                    ) : (
-                      <>
-                        <TouchableOpacity
-                          style={[styles.actionButton, styles.archiveButton]}
-                          onPress={() => {
-                            Alert.alert(
-                              'Hide Bounty',
-                              'Hide this bounty from your view? This will not affect the poster or other users.',
-                              [
-                                { text: 'Cancel', style: 'cancel' },
-                                {
-                                  text: 'Hide',
-                                  onPress: () => {
-                                    setHiddenByUser(true)
-                                    onRefresh?.()
-                                  }
-                                }
-                              ]
-                            )
-                          }}
-                        >
-                          <MaterialIcons name="bookmark-remove" size={20} color="#fff" />
-                          <Text style={styles.actionButtonText}>Hide</Text>
-                        </TouchableOpacity>
+                                },
+                              },
+                            ]
+                          );
+                        }}
+                        disabled={isProcessing}
+                      >
+                        <MaterialIcons name="delete" size={20} color="#fff" />
+                        <Text style={styles.actionButtonText}>Delete</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <>
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.archiveButton]}
+                        onPress={() => {
+                          Alert.alert(
+                            'Hide Bounty',
+                            'Hide this bounty from your view? This will not affect the poster or other users.',
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              {
+                                text: 'Hide',
+                                onPress: () => {
+                                  setHiddenByUser(true);
+                                  onRefresh?.();
+                                },
+                              },
+                            ]
+                          );
+                        }}
+                      >
+                        <MaterialIcons name="bookmark-remove" size={20} color="#fff" />
+                        <Text style={styles.actionButtonText}>Hide</Text>
+                      </TouchableOpacity>
 
-                        <TouchableOpacity
-                          style={[styles.actionButton, styles.deleteButton]}
-                          onPress={() => {
-                            Alert.alert(
-                              'Remove from List',
-                              'Remove this bounty from your local list? This does not delete the bounty for the owner.',
-                              [
-                                { text: 'Cancel', style: 'cancel' },
-                                {
-                                  text: 'Remove',
-                                  style: 'destructive',
-                                  onPress: () => {
-                                    setHiddenByUser(true)
-                                    onRefresh?.()
-                                  }
-                                }
-                              ]
-                            )
-                          }}
-                        >
-                          <MaterialIcons name="close" size={20} color="#fff" />
-                          <Text style={styles.actionButtonText}>Remove</Text>
-                        </TouchableOpacity>
-                      </>
-                    )}
-                  </View>
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.deleteButton]}
+                        onPress={() => {
+                          Alert.alert(
+                            'Remove from List',
+                            'Remove this bounty from your local list? This does not delete the bounty for the owner.',
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              {
+                                text: 'Remove',
+                                style: 'destructive',
+                                onPress: () => {
+                                  setHiddenByUser(true);
+                                  onRefresh?.();
+                                },
+                              },
+                            ]
+                          );
+                        }}
+                      >
+                        <MaterialIcons name="close" size={20} color="#fff" />
+                        <Text style={styles.actionButtonText}>Remove</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </View>
               </View>
             </AnimatedSection>
           )}
@@ -1572,7 +1866,11 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           {!conversation && bounty.status === 'open' && (
             <View style={styles.infoBox}>
               <MaterialIcons name="chat-bubble-outline" size={18} color="#6ee7b7" />
-              <Text style={styles.infoText}>{isOwner ? 'Conversation will appear after acceptance.' : 'A chat with the poster will appear once you’re accepted.'}</Text>
+              <Text style={styles.infoText}>
+                {isOwner
+                  ? 'Conversation will appear after acceptance.'
+                  : 'A chat with the poster will appear once you’re accepted.'}
+              </Text>
             </View>
           )}
         </View>
@@ -1589,10 +1887,10 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
           isForHonor={bounty.is_for_honor || false}
           onClose={() => dispatchUi({ type: 'set', key: 'showReviewModal', value: false })}
           onComplete={() => {
-            dispatchUi({ type: 'set', key: 'showReviewModal', value: false })
-            dispatchUi({ type: 'set', key: 'hasSubmission', value: false })
+            dispatchUi({ type: 'set', key: 'showReviewModal', value: false });
+            dispatchUi({ type: 'set', key: 'hasSubmission', value: false });
             // Trigger refresh
-            if (onRefresh) onRefresh()
+            if (onRefresh) onRefresh();
           }}
         />
       )}
@@ -1602,12 +1900,12 @@ export function MyPostingExpandable({ bounty, currentUserId, expanded, onToggle,
         visible={proofViewerVisible}
         attachment={selectedProofItem}
         onClose={() => {
-          setProofViewerVisible(false)
-          setSelectedProofItem(null)
+          setProofViewerVisible(false);
+          setSelectedProofItem(null);
         }}
       />
     </View>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
@@ -1634,14 +1932,43 @@ const styles = StyleSheet.create({
   bubbleIdle: { backgroundColor: 'rgba(110,231,183,0.3)' },
   bubbleActive: { backgroundColor: '#10b981' },
   bubbleCompleted: { backgroundColor: '#059669' },
-  connector: { width: 18, height: 2, backgroundColor: 'rgba(110,231,183,0.35)', marginHorizontal: 6 },
-  infoBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: 'rgba(5, 46, 27, 0.35)', padding: 10, borderRadius: 8, marginBottom: 8 },
+  connector: {
+    width: 18,
+    height: 2,
+    backgroundColor: 'rgba(110,231,183,0.35)',
+    marginHorizontal: 6,
+  },
+  infoBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: 'rgba(5, 46, 27, 0.35)',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
   infoText: { color: '#d1fae5', fontSize: 12, flex: 1 },
   actionsRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
-  primaryBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#10b981', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10 },
+  primaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#10b981',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
   primaryText: { color: '#fff', fontWeight: '600' },
   muted: { color: '#a7f3d0', fontSize: 12 },
-  honorBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#a7f3d0', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, gap: 4 },
+  honorBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#a7f3d0',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    gap: 4,
+  },
   honorBadgeText: { color: '#052e1b', fontWeight: '800', fontSize: 12 },
   reviewSubmissionBtn: {
     flexDirection: 'row',
@@ -2042,4 +2369,4 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
-})
+});
