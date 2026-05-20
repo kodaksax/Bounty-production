@@ -55,6 +55,7 @@ type MyPostingRowProps = {
   onToggle: () => void
   onEdit?: () => void
   onDelete?: () => void
+  onDiscard?: () => void
   onWithdrawApplication?: () => void
   onGoToReview: (id: string) => void
   onGoToPayout: (id: string) => void
@@ -64,7 +65,7 @@ type MyPostingRowProps = {
   onRefresh?: () => void
 }
 
-export const MyPostingRow: React.FC<MyPostingRowProps> = React.memo(function MyPostingRow({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onWithdrawApplication, onGoToReview, onGoToPayout, variant, isListScrolling, onExpandedLayout, onRefresh }) {
+export const MyPostingRow: React.FC<MyPostingRowProps> = React.memo(function MyPostingRow({ bounty, currentUserId, expanded, onToggle, onEdit, onDelete, onDiscard, onWithdrawApplication, onGoToReview, onGoToPayout, variant, isListScrolling, onExpandedLayout, onRefresh }) {
   return (
     <MyPostingExpandable
       bounty={bounty}
@@ -73,6 +74,7 @@ export const MyPostingRow: React.FC<MyPostingRowProps> = React.memo(function MyP
       onToggle={onToggle}
       onEdit={onEdit}
       onDelete={onDelete}
+      onDiscard={onDiscard}
       onWithdrawApplication={onWithdrawApplication}
       onGoToReview={onGoToReview}
       onGoToPayout={onGoToPayout}
@@ -504,6 +506,36 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
     )
   }, [refundEscrow, loadMyBounties])
 
+  // Discard a cancelled bounty: soft-removes it from the active My Postings list
+  // by transitioning its status to "deleted". The bounty remains visible in History.
+  // This addresses workspace clutter from completed cancellations where funds are
+  // already refunded but the cancelled card lingers on the My Postings tab.
+  const handleDiscardCancelledBounty = React.useCallback((bounty: Bounty) => {
+    Alert.alert(
+      'Discard Cancelled Bounty',
+      'Remove this cancelled bounty from your postings? It will still be visible in your history.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Discard',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const updated = await bountyService.update(bounty.id, { status: 'deleted' })
+              if (!updated) throw new Error('Failed to discard bounty')
+              setMyBounties((prev) => prev.filter((b) => b.id !== bounty.id))
+              await loadMyBounties()
+            } catch (err: any) {
+              setError(err?.message || 'Failed to discard bounty')
+              Alert.alert('Error', err?.message || 'Failed to discard bounty. Please try again.')
+            }
+          },
+        },
+      ],
+      { cancelable: true },
+    )
+  }, [loadMyBounties])
+
   const handleWithdrawApplication = async (bountyId: number | string) => {
     Alert.alert(
       "Withdraw Application",
@@ -613,6 +645,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
         onToggle={() => handleToggleAndScroll('myPostings', bounty.id)}
         onEdit={bounty.status === 'open' && !bountiesWithPendingRequestsSet.has(String(bounty.id)) ? () => handleEditBounty(bounty) : undefined}
         onDelete={bounty.status === 'open' ? () => handleDeleteBounty(bounty) : undefined}
+        onDiscard={bounty.status === 'cancelled' ? () => handleDiscardCancelledBounty(bounty) : undefined}
         onGoToReview={(id: string) => { /* legacy route removed - modal only */ }}
         onGoToPayout={(id: string) => router.push({ pathname: '/postings/[bountyId]/payout', params: { bountyId: id } })}
         variant={'owner'}
@@ -620,7 +653,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
         onRefresh={refreshAll}
       />
     </View>
-  ), [currentUserId, expandedMap, isListScrolling, router, handleEditBounty, handleDeleteBounty, refreshAll, bountiesWithPendingRequestsSet]);
+  ), [currentUserId, expandedMap, isListScrolling, router, handleEditBounty, handleDeleteBounty, handleDiscardCancelledBounty, refreshAll, bountiesWithPendingRequestsSet]);
 
   const renderInProgressItem = React.useCallback(({ item: bounty, index }: { item: Bounty; index: number }) => (
     <View

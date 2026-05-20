@@ -15,6 +15,10 @@ interface BountyCardProps {
   onCancel?: () => void; // New: Navigate to cancellation request screen
   onViewCancellation?: () => void; // New: Navigate to cancellation response screen
   onViewDispute?: () => void; // New: Navigate to dispute screen
+  // Owner action: discard a cancelled bounty so it no longer clutters active lists
+  // (soft-removes the bounty by transitioning it to the "deleted" status; it remains
+  // accessible from History).
+  onDiscard?: () => void;
   // If a revision has been requested for the current user, show an indicator
   revisionRequested?: boolean;
   // When the poster has a pending submission to review, show review-needed state
@@ -44,6 +48,7 @@ export function BountyCard({
   onCancel,
   onViewCancellation,
   onViewDispute,
+  onDiscard,
   revisionRequested,
   reviewNeeded,
   revisionFeedback,
@@ -235,7 +240,7 @@ export function BountyCard({
       </View>
 
       {/* Owner actions row (only visible to owner) */}
-      {isOwner && (onEdit || onDelete || onCancel || onViewCancellation || onViewDispute) && (
+      {isOwner && (onEdit || onDelete || onCancel || onViewCancellation || onViewDispute || onDiscard) && (
         <View style={styles.ownerActions}>
           <Text style={styles.ownerLabel}>Your posting</Text>
           <View style={styles.actionButtons}>
@@ -276,12 +281,14 @@ export function BountyCard({
                 <Text style={[styles.actionButtonText, styles.cancelButtonText]}>Cancel</Text>
               </TouchableOpacity>
             )}
-            {onViewCancellation && bounty.status === 'cancellation_requested' && (
-              <TouchableOpacity
-                style={[styles.actionButton, styles.viewButton]}
-                onPress={(e) => {
-                }}
-              >
+             {onViewCancellation && bounty.status === 'cancellation_requested' && (
+               <TouchableOpacity
+                 style={[styles.actionButton, styles.viewButton]}
+                 onPress={(e) => {
+                   e.stopPropagation();
+                   onViewCancellation();
+                 }}
+               >
                 <MaterialIcons name="visibility" size={16} color="#3b82f6" />
                 <Text style={[styles.actionButtonText, styles.viewButtonText]}>View Request</Text>
               </TouchableOpacity>
@@ -296,6 +303,21 @@ export function BountyCard({
               >
                 <MaterialIcons name="gavel" size={16} color="#dc2626" />
                 <Text style={[styles.actionButtonText, styles.disputeButtonText]}>View Dispute</Text>
+              </TouchableOpacity>
+            )}
+            {onDiscard && bounty.status === 'cancelled' && (
+              <TouchableOpacity
+                style={[styles.actionButton, styles.discardButton]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onDiscard();
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Discard cancelled bounty"
+                accessibilityHint="Removes this cancelled bounty from your postings. It will remain visible in your history."
+              >
+                <MaterialIcons name="delete-sweep" size={16} color="#ef4444" />
+                <Text style={[styles.actionButtonText, styles.discardText]}>Discard</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity
