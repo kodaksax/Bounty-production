@@ -585,6 +585,12 @@ export function SignUpForm() {
         onRequestClose={() => setLegalModal(null)}
         statusBarTranslucent
       >
+        {/*
+          SafeAreaView from react-native-safe-area-context does NOT receive top
+          insets when rendered inside a React Native Modal, so we omit the 'top'
+          edge here and apply the top inset manually on the header View below
+          (using insets.top captured in the parent context where the provider works).
+        */}
         <SafeAreaView className="flex-1 bg-emerald-600" edges={['left', 'right', 'bottom']}>
           <View
             className="flex-row justify-between items-center px-4 pb-4"
