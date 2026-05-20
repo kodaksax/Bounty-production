@@ -1,90 +1,94 @@
-"use client"
+'use client';
 
-import { MaterialIcons } from "@expo/vector-icons"
-import { useState } from "react"
-import { Animated, StyleSheet, Text, TouchableOpacity, View } from "react-native"
-import { BrandingLogo } from "components/ui/branding-logo"
-import { InfoTooltip } from "components/ui/tooltip"
-import { useHapticFeedback } from '../lib/haptic-feedback'
+import { MaterialIcons } from '@expo/vector-icons';
+import { BrandingLogo } from 'components/ui/branding-logo';
+import { InfoTooltip } from 'components/ui/tooltip';
+import { useState } from 'react';
+import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useHapticFeedback } from '../lib/haptic-feedback';
 
 interface AddBountyAmountScreenProps {
-  onBack: () => void
-  onAddAmount: (amount: number, isForHonor: boolean) => void
-  initialAmount?: number
+  onBack: () => void;
+  onAddAmount: (amount: number, isForHonor: boolean) => void;
+  initialAmount?: number;
 }
 
-export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }: AddBountyAmountScreenProps) {
-  const [amount, setAmount] = useState<string>(initialAmount.toString())
-  const [isForHonor, setIsForHonor] = useState<boolean>(false)
-  const [animateAmount] = useState<Animated.Value>(new Animated.Value(1))
-  const { triggerHaptic } = useHapticFeedback()
+export function AddBountyAmountScreen({
+  onBack,
+  onAddAmount,
+  initialAmount = 0,
+}: AddBountyAmountScreenProps) {
+  const [amount, setAmount] = useState<string>(initialAmount.toString());
+  const [isForHonor, setIsForHonor] = useState<boolean>(false);
+  const [animateAmount] = useState<Animated.Value>(new Animated.Value(1));
+  const { triggerHaptic } = useHapticFeedback();
 
   // Format the amount with commas for thousands
   const formattedAmount = () => {
-    if (amount === "0") return "0"
+    if (amount === '0') return '0';
 
     // Format with commas for thousands
-    const parts = amount.split(".")
-    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+    const parts = amount.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
-    return parts.join(".")
-  }
+    return parts.join('.');
+  };
 
   const handleNumberPress = (num: number) => {
     // Animate the amount display
     Animated.sequence([
       Animated.timing(animateAmount, { toValue: 1.1, duration: 150, useNativeDriver: true }),
       Animated.timing(animateAmount, { toValue: 1, duration: 150, useNativeDriver: true }),
-    ]).start()
+    ]).start();
 
-    if (amount === "0") {
-      setAmount(num.toString())
+    if (amount === '0') {
+      setAmount(num.toString());
     } else {
       // Limit to 2 decimal places and reasonable length
-      if (amount.includes(".")) {
-        const parts = amount.split(".")
+      if (amount.includes('.')) {
+        const parts = amount.split('.');
         if (parts[1].length < 2) {
-          setAmount(amount + num.toString())
+          setAmount(amount + num.toString());
         }
       } else if (amount.length < 8) {
-        setAmount(amount + num.toString())
+        setAmount(amount + num.toString());
       }
     }
-  }
+  };
 
   const handleDecimalPress = () => {
     // Animate the amount display
     Animated.sequence([
       Animated.timing(animateAmount, { toValue: 1.1, duration: 150, useNativeDriver: true }),
       Animated.timing(animateAmount, { toValue: 1, duration: 150, useNativeDriver: true }),
-    ]).start()
+    ]).start();
 
-    if (!amount.includes(".")) {
-      setAmount(amount + ".")
+    if (!amount.includes('.')) {
+      setAmount(amount + '.');
     }
-  }
+  };
 
   const handleDeletePress = () => {
     // Animate the amount display
     Animated.sequence([
       Animated.timing(animateAmount, { toValue: 1.1, duration: 150, useNativeDriver: true }),
       Animated.timing(animateAmount, { toValue: 1, duration: 150, useNativeDriver: true }),
-    ]).start()
+    ]).start();
 
     if (amount.length > 1) {
-      setAmount(amount.slice(0, -1))
+      setAmount(amount.slice(0, -1));
     } else {
-      setAmount("0")
+      setAmount('0');
     }
-  }
+  };
 
   const handleAddBounty = () => {
-    const numAmount = Number.parseFloat(amount)
+    const numAmount = Number.parseFloat(amount);
     if (!isNaN(numAmount)) {
-      triggerHaptic('medium') // Medium haptic for bounty creation
-      onAddAmount(numAmount, isForHonor)
+      triggerHaptic('medium'); // Medium haptic for bounty creation
+      onAddAmount(numAmount, isForHonor);
     }
-  }
+  };
 
   const styles = StyleSheet.create({
     container: {
@@ -303,9 +307,7 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
 
       {/* Amount Display */}
       <View style={styles.amountContainer}>
-        <Text style={styles.amountText}>
-          ${formattedAmount()}
-        </Text>
+        <Text style={styles.amountText}>${formattedAmount()}</Text>
       </View>
 
       {/* For Honor Toggle */}
@@ -323,12 +325,9 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
         </View>
         <TouchableOpacity
           onPress={() => setIsForHonor(!isForHonor)}
-          style={[
-            styles.toggle,
-            isForHonor ? styles.toggleActive : styles.toggleInactive,
-          ]}
+          style={[styles.toggle, isForHonor ? styles.toggleActive : styles.toggleInactive]}
         >
-          <View 
+          <View
             style={[
               styles.toggleSlider,
               isForHonor ? styles.toggleSliderActive : styles.toggleSliderInactive,
@@ -340,7 +339,8 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
       {isForHonor && (
         <View style={styles.honorTextContainer}>
           <Text style={styles.honorText}>
-            This bounty will be posted without payment. Hunters complete it to build reputation and help the community.
+            This bounty will be posted without payment. Hunters complete it to build reputation and
+            help the community.
           </Text>
         </View>
       )}
@@ -348,7 +348,7 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
       {/* Keypad */}
       <View style={styles.keypadContainer}>
         <View style={styles.keypadGrid}>
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
             <TouchableOpacity
               key={num}
               style={styles.keypadButton}
@@ -357,23 +357,18 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
               <Text style={styles.keypadButtonText}>{num}</Text>
             </TouchableOpacity>
           ))}
-          <TouchableOpacity
-            style={styles.keypadButton}
-            onPress={handleDecimalPress}
-          >
+          <TouchableOpacity style={styles.keypadButton} onPress={handleDecimalPress}>
             <Text style={styles.keypadButtonText}>.</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.keypadButton}
-            onPress={() => handleNumberPress(0)}
-          >
+          <TouchableOpacity style={styles.keypadButton} onPress={() => handleNumberPress(0)}>
             <Text style={styles.keypadButtonText}>0</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.keypadButton}
             onPress={handleDeletePress}
+            accessibilityLabel="Delete last digit"
           >
-            <Text style={styles.keypadButtonText}>&lt;</Text>
+            <MaterialIcons name="backspace" size={28} color="white" />
           </TouchableOpacity>
         </View>
       </View>
@@ -390,13 +385,16 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
           disabled={!(Number.parseFloat(amount) > 0 || isForHonor)}
           onPress={handleAddBounty}
         >
-          <Text style={[
-            styles.addButtonText,
-            !(Number.parseFloat(amount) > 0 || isForHonor) && styles.addButtonTextDisabled
-          ]}>Add</Text>
-
+          <Text
+            style={[
+              styles.addButtonText,
+              !(Number.parseFloat(amount) > 0 || isForHonor) && styles.addButtonTextDisabled,
+            ]}
+          >
+            Add
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
-  )
+  );
 }
