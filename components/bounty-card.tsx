@@ -281,12 +281,14 @@ export function BountyCard({
                 <Text style={[styles.actionButtonText, styles.cancelButtonText]}>Cancel</Text>
               </TouchableOpacity>
             )}
-            {onViewCancellation && bounty.status === 'cancellation_requested' && (
-              <TouchableOpacity
-                style={[styles.actionButton, styles.viewButton]}
-                onPress={(e) => {
-                }}
-              >
+             {onViewCancellation && bounty.status === 'cancellation_requested' && (
+               <TouchableOpacity
+                 style={[styles.actionButton, styles.viewButton]}
+                 onPress={(e) => {
+                   e.stopPropagation();
+                   onViewCancellation();
+                 }}
+               >
                 <MaterialIcons name="visibility" size={16} color="#3b82f6" />
                 <Text style={[styles.actionButtonText, styles.viewButtonText]}>View Request</Text>
               </TouchableOpacity>
