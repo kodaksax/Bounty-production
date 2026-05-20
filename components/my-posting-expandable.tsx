@@ -274,6 +274,9 @@ export function MyPostingExpandable({
 
   // Monitoring: detect mismatches where bounty marked completed but escrow still funded locally.
   // Suppress when a dispute is active — escrow is intentionally held during dispute resolution.
+  // Also suppress when no settlement (release/refund) transaction exists yet: a `completed`
+  // bounty with `funded` escrow and no settlement is a legitimate transient state (dispute
+  // window, pending payout, or post-completion dispute) — not a local cache inconsistency.
   useEffect(() => {
     try {
       if (!bounty) return;
@@ -281,18 +284,28 @@ export function MyPostingExpandable({
       // If there is an open dispute for this bounty, the escrow is legitimately
       // frozen (pending admin resolution). Do not fire a false-positive alert.
       if (hasDispute || activeDisputeId) return;
+      const bountyIdStr = String(bounty.id);
       const escrowStillFunded = transactions.some(
         tx =>
           tx.type === 'escrow' &&
-          String(tx.details?.bounty_id) === String(bounty.id) &&
+          String(tx.details?.bounty_id) === bountyIdStr &&
           tx.escrowStatus === 'funded'
       );
-      if (escrowStillFunded) {
-        logClientError('Bounty completed but escrow still funded locally', {
-          bountyId: String(bounty.id),
-          bountyStatus: bounty.status,
-        });
-      }
+      if (!escrowStillFunded) return;
+      // Only treat this as an inconsistency when a settlement (release or refund)
+      // has actually been recorded for this bounty. Otherwise the escrow is still
+      // legitimately held — e.g. during the dispute window after completion, where
+      // a poster can raise a dispute and escrow must remain reserved.
+      const hasSettlement = transactions.some(
+        tx =>
+          (tx.type === 'release' || tx.type === 'refund') &&
+          String(tx.details?.bounty_id) === bountyIdStr
+      );
+      if (!hasSettlement) return;
+      logClientError('Bounty completed but escrow still funded locally', {
+        bountyId: bountyIdStr,
+        bountyStatus: bounty.status,
+      });
     } catch (e) {
       // swallow
     }
