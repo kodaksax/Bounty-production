@@ -15,7 +15,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PRIVACY_TEXT } from '../../assets/legal/privacy';
 import { TERMS_TEXT } from '../../assets/legal/terms';
 import { BrandingLogo } from '../../components/ui/branding-logo';
@@ -42,6 +42,7 @@ export function SignUpForm() {
   // set status/safe-area color for this screen
   useScreenBackground('#097959ff'); // EMERALD_800 / dark
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -582,16 +583,23 @@ export function SignUpForm() {
         visible={legalModal !== null}
         animationType="slide"
         onRequestClose={() => setLegalModal(null)}
+        statusBarTranslucent
       >
-        <SafeAreaView className="flex-1 bg-emerald-600">
-          <View className="flex-row justify-between items-center p-4">
-            <View className="flex-row items-center">
+        <SafeAreaView className="flex-1 bg-emerald-600" edges={['left', 'right', 'bottom']}>
+          <View
+            className="flex-row justify-between items-center px-4 pb-4"
+            style={{ paddingTop: Math.max(insets.top, Platform.OS === 'ios' ? 44 : 16) }}
+          >
+            <View className="flex-row items-center flex-1 mr-2">
               <MaterialIcons
                 name={legalModal === 'terms' ? 'gavel' : 'privacy-tip'}
                 size={24}
                 color="#fff"
               />
-              <Text className="text-lg font-bold tracking-wider ml-2 text-white">
+              <Text
+                className="text-lg font-bold tracking-wider ml-2 text-white flex-1"
+                numberOfLines={1}
+              >
                 {legalModal === 'terms' ? 'Terms of Service' : 'Privacy Policy'}
               </Text>
             </View>
@@ -600,6 +608,7 @@ export function SignUpForm() {
               className="p-2"
               accessibilityRole="button"
               accessibilityLabel="Close"
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             >
               <MaterialIcons name="close" size={24} color="#fff" />
             </TouchableOpacity>
