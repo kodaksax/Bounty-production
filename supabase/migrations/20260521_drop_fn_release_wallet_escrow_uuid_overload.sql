@@ -1,0 +1,27 @@
+-- Migration: Drop fn_release_wallet_escrow_for_dispute(UUID) overload
+-- Created: 2026-05-21
+--
+-- Problem:
+--   When resolving a dispute in the hunter's favour for a wallet-escrowed
+--   bounty, the server logged:
+--
+--     PGRST203: Could not choose the best candidate function between:
+--       public.fn_release_wallet_escrow_for_dispute(p_dispute_id => integer),
+--       public.fn_release_wallet_escrow_for_dispute(p_dispute_id => uuid)
+--
+--   An older UUID-typed overload of fn_release_wallet_escrow_for_dispute
+--   still exists in the database alongside the correct INTEGER version
+--   added in 20260520_add_fn_release_wallet_escrow_for_dispute.sql.
+--   `CREATE OR REPLACE FUNCTION` only replaces a function with the exact
+--   same argument types, so the stale UUID overload was never removed.
+--
+-- Fix:
+--   Drop the UUID overload. bounty_disputes.id is INTEGER, so only the
+--   INTEGER signature is correct. This mirrors the parameter-type fix
+--   applied to fn_refund_wallet_escrow_for_dispute in
+--   20260520_fix_fn_refund_wallet_escrow_param_type.sql.
+--
+--   Safe to run repeatedly: `DROP FUNCTION IF EXISTS` is a no-op when the
+--   UUID overload is absent, and the INTEGER version is left untouched.
+
+DROP FUNCTION IF EXISTS public.fn_release_wallet_escrow_for_dispute(UUID);
