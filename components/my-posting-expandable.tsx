@@ -52,6 +52,7 @@ type Props = {
   onToggle: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  onDiscard?: () => void;
   onWithdrawApplication?: () => void;
   onGoToReview?: (bountyId: string) => void;
   onGoToPayout?: (bountyId: string) => void;
@@ -86,6 +87,7 @@ export function MyPostingExpandable({
   onToggle,
   onEdit,
   onDelete,
+  onDiscard,
   onWithdrawApplication,
   onGoToReview,
   onGoToPayout,
@@ -1038,6 +1040,7 @@ export function MyPostingExpandable({
         }}
         onEdit={onEdit}
         onDelete={onDelete}
+        onDiscard={onDiscard}
         onCancel={handleCancelBounty}
         onViewCancellation={handleViewCancellation}
         onViewDispute={handleViewDispute}
