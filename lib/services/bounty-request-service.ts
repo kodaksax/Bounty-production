@@ -1050,15 +1050,14 @@ export const bountyRequestService = {
       return result;
     }
 
-    // API mode: call an atomic server-side function to accept the request.
+    // API mode: call the consolidated backend accept endpoint.
     // This replaces sequential client updates with a single server-side operation
-    // exposed at POST ${API_BASE_URL}/functions/v1/accept-bounty-request
+    // exposed at POST ${API_BASE_URL}/api/bounty-requests/:id/accept.
     try {
-      const fnUrl = `${API_BASE_URL.replace(/\/$/, '')}/functions/v1/accept-bounty-request`;
-      const res = await fetch(fnUrl, {
+      const acceptUrl = `${API_BASE_URL.replace(/\/$/, '')}/api/bounty-requests/${requestId}/accept`;
+      const res = await fetch(acceptUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ request_id: String(requestId) }),
       });
 
       if (!res.ok) {
@@ -1074,23 +1073,33 @@ export const bountyRequestService = {
         throw err;
       }
 
-      // On success, prefer the atomic function's response as authoritative instead
-      // of immediately hitting the GET endpoint. The edge function returns the
-      // RPC rows (bounty, accepted_request) in its body so parsing that avoids a
+      // On success, prefer the atomic endpoint's response as authoritative instead
+      // of immediately hitting the GET endpoint. Some deployments return RPC-like
+      // rows (bounty, accepted_request), while the consolidated API route returns
+      // { success, bounty, acceptedRequestId }. Parsing both shapes avoids a
       // follow-up GET which can fail due to transient network issues and falsely
       // indicate a conflict to the caller.
       let acceptedReq: BountyRequest | null = null;
       try {
         const body = await res.json().catch(() => null);
-        if (body && body.data) {
-          const row = Array.isArray(body.data) ? body.data[0] : body.data;
+        if (body) {
+          const row = body.data ? (Array.isArray(body.data) ? body.data[0] : body.data) : body;
           const acceptedRequestJson =
-            (row as any)?.accepted_request ?? (row as any)?.acceptedRequest ?? row;
+            (row as any)?.accepted_request ??
+            (row as any)?.acceptedRequest ??
+            (row as any)?.accepted_request_json;
           if (acceptedRequestJson) {
             acceptedReq =
               typeof acceptedRequestJson === 'string'
                 ? JSON.parse(acceptedRequestJson)
                 : acceptedRequestJson;
+          } else if ((row as any)?.acceptedRequestId || (row as any)?.accepted_request_id) {
+            acceptedReq = {
+              id: (row as any).acceptedRequestId ?? (row as any).accepted_request_id,
+              bounty_id: (row as any).bounty?.id,
+              hunter_id: (row as any).bounty?.accepted_by,
+              status: 'accepted',
+            } as BountyRequest;
           }
         }
       } catch (parseErr) {
@@ -1140,7 +1149,7 @@ export const bountyRequestService = {
 
       return acceptedReq;
     } catch (err) {
-      logger.error('Error accepting request via Edge Function / API mode', {
+      logger.error('Error accepting request via consolidated API mode', {
         requestId,
         error: err instanceof Error ? err.message : String(err),
       });

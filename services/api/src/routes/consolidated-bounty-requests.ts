@@ -1037,6 +1037,237 @@ export async function registerConsolidatedBountyRequestRoutes(
   );
 
   /**
+   * POST /api/bounty-requests/:id/accept
+   * Accept a bounty request
+   * 
+   * - Requires authentication
+   * - Authorization: Only the bounty owner can accept requests
+   * - Can only accept if bounty is still open
+   * - Can only accept pending requests
+   * 
+   * Special logic:
+   * - Update bounty: status='in_progress', accepted_by=hunter_id
+   * - Update this request: status='accepted'
+   * - Reject all other pending requests for the same bounty
+   * 
+   * @header {string} Authorization - Bearer token (required)
+   * @param {string} id - Bounty request UUID
+   * 
+   * @returns {200} Bounty request accepted successfully (returns the accepted request object)
+   * @returns {401} Authentication required
+   * @returns {403} Not authorized to perform this action
+   * @returns {404} Bounty request or bounty not found
+   * @returns {409} Invalid status transition or already accepted
+   */
+  fastify.post(
+    '/api/bounty-requests/:id/accept',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['bounty-requests'],
+        description: 'Accept a bounty request (bounty owner only)',
+        params: toJsonSchema(z.object({ id: z.string().uuid('Invalid request ID format') }), 'AcceptBountyRequestParams'),
+      },
+    },
+    asyncHandler(async (request: AuthenticatedRequest, reply: FastifyReply) => {
+      const { id: requestId } = request.params as { id: string };
+      const userId = request.userId!;
+
+      request.log.info(
+        { userId, requestId },
+        'Accepting bounty request via POST accept endpoint'
+      );
+
+      try {
+        const supabase = getSupabaseAdmin();
+
+        // Fetch existing request
+        const { data: bountyRequest, error: fetchError } = await supabase
+          .from('bounty_requests')
+          .select('*')
+          .eq('id', requestId)
+          .single();
+
+        if (fetchError) {
+          if (fetchError.code === 'PGRST116') {
+            throw new NotFoundError('Bounty request', requestId);
+          }
+          throw new Error(fetchError.message);
+        }
+
+        if (!bountyRequest) {
+          throw new NotFoundError('Bounty request', requestId);
+        }
+
+        // Fetch associated bounty
+        const { data: bounty, error: bountyError } = await supabase
+          .from('bounties')
+          .select('*')
+          .eq('id', bountyRequest.bounty_id)
+          .single();
+
+        if (bountyError || !bounty) {
+          throw new NotFoundError('Bounty', bountyRequest.bounty_id);
+        }
+
+        const posterId = getBountyPosterId(bounty);
+
+        // Only bounty owner can accept
+        if (posterId !== userId) {
+          throw new AuthorizationError('Only the bounty owner can accept requests');
+        }
+        // Can only accept if bounty is still open
+        if (bounty.status !== 'open') {
+          throw new ConflictError(`Cannot accept request when bounty status is: ${bounty.status}`);
+        }
+        // Can only accept pending requests
+        if (bountyRequest.status !== 'pending') {
+          throw new ConflictError(`Cannot accept request with status: ${bountyRequest.status}`);
+        }
+
+        // 1. Update the bounty status and accepted_by
+        const { data: updatedBounty, error: bountyUpdateError } = await supabase
+          .from('bounties')
+          .update({
+            status: 'in_progress',
+            accepted_by: bountyRequest.hunter_id,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', bountyRequest.bounty_id)
+          .eq('status', 'open')  // Optimistic lock: only update if still open
+          .select()
+          .single();
+
+        if (bountyUpdateError || !updatedBounty) {
+          request.log.error(
+            { error: bountyUpdateError?.message, bountyId: bountyRequest.bounty_id },
+            'Failed to update bounty when accepting request (possibly already accepted)'
+          );
+          throw new ConflictError('This bounty has already been accepted by another user');
+        }
+
+        // 2. Update this request to accepted
+        const { data: updatedRequest, error: requestUpdateError } = await supabase
+          .from('bounty_requests')
+          .update({
+            status: 'accepted',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', requestId)
+          .select()
+          .single();
+
+        if (requestUpdateError || !updatedRequest) {
+          request.log.error(
+            { error: requestUpdateError?.message, requestId },
+            'Failed to update request status to accepted, attempting to roll back bounty'
+          );
+
+          // Compensating action: roll back the bounty to open if possible
+          const { data: rollbackData, error: bountyRollbackError } = await supabase
+            .from('bounties')
+            .update({
+              status: 'open',
+              accepted_by: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', bountyRequest.bounty_id)
+            .eq('status', 'in_progress')
+            .eq('accepted_by', bountyRequest.hunter_id)
+            .select();
+
+          if (bountyRollbackError) {
+            request.log.error(
+              {
+                error: bountyRollbackError.message,
+                bountyId: bountyRequest.bounty_id,
+                hunterId: bountyRequest.hunter_id,
+              },
+              'Failed to roll back bounty after request accept failure - manual intervention required'
+            );
+          }
+
+          throw new Error('Failed to accept request');
+        }
+
+        // 3. Reject all other pending requests for this bounty
+        const { data: rejectedRequests, error: rejectOthersError } = await supabase
+          .from('bounty_requests')
+          .update({
+            status: 'rejected',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('bounty_id', bountyRequest.bounty_id)
+          .eq('status', 'pending')
+          .neq('id', requestId)
+          .select('id, hunter_id');
+
+        if (rejectOthersError) {
+          request.log.warn(
+            { error: rejectOthersError.message, bountyId: bountyRequest.bounty_id },
+            'Failed to reject other pending requests (continuing)'
+          );
+        }
+
+        // Notify rejected hunters so they know the bounty is no longer available
+        if (Array.isArray(rejectedRequests) && rejectedRequests.length > 0) {
+          const rejectionNotificationPromises = rejectedRequests.map((rejected) =>
+            (async () => {
+              try {
+                await notificationService.notifyBountyRejection(
+                  rejected.hunter_id,
+                  bountyRequest.bounty_id,
+                  bounty.title
+                );
+              } catch (notifErr) {
+                request.log.warn(
+                  { error: notifErr, hunterId: rejected.hunter_id },
+                  'Failed to send rejection notification to competing hunter (non-fatal)'
+                );
+              }
+            })()
+          );
+
+          await Promise.allSettled(rejectionNotificationPromises);
+        }
+
+        request.log.info(
+          { userId, requestId, bountyId: bountyRequest.bounty_id },
+          'Bounty request accepted successfully via POST accept endpoint'
+        );
+
+        // Notify the hunter that their application was accepted
+        try {
+          await notificationService.notifyBountyAcceptance(
+            bountyRequest.hunter_id,
+            bountyRequest.bounty_id,
+            bounty.title
+          );
+        } catch (notificationError) {
+          request.log.warn(
+            { error: notificationError, hunterId: bountyRequest.hunter_id },
+            'Failed to send acceptance notification (non-fatal)'
+          );
+        }
+
+        return updatedRequest;
+      } catch (error) {
+        if (error instanceof NotFoundError ||
+          error instanceof AuthorizationError ||
+          error instanceof ConflictError ||
+          error instanceof ValidationError) {
+          throw error;
+        }
+        request.log.error(
+          { error, requestId },
+          'Unexpected error accepting bounty request'
+        );
+        throw error;
+      }
+    })
+  );
+
+  /**
    * DELETE /api/bounty-requests/:id
    * Delete/withdraw bounty request
    * 

@@ -406,13 +406,13 @@ async function testCannotAcceptAsNonOwner() {
  * Test 8: Accept request as bounty owner
  */
 async function testAcceptRequest() {
-  logSection('Test 8: Accept Request as Bounty Owner');
+  logSection('Test 8: Accept Request as Bounty Owner (via POST accept endpoint)');
 
   try {
     const response = await makeRequest(
-      'PATCH',
-      `/api/bounty-requests/${testRequestId}`,
-      { status: 'accepted' },
+      'POST',
+      `/api/bounty-requests/${testRequestId}/accept`,
+      undefined,
       { Authorization: `Bearer ${posterToken}` }
     );
 
