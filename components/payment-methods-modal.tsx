@@ -173,7 +173,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
 
   return (
     <Modal
-      visible={isOpen}
+      visible
       transparent
       animationType="none"
       onRequestClose={onClose}

@@ -364,7 +364,15 @@ export function SignInForm() {
   useEffect(() => {
     const run = async () => {
       if (!isGoogleConfigured) return
-      if (response?.type !== 'success') return
+      if (!response) return
+      if (response.type !== 'success') {
+        // User cancelled or error — clear the loading spinner set in onPress
+        setSocialAuthLoading(false)
+        if (response.type === 'error') {
+          setSocialAuthError(response.error?.message ?? 'Google sign-in failed')
+        }
+        return
+      }
       const idToken = response.params.id_token
       if (!idToken) {
         setSocialAuthError('Google did not return id_token')
@@ -702,6 +710,7 @@ export function SignInForm() {
                 disabled={!isGoogleConfigured || isSubmitting || !request || socialAuthLoading}
                 onPress={() => {
                   setSocialAuthError(null)
+                  setSocialAuthLoading(true)
                   promptAsync()
                 }}
                 className={`w-full rounded py-3 items-center flex-row justify-center mt-2 ${isGoogleConfigured ? 'bg-white' : 'bg-white/40'}`}
