@@ -607,6 +607,7 @@ export function SignInForm() {
                     cornerRadius={8}
                     style={{ width: '100%', height: 44 }}
                     onPress={async () => {
+                      setSocialAuthError(null)
                       setSocialAuthLoading(true)
                       try {
                         console.log('[apple] Starting Apple sign-in')
@@ -699,7 +700,10 @@ export function SignInForm() {
 
               <TouchableOpacity
                 disabled={!isGoogleConfigured || isSubmitting || !request || socialAuthLoading}
-                onPress={() => promptAsync()}
+                onPress={() => {
+                  setSocialAuthError(null)
+                  promptAsync()
+                }}
                 className={`w-full rounded py-3 items-center flex-row justify-center mt-2 ${isGoogleConfigured ? 'bg-white' : 'bg-white/40'}`}
               >
                 {socialAuthLoading ? (
@@ -714,6 +718,16 @@ export function SignInForm() {
               <TouchableOpacity onPress={() => router.push('/auth/sign-up-form')}>
                 <Text className="text-white/80 text-center mt-6">New here? Create an account</Text>
               </TouchableOpacity>
+
+              <View className="flex-row justify-center mt-4 gap-3">
+                <TouchableOpacity onPress={() => router.push('/legal/terms')} accessibilityRole="link" accessibilityLabel="View Terms of Service">
+                  <Text className="text-white/50 text-xs underline">Terms of Service</Text>
+                </TouchableOpacity>
+                <Text className="text-white/30 text-xs">·</Text>
+                <TouchableOpacity onPress={() => router.push('/legal/privacy')} accessibilityRole="link" accessibilityLabel="View Privacy Policy">
+                  <Text className="text-white/50 text-xs underline">Privacy Policy</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </ScrollView>

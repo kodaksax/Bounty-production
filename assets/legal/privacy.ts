@@ -39,6 +39,8 @@ We use trusted processors to run key parts of the Service. They process your inf
 - Supabase (authentication, database, storage). Privacy: https://supabase.com/privacy
 - Stripe and Stripe Connect (payments, escrow, payouts, KYC as applicable). Privacy: https://stripe.com/privacy
 - Apple Pay (Apple Payments tokens on supported devices). Privacy: https://www.apple.com/legal/privacy/data/en/apple-pay/
+- Mixpanel (analytics and in-app behavior tracking; we use this to understand feature usage and improve the product). Privacy: https://mixpanel.com/legal/privacy-policy/
+- Sentry (crash reporting and error monitoring; we use this to detect and fix bugs). Privacy: https://sentry.io/privacy/
 
 We do not sell or share personal information for cross-context behavioral advertising.
 
