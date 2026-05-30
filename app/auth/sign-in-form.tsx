@@ -363,15 +363,31 @@ export function SignInForm() {
   // Handle Google auth completion -> exchange id_token with Supabase
   useEffect(() => {
     const run = async () => {
-      if (!isGoogleConfigured) return
-      if (response?.type !== 'success') return
+      if (!isGoogleConfigured) {
+        setSocialAuthLoading(false)
+        return
+      }
+      if (!response) {
+        setSocialAuthLoading(false)
+        return
+      }
+      if (response.type !== 'success') {
+        // User cancelled or error — clear the loading spinner set in onPress
+        setSocialAuthLoading(false)
+        if (response.type === 'error') {
+          setSocialAuthError(response.error?.message ?? 'Google sign-in failed')
+        }
+        return
+      }
       const idToken = response.params.id_token
       if (!idToken) {
         setSocialAuthError('Google did not return id_token')
+        setSocialAuthLoading(false)
         return
       }
       if (!isSupabaseConfigured) {
         setSocialAuthError('Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.')
+        setSocialAuthLoading(false)
         return
       }
       try {
@@ -607,6 +623,7 @@ export function SignInForm() {
                     cornerRadius={8}
                     style={{ width: '100%', height: 44 }}
                     onPress={async () => {
+                      setSocialAuthError(null)
                       setSocialAuthLoading(true)
                       try {
                         console.log('[apple] Starting Apple sign-in')
@@ -699,7 +716,11 @@ export function SignInForm() {
 
               <TouchableOpacity
                 disabled={!isGoogleConfigured || isSubmitting || !request || socialAuthLoading}
-                onPress={() => promptAsync()}
+                onPress={() => {
+                  setSocialAuthError(null)
+                  setSocialAuthLoading(true)
+                  promptAsync()
+                }}
                 className={`w-full rounded py-3 items-center flex-row justify-center mt-2 ${isGoogleConfigured ? 'bg-white' : 'bg-white/40'}`}
               >
                 {socialAuthLoading ? (
@@ -714,6 +735,16 @@ export function SignInForm() {
               <TouchableOpacity onPress={() => router.push('/auth/sign-up-form')}>
                 <Text className="text-white/80 text-center mt-6">New here? Create an account</Text>
               </TouchableOpacity>
+
+              <View className="flex-row justify-center mt-4 gap-3">
+                <TouchableOpacity onPress={() => router.push('/legal/terms')} accessibilityRole="link" accessibilityLabel="View Terms of Service">
+                  <Text className="text-white/50 text-xs underline">Terms of Service</Text>
+                </TouchableOpacity>
+                <Text className="text-white/30 text-xs">·</Text>
+                <TouchableOpacity onPress={() => router.push('/legal/privacy')} accessibilityRole="link" accessibilityLabel="View Privacy Policy">
+                  <Text className="text-white/50 text-xs underline">Privacy Policy</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </ScrollView>

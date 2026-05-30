@@ -2,7 +2,7 @@
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons'
 import React, { useRef, useState } from "react"
-import { Alert, Animated, Dimensions, Easing, FlatList, PanResponder, Pressable, Text, TouchableOpacity, View } from "react-native"
+import { Alert, Animated, Dimensions, Easing, FlatList, Modal, PanResponder, Pressable, Text, TouchableOpacity, View } from "react-native"
 import { stripeService } from '../lib/services/stripe-service'
 import { useStripe } from '../lib/stripe-context'
 import { theme } from '../lib/theme'
@@ -161,8 +161,6 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
     }
   }, [isOpen])
 
-  if (!isOpen) return null
-
   const handleBackdropPress = () => {
     if (onBackdropPress) {
       onBackdropPress()
@@ -172,34 +170,36 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
   }
 
   return (
-    <Animated.View style={{
-      position: 'absolute',
-      left: 0,
-      right: 0,
-      bottom: 0,
-      top: 0,
-      zIndex: 50,
-      justifyContent: 'flex-end',
-      alignItems: 'center'
-    }}>
-      <Pressable style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} onPress={handleBackdropPress}>
-        <Animated.View style={{ flex: 1, backgroundColor: 'black', opacity: overlayOpacity }} />
-      </Pressable>
+    <Modal
+      visible={isOpen}
+      transparent
+      animationType="none"
+      onRequestClose={handleBackdropPress}
+      statusBarTranslucent
+    >
+      <Animated.View style={{
+        flex: 1,
+        justifyContent: 'flex-end',
+        alignItems: 'center'
+      }}>
+        <Pressable style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} onPress={handleBackdropPress}>
+          <Animated.View style={{ flex: 1, backgroundColor: 'black', opacity: overlayOpacity }} />
+        </Pressable>
 
-      <Animated.View
-        ref={modalRef}
-        {...panResponder.panHandlers}
-        style={{
-          backgroundColor: '#059669', // emerald-600
-          width: '100%',
-          borderTopLeftRadius: 24,
-          borderTopRightRadius: 24,
-          overflow: 'hidden',
-          transform: [{ translateY: animatedTranslateY }],
-          maxHeight: Dimensions.get('window').height * 0.92, // Increased for iPhone
-          minHeight: 400, // Ensure minimum usable height
-        }}
-      >
+        <Animated.View
+          ref={modalRef}
+          {...panResponder.panHandlers}
+          style={{
+            backgroundColor: '#059669', // emerald-600
+            width: '100%',
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
+            overflow: 'hidden',
+            transform: [{ translateY: animatedTranslateY }],
+            maxHeight: Dimensions.get('window').height * 0.92, // Increased for iPhone
+            minHeight: 400, // Ensure minimum usable height
+          }}
+        >
         {/* Drag handle - larger for iPhone */}
         <View style={{
           width: 56,
@@ -467,6 +467,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
           </View>
         )}
       </Animated.View>
-    </Animated.View>
+      </Animated.View>
+    </Modal>
   )
 }
