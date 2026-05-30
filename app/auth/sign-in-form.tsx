@@ -376,10 +376,12 @@ export function SignInForm() {
       const idToken = response.params.id_token
       if (!idToken) {
         setSocialAuthError('Google did not return id_token')
+        setSocialAuthLoading(false)
         return
       }
       if (!isSupabaseConfigured) {
         setSocialAuthError('Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.')
+        setSocialAuthLoading(false)
         return
       }
       try {

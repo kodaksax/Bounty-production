@@ -161,8 +161,6 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
     }
   }, [isOpen])
 
-  if (!isOpen) return null
-
   const handleBackdropPress = () => {
     if (onBackdropPress) {
       onBackdropPress()
@@ -173,10 +171,10 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
 
   return (
     <Modal
-      visible
+      visible={isOpen}
       transparent
       animationType="none"
-      onRequestClose={onClose}
+      onRequestClose={handleBackdropPress}
       statusBarTranslucent
     >
       <Animated.View style={{
@@ -468,6 +466,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
             )}
           </View>
         )}
+      </Animated.View>
       </Animated.View>
     </Modal>
   )
