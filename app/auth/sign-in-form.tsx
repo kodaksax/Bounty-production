@@ -363,8 +363,14 @@ export function SignInForm() {
   // Handle Google auth completion -> exchange id_token with Supabase
   useEffect(() => {
     const run = async () => {
-      if (!isGoogleConfigured) return
-      if (!response) return
+      if (!isGoogleConfigured) {
+        setSocialAuthLoading(false)
+        return
+      }
+      if (!response) {
+        setSocialAuthLoading(false)
+        return
+      }
       if (response.type !== 'success') {
         // User cancelled or error — clear the loading spinner set in onPress
         setSocialAuthLoading(false)
