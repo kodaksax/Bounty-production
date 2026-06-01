@@ -276,13 +276,13 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   }
 
   return (
-    <View className="flex flex-col h-screen bg-emerald-600 text-white">
+    <View className="flex flex-col h-screen bg-[#0B0F14] text-white">
       {/* Connection Status Banner - appears at top when offline */}
       <ConnectionStatus showQueueCount={true} />
       {/* Update Message Banner */}
       {updateMessage && (
         <View style={{ position: 'absolute', top: 60, left: 16, right: 16, zIndex: 50 }}>
-          <View className="bg-emerald-800 rounded-lg px-4 py-3 flex-row items-center justify-between shadow-lg">
+          <View className="bg-[#1F2937] rounded-lg px-4 py-3 flex-row items-center justify-between shadow-lg">
             <Text className="text-white text-sm flex-1">{updateMessage}</Text>
             <TouchableOpacity onPress={() => setUpdateMessage(null)}>
               <MaterialIcons name="close" size={18} color="white" />
@@ -334,8 +334,8 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            tintColor="#ffffff"
-            colors={['#10b981']}
+           tintColor="#9CA3AF"
+            colors={['#374151']}
           />
         }
       >
@@ -469,6 +469,7 @@ export default ProfileScreen;
 
 const styles = StyleSheet.create({
   section: {
+    backgroundColor: "#111827",
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
@@ -506,13 +507,13 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#ffffff",
+    color: "#9CA3AF",
   },
   editButton: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderWidth: 1,
-    borderColor: "#10b981",
+    borderColor: "#374151",
     borderRadius: 4,
   },
   editButtonText: {

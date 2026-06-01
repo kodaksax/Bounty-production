@@ -19,7 +19,7 @@ import { searchService } from '../../lib/services/search-service';
 import { userSearchService } from '../../lib/services/user-search-service';
 import type { AutocompleteSuggestion, BountySearchFilters, RecentSearch, UserProfile } from '../../lib/types';
 import { logger } from '../../lib/utils/error-logger';
-
+import type { TrendingBounty } from '../../lib/types'
 type SearchTab = 'bounties' | 'users';
 
 // Debounce delay for autocomplete (500ms as per requirements)
@@ -50,13 +50,27 @@ export default function EnhancedSearchScreen() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autocompleteRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const filtersPersistRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [trendingBounties, setTrendingBounties] = useState<TrendingBounty[]>([])
+  const [isLoadingTrending, setIsLoadingTrending] = useState(true)
 
   // Autocomplete state
   const [suggestions, setSuggestions] = useState<AutocompleteSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [filtersLoaded, setFiltersLoaded] = useState(false);
-
+  // Load trending bounties
+  const loadTrendingBounties = useCallback(async () => {
+    setIsLoadingTrending(true)
+    try {
+      const trending = await searchService.getTrendingBounties(5)
+      const unique = Array.from(new Map(trending.map(t => [String(t.id), t])).values())
+      setTrendingBounties(unique)
+    } catch (error) {
+      console.error('Error loading trending bounties:', error)
+    } finally {
+      setIsLoadingTrending(false)
+    }
+  }, [])
   // Bounty filters
   const [filters, setFilters] = useState<BountySearchFilters>({
     sortBy: 'date_desc',
@@ -81,6 +95,11 @@ export default function EnhancedSearchScreen() {
     };
     loadSavedFilters();
   }, []);
+   useEffect(() => {
+   
+    loadTrendingBounties()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Persist filters when they change (debounced to reduce I/O overhead)
   useEffect(() => {
@@ -393,38 +412,12 @@ export default function EnhancedSearchScreen() {
           accessibilityLabel="Go back"
           accessibilityHint="Returns to previous screen"
         >
-          <MaterialIcons name="arrow-back" size={22} color="#fff" accessibilityElementsHidden={true} />
+          <MaterialIcons name="arrow-back" size={22} color="white" accessibilityElementsHidden={true} />
         </TouchableOpacity>
         <Text style={styles.headerTitle} accessibilityRole="header">Search</Text>
       </View>
 
-      {/* Tab switcher */}
-      <View style={styles.tabRow}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'bounties' && styles.tabActive]}
-          onPress={() => setActiveTab('bounties')}
-          accessibilityRole="tab"
-          accessibilityLabel="Search bounties"
-          accessibilityState={{ selected: activeTab === 'bounties' }}
-          accessibilityHint="Switches to bounty search"
-        >
-          <Text style={[styles.tabText, activeTab === 'bounties' && styles.tabTextActive]}>
-            Bounties
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'users' && styles.tabActive]}
-          onPress={() => setActiveTab('users')}
-          accessibilityRole="tab"
-          accessibilityLabel="Search users"
-          accessibilityState={{ selected: activeTab === 'users' }}
-          accessibilityHint="Switches to user search"
-        >
-          <Text style={[styles.tabText, activeTab === 'users' && styles.tabTextActive]}>
-            Users
-          </Text>
-        </TouchableOpacity>
-      </View>
+     
 
       {/* Search bar */}
       <View style={styles.searchRow}>
@@ -432,7 +425,7 @@ export default function EnhancedSearchScreen() {
         <TextInput
           value={query}
           placeholder={activeTab === 'bounties' ? 'Search bounties...' : 'Search users...'}
-          placeholderTextColor="#93e5c7"
+          placeholderTextColor="#6B7280"
           onChangeText={(text) => {
             setQuery(text);
             if (!text.trim()) {
@@ -486,7 +479,33 @@ export default function EnhancedSearchScreen() {
           </>
         )}
       </View>
-
+       {/* Tab switcher */}
+      <View style={styles.tabRow}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'bounties' && styles.tabActive]}
+          onPress={() => setActiveTab('bounties')}
+          accessibilityRole="tab"
+          accessibilityLabel="Search bounties"
+          accessibilityState={{ selected: activeTab === 'bounties' }}
+          accessibilityHint="Switches to bounty search"
+        >
+          <Text style={[styles.tabText, activeTab === 'bounties' && styles.tabTextActive]}>
+            Bounties
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'users' && styles.tabActive]}
+          onPress={() => setActiveTab('users')}
+          accessibilityRole="tab"
+          accessibilityLabel="Search users"
+          accessibilityState={{ selected: activeTab === 'users' }}
+          accessibilityHint="Switches to user search"
+        >
+          <Text style={[styles.tabText, activeTab === 'users' && styles.tabTextActive]}>
+            Users
+          </Text>
+        </TouchableOpacity>
+      </View>
       {/* Autocomplete Suggestions */}
       {showSuggestions && suggestions.length > 0 && (
         <View style={styles.suggestionsContainer}>
@@ -560,6 +579,44 @@ export default function EnhancedSearchScreen() {
           />
         </View>
       )}
+
+      {/* Trending Bounties — shown only when search is empty */}
+{!query && !isSearching && trendingBounties.length > 0 && (
+  <View style={styles.trendingSection}>
+    <View style={styles.trendingHeader}>
+      <MaterialIcons name="local-fire-department" size={18} color="#059669" />
+      <Text style={styles.trendingTitle}>Trending</Text>
+    </View>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+      {trendingBounties.map((bounty) => (
+        <TouchableOpacity
+          key={String(bounty.id)}
+          style={styles.trendingCard}
+          onPress={() => router.push(`/bounty/${bounty.id}/public`)}
+        >
+          <Text style={styles.trendingCardTitle} numberOfLines={2}>
+            {bounty.title}
+          </Text>
+          {bounty.isForHonor ? (
+            <View style={styles.trendingHonorBadge}>
+              <Text style={styles.trendingHonorText}>For Honor</Text>
+            </View>
+          ) : (
+            <Text style={styles.trendingAmount}>
+              ${bounty.amount ?? 0}
+            </Text>
+          )}
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+  </View>
+)}
+
+
+
+
+
+
 
       {/* Results */}
       {activeTab === 'bounties' ? (
@@ -772,51 +829,135 @@ function timeAgo(ts?: string) {
 
 // Styles
 const styles = {
-  container: { flex: 1, backgroundColor: '#059669' },
+  container: {
+    flex: 1,
+    backgroundColor: '#0a0a0a',
+  },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingTop: 54,
     paddingHorizontal: SPACING.ELEMENT_GAP,
     paddingBottom: SPACING.ELEMENT_GAP,
+    backgroundColor: '#0a0a0a',
   },
-  backBtn: { padding: SPACING.COMPACT_GAP, marginRight: 4 },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '700', marginLeft: 4 },
+
+  backBtn: {
+    padding: SPACING.COMPACT_GAP,
+    marginRight: 4,
+  },
+
+  headerTitle: {
+    color: '#f9fafb',
+    fontSize: 18,
+    fontWeight: '700',
+    marginLeft: 4,
+  },
+
   tabRow: {
     flexDirection: 'row',
     paddingHorizontal: SPACING.ELEMENT_GAP,
     marginBottom: SPACING.COMPACT_GAP,
     gap: SPACING.COMPACT_GAP,
   },
+
   tab: {
     flex: 1,
     paddingVertical: SPACING.COMPACT_GAP,
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 8,
+    backgroundColor: '#141414',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#262626',
   },
-  tabActive: { backgroundColor: 'rgba(255,255,255,0.2)' },
-  tabText: { color: '#d1fae5', fontSize: 14, fontWeight: '600' },
-  tabTextActive: { color: '#fff' },
+
+  tabActive: {
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderColor: 'rgba(16, 185, 129, 0.4)',
+  },
+
+  tabText: {
+    color: '#6b7280',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  tabTextActive: {
+    color: '#6ee7b7',
+  },
+
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginHorizontal: SPACING.ELEMENT_GAP,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 24,
-    paddingVertical: 6,
-    marginBottom: 4,
+    backgroundColor: '#141414',
+    borderRadius: 999,
+    marginBottom: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#262626',
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
-  input: { flex: 1, color: 'white', paddingVertical: 4, fontSize: 15 },
-  iconMarginHorizontal8: { marginHorizontal: 8 },
-  smallPadding: { padding: 4 },
-  activityMarginRight: { marginRight: 8 },
-  iconMarginRight10: { marginRight: 10 },
-  flex1: { flex: 1 },
-  resultsContainer: { padding: 12, paddingBottom: 100 },
-  emptyCenter: { padding: 24, alignItems: 'center' },
-  emptyText: { color: '#ecfdf5' },
-  filterBtn: { padding: SPACING.COMPACT_GAP, position: 'relative' },
+
+  input: {
+    flex: 1,
+    color: '#f9fafb',
+    paddingVertical: 4,
+    fontSize: 15,
+  },
+
+  searchIconRight: {
+    marginLeft: 10,
+  },
+
+  iconMarginHorizontal8: {
+    marginHorizontal: 8,
+    color: '#6ee7b7',
+    marginRight: 10,
+  },
+
+  smallPadding: {
+    padding: 4,
+  },
+
+  activityMarginRight: {
+    marginRight: 8,
+  },
+
+  iconMarginRight10: {
+    marginRight: 10,
+    color: '#6ee7b7',
+  },
+
+  flex1: {
+    flex: 1,
+  },
+
+  resultsContainer: {
+    padding: 12,
+    paddingBottom: 100,
+  },
+
+  emptyCenter: {
+    padding: 24,
+    alignItems: 'center',
+  },
+
+  emptyText: {
+    color: '#6b7280',
+  },
+
+  filterBtn: {
+    padding: SPACING.COMPACT_GAP,
+    position: 'relative',
+  },
+
   filterDot: {
     position: 'absolute',
     top: 6,
@@ -824,146 +965,432 @@ const styles = {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#fcd34d',
+    backgroundColor: '#10b981',
   },
+
   card: {
-    backgroundColor: 'rgba(0,0,0,0.15)',
-    borderRadius: 12,
+    backgroundColor: '#141414',
+    borderRadius: 14,
     padding: SPACING.ELEMENT_GAP,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#262626',
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
-  cardTitle: { color: '#fff', fontSize: 15, fontWeight: '600', flex: 1 },
-  cardDesc: { color: '#d1fae5', fontSize: 13, marginBottom: 6 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.COMPACT_GAP, flexWrap: 'wrap' },
-  amount: { color: '#6ee7b7', fontWeight: '700', fontSize: 13 },
-  location: { color: '#a7f3d0', fontSize: 11, flex: 1 },
-  time: { color: '#a7f3d0', fontSize: 11 },
-  honorBadge: { backgroundColor: '#fcd34d', paddingHorizontal: SPACING.COMPACT_GAP, paddingVertical: 2, borderRadius: 4 },
-  honorText: { color: '#065f46', fontSize: 10, fontWeight: '700' },
-  statusBadge: { marginTop: 4, alignSelf: 'flex-start', paddingHorizontal: SPACING.COMPACT_GAP, paddingVertical: 2, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 4 },
-  statusText: { color: '#d1fae5', fontSize: 10, textTransform: 'capitalize' },
-  skillsRow: { flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' },
-  skillChip: { backgroundColor: 'rgba(110,231,183,0.2)', paddingHorizontal: SPACING.COMPACT_GAP, paddingVertical: 4, borderRadius: 12 },
-  skillText: { color: '#6ee7b7', fontSize: 11 },
-  recentSection: { paddingHorizontal: SPACING.ELEMENT_GAP, paddingVertical: SPACING.COMPACT_GAP },
-  recentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.COMPACT_GAP },
-  recentTitle: { color: '#d1fae5', fontSize: 13, fontWeight: '600' },
-  clearText: { color: '#6ee7b7', fontSize: 12 },
-  recentSearchItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: SPACING.COMPACT_GAP },
-  recentSearchContent: { flexDirection: 'row', alignItems: 'center', gap: SPACING.COMPACT_GAP, flex: 1 },
-  recentSearchText: { color: '#ecfdf5', fontSize: 14 },
-  errorBox: { backgroundColor: 'rgba(220,38,38,0.15)', margin: SPACING.ELEMENT_GAP, padding: 10, borderRadius: 8 },
-  errorText: { color: '#fee2e2', marginBottom: 6, fontSize: 13 },
+
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+
+  cardTitle: {
+    color: '#f9fafb',
+    fontSize: 15,
+    fontWeight: '600',
+    flex: 1,
+  },
+
+  cardDesc: {
+    color: '#9ca3af',
+    fontSize: 13,
+    marginBottom: 6,
+  },
+
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.COMPACT_GAP,
+    flexWrap: 'wrap',
+  },
+
+  amount: {
+    color: '#10b981',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+
+  location: {
+    color: '#6b7280',
+    fontSize: 11,
+    flex: 1,
+  },
+
+  time: {
+    color: '#4b5563',
+    fontSize: 11,
+  },
+
+  honorBadge: {
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    paddingHorizontal: SPACING.COMPACT_GAP,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.25)',
+  },
+
+  honorText: {
+    color: '#fbbf24',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+
+  statusBadge: {
+    marginTop: 4,
+    alignSelf: 'flex-start',
+    paddingHorizontal: SPACING.COMPACT_GAP,
+    paddingVertical: 2,
+    backgroundColor: '#1f1f1f',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#262626',
+  },
+
+  statusText: {
+    color: '#6b7280',
+    fontSize: 10,
+    textTransform: 'capitalize',
+  },
+
+  skillsRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 6,
+    flexWrap: 'wrap',
+  },
+
+  skillChip: {
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    paddingHorizontal: SPACING.COMPACT_GAP,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.25)',
+  },
+
+  skillText: {
+    color: '#6ee7b7',
+    fontSize: 11,
+  },
+
+  recentSection: {
+    paddingHorizontal: SPACING.ELEMENT_GAP,
+    paddingVertical: SPACING.COMPACT_GAP,
+  },
+
+  recentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.COMPACT_GAP,
+  },
+
+  recentTitle: {
+    color: '#f9fafb',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  clearText: {
+    color: '#10b981',
+    fontSize: 12,
+  },
+
+  recentSearchItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: SPACING.COMPACT_GAP,
+  },
+
+  recentSearchContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.COMPACT_GAP,
+    flex: 1,
+  },
+
+  recentSearchText: {
+    color: '#d1d5db',
+    fontSize: 14,
+  },
+
+  errorBox: {
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    margin: SPACING.ELEMENT_GAP,
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.2)',
+  },
+
+  errorText: {
+    color: '#f87171',
+    marginBottom: 6,
+    fontSize: 13,
+  },
+
   retryBtn: {
-    backgroundColor: '#065f46',
+    backgroundColor: '#059669',
     paddingHorizontal: SPACING.ELEMENT_GAP,
     paddingVertical: 6,
     borderRadius: 20,
     alignSelf: 'flex-start',
   },
-  retryText: { color: 'white', fontSize: 12, fontWeight: '600' },
+
+  retryText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'flex-end',
   },
+
   modalContent: {
-    backgroundColor: '#047857',
+    backgroundColor: '#141414',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '80%',
+    borderWidth: 1,
+    borderColor: '#262626',
   },
+
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: SPACING.CARD_PADDING,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
+    borderBottomColor: '#262626',
   },
-  modalTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
-  filterScroll: { padding: SPACING.CARD_PADDING },
-  filterLabel: { color: '#d1fae5', fontSize: 14, fontWeight: '600', marginBottom: SPACING.COMPACT_GAP, marginTop: 12 },
-  filterGroup: { gap: SPACING.COMPACT_GAP },
+
+  modalTitle: {
+    color: '#f9fafb',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+
+  filterScroll: {
+    padding: SPACING.CARD_PADDING,
+  },
+
+  filterLabel: {
+    color: '#9ca3af',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: SPACING.COMPACT_GAP,
+    marginTop: 12,
+  },
+
+  filterGroup: {
+    gap: SPACING.COMPACT_GAP,
+  },
+
   filterOption: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: '#1a1a1a',
     paddingVertical: SPACING.ELEMENT_GAP,
     paddingHorizontal: SPACING.CARD_PADDING,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#262626',
   },
-  filterOptionActive: { backgroundColor: '#6ee7b7' },
-  filterOptionText: { color: '#ecfdf5', fontSize: 14 },
-  filterOptionTextActive: { color: '#065f46', fontWeight: '600' },
-  amountRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.COMPACT_GAP },
+
+  filterOptionActive: {
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderColor: 'rgba(16, 185, 129, 0.4)',
+  },
+
+  filterOptionText: {
+    color: '#9ca3af',
+    fontSize: 14,
+  },
+
+  filterOptionTextActive: {
+    color: '#6ee7b7',
+    fontWeight: '600',
+  },
+
+  amountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.COMPACT_GAP,
+  },
+
   amountInput: {
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    color: 'white',
+    backgroundColor: '#1a1a1a',
+    color: '#f9fafb',
     paddingVertical: SPACING.ELEMENT_GAP,
     paddingHorizontal: SPACING.CARD_PADDING,
     borderRadius: 8,
     fontSize: 14,
+    borderWidth: 1,
+    borderColor: '#262626',
   },
-  amountSeparator: { color: '#d1fae5', fontSize: 16 },
+
+  amountSeparator: {
+    color: '#4b5563',
+    fontSize: 16,
+  },
+
   modalFooter: {
     flexDirection: 'row',
     padding: SPACING.CARD_PADDING,
     gap: SPACING.ELEMENT_GAP,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
+    borderTopColor: '#262626',
   },
+
   clearFiltersBtn: {
     flex: 1,
     paddingVertical: SPACING.ELEMENT_GAP,
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#1f1f1f',
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#262626',
   },
-  clearFiltersBtnText: { color: '#ecfdf5', fontSize: 14, fontWeight: '600' },
+
+  clearFiltersBtnText: {
+    color: '#9ca3af',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
   applyFiltersBtn: {
     flex: 1,
     paddingVertical: SPACING.ELEMENT_GAP,
     alignItems: 'center',
-    backgroundColor: '#6ee7b7',
+    backgroundColor: '#059669',
     borderRadius: 8,
+    shadowColor: '#10b981',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
   },
-  applyFiltersBtnText: { color: '#065f46', fontSize: 14, fontWeight: '700' },
-  // Autocomplete styles
+
+  applyFiltersBtnText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+
   suggestionsContainer: {
     marginHorizontal: SPACING.ELEMENT_GAP,
-    backgroundColor: 'rgba(0,0,0,0.25)',
+    backgroundColor: '#141414',
     borderRadius: 12,
     marginBottom: SPACING.COMPACT_GAP,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#262626',
   },
+
   suggestionItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: SPACING.ELEMENT_GAP,
     paddingHorizontal: 14,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
+    borderBottomColor: '#1f1f1f',
   },
+
   suggestionText: {
-    color: '#fff',
+    color: '#f9fafb',
     fontSize: 14,
     fontWeight: '500',
   },
+
   suggestionSubtext: {
-    color: '#a7f3d0',
+    color: '#6b7280',
     fontSize: 11,
     marginTop: 2,
   },
+
   suggestionTypeBadge: {
-    backgroundColor: 'rgba(110,231,183,0.15)',
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
     paddingHorizontal: SPACING.COMPACT_GAP,
     paddingVertical: 3,
     borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.25)',
   },
+
   suggestionTypeText: {
     color: '#6ee7b7',
     fontSize: 10,
     fontWeight: '600',
   },
-} as const;
+
+  trendingSection: {
+    marginBottom: 12,
+    paddingHorizontal: SPACING.ELEMENT_GAP,
+  },
+
+  trendingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+  },
+
+  trendingTitle: {
+    color: '#f9fafb',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+
+  trendingCard: {
+    width: 200,
+    backgroundColor: '#111827',
+    borderRadius: 12,
+    padding: 16,
+    marginRight: 10,
+    borderWidth: 1.5,
+    borderColor: '#D4AF37',
+    gap: 80,
+    shadowColor: '#D4AF37',
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+
+  trendingCardTitle: {
+    color: '#f9fafb',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  trendingAmount: {
+    color: '#D4AF37',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+
+  trendingHonorBadge: {
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.25)',
+  },
+
+  trendingHonorText: {
+    color: '#fbbf24',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+} as const

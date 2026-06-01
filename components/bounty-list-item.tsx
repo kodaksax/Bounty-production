@@ -3,12 +3,14 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import { useRouter } from 'expo-router'
 import React, { useCallback, useEffect, useState } from "react"
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
-import { SIZING, SPACING, TYPOGRAPHY, getLineHeight } from '../lib/constants/accessibility'
+import { SPACING, TYPOGRAPHY } from '../lib/constants/accessibility'
 import { useHapticFeedback } from '../lib/haptic-feedback'
 import { BountyDetailModal } from "./bountydetailmodal"
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar'
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window')
 
 export interface BountyListItemProps {
   id: string | number
@@ -23,264 +25,361 @@ export interface BountyListItemProps {
   poster_avatar?: string
 }
 
-/**
- * Optimized bounty list item with React.memo for preventing unnecessary re-renders.
- * Uses stable callbacks and careful state management.
- */
-function BountyListItemComponent({ id, title, username, price, distance, description, isForHonor, user_id, work_type, poster_avatar }: BountyListItemProps) {
+function BountyListItemComponent({
+  id, title, username, price, distance, description,
+  isForHonor, user_id, work_type, poster_avatar
+}: BountyListItemProps) {
   const [showDetail, setShowDetail] = useState(false)
   const router = useRouter()
   const { triggerHaptic } = useHapticFeedback()
   const { profile: posterProfile, loading: profileLoading } = useNormalizedProfile(user_id ?? undefined)
-
   const [resolvedUsername, setResolvedUsername] = useState<string>(username || 'Loading...')
-
-  // Determine which avatar to show: prop > profile > placeholder
   const avatarUrl = poster_avatar || posterProfile?.avatar
 
   useEffect(() => {
-    // Priority: explicit prop username -> posterProfile (resolved by user_id) -> 'Loading...' -> 'Anonymous'
-    // Never fall back to the current user's profile
-    if (username) {
-      setResolvedUsername(username)
-      return
-    }
-
-    if (posterProfile?.username) {
-      setResolvedUsername(posterProfile.username)
-      return
-    }
-
-    // Show 'Anonymous' if we're done loading and still no username
-    if (!profileLoading) {
-      setResolvedUsername('Anonymous')
-    } else {
-      setResolvedUsername('Loading...')
-    }
+    if (username) { setResolvedUsername(username); return }
+    if (posterProfile?.username) { setResolvedUsername(posterProfile.username); return }
+    setResolvedUsername(profileLoading ? 'Loading...' : 'Anonymous')
   }, [username, posterProfile?.username, profileLoading])
 
-
-  // Stable callbacks to prevent child re-renders
   const handleAvatarPress = useCallback((e: any) => {
     e.stopPropagation()
-    triggerHaptic('light') // Light haptic for avatar tap
-    if (user_id) {
-      router.push(`/profile/${user_id}`)
-    }
+    triggerHaptic('light')
+    if (user_id) router.push(`/profile/${user_id}`)
   }, [user_id, router, triggerHaptic])
 
   const handleBountyPress = useCallback(() => {
-    triggerHaptic('light') // Light haptic for bounty tap
+    triggerHaptic('light')
     setShowDetail(true)
   }, [triggerHaptic])
 
-  const handleCloseDetail = useCallback(() => {
-    setShowDetail(false)
-  }, [])
-
-  // Build accessibility label once
-  const accessibilityLabel = `Bounty: ${title} by ${resolvedUsername}${isForHonor ? ', for honor' : `, $${price}`}${work_type === 'online' ? ', online work' : distance !== null ? `, ${distance} miles away` : ', location to be determined'}`
-
   return (
     <>
-      <TouchableOpacity
-        activeOpacity={0.8}
-        style={styles.row}
-        onPress={handleBountyPress}
-        accessibilityRole="button"
-        accessibilityLabel={accessibilityLabel}
-        accessibilityHint="Tap to view bounty details and apply"
-      >
-        {/* Leading avatar - clickable to view profile */}
-        <TouchableOpacity
-          onPress={handleAvatarPress}
-          disabled={!user_id}
-          style={styles.leadingAvatarWrap}
-          accessibilityRole="button"
-          accessibilityLabel={`View ${resolvedUsername}'s profile`}
-          accessibilityHint="Tap to view poster's profile"
-        >
-          <Avatar style={styles.avatar}>
-            <AvatarImage src={avatarUrl || "/placeholder.svg?height=36&width=36"} alt={resolvedUsername} />
-            <AvatarFallback style={styles.avatarFallback}>
-              <Text style={styles.avatarText}>
-                {resolvedUsername.substring(0, 2).toUpperCase()}
-              </Text>
-            </AvatarFallback>
-          </Avatar>
-        </TouchableOpacity>
+      <View style={styles.page}>
 
-        {/* Main content */}
-        <View style={styles.mainContent}>
-          <Text style={styles.title} numberOfLines={2}>{title}</Text>
-          <View style={styles.metaRow}>
-            <Text style={styles.username}>{resolvedUsername}</Text>
-            <View style={styles.dot} />
+        {/* Top: poster info */}
+        <View style={styles.posterRow}>
+          <TouchableOpacity
+            onPress={handleAvatarPress}
+            disabled={!user_id}
+            style={styles.avatarWrap}
+            accessibilityRole="button"
+            accessibilityLabel={`View ${resolvedUsername}'s profile`}
+          >
+            <Avatar style={styles.avatar}>
+              <AvatarImage src={avatarUrl || "/placeholder.svg?height=48&width=48"} alt={resolvedUsername} />
+              <AvatarFallback style={styles.avatarFallback}>
+                <Text style={styles.avatarText}>
+                  {resolvedUsername.substring(0, 2).toUpperCase()}
+                </Text>
+              </AvatarFallback>
+            </Avatar>
+          </TouchableOpacity>
+          <View>
+            <Text style={styles.posterName}>{resolvedUsername}</Text>
+            <Text style={styles.posterLabel}>posted a bounty</Text>
+          </View>
+          <View style={styles.workTypeBadge}>
             {work_type === 'online' ? (
               <View style={styles.onlineBadge}>
-                <MaterialIcons name="wifi" size={10} color="#10b981" />
-                <Text style={styles.onlineText}>Online</Text>
+                <MaterialIcons name="wifi" size={12} color="#10b981" />
+                <Text style={styles.onlineText}>Remote</Text>
               </View>
-            ) : distance === null ? (
-              <Text style={styles.distance}>Location TBD</Text>
             ) : (
-              <Text style={styles.distance}>{distance} mi</Text>
+              <View style={styles.inPersonBadge}>
+                <MaterialIcons name="place" size={12} color="#f59e0b" />
+                <Text style={styles.inPersonText}>In Person</Text>
+              </View>
             )}
           </View>
         </View>
 
-        {/* Trailing price and chevron */}
-        <View style={styles.trailing}>
-          {isForHonor ? (
-            <View style={styles.honorBadge}>
-              <MaterialIcons name="favorite" size={12} color="#052e1b" />
-              <Text style={styles.honorText}>For Honor</Text>
-            </View>
-          ) : (
-            <Text style={styles.price}>${price}</Text>
-          )}
-          <MaterialIcons name="chevron-right" size={20} color="#d1fae5" />
+        {/* Center: main content */}
+        <View style={styles.mainContent}>
+          <View style={styles.titleRow}>
+            <Text style={styles.title}>{title}</Text>
+            {isForHonor && (
+              <View style={styles.honorBadgeLarge}>
+                <MaterialIcons name="favorite" size={16} color="#92400E" />
+                <Text style={styles.honorBadgeLargeText}>For Honor</Text>
+              </View>
+            )}
+          </View>
+
+          {description ? (
+            <Text style={styles.description} numberOfLines={4}>{description}</Text>
+          ) : null}
+
+          <View style={styles.locationRow}>
+            <MaterialIcons
+              name={work_type === 'online' ? 'wifi' : 'near-me'}
+              size={14}
+              color="#6B7280"
+            />
+            <Text style={styles.locationText}>
+              {work_type === 'online'
+                ? 'Remote work'
+                : distance !== null
+                  ? `${distance} miles away`
+                  : 'Location TBD'}
+            </Text>
+          </View>
         </View>
-      </TouchableOpacity>
+
+        {/* Bottom: price + CTA */}
+        <View style={styles.footer}>
+          <View style={styles.priceBlock}>
+            {isForHonor ? (
+              <>
+                <Text style={styles.priceLabelHonor}>Reward</Text>
+                <Text style={styles.priceValueHonor}>Honor </Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.priceLabelHonor}>Bounty</Text>
+                <Text style={styles.priceValue}>${price}</Text>
+              </>
+            )}
+          </View>
+          <TouchableOpacity
+            style={styles.applyButton}
+            onPress={handleBountyPress}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel={`Apply to bounty: ${title}`}
+          >
+            <Text style={styles.applyButtonText}>View & Apply</Text>
+            <MaterialIcons name="arrow-forward" size={18} color="#fff" />
+          </TouchableOpacity>
+        </View>
+
+      </View>
 
       {showDetail && (
         <BountyDetailModal
-          bounty={{ id, username: resolvedUsername, title, price, distance, description, user_id, work_type, poster_avatar, is_for_honor: isForHonor }}
-          onClose={handleCloseDetail}
+          bounty={{
+            id, username: resolvedUsername, title, price,
+            distance, description, user_id, work_type,
+            poster_avatar, is_for_honor: isForHonor
+          }}
+          onClose={() => setShowDetail(false)}
         />
       )}
     </>
   )
 }
 
-/**
- * Memoized BountyListItem that only re-renders when relevant props change.
- * This prevents expensive re-renders when parent lists update unrelated items.
- */
-export const BountyListItem = React.memo(BountyListItemComponent, (prevProps, nextProps) => {
-  // Only re-render if these specific props change
-  return (
-    prevProps.id === nextProps.id &&
-    prevProps.title === nextProps.title &&
-    prevProps.username === nextProps.username &&
-    prevProps.price === nextProps.price &&
-    prevProps.distance === nextProps.distance &&
-    prevProps.description === nextProps.description &&
-    prevProps.isForHonor === nextProps.isForHonor &&
-    prevProps.user_id === nextProps.user_id &&
-    prevProps.work_type === nextProps.work_type &&
-    prevProps.poster_avatar === nextProps.poster_avatar
-  )
-})
+export const BountyListItem = React.memo(BountyListItemComponent, (prev, next) =>
+  prev.id === next.id &&
+  prev.title === next.title &&
+  prev.username === next.username &&
+  prev.price === next.price &&
+  prev.distance === next.distance &&
+  prev.description === next.description &&
+  prev.isForHonor === next.isForHonor &&
+  prev.user_id === next.user_id &&
+  prev.work_type === next.work_type &&
+  prev.poster_avatar === next.poster_avatar
+)
 
 const styles = StyleSheet.create({
-  row: {
+  page: {
+    flex: 1,
+    backgroundColor: '#0a0a0a',
+    paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
+    paddingVertical: 24,
+    paddingBottom: 120,
+    justifyContent: 'space-between',
+  },
+
+  // Poster row
+  posterRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(2,44,34,0.55)', // emerald-900/55 overlay
-    borderRadius: SPACING.ELEMENT_GAP,
-    paddingHorizontal: SPACING.ELEMENT_GAP,
-    paddingVertical: SPACING.ELEMENT_GAP,
-    marginBottom: 10,
-    minHeight: SIZING.MIN_TOUCH_TARGET + SPACING.ELEMENT_GAP,
+    gap: 12,
+    marginTop: 8,
   },
-  leadingAvatarWrap: {
-    marginRight: SPACING.ELEMENT_GAP,
-  },
+  avatarWrap: {},
   avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#6ee7b780', // emerald-400/50
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: 'rgba(16, 185, 129, 0.5)',
   },
   avatarFallback: {
-    backgroundColor: '#064e3b', // dark emerald
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
     justifyContent: 'center',
+    alignItems: 'center',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
   },
   avatarText: {
-    color: '#a7f3d0',
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#6ee7b7',
+  },
+  posterName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#f9fafb',
+  },
+  posterLabel: {
     fontSize: 12,
-    fontWeight: '700',
+    color: '#6b7280',
+    marginTop: 1,
   },
-  mainContent: {
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: SIZING.MIN_TOUCH_TARGET,
-  },
-  title: {
-    color: '#ffffff',
-    fontWeight: '700',
-    fontSize: TYPOGRAPHY.SIZE_BODY,
-    lineHeight: getLineHeight(TYPOGRAPHY.SIZE_BODY),
-    marginBottom: 4,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  username: {
-    color: '#a7f3d0', // emerald-200
-    fontSize: TYPOGRAPHY.SIZE_XSMALL,
-  },
-  dot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#a7f3d0',
-    marginHorizontal: 6,
-    opacity: 0.9,
-  },
-  distance: {
-    color: '#d1fae5', // emerald-100
-    fontSize: TYPOGRAPHY.SIZE_XSMALL,
+  workTypeBadge: {
+    marginLeft: 'auto',
   },
   onlineBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#d1fae5', // emerald-100
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: SPACING.COMPACT_GAP,
-    gap: 2,
+    gap: 4,
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.25)',
   },
   onlineText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '600',
-    color: '#065f46', // emerald-800
+    color: '#6ee7b7',
   },
-  trailing: {
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-    marginLeft: SPACING.ELEMENT_GAP,
-  },
-  price: {
-    color: '#fcd34d', // amber-300
-    fontWeight: '800',
-    fontSize: 16,
-    marginBottom: 2,
-  },
-  honorBadge: {
+  inPersonBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#a7f3d0',
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
     gap: 4,
-    marginBottom: 2,
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.25)',
   },
-  honorText: {
-    color: '#052e1b',
-    fontWeight: '800',
+  inPersonText: {
     fontSize: 12,
-    marginLeft: 4,
+    fontWeight: '600',
+    color: '#fbbf24',
+  },
+
+  // Main content
+  mainContent: {
+    gap: 12,
+    marginTop: 16,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  honorBadgeLarge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+  },
+  honorBadgeLargeText: {
+    color: '#fbbf24',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#f9fafb',
+    letterSpacing: -0.5,
+    lineHeight: 34,
+    flex: 1,
+  },
+  description: {
+    fontSize: 15,
+    color: '#9ca3af',
+    lineHeight: 22,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  locationText: {
+    fontSize: 13,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+
+  // Footer
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#141414',
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#262626',
+    shadowColor: '#000',
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  priceBlock: {
+    gap: 2,
+  },
+  priceLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#4b5563',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  priceValue: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#059669',
+  },
+  priceLabelHonor: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#059669',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  priceValueHonor: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fbbf24',
+  },
+  applyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#059669',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: 14,
+    shadowColor: '#10b981',
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  applyButtonText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 15,
   },
 })
-
-export default BountyListItem
