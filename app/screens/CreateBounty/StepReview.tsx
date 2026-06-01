@@ -81,7 +81,7 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
   }, [])
 
   return (
-    <View className="flex-1 bg-emerald-600">
+    <View className="flex-1 bg-[#0B0F14]">
       {/* Use FlatList to ensure reliable scrolling inside available area */}
       {/** build sections dynamically so list can scroll properly **/}
       <FlatList
@@ -107,8 +107,8 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
             case 'header':
               return (
                 <View className="mb-6">
-                  <Text className="text-emerald-100 text-xl font-bold mb-2">Review Your Bounty</Text>
-                  <Text className="text-emerald-200/70 text-sm">Double-check everything before posting</Text>
+                  <Text className="text-white text-xl font-bold mb-2">Review Your Bounty</Text>
+                  <Text className="text-[#9CA3AF] text-sm">Double-check everything before posting</Text>
                 </View>
               );
             case 'trust_badges':
@@ -119,37 +119,37 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
               );
             case 'title':
               return (
-                <View className="mb-4 bg-emerald-700/30 rounded-lg p-4">
+                <View className="mb-4 bg-[#111827] rounded-lg p-4">
                   <View className="flex-row items-center justify-between mb-2">
-                    <Text className="text-emerald-200/70 text-xs uppercase tracking-wide">Title & Category</Text>
+                    <Text className="text-[#9CA3AF] text-xs uppercase tracking-wide">Title & Category</Text>
                   </View>
                   <Text className="text-white text-lg font-semibold mb-1">{draft.title}</Text>
-                  {draft.category && <Text className="text-emerald-300 text-sm">{formatCategoryLabel(draft.category)}</Text>}
+                  {draft.category && <Text className="text-[#6ee7b7] text-sm">{formatCategoryLabel(draft.category)}</Text>}
                 </View>
               );
             case 'description':
               return (
-                <View className="mb-4 bg-emerald-700/30 rounded-lg p-4">
-                  <Text className="text-emerald-200/70 text-xs uppercase tracking-wide mb-2">Description</Text>
+                <View className="mb-4 bg-[#111827] rounded-lg p-4">
+                  <Text className="text-[#9CA3AF] text-xs uppercase tracking-wide mb-2">Description</Text>
                   <Text className="text-white text-base">{draft.description}</Text>
                 </View>
               );
             case 'compensation':
               return (
-                <View className="mb-4 bg-emerald-700/30 rounded-lg p-4">
-                  <Text className="text-emerald-200/70 text-xs uppercase tracking-wide mb-2">Compensation</Text>
+                <View className="mb-4 bg-[#111827] rounded-lg p-4">
+                  <Text className="text-[#9CA3AF] text-xs uppercase tracking-wide mb-2">Compensation</Text>
                   <View className="flex-row items-center">
-                    <View className="bg-emerald-500 px-4 py-2 rounded-lg">
+                    <View className="bg-[#059669] px-4 py-2 rounded-lg">
                       <Text className="text-white text-lg font-bold">{draft.isForHonor ? 'For Honor' : `$${draft.amount}`}</Text>
                     </View>
-                    {!draft.isForHonor && <View className="ml-3 flex-1"><Text className="text-emerald-200 text-sm">Funds held in escrow until completion</Text></View>}
+                    {!draft.isForHonor && <View className="ml-3 flex-1"><Text className="text-[#9CA3AF] text-sm">Funds held in escrow until completion</Text></View>}
                   </View>
                 </View>
               );
             case 'location':
               return (
-                <View className="mb-4 bg-emerald-700/30 rounded-lg p-4">
-                  <Text className="text-emerald-200/70 text-xs uppercase tracking-wide mb-2">Work Type & Location</Text>
+                <View className="mb-4 bg-[#111827] rounded-lg p-4">
+                  <Text className="text-[#9CA3AF] text-xs uppercase tracking-wide mb-2">Work Type & Location</Text>
                   <View className="flex-row items-center">
                     <MaterialIcons name={draft.workType === 'online' ? 'language' : 'place'} size={20} color="#fff" />
                     <Text className="text-white text-base ml-2">{draft.workType === 'online' ? 'Online / Remote' : draft.location}</Text>
@@ -158,22 +158,22 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
               );
             case 'optional':
               return (
-                <View className="mb-4 bg-emerald-700/30 rounded-lg p-4">
-                  <Text className="text-emerald-200/70 text-xs uppercase tracking-wide mb-2">Additional Details</Text>
-                  {draft.timeline && <View className="mb-2"><Text className="text-emerald-300 text-sm">Timeline:</Text><Text className="text-white text-base">{draft.timeline}</Text></View>}
-                  {draft.skills && <View><Text className="text-emerald-300 text-sm">Skills:</Text><Text className="text-white text-base">{draft.skills}</Text></View>}
+                <View className="mb-4 bg-[#111827] rounded-lg p-4">
+                  <Text className="text-[#9CA3AF] text-xs uppercase tracking-wide mb-2">Additional Details</Text>
+                  {draft.timeline && <View className="mb-2"><Text className="text-[#6ee7b7] text-sm">Timeline:</Text><Text className="text-white text-base">{draft.timeline}</Text></View>}
+                  {draft.skills && <View><Text className="text-[#6ee7b7] text-sm">Skills:</Text><Text className="text-white text-base">{draft.skills}</Text></View>}
                 </View>
               );
             case 'attachments':
               return (
-                <View className="mb-4 bg-emerald-700/30 rounded-lg p-4">
-                  <Text className="text-emerald-200/70 text-xs uppercase tracking-wide mb-2">Attachments</Text>
+                <View className="mb-4 bg-[#111827] rounded-lg p-4">
+                  <Text className="text-[#9CA3AF] text-xs uppercase tracking-wide mb-2">Attachments</Text>
                   <View style={{ gap: 12 }}>
                     {draft.attachments?.map((attachment) => (
                       <TouchableOpacity
                         key={attachment.id}
                         onPress={() => handleViewAttachment(attachment)}
-                        className="bg-emerald-700/30 rounded-lg p-3 flex-row items-center"
+                        className="bg-[#1F2937] rounded-lg p-3 flex-row items-center"
                         accessibilityLabel={`View ${attachment.name}`}
                         accessibilityRole="button"
                         accessibilityHint="Tap to preview attachment"
@@ -195,11 +195,11 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
                           <Text className="text-white text-sm" numberOfLines={1}>
                             {attachment.name}
                           </Text>
-                          <Text className="text-emerald-300/60 text-xs">
+                          <Text className="text-[#9CA3AF] text-xs">
                             Tap to preview
                           </Text>
                         </View>
-                        <MaterialIcons name="visibility" size={20} color="rgba(110, 231, 183, 0.6)" />
+                        <MaterialIcons name="visibility" size={20} color="#6ee7b7" />
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -223,14 +223,14 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
 
       {/* Navigation Buttons */}
       <View
-        className="px-4 pb-4 pt-3 bg-emerald-600 border-t border-emerald-700/50"
+        className="px-4 pb-4 pt-3 bg-[#0B0F14] border-t border-[#374151]"
         style={{ marginBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 8) }}
       >
         <View className="flex-row gap-3">
           <TouchableOpacity
             onPress={onBack}
             disabled={isSubmitting}
-            className="flex-1 bg-emerald-700/50 py-3 rounded-lg flex-row items-center justify-center"
+            className="flex-1 bg-[#1F2937] py-3 rounded-lg flex-row items-center justify-center"
             accessibilityLabel="Go back"
             accessibilityRole="button"
             accessibilityState={{ disabled: isSubmitting }}
@@ -241,7 +241,7 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
           <TouchableOpacity
             onPress={() => setShowEscrowModal(true)}
             disabled={isSubmitting}
-            className="flex-1 bg-emerald-500 py-3 rounded-lg flex-row items-center justify-center"
+            className="flex-1 bg-[#059669] py-3 rounded-lg flex-row items-center justify-center"
             accessibilityLabel="Post bounty"
             accessibilityRole="button"
             accessibilityState={{ disabled: isSubmitting }}
@@ -269,9 +269,9 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
         onRequestClose={() => setShowEscrowModal(false)}
       >
         <View className="flex-1 bg-black/50 justify-center items-center px-4">
-          <View className="bg-emerald-600 rounded-2xl w-full max-w-md overflow-hidden">
+          <View className="bg-[#111827] rounded-2xl w-full max-w-md overflow-hidden">
             {/* Modal Header */}
-            <View className="bg-emerald-700 p-4 flex-row items-center justify-between">
+            <View className="bg-[#0B0F14] p-4 flex-row items-center justify-between">
               <View className="flex-row items-center">
                 <MaterialIcons name="security" size={24} color="#fff" />
                 <Text className="text-white text-lg font-bold ml-2">
@@ -289,26 +289,26 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
 
             {/* Modal Content */}
             <ScrollView className="p-6" style={{ maxHeight: 400 }}>
-              <Text className="text-emerald-100 text-base mb-4">
+              <Text className="text-white text-base mb-4">
                 Your payment is protected with escrow to ensure a safe transaction for both parties.
               </Text>
 
               {/* How It Works */}
               <View className="mb-4">
-                <Text className="text-emerald-100 font-semibold text-lg mb-3">
+                <Text className="text-white font-semibold text-lg mb-3">
                   How it works:
                 </Text>
 
                 <View className="mb-3">
                   <View className="flex-row items-start">
-                    <View className="bg-emerald-500 w-6 h-6 rounded-full items-center justify-center mr-3">
+                    <View className="bg-[#059669] w-6 h-6 rounded-full items-center justify-center mr-3">
                       <Text className="text-white font-bold text-sm">1</Text>
                     </View>
                     <View className="flex-1">
-                      <Text className="text-emerald-100 font-semibold mb-1">
+                      <Text className="text-white font-semibold mb-1">
                         Funds Secured
                       </Text>
-                      <Text className="text-emerald-200/70 text-sm">
+                      <Text className="text-[#9CA3AF] text-sm">
                         ${draft.amount} is held securely when someone accepts your bounty
                       </Text>
                     </View>
@@ -317,14 +317,14 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
 
                 <View className="mb-3">
                   <View className="flex-row items-start">
-                    <View className="bg-emerald-500 w-6 h-6 rounded-full items-center justify-center mr-3">
+                    <View className="bg-[#059669] w-6 h-6 rounded-full items-center justify-center mr-3">
                       <Text className="text-white font-bold text-sm">2</Text>
                     </View>
                     <View className="flex-1">
-                      <Text className="text-emerald-100 font-semibold mb-1">
+                      <Text className="text-white font-semibold mb-1">
                         Work Completed
                       </Text>
-                      <Text className="text-emerald-200/70 text-sm">
+                      <Text className="text-[#9CA3AF] text-sm">
                         The hunter completes the task and marks it as done
                       </Text>
                     </View>
@@ -333,14 +333,14 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
 
                 <View className="mb-3">
                   <View className="flex-row items-start">
-                    <View className="bg-emerald-500 w-6 h-6 rounded-full items-center justify-center mr-3">
+                    <View className="bg-[#059669] w-6 h-6 rounded-full items-center justify-center mr-3">
                       <Text className="text-white font-bold text-sm">3</Text>
                     </View>
                     <View className="flex-1">
-                      <Text className="text-emerald-100 font-semibold mb-1">
+                      <Text className="text-white font-semibold mb-1">
                         You Approve
                       </Text>
-                      <Text className="text-emerald-200/70 text-sm">
+                      <Text className="text-[#9CA3AF] text-sm">
                         Review the work and approve payment release
                       </Text>
                     </View>
@@ -349,14 +349,14 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
 
                 <View>
                   <View className="flex-row items-start">
-                    <View className="bg-emerald-500 w-6 h-6 rounded-full items-center justify-center mr-3">
+                    <View className="bg-[#059669] w-6 h-6 rounded-full items-center justify-center mr-3">
                       <Text className="text-white font-bold text-sm">4</Text>
                     </View>
                     <View className="flex-1">
-                      <Text className="text-emerald-100 font-semibold mb-1">
+                      <Text className="text-white font-semibold mb-1">
                         Payment Released
                       </Text>
-                      <Text className="text-emerald-200/70 text-sm">
+                      <Text className="text-[#9CA3AF] text-sm">
                         Funds are transferred to the hunter
                         {"'"}
                         s wallet
@@ -367,17 +367,17 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
               </View>
 
               {/* Fees */}
-              <View className="bg-emerald-700/30 rounded-lg p-4 mb-4">
-                <Text className="text-emerald-100 font-semibold mb-2">
+              <View className="bg-[#1F2937] rounded-lg p-4 mb-4">
+                <Text className="text-white font-semibold mb-2">
                   Platform Fee: {PLATFORM_FEE_DISPLAY} on completion
                 </Text>
-                <Text className="text-emerald-200/70 text-sm mb-2">
+                <Text className="text-[#9CA3AF] text-sm mb-2">
                   A {PLATFORM_FEE_DISPLAY} service fee is deducted from the bounty
                   amount when work is completed and funds are released to the
                   hunter. You pay only the bounty amount up front; the fee comes
                   out of the hunter payout, not in addition to your escrow.
                 </Text>
-                <Text className="text-emerald-200/70 text-sm">
+                <Text className="text-[#9CA3AF] text-sm">
                   Standard payment-processor fees from Stripe (typically 2.9% +
                   $0.30 on card transactions) may also apply when funding your
                   wallet. The exact total is shown before you confirm.
@@ -385,16 +385,16 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
               </View>
 
               {/* Safety Info */}
-              <View className="bg-emerald-500/20 rounded-lg p-4 border border-emerald-400/30">
+              <View className="bg-[#1F2937] rounded-lg p-4 border border-[#374151]">
                 <View className="flex-row items-start">
                   <MaterialIcons
                     name="verified-user"
                     size={20}
-                    color="rgba(52, 211, 153, 0.9)"
+                    color="#6ee7b7"
                     style={{ marginRight: 8, marginTop: 2 }}
                   />
                   <View className="flex-1">
-                    <Text className="text-emerald-200/70 text-sm">
+                    <Text className="text-[#9CA3AF] text-sm">
                       Your funds are never released without your approval. If there
                       {"'"}
                       s an issue, our support team can help resolve disputes.
@@ -405,11 +405,11 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
             </ScrollView>
 
             {/* Modal Actions */}
-            <View className="p-4 border-t border-emerald-700/50">
+            <View className="p-4 border-t border-[#374151]">
               <TouchableOpacity
                 onPress={handleSubmit}
                 disabled={isSubmitting}
-                className="bg-emerald-500 py-3 rounded-lg flex-row items-center justify-center mb-2"
+                className="bg-[#059669] py-3 rounded-lg flex-row items-center justify-center mb-2"
                 accessibilityLabel="Confirm and post bounty"
                 accessibilityRole="button"
                 accessibilityState={{ disabled: isSubmitting }}
@@ -429,7 +429,7 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
               <TouchableOpacity
                 onPress={() => setShowEscrowModal(false)}
                 disabled={isSubmitting}
-                className="bg-emerald-700/50 py-3 rounded-lg"
+                className="bg-[#1F2937] py-3 rounded-lg"
                 accessibilityLabel="Cancel"
                 accessibilityRole="button"
                 accessibilityState={{ disabled: isSubmitting }}

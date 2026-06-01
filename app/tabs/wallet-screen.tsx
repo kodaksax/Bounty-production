@@ -294,7 +294,7 @@ export default WalletScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: '#0B0F14',
   },
   header: {
     flexDirection: 'row',
@@ -302,7 +302,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     paddingTop: 20,
     paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
-    backgroundColor: '#059669',
+    backgroundColor: '#0B0F14',
     gap: SPACING.COMPACT_GAP,
   },
   headerTitleRow: {
@@ -332,7 +332,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.SECTION_GAP,
   },
   balanceCard: {
-    backgroundColor: '#047857',
+    backgroundColor: '#111827',
     borderRadius: SPACING.SCREEN_HORIZONTAL,
     padding: SPACING.CARD_PADDING,
     shadowColor: '#000',
@@ -365,7 +365,7 @@ const styles = StyleSheet.create({
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#065f46',
+    backgroundColor: '#059669',
     borderRadius: 10,
     paddingVertical: SPACING.ELEMENT_GAP,
     paddingHorizontal: 18,
@@ -386,7 +386,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.COMPACT_GAP,
   },
   sectionTitle: {
-    color: '#fff',
+    color: '#9CA3AF',
     fontSize: TYPOGRAPHY.SIZE_BODY,
     fontWeight: 'bold',
   },
@@ -402,7 +402,7 @@ const styles = StyleSheet.create({
   accountCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#047857cc',
+    backgroundColor: '#111827',
     borderRadius: SPACING.ELEMENT_GAP,
     padding: SPACING.SCREEN_HORIZONTAL,
     marginBottom: SPACING.COMPACT_GAP,
@@ -414,7 +414,7 @@ const styles = StyleSheet.create({
   accountIcon: {
     height: SIZING.AVATAR_MEDIUM,
     width: SIZING.AVATAR_MEDIUM,
-    backgroundColor: '#065f46',
+    backgroundColor: '#1F2937',
     borderRadius: SPACING.COMPACT_GAP,
     alignItems: 'center',
     justifyContent: 'center',
@@ -426,14 +426,14 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   accountSub: {
-    color: '#6ee7b7',
+    color: '#9CA3AF',
     fontSize: TYPOGRAPHY.SIZE_SMALL - 1,
   },
   bountyCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#047857cc',
+    backgroundColor: '#111827',
     borderRadius: SPACING.ELEMENT_GAP,
     padding: SPACING.SCREEN_HORIZONTAL,
     marginBottom: SPACING.COMPACT_GAP,

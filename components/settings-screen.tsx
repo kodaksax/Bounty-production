@@ -64,7 +64,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
 
   // Root panel
   return (
-    <View className="flex-1 bg-emerald-600">
+    <View className="flex-1 bg-[#0B0F14]">
       {/* Header */}
       <View className="flex-row justify-between items-center p-4">
         <View className="flex-row items-center">
@@ -117,13 +117,13 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
 
         {/* Admin Tab Toggle - only visible to users with admin permissions */}
         {isAdmin && (
-          <View className="bg-black/30 rounded-xl p-4 mb-4">
+          <View className="bg-[#111827] rounded-xl p-4 mb-4">
             <View className="flex-row items-center justify-between">
               <View className="flex-row items-center flex-1">
-                <MaterialIcons name="admin-panel-settings" size={22} color="#34d399" />
+                <MaterialIcons name="admin-panel-settings" size={22} color="#6ee7b7" />
                 <View className="ml-2 flex-1">
                   <Text className="text-white font-medium text-sm">Admin Tab</Text>
-                  <Text className="text-emerald-200 text-xs leading-4 mt-1" numberOfLines={2}>
+                  <Text className="text-[#9CA3AF] text-xs leading-4 mt-1" numberOfLines={2}>
                     {isAdminTabEnabled
                       ? 'Admin tab is visible, replacing the profile tab in navigation.'
                       : 'Enable to show admin tab in navigation bar.'}
@@ -293,7 +293,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
           icon="delete-forever"
         />
         <View className="mt-6 mb-10">
-          <TouchableOpacity onPress={onBack} className="mx-auto px-4 py-2 rounded-md bg-black/30">
+          <TouchableOpacity onPress={onBack} className="mx-auto px-4 py-2 rounded-md bg-[#1F2937]">
             <Text className="text-white text-sm font-medium">Back to Home</Text>
           </TouchableOpacity>
         </View>
@@ -332,18 +332,18 @@ interface SettingsCardProps {
 
 const SettingsCard = ({ title, description, primaryLabel, secondaryLabel, onPrimary, onSecondary, icon }: SettingsCardProps) => {
   return (
-    <View className="bg-black/30 rounded-xl p-4 mb-4">
+    <View className="bg-[#111827] rounded-xl p-4 mb-4">
       <View className="flex-row items-center mb-2">
-        <MaterialIcons name={icon} size={22} color="#34d399" />
+        <MaterialIcons name={icon} size={22} color="#6ee7b7" />
         <Text className="ml-2 text-white font-medium text-sm flex-1" numberOfLines={1}>{title}</Text>
       </View>
-      <Text className="text-emerald-200 text-xs leading-4 mb-3" numberOfLines={4}>{description}</Text>
+      <Text className="text-[#9CA3AF] text-xs leading-4 mb-3" numberOfLines={4}>{description}</Text>
       <View className="flex-row gap-2">
-        <TouchableOpacity onPress={onPrimary} className="px-3 py-1 rounded-md bg-emerald-700">
+        <TouchableOpacity onPress={onPrimary} className="px-3 py-1 rounded-md bg-[#059669]">
           <Text className="text-white text-xs font-medium">{primaryLabel}</Text>
         </TouchableOpacity>
         {secondaryLabel && onSecondary && (
-          <TouchableOpacity onPress={onSecondary} className="px-3 py-1 rounded-md bg-black/40">
+          <TouchableOpacity onPress={onSecondary} className="px-3 py-1 rounded-md bg-[#1F2937]">
             <Text className="text-white text-xs font-medium">{secondaryLabel}</Text>
           </TouchableOpacity>
         )}

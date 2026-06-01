@@ -760,7 +760,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   }
 
   return (
-    <View className="flex-1 bg-emerald-600">
+    <View className="flex-1 bg-[#0B0F14]">
         {/* Fixed Header (overlay) - measured height to align content under tabs */}
         <View
           onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
@@ -771,7 +771,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
               left: 0,
               right: 0,
               zIndex: 20,
-              backgroundColor: "#059669", // emerald-600
+              backgroundColor: "#0B0F14",
               paddingTop: insets.top, // ensure content starts right under the status bar safe area
             },
             showShadow
@@ -833,8 +833,8 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
 
 
           {/* Tabs - Segmented Control Style */}
-          <View className="px-4 mb-4 bg-emerald-600">
-            <View className="flex-row items-center rounded-full bg-emerald-700/40 p-1 border border-emerald-500/30">
+          <View className="px-4 mb-4 bg-[#0B0F14]">
+            <View className="flex-row items-center rounded-full bg-[#1F2937] p-1 border border-[#374151]/50">
               {tabs.map((tab, idx) => {
                 const isActive = activeTab === tab.id
                 const badgeCount = getTabBadgeCount(tab.id)
@@ -867,13 +867,13 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                       <MaterialIcons
                         name={tab.icon as keyof typeof MaterialIcons.glyphMap}
                         size={14}
-                        color={isActive ? '#047857' : 'rgba(167, 243, 208, 0.75)'}
+                        color={isActive ? '#059669' : 'rgba(156, 163, 175, 0.75)'}
                         accessibilityElementsHidden={true}
                       />
                       <Text
                         className={cn(
                           "text-xs font-semibold tracking-wide ml-1",
-                          isActive ? "text-emerald-700" : "text-emerald-200/70"
+                          isActive ? "text-[#059669]" : "text-[#6B7280]"
                         )}
                         numberOfLines={1}
                       >
@@ -919,7 +919,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
 
           {/* Success message */}
           {postSuccess && (
-            <View className="mx-4 mb-4 p-3 bg-emerald-500/70 rounded-lg">
+            <View className="mx-4 mb-4 p-3 bg-[#059669]/70 rounded-lg">
               <Text className="text-white text-sm">Bounty posted successfully!</Text>
             </View>
           )}
@@ -967,16 +967,16 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                             <TouchableOpacity
                               key={f}
                               onPress={() => setStatusFilterInProgress(f)}
-                              className={cn('px-3 py-1.5 rounded-full border flex-row items-center', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}
+                              className={cn('px-3 py-1.5 rounded-full border flex-row items-center', selected ? 'bg-[#1F2937] border-[#6ee7b7]' : 'bg-[#111827] border-[#374151]')}
                               accessibilityRole="button"
                               accessibilityLabel={f === 'review' ? `Filter by work needing your review${count > 0 ? `, ${count} item${count === 1 ? '' : 's'}` : ''}` : `Filter by ${label} work in progress`}
                               accessibilityState={{ selected }}
                               accessibilityHint={selected ? 'Currently active filter' : f === 'review' ? 'Tap to show only bounties that need your action' : `Tap to show only ${label} work`}
                             >
-                              <Text className={cn('text-xs', selected ? 'text-white font-medium' : 'text-emerald-200')}>{label}</Text>
+                              <Text className={cn('text-xs', selected ? 'text-white font-medium' : 'text-[#9CA3AF]')}>{label}</Text>
                               {f === 'review' && count > 0 && (
                                 <View className="ml-1.5 px-1.5 rounded-full bg-amber-400 min-w-[18px] items-center">
-                                  <Text className="text-[10px] font-bold text-emerald-900">{count > 99 ? "99+" : count}</Text>
+                                  <Text className="text-[10px] font-bold text-[#111827]">{count > 99 ? "99+" : count}</Text>
                                 </View>
                               )}
                             </TouchableOpacity>
@@ -1110,16 +1110,16 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                             <TouchableOpacity
                               key={f}
                               onPress={() => setStatusFilterMyPostings(f)}
-                              className={cn('px-3 py-1.5 rounded-full border flex-row items-center', selected ? 'bg-emerald-400/30 border-emerald-300' : 'bg-emerald-800/40 border-emerald-600')}
+                              className={cn('px-3 py-1.5 rounded-full border flex-row items-center', selected ? 'bg-[#1F2937] border-[#6ee7b7]' : 'bg-[#111827] border-[#374151]')}
                               accessibilityRole="button"
                               accessibilityLabel={f === 'review' ? `Filter by postings needing your review${count > 0 ? `, ${count} item${count === 1 ? '' : 's'}` : ''}` : `Filter by ${label} postings`}
                               accessibilityState={{ selected }}
                               accessibilityHint={selected ? 'Currently active filter' : f === 'review' ? 'Tap to show only postings that need your action' : `Tap to show only ${label} bounties`}
                             >
-                              <Text className={cn('text-xs', selected ? 'text-white font-medium' : 'text-emerald-200')}>{label}</Text>
+                              <Text className={cn('text-xs', selected ? 'text-white font-medium' : 'text-[#9CA3AF]')}>{label}</Text>
                               {f === 'review' && count > 0 && (
                                 <View className="ml-1.5 px-1.5 rounded-full bg-amber-400 min-w-[18px] items-center">
-                                  <Text className="text-[10px] font-bold text-emerald-900">{count > 99 ? "99+" : count}</Text>
+                                  <Text className="text-[10px] font-bold text-[#111827]">{count > 99 ? "99+" : count}</Text>
                                 </View>
                               )}
                             </TouchableOpacity>
@@ -1176,7 +1176,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                 />
               ) : (
                 <View className="flex items-center justify-center h-full">
-                  <Text className="text-emerald-200 text-center">Content will appear here</Text>
+                  <Text className="text-[#9CA3AF] text-center">Content will appear here</Text>
                 </View>
               ))}
           </View>
@@ -1185,7 +1185,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
         {/* Sticky Bottom Actions - iPhone optimized with safe area inset */}
         {activeTab === "new" && !showMultiStepFlow && (
           <View
-            className="absolute left-0 right-0 bottom-0 bg-emerald-600/95 border-t border-emerald-500/30"
+            className="absolute left-0 right-0 bottom-0 bg-[#0B0F14]/95 border-t border-[#1F2937]"
             style={{
               paddingHorizontal: 12,
               paddingTop: 8,
@@ -1200,7 +1200,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
             {/* Amount header row */}
             <View className="flex-row items-center justify-between mb-2 px-2">
               <Text className="text-white text-base font-medium">Bounty Amount</Text>
-              <Text className="text-emerald-200 text-sm">Current Balance: ${balance.toFixed(2)}</Text>
+              <Text className="text-[#9CA3AF] text-sm">Current Balance: ${balance.toFixed(2)}</Text>
             </View>
 
             {/* Preset amount chips + dynamic Other chip (horizontal scroll to keep fixed height) */}
@@ -1218,8 +1218,8 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                         selected
                           ? lowBalance
                             ? "bg-amber-400/90 border-amber-200"
-                            : "bg-emerald-300 text-emerald-900 border-emerald-200"
-                          : "bg-emerald-900/40 border-emerald-500/40",
+                            : "bg-[#059669] border-[#6ee7b7]"
+                          : "bg-[#111827] border-[#374151]",
                       )}
                     >
                       <Text
@@ -1228,8 +1228,8 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                           selected
                             ? lowBalance
                               ? "text-amber-950"
-                              : "text-emerald-900"
-                            : "text-emerald-100"
+                              : "text-white"
+                            : "text-white"
                         )}
                       >
                         ${amt}
@@ -1250,8 +1250,8 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                         highlight
                           ? lowBalance
                             ? "bg-amber-400/90 border-amber-200"
-                            : "bg-emerald-300 border-emerald-200"
-                          : "bg-emerald-900/40 border-emerald-500/40"
+                            : "bg-[#059669] border-[#6ee7b7]"
+                          : "bg-[#111827] border-[#374151]"
                       )}
                     >
                       <Text
@@ -1260,8 +1260,8 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                           highlight
                             ? lowBalance
                               ? "text-amber-950"
-                              : "text-emerald-900"
-                            : "text-emerald-100"
+                              : "text-white"
+                            : "text-white"
                         )}
                       >
                         {displayLabel}
@@ -1312,8 +1312,8 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                     onPress={handlePress}
                     className={cn(
                       "self-center w-full px-8 py-4 rounded-2xl border",
-                      lowBalance ? "border-amber-400 bg-amber-500/25" : "border-emerald-300/50 bg-emerald-700/30",
-                      requiredMissing && !lowBalance ? "border-red-400/70" : ""
+                      lowBalance ? "border-amber-400 bg-amber-500/25" : "border-[#374151] bg-[#059669]",
+                      requiredMissing && !lowBalance ? "border-red-400/70 bg-[#111827]" : ""
                     )}
                     activeOpacity={0.85}
                   >
@@ -1387,7 +1387,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 20,
-    backgroundColor: '#059669',
+    backgroundColor: '#0B0F14',
   },
   headerShadow: {
     shadowColor: '#000',

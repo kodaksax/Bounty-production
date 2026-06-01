@@ -184,7 +184,7 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#059669", // emerald-600
+    backgroundColor: "#0B0F14",
   },
   header: {
     flexDirection: "row",
@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(16, 185, 129, 0.3)",
+    borderBottomColor: "#1F2937",
   },
   backButton: {
     padding: 4,
@@ -212,12 +212,12 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   item: {
-    backgroundColor: "rgba(5, 95, 70, 0.5)",
+    backgroundColor: "#111827",
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: "rgba(16, 185, 129, 0.2)",
+    borderColor: "#1F2937",
   },
   itemHeader: {
     flexDirection: "row",
@@ -238,7 +238,7 @@ const styles = StyleSheet.create({
   },
   date: {
     fontSize: 12,
-    color: "#a7f3d0",
+    color: "#9CA3AF",
   },
   itemTitle: {
     fontSize: 16,
@@ -248,7 +248,7 @@ const styles = StyleSheet.create({
   },
   itemDescription: {
     fontSize: 14,
-    color: "#d1fae5",
+    color: "#9CA3AF",
     lineHeight: 20,
     marginBottom: 12,
   },
@@ -279,7 +279,7 @@ const styles = StyleSheet.create({
   transactionType: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#d1fae5",
+    color: "#9CA3AF",
   },
   transactionAmount: {
     fontSize: 18,
@@ -319,7 +319,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    color: "#a7f3d0",
+    color: "#9CA3AF",
     textAlign: "center",
     paddingHorizontal: 32,
   },

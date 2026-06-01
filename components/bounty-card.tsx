@@ -351,12 +351,12 @@ export function BountyCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "rgba(5, 150, 105, 0.85)", // more opaque for stronger contrast
+    backgroundColor: "#111827",
     borderRadius: 16,
     padding: 18,
-    marginBottom: 18, // increased spacing between cards
+    marginBottom: 18,
     borderWidth: 1,
-    borderColor: "rgba(16, 185, 129, 0.35)", // stronger border for separation
+    borderColor: "#374151",
     ...theme.shadows.lg,
   },
   header: {
@@ -373,7 +373,7 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 16,
     borderWidth: 2,
-    borderColor: "rgba(110, 231, 183, 0.6)", // emerald-400 with opacity
+    borderColor: "#374151",
   },
   statusBadge: {
     paddingHorizontal: 10,
@@ -423,7 +423,7 @@ const styles = StyleSheet.create({
   },
   description: {
     fontSize: 14,
-    color: "#d1fae5",
+    color: "#9CA3AF",
     lineHeight: 20,
     marginBottom: 12,
   },
@@ -440,19 +440,19 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 12,
-    color: "#a7f3d0",
+    color: "#9CA3AF",
   },
   footer: {
     flexDirection: "row",
     alignItems: "center",
     paddingTop: 14,
     borderTopWidth: 1,
-    borderTopColor: "rgba(16, 185, 129, 0.35)",
+    borderTopColor: "#1F2937",
   },
   ratingChip: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(5, 95, 70, 0.5)",
+    backgroundColor: "#1F2937",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
@@ -465,7 +465,7 @@ const styles = StyleSheet.create({
   },
   ratingCountText: {
     fontSize: 11,
-    color: "#a7f3d0",
+    color: "#9CA3AF",
   },
   amount: {
     fontSize: 20,
@@ -536,7 +536,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: "rgba(16, 185, 129, 0.2)",
+    borderTopColor: "#1F2937",
   },
   ownerLabel: {
     fontSize: 11,
@@ -553,7 +553,7 @@ const styles = StyleSheet.create({
   actionButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(5, 95, 70, 0.85)",
+    backgroundColor: "#1F2937",
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 8,
@@ -562,7 +562,7 @@ const styles = StyleSheet.create({
   actionButtonText: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#d1fae5",
+    color: "#9CA3AF",
   },
   cancelButton: {
     backgroundColor: "rgba(249, 115, 22, 0.2)",

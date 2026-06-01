@@ -108,7 +108,7 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
   }, [])
 
   return (
-    <View className="flex-1 bg-emerald-600">
+    <View className="flex-1 bg-[#0B0F14]">
       <ScrollView
         ref={scrollRef}
         className="flex-1 px-4 pt-2"
@@ -121,33 +121,33 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
         contentContainerStyle={{ flexGrow: 1, paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
       >
         {/* Wallet Balance Display */}
-        <View className="mb-4 bg-emerald-700/30 rounded-lg p-3 flex-row items-center justify-between">
+        <View className="mb-4 bg-[#111827] rounded-lg p-3 flex-row items-center justify-between">
           <View className="flex-row items-center">
             <MaterialIcons name="account-balance-wallet" size={20} color="#6ee7b7" />
-            <Text className="text-emerald-100 text-sm font-medium ml-2">
+            <Text className="text-white text-sm font-medium ml-2">
               Available Balance:
             </Text>
           </View>
-          <Text className="text-emerald-300 text-lg font-bold">
+          <Text className="text-[#6ee7b7] text-lg font-bold">
             ${balance.toFixed(2)}
           </Text>
         </View>
 
         {/* Honor Toggle */}
-        <View className="mb-6 bg-emerald-700/30 rounded-lg p-4">
+        <View className="mb-6 bg-[#111827] rounded-lg p-4">
           <View className="flex-row items-center justify-between mb-2">
             <View className="flex-1">
-              <Text className="text-emerald-100 text-base font-semibold">
+              <Text className="text-white text-base font-semibold">
                 Post for Honor
               </Text>
-              <Text className="text-emerald-200/70 text-sm mt-1">
+              <Text className="text-[#9CA3AF] text-sm mt-1">
                 No payment required - reputation only
               </Text>
             </View>
             <Switch
               value={draft.isForHonor}
               onValueChange={handleHonorToggle}
-              trackColor={{ false: '#065f46', true: '#34d399' }}
+              trackColor={{ false: '#374151', true: '#059669' }}
               thumbColor={draft.isForHonor ? '#fff' : '#d1d5db'}
               accessibilityLabel="Post for honor toggle"
             />
@@ -158,7 +158,7 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
           <>
             {/* Amount Presets */}
             <View className="mb-6">
-              <Text className="text-emerald-100 text-base font-semibold mb-3">
+              <Text className="text-white text-base font-semibold mb-3">
                 How much will you pay? *
               </Text>
               <View className="flex-row flex-wrap gap-2 mb-3">
@@ -170,10 +170,10 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
                       key={preset}
                       onPress={() => handlePresetSelect(preset)}
                       className={`px-6 py-3 rounded-lg ${isOverBalance
-                          ? 'bg-emerald-800/30 border border-red-500/50'
+                          ? 'bg-[#1F2937] border border-red-500/50'
                           : isSelected
-                            ? 'bg-emerald-400'
-                            : 'bg-emerald-700/50'
+                            ? 'bg-[#059669]'
+                            : 'bg-[#111827]'
                         }`}
                       accessibilityLabel={`Select $${preset}${isOverBalance ? ' (exceeds balance)' : ''}`}
                       accessibilityRole="button"
@@ -183,8 +183,8 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
                         className={`font-semibold text-lg ${isOverBalance
                             ? 'text-red-300/70'
                             : isSelected
-                              ? 'text-emerald-900'
-                              : 'text-white'
+                              ? 'text-white'
+                              : 'text-[#9CA3AF]'
                           }`}
                       >
                         ${preset}
@@ -200,15 +200,15 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
                   // Focus on custom input
                 }}
                 className={`px-6 py-3 rounded-lg border-2 ${isCustomSelected
-                    ? 'bg-emerald-400 border-emerald-400'
-                    : 'bg-emerald-700/50 border-emerald-500/50 border-dashed'
+                    ? 'bg-[#059669] border-[#059669]'
+                    : 'bg-[#1F2937] border-[#374151] border-dashed'
                   }`}
                 accessibilityLabel="Enter custom amount"
                 accessibilityRole="button"
               >
                 <View className="flex-row items-center justify-between">
                   <Text
-                    className={`font-semibold ${isCustomSelected ? 'text-emerald-900' : 'text-emerald-200'
+                    className={`font-semibold ${isCustomSelected ? 'text-white' : 'text-[#9CA3AF]'
                       }`}
                   >
                     Custom Amount
@@ -216,21 +216,21 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
                   <MaterialIcons
                     name="edit"
                     size={20}
-                    color={isCustomSelected ? '#065f46' : 'rgba(110, 231, 183, 0.6)'}
+                    color={isCustomSelected ? '#fff' : '#6ee7b7'}
                   />
                 </View>
               </TouchableOpacity>
 
               {/* Custom Amount Input */}
               <View className="mt-3">
-                <View className={`flex-row items-center rounded-lg px-4 py-3 ${showBalanceWarning ? 'bg-red-500/20 border border-red-500/50' : 'bg-emerald-700/50'
+                <View className={`flex-row items-center rounded-lg px-4 py-3 ${showBalanceWarning ? 'bg-red-500/20 border border-red-500/50' : 'bg-[#1F2937]'
                   }`}>
                   <Text className="text-white text-lg font-semibold mr-2">$</Text>
                   <TextInput
                     value={customAmount}
                     onChangeText={handleCustomAmountChange}
                     placeholder="0"
-                    placeholderTextColor="rgba(110, 231, 183, 0.4)"
+                    placeholderTextColor="#6B7280"
                     keyboardType="numeric"
                     className="flex-1 text-white text-lg"
                     accessibilityLabel="Custom amount input"
@@ -268,19 +268,19 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
         )}
 
         {draft.isForHonor && (
-          <View className="mb-6 bg-emerald-700/20 rounded-lg p-4 border border-emerald-500/30">
+          <View className="mb-6 bg-[#111827] rounded-lg p-4 border border-[#374151]">
             <View className="flex-row items-start">
               <MaterialIcons
                 name="favorite"
                 size={20}
-                color="rgba(110, 231, 183, 0.8)"
+                color="#6ee7b7"
                 style={{ marginRight: 8, marginTop: 2 }}
               />
               <View className="flex-1">
-                <Text className="text-emerald-100 font-semibold mb-1">
+                <Text className="text-white font-semibold mb-1">
                   Honor Bounty
                 </Text>
-                <Text className="text-emerald-200/70 text-sm">
+                <Text className="text-[#9CA3AF] text-sm">
                   This bounty is for reputation and experience only. No payment will be processed.
                 </Text>
               </View>
@@ -291,13 +291,13 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
 
       {/* Navigation Buttons */}
       <View
-        className="px-4 pb-4 pt-3 bg-emerald-600 border-t border-emerald-700/50"
+        className="px-4 pb-4 pt-3 bg-[#0B0F14] border-t border-[#374151]"
         style={{ marginBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 8) }}
       >
         <View className="flex-row gap-3">
           <TouchableOpacity
             onPress={onBack}
-            className="flex-1 bg-emerald-700/50 py-3 rounded-lg flex-row items-center justify-center"
+            className="flex-1 bg-[#1F2937] py-3 rounded-lg flex-row items-center justify-center"
             accessibilityLabel="Go back"
             accessibilityRole="button"
           >
@@ -307,14 +307,14 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
           <TouchableOpacity
             onPress={handleNext}
             disabled={!isValid}
-            className={`flex-1 py-3 rounded-lg flex-row items-center justify-center ${isValid ? 'bg-emerald-500' : 'bg-emerald-700/30'
+            className={`flex-1 py-3 rounded-lg flex-row items-center justify-center ${isValid ? 'bg-[#059669]' : 'bg-[#111827]'
               }`}
             accessibilityLabel="Continue to next step"
             accessibilityRole="button"
             accessibilityState={{ disabled: !isValid }}
           >
             <Text
-              className={`font-semibold mr-2 ${isValid ? 'text-white' : 'text-emerald-400/40'
+              className={`font-semibold mr-2 ${isValid ? 'text-white' : 'text-[#9CA3AF]/40'
                 }`}
             >
               Next
@@ -322,7 +322,7 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
             <MaterialIcons
               name="arrow-forward"
               size={20}
-              color={isValid ? '#fff' : 'rgba(110, 231, 183, 0.4)'}
+              color={isValid ? '#fff' : '#6B7280'}
             />
           </TouchableOpacity>
         </View>
