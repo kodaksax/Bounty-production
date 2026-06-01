@@ -103,7 +103,7 @@ export default function FollowingScreen() {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#10b981" />
+          <ActivityIndicator size="large" color="#059669" />
         </View>
       ) : (
         <FlatList
@@ -124,14 +124,14 @@ export default function FollowingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#1a3d2e",
+    backgroundColor: "#0B0F14",
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: "#1a3d2e",
+    backgroundColor: "#0B0F14",
   },
   backButton: {
     marginRight: 12,
@@ -182,7 +182,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "#10b981",
+    backgroundColor: "#059669",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
   },
   followingTitle: {
     fontSize: 13,
-    color: "#10b981",
+    color: "#059669",
   },
   emptyState: {
     alignItems: "center",

@@ -1231,13 +1231,13 @@ export function MyPostingExpandable({
                       accessibilityHint="Opens quick tools including dispute and message actions"
                     >
                       <View style={styles.posterToolsToggleLeft}>
-                        <MaterialIcons name="gavel" size={18} color="#a7f3d0" />
+                        <MaterialIcons name="gavel" size={18} color="#9CA3AF" />
                         <Text style={styles.posterToolsToggleText}>Poster Flow Tools</Text>
                       </View>
                       <MaterialIcons
                         name={posterToolsExpanded ? 'expand-less' : 'expand-more'}
                         size={20}
-                        color="#a7f3d0"
+                        color="#9CA3AF"
                       />
                     </TouchableOpacity>
 
@@ -1418,13 +1418,13 @@ export function MyPostingExpandable({
                       accessibilityHint="Opens quick tools including dispute and message actions"
                     >
                       <View style={styles.hunterToolsToggleLeft}>
-                        <MaterialIcons name="build-circle" size={18} color="#a7f3d0" />
+                        <MaterialIcons name="build-circle" size={18} color="#9CA3AF" />
                         <Text style={styles.hunterToolsToggleText}>Hunter Flow Tools</Text>
                       </View>
                       <MaterialIcons
                         name={hunterToolsExpanded ? 'expand-less' : 'expand-more'}
                         size={20}
-                        color="#a7f3d0"
+                        color="#9CA3AF"
                       />
                     </TouchableOpacity>
 
@@ -1629,7 +1629,7 @@ export function MyPostingExpandable({
                             (readyToSubmitPressed || !!readyRecord) && !hasDispute ? 'add' : 'lock'
                           }
                           size={20}
-                          color="#10b981"
+                          color="#059669"
                         />
                         <Text style={styles.addFileText}>
                           {hasDispute
@@ -1676,7 +1676,7 @@ export function MyPostingExpandable({
               <View style={{ gap: 16 }}>
                 {/* Success Message */}
                 <View style={styles.successPanel}>
-                  <MaterialIcons name="check-circle" size={48} color="#10b981" />
+                  <MaterialIcons name="check-circle" size={48} color="#059669" />
                   <Text style={styles.successTitle}>Payout Released!</Text>
                   <Text style={styles.successText}>
                     {isOwner
@@ -1728,7 +1728,7 @@ export function MyPostingExpandable({
                     <View style={styles.receiptRow}>
                       <Text style={styles.receiptLabel}>Status</Text>
                       <View style={styles.statusPill}>
-                        <MaterialIcons name="check-circle" size={16} color="#10b981" />
+                        <MaterialIcons name="check-circle" size={16} color="#059669" />
                         <Text style={styles.statusPillText}>Completed</Text>
                       </View>
                     </View>
@@ -1930,7 +1930,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.2)',
+    borderColor: '#374151',
     marginTop: -8,
     marginBottom: 12,
   },
@@ -1946,7 +1946,7 @@ const styles = StyleSheet.create({
   timelineItem: { flexDirection: 'row', alignItems: 'center' },
   bubble: { width: 12, height: 12, borderRadius: 6 },
   bubbleIdle: { backgroundColor: 'rgba(110,231,183,0.3)' },
-  bubbleActive: { backgroundColor: '#10b981' },
+  bubbleActive: { backgroundColor: '#059669' },
   bubbleCompleted: { backgroundColor: '#059669' },
   connector: {
     width: 18,
@@ -1963,23 +1963,23 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 8,
   },
-  infoText: { color: '#d1fae5', fontSize: 12, flex: 1 },
+  infoText: { color: '#1F2937', fontSize: 12, flex: 1 },
   actionsRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
   primaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 10,
   },
   primaryText: { color: '#fff', fontWeight: '600' },
-  muted: { color: '#a7f3d0', fontSize: 12 },
+  muted: { color: '#9CA3AF', fontSize: 12 },
   honorBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#9CA3AF',
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -2071,7 +2071,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   sectionTitle: {
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     fontSize: 13,
     fontWeight: '700',
     marginBottom: 6,
@@ -2081,15 +2081,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    backgroundColor: '#374151',
     paddingVertical: 12,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#10b981',
+    borderColor: '#059669',
     borderStyle: 'dashed',
   },
   addFileText: {
-    color: '#10b981',
+    color: '#059669',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -2103,7 +2103,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   successTitle: {
     color: '#fff',
@@ -2132,7 +2132,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   payoutAmount: {
-    color: '#10b981',
+    color: '#059669',
     fontSize: 32,
     fontWeight: '700',
   },
@@ -2201,18 +2201,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    backgroundColor: '#374151',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
   },
   statusPillText: {
-    color: '#10b981',
+    color: '#059669',
     fontSize: 12,
     fontWeight: '600',
   },
   readyBadge: {
-    backgroundColor: '#d1fae5',
+    backgroundColor: '#1F2937',
     borderRadius: 12,
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -2281,7 +2281,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   hunterToolsToggleText: {
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     fontSize: 13,
     fontWeight: '700',
   },
@@ -2312,7 +2312,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(239, 68, 68, 0.2)',
   },
   hunterToolText: {
-    color: '#d1fae5',
+    color: '#1F2937',
     fontSize: 13,
     fontWeight: '600',
   },
@@ -2347,7 +2347,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   posterToolsToggleText: {
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     fontSize: 13,
     fontWeight: '700',
   },

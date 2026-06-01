@@ -501,7 +501,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                   >
                     {profileLoading ? (
                       <View style={styles.profileLoadingContainer}>
-                        <ActivityIndicator size="small" color="#a7f3d0" />
+                        <ActivityIndicator size="small" color="#9CA3AF" />
                         <Text style={styles.loadingText}>Loading profile...</Text>
                       </View>
                     ) : (
@@ -519,7 +519,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                           <Text style={styles.postTime}>Posted 2h ago</Text>
                         </View>
                         {posterId && (
-                          <MaterialIcons name="chevron-right" size={20} color="#a7f3d0" style={{ marginLeft: 'auto' }} />
+                          <MaterialIcons name="chevron-right" size={20} color="#9CA3AF" style={{ marginLeft: 'auto' }} />
                         )}
                       </>
                     )}
@@ -544,7 +544,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                     </View>
                     {bounty.work_type === 'online' ? (
                       <View style={styles.onlineBadge}>
-                        <MaterialIcons name="wifi" size={14} color="#10b981" />
+                        <MaterialIcons name="wifi" size={14} color="#059669" />
                         <Text style={styles.onlineText}>Online</Text>
                       </View>
                     ) : bounty.distance === null ? (
@@ -568,19 +568,19 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                       {([
                         bounty.timeline && {
                           icon: 'schedule' as const,
-                          color: '#a7f3d0',
+                          color: '#9CA3AF',
                           label: 'Timeline',
                           value: bounty.timeline,
                         },
                         bounty.skills_required && {
                           icon: 'build' as const,
-                          color: '#a7f3d0',
+                          color: '#9CA3AF',
                           label: 'Skills Required',
                           value: bounty.skills_required,
                         },
                         bounty.location && bounty.work_type !== 'online' && {
                           icon: 'place' as const,
-                          color: '#a7f3d0',
+                          color: '#9CA3AF',
                           label: 'Location',
                           value: bounty.location,
                         },
@@ -613,7 +613,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                       <Text style={styles.sectionHeader}>Attachments</Text>
                       {isLoadingAttachments ? (
                         <View style={styles.attachmentsLoadingContainer}>
-                          <ActivityIndicator size="small" color="#a7f3d0" />
+                          <ActivityIndicator size="small" color="#9CA3AF" />
                           <Text style={styles.attachmentsLoadingText}>Loading attachments...</Text>
                         </View>
                       ) : (
@@ -637,7 +637,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                                       resizeMode="cover"
                                     />
                                   ) : (
-                                    <MaterialIcons name="description" size={20} color="#a7f3d0" />
+                                    <MaterialIcons name="description" size={20} color="#9CA3AF" />
                                   )}
                                 </View>
                                 <View style={styles.attachmentInfo}>
@@ -647,7 +647,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                                   </Text>
                                 </View>
                                 <View style={styles.downloadButton}>
-                                  <MaterialIcons name="arrow-forward" size={16} color="#a7f3d0" />
+                                  <MaterialIcons name="arrow-forward" size={16} color="#9CA3AF" />
                                 </View>
                               </TouchableOpacity>
                             )
@@ -753,7 +753,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 16,
-    backgroundColor: '#047857', // emerald-700
+    backgroundColor: '#0B0F14', // emerald-700
     // Optional: ensure the darker header follows the rounded top
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
@@ -788,7 +788,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   bountyCard: {
-    backgroundColor: '#047857cc', // emerald-700/80
+    backgroundColor: '#0B0F14cc', // emerald-700/80
     borderRadius: 12,
     overflow: 'hidden',
     marginBottom: 16,
@@ -809,7 +809,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   loadingText: {
-    color: '#a7f3d0', // emerald-300
+    color: '#9CA3AF', // emerald-300
     fontSize: 14,
     fontStyle: 'italic',
   },
@@ -828,16 +828,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   avatarText: {
-    color: '#a7f3d0', // emerald-200
+    color: '#9CA3AF', // emerald-200
     fontSize: 12,
   },
   username: {
     fontSize: 14,
-    color: '#d1fae5', // emerald-100
+    color: '#1F2937', // emerald-100
   },
   postTime: {
     fontSize: 12,
-    color: '#a7f3d0', // emerald-300
+    color: '#9CA3AF', // emerald-300
   },
   title: {
     fontSize: 20,
@@ -854,7 +854,7 @@ const styles = StyleSheet.create({
   onlineText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#065f46', // emerald-800
+    color: '#111827', // emerald-800
   },
   priceContainer: {
     backgroundColor: '#064e3b80', // emerald-900/50
@@ -868,12 +868,12 @@ const styles = StyleSheet.create({
   },
   distanceText: {
     fontSize: 14,
-    color: '#a7f3d0', // emerald-200
+    color: '#9CA3AF', // emerald-200
   },
   onlineBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#d1fae5', // emerald-100
+    backgroundColor: '#1F2937', // emerald-100
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
@@ -888,14 +888,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   categoryPillText: {
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     fontSize: 12,
     fontWeight: '600',
   },
   honorBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#a7f3d0', // emerald-200
+    backgroundColor: '#9CA3AF', // emerald-200
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -927,12 +927,12 @@ const styles = StyleSheet.create({
   detailLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#a7f3d0', // emerald-300
+    color: '#9CA3AF', // emerald-300
     marginBottom: 2,
   },
   detailValue: {
     fontSize: 14,
-    color: '#d1fae5', // emerald-100
+    color: '#1F2937', // emerald-100
     lineHeight: 18,
   },
   attachmentsSection: {
@@ -941,7 +941,7 @@ const styles = StyleSheet.create({
   sectionHeader: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#a7f3d0', // emerald-200
+    color: '#9CA3AF', // emerald-200
     marginBottom: 8,
   },
   descriptionText: {
@@ -962,7 +962,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   attachmentsLoadingText: {
-    color: '#a7f3d0', // emerald-300
+    color: '#9CA3AF', // emerald-300
     fontSize: 14,
     fontStyle: 'italic',
   },
@@ -991,7 +991,7 @@ const styles = StyleSheet.create({
   },
   attachmentSize: {
     fontSize: 12,
-    color: '#a7f3d0', // emerald-300
+    color: '#9CA3AF', // emerald-300
   },
   downloadButton: {
     padding: 8,
@@ -999,14 +999,14 @@ const styles = StyleSheet.create({
   actionContainer: {
     padding: 16,
     paddingTop: 16,
-    backgroundColor: '#047857', // emerald-700
+    backgroundColor: '#0B0F14', // emerald-700
     borderTopWidth: 1,
     borderTopColor: '#05966920', // emerald-600/20
   },
   acceptButton: {
     width: '100%',
     paddingVertical: 16,
-    backgroundColor: '#10b981', // emerald-500
+    backgroundColor: '#059669', // emerald-500
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1026,7 +1026,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: 'rgba(110, 231, 183, 0.3)',
-    color: '#d1fae5',
+    color: '#1F2937',
     fontSize: 14,
     padding: 12,
     minHeight: 72,

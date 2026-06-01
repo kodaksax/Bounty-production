@@ -317,7 +317,7 @@ export function AddBountyAmountScreen({ onBack, onAddAmount, initialAmount = 0 }
               title="What are Honor Bounties?"
               content="Honor bounties are non-paid tasks that help build reputation in the community. People complete them to gain experience, help others, and build their profile rating. Great for simple tasks or community support."
               iconSize={16}
-              iconColor="#10b981"
+              iconColor="#059669"
             />
           </View>
         </View>

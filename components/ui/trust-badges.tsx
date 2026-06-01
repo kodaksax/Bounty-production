@@ -28,7 +28,7 @@ const PLATFORM_BADGES: TrustBadge[] = [
     icon: 'lock',
     title: 'Escrow Protected',
     description: 'All payments are held securely in escrow until work is verified and approved. Your funds are never released without your explicit approval.',
-    color: '#10b981', // emerald-500
+    color: '#059669', // emerald-500
   },
   {
     id: 'secure-payments',
@@ -279,7 +279,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 12,
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     marginBottom: 16,
   },
   gridContainer: {
@@ -323,7 +323,7 @@ const styles = StyleSheet.create({
   },
   badgePreview: {
     fontSize: 12,
-    color: '#a7f3d0',
+    color: '#9CA3AF',
   },
   compactContainer: {
     marginVertical: 8,
@@ -344,7 +344,7 @@ const styles = StyleSheet.create({
   compactBadgeText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#d1fae5',
+    color: '#1F2937',
   },
   modalOverlay: {
     flex: 1,
@@ -354,7 +354,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modalContent: {
-    backgroundColor: '#065f46', // emerald-800
+    backgroundColor: '#111827', // emerald-800
     borderRadius: 16,
     padding: 24,
     width: '100%',
@@ -380,7 +380,7 @@ const styles = StyleSheet.create({
   },
   modalDescription: {
     fontSize: 14,
-    color: '#d1fae5',
+    color: '#1F2937',
     lineHeight: 22,
     textAlign: 'center',
     marginBottom: 20,

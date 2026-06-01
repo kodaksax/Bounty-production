@@ -332,14 +332,14 @@ export default function DoneScreen() {
             <Text style={styles.summaryTitle}>Your Profile Summary</Text>
 
             <View style={styles.summaryItem}>
-              <MaterialIcons name="person" size={18} color="#a7f3d0" />
+              <MaterialIcons name="person" size={18} color="#9CA3AF" />
               <Text style={styles.summaryLabel}>Username</Text>
               <Text style={styles.summaryValue}>@{displayUsername}</Text>
             </View>
 
             {displayName && (
               <View style={styles.summaryItem}>
-                <MaterialIcons name="badge" size={18} color="#a7f3d0" />
+                <MaterialIcons name="badge" size={18} color="#9CA3AF" />
                 <Text style={styles.summaryLabel}>Name</Text>
                 <Text style={styles.summaryValue}>{displayName}</Text>
               </View>
@@ -347,7 +347,7 @@ export default function DoneScreen() {
 
             {displayTitle && (
               <View style={styles.summaryItem}>
-                <MaterialIcons name="work" size={18} color="#a7f3d0" />
+                <MaterialIcons name="work" size={18} color="#9CA3AF" />
                 <Text style={styles.summaryLabel}>Title</Text>
                 <Text style={styles.summaryValue}>{displayTitle}</Text>
               </View>
@@ -355,7 +355,7 @@ export default function DoneScreen() {
 
             {displayLocation && (
               <View style={styles.summaryItem}>
-                <MaterialIcons name="location-on" size={18} color="#a7f3d0" />
+                <MaterialIcons name="location-on" size={18} color="#9CA3AF" />
                 <Text style={styles.summaryLabel}>Location</Text>
                 <Text style={styles.summaryValue}>{displayLocation}</Text>
               </View>
@@ -364,7 +364,7 @@ export default function DoneScreen() {
             {displayBio && (
               <View style={styles.summaryItemColumn}>
                 <View style={styles.summaryItemRow}>
-                  <MaterialIcons name="info-outline" size={18} color="#a7f3d0" />
+                  <MaterialIcons name="info-outline" size={18} color="#9CA3AF" />
                   <Text style={styles.summaryLabel}>Bio</Text>
                 </View>
                 <Text style={styles.summaryBio}>{displayBio}</Text>
@@ -374,7 +374,7 @@ export default function DoneScreen() {
             {displaySkills.length > 0 && (
               <View style={styles.summaryItemColumn}>
                 <View style={styles.summaryItemRow}>
-                  <MaterialIcons name="star" size={18} color="#a7f3d0" />
+                  <MaterialIcons name="star" size={18} color="#9CA3AF" />
                   <Text style={styles.summaryLabel}>Skills</Text>
                 </View>
                 <View style={styles.skillsRow}>
@@ -392,7 +392,7 @@ export default function DoneScreen() {
 
             {hasPhone && (
               <View style={styles.summaryItem}>
-                <MaterialIcons name="phone" size={18} color="#a7f3d0" />
+                <MaterialIcons name="phone" size={18} color="#9CA3AF" />
                 <Text style={styles.summaryLabel}>Phone</Text>
                 <Text style={styles.summaryValue}>✓ Added (private)</Text>
               </View>
@@ -472,7 +472,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#9CA3AF',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
@@ -500,7 +500,7 @@ const styles = StyleSheet.create({
   summaryTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     marginBottom: 12,
     textAlign: 'center',
   },
@@ -548,7 +548,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   skillBadgeText: {
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     fontSize: 11,
     fontWeight: '500',
   },
@@ -572,7 +572,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#9CA3AF',
     paddingVertical: 16,
     borderRadius: 999,
     gap: 8,
@@ -596,6 +596,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.3)',
   },
   progressDotActive: {
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#9CA3AF',
   },
 });

@@ -449,7 +449,7 @@ export default function UserProfileScreen() {
           <View style={styles.moreMenuBackdrop} />
           <View style={[styles.moreMenuContainer, { top: 48 }]}>
             <TouchableOpacity style={styles.moreMenuItem} onPress={handleShare}>
-              <MaterialIcons name="share" size={20} color="#a7f3d0" />
+              <MaterialIcons name="share" size={20} color="#9CA3AF" />
               <Text style={styles.moreMenuText}>Share Profile</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.moreMenuItem} onPress={handleReport}>
@@ -495,7 +495,7 @@ export default function UserProfileScreen() {
         <View style={styles.actionButtons}>
           {isOwnProfile ? (
             <TouchableOpacity style={styles.primaryButton} onPress={handleEditProfile}>
-              <MaterialIcons name="edit" size={18} color="#065f46" />
+              <MaterialIcons name="edit" size={18} color="#111827" />
               <Text style={styles.primaryButtonText}>Edit Profile</Text>
             </TouchableOpacity>
           ) : (
@@ -506,13 +506,13 @@ export default function UserProfileScreen() {
                 disabled={followLoading}
               >
                 {followLoading ? (
-                  <ActivityIndicator size="small" color={isFollowing ? "#10b981" : "#ffffff"} />
+                  <ActivityIndicator size="small" color={isFollowing ? "#059669" : "#ffffff"} />
                 ) : (
                   <>
                     <MaterialIcons
                       name={isFollowing ? "person-remove" : "person-add"}
                       size={18}
-                      color={isFollowing ? "#10b981" : "#ffffff"}
+                      color={isFollowing ? "#059669" : "#ffffff"}
                     />
                     <Text style={[styles.secondaryButtonText, isFollowing && styles.followingButtonText]}>
                       {isFollowing ? "Following" : "Follow"}
@@ -541,7 +541,7 @@ export default function UserProfileScreen() {
                   disabled={resendLoading}
                 >
                   {resendLoading ? (
-                    <ActivityIndicator size="small" color="#065f46" />
+                    <ActivityIndicator size="small" color="#111827" />
                   ) : (
                     <Text style={styles.resendButtonText}>Resend email</Text>
                   )}
@@ -631,7 +631,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 60,
     right: 16,
-    backgroundColor: "#047857", // emerald-700
+    backgroundColor: "#0B0F14", // emerald-700
     borderRadius: 8,
     padding: 8,
     shadowColor: "#000",
@@ -677,7 +677,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: "#a7f3d0", // emerald-200
+    color: "#9CA3AF", // emerald-200
   },
   errorContainer: {
     flex: 1,
@@ -694,12 +694,12 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 14,
-    color: "#a7f3d0", // emerald-200
+    color: "#9CA3AF", // emerald-200
     textAlign: "center",
     marginBottom: 24,
   },
   retryButton: {
-    backgroundColor: "#10b981", // emerald-500
+    backgroundColor: "#059669", // emerald-500
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -769,7 +769,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#a7f3d0", // emerald-200
+    backgroundColor: "#9CA3AF", // emerald-200
     paddingVertical: 12,
     borderRadius: 12,
     gap: 6,
@@ -778,7 +778,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   primaryButtonText: {
-    color: "#065f46", // emerald-800
+    color: "#111827", // emerald-800
     fontSize: 16,
     fontWeight: "600",
   },
@@ -789,7 +789,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "transparent",
     borderWidth: 1,
-    borderColor: "#a7f3d0", // emerald-200
+    borderColor: "#9CA3AF", // emerald-200
     paddingVertical: 12,
     borderRadius: 12,
     gap: 6,
@@ -803,7 +803,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(167, 243, 208, 0.1)",
   },
   followingButtonText: {
-    color: "#10b981",
+    color: "#059669",
   },
   statsContainer: {
     flexDirection: "row",
@@ -819,7 +819,7 @@ const styles = StyleSheet.create({
   },
   statDivider: {
     width: 1,
-    backgroundColor: "#047857", // emerald-700
+    backgroundColor: "#0B0F14", // emerald-700
   },
   statValue: {
     fontSize: 24,
@@ -829,7 +829,7 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: 14,
-    color: "#a7f3d0", // emerald-200
+    color: "#9CA3AF", // emerald-200
   },
   section: {
     marginBottom: 16,
@@ -850,7 +850,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "flex-start",
-    backgroundColor: "#a7f3d0", // emerald-200
+    backgroundColor: "#9CA3AF", // emerald-200
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 20,
@@ -859,7 +859,7 @@ const styles = StyleSheet.create({
   emailBadgeText: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#065f46", // emerald-800
+    color: "#111827", // emerald-800
   },
   resendPrompt: {
     flexDirection: "row",
@@ -873,7 +873,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   resendButton: {
-    backgroundColor: "#a7f3d0",
+    backgroundColor: "#9CA3AF",
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 20,
@@ -886,11 +886,11 @@ const styles = StyleSheet.create({
   resendButtonText: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#065f46",
+    color: "#111827",
   },
   resendMessageText: {
     fontSize: 12,
-    color: "#a7f3d0",
+    color: "#9CA3AF",
     fontStyle: "italic",
   },
 });

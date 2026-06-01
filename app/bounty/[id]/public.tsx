@@ -45,10 +45,10 @@ export default function PublicBountyDetail() {
       setIsLoading(false);
       return;
     }
-    pushColor('#0f291e'); // Darker, richer background
+    pushColor('#0B0F14'); // Darker, richer background
     loadBounty(routeBountyId);
     return () => {
-      popColor('#0f291e');
+      popColor('#0B0F14');
     };
   }, [routeBountyId]);
 
@@ -82,7 +82,7 @@ export default function PublicBountyDetail() {
   const getStatusBadgeColor = (status?: string) => {
     switch (status) {
       case 'open':
-        return '#10b981'; // emerald-500
+        return '#059669'; // emerald-500
       case 'in_progress':
         return '#fbbf24'; // amber-400
       case 'completed':
@@ -90,7 +90,7 @@ export default function PublicBountyDetail() {
       case 'archived':
         return '#6b7280'; // gray-500
       default:
-        return '#10b981';
+        return '#059669';
     }
   };
 
@@ -180,7 +180,7 @@ export default function PublicBountyDetail() {
   if (isLoading) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#10b981" />
+        <ActivityIndicator size="large" color="#059669" />
         <Text style={styles.loadingText}>Loading bounty...</Text>
       </SafeAreaView>
     );
@@ -203,7 +203,7 @@ export default function PublicBountyDetail() {
     <View style={[styles.container, { width: '100%', alignSelf: 'stretch' }]}>
       {/* Decorative gradient background */}
       <LinearGradient
-        colors={['rgba(16, 185, 129, 0.15)', 'transparent']}
+        colors={['rgba(255,255,255,0.05)', 'transparent']}
         style={StyleSheet.absoluteFillObject}
         pointerEvents="none"
       />
@@ -261,7 +261,7 @@ export default function PublicBountyDetail() {
             
             <View style={styles.posterInfo}>
               <View style={styles.avatarPlaceholder}>
-                <MaterialIcons name="person" size={24} color="#a7f3d0" />
+                <MaterialIcons name="person" size={24} color="#9CA3AF" />
               </View>
               <View style={styles.posterTextGroup}>
                 <Text style={styles.posterLabel}>Posted by</Text>
@@ -279,7 +279,7 @@ export default function PublicBountyDetail() {
               {bounty.location ? (
                 <View style={styles.infoBox}>
                   <View style={styles.infoIconBg}>
-                    <MaterialIcons name="place" size={20} color="#10b981" />
+                    <MaterialIcons name="place" size={20} color="#059669" />
                   </View>
                   <Text style={styles.infoBoxLabel}>Location</Text>
                   <Text style={styles.infoBoxValue}>{bounty.location}</Text>
@@ -289,7 +289,7 @@ export default function PublicBountyDetail() {
               {bounty.work_type ? (
                 <View style={styles.infoBox}>
                   <View style={styles.infoIconBg}>
-                    <MaterialIcons name={bounty.work_type === 'online' ? 'computer' : 'directions-walk'} size={20} color="#10b981" />
+                    <MaterialIcons name={bounty.work_type === 'online' ? 'computer' : 'directions-walk'} size={20} color="#059669" />
                   </View>
                   <Text style={styles.infoBoxLabel}>Type</Text>
                   <Text style={styles.infoBoxValue}>{bounty.work_type === 'online' ? 'Remote' : 'In Person'}</Text>
@@ -312,7 +312,7 @@ export default function PublicBountyDetail() {
 
             {bounty.timeline ? (
               <View style={styles.timelineBox}>
-                <MaterialIcons name="schedule" size={20} color="#a7f3d0" />
+                <MaterialIcons name="schedule" size={20} color="#9CA3AF" />
                 <View>
                   <Text style={styles.infoBoxLabel}>Timeline</Text>
                   <Text style={styles.timelineValue}>{bounty.timeline}</Text>
@@ -352,7 +352,7 @@ export default function PublicBountyDetail() {
                 disabled={isApplying}
               >
                 <LinearGradient
-                  colors={['#10b981', '#059669']}
+                  colors={['#059669', '#0B0F14']}
                   style={[StyleSheet.absoluteFillObject, { borderRadius: 16 }]}
                 />
                 {isApplying ? (
@@ -384,23 +384,23 @@ export default function PublicBountyDetail() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0f291e', // deeper dark green
+    backgroundColor: '#0B0F14', // deeper dark green
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#0f291e',
+    backgroundColor: '#0B0F14',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 16,
   },
   loadingText: {
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     fontSize: 16,
     fontWeight: '500',
   },
   errorContainer: {
     flex: 1,
-    backgroundColor: '#0f291e',
+    backgroundColor: '#0B0F14',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 16,
@@ -416,13 +416,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 12,
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    backgroundColor: '#111827',
     borderRadius: 99,
     gap: 8,
     marginTop: 16,
   },
   backButtonText: {
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -458,11 +458,11 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   heroCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
+    backgroundColor: '#111827',
     borderRadius: 24,
     padding: 24,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.15)',
+    borderColor: '#374151',
     overflow: 'hidden',
   },
   heroTopRow: {
@@ -528,7 +528,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   categoryPillText: {
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -546,11 +546,11 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
+    borderColor: '#374151',
   },
   posterTextGroup: {
     flex: 1,
@@ -567,15 +567,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   detailsCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.1)',
+    backgroundColor: '#111827',
     borderRadius: 24,
     padding: 24,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.1)',
+    borderColor: '#374151',
     gap: 24,
   },
   sectionTitle: {
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     fontSize: 18,
     fontWeight: '700',
     letterSpacing: 0.5,
@@ -601,7 +601,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -626,12 +626,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   skillTag: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
+    borderColor: '#374151',
   },
   skillTagText: {
     color: '#fff',
@@ -660,7 +660,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#10b981',
+    shadowColor: '#059669',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,

@@ -205,7 +205,7 @@ export default function AuthCallbackScreen() {
       case 'loading':
         return (
           <View style={styles.centerContent}>
-            <ActivityIndicator size="large" color="#a7f3d0" />
+            <ActivityIndicator size="large" color="#9CA3AF" />
             <Text style={styles.title}>{message}</Text>
             <Text style={styles.description}>
               {isRecovery
@@ -219,7 +219,7 @@ export default function AuthCallbackScreen() {
         return (
           <View style={styles.centerContent}>
             <View style={styles.successIconCircle}>
-              <MaterialIcons name="check-circle" size={64} color="#052e1b" />
+              <MaterialIcons name="check-circle" size={64} color="#059669" />
             </View>
             <Text style={styles.title}>{message}</Text>
             <Text style={styles.description}>
@@ -241,7 +241,7 @@ export default function AuthCallbackScreen() {
 
             {/* Help section */}
             <View style={styles.helpBox}>
-              <MaterialIcons name="info-outline" size={20} color="#a7f3d0" />
+              <MaterialIcons name="info-outline" size={20} color="#9CA3AF" />
               <View style={styles.helpContent}>
                 <Text style={styles.helpTitle}>
                   {isRecovery ? 'Need a new reset link?' : 'Need a new confirmation email?'}
@@ -260,22 +260,22 @@ export default function AuthCallbackScreen() {
                 <>
                   <TouchableOpacity style={styles.primaryButton} onPress={handleRequestNewResetLink}>
                     <Text style={styles.primaryButtonText}>Request New Reset Link</Text>
-                    <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
+                    <MaterialIcons name="arrow-forward" size={20} color="#ffffff" />
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.secondaryButton} onPress={handleGoToSignIn}>
-                    <MaterialIcons name="login" size={20} color="#a7f3d0" />
+                    <MaterialIcons name="login" size={20} color="#9CA3AF" />
                     <Text style={styles.secondaryButtonText}>Back to Sign In</Text>
                   </TouchableOpacity>
                 </>
               ) : (
                 <>
                   <TouchableOpacity style={styles.secondaryButton} onPress={handleOpenEmail}>
-                    <MaterialIcons name="email" size={20} color="#a7f3d0" />
+                    <MaterialIcons name="email" size={20} color="#9CA3AF" />
                     <Text style={styles.secondaryButtonText}>Check Email</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.primaryButton} onPress={handleGoToSignIn}>
                     <Text style={styles.primaryButtonText}>Go to Sign In</Text>
-                    <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
+                    <MaterialIcons name="arrow-forward" size={20} color="#ffffff" />
                   </TouchableOpacity>
                 </>
               )}
@@ -310,7 +310,7 @@ export default function AuthCallbackScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: '#0B0F14',
     paddingHorizontal: 24,
   },
   brandingHeader: {
@@ -337,7 +337,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#9CA3AF',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -379,20 +379,20 @@ const styles = StyleSheet.create({
   helpBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: 'rgba(5,46,27,0.4)',
+    backgroundColor: '#1F2937',
     borderRadius: 12,
     padding: 16,
     width: '100%',
     marginBottom: 24,
     borderWidth: 1,
-    borderColor: 'rgba(167,243,208,0.3)',
+    borderColor: '#374151',
   },
   helpContent: {
     flex: 1,
     marginLeft: 12,
   },
   helpTitle: {
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     fontSize: 15,
     fontWeight: '600',
     marginBottom: 4,
@@ -410,13 +410,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#059669',
     paddingVertical: 16,
     borderRadius: 999,
     gap: 8,
   },
   primaryButtonText: {
-    color: '#052e1b',
+    color: '#ffffff',
     fontSize: 18,
     fontWeight: 'bold',
   },
@@ -424,15 +424,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(5,46,27,0.4)',
+    backgroundColor: '#1F2937',
     paddingVertical: 16,
     borderRadius: 999,
     gap: 8,
     borderWidth: 2,
-    borderColor: '#a7f3d0',
+    borderColor: '#374151',
   },
   secondaryButtonText: {
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     fontSize: 16,
     fontWeight: '600',
   },

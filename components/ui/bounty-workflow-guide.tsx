@@ -174,7 +174,7 @@ export function BountyWorkflowGuide({ variant }: BountyWorkflowGuideProps) {
       {/* Header row */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <MaterialIcons name="help-outline" size={18} color="#10b981" />
+          <MaterialIcons name="help-outline" size={18} color="#059669" />
           <Text style={styles.headerTitle}>{config.title}</Text>
         </View>
         <View style={styles.headerActions}>
@@ -259,7 +259,7 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   header: {
     flexDirection: 'row',
@@ -288,7 +288,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   subtitle: {
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     fontSize: 13,
     lineHeight: 18,
     marginBottom: 10,
@@ -306,7 +306,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: 'rgba(16, 185, 129, 0.3)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     borderWidth: 1,
     borderColor: 'rgba(110, 231, 183, 0.4)',
     alignItems: 'center',
@@ -325,7 +325,7 @@ const styles = StyleSheet.create({
   },
   stepText: {
     flex: 1,
-    color: '#d1fae5',
+    color: '#1F2937',
     fontSize: 13,
     lineHeight: 19,
   },
@@ -334,7 +334,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     borderRadius: 20,
     paddingVertical: 8,
     paddingHorizontal: 20,

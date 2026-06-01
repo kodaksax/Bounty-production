@@ -79,7 +79,7 @@ export default function EmailConfirmationScreen() {
           ]}
         >
           <View style={styles.iconCircle}>
-            <MaterialIcons name="mark-email-read" size={64} color="#052e1b" />
+            <MaterialIcons name="mark-email-read" size={64} color="#059669" />
           </View>
         </Animated.View>
 
@@ -131,7 +131,7 @@ export default function EmailConfirmationScreen() {
 
         {/* Info box */}
         <View style={styles.infoBox}>
-          <MaterialIcons name="info-outline" size={18} color="#a7f3d0" />
+          <MaterialIcons name="info-outline" size={18} color="#9CA3AF" />
           <Text style={styles.infoText}>
             Can
             {"'"}
@@ -144,7 +144,7 @@ export default function EmailConfirmationScreen() {
       <View style={styles.actions}>
         <TouchableOpacity style={styles.primaryButton} onPress={handleGoToSignIn}>
           <Text style={styles.primaryButtonText}>Go to Sign In</Text>
-          <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
+          <MaterialIcons name="arrow-forward" size={20} color="#ffffff" />
         </TouchableOpacity>
       </View>
     </View>
@@ -154,7 +154,7 @@ export default function EmailConfirmationScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: '#0B0F14',
     paddingHorizontal: 24,
   },
   brandingHeader: {
@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#9CA3AF',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -198,11 +198,11 @@ const styles = StyleSheet.create({
   },
   stepsContainer: {
     width: '100%',
-    backgroundColor: 'rgba(5,46,27,0.4)',
+    backgroundColor: '#1F2937',
     borderRadius: 16,
     padding: 20,
     borderWidth: 2,
-    borderColor: 'rgba(167,243,208,0.3)',
+    borderColor: '#374151',
     marginBottom: 24,
   },
   step: {
@@ -213,13 +213,13 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#059669',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
   stepNumberText: {
-    color: '#052e1b',
+    color: '#ffffff',
     fontSize: 14,
     fontWeight: 'bold',
   },
@@ -240,14 +240,14 @@ const styles = StyleSheet.create({
   stepDivider: {
     width: 2,
     height: 20,
-    backgroundColor: 'rgba(167,243,208,0.3)',
+    backgroundColor: '#374151',
     marginLeft: 13,
     marginVertical: 8,
   },
   infoBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: 'rgba(5,46,27,0.4)',
+    backgroundColor: '#1F2937',
     borderRadius: 12,
     padding: 14,
     width: '100%',
@@ -266,13 +266,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#059669',
     paddingVertical: 16,
     borderRadius: 999,
     gap: 8,
   },
   primaryButtonText: {
-    color: '#052e1b',
+    color: '#ffffff',
     fontSize: 18,
     fontWeight: 'bold',
   },

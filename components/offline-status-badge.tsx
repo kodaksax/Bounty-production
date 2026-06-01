@@ -71,7 +71,7 @@ export function OfflineStatusBadge({ onPress }: OfflineStatusBadgeProps) {
 
                     <View style={styles.itemActions}>
                       <TouchableOpacity style={styles.actionBtn} onPress={() => retryItem(item.id)}>
-                        <MaterialIcons name="refresh" size={18} color="#065f46" />
+                        <MaterialIcons name="refresh" size={18} color="#111827" />
                       </TouchableOpacity>
                       <TouchableOpacity style={[styles.actionBtn, { marginLeft: 8 }]} onPress={() => removeItem(item.id)}>
                         <MaterialIcons name="delete" size={18} color="#b91c1c" />
@@ -204,7 +204,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   closeText: {
-    color: '#065f46',
+    color: '#111827',
     fontWeight: '600',
   },
 });

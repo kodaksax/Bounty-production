@@ -342,7 +342,7 @@ export function SignUpForm() {
         style={{ flex: 1 }}
       >
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-          <View className="flex-1 bg-emerald-700/95 px-6 pt-20 pb-8">
+          <View className="flex-1 bg-[#0B0F14] px-6 pt-20 pb-8">
             <View className="flex-row items-center justify-center mb-10">
               <BrandingLogo size="large" />
             </View>
@@ -511,7 +511,7 @@ export function SignUpForm() {
                   <MaterialIcons
                     name={ageVerified ? 'check-box' : 'check-box-outline-blank'}
                     size={22}
-                    color={ageVerified ? '#10b981' : '#fff'}
+                    color={ageVerified ? '#059669' : '#fff'}
                   />
                 </TouchableOpacity>
                 <Text className="text-white/90">I confirm I am 18 years or older</Text>
@@ -531,7 +531,7 @@ export function SignUpForm() {
                     <MaterialIcons
                       name={termsAccepted ? 'check-box' : 'check-box-outline-blank'}
                       size={22}
-                      color={termsAccepted ? '#10b981' : '#fff'}
+                      color={termsAccepted ? '#059669' : '#fff'}
                     />
                   </TouchableOpacity>
                   <View className="flex-1 flex-row flex-wrap">
@@ -563,7 +563,7 @@ export function SignUpForm() {
               <TouchableOpacity
                 onPress={handleSubmit}
                 disabled={isLoading}
-                className="w-full bg-emerald-600 rounded py-3 items-center flex-row justify-center"
+                className="w-full bg-[#059669] rounded py-3 items-center flex-row justify-center"
               >
                 {isLoading ? (
                   <ActivityIndicator color="#fff" />
@@ -591,7 +591,7 @@ export function SignUpForm() {
           edge here and apply the top inset manually on the header View below
           (using insets.top captured in the parent context where the provider works).
         */}
-        <SafeAreaView className="flex-1 bg-emerald-600" edges={['left', 'right', 'bottom']}>
+        <SafeAreaView className="flex-1 bg-[#111827]" edges={['left', 'right', 'bottom']}>
           <View
             className="flex-row justify-between items-center px-4 pb-4"
             style={{ paddingTop: Math.max(insets.top, Platform.OS === 'ios' ? 44 : 16) }}
@@ -621,7 +621,7 @@ export function SignUpForm() {
           </View>
           <ScrollView className="px-4" contentContainerStyle={{ paddingBottom: 96 }}>
             {(legalModal === 'terms' ? TERMS_TEXT : PRIVACY_TEXT).split(/\n\n+/).map((p, i) => (
-              <Text key={i} className="text-emerald-100 text-sm leading-6 mb-3">
+              <Text key={i} className="text-white text-sm leading-6 mb-3">
                 {p}
               </Text>
             ))}

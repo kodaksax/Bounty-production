@@ -495,7 +495,7 @@ export function PosterReviewModal({
           </Text>
           <Text style={styles.proofSize}>{formatFileSize(item.size)}</Text>
         </View>
-        <MaterialIcons name="open-in-new" size={20} color="#a7f3d0" />
+        <MaterialIcons name="open-in-new" size={20} color="#9CA3AF" />
       </TouchableOpacity>
     );
   };
@@ -526,7 +526,7 @@ export function PosterReviewModal({
 
           {isLoading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#10b981" />
+              <ActivityIndicator size="large" color="#059669" />
               <Text style={styles.loadingText}>Loading submission...</Text>
             </View>
           ) : !submission ? (
@@ -576,7 +576,7 @@ export function PosterReviewModal({
                   onPress={() => setShowPayoutWarning(false)}
                   disabled={isProcessing}
                 >
-                  <MaterialIcons name="arrow-back" size={18} color="#a7f3d0" />
+                  <MaterialIcons name="arrow-back" size={18} color="#9CA3AF" />
                   <Text style={styles.warningCancelText}>Back to review</Text>
                 </TouchableOpacity>
               </View>
@@ -768,7 +768,7 @@ export function PosterReviewModal({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0B0F14',
   },
   header: {
     flexDirection: 'row',
@@ -841,7 +841,7 @@ const styles = StyleSheet.create({
   avatarFallbackText: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#10b981',
+    color: '#059669',
   },
   hunterDetails: {
     flex: 1,
@@ -947,7 +947,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     paddingVertical: 16,
     borderRadius: 12,
     ...theme.shadows.emerald,
@@ -991,7 +991,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   primaryButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 12,
@@ -1038,15 +1038,15 @@ const styles = StyleSheet.create({
   },
   secondaryButton: {
     flex: 1,
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    backgroundColor: '#374151',
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#10b981',
+    borderColor: '#059669',
   },
   secondaryButtonText: {
-    color: '#10b981',
+    color: '#059669',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -1134,7 +1134,7 @@ const styles = StyleSheet.create({
     width: SLIDER_HANDLE_WIDTH,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     justifyContent: 'center',
     alignItems: 'center',
     top: 2,
@@ -1159,7 +1159,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(5, 150, 105, 0.2)',
   },
   warningCancelText: {
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     fontSize: 13,
     fontWeight: '600',
     letterSpacing: 0.3,

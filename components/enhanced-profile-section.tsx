@@ -342,7 +342,7 @@ export function EnhancedProfileSection({
             <TouchableOpacity
               onPress={toggleFollow}
               disabled={followLoading}
-              className={`px-4 py-2 rounded-lg ${isFollowing ? 'bg-[#1F2937] border border-[#374151] text-white' : 'bg-emerald-600'}`}
+              className={`px-4 py-2 rounded-lg ${isFollowing ? 'bg-[#1F2937] border border-[#374151] text-white' : 'bg-[#059669]'}`}
             >
               {followLoading ? (
                 <ActivityIndicator size="small" color={isFollowing ? '#059669' : '#ffffff'} />
@@ -541,7 +541,7 @@ export function EnhancedProfileSection({
               <View className="flex-row items-center gap-2">
                 {items.length > 1 && (
                   <TouchableOpacity
-                    className={`px-2 py-1 rounded border ${isReordering ? 'bg-emerald-100 border-emerald-400' : 'bg-gray-100 border-gray-300'}`}
+                    className={`px-2 py-1 rounded border ${isReordering ? 'bg-emerald-100 border-[#059669]' : 'bg-gray-100 border-gray-300'}`}
                     onPress={() => setIsReordering(!isReordering)}
                   >
                     <Text className={`text-xs ${isReordering ? 'text-emerald-700' : 'text-gray-400'}`}>{isReordering ? 'Done' : 'Reorder'}</Text>
@@ -607,7 +607,7 @@ export function EnhancedProfileSection({
                   >
                     <View
                       className={`w-32 h-32 bg-emerald-50 rounded-lg overflow-hidden items-center justify-center border border-[#1F2937] ${
-                        isReordering ? 'border-2 border-dashed border-emerald-400' : ''
+                        isReordering ? 'border-2 border-dashed border-[#059669]' : ''
                       }`}
                     >
                       {item.type === 'image' || item.type === 'video' ? (
@@ -834,7 +834,7 @@ export function PortfolioSection({
     <View className="mb-4 px-4 bg-[#0B0F14]">
       <View className="flex-row justify-between items-center mb-2">
         <View className="flex-row items-center">
-          <Text className="text-sm font-medium text-white">Portfolio</Text>
+          <Text className="text-lg font-medium text-white">Portfolio</Text>
           <Text className="text-xs text-gray-500 ml-2">
             ({items.length}/{MAX_PORTFOLIO_ITEMS})
           </Text>
@@ -843,7 +843,7 @@ export function PortfolioSection({
           <View className="flex-row items-center gap-2">
             {items.length > 1 && (
               <TouchableOpacity
-                className={`px-2 py-1 rounded border ${isReordering ? 'bg-emerald-100 border-emerald-400' : 'bg-gray-100 border-gray-300'}`}
+                className={`px-2 py-1 rounded border ${isReordering ? 'bg-emerald-100 border-[#059669]' : 'bg-gray-100 border-gray-300'}`}
                 onPress={() => setIsReordering(!isReordering)}
               >
                 <Text className={`text-xs ${isReordering ? 'text-emerald-700' : 'text-gray-400'}`}>{isReordering ? 'Done' : 'Reorder'}</Text>
@@ -908,7 +908,7 @@ export function PortfolioSection({
               >
                 <View
                   className={`w-32 h-32 bg-emerald-50 rounded-lg overflow-hidden items-center justify-center border border-[#1F2937] ${
-                    isReordering ? 'border-2 border-dashed border-emerald-400' : ''
+                    isReordering ? 'border-2 border-dashed border-[#059669]' : ''
                   }`}
                 >
                   {item.type === 'image' || item.type === 'video' ? (

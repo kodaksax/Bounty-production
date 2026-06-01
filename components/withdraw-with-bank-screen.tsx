@@ -449,13 +449,13 @@ export function WithdrawWithBankScreen({
               accessibilityLabel="Add bank account"
               accessibilityRole="button"
             >
-              <MaterialIcons name="add" size={18} color="#10b981" />
+              <MaterialIcons name="add" size={18} color="#059669" />
               <Text style={styles.addButtonText}>Add</Text>
             </TouchableOpacity>
           </View>
 
           {isLoadingAccounts ? (
-            <ActivityIndicator size="small" color="#10b981" style={{ marginVertical: 20 }} />
+            <ActivityIndicator size="small" color="#059669" style={{ marginVertical: 20 }} />
           ) : bankAccounts.length === 0 ? (
             <View style={styles.emptyState}>
               <MaterialIcons name="account-balance" size={48} color="rgba(255,255,255,0.3)" />
@@ -484,7 +484,7 @@ export function WithdrawWithBankScreen({
               >
                 <View style={styles.radioButton}>
                   {selectedBankAccount === account.id ? (
-                    <MaterialIcons name="radio-button-checked" size={24} color="#10b981" />
+                    <MaterialIcons name="radio-button-checked" size={24} color="#059669" />
                   ) : (
                     <MaterialIcons
                       name="radio-button-unchecked"
@@ -552,7 +552,7 @@ export function WithdrawWithBankScreen({
 
         {/* Info Card */}
         <View style={styles.infoCard}>
-          <MaterialIcons name="info-outline" size={20} color="#10b981" />
+          <MaterialIcons name="info-outline" size={20} color="#059669" />
           <Text style={styles.infoText}>
             Withdrawals typically arrive in 1-2 business days. There are no fees for standard bank
             transfers.
@@ -617,7 +617,7 @@ export function WithdrawWithBankScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#047857',
+    backgroundColor: '#0B0F14',
   },
   header: {
     flexDirection: 'row',
@@ -639,7 +639,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   balanceCard: {
-    backgroundColor: 'rgba(4,120,87,0.6)',
+    backgroundColor: '#1F2937',
     borderRadius: 16,
     padding: 20,
     marginBottom: 24,
@@ -673,7 +673,7 @@ const styles = StyleSheet.create({
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(16,185,129,0.2)',
+    backgroundColor: '#374151',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
@@ -681,13 +681,13 @@ const styles = StyleSheet.create({
   addButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#10b981',
+    color: '#059669',
     marginLeft: 4,
   },
   amountInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(4,120,87,0.6)',
+    backgroundColor: '#1F2937',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -711,7 +711,7 @@ const styles = StyleSheet.create({
   },
   quickAmountButton: {
     flex: 1,
-    backgroundColor: 'rgba(4,120,87,0.6)',
+    backgroundColor: '#1F2937',
     paddingVertical: 10,
     borderRadius: 8,
     alignItems: 'center',
@@ -724,7 +724,7 @@ const styles = StyleSheet.create({
   bankAccountCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(4,120,87,0.6)',
+    backgroundColor: '#1F2937',
     borderRadius: 12,
     padding: 12,
     marginBottom: 8,
@@ -732,8 +732,8 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   bankAccountCardSelected: {
-    borderColor: '#10b981',
-    backgroundColor: 'rgba(16,185,129,0.2)',
+    borderColor: '#059669',
+    backgroundColor: '#374151',
   },
   radioButton: {
     marginRight: 12,
@@ -753,7 +753,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   defaultBadge: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4,
@@ -786,7 +786,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   emptyStateButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -828,7 +828,7 @@ const styles = StyleSheet.create({
   },
   infoCard: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(16,185,129,0.2)',
+    backgroundColor: '#374151',
     borderRadius: 12,
     padding: 12,
     marginBottom: 24,
@@ -848,7 +848,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     borderRadius: 12,
     paddingVertical: 16,
     ...theme.shadows.emerald,

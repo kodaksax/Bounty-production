@@ -149,7 +149,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
             >
               <MaterialIcons
                 name="gps-fixed"
-                color={activeScreen === "bounty" ? "#fffef5" : "#d1fae5"}
+                color={activeScreen === "bounty" ? "#fffef5" : "#1F2937"}
                 size={CENTER_ICON_SIZE}
               />
             </TouchableOpacity>
@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center", // Center the three sections
     height: 110, // Slightly reduced for cleaner mobile look
-    backgroundColor: "#1a3d2e", // Primary background
+    backgroundColor: "#0B0F14", // Primary background
     paddingHorizontal: 16, // Reduced padding for more icon space
     paddingBottom: 12,
     borderTopLeftRadius: 28, // Increased radius for modern look
@@ -272,7 +272,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 3,
     borderWidth: 1.5,
-    borderColor: '#1a3d2e',
+    borderColor: '#0B0F14',
   },
   badgeText: {
     color: '#ffffff',

@@ -81,7 +81,7 @@ export function BountyCard({
     if (requestStatus === 'rejected') return '#ef4444' // red for rejected
     switch (bounty.status) {
       case "open":
-        return "#10b981"; // emerald-500
+        return "#059669"; // emerald-500
       case "in_progress":
         return "#fbbf24"; // amber-400
       case "completed":
@@ -93,7 +93,7 @@ export function BountyCard({
       case "cancellation_requested":
         return "#f97316"; // orange-500
       default:
-        return "#10b981";
+        return "#059669";
     }
   };
 
@@ -173,7 +173,7 @@ export function BountyCard({
         )}
         {bounty.status === 'in_progress' && bounty.accepted_by && (
           <View style={styles.filledBadge}>
-            <MaterialIcons name="check-circle" size={12} color="#065f46" />
+            <MaterialIcons name="check-circle" size={12} color="#111827" />
             <Text style={styles.filledText}>FILLED</Text>
           </View>
         )}
@@ -252,7 +252,7 @@ export function BountyCard({
                   onEdit();
                 }}
               >
-                <MaterialIcons name="edit" size={16} color="#10b981" />
+                <MaterialIcons name="edit" size={16} color="#059669" />
                 <Text style={styles.actionButtonText}>Edit</Text>
               </TouchableOpacity>
             )}
@@ -403,14 +403,14 @@ const styles = StyleSheet.create({
   filledBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#a7f3d0",
+    backgroundColor: "#9CA3AF",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
     gap: 4,
   },
   filledText: {
-    color: "#065f46",
+    color: "#111827",
     fontSize: 10,
     fontWeight: "800",
     letterSpacing: 0.4,
@@ -475,7 +475,7 @@ const styles = StyleSheet.create({
   honorBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#a7f3d0",
+    backgroundColor: "#9CA3AF",
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 6,

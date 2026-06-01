@@ -325,7 +325,7 @@ export default function IdentityVerificationScreen() {
 
           <View style={[styles.content, { marginTop: 32 }]}>
             <View style={[styles.iconCircle, styles.iconCircleSuccess]}>
-              <MaterialIcons name="hourglass-top" size={48} color="#a7f3d0" />
+              <MaterialIcons name="hourglass-top" size={48} color="#9CA3AF" />
             </View>
             <Text style={styles.title} accessibilityRole="header">Verification Submitted</Text>
             <Text style={styles.subtitle}>
@@ -372,7 +372,7 @@ export default function IdentityVerificationScreen() {
             accessibilityLabel="Go back"
             disabled={isSubmitting}
           >
-            <MaterialIcons name="arrow-back" size={24} color="#a7f3d0" />
+            <MaterialIcons name="arrow-back" size={24} color="#9CA3AF" />
           </TouchableOpacity>
           <BrandingLogo size="small" />
           <View style={{ width: 40 }} />
@@ -381,7 +381,7 @@ export default function IdentityVerificationScreen() {
         {/* Prompt */}
         <View style={styles.content}>
           <View style={styles.iconCircle}>
-            <MaterialIcons name="verified-user" size={48} color="#a7f3d0" />
+            <MaterialIcons name="verified-user" size={48} color="#9CA3AF" />
           </View>
           <Text style={styles.title} accessibilityRole="header">Verify Your Identity</Text>
           <Text style={styles.subtitle}>
@@ -408,7 +408,7 @@ export default function IdentityVerificationScreen() {
               <Image source={{ uri: idImage }} style={styles.uploadedImage} />
             ) : (
               <>
-                <MaterialIcons name="add-a-photo" size={40} color="#a7f3d0" />
+                <MaterialIcons name="add-a-photo" size={40} color="#9CA3AF" />
                 <Text style={styles.uploadText}>Tap to upload front of ID</Text>
               </>
             )}
@@ -429,7 +429,7 @@ export default function IdentityVerificationScreen() {
               <Image source={{ uri: selfieImage }} style={styles.uploadedImage} />
             ) : (
               <>
-                <MaterialIcons name="camera-front" size={40} color="#a7f3d0" />
+                <MaterialIcons name="camera-front" size={40} color="#9CA3AF" />
                 <Text style={styles.uploadText}>Tap to take a selfie</Text>
               </>
             )}
@@ -438,7 +438,7 @@ export default function IdentityVerificationScreen() {
 
         {/* Privacy notice */}
         <View style={styles.privacyBox}>
-          <MaterialIcons name="lock" size={20} color="#a7f3d0" />
+          <MaterialIcons name="lock" size={20} color="#9CA3AF" />
           <View style={styles.privacyContent}>
             <Text style={styles.privacyTitle}>Your Privacy</Text>
             <Text style={styles.privacyText}>
@@ -528,7 +528,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(167,243,208,0.3)',
   },
   iconCircleSuccess: {
-    borderColor: '#a7f3d0',
+    borderColor: '#9CA3AF',
   },
   content: {
     alignItems: 'center',
@@ -555,7 +555,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     marginBottom: SPACING.ELEMENT_GAP,
   },
   helperText: {
@@ -601,7 +601,7 @@ const styles = StyleSheet.create({
   privacyTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     marginBottom: 4,
   },
   privacyText: {
@@ -630,7 +630,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#9CA3AF',
     paddingVertical: SPACING.CARD_PADDING,
     borderRadius: 999,
     marginBottom: SPACING.COMPACT_GAP,
@@ -666,6 +666,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.3)',
   },
   progressDotActive: {
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#9CA3AF',
   },
 });

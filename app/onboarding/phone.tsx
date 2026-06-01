@@ -149,7 +149,7 @@ export default function PhoneScreen() {
         {/* Header with Back Button and Branding */}
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <MaterialIcons name="arrow-back" size={24} color="#a7f3d0" />
+            <MaterialIcons name="arrow-back" size={24} color="#9CA3AF" />
           </TouchableOpacity>
           <View style={styles.brandingHeader}>
             <BrandingLogo size="small" />
@@ -160,7 +160,7 @@ export default function PhoneScreen() {
         {/* Trust Badge Header */}
         <View style={styles.trustBadgeHeader}>
           <View style={styles.trustBadge}>
-            <MaterialIcons name="verified" size={20} color="#10b981" />
+            <MaterialIcons name="verified" size={20} color="#059669" />
             <Text style={styles.trustBadgeText}>Build Your Trust Score</Text>
           </View>
         </View>
@@ -168,7 +168,7 @@ export default function PhoneScreen() {
         {/* Content */}
         <View style={styles.content}>
           <View style={styles.iconCircle}>
-            <MaterialIcons name="phone-android" size={48} color="#a7f3d0" />
+            <MaterialIcons name="phone-android" size={48} color="#9CA3AF" />
           </View>
           <Text style={styles.title}>Verify Your Phone</Text>
           <Text style={styles.subtitle}>
@@ -183,7 +183,7 @@ export default function PhoneScreen() {
             <Text style={styles.trustBenefitText}>Earn a verified badge on your profile</Text>
           </View>
           <View style={styles.trustBenefitItem}>
-            <MaterialIcons name="trending-up" size={18} color="#34d399" />
+            <MaterialIcons name="trending-up" size={18} color="#059669" />
             <Text style={styles.trustBenefitText}>Increase your chances of getting responses on your bounties</Text>
           </View>
           <View style={styles.trustBenefitItem}>
@@ -206,7 +206,7 @@ export default function PhoneScreen() {
               maxLength={20}
             />
             <View style={styles.privacyNote}>
-              <MaterialIcons name="lock" size={16} color="#a7f3d0" />
+              <MaterialIcons name="lock" size={16} color="#9CA3AF" />
               <Text style={styles.privacyText}>
                 Never shared publicly — only used for verification
               </Text>
@@ -215,7 +215,7 @@ export default function PhoneScreen() {
 
           {/* Info box */}
           <View style={styles.infoBox}>
-            <MaterialIcons name="security" size={20} color="#a7f3d0" />
+            <MaterialIcons name="security" size={20} color="#9CA3AF" />
             <Text style={styles.infoText}>
               We use bank-level encryption to protect your data. Your phone number is never displayed to other users.
             </Text>
@@ -292,15 +292,15 @@ const styles = StyleSheet.create({
   trustBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(16,185,129,0.2)',
+    backgroundColor: '#374151',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(16,185,129,0.4)',
+    borderColor: '#374151',
   },
   trustBadgeText: {
-    color: '#10b981',
+    color: '#059669',
     fontSize: 14,
     fontWeight: '600',
     marginLeft: 8,
@@ -360,7 +360,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   label: {
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     fontSize: 14,
     fontWeight: '600',
     marginBottom: 8,
@@ -383,7 +383,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   privacyText: {
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     fontSize: 13,
     marginLeft: 6,
     flex: 1,
@@ -410,7 +410,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#9CA3AF',
     paddingVertical: 16,
     borderRadius: 999,
     marginBottom: 12,
@@ -442,6 +442,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.3)',
   },
   progressDotActive: {
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#9CA3AF',
   },
 });

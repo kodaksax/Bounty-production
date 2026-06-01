@@ -44,7 +44,7 @@ const styles = StyleSheet.create({
   balanceCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#047857',
+    backgroundColor: '#0B0F14',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,

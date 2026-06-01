@@ -266,7 +266,7 @@ export function WorkflowDisputeModal({
             <MaterialIcons
               name={selectedReason === reason ? 'radio-button-checked' : 'radio-button-unchecked'}
               size={20}
-              color={selectedReason === reason ? '#10b981' : '#6ee7b7'}
+              color={selectedReason === reason ? '#059669' : '#6ee7b7'}
             />
             <Text style={styles.reasonOptionText}>{reason}</Text>
           </TouchableOpacity>
@@ -507,7 +507,7 @@ export function WorkflowDisputeModal({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0B0F14',
   },
   header: {
     flexDirection: 'row',
@@ -630,8 +630,8 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   reasonOptionSelected: {
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    borderColor: '#10b981',
+    backgroundColor: '#374151',
+    borderColor: '#059669',
   },
   reasonOptionText: {
     flex: 1,
@@ -662,7 +662,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   charCountValid: {
-    color: '#10b981',
+    color: '#059669',
   },
   evidenceInputRow: {
     flexDirection: 'row',
@@ -679,7 +679,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(110, 231, 183, 0.2)',
   },
   addButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -687,7 +687,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   addButtonDisabled: {
-    backgroundColor: 'rgba(16, 185, 129, 0.3)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
   uploadButton: {
     flexDirection: 'row',
@@ -758,7 +758,7 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: 'rgba(110, 231, 183, 0.1)',
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0B0F14',
   },
   backBtn: {
     flexDirection: 'row',
@@ -776,13 +776,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 10,
   },
   nextBtnDisabled: {
-    backgroundColor: 'rgba(16, 185, 129, 0.3)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
   nextBtnText: {
     color: '#fff',

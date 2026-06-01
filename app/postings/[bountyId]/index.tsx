@@ -67,11 +67,11 @@ export default function BountyDashboard() {
       return
     }
     // Ensure the app-level safe area color matches this screen's dark background
-    pushColor('#1a3d2e');
+    pushColor('#0B0F14');
     loadBounty(routeBountyId)
     loadConversation(routeBountyId)
     return () => {
-      popColor('#1a3d2e');
+      popColor('#0B0F14');
     }
   }, [routeBountyId]);
 
@@ -193,7 +193,7 @@ export default function BountyDashboard() {
   const getStatusBadgeColor = (status?: string) => {
     switch (status) {
       case 'open':
-        return '#10b981'; // emerald-500
+        return '#059669'; // emerald-500
       case 'in_progress':
         return '#fbbf24'; // amber-400
       case 'completed':
@@ -201,7 +201,7 @@ export default function BountyDashboard() {
       case 'archived':
         return '#6b7280'; // gray-500
       default:
-        return '#10b981';
+        return '#059669';
     }
   };
 
@@ -236,7 +236,7 @@ export default function BountyDashboard() {
   if (isLoading) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#10b981" />
+        <ActivityIndicator size="large" color="#059669" />
         <Text style={styles.loadingText}>Loading bounty...</Text>
       </SafeAreaView>
     );
@@ -282,7 +282,7 @@ export default function BountyDashboard() {
   return (
     <SafeAreaView style={[styles.container, { width: '100%', alignSelf: 'stretch' }]} edges={["top"]}>
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: '#1a3d2e' }]}>
+      <View style={[styles.header, { backgroundColor: '#0B0F14' }]}>
         <TouchableOpacity style={styles.backIcon} onPress={() => router.back()}>
           <MaterialIcons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
@@ -414,7 +414,7 @@ export default function BountyDashboard() {
                   </Text>
                   {isCompleted && (
                     <View style={styles.completedCheckmark}>
-                      <MaterialIcons name="check-circle" size={16} color="#10b981" />
+                      <MaterialIcons name="check-circle" size={16} color="#059669" />
                     </View>
                   )}
                 </TouchableOpacity>
@@ -530,13 +530,13 @@ export default function BountyDashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0B0F14',
     width: '100%',
     alignSelf: 'stretch',
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0B0F14',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 16,
@@ -547,7 +547,7 @@ const styles = StyleSheet.create({
   },
   errorContainer: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0B0F14',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 16,
@@ -559,7 +559,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -586,7 +586,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: 'rgba(5, 150, 105, 0.3)',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(16, 185, 129, 0.2)',
+    borderBottomColor: '#374151',
   },
   backIcon: {
     padding: 8,
@@ -609,7 +609,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.2)',
+    borderColor: '#374151',
     marginBottom: 16,
   },
   bountyHeader: {
@@ -621,7 +621,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: 'rgba(16, 185, 129, 0.3)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -663,7 +663,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
@@ -683,7 +683,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   categoryPillText: {
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     fontSize: 12,
     fontWeight: '600',
   },
@@ -707,16 +707,16 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: 'rgba(5, 150, 105, 0.2)',
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.2)',
+    borderColor: '#374151',
   },
   stageItemActive: {
-    backgroundColor: 'rgba(16, 185, 129, 0.3)',
-    borderColor: '#10b981',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderColor: '#059669',
     borderWidth: 2,
   },
   stageItemCompleted: {
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    borderColor: '#10b981',
+    backgroundColor: '#374151',
+    borderColor: '#059669',
   },
   stageItemLocked: {
     opacity: 0.5,
@@ -737,16 +737,16 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     opacity: 0.25,
-    shadowColor: '#10b981',
+    shadowColor: '#059669',
     shadowOpacity: 0.9,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 0 },
     elevation: 10,
   },
   stageIconActive: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
   },
   stageIconCompleted: {
     backgroundColor: '#059669',
@@ -784,12 +784,12 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.2)',
+    borderColor: '#374151',
     minHeight: 80,
     textAlignVertical: 'top',
   },
   sendButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -797,7 +797,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sendButtonDisabled: {
-    backgroundColor: 'rgba(16, 185, 129, 0.3)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
   noConversation: {
     backgroundColor: 'rgba(5, 150, 105, 0.2)',
@@ -805,7 +805,7 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.2)',
+    borderColor: '#374151',
   },
   noConversationText: {
     color: '#fff',
@@ -824,7 +824,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.2)',
+    borderColor: '#374151',
     marginBottom: 16,
   },
   description: {
@@ -856,7 +856,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   nextButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -875,7 +875,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.2)',
+    borderColor: '#374151',
     marginBottom: 16,
   },
   preAcceptanceTitle: {
@@ -886,7 +886,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   preAcceptanceText: {
-    color: '#d1fae5',
+    color: '#1F2937',
     fontSize: 13,
   },
   secondaryBtn: {

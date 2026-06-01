@@ -228,7 +228,7 @@ export default function UploadIDScreen() {
             accessibilityLabel="Go back"
             accessibilityHint="Returns to previous screen"
           >
-            <MaterialIcons name="arrow-back" size={24} color="#a7f3d0" accessibilityElementsHidden={true} />
+            <MaterialIcons name="arrow-back" size={24} color="#9CA3AF" accessibilityElementsHidden={true} />
           </TouchableOpacity>
           <BrandingLogo size="small" />
           <View style={{ width: 40 }} />
@@ -237,7 +237,7 @@ export default function UploadIDScreen() {
         {/* Content */}
         <View style={styles.content}>
           <View style={styles.iconCircle}>
-            <MaterialIcons name="verified-user" size={48} color="#a7f3d0" accessibilityElementsHidden={true} />
+            <MaterialIcons name="verified-user" size={48} color="#9CA3AF" accessibilityElementsHidden={true} />
           </View>
           <Text style={styles.title} accessibilityRole="header">Verify Your Identity</Text>
           <Text style={styles.subtitle}>
@@ -253,7 +253,7 @@ export default function UploadIDScreen() {
             <Text style={styles.benefitText}>Premium verified badge on profile</Text>
           </View>
           <View style={styles.benefit}>
-            <MaterialIcons name="attach-money" size={18} color="#10b981" />
+            <MaterialIcons name="attach-money" size={18} color="#059669" />
             <Text style={styles.benefitText}>Higher transaction limits</Text>
           </View>
           <View style={styles.benefit}>
@@ -281,7 +281,7 @@ export default function UploadIDScreen() {
               accessibilityState={{ selected: selectedDocType === 'driversLicense' }}
               accessibilityHint="Select this document type for verification"
             >
-              <MaterialIcons name="credit-card" size={24} color={selectedDocType === 'driversLicense' ? '#10b981' : '#a7f3d0'} accessibilityElementsHidden={true} />
+              <MaterialIcons name="credit-card" size={24} color={selectedDocType === 'driversLicense' ? '#059669' : '#9CA3AF'} accessibilityElementsHidden={true} />
               <Text style={[styles.docTypeText, selectedDocType === 'driversLicense' && styles.docTypeTextActive]}>
                 Driver
                 {"'"}
@@ -300,7 +300,7 @@ export default function UploadIDScreen() {
               accessibilityState={{ selected: selectedDocType === 'passport' }}
               accessibilityHint="Select this document type for verification. Only front photo required"
             >
-              <MaterialIcons name="flight" size={24} color={selectedDocType === 'passport' ? '#10b981' : '#a7f3d0'} accessibilityElementsHidden={true} />
+              <MaterialIcons name="flight" size={24} color={selectedDocType === 'passport' ? '#059669' : '#9CA3AF'} accessibilityElementsHidden={true} />
               <Text style={[styles.docTypeText, selectedDocType === 'passport' && styles.docTypeTextActive]}>
                 Passport
               </Text>
@@ -317,7 +317,7 @@ export default function UploadIDScreen() {
               accessibilityState={{ selected: selectedDocType === 'nationalId' }}
               accessibilityHint="Select this document type for verification"
             >
-              <MaterialIcons name="badge" size={24} color={selectedDocType === 'nationalId' ? '#10b981' : '#a7f3d0'} accessibilityElementsHidden={true} />
+              <MaterialIcons name="badge" size={24} color={selectedDocType === 'nationalId' ? '#059669' : '#9CA3AF'} accessibilityElementsHidden={true} />
               <Text style={[styles.docTypeText, selectedDocType === 'nationalId' && styles.docTypeTextActive]}>
                 National ID
               </Text>
@@ -342,7 +342,7 @@ export default function UploadIDScreen() {
               <Image source={{ uri: frontImage }} style={styles.uploadedImage} accessibilityLabel={`Front side of ${selectedDocType === 'driversLicense' ? "driver's license" : selectedDocType === 'passport' ? 'passport' : 'national ID'} photo`} />
             ) : (
               <>
-                <MaterialIcons name="add-a-photo" size={48} color="#a7f3d0" accessibilityElementsHidden={true} />
+                <MaterialIcons name="add-a-photo" size={48} color="#9CA3AF" accessibilityElementsHidden={true} />
                 <Text style={styles.uploadText}>Tap to upload</Text>
               </>
             )}
@@ -363,7 +363,7 @@ export default function UploadIDScreen() {
                   <Image source={{ uri: backImage }} style={styles.uploadedImage} accessibilityLabel={`Back side of ${selectedDocType === 'driversLicense' ? "driver's license" : selectedDocType === 'nationalId' ? 'national ID' : 'document'} photo`} />
                 ) : (
                   <>
-                    <MaterialIcons name="add-a-photo" size={48} color="#a7f3d0" accessibilityElementsHidden={true} />
+                    <MaterialIcons name="add-a-photo" size={48} color="#9CA3AF" accessibilityElementsHidden={true} />
                     <Text style={styles.uploadText}>Tap to upload</Text>
                   </>
                 )}
@@ -374,7 +374,7 @@ export default function UploadIDScreen() {
 
         {/* Privacy Notice */}
         <View style={styles.privacyBox}>
-          <MaterialIcons name="lock" size={20} color="#a7f3d0" />
+          <MaterialIcons name="lock" size={20} color="#9CA3AF" />
           <View style={styles.privacyContent}>
             <Text style={styles.privacyTitle}>Your Privacy</Text>
             <Text style={styles.privacyText}>
@@ -463,7 +463,7 @@ const styles = StyleSheet.create({
   benefitsTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     marginBottom: SPACING.ELEMENT_GAP,
   },
   benefit: {
@@ -482,7 +482,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     marginBottom: SPACING.ELEMENT_GAP,
   },
   docTypeContainer: {
@@ -499,8 +499,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(167,243,208,0.2)',
   },
   docTypeButtonActive: {
-    borderColor: '#10b981',
-    backgroundColor: 'rgba(16,185,129,0.1)',
+    borderColor: '#059669',
+    backgroundColor: 'rgba(255,255,255,0.05)',
   },
   docTypeText: {
     fontSize: 12,
@@ -509,13 +509,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   docTypeTextActive: {
-    color: '#10b981',
+    color: '#059669',
     fontWeight: '600',
   },
   uploadLabel: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     marginBottom: SPACING.COMPACT_GAP,
   },
   uploadBox: {
@@ -555,7 +555,7 @@ const styles = StyleSheet.create({
   privacyTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     marginBottom: 4,
   },
   privacyText: {
@@ -567,7 +567,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#9CA3AF',
     paddingVertical: SPACING.CARD_PADDING,
     borderRadius: 999,
     marginBottom: SPACING.SCREEN_HORIZONTAL,

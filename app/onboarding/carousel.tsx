@@ -42,7 +42,7 @@ const slides: SlideData[] = [
     icon: 'gps-fixed',
     title: 'Welcome to Bounty',
     description: 'The trusted marketplace for getting things done. Post a task, find local help, and pay safely — all in one place.',
-    color: '#a7f3d0',
+    color: '#9CA3AF',
   },
   {
     id: '2',
@@ -56,14 +56,14 @@ const slides: SlideData[] = [
     icon: 'people',
     title: 'Step 2: Review & Accept',
     description: 'Receive applications from qualified hunters. Review their profiles and ratings, then accept the best match. Funds are held safely in escrow.',
-    color: '#34d399',
+    color: '#059669',
   },
   {
     id: '4',
     icon: 'chat-bubble',
     title: 'Step 3: Chat & Coordinate',
     description: 'Message your hunter directly in the app. Share details, coordinate timing, and track progress. Everything stays organized in one place.',
-    color: '#10b981',
+    color: '#059669',
   },
   {
     id: '5',
@@ -84,7 +84,7 @@ const slides: SlideData[] = [
     icon: 'security',
     title: 'Safe & Secure',
     description: 'Payments protected by escrow. Verified profiles and ratings. Phone verification adds extra security. Your money is always safe.',
-    color: '#a7f3d0',
+    color: '#9CA3AF',
   },
 ];
 
@@ -356,7 +356,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(167,243,208,0.5)',
   },
   stepBadgeText: {
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     fontSize: 12,
     fontWeight: 'bold',
     letterSpacing: 1.5,
@@ -395,7 +395,7 @@ const styles = StyleSheet.create({
   dot: {
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#9CA3AF',
     marginHorizontal: 4,
   },
   actionContainer: {
@@ -406,7 +406,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#9CA3AF',
     paddingVertical: 16,
     borderRadius: 999,
     gap: 8,

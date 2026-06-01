@@ -76,7 +76,7 @@ export function AchievementsGrid({ badgesEarned }: AchievementsGridProps) {
           <Text
             style={{
               fontSize: 12,
-              color: "#d1fae5",
+              color: "#1F2937",
               textAlign: "center",
             }}
             numberOfLines={2}

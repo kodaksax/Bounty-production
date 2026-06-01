@@ -180,7 +180,7 @@ export default function VerifyPhoneScreen() {
         {/* Header */}
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <MaterialIcons name="arrow-back" size={24} color="#a7f3d0" />
+            <MaterialIcons name="arrow-back" size={24} color="#9CA3AF" />
           </TouchableOpacity>
           <View style={styles.brandingHeader}>
             <BrandingLogo size="small" />
@@ -191,7 +191,7 @@ export default function VerifyPhoneScreen() {
         {/* Content */}
         <View style={styles.content}>
           <View style={styles.iconCircle}>
-            <MaterialIcons name="sms" size={48} color="#a7f3d0" />
+            <MaterialIcons name="sms" size={48} color="#9CA3AF" />
           </View>
           <Text style={styles.title}>Enter Verification Code</Text>
           <Text style={styles.subtitle}>
@@ -287,7 +287,7 @@ export default function VerifyPhoneScreen() {
 
         {/* Info Box */}
         <View style={styles.infoBox}>
-          <MaterialIcons name="info-outline" size={18} color="#a7f3d0" />
+          <MaterialIcons name="info-outline" size={18} color="#9CA3AF" />
           <Text style={styles.infoText}>
             Phone verification is recommended and helps build trust with other users. You can always verify later from your profile.
           </Text>
@@ -350,7 +350,7 @@ const styles = StyleSheet.create({
   },
   phoneNumber: {
     fontWeight: '600',
-    color: '#a7f3d0',
+    color: '#9CA3AF',
   },
   otpContainer: {
     flexDirection: 'row',
@@ -371,7 +371,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   otpInputFilled: {
-    borderColor: '#a7f3d0',
+    borderColor: '#9CA3AF',
     backgroundColor: 'rgba(167,243,208,0.1)',
   },
   otpInputError: {
@@ -393,7 +393,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#9CA3AF',
     paddingVertical: 16,
     borderRadius: 999,
     marginBottom: 16,

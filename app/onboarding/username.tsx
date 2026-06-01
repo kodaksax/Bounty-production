@@ -275,7 +275,7 @@ export default function UsernameScreen() {
 
         {/* Header */}
         <View style={styles.header}>
-          <MaterialIcons name="person-outline" size={56} color="#a7f3d0" />
+          <MaterialIcons name="person-outline" size={56} color="#9CA3AF" />
           <Text style={styles.title}>Choose Your Username</Text>
           <Text style={styles.subtitle}>
             This is how others will find you. Pick something unique and memorable.
@@ -297,10 +297,10 @@ export default function UsernameScreen() {
               autoFocus
             />
             {checking && (
-              <ActivityIndicator size="small" color="#a7f3d0" style={styles.indicator} />
+              <ActivityIndicator size="small" color="#9CA3AF" style={styles.indicator} />
             )}
             {!checking && username && isValid && (
-              <MaterialIcons name="check-circle" size={24} color="#10b981" style={styles.indicator} />
+              <MaterialIcons name="check-circle" size={24} color="#059669" style={styles.indicator} />
             )}
           </View>
           
@@ -331,7 +331,7 @@ export default function UsernameScreen() {
               accessibilityLabel="Accept terms and privacy policy"
               style={styles.checkboxButton}
             >
-              <MaterialIcons name={accepted ? 'check-box' : 'check-box-outline-blank'} size={22} color="#a7f3d0" />
+              <MaterialIcons name={accepted ? 'check-box' : 'check-box-outline-blank'} size={22} color="#9CA3AF" />
             </TouchableOpacity>
             <Text style={styles.legalText}>I agree to the</Text>
             <TouchableOpacity 
@@ -454,7 +454,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   linkText: {
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     textDecorationLine: 'underline',
     fontSize: 13,
     fontWeight: '600',
@@ -474,7 +474,7 @@ const styles = StyleSheet.create({
   },
   atSymbol: {
     fontSize: 24,
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     fontWeight: '600',
     marginRight: 4,
   },
@@ -518,7 +518,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#9CA3AF',
     paddingVertical: 16,
     borderRadius: 999,
     marginBottom: 20,
@@ -545,6 +545,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.3)',
   },
   progressDotActive: {
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#9CA3AF',
   },
 });

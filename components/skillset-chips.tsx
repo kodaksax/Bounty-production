@@ -21,7 +21,7 @@ export function SkillsetChips({ skills }: SkillsetChipsProps) {
   const alias: Record<string, string> = { heart: "favorite", target: "gps-fixed", globe: "public" };
   const getIconComponent = (iconName: string) => {
     const mappedName = alias[iconName] || iconName;
-    return <MaterialIcons name={mappedName as any} size={16} color="#d1fae5" />;
+    return <MaterialIcons name={mappedName as any} size={16} color="white" />;
   };
 
   if (!skills || skills.length === 0) {
@@ -42,7 +42,7 @@ export function SkillsetChips({ skills }: SkillsetChipsProps) {
           </Text>
           {skill.credentialUrl && (
             <View style={styles.credentialBadge}>
-              <MaterialIcons name="attach-file" size={12} color="#34d399" />
+              <MaterialIcons name="attach-file" size={12} color="#059669" />
             </View>
           )}
         </View>
@@ -74,7 +74,7 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontSize: 13,
-    color: "#d1fae5",
+    color: "white",
     maxWidth: 150,
   },
   credentialBadge: {

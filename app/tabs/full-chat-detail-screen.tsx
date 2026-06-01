@@ -215,7 +215,7 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
      <View style={styles.header}>
        <View style={styles.headerInner}>
          <TouchableOpacity onPress={onBack} style={styles.backButton}>
-           <MaterialIcons name="arrow-back" size={24} color="#064E3B" />
+           <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
          </TouchableOpacity>
          <TouchableOpacity
            onPress={() => {
@@ -373,15 +373,15 @@ export default FullChatDetailScreen;
 const styles = StyleSheet.create({
  container: {
    flex: 1,
-   backgroundColor: '#FFFFFF',
+   backgroundColor: '#0B0F14',
  },
  header: {
-   backgroundColor: '#FFFFFF',
+   backgroundColor: '#0B0F14',
    paddingTop: 48,
    paddingBottom: 12,
    paddingHorizontal: 16,
    borderBottomWidth: 1,
-   borderBottomColor: '#E5E7EB',
+   borderBottomColor: '#374151',
  },
  headerInner: {
    flexDirection: 'row',
@@ -402,7 +402,7 @@ const styles = StyleSheet.create({
    marginRight: 12,
  },
  avatarFallback: {
-   backgroundColor: '#D1FAE5',
+   backgroundColor: '#1F2937',
    width: 40,
    height: 40,
    borderRadius: 20,
@@ -410,14 +410,14 @@ const styles = StyleSheet.create({
    alignItems: 'center',
  },
  avatarFallbackText: {
-   color: '#064E3B',
+   color: '#6ee7b7',
    fontWeight: '600',
    fontSize: 14,
  },
  headerName: {
    fontSize: 16,
    fontWeight: '600',
-   color: '#111827',
+   color: '#ffffff',
  },
  headerSubtext: {
    fontSize: 12,
@@ -447,23 +447,23 @@ const styles = StyleSheet.create({
  },
  inputContainer: {
    padding: 12,
-   backgroundColor: '#FFFFFF',
+   backgroundColor: '#0B0F14',
    borderTopWidth: 1,
-   borderTopColor: '#E5E7EB',
+   borderTopColor: '#374151',
  },
  inputRow: {
    flexDirection: 'row',
    alignItems: 'flex-end',
-   backgroundColor: '#F9FAFB',
+   backgroundColor: '#1F2937',
    borderRadius: 20,
    paddingHorizontal: 16,
    paddingVertical: 8,
    borderWidth: 1,
-   borderColor: '#E5E7EB',
+   borderColor: '#374151',
  },
  inlineTextInput: {
    flex: 1,
-   color: '#111827',
+   color: '#ffffff',
    fontSize: 15,
    maxHeight: 100,
    paddingTop: 4,

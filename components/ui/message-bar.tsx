@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   sendButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -118,6 +118,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sendButtonDisabled: {
-    backgroundColor: 'rgba(16, 185, 129, 0.3)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
 });

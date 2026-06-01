@@ -22,7 +22,7 @@ const BADGE_COLORS: Record<string, string> = {
   email_confirmed: '#3b82f6',  // blue-500
   phone_verified: '#8b5cf6',   // violet-500
   id_verified: '#06b6d4',      // cyan-500
-  profile_complete: '#10b981', // emerald-500
+  profile_complete: '#059669', // emerald-500
   trusted: '#f59e0b',          // amber-500
 };
 

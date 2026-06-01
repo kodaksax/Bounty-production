@@ -409,7 +409,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
                   : 'Verify your identity'
               }
             >
-              <MaterialIcons name="verified-user" size={20} color="#a7f3d0" />
+              <MaterialIcons name="verified-user" size={20} color="#9CA3AF" />
               <View style={styles.verifyIdentityTextWrap}>
                 <Text style={styles.verifyIdentityTitle}>
                   {authProfile?.id_verification_status === 'rejected'
@@ -443,17 +443,17 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
         {/* History Link (raised by 20px) */}
         <View style={{ marginTop: -20 }} className="px-4 py-2">
           <TouchableOpacity
-            className="flex-row items-center justify-between bg-emerald-700/30 rounded-lg p-3 touch-target-min"
+            className="flex-row items-center justify-between bg-[#111827] rounded-lg p-3 touch-target-min"
             onPress={() => {
               // Navigate to history screen
               setShowHistory(true)
             }}
           >
             <View className="flex-row items-center">
-              <MaterialIcons name="history" size={20} color="#a7f3d0" />
+              <MaterialIcons name="history" size={20} color="#9CA3AF" />
               <Text className="text-sm font-medium text-white ml-2">View History</Text>
             </View>
-            <MaterialIcons name="chevron-right" size={20} color="#a7f3d0" />
+            <MaterialIcons name="chevron-right" size={20} color="#9CA3AF" />
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -489,7 +489,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   verifyIdentityTitle: {
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -505,9 +505,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: "600",
-    color: "#9CA3AF",
+    color: "white",
   },
   editButton: {
     paddingHorizontal: 8,

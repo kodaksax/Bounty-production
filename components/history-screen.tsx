@@ -151,7 +151,7 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#10b981" />
+          <ActivityIndicator size="large" color="#059669" />
         </View>
       ) : (
         <FlatList
@@ -163,7 +163,7 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={handleRefresh}
-              tintColor="#10b981"
+              tintColor="#059669"
             />
           }
           ListEmptyComponent={
@@ -265,7 +265,7 @@ const styles = StyleSheet.create({
   honorBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#a7f3d0",
+    backgroundColor: "#9CA3AF",
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -286,7 +286,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   positiveAmount: {
-    color: "#10b981",
+    color: "#059669",
   },
   negativeAmount: {
     color: "#ef4444",

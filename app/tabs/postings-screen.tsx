@@ -1014,7 +1014,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                       refreshing={isRefreshing}
                       onRefresh={refreshAll}
                       tintColor="#ffffff"
-                      colors={['#10b981']}
+                      colors={['#059669']}
                     />
                   }
                   contentContainerStyle={listContentPadding}
@@ -1071,7 +1071,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                       refreshing={isRefreshing}
                       onRefresh={refreshAll}
                       tintColor="#ffffff"
-                      colors={['#10b981']}
+                      colors={['#059669']}
                     />
                   }
                   contentContainerStyle={{ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
@@ -1157,7 +1157,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                       refreshing={isRefreshing}
                       onRefresh={refreshAll}
                       tintColor="#ffffff"
-                      colors={['#10b981']}
+                      colors={['#059669']}
                     />
                   }
                   contentContainerStyle={{ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}

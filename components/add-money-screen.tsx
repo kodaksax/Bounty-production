@@ -297,9 +297,9 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
   }
 
   return (
-    <View className="flex-1 bg-emerald-600">
+    <View className="flex-1 bg-[#059669]">
       {/* Header */}
-      <View className="sticky top-0 z-10 bg-emerald-600 px-4 pt-safe pb-2">
+      <View className="sticky top-0 z-10 bg-[#059669] px-4 pt-safe pb-2">
         <View className="flex-row items-center justify-between">
           <TouchableOpacity onPress={onBack} className="p-2 touch-target-min">
             <MaterialIcons name="close" size={24} color="#ffffff" />
@@ -377,7 +377,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
       </View>
 
       {/* Add Button - fixed above home indicator */}
-      <View className="fixed left-0 right-0 bg-emerald-600 pb-safe" style={{ position: 'absolute', bottom: 66 }}>
+      <View className="fixed left-0 right-0 bg-[#059669] pb-safe" style={{ position: 'absolute', bottom: 66 }}>
         <View className="px-4">
           {/* Apple Pay button (iOS only) */}
           {Platform.OS === 'ios' && isApplePayAvailable && (
@@ -433,7 +433,7 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
 
           {/* Hint for new users */}
           {paymentMethods.length === 0 && !stripeLoading && !stripeError && (
-            <Text className="text-emerald-100/70 text-xs text-center mt-3 px-6">
+            <Text className="text-white/70 text-xs text-center mt-3 px-6">
               Link a credit card or bank account to add funds to your wallet.
             </Text>
           )}

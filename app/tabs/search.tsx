@@ -873,8 +873,8 @@ const styles = {
   },
 
   tabActive: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    borderColor: 'rgba(16, 185, 129, 0.4)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderColor: '#374151',
   },
 
   tabText: {
@@ -965,7 +965,7 @@ const styles = {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
   },
 
   card: {
@@ -1010,7 +1010,7 @@ const styles = {
   },
 
   amount: {
-    color: '#10b981',
+    color: '#059669',
     fontWeight: '700',
     fontSize: 13,
   },
@@ -1071,7 +1071,7 @@ const styles = {
     paddingVertical: 4,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.25)',
+    borderColor: 'rgba(255,255,255,0.1)',
   },
 
   skillText: {
@@ -1098,7 +1098,7 @@ const styles = {
   },
 
   clearText: {
-    color: '#10b981',
+    color: '#059669',
     fontSize: 12,
   },
 
@@ -1206,8 +1206,8 @@ const styles = {
   },
 
   filterOptionActive: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    borderColor: 'rgba(16, 185, 129, 0.4)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderColor: '#374151',
   },
 
   filterOptionText: {
@@ -1273,7 +1273,7 @@ const styles = {
     alignItems: 'center',
     backgroundColor: '#059669',
     borderRadius: 8,
-    shadowColor: '#10b981',
+    shadowColor: '#059669',
     shadowOpacity: 0.3,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
@@ -1323,7 +1323,7 @@ const styles = {
     paddingVertical: 3,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.25)',
+    borderColor: 'rgba(255,255,255,0.1)',
   },
 
   suggestionTypeText: {

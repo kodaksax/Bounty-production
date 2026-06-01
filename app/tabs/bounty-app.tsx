@@ -194,8 +194,8 @@ function BountyAppInner() {
 
   if (isVerificationInProgress) {
     return (
-      <View className="flex-1 items-center justify-center bg-emerald-600">
-        <ActivityIndicator size="large" color="#10b981" />
+      <View className="flex-1 items-center justify-center bg-[#059669]">
+        <ActivityIndicator size="large" color="#059669" />
         <Text className="text-white mt-4 text-base">Loading...</Text>
       </View>
     )

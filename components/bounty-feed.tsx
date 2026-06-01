@@ -352,7 +352,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       return (
         <View style={{ width: '100%', alignItems: 'center' }}>
           <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>No bounties match this filter.</Text>
-          <TouchableOpacity onPress={() => handleSetActiveCategory('all')} style={{ backgroundColor: '#a7f3d0', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 }}>
+          <TouchableOpacity onPress={() => handleSetActiveCategory('all')} style={{ backgroundColor: '#9CA3AF', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 }}>
             <Text style={{ color: '#052e1b', fontWeight: '700' }}>Clear filter</Text>
           </TouchableOpacity>
         </View>
@@ -541,7 +541,7 @@ const styles = StyleSheet.create({
     minHeight: SIZING.MIN_TOUCH_TARGET,
   },
   chipActive: {
-    backgroundColor: '#D1FAE5',
+    backgroundColor: '#1F2937',
     borderColor: '#059669',
   },
   chipLabel: {

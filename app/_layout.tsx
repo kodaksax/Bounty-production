@@ -296,7 +296,7 @@ const SessionMonitorGate = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669', // emerald-600
+    backgroundColor: '#0B0F14', // page background
   },
   inner: {
     flex: 1,

@@ -271,7 +271,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
             <View style={{
               flexDirection: 'row',
               marginBottom: 20,
-              backgroundColor: '#047857',
+              backgroundColor: '#0B0F14',
               borderRadius: 12,
               padding: 4,
             }}>
@@ -324,7 +324,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
-                backgroundColor: '#047857',
+                backgroundColor: '#0B0F14',
                 borderRadius: 14,
                 padding: 18,
                 marginBottom: 20,
@@ -378,7 +378,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
                 </Text>
                 <TouchableOpacity
                   onPress={() => refreshWithRetry(3, 1000)}
-                  style={{ marginTop: 16, backgroundColor: '#065f46', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10 }}
+                  style={{ marginTop: 16, backgroundColor: '#111827', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10 }}
                   accessibilityRole="button"
                   accessibilityLabel="Retry loading payment methods"
                 >
@@ -421,7 +421,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
                   <View style={{
                     flexDirection: 'row',
                     alignItems: 'center',
-                    backgroundColor: 'rgba(16,185,129,0.25)',
+                    backgroundColor: 'rgba(255,255,255,0.1)',
                     borderRadius: 14,
                     padding: 18,
                     marginBottom: 14,

@@ -79,7 +79,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(110,231,183,0.3)',
   },
   bubbleActive: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
   },
   bubbleCompleted: {
     backgroundColor: '#059669',
@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 6,
   },
   label: {
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     fontSize: 10,
     marginLeft: 4,
   },

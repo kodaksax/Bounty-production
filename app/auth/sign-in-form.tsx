@@ -469,7 +469,7 @@ export function SignInForm() {
     <AnimatedScreen animationType="fade" duration={400}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-          <View className="flex-1 bg-emerald-700/95 px-6 pt-20 pb-8">
+          <View className="flex-1 bg-[#0B0F14] px-6 pt-20 pb-8">
             <View className="flex-row items-center justify-center mb-10">
               <Image
                 source={require('../../assets/images/bounty-logo.png')}
@@ -544,7 +544,7 @@ export function SignInForm() {
                 <View className="flex-row items-center justify-between mb-1">
                   <Text className="text-sm text-white/80">Password</Text>
                   <TouchableOpacity onPress={() => router.push('/auth/reset-password')}>
-                    <Text className="text-[11px] text-emerald-200">Forgot?</Text>
+                    <Text className="text-[11px] text-[#9CA3AF]">Forgot?</Text>
                   </TouchableOpacity>
                 </View>
                 <View className="relative">
@@ -605,7 +605,7 @@ export function SignInForm() {
                 </View>
               )}
 
-              <TouchableOpacity onPress={handleSubmit} disabled={isSubmitting} className="w-full bg-emerald-600 rounded py-3 items-center flex-row justify-center">
+              <TouchableOpacity onPress={handleSubmit} disabled={isSubmitting} className="w-full bg-[#059669] rounded py-3 items-center flex-row justify-center">
                 {isSubmitting ? (
                   <>
                     <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />
