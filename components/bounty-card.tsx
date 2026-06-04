@@ -2,9 +2,10 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from 'expo-router';
 import type { Bounty } from "lib/services/database.types";
 import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-// 1. Update imports
-import { theme } from "lib/theme";
+import { theme as legacyTheme } from "lib/theme";
 import { shareBounty } from "lib/utils/share-utils";
+import { useAppThemeContext } from 'lib/themes/AppThemeContext';
+import type { AppTheme } from 'lib/themes/types';
 
 interface BountyCardProps {
   bounty: Bounty;
@@ -62,7 +63,9 @@ export function BountyCard({
   onWithdrawApplication,
 }: BountyCardProps) {
   const isOwner = currentUserId === bounty.user_id;
-  const router = useRouter()
+  const router = useRouter();
+  const { theme } = useAppThemeContext();
+  const styles = makeStyles(theme);
 
   const handleShare = async () => {
     await shareBounty({
@@ -193,7 +196,7 @@ export function BountyCard({
       <View style={styles.metaRow}>
         {bounty.location && (
           <View style={styles.metaItem}>
-            <MaterialIcons name="place" size={14} color="#6ee7b7" />
+            <MaterialIcons name="place" size={14} color={theme.primaryLight} />
             <Text style={styles.metaText} numberOfLines={1}>
               {bounty.location}
             </Text>
@@ -204,7 +207,7 @@ export function BountyCard({
             <MaterialIcons
               name={bounty.work_type === "online" ? "computer" : "person-pin"}
               size={14}
-              color="#6ee7b7"
+              color={theme.primaryLight}
             />
             <Text style={styles.metaText}>
               {bounty.work_type === "online" ? "Online" : "In Person"}
@@ -327,7 +330,7 @@ export function BountyCard({
                 handleShare();
               }}
             >
-              <MaterialIcons name="share" size={16} color="#6ee7b7" />
+              <MaterialIcons name="share" size={16} color={theme.primaryLight} />
               <Text style={styles.actionButtonText}>Share</Text>
             </TouchableOpacity>
           </View>
@@ -349,250 +352,251 @@ export function BountyCard({
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: "#111827",
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 18,
-    borderWidth: 1,
-    borderColor: "#374151",
-    ...theme.shadows.lg,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-    gap: 8,
-  },
-  avatarContainer: {
-    marginRight: 4,
-  },
-  avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: "#374151",
-  },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusText: {
-    color: "#fff",
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-  },
-  urgentBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fef2f2",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 4,
-  },
-  urgentText: {
-    color: "#dc2626",
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  filledBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#9CA3AF",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 4,
-  },
-  filledText: {
-    color: "#111827",
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.4,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#fff",
-    marginBottom: 8,
-  },
-  description: {
-    fontSize: 14,
-    color: "#9CA3AF",
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 12,
-  },
-  metaItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  metaText: {
-    fontSize: 12,
-    color: "#9CA3AF",
-  },
-  footer: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: "#1F2937",
-  },
-  ratingChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#1F2937",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 4,
-  },
-  ratingText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#fcd34d",
-  },
-  ratingCountText: {
-    fontSize: 11,
-    color: "#9CA3AF",
-  },
-  amount: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: "#fcd34d",
-  },
-  honorBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#9CA3AF",
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    gap: 4,
-  },
-  honorText: {
-    color: "#052e1b",
-    fontWeight: "800",
-    fontSize: 13,
-  },
-  revisionBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 6,
-    marginLeft: 8,
-  },
-  revisionText: {
-    color: '#92400e',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-  },
-  cancellationBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(249, 115, 22, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 6,
-  },
-  cancellationText: {
-    color: '#92400e',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-  },
-  disputeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(220, 38, 38, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 6,
-  },
-  disputeText: {
-    color: '#7c2d12',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-  },
-  ownerActions: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#1F2937",
-  },
-  ownerLabel: {
-    fontSize: 11,
-    color: "#6ee7b7",
-    fontWeight: "600",
-    marginBottom: 8,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  actionButtons: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  actionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#1F2937",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 8,
-    gap: 6,
-  },
-  actionButtonText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#9CA3AF",
-  },
-  cancelButton: {
-    backgroundColor: "rgba(249, 115, 22, 0.2)",
-  },
-  cancelButtonText: {
-    color: "#fb923c",
-  },
-  viewButton: {
-    backgroundColor: "rgba(59, 130, 246, 0.2)",
-  },
-  viewButtonText: {
-    color: "#60a5fa",
-  },
-  disputeButton: {
-    backgroundColor: "rgba(220, 38, 38, 0.2)",
-  },
-  disputeButtonText: {
-    color: "#f87171",
-  },
-  // Hunter action styles
-  discardButton: {
-    backgroundColor: 'rgba(239, 68, 68, 0.08)'
-  },
-  discardText: {
-    color: '#ef4444'
-  },
-  withdrawButton: {
-    backgroundColor: 'rgba(245, 158, 11, 0.08)'
-  },
-  withdrawText: {
-    color: '#f59e0b'
-  },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    card: {
+      backgroundColor: theme.surface,
+      borderRadius: 16,
+      padding: 18,
+      marginBottom: 18,
+      borderWidth: 1,
+      borderColor: theme.border,
+      ...legacyTheme.shadows.lg,
+    },
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 12,
+      gap: 8,
+    },
+    avatarContainer: {
+      marginRight: 4,
+    },
+    avatar: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      borderWidth: 2,
+      borderColor: theme.border,
+    },
+    statusBadge: {
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 12,
+    },
+    statusText: {
+      color: "#fff",
+      fontSize: 10,
+      fontWeight: "800",
+      letterSpacing: 0.5,
+    },
+    urgentBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: "#fef2f2",
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12,
+      gap: 4,
+    },
+    urgentText: {
+      color: "#dc2626",
+      fontSize: 10,
+      fontWeight: "700",
+    },
+    filledBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: "#9CA3AF",
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12,
+      gap: 4,
+    },
+    filledText: {
+      color: "#111827",
+      fontSize: 10,
+      fontWeight: "800",
+      letterSpacing: 0.4,
+    },
+    title: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: theme.text,
+      marginBottom: 8,
+    },
+    description: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      lineHeight: 20,
+      marginBottom: 12,
+    },
+    metaRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      marginBottom: 12,
+    },
+    metaItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+    },
+    metaText: {
+      fontSize: 12,
+      color: theme.textSecondary,
+    },
+    footer: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingTop: 14,
+      borderTopWidth: 1,
+      borderTopColor: theme.surfaceSecondary,
+    },
+    ratingChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: theme.surfaceSecondary,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12,
+      gap: 4,
+    },
+    ratingText: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: "#fcd34d",
+    },
+    ratingCountText: {
+      fontSize: 11,
+      color: theme.textSecondary,
+    },
+    amount: {
+      fontSize: 20,
+      fontWeight: "800",
+      color: "#fcd34d",
+    },
+    honorBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: "#9CA3AF",
+      borderRadius: 999,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      gap: 4,
+    },
+    honorText: {
+      color: "#052e1b",
+      fontWeight: "800",
+      fontSize: 13,
+    },
+    revisionBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: 'rgba(245, 158, 11, 0.15)',
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12,
+      gap: 6,
+      marginLeft: 8,
+    },
+    revisionText: {
+      color: '#92400e',
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 0.4,
+    },
+    cancellationBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: 'rgba(249, 115, 22, 0.15)',
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12,
+      gap: 6,
+    },
+    cancellationText: {
+      color: '#92400e',
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 0.4,
+    },
+    disputeBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: 'rgba(220, 38, 38, 0.15)',
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12,
+      gap: 6,
+    },
+    disputeText: {
+      color: '#7c2d12',
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 0.4,
+    },
+    ownerActions: {
+      marginTop: 12,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: theme.surfaceSecondary,
+    },
+    ownerLabel: {
+      fontSize: 11,
+      color: theme.primaryLight,
+      fontWeight: "600",
+      marginBottom: 8,
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+    },
+    actionButtons: {
+      flexDirection: "row",
+      gap: 8,
+    },
+    actionButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: theme.surfaceSecondary,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderRadius: 8,
+      gap: 6,
+    },
+    actionButtonText: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: theme.textSecondary,
+    },
+    cancelButton: {
+      backgroundColor: "rgba(249, 115, 22, 0.2)",
+    },
+    cancelButtonText: {
+      color: "#fb923c",
+    },
+    viewButton: {
+      backgroundColor: "rgba(59, 130, 246, 0.2)",
+    },
+    viewButtonText: {
+      color: "#60a5fa",
+    },
+    disputeButton: {
+      backgroundColor: "rgba(220, 38, 38, 0.2)",
+    },
+    disputeButtonText: {
+      color: "#f87171",
+    },
+    discardButton: {
+      backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    },
+    discardText: {
+      color: '#ef4444',
+    },
+    withdrawButton: {
+      backgroundColor: 'rgba(245, 158, 11, 0.08)',
+    },
+    withdrawText: {
+      color: '#f59e0b',
+    },
+  });
+}

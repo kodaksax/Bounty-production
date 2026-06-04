@@ -7,6 +7,7 @@ import { EmptyState } from "components/ui/empty-state"
 import { ConversationsListSkeleton } from "components/ui/skeleton-loaders"
 import { useRouter } from "expo-router"
 import { cn } from "lib/utils"
+import { useAppThemeContext } from "../../lib/themes/AppThemeContext"
 import React, { useCallback, useMemo, useRef, useState } from "react"
 import {
   Alert,
@@ -68,6 +69,7 @@ export function MessengerScreen({
   onConversationModeChange?: (inConversation: boolean) => void
 }) {
   const router = useRouter()
+  const { theme } = useAppThemeContext()
   const { conversations, loading, error, markAsRead, deleteConversation, refresh } =
     useConversations()
 
@@ -187,7 +189,7 @@ export function MessengerScreen({
       return (
         <View style={{ flex: 1 }}>
           <Animated.View style={{ flex: 1, opacity: inboxOpacity }}>
-            <View className="flex-1 bg-[#0B0F14]">
+            <View style={{ flex: 1, backgroundColor: theme.background }}>
               <FlatList
                 data={conversations}
                 keyExtractor={keyExtractor}
@@ -204,7 +206,7 @@ export function MessengerScreen({
               width: "100%",
               height: "100%",
               transform: [{ translateX: chatTranslateX }],
-              backgroundColor: "#0B0F14",
+              backgroundColor: theme.background,
               zIndex: 50,
             }}
           >
@@ -219,10 +221,13 @@ export function MessengerScreen({
   }
 
   return (
-    <View className="flex-1 bg-[#0B0F14]">
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
       <ConnectionStatus />
 
-      <View className="px-4 pt-12 pb-3 border-b border-[#1F2937] bg-[#0B0F14]">
+      <View
+        className="px-4 pt-12 pb-3 border-b"
+        style={{ borderBottomColor: theme.border, backgroundColor: theme.background }}
+      >
         <View className="flex-row justify-between items-center">
           <BrandingLogo size="medium" />
           <WalletBalanceButton onPress={() => onNavigate?.("wallet")} />
@@ -230,7 +235,7 @@ export function MessengerScreen({
       </View>
 
       <View className="px-4 py-3">
-        <Text className="text-lg font-semibold text-white">Messages</Text>
+        <Text className="text-lg font-semibold" style={{ color: theme.text }}>Messages</Text>
       </View>
 
       <FlatList
@@ -258,6 +263,7 @@ const ConversationItem = React.memo(function ConversationItem({
   onPress,
   onDelete,
 }: ConversationItemProps) {
+  const { theme } = useAppThemeContext()
   const time = useMemo(
     () => formatConversationTime(conversation.updatedAt),
     [conversation.updatedAt]
@@ -276,7 +282,8 @@ const ConversationItem = React.memo(function ConversationItem({
     >
       <TouchableOpacity
         onPress={onPress}
-        className="flex-row items-center px-3 py-3 mb-2 bg-[#111827] border border-[#1F2937] rounded-2xl"
+        className="flex-row items-center px-3 py-3 mb-2 rounded-2xl"
+        style={{ backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border }}
       >
         <View className="mr-3">
           <Avatar className="h-12 w-12">
@@ -284,23 +291,24 @@ const ConversationItem = React.memo(function ConversationItem({
               src={conversation.avatar || "/placeholder.svg"}
               alt={conversation.name}
             />
-            <AvatarFallback className="bg-[#1F2937] text-gray-300">
-              {conversation.name?.[0] ?? "?"}
+            <AvatarFallback style={{ backgroundColor: theme.surfaceSecondary }}>
+              <Text style={{ color: theme.textSecondary, fontSize: 14, fontWeight: '600' }}>
+                {conversation.name?.[0] ?? "?"}
+              </Text>
             </AvatarFallback>
           </Avatar>
         </View>
 
         <View className="flex-1 ml-2">
-          <Text className="text-white font-semibold">
+          <Text className="font-semibold" style={{ color: theme.text }}>
             {conversation.name}
           </Text>
-
-          <Text className="text-sm text-gray-400 truncate">
+          <Text className="text-sm" style={{ color: theme.textSecondary }} numberOfLines={1}>
             {conversation.lastMessage || "No messages yet"}
           </Text>
         </View>
 
-        <Text className="text-xs text-gray-500">{time}</Text>
+        <Text style={{ fontSize: 12, color: theme.textDisabled }}>{time}</Text>
       </TouchableOpacity>
     </Swipeable>
   )

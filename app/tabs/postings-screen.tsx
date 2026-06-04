@@ -34,6 +34,7 @@ import { useAcceptRequest } from '../../hooks/useAcceptRequest'
 import { useBountyForm } from '../../hooks/useBountyForm'
 import { useRejectRequest } from '../../hooks/useRejectRequest'
 import { useWallet } from '../../lib/wallet-context'
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
 
 
 
@@ -117,6 +118,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   const STICKY_BOTTOM_EXTRA = 44 // extra height used by chips/title in sticky bar
   const BOTTOM_NAV_OFFSET = 60// height of BottomNav + gap so sticky actions sit fully above it
   const { balance, deposit, createEscrow, refundEscrow } = useWallet()
+  const { theme } = useAppThemeContext()
   // Filter chip state for each tab; kept separate so toggling one doesn't affect the other.
   // In Progress supports: all, review, applied, in_progress, rejected.
   // My Postings supports: all, review, open, in_progress.
@@ -760,7 +762,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   }
 
   return (
-    <View className="flex-1 bg-[#0B0F14]">
+    <View className="flex-1" style={{ backgroundColor: theme.background }}>
         {/* Fixed Header (overlay) - measured height to align content under tabs */}
         <View
           onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
@@ -771,8 +773,8 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
               left: 0,
               right: 0,
               zIndex: 20,
-              backgroundColor: "#0B0F14",
-              paddingTop: insets.top, // ensure content starts right under the status bar safe area
+              backgroundColor: theme.background,
+              paddingTop: insets.top,
             },
             showShadow
               ? {
@@ -806,7 +808,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                 <MaterialIcons
                   name="bookmark"
                   size={20}
-                  color="#ffffff"
+                  color={theme.text}
                   accessibilityElementsHidden={true}
                 />
               </TouchableOpacity>
@@ -820,7 +822,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
 
           {/* Title (centered below header) */}
           <View className="px-4">
-            <Text style={styles.titleText} className="text-white font-bold tracking-wide uppercase text-center w-full">
+            <Text style={[styles.titleText, { color: theme.text }]} className="font-bold tracking-wide uppercase text-center w-full">
               {activeTab === "inProgress"
                 ? "In Progress"
                 : activeTab === "requests"
@@ -833,8 +835,8 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
 
 
           {/* Tabs - Segmented Control Style */}
-          <View className="px-4 mb-4 bg-[#0B0F14]">
-            <View className="flex-row items-center rounded-full bg-[#1F2937] p-1 border border-[#374151]/50">
+          <View className="px-4 mb-4" style={{ backgroundColor: theme.background }}>
+            <View className="flex-row items-center rounded-full p-1 border" style={{ backgroundColor: theme.surfaceSecondary, borderColor: theme.border }}>
               {tabs.map((tab, idx) => {
                 const isActive = activeTab === tab.id
                 const badgeCount = getTabBadgeCount(tab.id)
@@ -843,11 +845,9 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                     key={tab.id}
                     onPress={() => setActiveTab(tab.id)}
                     activeOpacity={0.85}
-                    className={cn(
-                      "flex-1 py-2 mx-0.5 rounded-full items-center justify-center touch-target-min",
-                      isActive ? "bg-white" : "bg-transparent"
-                    )}
+                    className="flex-1 py-2 mx-0.5 rounded-full items-center justify-center touch-target-min"
                     style={{
+                      backgroundColor: isActive ? theme.surface : 'transparent',
                       shadowColor: isActive ? '#000' : 'transparent',
                       shadowOffset: { width: 0, height: isActive ? 2 : 0 },
                       shadowOpacity: isActive ? 0.12 : 0,
@@ -867,14 +867,12 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                       <MaterialIcons
                         name={tab.icon as keyof typeof MaterialIcons.glyphMap}
                         size={14}
-                        color={isActive ? '#059669' : 'rgba(156, 163, 175, 0.75)'}
+                        color={isActive ? theme.primary : theme.textDisabled}
                         accessibilityElementsHidden={true}
                       />
                       <Text
-                        className={cn(
-                          "text-xs font-semibold tracking-wide ml-1",
-                          isActive ? "text-[#059669]" : "text-[#6B7280]"
-                        )}
+                        className="text-xs font-semibold tracking-wide ml-1"
+                        style={{ color: isActive ? theme.primary : theme.textDisabled }}
                         numberOfLines={1}
                       >
                         {tab.shortLabel.toUpperCase()}
@@ -967,13 +965,14 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                             <TouchableOpacity
                               key={f}
                               onPress={() => setStatusFilterInProgress(f)}
-                              className={cn('px-3 py-1.5 rounded-full border flex-row items-center', selected ? 'bg-[#1F2937] border-[#6ee7b7]' : 'bg-[#111827] border-[#374151]')}
+                              className="px-3 py-1.5 rounded-full border flex-row items-center"
+                              style={{ backgroundColor: selected ? theme.surfaceSecondary : theme.surface, borderColor: selected ? theme.primaryLight : theme.border }}
                               accessibilityRole="button"
                               accessibilityLabel={f === 'review' ? `Filter by work needing your review${count > 0 ? `, ${count} item${count === 1 ? '' : 's'}` : ''}` : `Filter by ${label} work in progress`}
                               accessibilityState={{ selected }}
                               accessibilityHint={selected ? 'Currently active filter' : f === 'review' ? 'Tap to show only bounties that need your action' : `Tap to show only ${label} work`}
                             >
-                              <Text className={cn('text-xs', selected ? 'text-white font-medium' : 'text-[#9CA3AF]')}>{label}</Text>
+                              <Text className="text-xs" style={{ fontWeight: selected ? '500' : 'normal', color: selected ? theme.text : theme.textSecondary }}>{label}</Text>
                               {f === 'review' && count > 0 && (
                                 <View className="ml-1.5 px-1.5 rounded-full bg-amber-400 min-w-[18px] items-center">
                                   <Text className="text-[10px] font-bold text-[#111827]">{count > 99 ? "99+" : count}</Text>
@@ -1013,7 +1012,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                     <RefreshControl
                       refreshing={isRefreshing}
                       onRefresh={refreshAll}
-                      tintColor="#ffffff"
+                      tintColor={theme.text}
                       colors={['#059669']}
                     />
                   }
@@ -1070,7 +1069,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                     <RefreshControl
                       refreshing={isRefreshing}
                       onRefresh={refreshAll}
-                      tintColor="#ffffff"
+                      tintColor={theme.text}
                       colors={['#059669']}
                     />
                   }
@@ -1110,13 +1109,14 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                             <TouchableOpacity
                               key={f}
                               onPress={() => setStatusFilterMyPostings(f)}
-                              className={cn('px-3 py-1.5 rounded-full border flex-row items-center', selected ? 'bg-[#1F2937] border-[#6ee7b7]' : 'bg-[#111827] border-[#374151]')}
+                              className="px-3 py-1.5 rounded-full border flex-row items-center"
+                              style={{ backgroundColor: selected ? theme.surfaceSecondary : theme.surface, borderColor: selected ? theme.primaryLight : theme.border }}
                               accessibilityRole="button"
                               accessibilityLabel={f === 'review' ? `Filter by postings needing your review${count > 0 ? `, ${count} item${count === 1 ? '' : 's'}` : ''}` : `Filter by ${label} postings`}
                               accessibilityState={{ selected }}
                               accessibilityHint={selected ? 'Currently active filter' : f === 'review' ? 'Tap to show only postings that need your action' : `Tap to show only ${label} bounties`}
                             >
-                              <Text className={cn('text-xs', selected ? 'text-white font-medium' : 'text-[#9CA3AF]')}>{label}</Text>
+                              <Text className="text-xs" style={{ fontWeight: selected ? '500' : 'normal', color: selected ? theme.text : theme.textSecondary }}>{label}</Text>
                               {f === 'review' && count > 0 && (
                                 <View className="ml-1.5 px-1.5 rounded-full bg-amber-400 min-w-[18px] items-center">
                                   <Text className="text-[10px] font-bold text-[#111827]">{count > 99 ? "99+" : count}</Text>
@@ -1156,7 +1156,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                     <RefreshControl
                       refreshing={isRefreshing}
                       onRefresh={refreshAll}
-                      tintColor="#ffffff"
+                      tintColor={theme.text}
                       colors={['#059669']}
                     />
                   }
@@ -1176,7 +1176,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                 />
               ) : (
                 <View className="flex items-center justify-center h-full">
-                  <Text className="text-[#9CA3AF] text-center">Content will appear here</Text>
+                  <Text className="text-center" style={{ color: theme.textSecondary }}>Content will appear here</Text>
                 </View>
               ))}
           </View>
@@ -1185,22 +1185,21 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
         {/* Sticky Bottom Actions - iPhone optimized with safe area inset */}
         {activeTab === "new" && !showMultiStepFlow && (
           <View
-            className="absolute left-0 right-0 bottom-0 bg-[#0B0F14]/95 border-t border-[#1F2937]"
+            className="absolute left-0 right-0 bottom-0 border-t"
             style={{
+              backgroundColor: theme.background,
+              borderColor: theme.surface,
               paddingHorizontal: 12,
               paddingTop: 8,
-              // Ensure internal content has breathing room above device inset
               paddingBottom: Math.max(insets.bottom, 12),
-              // Reserve more space for the chip row + CTA
               minHeight: BOTTOM_ACTIONS_HEIGHT + STICKY_BOTTOM_EXTRA,
-              // Position above BottomNav instead of underneath it
               bottom: BOTTOM_NAV_OFFSET
             }}
           >
             {/* Amount header row */}
             <View className="flex-row items-center justify-between mb-2 px-2">
-              <Text className="text-white text-base font-medium">Bounty Amount</Text>
-              <Text className="text-[#9CA3AF] text-sm">Current Balance: ${balance.toFixed(2)}</Text>
+              <Text className="text-base font-medium" style={{ color: theme.text }}>Bounty Amount</Text>
+              <Text className="text-sm" style={{ color: theme.textSecondary }}>Current Balance: ${balance.toFixed(2)}</Text>
             </View>
 
             {/* Preset amount chips + dynamic Other chip (horizontal scroll to keep fixed height) */}
@@ -1215,22 +1214,16 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                       onPress={() => handleChooseAmount(amt)}
                       className={cn(
                         "px-4 py-2 rounded-full border",
-                        selected
-                          ? lowBalance
-                            ? "bg-amber-400/90 border-amber-200"
-                            : "bg-[#059669] border-[#6ee7b7]"
-                          : "bg-[#111827] border-[#374151]",
+                        selected && lowBalance ? "bg-amber-400/90 border-amber-200" : ""
                       )}
+                      style={!(selected && lowBalance) ? {
+                        backgroundColor: selected ? theme.primary : theme.surface,
+                        borderColor: selected ? theme.primaryLight : theme.border,
+                      } : undefined}
                     >
                       <Text
-                        className={cn(
-                          "font-medium",
-                          selected
-                            ? lowBalance
-                              ? "text-amber-950"
-                              : "text-white"
-                            : "text-white"
-                        )}
+                        className={cn("font-medium", selected && lowBalance ? "text-amber-950" : "")}
+                        style={!(selected && lowBalance) ? { color: selected ? '#ffffff' : theme.text } : undefined}
                       >
                         ${amt}
                       </Text>
@@ -1247,22 +1240,16 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                       onPress={() => setShowAddBountyAmount(true)}
                       className={cn(
                         "px-4 py-2 rounded-full border",
-                        highlight
-                          ? lowBalance
-                            ? "bg-amber-400/90 border-amber-200"
-                            : "bg-[#059669] border-[#6ee7b7]"
-                          : "bg-[#111827] border-[#374151]"
+                        highlight && lowBalance ? "bg-amber-400/90 border-amber-200" : ""
                       )}
+                      style={!(highlight && lowBalance) ? {
+                        backgroundColor: highlight ? theme.primary : theme.surface,
+                        borderColor: highlight ? theme.primaryLight : theme.border,
+                      } : undefined}
                     >
                       <Text
-                        className={cn(
-                          "font-medium",
-                          highlight
-                            ? lowBalance
-                              ? "text-amber-950"
-                              : "text-white"
-                            : "text-white"
-                        )}
+                        className={cn("font-medium", highlight && lowBalance ? "text-amber-950" : "")}
+                        style={!(highlight && lowBalance) ? { color: highlight ? '#ffffff' : theme.text } : undefined}
                       >
                         {displayLabel}
                       </Text>
@@ -1312,9 +1299,12 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                     onPress={handlePress}
                     className={cn(
                       "self-center w-full px-8 py-4 rounded-2xl border",
-                      lowBalance ? "border-amber-400 bg-amber-500/25" : "border-[#374151] bg-[#059669]",
-                      requiredMissing && !lowBalance ? "border-red-400/70 bg-[#111827]" : ""
+                      lowBalance ? "border-amber-400 bg-amber-500/25" : ""
                     )}
+                    style={!lowBalance ? {
+                      borderColor: requiredMissing ? 'rgba(248,113,113,0.7)' : theme.border,
+                      backgroundColor: requiredMissing ? theme.surface : theme.primary,
+                    } : undefined}
                     activeOpacity={0.85}
                   >
                     <View className="flex-row items-center justify-center gap-2">

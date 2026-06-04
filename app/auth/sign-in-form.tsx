@@ -26,6 +26,7 @@ import { suggestEmailCorrection, validateEmail } from '../../lib/utils/auth-vali
 import { CAPTCHA_THRESHOLD } from '../../lib/utils/captcha'
 import { getUserFriendlyError } from '../../lib/utils/error-messages'
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation'
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
 
 WebBrowser.maybeCompleteAuthSession()
 
@@ -34,8 +35,9 @@ export default function SignInRoute() {
 }
 
 export function SignInForm() {
-  // set status/safe-area color for this screen
-  useScreenBackground('#097959ff') // EMERALD_800 / dark
+  const { theme } = useAppThemeContext()
+  // set status/safe-area color to match screen background
+  useScreenBackground(theme.background)
   const router = useRouter()
   const [identifier, setIdentifier] = useState('') // email or username
   const [password, setPassword] = useState('')
@@ -469,7 +471,7 @@ export function SignInForm() {
     <AnimatedScreen animationType="fade" duration={400}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-          <View className="flex-1 bg-[#0B0F14] px-6 pt-20 pb-8">
+          <View className="flex-1 px-6 pt-20 pb-8" style={{ backgroundColor: theme.background }}>
             <View className="flex-row items-center justify-center mb-10">
               <Image
                 source={require('../../assets/images/bounty-logo.png')}
@@ -499,7 +501,7 @@ export function SignInForm() {
               )}
 
               <View>
-                <Text className="text-sm text-white/80 mb-1">Email</Text>
+                <Text className="text-sm mb-1" style={{ color: theme.text }}>Email</Text>
                 <TextInput
                   nativeID="identifier"
                   value={identifier}
@@ -515,9 +517,10 @@ export function SignInForm() {
                   autoCapitalize="none"
                   autoComplete="email"
                   editable={!isSubmitting}
-                  className={`w-full bg-white/10 rounded px-3 py-3 text-white ${fieldErrors.identifier ? 'border border-red-400' : ''}`}
+                  className={`w-full rounded px-3 py-3 ${fieldErrors.identifier ? 'border border-red-400' : ''}`}
+                  style={{ backgroundColor: theme.surfaceSecondary, color: theme.text }}
                   textContentType={Platform.OS === 'ios' ? 'emailAddress' : undefined}
-                  placeholderTextColor="rgba(255,255,255,0.4)"
+                  placeholderTextColor={theme.textDisabled}
                   returnKeyType="next"
                   blurOnSubmit={false}
                   onSubmitEditing={() => passwordRef.current?.focus()}
@@ -542,9 +545,9 @@ export function SignInForm() {
 
               <View>
                 <View className="flex-row items-center justify-between mb-1">
-                  <Text className="text-sm text-white/80">Password</Text>
+                  <Text className="text-sm" style={{ color: theme.text }}>Password</Text>
                   <TouchableOpacity onPress={() => router.push('/auth/reset-password')}>
-                    <Text className="text-[11px] text-[#9CA3AF]">Forgot?</Text>
+                    <Text className="text-[11px]" style={{ color: theme.textSecondary }}>Forgot?</Text>
                   </TouchableOpacity>
                 </View>
                 <View className="relative">
@@ -562,9 +565,10 @@ export function SignInForm() {
                     secureTextEntry={!showPassword}
                     autoComplete="password"
                     editable={!isSubmitting}
-                    className={`w-full bg-white/10 rounded px-3 py-3 text-white pr-12 ${fieldErrors.password ? 'border border-red-400' : ''}`}
+                    className={`w-full rounded px-3 py-3 pr-12 ${fieldErrors.password ? 'border border-red-400' : ''}`}
+                    style={{ backgroundColor: theme.surfaceSecondary, color: theme.text }}
                     textContentType={Platform.OS === 'ios' ? 'password' : undefined}
-                    placeholderTextColor="rgba(255,255,255,0.4)"
+                    placeholderTextColor={theme.textDisabled}
                     returnKeyType="done"
                     onSubmitEditing={handleSubmit}
                   />
@@ -573,7 +577,7 @@ export function SignInForm() {
                     className="absolute right-3 top-1/2 -translate-y-1/2"
                     accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
                   >
-                    <MaterialIcons name={showPassword ? 'visibility-off' : 'visibility'} size={20} color="#fff" />
+                    <MaterialIcons name={showPassword ? 'visibility-off' : 'visibility'} size={20} color={theme.text} />
                   </TouchableOpacity>
                 </View>
                 {getFieldError('password') ? <ValidationMessage message={getFieldError('password')} /> : null}
@@ -589,13 +593,13 @@ export function SignInForm() {
                   onPress={() => !isSubmitting && setRememberMe(!rememberMe)}
                   disabled={isSubmitting}
                 >
-                  <Text className="text-white/80 text-sm ml-2">Remember me</Text>
+                  <Text className="text-sm ml-2" style={{ color: theme.text }}>Remember me</Text>
                 </TouchableOpacity>
               </View>
 
               {captchaRequired && (
                 <View className="mt-4">
-                  <Text className="text-xs text-white/80 mb-2">
+                  <Text className="text-xs mb-2" style={{ color: theme.text }}>
                     Please complete the security check below to continue signing in.
                   </Text>
                   <CaptchaChallenge
@@ -733,16 +737,16 @@ export function SignInForm() {
               </TouchableOpacity>
 
               <TouchableOpacity onPress={() => router.push('/auth/sign-up-form')}>
-                <Text className="text-white/80 text-center mt-6">New here? Create an account</Text>
+                <Text className="text-center mt-6" style={{ color: theme.text }}>New here? Create an account</Text>
               </TouchableOpacity>
 
               <View className="flex-row justify-center mt-4 gap-3">
                 <TouchableOpacity onPress={() => router.push('/legal/terms')} accessibilityRole="link" accessibilityLabel="View Terms of Service">
-                  <Text className="text-white/50 text-xs underline">Terms of Service</Text>
+                  <Text className="text-xs underline" style={{ color: theme.textSecondary }}>Terms of Service</Text>
                 </TouchableOpacity>
-                <Text className="text-white/30 text-xs">·</Text>
+                <Text className="text-xs" style={{ color: theme.textDisabled }}>·</Text>
                 <TouchableOpacity onPress={() => router.push('/legal/privacy')} accessibilityRole="link" accessibilityLabel="View Privacy Policy">
-                  <Text className="text-white/50 text-xs underline">Privacy Policy</Text>
+                  <Text className="text-xs underline" style={{ color: theme.textSecondary }}>Privacy Policy</Text>
                 </TouchableOpacity>
               </View>
             </View>

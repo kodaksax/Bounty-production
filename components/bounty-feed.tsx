@@ -12,6 +12,8 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRe
 import { Alert, Animated, Dimensions, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useValidUserId } from '../hooks/useValidUserId'
 import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../lib/constants/accessibility'
+import { useAppThemeContext } from '../lib/themes/AppThemeContext'
+import type { AppTheme } from '../lib/themes/types'
 import { bountyRequestService } from '../lib/services/bounty-request-service'
 import { bountyService } from '../lib/services/bounty-service'
 import type { Bounty } from '../lib/services/database.types'
@@ -53,6 +55,9 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   const [distanceFilter, setDistanceFilter] = useState<number | null>(null)
   const [distanceDropdownOpen, setDistanceDropdownOpen] = useState(false)
   const [distanceChipLayout, setDistanceChipLayout] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
+
+  const { theme } = useAppThemeContext()
+  const s = useMemo(() => makeStyles(theme), [theme])
 
   const scrollY = useRef(new Animated.Value(0)).current
   const bountyListRef = useRef<FlatList>(null)
@@ -351,9 +356,9 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     if (activeCategory && activeCategory !== 'all') {
       return (
         <View style={{ width: '100%', alignItems: 'center' }}>
-          <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>No bounties match this filter.</Text>
-          <TouchableOpacity onPress={() => handleSetActiveCategory('all')} style={{ backgroundColor: '#9CA3AF', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 }}>
-            <Text style={{ color: '#052e1b', fontWeight: '700' }}>Clear filter</Text>
+          <Text style={{ color: theme.textSecondary, marginBottom: 8 }}>No bounties match this filter.</Text>
+          <TouchableOpacity onPress={() => handleSetActiveCategory('all')} style={{ backgroundColor: theme.surfaceSecondary, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999, borderWidth: 1, borderColor: theme.border }}>
+            <Text style={{ color: theme.text, fontWeight: '700' }}>Clear filter</Text>
           </TouchableOpacity>
         </View>
       )
@@ -386,26 +391,26 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     
 
     
-    <View style={styles.dashboardArea}>
+    <View style={s.dashboardArea}>
 
 
       
       {/* Search Bar */}
-          <View style={styles.searchWrapper}>
+          <View style={s.searchWrapper}>
             
             <TouchableOpacity
               accessibilityRole="button"
               accessibilityLabel="Open search"
               onPress={() => router.push('/tabs/search')}
-              style={styles.searchButton}
+              style={s.searchButton}
             >
               <MaterialIcons
-  name="search"
-  size={20}
-  color="#9CA3AF"
-  style={styles.searchIcon}
-/>
-        <Text style={styles.searchText}>Search bounties or users...</Text>
+                name="search"
+                size={20}
+                color={theme.textDisabled}
+                style={s.searchIcon}
+              />
+        <Text style={s.searchText}>Search bounties or users...</Text>
 
           
             </TouchableOpacity>
@@ -455,198 +460,198 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         />
       </View>
       <LinearGradient
-        colors={['rgba(5,150,105,0)', 'rgba(5,150,105,0.5)', '#059669']}
-        style={styles.bottomFade}
+        colors={[
+          `${theme.background}00`,
+          `${theme.background}CC`,
+          theme.background,
+        ] as [string, string, string]}
+        style={s.bottomFade}
         pointerEvents="none"
       />
     </View>
   )
 })
 
-const styles = StyleSheet.create({
-  dashboardArea: {
-    flex: 1,
-    backgroundColor: '#0a0a0a',
-  },
-  collapsingHeader: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    zIndex: 10,
-    backgroundColor: '#F9FAFB',
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#E5E7EB',
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
-    paddingTop: 12,
-    paddingBottom: SPACING.COMPACT_GAP,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: HEADER_LAYOUT.iconToTitleGap,
-    transform: [{ translateX: -2 }, { translateY: -1 }],
-  },
-  searchWrapper: {
-    paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
-    marginBottom: SPACING.COMPACT_GAP,
-    marginTop: 12,
-
-  },
-  searchButton: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-
-  backgroundColor: '#0a0a0a',
-  borderRadius: 999,
-
-  paddingVertical: 12,
-  paddingHorizontal: 16,
-
-  borderWidth: 1,
-  borderColor: '#E5E7EB',
-
-  // modern shadow
-  shadowColor: '#000',
-  shadowOpacity: 0.05,
-  shadowRadius: 10,
-  shadowOffset: { width: 0, height: 4 },
-  elevation: 2,
-},
-  searchIcon: { marginRight: SPACING.COMPACT_GAP, color: "#9CA3AF" },
-  searchText: {
-  color: '#6B7280',
-  fontSize: 14,
-  fontWeight: '500',
-  flex: 1,
-},
-  filtersRow: { paddingVertical: SPACING.COMPACT_GAP },
-  gradientSeparator: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 40 },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    paddingHorizontal: 14,
-    height: 36,
-    borderRadius: 999,
-    marginRight: SPACING.COMPACT_GAP,
-    minHeight: SIZING.MIN_TOUCH_TARGET,
-  },
-  chipActive: {
-    backgroundColor: '#1F2937',
-    borderColor: '#059669',
-  },
-  chipLabel: {
-    color: '#374151',
-    fontSize: TYPOGRAPHY.SIZE_SMALL,
-    fontWeight: '600',
-  },
-  chipLabelActive: { color: '#064E3B' },
-  disabledChip: { opacity: 0.4 },
-  distanceDropdown: {
-    position: 'absolute',
-    top: 48,
-    right: SPACING.SCREEN_HORIZONTAL,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    padding: SPACING.COMPACT_GAP,
-    zIndex: 60,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
-  },
-  distanceOption: {
-    paddingVertical: SPACING.COMPACT_GAP,
-    paddingHorizontal: SPACING.ELEMENT_GAP,
-  },
-  dropdownNotice: {
-    color: '#6B7280',
-    padding: SPACING.COMPACT_GAP,
-    fontSize: TYPOGRAPHY.SIZE_XSMALL,
-  },
-  bottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 140, zIndex: 50 },
-  trendingSection: {
-    marginBottom: 16,
-    marginHorizontal: -16,
-    paddingHorizontal: 16,
-  },
-  trendingHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-  },
-  trendingTitle: {
-    color: '#111827',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  trendingCard: {
-    width: 200,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 14,
-    marginRight: 10,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  trendingCardHeader: { marginBottom: 8 },
-  trendingCardTitle: {
-    color: '#111827',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  trendingAmount: {
-    color: '#059669',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  trendingHonorBadge: {
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-  },
-  trendingHonorText: {
-    color: '#92400E',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  trendingNewBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
-  },
-  trendingNewText: {
-    color: '#059669',
-    fontSize: 11,
-    fontWeight: '500',
-  },
-  resultsRow: {
-    paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
-    paddingBottom: 6,
-  },
-  resultsText: {
-    fontSize: TYPOGRAPHY.SIZE_XSMALL,
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  searchIconRight: {
-  marginRight: 10,
-},
-})
+function makeStyles(t: AppTheme) {
+  return StyleSheet.create({
+    dashboardArea: {
+      flex: 1,
+      backgroundColor: t.background,
+    },
+    collapsingHeader: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      top: 0,
+      zIndex: 10,
+      backgroundColor: t.background,
+      borderBottomWidth: 0.5,
+      borderBottomColor: t.border,
+    },
+    headerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
+      paddingTop: 12,
+      paddingBottom: SPACING.COMPACT_GAP,
+    },
+    headerLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: HEADER_LAYOUT.iconToTitleGap,
+      transform: [{ translateX: -2 }, { translateY: -1 }],
+    },
+    searchWrapper: {
+      paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
+      marginBottom: SPACING.COMPACT_GAP,
+      marginTop: 12,
+    },
+    searchButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: t.surfaceSecondary,
+      borderRadius: 999,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      borderWidth: 1,
+      borderColor: t.border,
+      shadowColor: '#000',
+      shadowOpacity: 0.05,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 2,
+    },
+    searchIcon: { marginRight: SPACING.COMPACT_GAP },
+    searchText: {
+      color: t.textDisabled,
+      fontSize: 14,
+      fontWeight: '500',
+      flex: 1,
+    },
+    filtersRow: { paddingVertical: SPACING.COMPACT_GAP },
+    gradientSeparator: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 40 },
+    chip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: t.surfaceSecondary,
+      borderWidth: 1,
+      borderColor: t.border,
+      paddingHorizontal: 14,
+      height: 36,
+      borderRadius: 999,
+      marginRight: SPACING.COMPACT_GAP,
+      minHeight: SIZING.MIN_TOUCH_TARGET,
+    },
+    chipActive: {
+      backgroundColor: t.surface,
+      borderColor: t.primary,
+    },
+    chipLabel: {
+      color: t.text,
+      fontSize: TYPOGRAPHY.SIZE_SMALL,
+      fontWeight: '600',
+    },
+    chipLabelActive: { color: t.primaryLight },
+    disabledChip: { opacity: 0.4 },
+    distanceDropdown: {
+      position: 'absolute',
+      top: 48,
+      right: SPACING.SCREEN_HORIZONTAL,
+      backgroundColor: t.surface,
+      borderWidth: 1,
+      borderColor: t.border,
+      borderRadius: 12,
+      padding: SPACING.COMPACT_GAP,
+      zIndex: 60,
+      shadowColor: '#000',
+      shadowOpacity: 0.08,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 4,
+    },
+    distanceOption: {
+      paddingVertical: SPACING.COMPACT_GAP,
+      paddingHorizontal: SPACING.ELEMENT_GAP,
+    },
+    dropdownNotice: {
+      color: t.textSecondary,
+      padding: SPACING.COMPACT_GAP,
+      fontSize: TYPOGRAPHY.SIZE_XSMALL,
+    },
+    bottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 140, zIndex: 50 },
+    trendingSection: {
+      marginBottom: 16,
+      marginHorizontal: -16,
+      paddingHorizontal: 16,
+    },
+    trendingHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 8,
+    },
+    trendingTitle: {
+      color: t.text,
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    trendingCard: {
+      width: 200,
+      backgroundColor: t.surface,
+      borderRadius: 16,
+      padding: 14,
+      marginRight: 10,
+      borderWidth: 1,
+      borderColor: t.border,
+    },
+    trendingCardHeader: { marginBottom: 8 },
+    trendingCardTitle: {
+      color: t.text,
+      fontSize: 14,
+      fontWeight: '600',
+      marginBottom: 4,
+    },
+    trendingAmount: {
+      color: t.primary,
+      fontSize: 15,
+      fontWeight: '700',
+    },
+    trendingHonorBadge: {
+      backgroundColor: '#FEF3C7',
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 6,
+      alignSelf: 'flex-start',
+    },
+    trendingHonorText: {
+      color: '#92400E',
+      fontSize: 11,
+      fontWeight: '700',
+    },
+    trendingNewBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      marginTop: 4,
+    },
+    trendingNewText: {
+      color: t.primary,
+      fontSize: 11,
+      fontWeight: '500',
+    },
+    resultsRow: {
+      paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
+      paddingBottom: 6,
+    },
+    resultsText: {
+      fontSize: TYPOGRAPHY.SIZE_XSMALL,
+      color: t.textSecondary,
+      fontWeight: '500',
+    },
+    searchIconRight: {
+      marginRight: 10,
+    },
+  })
+}

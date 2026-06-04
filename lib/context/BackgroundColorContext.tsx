@@ -1,4 +1,5 @@
 import React, { createContext, ReactNode, useCallback, useContext, useState } from "react";
+import { darkTheme } from "../themes/darkTheme";
 
 type BGContext = {
   color: string; // current active color (top of stack)
@@ -8,7 +9,7 @@ type BGContext = {
   setColor: (c: string) => void;
 };
 
-export const DEFAULT = "#0B0F14"; // Bounty app default (dark navy) fallback
+export const DEFAULT = darkTheme.background; // single source of truth
 
 const BackgroundColorContext = createContext<BGContext | undefined>(undefined);
 
@@ -16,12 +17,7 @@ export const BackgroundColorProvider = ({ children }: { children: ReactNode }) =
   const [stack, setStack] = useState<string[]>([DEFAULT]);
 
   const pushColor = useCallback((c: string) => {
-    setStack(s => {
-      // if identical to current top, avoid duplicate push
-      const top = s[s.length - 1];
-      if (top === c) return s;
-      return [...s, c];
-    });
+    setStack(s => [...s, c]);
   }, []);
 
   const popColor = useCallback((c: string) => {

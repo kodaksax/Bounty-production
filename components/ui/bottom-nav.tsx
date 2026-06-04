@@ -3,7 +3,9 @@ import { useHapticFeedback } from "lib/haptic-feedback";
 import React, { useEffect, useRef } from "react";
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { A11Y, SIZING } from "../../lib/constants/accessibility";
-import { theme } from "../../lib/theme";
+import { theme as legacyTheme } from "../../lib/theme";
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 
 
 export type ScreenKey = "messages" | "wallet" | "bounty" | "postings" | "profile" | "admin";
@@ -24,6 +26,8 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
   const centerButtonScale = useRef(new Animated.Value(1)).current;
   const centerButtonRotation = useRef(new Animated.Value(0)).current;
   const { triggerHaptic } = useHapticFeedback();
+  const { theme } = useAppThemeContext();
+  const styles = makeStyles(theme);
 
   const handleNavigate = React.useCallback((screen: ScreenKey) => {
     // If tapping the bounty button while already on bounty screen, trigger scroll-to-top + refresh
@@ -97,7 +101,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
             <View style={styles.iconWrapper}>
               <MaterialIcons
                 name="chat"
-                color={activeScreen === "messages" ? "#fffef5" : "#9ca3af"}
+                color={activeScreen === "messages" ? theme.text : theme.textSecondary}
                 size={NAV_ICON_SIZE}
               />
               {unreadMessageCount > 0 && (
@@ -119,7 +123,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
           >
             <MaterialIcons
               name="account-balance-wallet"
-              color={activeScreen === "wallet" ? "#fffef5" : "#9ca3af"}
+              color={activeScreen === "wallet" ? theme.text : theme.textSecondary}
               size={NAV_ICON_SIZE}
             />
           </TouchableOpacity>
@@ -149,7 +153,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
             >
               <MaterialIcons
                 name="gps-fixed"
-                color={activeScreen === "bounty" ? "#fffef5" : "#1F2937"}
+                color={activeScreen === "bounty" ? theme.text : theme.textSecondary}
                 size={CENTER_ICON_SIZE}
               />
             </TouchableOpacity>
@@ -168,7 +172,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
           >
             <MaterialIcons
               name="edit-note"
-              color={activeScreen === "postings" ? "#fffef5" : "#9ca3af"}
+              color={activeScreen === "postings" ? theme.text : theme.textSecondary}
               size={NAV_ICON_SIZE}
             />
           </TouchableOpacity>
@@ -183,7 +187,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
             >
               <MaterialIcons
                 name="admin-panel-settings"
-                color={activeScreen === "admin" ? "#00dc50" : "#9ca3af"}
+                color={activeScreen === "admin" ? "#00dc50" : theme.text}
                 size={NAV_ICON_SIZE}
               />
             </TouchableOpacity>
@@ -198,7 +202,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
             >
               <MaterialIcons
                 name="person"
-                color={activeScreen === "profile" ? "#fffef5" : "#9ca3af"}
+                color={activeScreen === "profile" ? theme.target : theme.target}
                 size={NAV_ICON_SIZE}
               />
             </TouchableOpacity>
@@ -209,98 +213,94 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
   );
 }
 
-const styles = StyleSheet.create({
-  bottomNavContainer: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    // Float partially off-screen for layered effect while remaining visually fixed
-    bottom: -50,
-    zIndex: 100,
-  },
-  bottomNav: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center", // Center the three sections
-    height: 110, // Slightly reduced for cleaner mobile look
-    backgroundColor: "#0B0F14", // Primary background
-    paddingHorizontal: 16, // Reduced padding for more icon space
-    paddingBottom: 12,
-    borderTopLeftRadius: 28, // Increased radius for modern look
-    borderTopRightRadius: 28,
-    ...theme.shadows.lg,
-    // Enhanced glass-morphism effect
-    borderWidth: 1,
-    borderColor: "rgba(0, 145, 44, 0.25)", // Company specified primary green
-  },
-
-  // Left and right sections take equal space, ensuring center is dead center
-  sideSection: {
-    flex: 1, // Equal flex for left and right
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-evenly", // Even distribution of icons
-  },
-  // Center section for the prominent GPS button
-  centerSection: {
-    width: 80, // Fixed width for center section
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  navButton: {
-    padding: 12,
-    borderRadius: 16,
-    backgroundColor: "transparent",
-    minWidth: SIZING.MIN_TOUCH_TARGET,
-    minHeight: SIZING.MIN_TOUCH_TARGET,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: -28, // Align with raised center button
-  },
-  iconWrapper: {
-    position: 'relative',
-  },
-  badge: {
-    position: 'absolute',
-    top: -6,
-    right: -8,
-    backgroundColor: '#ef4444',
-    borderRadius: 10,
-    minWidth: 18,
-    height: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 3,
-    borderWidth: 1.5,
-    borderColor: '#0B0F14',
-  },
-  badgeText: {
-    color: '#ffffff',
-    fontSize: 10,
-    fontWeight: '700',
-    lineHeight: 13,
-  },
-  centerButton: {
-    height: 68, // Slightly larger for emphasis
-    width: 68,
-    backgroundColor: "rgba(0, 145, 44, 0.15)", // Slightly more visible background
-    borderWidth: 2.5, // Thicker border for emphasis
-    borderColor: "#00912C", // Company specified primary green base
-    borderRadius: 34,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: -28, // Raised higher for more prominence
-    minWidth: SIZING.MIN_TOUCH_TARGET + 24, // Larger touch target
-    minHeight: SIZING.MIN_TOUCH_TARGET + 24,
-    ...theme.shadows.emerald,
-    overflow: 'hidden',
-  },
-
-  centerButtonInner: {
-    width: "100%",
-    height: "100%",
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 34,
-  },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    bottomNavContainer: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: -50,
+      zIndex: 100,
+    },
+    bottomNav: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      height: 110,
+      backgroundColor: theme.background,
+      paddingHorizontal: 16,
+      paddingBottom: 12,
+      borderTopLeftRadius: 28,
+      borderTopRightRadius: 28,
+      ...legacyTheme.shadows.lg,
+      borderWidth: 1,
+      borderColor: "rgba(0, 145, 44, 0.25)",
+    },
+    sideSection: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-evenly",
+    },
+    centerSection: {
+      width: 80,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    navButton: {
+      padding: 12,
+      borderRadius: 16,
+      backgroundColor: "transparent",
+      minWidth: SIZING.MIN_TOUCH_TARGET,
+      minHeight: SIZING.MIN_TOUCH_TARGET,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: -28,
+    },
+    iconWrapper: {
+      position: 'relative',
+    },
+    badge: {
+      position: 'absolute',
+      top: -6,
+      right: -8,
+      backgroundColor: '#ef4444',
+      borderRadius: 10,
+      minWidth: 18,
+      height: 18,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 3,
+      borderWidth: 1.5,
+      borderColor: theme.background,
+    },
+    badgeText: {
+      color: '#ffffff',
+      fontSize: 10,
+      fontWeight: '700',
+      lineHeight: 13,
+    },
+    centerButton: {
+      height: 68,
+      width: 68,
+      backgroundColor: "rgba(0, 145, 44, 0.15)",
+      borderWidth: 2.5,
+      borderColor: "#00912C",
+      borderRadius: 34,
+      alignItems: "center",
+      justifyContent: "center",
+      marginTop: -28,
+      minWidth: SIZING.MIN_TOUCH_TARGET + 24,
+      minHeight: SIZING.MIN_TOUCH_TARGET + 24,
+      ...legacyTheme.shadows.emerald,
+      overflow: 'hidden',
+    },
+    centerButtonInner: {
+      width: "100%",
+      height: "100%",
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 34,
+    },
+  });
+}

@@ -16,6 +16,7 @@ import { offlineQueueService } from 'lib/services/offline-queue-service';
 import { getInsufficientBalanceMessage, validateBalance } from 'lib/utils/bounty-validation';
 import { getUserFriendlyError } from 'lib/utils/error-messages';
 import { useWallet } from 'lib/wallet-context';
+import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -41,6 +42,7 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
   const { draft, saveDraft, clearDraft, isLoading } = useBountyDraft(session?.user?.id);
   const insets = useSafeAreaInsets();
   const { createEscrow, balance } = useWallet();
+  const { theme } = useAppThemeContext();
   const { isEmailVerified, canPostBounties, userEmail } = useEmailVerification();
 
   // Use form submission hook with debouncing
@@ -198,16 +200,17 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
 
   if (isLoading) {
     return (
-      <View className="flex-1 bg-[#0B0F14] items-center justify-center">
-        <ActivityIndicator size="large" color="#fff" />
-        <Text className="text-white mt-4">Loading draft...</Text>
+      <View className="flex-1 items-center justify-center" style={{ backgroundColor: theme.background }}>
+        <ActivityIndicator size="large" color={theme.text} />
+        <Text className="mt-4" style={{ color: theme.text }}>Loading draft...</Text>
       </View>
     );
   }
 
   return (
     <KeyboardAvoidingView
-      className="flex-1 bg-[#0B0F14]"
+      className="flex-1"
+      style={{ backgroundColor: theme.background }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={insets.top}
     >
