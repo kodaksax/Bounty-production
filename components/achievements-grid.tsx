@@ -1,6 +1,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import React from "react";
 import { Text, View } from "react-native";
+import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 
 interface Achievement {
   id: string;
@@ -28,6 +29,7 @@ const ACHIEVEMENT_DEFINITIONS = [
  * Shows a 3-column grid with badge status (earned vs locked)
  */
 export function AchievementsGrid({ badgesEarned }: AchievementsGridProps) {
+  const { theme } = useAppThemeContext();
   // Build achievements based on definitions and earned count
   const achievements: Achievement[] = ACHIEVEMENT_DEFINITIONS.map((def, i) => ({
     id: `achievement-${i}`,
@@ -46,7 +48,7 @@ export function AchievementsGrid({ badgesEarned }: AchievementsGridProps) {
             minWidth: "30%",
             maxWidth: "32%",
             aspectRatio: 1,
-            backgroundColor: "rgba(6, 78, 59, 0.3)",
+            backgroundColor: theme.surface,
             borderRadius: 12,
             padding: 12,
             alignItems: "center",
@@ -61,7 +63,7 @@ export function AchievementsGrid({ badgesEarned }: AchievementsGridProps) {
               height: 40,
               width: 40,
               borderRadius: 20,
-              backgroundColor: achievement.isEarned ? "#059669" : "#064e3b",
+              backgroundColor: achievement.isEarned ? theme.primary : theme.surfaceSecondary,
               alignItems: "center",
               justifyContent: "center",
               marginBottom: 8,
@@ -70,13 +72,13 @@ export function AchievementsGrid({ badgesEarned }: AchievementsGridProps) {
             <MaterialIcons
               name={achievement.icon}
               size={20}
-              color={achievement.isEarned ? "#ffffff" : "#6b7280"}
+              color={achievement.isEarned ? "#ffffff" : theme.textDisabled}
             />
           </View>
           <Text
             style={{
               fontSize: 12,
-              color: "#1F2937",
+              color: theme.text,
               textAlign: "center",
             }}
             numberOfLines={2}

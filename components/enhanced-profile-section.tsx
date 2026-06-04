@@ -25,6 +25,7 @@ import {
   View,
 } from 'react-native';
 import { showReportAlert } from './ReportModal';
+import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import { ReputationScoreCompact } from './ui/reputation-score';
 import { EnhancedProfileSectionSkeleton, PortfolioSkeleton } from './ui/skeleton-loaders';
 import { VerificationBadge, type VerificationLevel } from './ui/verification-badge';
@@ -33,6 +34,7 @@ import { VerificationBadge, type VerificationLevel } from './ui/verification-bad
  * Progress bar component for upload progress
  */
 function UploadProgressBar({ progress, message }: { progress: number; message?: string | null }) {
+  const { theme } = useAppThemeContext();
   const [showBar, setShowBar] = useState(false);
   useEffect(() => {
     if (progress > 0 && progress < 1) {
@@ -47,15 +49,15 @@ function UploadProgressBar({ progress, message }: { progress: number; message?: 
   }, [progress]);
   if (!showBar) return null;
   return (
-    <View className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 mb-3">
+    <View className="rounded-lg p-3 mb-3" style={{ backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border }}>
       <View className="flex-row items-center justify-between mb-2">
-        <Text className="text-sm text-gray-700">{message || 'Uploading…'}</Text>
-        <Text className="text-sm font-medium" style={{ color: '#059669' }}>{Math.round(progress * 100)}%</Text>
+        <Text className="text-sm" style={{ color: theme.textSecondary }}>{message || 'Uploading…'}</Text>
+        <Text className="text-sm font-medium" style={{ color: theme.primary }}>{Math.round(progress * 100)}%</Text>
       </View>
-      <View className="h-2 bg-gray-200 rounded-full overflow-hidden">
+      <View className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: theme.surfaceSecondary }}>
         <View
           className="h-full rounded-full"
-          style={{ width: `${Math.round(progress * 100)}%`, backgroundColor: '#059669' }}
+          style={{ width: `${Math.round(progress * 100)}%`, backgroundColor: theme.primary }}
         />
       </View>
     </View>
@@ -130,6 +132,7 @@ export function EnhancedProfileSection({
     });
   };
 
+  const { theme } = useAppThemeContext();
   const currentUserId = authProfileFromHook?.id;
   const showMessageButton =
     !isOwnProfile &&
@@ -252,7 +255,7 @@ export function EnhancedProfileSection({
   if (!effectiveProfile) {
     return (
       <View className="p-4">
-        <Text className="text-center text-gray-500">Profile not found</Text>
+        <Text className="text-center" style={{ color: theme.textSecondary }}>Profile not found</Text>
       </View>
     );
   }
@@ -277,7 +280,7 @@ export function EnhancedProfileSection({
           ratingCount={ratingStats.ratingCount}
         />
         {ratingStats.ratingCount > 0 && (
-          <Text className="text-xs text-gray-500 ml-2">
+          <Text className="text-xs ml-2" style={{ color: theme.textSecondary }}>
             ({ratingStats.ratingCount} review{ratingStats.ratingCount !== 1 ? 's' : ''})
           </Text>
         )}
@@ -299,13 +302,13 @@ export function EnhancedProfileSection({
   };
 
   return (
-    <View className="px-4 py-2 bg-[#0B0F14]">
+    <View className="px-4 py-2" style={{ backgroundColor: theme.background }}>
       {/* Enhanced Profile Header + Stats (merged card) */}
-      <View className="bg-[#0B0F14] border border-[#1F2937] rounded-xl p-4 mb-4 shadow-sm">
+      <View className="rounded-xl p-4 mb-4 shadow-sm" style={{ backgroundColor: theme.background, borderWidth: 1, borderColor: theme.surfaceSecondary }}>
         <View className="flex-row items-start justify-between">
           <View className="flex-row items-center flex-1">
             <View className="relative">
-              <View className="h-16 w-16 rounded-full bg-emerald-100 overflow-hidden items-center justify-center border border-[#1F2937]">
+              <View className="h-16 w-16 rounded-full overflow-hidden items-center justify-center" style={{ backgroundColor: theme.surfaceSecondary, borderWidth: 1, borderColor: theme.border }}>
                 {effectiveProfile.avatar ? (
                   <OptimizedImage
                     source={{ uri: effectiveProfile.avatar }}
@@ -324,17 +327,17 @@ export function EnhancedProfileSection({
               {renderVerificationBadge()}
             </View>
             <View className="ml-4 flex-1">
-              <Text className="text-lg font-bold text-white">
+              <Text className="text-lg font-bold" style={{ color: theme.text }}>
                 {effectiveProfile.display_name ||
                   effectiveProfile.name ||
                   effectiveProfile.username}
               </Text>
-              <Text className="text-xs text-gray-500">
+              <Text className="text-xs" style={{ color: theme.textSecondary }}>
                 {effectiveProfile.username ? `@${effectiveProfile.username}` : ''}
               </Text>
               {renderReputationScore()}
               {effectiveProfile.title && (
-                <Text className="text-sm text-gray-400 mt-1">{effectiveProfile.title}</Text>
+                <Text className="text-sm mt-1" style={{ color: theme.textSecondary }}>{effectiveProfile.title}</Text>
               )}
             </View>
           </View>
@@ -342,12 +345,13 @@ export function EnhancedProfileSection({
             <TouchableOpacity
               onPress={toggleFollow}
               disabled={followLoading}
-              className={`px-4 py-2 rounded-lg ${isFollowing ? 'bg-[#1F2937] border border-[#374151] text-white' : 'bg-[#059669]'}`}
+              className="px-4 py-2 rounded-lg"
+              style={{ backgroundColor: isFollowing ? theme.surfaceSecondary : theme.primary, borderWidth: isFollowing ? 1 : 0, borderColor: theme.border }}
             >
               {followLoading ? (
                 <ActivityIndicator size="small" color={isFollowing ? '#059669' : '#ffffff'} />
               ) : (
-                <Text className={`text-sm font-medium ${isFollowing ? 'text-emerald-700' : 'text-white'}`}>
+                <Text className="text-sm font-medium" style={{ color: isFollowing ? theme.primary : '#ffffff' }}>
                   {isFollowing ? 'Following' : 'Follow'}
                 </Text>
               )}
@@ -356,11 +360,12 @@ export function EnhancedProfileSection({
           {!isOwnProfile && !hideActions && (
             <TouchableOpacity
               onPress={() => setShowMoreActions(true)}
-              className="ml-2 p-2 rounded-lg bg-gray-100"
+              className="ml-2 p-2 rounded-lg"
+              style={{ backgroundColor: theme.surfaceSecondary }}
               accessibilityLabel="More actions"
               accessibilityHint="Open menu for report and block options"
             >
-              <MaterialIcons name="more-vert" size={20} color="#6B7280" />
+              <MaterialIcons name="more-vert" size={20} color={theme.textSecondary} />
             </TouchableOpacity>
           )}
         </View>
@@ -381,7 +386,7 @@ export function EnhancedProfileSection({
               accessibilityHint="Double tap to dismiss the action menu"
             >
               <View style={{ padding: 16 }}>
-                <View style={{ backgroundColor: '#ffffff', borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#E5E7EB' }}>
+                <View style={{ backgroundColor: theme.surface, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: theme.border }}>
                   <TouchableOpacity
                     style={{
                       flexDirection: 'row',
@@ -400,7 +405,7 @@ export function EnhancedProfileSection({
                   <View
                     style={{
                       height: 1,
-                      backgroundColor: '#E5E7EB',
+                      backgroundColor: theme.border,
                       marginHorizontal: 20,
                     }}
                   />
@@ -421,13 +426,13 @@ export function EnhancedProfileSection({
                       <MaterialIcons
                         name={isBlocked ? 'check-circle' : 'block'}
                         size={22}
-                        color={isBlocked ? '#059669' : '#dc2626'}
+                        color={isBlocked ? theme.primary : '#dc2626'}
                       />
                     )}
                     <Text
                       style={{
                         fontSize: 16,
-                        color: isBlocked ? '#059669' : '#dc2626',
+                        color: isBlocked ? theme.primary : '#dc2626',
                         fontWeight: '500',
                       }}
                     >
@@ -437,7 +442,7 @@ export function EnhancedProfileSection({
                   <View
                     style={{
                       height: 1,
-                      backgroundColor: '#E5E7EB',
+                      backgroundColor: theme.border,
                       marginHorizontal: 20,
                     }}
                   />
@@ -451,8 +456,8 @@ export function EnhancedProfileSection({
                     }}
                     onPress={() => setShowMoreActions(false)}
                   >
-                    <MaterialIcons name="close" size={22} color="#6B7280" />
-                    <Text style={{ fontSize: 16, color: '#6B7280', fontWeight: '500' }}>
+                    <MaterialIcons name="close" size={22} color={theme.textSecondary} />
+                    <Text style={{ fontSize: 16, color: theme.textSecondary, fontWeight: '500' }}>
                       Cancel
                     </Text>
                   </TouchableOpacity>
@@ -464,7 +469,7 @@ export function EnhancedProfileSection({
 
         {/* Bio */}
         {effectiveProfile.bio && (
-          <Text className="text-sm text-white mt-3">{effectiveProfile.bio}</Text>
+          <Text className="text-sm mt-3" style={{ color: theme.text }}>{effectiveProfile.bio}</Text>
         )}
 
         {/* Location & Portfolio/Website */}
@@ -473,13 +478,13 @@ export function EnhancedProfileSection({
             {effectiveProfile.location && (
               <View className="flex-row items-center">
                 <MaterialIcons name="location-on" size={16} color="#059669" />
-                <Text className="text-sm text-gray-400 ml-2">{effectiveProfile.location}</Text>
+                <Text className="text-sm ml-2" style={{ color: theme.textSecondary }}>{effectiveProfile.location}</Text>
               </View>
             )}
             {effectiveProfile.portfolio && (
               <View className="flex-row items-center">
                 <MaterialIcons name="link" size={16} color="#059669" />
-                <Text className="text-sm text-gray-400 ml-2" numberOfLines={1}>
+                <Text className="text-sm ml-2" style={{ color: theme.textSecondary }} numberOfLines={1}>
                   {effectiveProfile.portfolio}
                 </Text>
               </View>
@@ -488,26 +493,26 @@ export function EnhancedProfileSection({
         )}
 
         {/* Stats Row */}
-        <View className="flex-row justify-around mt-4 pt-3 border-t border-[#1F2937]">
+        <View className="flex-row justify-around mt-4 pt-3 border-t" style={{ borderTopColor: theme.surfaceSecondary }}>
           <View className="items-center">
-            <Text className="text-2xl font-bold text-white">
+            <Text className="text-2xl font-bold" style={{ color: theme.text }}>
               {activityStats?.jobsCompleted ?? activityStats?.jobsAccepted ?? 0}
             </Text>
-            <Text className="text-xs text-gray-500 mt-1">Jobs Completed</Text>
+            <Text className="text-xs mt-1" style={{ color: theme.textSecondary }}>Jobs Completed</Text>
           </View>
           <View className="items-center">
-            <Text className="text-2xl font-bold text-white">{activityStats?.bountiesPosted ?? 0}</Text>
-            <Text className="text-xs text-gray-500 mt-1">Bounties Posted</Text>
+            <Text className="text-2xl font-bold" style={{ color: theme.text }}>{activityStats?.bountiesPosted ?? 0}</Text>
+            <Text className="text-xs mt-1" style={{ color: theme.textSecondary }}>Bounties Posted</Text>
           </View>
           <View className="items-center">
-            <Text className="text-2xl font-bold text-white">{followerCount ?? 0}</Text>
-            <Text className="text-xs text-gray-500 mt-1">Followers</Text>
+            <Text className="text-2xl font-bold" style={{ color: theme.text }}>{followerCount ?? 0}</Text>
+            <Text className="text-xs mt-1" style={{ color: theme.textSecondary }}>Followers</Text>
           </View>
         </View>
 
         {/* Joined Date */}
         <View className="mt-3 items-center">
-          <Text className="text-xs text-gray-400">
+          <Text className="text-xs" style={{ color: theme.textSecondary }}>
             Joined{' '}
             {new Date(
               (effectiveProfile as any).created_at || effectiveProfile.joinDate || Date.now()
@@ -532,8 +537,8 @@ export function EnhancedProfileSection({
         <View className="mb-4">
           <View className="flex-row justify-between items-center mb-2">
             <View className="flex-row items-center">
-              <Text className="text-sm font-medium text-gray-900">Portfolio</Text>
-              <Text className="text-xs text-gray-500 ml-2">
+              <Text className="text-sm font-medium" style={{ color: theme.text }}>Portfolio</Text>
+              <Text className="text-xs ml-2" style={{ color: theme.textSecondary }}>
                 ({items.length}/{MAX_PORTFOLIO_ITEMS})
               </Text>
             </View>
@@ -541,15 +546,18 @@ export function EnhancedProfileSection({
               <View className="flex-row items-center gap-2">
                 {items.length > 1 && (
                   <TouchableOpacity
-                    className={`px-2 py-1 rounded border ${isReordering ? 'bg-emerald-100 border-[#059669]' : 'bg-gray-100 border-gray-300'}`}
+                    className="px-2 py-1 rounded border"
+                    style={isReordering
+                      ? { backgroundColor: theme.surfaceSecondary, borderColor: theme.primary }
+                      : { backgroundColor: theme.surfaceSecondary, borderColor: theme.border }}
                     onPress={() => setIsReordering(!isReordering)}
                   >
-                    <Text className={`text-xs ${isReordering ? 'text-emerald-700' : 'text-gray-400'}`}>{isReordering ? 'Done' : 'Reorder'}</Text>
+                    <Text className="text-xs" style={{ color: isReordering ? theme.primary : theme.textSecondary }}>{isReordering ? 'Done' : 'Reorder'}</Text>
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity
                   className={`px-2 py-1 rounded ${items.length >= MAX_PORTFOLIO_ITEMS ? 'opacity-50' : ''}`}
-                  style={{ backgroundColor: '#059669' }}
+                  style={{ backgroundColor: theme.primary }}
                   onPress={pickAndUpload}
                   disabled={isPicking || isUploading || items.length >= MAX_PORTFOLIO_ITEMS}
                 >
@@ -565,11 +573,11 @@ export function EnhancedProfileSection({
           )}
           {portfolioLoading ? (
             <View className="items-center py-4">
-              <ActivityIndicator size="small" color="#059669" />
+              <ActivityIndicator size="small" color={theme.primary} />
             </View>
           ) : items.length === 0 && !lastPicked ? (
-            <View className="bg-emerald-50 border border-emerald-100 p-4 rounded-lg">
-              <Text className="text-center text-gray-400 text-sm">
+            <View className="p-4 rounded-lg" style={{ backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border }}>
+              <Text className="text-center text-sm" style={{ color: theme.textSecondary }}>
                 {isOwnProfile
                   ? 'Showcase your work! Tap "Add Item" to upload images, videos, or files.'
                   : "This user hasn't added portfolio items yet."}
@@ -606,9 +614,10 @@ export function EnhancedProfileSection({
                     }
                   >
                     <View
-                      className={`w-32 h-32 bg-emerald-50 rounded-lg overflow-hidden items-center justify-center border border-[#1F2937] ${
+                      className={`w-32 h-32 rounded-lg overflow-hidden items-center justify-center border ${
                         isReordering ? 'border-2 border-dashed border-[#059669]' : ''
                       }`}
+                      style={!isReordering ? { backgroundColor: theme.surfaceSecondary, borderColor: theme.border } : { backgroundColor: theme.surfaceSecondary }}
                     >
                       {item.type === 'image' || item.type === 'video' ? (
                         <>
@@ -632,14 +641,14 @@ export function EnhancedProfileSection({
                         </>
                       ) : (
                         <View className="items-center justify-center p-3">
-                          <MaterialIcons name="insert-drive-file" size={28} color="#059669" />
-                          <Text className="text-[10px] text-gray-400 mt-1" numberOfLines={2}>
+                          <MaterialIcons name="insert-drive-file" size={28} color={theme.primary} />
+                          <Text className="text-[10px] mt-1" style={{ color: theme.textSecondary }} numberOfLines={2}>
                             {item.name || 'File'}
                           </Text>
                         </View>
                       )}
                       {isReordering && isOwnProfile && items.length > 1 && (
-                        <View className="absolute inset-0 bg-white/60 items-center justify-center">
+                        <View className="absolute inset-0 items-center justify-center" style={{ backgroundColor: theme.isDark ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.65)' }}>
                           <View className="flex-row gap-2">
                             {index > 0 && (
                               <TouchableOpacity
@@ -718,11 +727,11 @@ export function EnhancedProfileSection({
           onPress={() => setSelectedPortfolioItem(null)}
         >
           <Pressable onPress={() => {}} style={{ width: '100%', maxWidth: 720 }}>
-            <View className="bg-[#0B0F14] rounded-xl p-4 m-4 max-w-lg w-full border border-[#1F2937]">
+            <View className="rounded-xl p-4 m-4 max-w-lg w-full" style={{ backgroundColor: theme.background, borderWidth: 1, borderColor: theme.surfaceSecondary }}>
               <View className="flex-row justify-between items-center mb-3">
-                <Text className="text-lg font-bold text-gray-900">Portfolio Item</Text>
+                <Text className="text-lg font-bold" style={{ color: theme.text }}>Portfolio Item</Text>
                 <TouchableOpacity onPress={() => setSelectedPortfolioItem(null)}>
-                  <MaterialIcons name="close" size={24} color="#6B7280" />
+                  <MaterialIcons name="close" size={24} color={theme.textSecondary} />
                 </TouchableOpacity>
               </View>
               {selectedPortfolioItem && (
@@ -736,8 +745,8 @@ export function EnhancedProfileSection({
                         style={{ width: '100%', height: 256, borderRadius: 8, marginBottom: 12 }}
                       />
                     ) : (
-                      <View className="bg-gray-100 rounded-lg items-center justify-center h-64 mb-3">
-                        <Text className="text-gray-500">Unable to load video preview</Text>
+                      <View className="rounded-lg items-center justify-center h-64 mb-3" style={{ backgroundColor: theme.surfaceSecondary }}>
+                        <Text style={{ color: theme.textSecondary }}>Unable to load video preview</Text>
                       </View>
                     )
                   ) : (
@@ -751,12 +760,12 @@ export function EnhancedProfileSection({
                     />
                   )}
                   {selectedPortfolioItem.title && (
-                    <Text className="text-base font-medium text-gray-900 mb-2">
+                    <Text className="text-base font-medium mb-2" style={{ color: theme.text }}>
                       {selectedPortfolioItem.title}
                     </Text>
                   )}
                   {selectedPortfolioItem.description && (
-                    <Text className="text-sm text-gray-400">
+                    <Text className="text-sm" style={{ color: theme.textSecondary }}>
                       {selectedPortfolioItem.description}
                     </Text>
                   )}
@@ -780,6 +789,7 @@ export function PortfolioSection({
 }) {
   const { profile: normalizedFromHookOrLocal } = useNormalizedProfile(userId);
   const { profile: authProfileFromHook } = useAuthProfile();
+  const { theme } = useAppThemeContext();
   const resolvedUserId =
     normalizedFromHookOrLocal?.id || userId || authProfileFromHook?.id || 'current-user';
 
@@ -831,11 +841,11 @@ export function PortfolioSection({
   };
 
   return (
-    <View className="mb-4 px-4 bg-[#0B0F14]">
+    <View className="mb-4 px-4" style={{ backgroundColor: theme.background }}>
       <View className="flex-row justify-between items-center mb-2">
         <View className="flex-row items-center">
-          <Text className="text-lg font-medium text-white">Portfolio</Text>
-          <Text className="text-xs text-gray-500 ml-2">
+          <Text className="text-lg font-medium" style={{ color: theme.text }}>Portfolio</Text>
+          <Text className="text-xs ml-2" style={{ color: theme.textSecondary }}>
             ({items.length}/{MAX_PORTFOLIO_ITEMS})
           </Text>
         </View>
@@ -843,15 +853,18 @@ export function PortfolioSection({
           <View className="flex-row items-center gap-2">
             {items.length > 1 && (
               <TouchableOpacity
-                className={`px-2 py-1 rounded border ${isReordering ? 'bg-emerald-100 border-[#059669]' : 'bg-gray-100 border-gray-300'}`}
+                className="px-2 py-1 rounded border"
+                style={isReordering
+                  ? { backgroundColor: theme.surfaceSecondary, borderColor: theme.primary }
+                  : { backgroundColor: theme.surfaceSecondary, borderColor: theme.border }}
                 onPress={() => setIsReordering(!isReordering)}
               >
-                <Text className={`text-xs ${isReordering ? 'text-emerald-700' : 'text-gray-400'}`}>{isReordering ? 'Done' : 'Reorder'}</Text>
+                <Text className="text-xs" style={{ color: isReordering ? theme.primary : theme.textSecondary }}>{isReordering ? 'Done' : 'Reorder'}</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity
               className={`px-2 py-1 rounded ${items.length >= MAX_PORTFOLIO_ITEMS ? 'opacity-50' : ''}`}
-              style={{ backgroundColor: '#059669' }}
+              style={{ backgroundColor: theme.primary }}
               onPress={pickAndUpload}
               disabled={isPicking || isUploading || items.length >= MAX_PORTFOLIO_ITEMS}
             >
@@ -868,8 +881,8 @@ export function PortfolioSection({
       {portfolioLoading ? (
         <PortfolioSkeleton count={3} />
       ) : items.length === 0 && !lastPickedStandalone ? (
-        <View className="bg-[#111827] border border-[#1F2937] p-4 rounded-lg">
-          <Text className="text-center text-gray-400 text-sm">
+        <View className="p-4 rounded-lg" style={{ backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.surfaceSecondary }}>
+          <Text className="text-center text-sm" style={{ color: theme.textSecondary }}>
             {isOwnProfile
               ? 'Showcase your work! Tap "Add Item" to upload images, videos, or files.'
               : "This user hasn't added portfolio items yet."}
@@ -907,9 +920,10 @@ export function PortfolioSection({
                 }
               >
                 <View
-                  className={`w-32 h-32 bg-emerald-50 rounded-lg overflow-hidden items-center justify-center border border-[#1F2937] ${
+                  className={`w-32 h-32 rounded-lg overflow-hidden items-center justify-center border ${
                     isReordering ? 'border-2 border-dashed border-[#059669]' : ''
                   }`}
+                  style={!isReordering ? { backgroundColor: theme.surfaceSecondary, borderColor: theme.border } : { backgroundColor: theme.surfaceSecondary }}
                 >
                   {item.type === 'image' || item.type === 'video' ? (
                     <>
@@ -933,14 +947,14 @@ export function PortfolioSection({
                     </>
                   ) : (
                     <View className="items-center justify-center p-3">
-                      <MaterialIcons name="insert-drive-file" size={28} color="#059669" />
-                      <Text className="text-[10px] text-gray-400 mt-1" numberOfLines={2}>
+                      <MaterialIcons name="insert-drive-file" size={28} color={theme.primary} />
+                      <Text className="text-[10px] mt-1" style={{ color: theme.textSecondary }} numberOfLines={2}>
                         {item.name || 'File'}
                       </Text>
                     </View>
                   )}
                   {isReordering && isOwnProfile && items.length > 1 && (
-                    <View className="absolute inset-0 bg-white/60 items-center justify-center">
+                    <View className="absolute inset-0 items-center justify-center" style={{ backgroundColor: theme.isDark ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.65)' }}>
                       <View className="flex-row gap-2">
                         {index > 0 && (
                           <TouchableOpacity
@@ -1015,11 +1029,11 @@ export function PortfolioSection({
           onPress={() => setSelectedPortfolioItem(null)}
         >
           <Pressable onPress={() => {}} style={{ width: '100%', maxWidth: 720 }}>
-            <View className="bg-[#111827] rounded-xl p-4 m-4 max-w-lg w-full border border-[#1F2937]">
+            <View className="rounded-xl p-4 m-4 max-w-lg w-full" style={{ backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.surfaceSecondary }}>
               <View className="flex-row justify-between items-center mb-3">
-                <Text className="text-lg font-bold text-white">Portfolio Item</Text>
+                <Text className="text-lg font-bold" style={{ color: theme.text }}>Portfolio Item</Text>
                 <TouchableOpacity onPress={() => setSelectedPortfolioItem(null)}>
-                  <MaterialIcons name="close" size={24} color="#6B7280" />
+                  <MaterialIcons name="close" size={24} color={theme.textSecondary} />
                 </TouchableOpacity>
               </View>
               {selectedPortfolioItem && (
@@ -1033,8 +1047,8 @@ export function PortfolioSection({
                         style={{ width: '100%', height: 256, borderRadius: 8, marginBottom: 12 }}
                       />
                     ) : (
-                      <View className="bg-gray-100 rounded-lg items-center justify-center h-64 mb-3">
-                        <Text className="text-gray-500">Unable to load video preview</Text>
+                      <View className="rounded-lg items-center justify-center h-64 mb-3" style={{ backgroundColor: theme.surfaceSecondary }}>
+                        <Text style={{ color: theme.textSecondary }}>Unable to load video preview</Text>
                       </View>
                     )
                   ) : (
@@ -1048,12 +1062,12 @@ export function PortfolioSection({
                     />
                   )}
                   {selectedPortfolioItem.title && (
-                    <Text className="text-base font-medium text-gray-900 mb-2">
+                    <Text className="text-base font-medium mb-2" style={{ color: theme.text }}>
                       {selectedPortfolioItem.title}
                     </Text>
                   )}
                   {selectedPortfolioItem.description && (
-                    <Text className="text-sm text-gray-400">
+                    <Text className="text-sm" style={{ color: theme.textSecondary }}>
                       {selectedPortfolioItem.description}
                     </Text>
                   )}

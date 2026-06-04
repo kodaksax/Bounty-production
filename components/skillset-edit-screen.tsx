@@ -8,6 +8,7 @@ import { useEffect, useState } from "react"
 import { ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native"
 import { useAuthProfile } from '../hooks/useAuthProfile'
 import { useUserProfile } from '../hooks/useUserProfile'
+import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 
 interface SkillsetEditScreenProps {
   onBack?: () => void
@@ -28,6 +29,7 @@ const ICON_LIBRARY = [
 ] as const
 
 export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: SkillsetEditScreenProps) {
+  const { theme } = useAppThemeContext();
   const { profile: localProfile, updateProfile } = useUserProfile();
   const { userId: authUserId } = useAuthProfile();
 
@@ -41,7 +43,7 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
 
   const [selectedSkill, setSelectedSkill] = useState<string>("1")
   const alias: Record<string,string> = { heart: 'favorite', target: 'gps-fixed', globe: 'public' }
-  const getIconComponent = (iconName: string) => <MaterialIcons name={(alias[iconName] || iconName) as any} size={20} color="#ffffff" />
+  const getIconComponent = (iconName: string) => <MaterialIcons name={(alias[iconName] || iconName) as any} size={20} color={theme.text} />
   
   // User-specific storage key to prevent data leaks between users
   const SKILLS_STORAGE_KEY = `profileSkills:${resolvedUserId || 'anon'}`;
@@ -150,23 +152,23 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
   }
 
   return (
-    <View className="flex flex-col min-h-screen bg-[#0B0F14] text-white">
+    <View className="flex flex-col min-h-screen" style={{ backgroundColor: theme.background }}>
       {/* Standard Header */}
       <View className="flex-row items-center justify-between p-4 pt-8">
         <View className="flex-row items-center">
           <BrandingLogo size="small" />
         </View>
         <TouchableOpacity onPress={handleSave} className="p-2">
-          <MaterialIcons name="close" size={24} color="#ffffff" />
+          <MaterialIcons name="close" size={24} color={theme.text} />
         </TouchableOpacity>
       </View>
 
       {/* Actions Bar */}
       <View className="flex-row items-center justify-between px-4 pb-2">
-        <Text className="text-base font-bold text-white">Edit Skillsets</Text>
+        <Text className="text-base font-bold" style={{ color: theme.text }}>Edit Skillsets</Text>
         <View className="flex-row">
-          <TouchableOpacity onPress={addNewSkill} className="px-3 py-2 bg-[#1F2937] rounded-lg mr-2">
-            <Text className="text-white text-sm">Add</Text>
+          <TouchableOpacity onPress={addNewSkill} className="px-3 py-2 rounded-lg mr-2" style={{ backgroundColor: theme.surfaceSecondary }}>
+            <Text className="text-sm" style={{ color: theme.text }}>Add</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={handleSave} className="px-3 py-2 bg-[#059669] rounded-lg">
             <Text className="text-white text-sm font-semibold">Save</Text>
@@ -175,17 +177,17 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
       </View>
 
       {banner && (
-        <View className="mx-4 mb-2 rounded-md bg-[#1F2937] border border-[#374151] px-3 py-2">
-          <Text className="text-xs text-white">{banner}</Text>
+        <View className="mx-4 mb-2 rounded-md px-3 py-2" style={{ backgroundColor: theme.surfaceSecondary, borderWidth: 1, borderColor: theme.border }}>
+          <Text className="text-xs" style={{ color: theme.text }}>{banner}</Text>
         </View>
       )}
       <ScrollView className="flex-1" contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}>
         {skills.map(skill => {
           const isActive = selectedSkill === skill.id
           return (
-            <View key={skill.id} className={`mb-4 rounded-xl p-4 ${isActive ? 'bg-[#1F2937] border border-[#374151]' : 'bg-[#111827]'}`}>
+            <View key={skill.id} className="mb-4 rounded-xl p-4" style={{ backgroundColor: isActive ? theme.surfaceSecondary : theme.surface, borderWidth: isActive ? 1 : 0, borderColor: theme.border }}>
               <View className="flex-row items-center mb-3">
-                <TouchableOpacity onPress={() => setSelectedSkill(skill.id)} className="h-12 w-12 rounded-full bg-[#1F2937] items-center justify-center mr-3">
+                <TouchableOpacity onPress={() => setSelectedSkill(skill.id)} className="h-12 w-12 rounded-full items-center justify-center mr-3" style={{ backgroundColor: theme.surfaceSecondary }}>
                   {getIconComponent(skill.icon)}
                 </TouchableOpacity>
                 <View className="flex-1">
@@ -193,32 +195,33 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
                     value={skill.text}
                     onChangeText={(text) => handleSkillChange(skill.id, text)}
                     placeholder="Describe your skill or credential"
-                    placeholderTextColor="#6B7280"
-                    className="text-white text-sm"
+                    placeholderTextColor={theme.textDisabled}
+                    className="text-sm"
+                    style={{ color: theme.text }}
                   />
                   {skill.credentialUrl && (
-                    <Text className="text-[#6ee7b7] text-xs mt-1" numberOfLines={1}>Attached: {skill.credentialUrl.split('/').pop()}</Text>
+                    <Text className="text-xs mt-1" style={{ color: theme.primaryLight }} numberOfLines={1}>Attached: {skill.credentialUrl.split('/').pop()}</Text>
                   )}
                 </View>
                 <TouchableOpacity onPress={() => removeSkill(skill.id)} className="ml-2 p-2">
-                  <MaterialIcons name="delete" size={20} color="#ffffff" />
+                  <MaterialIcons name="delete" size={20} color={theme.text} />
                 </TouchableOpacity>
               </View>
               {isActive && (
                 <View>
                   {/* Icon Library */}
-                  <Text className="text-xs font-semibold mb-1 text-[#9CA3AF]">Select Icon</Text>
+                  <Text className="text-xs font-semibold mb-1" style={{ color: theme.textSecondary }}>Select Icon</Text>
                   <View className="flex-row flex-wrap -m-1 mb-3">
                     {ICON_LIBRARY.map(ic => (
-                      <TouchableOpacity key={ic} onPress={() => changeIcon(skill.id, ic)} className={`m-1 h-9 w-9 rounded-lg items-center justify-center ${skill.icon === ic ? 'bg-[#059669]' : 'bg-[#1F2937]'}`}>
-                        <MaterialIcons name={ic as any} size={18} color={skill.icon === ic ? '#ffffff' : '#6ee7b7'} />
+                      <TouchableOpacity key={ic} onPress={() => changeIcon(skill.id, ic)} className="m-1 h-9 w-9 rounded-lg items-center justify-center" style={{ backgroundColor: skill.icon === ic ? theme.primary : theme.surfaceSecondary }}>
+                        <MaterialIcons name={ic as any} size={18} color={skill.icon === ic ? '#ffffff' : theme.primaryLight} />
                       </TouchableOpacity>
                     ))}
                   </View>
                   <View className="flex-row">
-                    <TouchableOpacity onPress={() => attachCredential(skill.id)} className={`flex-1 ${skill.credentialUrl ? 'mr-2' : ''} px-3 py-2 bg-[#1F2937] rounded-lg flex-row items-center justify-center`}>
-                      <MaterialIcons name="attach-file" size={18} color="#6ee7b7" />
-                      <Text className="text-[#6ee7b7] text-sm ml-1">{skill.credentialUrl ? 'Replace Credential' : 'Attach Credential'}</Text>
+                    <TouchableOpacity onPress={() => attachCredential(skill.id)} className={`flex-1 ${skill.credentialUrl ? 'mr-2' : ''} px-3 py-2 rounded-lg flex-row items-center justify-center`} style={{ backgroundColor: theme.surfaceSecondary }}>
+                      <MaterialIcons name="attach-file" size={18} color={theme.primaryLight} />
+                      <Text className="text-sm ml-1" style={{ color: theme.primaryLight }}>{skill.credentialUrl ? 'Replace Credential' : 'Attach Credential'}</Text>
                     </TouchableOpacity>
                     {skill.credentialUrl && (
                       <TouchableOpacity onPress={() => removeCredential(skill.id)} className="flex-1 px-3 py-2 bg-red-600/70 rounded-lg flex-row items-center justify-center">
