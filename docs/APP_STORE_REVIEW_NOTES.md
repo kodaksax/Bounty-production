@@ -2,6 +2,11 @@
 
 > Last updated: 2026-04-26
 >
+> **See also:** [`APP_STORE_REVIEW_RESPONSE_2026-05.md`](./APP_STORE_REVIEW_RESPONSE_2026-05.md)
+> for the point-by-point response to the v1.0 (39) rejection (Submission
+> 1425efd3), including the manual App Store Connect / Apple Developer / Supabase
+> configuration steps.
+>
 > This document captures known App Store / Play Store review considerations for
 > BOUNTY (`com.bounty.BOUNTYExpo` on iOS, `app.bountyfinder.BOUNTYExpo` on
 > Android), with the rationale for current decisions and the recommended path
