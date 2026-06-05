@@ -3,6 +3,7 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import { useEffect, useState } from "react"
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAuthContext } from "../hooks/use-auth-context"
 import { stripeService } from "../lib/services/stripe-service"
 import { useStripe } from "../lib/stripe-context"
@@ -48,6 +49,11 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
 
   const { createPaymentMethod, loadPaymentMethods, error: stripeError } = useStripe()
   const { session, isAuthStale, attemptRefresh, isLoading: isAuthLoading } = useAuthContext()
+  const insets = useSafeAreaInsets()
+  // Guarantee the action button / form bottom clears the home indicator and
+  // the rounded sheet edge on larger devices (e.g. iPad), where the modal is
+  // taller and the bottom controls were previously clipped (App Review 4).
+  const bottomInset = Math.max(insets.bottom, 16)
 
   // Refresh payment methods with retry logic
   // Let Stripe SDK and network stack handle timeouts naturally
@@ -424,7 +430,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
 
     if (embedded) {
       return (
-        <View style={embeddedStyles.container}>
+        <View style={[embeddedStyles.container, { flex: 1 }]}>
           <View style={embeddedStyles.navBar}>
             <TouchableOpacity onPress={onBack} style={embeddedStyles.backButton} accessibilityRole="button" accessibilityLabel="Back">
               <MaterialIcons name="arrow-back" size={22} color="#fff" />
@@ -432,9 +438,16 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
             <Text style={embeddedStyles.title}>Add Card</Text>
             <View style={{ width: 44 }} />
           </View>
-          <View style={{ backgroundColor: '#ffffff', margin: 16, borderRadius: 16, overflow: 'hidden' }}>
-            {paymentElementContent}
-          </View>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingBottom: bottomInset }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={{ backgroundColor: '#ffffff', margin: 16, borderRadius: 16, overflow: 'hidden' }}>
+              {paymentElementContent}
+            </View>
+          </ScrollView>
         </View>
       )
     }
@@ -457,9 +470,16 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
             <Text style={styles.navTitle}>Add Card</Text>
             <View style={styles.navButtonPlaceholder} />
           </View>
-          <View style={{ backgroundColor: '#ffffff', margin: 16, borderRadius: 16, overflow: 'hidden' }}>
-            {paymentElementContent}
-          </View>
+<ScrollView
+  style={styles.contentScroll}
+  contentContainerStyle={{ paddingBottom: bottomInset }}
+  keyboardShouldPersistTaps="handled"
+  showsVerticalScrollIndicator={false}
+>
+            <View style={{ backgroundColor: '#ffffff', margin: 16, borderRadius: 16, overflow: 'hidden' }}>
+              {paymentElementContent}
+            </View>
+          </ScrollView>
         </View>
       </KeyboardAvoidingView>
     )
@@ -468,7 +488,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
   if (embedded) {
     // Render inline when embedded inside another modal
     return (
-      <View style={embeddedStyles.container}>
+      <View style={[embeddedStyles.container, { flex: 1 }]}>
         <View style={embeddedStyles.navBar}>
           <TouchableOpacity onPress={onBack} style={embeddedStyles.backButton} accessibilityRole="button" accessibilityLabel="Back">
             <MaterialIcons name="arrow-back" size={22} color="#fff" />
@@ -477,7 +497,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
           <View style={{ width: 44 }} />
         </View>
 
-        <ScrollView contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.contentContainer, { paddingBottom: 40 + bottomInset }]} keyboardShouldPersistTaps="handled">
           <Text style={styles.instructions}>Enter your card details. Data updates as you type.</Text>
 
           <View style={styles.previewCard}>
@@ -616,7 +636,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
 
         <ScrollView
           style={styles.contentScroll}
-          contentContainerStyle={styles.contentContainer}
+          contentContainerStyle={[styles.contentContainer, { paddingBottom: 40 + bottomInset }]}
           keyboardShouldPersistTaps="handled"
         >
           <Text style={styles.instructions}>Enter your card details. Data updates as you type.</Text>
