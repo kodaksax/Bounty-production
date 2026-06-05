@@ -470,11 +470,12 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
             <Text style={styles.navTitle}>Add Card</Text>
             <View style={styles.navButtonPlaceholder} />
           </View>
-          <ScrollView
-            contentContainerStyle={{ paddingBottom: bottomInset }}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
+<ScrollView
+  style={styles.contentScroll}
+  contentContainerStyle={{ paddingBottom: bottomInset }}
+  keyboardShouldPersistTaps="handled"
+  showsVerticalScrollIndicator={false}
+>
             <View style={{ backgroundColor: '#ffffff', margin: 16, borderRadius: 16, overflow: 'hidden' }}>
               {paymentElementContent}
             </View>
