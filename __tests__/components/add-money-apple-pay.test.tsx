@@ -111,6 +111,7 @@ describe('AddMoneyScreen — Apple Pay discoverability (Guideline 2.1)', () => {
   it('processes the payment when Apple Pay is available', async () => {
     mockIsAvailable.mockResolvedValue(true);
     mockProcessPayment.mockResolvedValue({ success: true, paymentIntentId: 'pi_123' });
+    const fetchSpy = jest.spyOn(global, 'fetch' as any).mockResolvedValue({ ok: true } as any);
 
     const { getByText } = render(<AddMoneyScreen />);
     await waitFor(() => expect(getByText('Pay')).toBeTruthy());
@@ -122,5 +123,6 @@ describe('AddMoneyScreen — Apple Pay discoverability (Guideline 2.1)', () => {
     });
 
     await waitFor(() => expect(mockProcessPayment).toHaveBeenCalledTimes(1));
+    fetchSpy.mockRestore();
   });
 });
