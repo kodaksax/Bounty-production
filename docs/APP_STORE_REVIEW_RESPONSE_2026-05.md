@@ -209,17 +209,26 @@ in by `@stripe/stripe-react-native`, and the app uses it:
   consistently in `app.json` (`ios.entitlements["com.apple.developer.in-app-payments"]`
   and the `@stripe/stripe-react-native` plugin `merchantIdentifier`).
 
-**Why the reviewer may not have seen it:** The Apple Pay button is intentionally
-**hidden when `isApplePaySupported()` returns false** — i.e. when the test device
-has no card provisioned in Apple Wallet. On the review device the button would
-not appear until a (test) card is added to Wallet.
+**Why the reviewer may not have seen it:** The Apple Pay button was previously
+**hidden when `isApplePaySupported()` returned false** — i.e. when the test
+device had no card provisioned in Apple Wallet. On the review device the button
+would not appear until a (test) card was added to Wallet.
 
-**Add to App Review Notes (no code change required):**
-> Apple Pay is available at **Wallet → Add Money**. The Apple Pay button appears
-> only on iOS devices that have a card in Apple Wallet (it is gated by
-> `isApplePaySupported()`). To verify: add a card to Apple Wallet on the review
-> device, open Wallet → Add Money, enter an amount, and the Apple Pay button will
-> be shown. Merchant ID: `merchant.com.bountyexpo-workspace`.
+**Code fix (this build):** The Apple Pay button at **Wallet → Add Money** is now
+rendered on **all iOS devices** (gated only on `Platform.OS === 'ios'`), so the
+integration is always locatable. Tapping it re-checks availability via
+`applePayService.isAvailable()`; if Apple Pay is not yet set up on the device,
+the app shows a short "Apple Pay Not Set Up" prompt directing the user to add a
+card in the Wallet app, instead of silently failing. See
+`components/add-money-screen.tsx` (`handleApplePayPress` and the Apple Pay button
+render block).
+
+**Add to App Review Notes:**
+> Apple Pay is available at **Wallet → Add Money**. On iOS the black "Pay"
+> (Apple Pay) button is always shown above the "Add Money" button. To complete a
+> payment, add a card to Apple Wallet on the review device, open Wallet → Add
+> Money, enter an amount, and tap the Apple Pay button. Merchant ID:
+> `merchant.com.bountyexpo-workspace`.
 
 If Apple Pay is **not** intended to ship in this version, instead remove the
 Apple Pay capability/entitlement and the Stripe `merchantIdentifier`, and note in

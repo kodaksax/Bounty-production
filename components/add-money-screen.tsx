@@ -232,6 +232,24 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
       return
     }
 
+    // Apple Pay may not be set up on this device (no card provisioned in the
+    // Wallet app). Re-check availability on tap so the button stays discoverable
+    // — this is also what App Review needs to locate the integration — and guide
+    // the user to set it up instead of silently failing.
+    let available = isApplePayAvailable
+    if (!available) {
+      available = await applePayService.isAvailable()
+      setIsApplePayAvailable(available)
+    }
+    if (!available) {
+      Alert.alert(
+        'Apple Pay Not Set Up',
+        'Apple Pay isn\u2019t set up on this device. Open the Wallet app and add a card to pay with Apple Pay, or use a linked card or bank account below.',
+        [{ text: 'OK' }]
+      )
+      return
+    }
+
     setIsProcessing(true)
     setError(null)
 
@@ -379,8 +397,13 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
       {/* Add Button - fixed above home indicator */}
       <View className="fixed left-0 right-0 bg-emerald-600 pb-safe" style={{ position: 'absolute', bottom: 66 }}>
         <View className="px-4">
-          {/* Apple Pay button (iOS only) */}
-          {Platform.OS === 'ios' && isApplePayAvailable && (
+          {/* Apple Pay button (iOS only).
+              Always rendered on iOS — even when no card is provisioned in the
+              Wallet app — so the Apple Pay integration is discoverable (the tap
+              handler re-checks availability and guides the user to set it up).
+              This keeps the integration locatable for App Store review per
+              Guideline 2.1. */}
+          {Platform.OS === 'ios' && (
             <TouchableOpacity
               className="w-full py-4 rounded-full flex-row items-center justify-center mb-3"
               style={{ backgroundColor: '#000000' }}
