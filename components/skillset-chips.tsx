@@ -65,7 +65,7 @@ function makeStyles(theme: AppTheme) {
     chip: {
       flexDirection: "row",
       alignItems: "center",
-      backgroundColor: "rgba(6, 78, 59, 0.4)",
+      backgroundColor: theme.surfaceSecondary,
       borderRadius: 16,
       paddingVertical: 6,
       paddingHorizontal: 12,
@@ -88,7 +88,7 @@ function makeStyles(theme: AppTheme) {
     emptyState: {
       paddingVertical: 12,
       paddingHorizontal: 16,
-      backgroundColor: "rgba(6, 78, 59, 0.2)",
+      backgroundColor: theme.surfaceSecondary,
       borderRadius: 8,
     },
     emptyText: {
