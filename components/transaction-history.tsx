@@ -188,7 +188,7 @@ export function TransactionHistory({
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'succeeded':
-        return <CheckCircle2 size={20} color="#10b981" />;
+        return <CheckCircle2 size={20} color="#059669" />;
       case 'pending':
       case 'processing':
         return <Clock size={20} color="#f59e0b" />;
@@ -204,7 +204,7 @@ export function TransactionHistory({
   const getStatusColor = (status: string): string => {
     switch (status) {
       case 'succeeded':
-        return '#10b981';
+        return '#059669';
       case 'pending':
       case 'processing':
         return '#f59e0b';
@@ -218,7 +218,7 @@ export function TransactionHistory({
   };
 
   const getTransactionIcon = (type: string, status: string) => {
-    const color = status === 'succeeded' ? '#047857' : '#6b7280';
+    const color = status === 'succeeded' ? '#0B0F14' : '#6b7280';
 
     if (type === 'deposit' || type === 'refund') {
       return <ArrowDownLeft size={24} color={color} />;
@@ -263,7 +263,7 @@ export function TransactionHistory({
           style={[
             styles.amount,
             {
-              color: item.type === 'deposit' || item.type === 'refund' ? '#10b981' : '#111827',
+              color: item.type === 'deposit' || item.type === 'refund' ? '#059669' : '#111827',
             },
           ]}
         >
@@ -295,7 +295,7 @@ export function TransactionHistory({
   if (loading && !refreshing) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#047857" />
+        <ActivityIndicator size="large" color="#0B0F14" />
         <Text style={styles.loadingText}>Loading transactions...</Text>
       </View>
     );
@@ -325,8 +325,8 @@ export function TransactionHistory({
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            tintColor="#047857"
-            colors={['#047857']}
+            tintColor="#0B0F14"
+            colors={['#0B0F14']}
           />
         }
         contentContainerStyle={transactions.length === 0 ? styles.emptyContainer : undefined}
@@ -420,7 +420,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingVertical: 12,
     paddingHorizontal: 24,
-    backgroundColor: '#047857',
+    backgroundColor: '#0B0F14',
     borderRadius: 8,
   },
   retryButtonText: {
@@ -455,6 +455,6 @@ const styles = StyleSheet.create({
   loadMoreText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#047857',
+    color: '#0B0F14',
   },
 });

@@ -44,19 +44,19 @@ export const MessageBubble = memo(({
       case 'sending':
         return (
           <View style={styles.statusContainer}>
-            <MaterialIcons name="schedule" size={12} color="rgba(209, 250, 229, 0.6)" />
+            <MaterialIcons name="schedule" size={12} color="rgba(156, 163, 175, 0.6)" />
           </View>
         );
       case 'sent':
         return (
           <View style={styles.statusContainer}>
-            <MaterialIcons name="check" size={12} color="#d1fae5" />
+            <MaterialIcons name="check" size={12} color="#9CA3AF" />
           </View>
         );
       case 'delivered':
         return (
           <View style={styles.statusContainer}>
-            <MaterialIcons name="done-all" size={12} color="#d1fae5" />
+            <MaterialIcons name="done-all" size={12} color="#9CA3AF" />
           </View>
         );
       case 'read':
@@ -85,9 +85,9 @@ export const MessageBubble = memo(({
       <View className={cn('mb-3 px-3 max-w-[80%]', isUser ? 'ml-auto' : 'mr-auto')}>
         <View className={cn(
           'px-3 py-2 rounded-2xl',
-          isUser 
-            ? 'bg-emerald-500 rounded-br-none' // Current user: emerald-500, right-aligned
-            : 'bg-neutral-200 rounded-bl-none' // Peer: neutral-200, left-aligned
+          isUser
+            ? 'bg-[#059669] rounded-br-none'
+            : 'bg-[#1F2937] rounded-bl-none'
         )}>
           {isPinned && (
             <View style={styles.pinnedBadge}>
@@ -97,7 +97,7 @@ export const MessageBubble = memo(({
           )}
           <Text className={cn(
             'text-sm',
-            isUser ? 'text-white' : 'text-gray-900' // Current user: white text; Peer: dark text
+            isUser ? 'text-white' : 'text-white'
           )}>{text}</Text>
           {renderStatusIcon()}
         </View>

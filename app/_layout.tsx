@@ -1,4 +1,5 @@
 import { ThemeProvider } from "components/theme-provider";
+import { AppThemeProvider, useAppThemeContext } from '../lib/themes/AppThemeContext';
 import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
 import { Slot } from "expo-router";
@@ -76,6 +77,17 @@ const getBarStyleForHex = (hex: string): "light" | "dark" => {
   return lum > 0.5 ? "dark" : "light";
 };
 
+// Keeps BackgroundColorContext (used for status-bar tinting) in sync with the
+// active theme so the status-bar color flips instantly when the user toggles.
+const ThemeSyncer = () => {
+  const { theme } = useAppThemeContext();
+  const { setColor } = useBackgroundColor();
+  React.useEffect(() => {
+    setColor(theme.background);
+  }, [theme.background, setColor]);
+  return null;
+};
+
 const RootFrame = ({ children, bgColor = COLORS.EMERALD_500 }: { children: React.ReactNode; bgColor?: string }) => {
   const insets = useSafeAreaInsets();
   const barStyle = getBarStyleForHex(bgColor);
@@ -138,6 +150,7 @@ const LayoutContent = () => {
                     <NotificationProvider>
                       <WebSocketProvider>
                         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+                          <ThemeSyncer />
                           <View style={styles.inner}>
                             <Slot />
                           </View>
@@ -270,9 +283,11 @@ function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <SafeAreaProvider>
       <GestureHandlerRootView style={styles.gestureRoot}>
-        <BackgroundColorProvider>
-          <LayoutContent />
-        </BackgroundColorProvider>
+        <AppThemeProvider>
+          <BackgroundColorProvider>
+            <LayoutContent />
+          </BackgroundColorProvider>
+        </AppThemeProvider>
       </GestureHandlerRootView>
     </SafeAreaProvider>
   );
@@ -296,7 +311,7 @@ const SessionMonitorGate = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669', // emerald-600
+    backgroundColor: '#0B0F14', // page background
   },
   inner: {
     flex: 1,

@@ -130,7 +130,7 @@ export function UpdatePasswordScreen() {
   // Show loading while verifying token
   if (verifying) {
     return (
-      <View className="flex-1 bg-emerald-700/95 items-center justify-center">
+      <View className="flex-1 bg-[#0B0F14] items-center justify-center">
         <ActivityIndicator size="large" color="#fff" />
         <Text className="text-white/80 mt-4">Verifying reset link...</Text>
       </View>
@@ -140,7 +140,7 @@ export function UpdatePasswordScreen() {
   // Show error if token is invalid
   if (!tokenValid && !success) {
     return (
-      <View className="flex-1 bg-emerald-700/95 px-6 pt-20 pb-8">
+      <View className="flex-1 bg-[#0B0F14] px-6 pt-20 pb-8">
         <View className="items-center">
           <View className="bg-red-500/20 rounded-full p-4 mb-4">
             <MaterialIcons name="error-outline" size={48} color="#f87171" />
@@ -154,7 +154,7 @@ export function UpdatePasswordScreen() {
               router.push('/auth/reset-password')
               try { markInitialNavigationDone(); } catch {}
             }}
-            className="bg-emerald-600 rounded-lg py-3 px-6 mb-4"
+            className="bg-[#059669] rounded-lg py-3 px-6 mb-4"
           >
             <Text className="text-white font-medium">Request New Reset Link</Text>
           </TouchableOpacity>
@@ -172,10 +172,10 @@ export function UpdatePasswordScreen() {
   // Show success screen
   if (success) {
     return (
-      <View className="flex-1 bg-emerald-700/95 px-6 pt-20 pb-8">
+      <View className="flex-1 bg-[#0B0F14] px-6 pt-20 pb-8">
         <View className="items-center">
-          <View className="bg-emerald-500/30 rounded-full p-4 mb-4">
-            <MaterialIcons name="check-circle" size={48} color="#34d399" />
+          <View className="bg-[#059669]/30 rounded-full p-4 mb-4">
+            <MaterialIcons name="check-circle" size={48} color="#059669" />
           </View>
           <Text className="text-white font-bold text-xl mb-2">Password Updated!</Text>
           <Text className="text-white/70 text-center text-sm px-4 mb-6">
@@ -186,7 +186,7 @@ export function UpdatePasswordScreen() {
               router.replace('/auth/sign-in-form')
               try { markInitialNavigationDone(); } catch {}
             }}
-            className="bg-emerald-600 rounded-lg py-3 px-6"
+            className="bg-[#059669] rounded-lg py-3 px-6"
           >
             <View className="flex-row items-center">
               <MaterialIcons name="login" size={20} color="#fff" style={{ marginRight: 8 }} />
@@ -201,7 +201,7 @@ export function UpdatePasswordScreen() {
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-        <View className="flex-1 bg-emerald-700/95 px-6 pt-20 pb-8">
+        <View className="flex-1 bg-[#0B0F14] px-6 pt-20 pb-8">
           {/* Header */}
           <View className="flex-row items-center justify-center mb-6">
             <BrandingLogo size="large" />
@@ -305,10 +305,10 @@ export function UpdatePasswordScreen() {
                         <MaterialIcons 
                           name={req.met ? 'check-circle' : 'radio-button-unchecked'} 
                           size={14} 
-                          color={req.met ? '#34d399' : 'rgba(255,255,255,0.4)'} 
+                          color={req.met ? '#059669' : 'rgba(255,255,255,0.4)'} 
                         />
                         <Text 
-                          className={`text-xs ml-2 ${req.met ? 'text-emerald-300' : 'text-white/50'}`}
+                          className={`text-xs ml-2 ${req.met ? 'text-[#6ee7b7]' : 'text-white/50'}`}
                         >
                           {req.label}
                         </Text>
@@ -367,8 +367,8 @@ export function UpdatePasswordScreen() {
                 <View className="flex-row items-center mt-2">
                   {password === confirmPassword ? (
                     <>
-                      <MaterialIcons name="check-circle" size={14} color="#34d399" />
-                      <Text className="text-emerald-300 text-xs ml-1">Passwords match</Text>
+                      <MaterialIcons name="check-circle" size={14} color="#059669" />
+                      <Text className="text-[#6ee7b7] text-xs ml-1">Passwords match</Text>
                     </>
                   ) : (
                     <>
@@ -386,8 +386,8 @@ export function UpdatePasswordScreen() {
               disabled={loading || !passwordStrength?.isValid || password !== confirmPassword}
               className={`w-full rounded-lg py-4 items-center flex-row justify-center ${
                 loading || !passwordStrength?.isValid || password !== confirmPassword
-                  ? 'bg-emerald-600/50'
-                  : 'bg-emerald-600'
+                  ? 'bg-[#059669]/50'
+                  : 'bg-[#059669]'
               }`}
             >
               {loading ? (

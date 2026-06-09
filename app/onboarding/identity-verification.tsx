@@ -37,6 +37,8 @@ import { SPACING } from '../../lib/constants/accessibility';
 import { storageService } from '../../lib/services/storage-service';
 import { supabase } from '../../lib/supabase';
 import { compressImage } from '../../lib/utils/image-utils';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/heic'];
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB — matches bucket limit
@@ -94,6 +96,8 @@ export default function IdentityVerificationScreen() {
   const insets = useSafeAreaInsets();
   const { session } = useAuthContext();
 
+  const { theme } = useAppThemeContext();
+  const styles = makeStyles(theme);
   const [idImage, setIdImage] = useState<string | null>(null);
   const [selfieImage, setSelfieImage] = useState<string | null>(null);
   const [step, setStep] = useState<UploadStep>('idle');
@@ -325,7 +329,7 @@ export default function IdentityVerificationScreen() {
 
           <View style={[styles.content, { marginTop: 32 }]}>
             <View style={[styles.iconCircle, styles.iconCircleSuccess]}>
-              <MaterialIcons name="hourglass-top" size={48} color="#a7f3d0" />
+              <MaterialIcons name="hourglass-top" size={48} color="#9CA3AF" />
             </View>
             <Text style={styles.title} accessibilityRole="header">Verification Submitted</Text>
             <Text style={styles.subtitle}>
@@ -372,7 +376,7 @@ export default function IdentityVerificationScreen() {
             accessibilityLabel="Go back"
             disabled={isSubmitting}
           >
-            <MaterialIcons name="arrow-back" size={24} color="#a7f3d0" />
+            <MaterialIcons name="arrow-back" size={24} color="#9CA3AF" />
           </TouchableOpacity>
           <BrandingLogo size="small" />
           <View style={{ width: 40 }} />
@@ -381,7 +385,7 @@ export default function IdentityVerificationScreen() {
         {/* Prompt */}
         <View style={styles.content}>
           <View style={styles.iconCircle}>
-            <MaterialIcons name="verified-user" size={48} color="#a7f3d0" />
+            <MaterialIcons name="verified-user" size={48} color="#9CA3AF" />
           </View>
           <Text style={styles.title} accessibilityRole="header">Verify Your Identity</Text>
           <Text style={styles.subtitle}>
@@ -408,7 +412,7 @@ export default function IdentityVerificationScreen() {
               <Image source={{ uri: idImage }} style={styles.uploadedImage} />
             ) : (
               <>
-                <MaterialIcons name="add-a-photo" size={40} color="#a7f3d0" />
+                <MaterialIcons name="add-a-photo" size={40} color="#9CA3AF" />
                 <Text style={styles.uploadText}>Tap to upload front of ID</Text>
               </>
             )}
@@ -429,7 +433,7 @@ export default function IdentityVerificationScreen() {
               <Image source={{ uri: selfieImage }} style={styles.uploadedImage} />
             ) : (
               <>
-                <MaterialIcons name="camera-front" size={40} color="#a7f3d0" />
+                <MaterialIcons name="camera-front" size={40} color="#9CA3AF" />
                 <Text style={styles.uploadText}>Tap to take a selfie</Text>
               </>
             )}
@@ -438,7 +442,7 @@ export default function IdentityVerificationScreen() {
 
         {/* Privacy notice */}
         <View style={styles.privacyBox}>
-          <MaterialIcons name="lock" size={20} color="#a7f3d0" />
+          <MaterialIcons name="lock" size={20} color="#9CA3AF" />
           <View style={styles.privacyContent}>
             <Text style={styles.privacyTitle}>Your Privacy</Text>
             <Text style={styles.privacyText}>
@@ -498,174 +502,176 @@ export default function IdentityVerificationScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#059669',
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: SPACING.COMPACT_GAP,
-    marginBottom: SPACING.SCREEN_HORIZONTAL,
-  },
-  backButton: {
-    padding: SPACING.COMPACT_GAP,
-  },
-  iconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(5,46,27,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(167,243,208,0.3)',
-  },
-  iconCircleSuccess: {
-    borderColor: '#a7f3d0',
-  },
-  content: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginTop: SPACING.SCREEN_HORIZONTAL,
-    marginBottom: SPACING.COMPACT_GAP,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.85)',
-    textAlign: 'center',
-    lineHeight: 22,
-    paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
-  },
-  section: {
-    marginBottom: SPACING.SECTION_GAP,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#a7f3d0',
-    marginBottom: SPACING.ELEMENT_GAP,
-  },
-  helperText: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.7)',
-    marginTop: -SPACING.COMPACT_GAP,
-    marginBottom: SPACING.ELEMENT_GAP,
-  },
-  uploadBox: {
-    backgroundColor: 'rgba(5,46,27,0.5)',
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: 'rgba(167,243,208,0.3)',
-    borderStyle: 'dashed',
-    height: 180,
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
-  uploadText: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.7)',
-    marginTop: 8,
-  },
-  uploadedImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
-  },
-  privacyBox: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(5,46,27,0.5)',
-    borderRadius: 12,
-    padding: SPACING.CARD_PADDING,
-    marginBottom: SPACING.SECTION_GAP,
-    borderWidth: 1,
-    borderColor: 'rgba(167,243,208,0.3)',
-  },
-  privacyContent: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  privacyTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#a7f3d0',
-    marginBottom: 4,
-  },
-  privacyText: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.8)',
-    lineHeight: 18,
-  },
-  errorBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.COMPACT_GAP,
-    backgroundColor: 'rgba(127,29,29,0.6)',
-    borderRadius: 12,
-    padding: SPACING.CARD_PADDING,
-    marginBottom: SPACING.ELEMENT_GAP,
-    borderWidth: 1,
-    borderColor: 'rgba(252,165,165,0.3)',
-  },
-  errorText: {
-    flex: 1,
-    color: '#fecaca',
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  submitButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#a7f3d0',
-    paddingVertical: SPACING.CARD_PADDING,
-    borderRadius: 999,
-    marginBottom: SPACING.COMPACT_GAP,
-    gap: SPACING.COMPACT_GAP,
-  },
-  submitButtonDisabled: {
-    opacity: 0.5,
-  },
-  submitButtonText: {
-    color: '#052e1b',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  skipButton: {
-    alignItems: 'center',
-    paddingVertical: 12,
-    marginBottom: SPACING.SCREEN_HORIZONTAL,
-  },
-  skipButtonText: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 16,
-  },
-  progressContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
-    paddingTop: 8,
-  },
-  progressDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-  },
-  progressDotActive: {
-    backgroundColor: '#a7f3d0',
-  },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    scrollContent: {
+      flexGrow: 1,
+      paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: SPACING.COMPACT_GAP,
+      marginBottom: SPACING.SCREEN_HORIZONTAL,
+    },
+    backButton: {
+      padding: SPACING.COMPACT_GAP,
+    },
+    iconCircle: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      backgroundColor: theme.surface,
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 2,
+      borderColor: theme.border,
+    },
+    iconCircleSuccess: {
+      borderColor: theme.primary,
+    },
+    content: {
+      alignItems: 'center',
+      marginBottom: 24,
+    },
+    title: {
+      fontSize: 26,
+      fontWeight: 'bold',
+      color: theme.text,
+      marginTop: SPACING.SCREEN_HORIZONTAL,
+      marginBottom: SPACING.COMPACT_GAP,
+      textAlign: 'center',
+    },
+    subtitle: {
+      fontSize: 15,
+      color: theme.textSecondary,
+      textAlign: 'center',
+      lineHeight: 22,
+      paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
+    },
+    section: {
+      marginBottom: SPACING.SECTION_GAP,
+    },
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.textSecondary,
+      marginBottom: SPACING.ELEMENT_GAP,
+    },
+    helperText: {
+      fontSize: 13,
+      color: theme.textSecondary,
+      marginTop: -SPACING.COMPACT_GAP,
+      marginBottom: SPACING.ELEMENT_GAP,
+    },
+    uploadBox: {
+      backgroundColor: theme.surface,
+      borderRadius: 12,
+      borderWidth: 2,
+      borderColor: theme.border,
+      borderStyle: 'dashed',
+      height: 180,
+      justifyContent: 'center',
+      alignItems: 'center',
+      overflow: 'hidden',
+    },
+    uploadText: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      marginTop: 8,
+    },
+    uploadedImage: {
+      width: '100%',
+      height: '100%',
+      resizeMode: 'cover',
+    },
+    privacyBox: {
+      flexDirection: 'row',
+      backgroundColor: theme.surface,
+      borderRadius: 12,
+      padding: SPACING.CARD_PADDING,
+      marginBottom: SPACING.SECTION_GAP,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    privacyContent: {
+      flex: 1,
+      marginLeft: 12,
+    },
+    privacyTitle: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: theme.textSecondary,
+      marginBottom: 4,
+    },
+    privacyText: {
+      fontSize: 13,
+      color: theme.textSecondary,
+      lineHeight: 18,
+    },
+    errorBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: SPACING.COMPACT_GAP,
+      backgroundColor: 'rgba(127,29,29,0.6)',
+      borderRadius: 12,
+      padding: SPACING.CARD_PADDING,
+      marginBottom: SPACING.ELEMENT_GAP,
+      borderWidth: 1,
+      borderColor: 'rgba(252,165,165,0.3)',
+    },
+    errorText: {
+      flex: 1,
+      color: '#fecaca',
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    submitButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.primary,
+      paddingVertical: SPACING.CARD_PADDING,
+      borderRadius: 999,
+      marginBottom: SPACING.COMPACT_GAP,
+      gap: SPACING.COMPACT_GAP,
+    },
+    submitButtonDisabled: {
+      opacity: 0.5,
+    },
+    submitButtonText: {
+      color: '#052e1b',
+      fontSize: 18,
+      fontWeight: 'bold',
+    },
+    skipButton: {
+      alignItems: 'center',
+      paddingVertical: 12,
+      marginBottom: SPACING.SCREEN_HORIZONTAL,
+    },
+    skipButtonText: {
+      color: theme.textSecondary,
+      fontSize: 16,
+    },
+    progressContainer: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 8,
+      paddingTop: 8,
+    },
+    progressDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: theme.border,
+    },
+    progressDotActive: {
+      backgroundColor: theme.primary,
+    },
+  });
+}

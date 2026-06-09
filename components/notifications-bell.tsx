@@ -35,7 +35,7 @@ const NotificationItem = React.memo<{
       activeOpacity={0.7}
     >
       <View className="flex-row items-start">
-        <View className={`w-10 h-10 rounded-full items-center justify-center mr-3 ${!item.read ? 'bg-emerald-600' : 'bg-gray-400'}`}>
+        <View className={`w-10 h-10 rounded-full items-center justify-center mr-3 ${!item.read ? 'bg-[#059669]' : 'bg-gray-400'}`}>
           <MaterialIcons name={getIcon(item.type)} size={20} color="white" />
         </View>
         <View className="flex-1">
@@ -44,7 +44,7 @@ const NotificationItem = React.memo<{
           <Text className="text-gray-400 text-xs">{timeAgo}</Text>
         </View>
         {!item.read && (
-          <View className="w-2 h-2 rounded-full bg-emerald-600 ml-2 mt-2" />
+          <View className="w-2 h-2 rounded-full bg-[#059669] ml-2 mt-2" />
         )}
       </View>
     </TouchableOpacity>
@@ -154,9 +154,9 @@ export function NotificationsBell() {
         onRequestClose={() => setDropdownVisible(false)}
       >
   {/* Root modal view: use the same emerald-600 as the header for cohesion */}
-  <View className="flex-1 bg-emerald-600" style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}>
+  <View className="flex-1 bg-[#059669]" style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}>
           {/* Header */}
-          <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-200 bg-emerald-600">
+          <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-200 bg-[#059669]">
             <View className="flex-row items-center">
               <MaterialIcons name="notifications" size={24} color="#fff" />
               <Text className="text-xl font-bold ml-2 text-white">Notifications</Text>
@@ -168,13 +168,13 @@ export function NotificationsBell() {
 
           {/* Action bar — match emerald palette and use white text for contrast */}
           {notifications.length > 0 && (
-            <View className="flex-row items-center justify-between px-4 py-2 bg-emerald-700 border-b border-emerald-700">
+            <View className="flex-row items-center justify-between px-4 py-2 bg-[#111827] border-b border-emerald-700">
               <Text className="text-sm text-white">
                 {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up!'}
               </Text>
               {unreadCount > 0 && (
                 <TouchableOpacity onPress={handleMarkAllRead}>
-                  <Text className="text-sm font-semibold text-emerald-200">Mark all read</Text>
+                  <Text className="text-sm font-semibold text-[#9CA3AF]">Mark all read</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -190,7 +190,7 @@ export function NotificationsBell() {
             <View className="flex-1 items-center justify-center px-4">
               <MaterialIcons name="notifications-none" size={64} color="#ffffff" />
               <Text className="text-white text-lg font-semibold mt-4">No notifications yet</Text>
-              <Text className="text-emerald-100 text-center mt-2">
+              <Text className="text-white text-center mt-2">
                 When someone applies to your bounties or sends you a message, you'll see it here
               </Text>
             </View>

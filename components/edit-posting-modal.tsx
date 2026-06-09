@@ -124,7 +124,7 @@ export function EditPostingModal({
                 disabled={isSubmitting}
                 style={styles.closeButton}
               >
-                <MaterialIcons name="close" size={24} color="#d1fae5" />
+                <MaterialIcons name="close" size={24} color="#1F2937" />
               </TouchableOpacity>
             </View>
 
@@ -180,7 +180,7 @@ export function EditPostingModal({
                 disabled={isSubmitting}
               >
                 <View style={styles.toggleLeft}>
-                  <MaterialIcons name="favorite" size={20} color="#10b981" />
+                  <MaterialIcons name="favorite" size={20} color="#059669" />
                   <Text style={styles.toggleLabel}>For Honor</Text>
                 </View>
                 <View
@@ -279,7 +279,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   modal: {
-    backgroundColor: "#047857", // emerald-700
+    backgroundColor: "#0B0F14", // emerald-700
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     // Use a fixed relative height so content gets layout below the header
@@ -315,11 +315,11 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#d1fae5",
+    color: "#1F2937",
     marginBottom: 8,
   },
   input: {
-    backgroundColor: "#065f46",
+    backgroundColor: "#111827",
     borderRadius: 12,
     padding: 12,
     color: "#fff",
@@ -335,7 +335,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#065f46",
+    backgroundColor: "#111827",
     borderRadius: 12,
     padding: 16,
     marginBottom: 20,
@@ -359,7 +359,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   toggleActive: {
-    backgroundColor: "#10b981",
+    backgroundColor: "#059669",
   },
   toggleThumb: {
     width: 24,
@@ -385,7 +385,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   saveButton: {
-    backgroundColor: "#10b981",
+    backgroundColor: "#059669",
     padding: 16,
     borderRadius: 12,
     alignItems: "center",
@@ -401,7 +401,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   cancelButtonText: {
-    color: "#a7f3d0",
+    color: "#9CA3AF",
     fontSize: 14,
   },
 });

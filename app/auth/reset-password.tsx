@@ -134,7 +134,7 @@ export function ResetPasswordScreen() {
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-        <View className="flex-1 bg-emerald-700/95 px-6 pt-20 pb-8">
+        <View className="flex-1 bg-[#0B0F14] px-6 pt-20 pb-8">
           {/* Header */}
           <View className="flex-row items-center justify-center mb-6">
             <BrandingLogo size="large" />
@@ -168,10 +168,10 @@ export function ResetPasswordScreen() {
           
           {/* Success Message */}
           {message && (
-            <View className="bg-emerald-600/30 border border-emerald-400 rounded-lg p-4 mb-4 flex-row items-start">
-              <MaterialIcons name="check-circle" size={20} color="#34d399" style={{ marginTop: 2 }} />
+            <View className="bg-[#1F2937] border border-[#374151] rounded-lg p-4 mb-4 flex-row items-start">
+              <MaterialIcons name="check-circle" size={20} color="#059669" style={{ marginTop: 2 }} />
               <View className="ml-3 flex-1">
-                <Text className="text-emerald-200 text-sm">{message}</Text>
+                <Text className="text-[#9CA3AF] text-sm">{message}</Text>
               </View>
             </View>
           )}
@@ -220,7 +220,7 @@ export function ResetPasswordScreen() {
                   onPress={() => {
                     // This is a placeholder - in production, use expo-mail-composer
                   }}
-                  className="w-full bg-emerald-600 rounded-lg py-3 items-center"
+                  className="w-full bg-[#059669] rounded-lg py-3 items-center"
                 >
                   <Text className="text-white font-medium">Open Email App</Text>
                 </TouchableOpacity>
@@ -241,7 +241,7 @@ export function ResetPasswordScreen() {
                     <Text className="text-white/80 text-sm">
                       Didn
                       {"'"}
-                      t receive the email? <Text className="text-emerald-300 underline">Resend</Text>
+                      t receive the email? <Text className="text-[#6ee7b7] underline">Resend</Text>
                     </Text>
                   )}
                 </TouchableOpacity>
@@ -264,8 +264,8 @@ export function ResetPasswordScreen() {
                 onPress={handleReset}
                 className={`w-full rounded-lg py-3 items-center ${
                   loading || resendCooldown > 0 || isLockedOut()
-                    ? 'bg-emerald-600/50'
-                    : 'bg-emerald-600'
+                    ? 'bg-[#059669]/50'
+                    : 'bg-[#059669]'
                 }`}
               >
                 {loading ? (

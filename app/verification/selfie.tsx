@@ -131,7 +131,7 @@ export default function SelfieScreen() {
             <MaterialIcons
               name="arrow-back"
               size={24}
-              color="#a7f3d0"
+              color="#9CA3AF"
               accessibilityElementsHidden={true}
             />
           </TouchableOpacity>
@@ -145,7 +145,7 @@ export default function SelfieScreen() {
             <MaterialIcons
               name="face"
               size={48}
-              color="#a7f3d0"
+              color="#9CA3AF"
               accessibilityElementsHidden={true}
             />
           </View>
@@ -209,7 +209,7 @@ export default function SelfieScreen() {
               accessibilityLabel="Retake selfie"
               accessibilityState={{ disabled: isSubmitting }}
             >
-              <MaterialIcons name="refresh" size={20} color="#a7f3d0" accessibilityElementsHidden={true} />
+              <MaterialIcons name="refresh" size={20} color="#9CA3AF" accessibilityElementsHidden={true} />
               <Text style={styles.retakeButtonText}>Retake</Text>
             </TouchableOpacity>
 
@@ -231,7 +231,7 @@ export default function SelfieScreen() {
 
         {/* Privacy notice */}
         <View style={styles.privacyBox}>
-          <MaterialIcons name="lock" size={20} color="#a7f3d0" />
+          <MaterialIcons name="lock" size={20} color="#9CA3AF" />
           <View style={styles.privacyContent}>
             <Text style={styles.privacyTitle}>Your Privacy</Text>
             <Text style={styles.privacyText}>
@@ -299,7 +299,7 @@ const styles = StyleSheet.create({
     height: 220,
     borderRadius: 110,
     borderWidth: 3,
-    borderColor: '#a7f3d0',
+    borderColor: '#9CA3AF',
     overflow: 'hidden',
     backgroundColor: 'rgba(5,46,27,0.5)',
     marginBottom: SPACING.SECTION_GAP,
@@ -340,7 +340,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#9CA3AF',
     paddingVertical: SPACING.CARD_PADDING,
     borderRadius: 999,
     marginBottom: SPACING.SECTION_GAP,
@@ -365,11 +365,11 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.CARD_PADDING,
     borderRadius: 999,
     borderWidth: 2,
-    borderColor: '#a7f3d0',
+    borderColor: '#9CA3AF',
     gap: SPACING.COMPACT_GAP,
   },
   retakeButtonText: {
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -378,7 +378,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#9CA3AF',
     paddingVertical: SPACING.CARD_PADDING,
     borderRadius: 999,
     gap: SPACING.COMPACT_GAP,
@@ -407,7 +407,7 @@ const styles = StyleSheet.create({
   privacyTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     marginBottom: 4,
   },
   privacyText: {

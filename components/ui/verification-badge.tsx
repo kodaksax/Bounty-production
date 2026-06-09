@@ -24,8 +24,8 @@ interface VerificationConfig {
 const VERIFICATION_CONFIGS: Record<VerificationLevel, VerificationConfig> = {
   verified: {
     icon: 'verified',
-    color: '#10b981', // emerald-500
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    color: '#059669', // emerald-500
+    backgroundColor: 'rgba(255,255,255,0.05)',
     label: 'Verified',
     title: 'Verified Account',
     description: 'This user has completed identity verification through our secure process. Their email is confirmed, and their payment methods are validated. You can trust transactions with verified users.',
@@ -133,15 +133,15 @@ export function VerificationBadge({
             {status === 'verified' && (
               <View style={styles.verificationDetails}>
                 <View style={styles.detailRow}>
-                  <MaterialIcons name="check-circle" size={16} color="#10b981" />
+                  <MaterialIcons name="check-circle" size={16} color="#059669" />
                   <Text style={styles.detailText}>Email confirmed</Text>
                 </View>
                 <View style={styles.detailRow}>
-                  <MaterialIcons name="check-circle" size={16} color="#10b981" />
+                  <MaterialIcons name="check-circle" size={16} color="#059669" />
                   <Text style={styles.detailText}>Payment method validated</Text>
                 </View>
                 <View style={styles.detailRow}>
-                  <MaterialIcons name="check-circle" size={16} color="#10b981" />
+                  <MaterialIcons name="check-circle" size={16} color="#059669" />
                   <Text style={styles.detailText}>Identity verified</Text>
                 </View>
               </View>
@@ -191,7 +191,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modalContent: {
-    backgroundColor: '#065f46', // emerald-800
+    backgroundColor: '#111827', // emerald-800
     borderRadius: 16,
     padding: 24,
     width: '100%',
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
   },
   modalDescription: {
     fontSize: 14,
-    color: '#d1fae5', // emerald-100
+    color: '#1F2937', // emerald-100
     lineHeight: 22,
     textAlign: 'center',
     marginBottom: 16,
@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
   },
   detailText: {
     fontSize: 13,
-    color: '#a7f3d0', // emerald-200
+    color: '#9CA3AF', // emerald-200
   },
   tipBox: {
     flexDirection: 'row',
@@ -254,7 +254,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   closeButton: {
-    backgroundColor: '#10b981', // emerald-500
+    backgroundColor: '#059669', // emerald-500
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',

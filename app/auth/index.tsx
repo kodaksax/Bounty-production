@@ -47,7 +47,7 @@ export default function AuthIndex() {
   // Show a minimal loading indicator while the redirect takes effect.
   return (
     <View style={styles.container}>
-      <ActivityIndicator size="large" color="#a7f3d0" />
+      <ActivityIndicator size="large" color="#9CA3AF" />
     </View>
   );
 }
@@ -55,7 +55,7 @@ export default function AuthIndex() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: '#0B0F14',
     justifyContent: 'center',
     alignItems: 'center',
   },

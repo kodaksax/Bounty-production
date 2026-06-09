@@ -3,6 +3,8 @@ import type { ComponentProps } from 'react';
 import React, { useState, useCallback } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useHapticFeedback } from '../../lib/haptic-feedback';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 
 // Type for MaterialIcons icon names
 type MaterialIconName = ComponentProps<typeof MaterialIcons>['name'];
@@ -28,7 +30,7 @@ const PLATFORM_BADGES: TrustBadge[] = [
     icon: 'lock',
     title: 'Escrow Protected',
     description: 'All payments are held securely in escrow until work is verified and approved. Your funds are never released without your explicit approval.',
-    color: '#10b981', // emerald-500
+    color: '#059669', // emerald-500
   },
   {
     id: 'secure-payments',
@@ -79,6 +81,8 @@ export function TrustBadges({
   showPlatformBadges = true,
   compact = false,
 }: TrustBadgesProps) {
+  const { theme } = useAppThemeContext();
+  const styles = makeStyles(theme);
   const [selectedBadge, setSelectedBadge] = useState<TrustBadge | null>(null);
   const { triggerHaptic } = useHapticFeedback();
   
@@ -96,7 +100,7 @@ export function TrustBadges({
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <MaterialIcons name="shield" size={18} color="#6ee7b7" />
+        <MaterialIcons name="shield" size={18} color={theme.primary} />
         <Text style={styles.title}>Platform Security</Text>
       </View>
       
@@ -126,7 +130,7 @@ export function TrustBadges({
               </View>
             )}
             {!compact && (
-              <MaterialIcons name="chevron-right" size={20} color="#6ee7b7" />
+              <MaterialIcons name="chevron-right" size={20} color={theme.primary} />
             )}
           </TouchableOpacity>
         ))}
@@ -183,6 +187,8 @@ export function TrustBadges({
  * Used in areas with limited vertical space
  */
 export function TrustBadgesCompact() {
+  const { theme } = useAppThemeContext();
+  const styles = makeStyles(theme);
   const [selectedBadge, setSelectedBadge] = useState<TrustBadge | null>(null);
   const { triggerHaptic } = useHapticFeedback();
 
@@ -259,140 +265,144 @@ export function TrustBadgesCompact() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    backgroundColor: 'rgba(5, 95, 70, 0.3)',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  subtitle: {
-    fontSize: 12,
-    color: '#a7f3d0',
-    marginBottom: 16,
-  },
-  gridContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  listContainer: {
-    gap: 12,
-  },
-  gridBadge: {
-    width: '30%',
-    alignItems: 'center',
-    padding: 12,
-    backgroundColor: 'rgba(6, 78, 59, 0.5)',
-    borderRadius: 12,
-  },
-  listBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    backgroundColor: 'rgba(6, 78, 59, 0.5)',
-    borderRadius: 12,
-    gap: 12,
-  },
-  badgeIconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  badgeTextContainer: {
-    flex: 1,
-  },
-  badgeTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#fff',
-    marginBottom: 2,
-  },
-  badgePreview: {
-    fontSize: 12,
-    color: '#a7f3d0',
-  },
-  compactContainer: {
-    marginVertical: 8,
-  },
-  compactScrollContent: {
-    gap: 8,
-    paddingHorizontal: 4,
-  },
-  compactBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(5, 95, 70, 0.3)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-    gap: 6,
-  },
-  compactBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#d1fae5',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: '#065f46', // emerald-800
-    borderRadius: 16,
-    padding: 24,
-    width: '100%',
-    maxWidth: 340,
-  },
-  modalHeader: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  modalIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#fff',
-    textAlign: 'center',
-  },
-  modalDescription: {
-    fontSize: 14,
-    color: '#d1fae5',
-    lineHeight: 22,
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  closeButton: {
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  closeButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      backgroundColor: theme.isDark ? 'rgba(5,95,70,0.3)' : 'rgba(5,150,105,0.1)',
+      borderRadius: 16,
+      padding: 16,
+      marginBottom: 16,
+      borderWidth: 1,
+      borderColor: theme.isDark ? 'rgba(167,243,208,0.3)' : theme.primary,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 4,
+    },
+    title: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: theme.text,
+    },
+    subtitle: {
+      fontSize: 12,
+      color: theme.textSecondary,
+      marginBottom: 16,
+    },
+    gridContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 12,
+    },
+    listContainer: {
+      gap: 12,
+    },
+    gridBadge: {
+      width: '30%',
+      alignItems: 'center',
+      padding: 12,
+      backgroundColor: theme.isDark ? 'rgba(6,78,59,0.5)' : 'rgba(5,150,105,0.08)',
+      borderRadius: 12,
+    },
+    listBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 12,
+      backgroundColor: theme.isDark ? 'rgba(6,78,59,0.5)' : 'rgba(5,150,105,0.08)',
+      borderRadius: 12,
+      gap: 12,
+    },
+    badgeIconCircle: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    badgeTextContainer: {
+      flex: 1,
+    },
+    badgeTitle: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: theme.text,
+      marginBottom: 2,
+    },
+    badgePreview: {
+      fontSize: 12,
+      color: theme.textSecondary,
+    },
+    compactContainer: {
+      marginVertical: 8,
+    },
+    compactScrollContent: {
+      gap: 8,
+      paddingHorizontal: 4,
+    },
+    compactBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.isDark ? 'rgba(5,95,70,0.3)' : 'rgba(5,150,105,0.1)',
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 16,
+      gap: 6,
+    },
+    compactBadgeText: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: theme.text,
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 20,
+    },
+    modalContent: {
+      backgroundColor: theme.surface,
+      borderRadius: 16,
+      padding: 24,
+      width: '100%',
+      maxWidth: 340,
+    },
+    modalHeader: {
+      alignItems: 'center',
+      marginBottom: 16,
+    },
+    modalIconCircle: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 16,
+    },
+    modalTitle: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: theme.text,
+      textAlign: 'center',
+    },
+    modalDescription: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      lineHeight: 22,
+      textAlign: 'center',
+      marginBottom: 20,
+    },
+    closeButton: {
+      paddingVertical: 12,
+      borderRadius: 8,
+      alignItems: 'center',
+    },
+    closeButtonText: {
+      color: '#fff',
+      fontSize: 16,
+      fontWeight: '600',
+    },
+  });
+}

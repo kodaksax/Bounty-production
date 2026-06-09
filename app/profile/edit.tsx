@@ -310,7 +310,7 @@ export default function EditProfileScreen() {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#10b981" />
+          <ActivityIndicator size="large" color="#059669" />
           <Text style={styles.loadingText}>Loading profile...</Text>
         </View>
       </View>
@@ -601,7 +601,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 14,
-    backgroundColor: "#047857", // emerald-700
+    backgroundColor: "#0B0F14", // emerald-700
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255, 255, 255, 0.1)",
   },
@@ -623,7 +623,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   saveButton: {
-    backgroundColor: "#10b981", // emerald-500
+    backgroundColor: "#059669", // emerald-500
     borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 6,
@@ -687,7 +687,7 @@ const styles = StyleSheet.create({
   },
   bannerPlaceholder: {
     height: BANNER_HEIGHT,
-    backgroundColor: "#047857",
+    backgroundColor: "#0B0F14",
     justifyContent: "center",
     alignItems: "center",
     borderBottomWidth: 1,
@@ -695,7 +695,7 @@ const styles = StyleSheet.create({
   },
   bannerHelpText: {
     fontSize: 13,
-    color: "#d1fae5",
+    color: "#1F2937",
     marginTop: 6,
     fontStyle: "italic",
     fontWeight: "500",
@@ -709,7 +709,7 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: "#10b981",
+    backgroundColor: "#059669",
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 5,
@@ -732,7 +732,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#10b981",
+    backgroundColor: "#059669",
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 4,
@@ -749,7 +749,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#a7f3d0",
+    color: "#9CA3AF",
     marginBottom: 16,
     paddingHorizontal: 16,
   },
@@ -763,7 +763,7 @@ const styles = StyleSheet.create({
   },
   fieldContainerFocused: {
     backgroundColor: "rgba(16, 185, 129, 0.12)",
-    borderLeftColor: "#10b981",
+    borderLeftColor: "#059669",
   },
   label: {
     fontSize: 12,
@@ -810,7 +810,7 @@ const styles = StyleSheet.create({
   infoText: {
     flex: 1,
     fontSize: 12,
-    color: "#d1fae5",
+    color: "#1F2937",
     lineHeight: 16,
   },
 });

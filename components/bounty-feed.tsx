@@ -11,8 +11,9 @@ import { useRouter } from 'expo-router'
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { Alert, Animated, Dimensions, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useValidUserId } from '../hooks/useValidUserId'
-import { API_TIMEOUTS } from '../lib/config/network'
 import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../lib/constants/accessibility'
+import { useAppThemeContext } from '../lib/themes/AppThemeContext'
+import type { AppTheme } from '../lib/themes/types'
 import { bountyRequestService } from '../lib/services/bounty-request-service'
 import { bountyService } from '../lib/services/bounty-service'
 import type { Bounty } from '../lib/services/database.types'
@@ -22,9 +23,7 @@ import { storage } from '../lib/storage'
 import type { TrendingBounty } from '../lib/types'
 
 export type BountyFeedHandle = {
-  /** Reload the first page of bounties (reset pagination). */
   refresh: () => void
-  /** Scroll list to top and trigger a refresh — used when user re-taps the bounty tab. */
   handleTabRepress: () => void
 }
 
@@ -41,38 +40,33 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   ref
 ) {
   const router = useRouter()
-
+  const [listHeight, setListHeight] = useState(0)  // ← measured height
   const [bounties, setBounties] = useState<Bounty[]>([])
   const [isLoadingBounties, setIsLoadingBounties] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
-  // Track bounty IDs the user has applied to (pending, accepted, or rejected)
   const [appliedBountyIds, setAppliedBountyIds] = useState<Set<string>>(new Set())
-  // Track whether user applications have been loaded (prevents flash of unfiltered content)
   const [applicationsLoaded, setApplicationsLoaded] = useState(false)
-  // Track error state to show offline/error UI instead of perpetual loading
   const [loadError, setLoadError] = useState<Error | null>(null)
   const [refreshing, setRefreshing] = useState(false)
-  // Trending bounties state
   const [trendingBounties, setTrendingBounties] = useState<TrendingBounty[]>([])
   const [isLoadingTrending, setIsLoadingTrending] = useState(true)
-
   const [activeCategory, setActiveCategory] = useState<string | 'all'>('all')
-  const [distanceFilter, setDistanceFilter] = useState<number | null>(null) // Max distance in miles, null = no filter
+  const [distanceFilter, setDistanceFilter] = useState<number | null>(null)
   const [distanceDropdownOpen, setDistanceDropdownOpen] = useState(false)
   const [distanceChipLayout, setDistanceChipLayout] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
+
+  const { theme } = useAppThemeContext()
+  const s = useMemo(() => makeStyles(theme), [theme])
 
   const scrollY = useRef(new Animated.Value(0)).current
   const bountyListRef = useRef<FlatList>(null)
   const offsetRef = useRef(0)
   const distanceChipRef = useRef<any>(null)
 
-  // Location hook for calculating real distances
   const { location: userLocation, permission } = useLocation()
-
   const validUserId = useValidUserId()
 
-  // Collapsing header config (using standardized constants)
   const HEADER_EXPANDED = HEADER_LAYOUT.expandedHeight
   const HEADER_COLLAPSED = HEADER_LAYOUT.collapsedHeight
   const headerTopPad = 0
@@ -87,26 +81,19 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     extrapolate: 'clamp',
   })
 
-  // Filter chips per design - memoized to prevent dependency issues
   const categories = useMemo(() => [
     { id: 'crypto', label: 'Crypto', icon: 'attach-money' as const },
     { id: 'remote', label: 'Remote', icon: 'inventory' as const },
     { id: 'highpaying', label: 'High Paying', icon: 'payments' as const },
-    // Insert distance as a synthetic chip so it renders inline between High Paying and For Honor
     { id: 'distance', label: 'Distance', icon: 'near-me' as const, special: true },
     { id: 'forkids', label: 'For Honor', icon: 'favorite' as const },
   ], [])
 
   const DISTANCE_OPTIONS = [5, 10, 25, 50]
 
-  // Calculate distance - uses real geolocation when available, falls back to mock
   const calculateDistance = useCallback((bountyLocation: string) => {
-    if (!bountyLocation) return null // Return null for missing location (will show "Location TBD")
-
-    // If user has location permission and coordinates
+    if (!bountyLocation) return null
     if (userLocation && permission?.granted) {
-      // Try to parse bounty location if it has coordinates
-      // Format: "lat,lng" or just address string
       const coordMatch = bountyLocation.match(/^(-?\d+\.?\d*),\s*(-?\d+\.?\d*)$/)
       if (coordMatch) {
         const lat = parseFloat(coordMatch[1])
@@ -120,14 +107,11 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         }
       }
     }
-
-    // Fallback: deterministic mock distance calculation based on location string
     const seed = bountyLocation.length
     const hash = bountyLocation.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
     return 1 + ((hash % seed) % 15)
   }, [userLocation, permission])
 
-  // Memoize distance calculations to avoid recalculating on each filter/sort
   const bountyDistances = useMemo(() => {
     const distances = new Map<string, number | null>()
     bounties.forEach(bounty => {
@@ -135,16 +119,12 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     })
     return distances
   }, [bounties, calculateDistance])
-
-  // Filter and sort bounties by category
+  
   const filteredBounties = useMemo(() => {
     let list = [...bounties]
-
-    // Filter out bounties the user has applied to (pending, accepted, or rejected)
     if (appliedBountyIds.size > 0) {
       list = list.filter((b) => !appliedBountyIds.has(String(b.id)))
     }
-
     if (activeCategory !== 'all') {
       if (activeCategory === 'forkids') {
         list = list.filter((b) => Boolean(b.is_for_honor))
@@ -158,8 +138,6 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         )
       }
     }
-
-    // Apply distance filter if active (only for in-person bounties)
     if (distanceFilter !== null && userLocation && permission?.granted) {
       list = list.filter((b) => {
         if (b.work_type === 'online') return true
@@ -168,8 +146,6 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         return distance <= distanceFilter
       })
     }
-
-    // Sorting
     if (activeCategory === 'highpaying') {
       list.sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0))
     } else {
@@ -185,7 +161,16 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     return list
   }, [bounties, activeCategory, distanceFilter, userLocation, permission, bountyDistances, appliedBountyIds])
 
-  // Load user's bounty applications (to filter out applied/rejected bounties from feed)
+  const resultsLabel = useMemo(() => {
+    const count = filteredBounties.length
+    if (count === 0) return 'No bounties'
+    if (count === 1) return '1 bounty'
+    let label = `${count} bounties`
+    if (distanceFilter) label += ` • within ${distanceFilter} mi`
+    if (activeCategory !== 'all') label += ` • ${activeCategory}`
+    return label
+  }, [filteredBounties.length, distanceFilter, activeCategory])
+
   const loadUserApplications = useCallback(async () => {
     const uid = validUserId ?? currentUserId
     if (!uid) {
@@ -207,34 +192,25 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     }
   }, [currentUserId])
 
-  // Debounced setter to avoid rapid re-render/update cycles when users tap filters quickly
   const activeCategoryTimerRef = useRef<number | null>(null)
   const handleSetActiveCategory = useCallback((val: string | 'all') => {
-    if (activeCategoryTimerRef.current) {
-      clearTimeout(activeCategoryTimerRef.current)
-    }
-    // small debounce to batch rapid taps
-    // store timer id as number for React Native
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    if (activeCategoryTimerRef.current) clearTimeout(activeCategoryTimerRef.current)
     // @ts-ignore
     activeCategoryTimerRef.current = setTimeout(() => {
       setActiveCategory(val)
     }, 250) as unknown as number
   }, [])
 
-  // Cleanup any pending debounce timers on unmount to avoid stray setState
   useEffect(() => {
     return () => {
       if (activeCategoryTimerRef.current) {
         clearTimeout(activeCategoryTimerRef.current)
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore
         activeCategoryTimerRef.current = null
       }
     }
   }, [])
 
-  // Load bounties from backend
   const loadBounties = useCallback(async ({ reset = false }: { reset?: boolean } = {}) => {
     if (reset) {
       setIsLoadingBounties(true)
@@ -244,24 +220,12 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     }
     try {
       const pageOffset = reset ? 0 : offsetRef.current
-      const fetchedBounties = await Promise.race<Bounty[]>([
-        bountyService.getAll({ status: 'open', limit: PAGE_SIZE, offset: pageOffset }),
-        new Promise<never>((_, reject) =>
-          setTimeout(
-            () => reject(new Error('Service unavailable — please try again shortly')),
-            API_TIMEOUTS.DEFAULT
-          )
-        ),
-      ])
-
+      const fetchedBounties = await bountyService.getAll({ status: 'open', limit: PAGE_SIZE, offset: pageOffset })
       const mergeUniqueById = (existing: Bounty[], incoming: Bounty[]) => {
         const map = new Map<string, Bounty>()
-        existing.concat(incoming).forEach(b => {
-          map.set(String(b.id), b)
-        })
+        existing.concat(incoming).forEach(b => { map.set(String(b.id), b) })
         return Array.from(map.values())
       }
-
       if (reset) {
         setBounties(mergeUniqueById([], fetchedBounties))
       } else {
@@ -283,21 +247,6 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     }
   }, [])
 
-  // Load trending bounties
-  const loadTrendingBounties = useCallback(async () => {
-    setIsLoadingTrending(true)
-    try {
-      const trending = await searchService.getTrendingBounties(5)
-      const unique = Array.from(new Map(trending.map(t => [String(t.id), t])).values())
-      setTrendingBounties(unique)
-    } catch (error) {
-      console.error('Error loading trending bounties:', error)
-    } finally {
-      setIsLoadingTrending(false)
-    }
-  }, [])
-
-  // Pull-to-refresh handler
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
@@ -305,21 +254,15 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       setHasMore(true)
       await Promise.all([
         loadBounties({ reset: true }),
-        loadUserApplications().catch(err => {
-          console.error('Failed to refresh user applications:', err)
-        }),
-        loadTrendingBounties().catch(err => {
-          console.error('Failed to refresh trending bounties:', err)
-        }),
+        loadUserApplications().catch(err => console.error('Failed to refresh user applications:', err)),
       ])
     } catch (error) {
       console.error('Error refreshing bounties:', error)
     } finally {
       setRefreshing(false)
     }
-  }, [loadBounties, loadUserApplications, loadTrendingBounties])
+  }, [loadBounties, loadUserApplications])
 
-  // Expose refresh and tab-repress handlers to parent via ref
   useImperativeHandle(ref, () => ({
     refresh: () => {
       offsetRef.current = 0
@@ -332,28 +275,15 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     },
   }), [loadBounties, onRefresh])
 
-  // Load user applications when component mounts or user changes
-  useEffect(() => {
-    loadUserApplications()
-  }, [loadUserApplications])
-
-  // Load initial data on mount only
-  useEffect(() => {
-    loadBounties({ reset: true })
-    loadTrendingBounties()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Reload bounties when returning to bounty screen from other screens
+  useEffect(() => { loadUserApplications() }, [loadUserApplications])
+  useEffect(() => { loadBounties({ reset: true }) }, []) // eslint-disable-line
   useEffect(() => {
     if (activeScreen === 'bounty') {
       loadBounties({ reset: false })
       loadUserApplications()
-      loadTrendingBounties()
     }
-  }, [activeScreen, loadBounties, loadUserApplications, loadTrendingBounties])
+  }, [activeScreen, loadBounties, loadUserApplications])
 
-  // Restore last-selected chip on mount
   useEffect(() => {
     ;(async () => {
       try {
@@ -363,16 +293,12 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     })()
   }, [])
 
-  // Persist chip selection
   useEffect(() => {
     ;(async () => {
-      try {
-        await storage.setItem('BE:lastFilter', String(activeCategory))
-      } catch {}
+      try { await storage.setItem('BE:lastFilter', String(activeCategory)) } catch {}
     })()
   }, [activeCategory])
 
-  // Ensure activeCategory matches available filters
   useEffect(() => {
     const ids = categories.map((c) => c.id)
     if (activeCategory !== 'all' && !ids.includes(String(activeCategory))) {
@@ -380,40 +306,33 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     }
   }, [categories, activeCategory])
 
-  // FlatList optimization: memoized functions
   const keyExtractor = useCallback((item: Bounty) => item.id.toString(), [])
-
-  const getItemLayout = useCallback((_data: any, index: number) => ({
-    length: 90,
-    offset: 90 * index,
-    index,
-  }), [])
 
   const renderBountyItem = useCallback(({ item }: { item: Bounty }) => {
     const distance = bountyDistances.get(String(item.id)) ?? calculateDistance(item.location || '')
     return (
-      <BountyListItem
-        id={item.id}
-        title={item.title}
-        username={item.username}
-        price={Number(item.amount)}
-        distance={distance}
-        description={item.description}
-        isForHonor={Boolean(item.is_for_honor)}
-        user_id={item.user_id}
-        work_type={item.work_type}
-        poster_avatar={item.poster_avatar}
-      />
+      <View style={{ height: listHeight }}>
+        <BountyListItem
+          id={item.id}
+          title={item.title}
+          username={item.username}
+          price={Number(item.amount)}
+          distance={distance}
+          description={item.description}
+          isForHonor={Boolean(item.is_for_honor)}
+          user_id={item.user_id}
+          work_type={item.work_type}
+          poster_avatar={item.poster_avatar}
+        />
+      </View>
     )
-  }, [bountyDistances, calculateDistance])
+  }, [bountyDistances, calculateDistance, listHeight])
 
   const handleEndReached = useCallback(() => {
-    if (!isLoadingBounties && !loadingMore && hasMore) {
-      loadBounties()
-    }
+    if (!isLoadingBounties && !loadingMore && hasMore) loadBounties()
   }, [isLoadingBounties, loadingMore, hasMore, loadBounties])
 
-  const ItemSeparator = useCallback(() => <View style={{ height: 2 }} />, [])
+  const ItemSeparator = useCallback(() => null, [])
 
   const EmptyListComponent = useCallback(() => {
     if (isLoadingBounties || !applicationsLoaded) {
@@ -423,31 +342,27 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         </View>
       )
     }
-
     if (loadError) {
       return (
         <EmptyState
           icon="cloud-off"
           title="Unable to load bounties"
-          description={loadError.message.includes('unavailable') ? loadError.message : 'Service temporarily unavailable. Pull down to retry.'}
+          description="Check your internet connection and try again"
           actionLabel="Try Again"
           onAction={() => loadBounties({ reset: true })}
         />
       )
     }
-    // If a category filter is active, offer a clear-filter empty state.
     if (activeCategory && activeCategory !== 'all') {
       return (
         <View style={{ width: '100%', alignItems: 'center' }}>
-          <Text style={{ color: '#e5e7eb', marginBottom: 8 }}>No bounties match this filter.</Text>
-          <TouchableOpacity onPress={() => handleSetActiveCategory('all')} style={{ backgroundColor: '#a7f3d0', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999 }}>
-            <Text style={{ color: '#052e1b', fontWeight: '700' }}>Clear filter</Text>
+          <Text style={{ color: theme.textSecondary, marginBottom: 8 }}>No bounties match this filter.</Text>
+          <TouchableOpacity onPress={() => handleSetActiveCategory('all')} style={{ backgroundColor: theme.surfaceSecondary, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999, borderWidth: 1, borderColor: theme.border }}>
+            <Text style={{ color: theme.text, fontWeight: '700' }}>Clear filter</Text>
           </TouchableOpacity>
         </View>
       )
     }
-
-    // Generic empty feed for new users: encourage posting a bounty
     return (
       <EmptyState
         icon="search-off"
@@ -466,418 +381,277 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       </View>
     ) : null
   ), [loadingMore])
-
-  // Trending Section Component
-  const TrendingSection = useCallback(() => {
-    if (isLoadingTrending && trendingBounties.length === 0) {
-      return (
-        <View style={styles.trendingSection}>
-          <View style={styles.trendingHeader}>
-            <MaterialIcons name="trending-up" size={20} color="#fcd34d" />
-            <Text style={styles.trendingTitle}>Trending This Week</Text>
-          </View>
-          <View style={{ paddingVertical: 16 }}>
-            <PostingsListSkeleton count={2} />
-          </View>
-        </View>
-      )
-    }
-
-    if (trendingBounties.length === 0) {
-      return null
-    }
-
-    const getAgeBadge = (createdAt: string | undefined | null): string | null => {
-      if (!createdAt) return null
-      const date = new Date(createdAt)
-      if (isNaN(date.getTime())) return null
-      const hours = (Date.now() - date.getTime()) / (1000 * 60 * 60)
-      if (hours < 24) return 'New today'
-      if (hours < 48) return 'Yesterday'
-      if (hours < 72) return '2 days ago'
-      return null
-    }
-
-    return (
-      <View style={styles.trendingSection}>
-        <View style={styles.trendingHeader}>
-          <MaterialIcons name="trending-up" size={20} color="#fcd34d" />
-          <Text style={styles.trendingTitle}>Trending This Week</Text>
-        </View>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingVertical: 8 }}
-        >
-          {trendingBounties.map((item) => {
-            const ageBadge = getAgeBadge(item.createdAt)
-            return (
-              <TouchableOpacity
-                key={item.id}
-                style={styles.trendingCard}
-                onPress={() => router.push(`/bounty/${item.id}/public`)}
-                accessibilityRole="button"
-                accessibilityLabel={`Trending bounty: ${item.title}, ${item.isForHonor ? 'for honor' : '$' + item.amount}${ageBadge ? ', ' + ageBadge : ''}`}
-              >
-                <View style={styles.trendingCardHeader}>
-                  <Text style={styles.trendingCardTitle} numberOfLines={2}>
-                    {item.title}
-                  </Text>
-                  {item.isForHonor ? (
-                    <View style={styles.trendingHonorBadge}>
-                      <Text style={styles.trendingHonorText}>Honor</Text>
-                    </View>
-                  ) : item.amount ? (
-                    <Text style={styles.trendingAmount}>${item.amount}</Text>
-                  ) : null}
-                </View>
-                {ageBadge && (
-                  <View style={styles.trendingNewBadge}>
-                    <MaterialIcons name="schedule" size={12} color="#6ee7b7" />
-                    <Text style={styles.trendingNewText}>{ageBadge}</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            )
-          })}
-        </ScrollView>
-      </View>
-    )
-  }, [isLoadingTrending, trendingBounties, router])
-
+   
   return (
-    <View style={styles.dashboardArea}>
-      {/* Collapsing Header */}
-      <Animated.View style={[styles.collapsingHeader, { height: headerHeight, paddingTop: headerTopPad }]}>
-        <View style={styles.headerRow}>
-          <View style={styles.headerLeft}>
-            <BrandingLogo size="medium" />
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <NotificationsBell />
-            <WalletBalanceButton onPress={() => setActiveScreen('wallet')} />
-          </View>
-        </View>
-        <Animated.View style={{ opacity: extraContentOpacity }}>
-          {/* Search Bar */}
-          <View style={styles.searchWrapper}>
+
+
+ 
+
+
+    
+
+    
+    <View style={s.dashboardArea}>
+
+
+      
+      {/* Search Bar */}
+          <View style={s.searchWrapper}>
+            
             <TouchableOpacity
               accessibilityRole="button"
               accessibilityLabel="Open search"
               onPress={() => router.push('/tabs/search')}
-              style={styles.searchButton}
+              style={s.searchButton}
             >
-              <MaterialIcons name="search" size={18} color="rgba(255,255,255,0.85)" style={styles.searchIcon} />
-              <Text style={styles.searchText}>Search bounties or users...</Text>
+              <MaterialIcons
+                name="search"
+                size={20}
+                color={theme.textDisabled}
+                style={s.searchIcon}
+              />
+        <Text style={s.searchText}>Search bounties or users...</Text>
+
+          
             </TouchableOpacity>
           </View>
-          {/* Filter Chips + Distance chip */}
-          <View style={styles.filtersRow}>
-            <FlatList
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              data={categories}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={{ paddingHorizontal: 16 }}
-              renderItem={({ item }) => {
-                const isDistance = item.id === 'distance'
-                const isActive = isDistance ? Boolean(distanceFilter) : activeCategory === item.id
-                if (isDistance) {
-                  return (
-                    <TouchableOpacity
-                      ref={(r) => { distanceChipRef.current = r }}
-                      onLayout={(e) => {
-                        const { x, y, width, height } = e.nativeEvent.layout
-                        setDistanceChipLayout({ x, y, width, height })
-                      }}
-                      onPress={() => {
-                        if (!permission?.granted || !userLocation) {
-                          Alert.alert('Location required', 'Enable location permission to filter by distance.')
-                          return
-                        }
-                        if (distanceFilter) {
-                          setDistanceFilter(null)
-                          setDistanceDropdownOpen(false)
-                          return
-                        }
-                        if (distanceDropdownOpen && !distanceFilter) {
-                          setDistanceDropdownOpen(false)
-                          return
-                        }
-                        try {
-                          if (distanceChipRef.current && typeof distanceChipRef.current.measureInWindow === 'function') {
-                            distanceChipRef.current.measureInWindow((x: number, y: number, width: number, height: number) => {
-                              setDistanceChipLayout({ x, y, width, height })
-                              setDistanceDropdownOpen(true)
-                            })
-                            return
-                          }
-                        } catch {
-                          // fallthrough to open without positioning
-                        }
-                        setDistanceDropdownOpen((s) => !s)
-                      }}
-                      style={[styles.chip, isActive && styles.chipActive, !permission?.granted ? styles.disabledChip : undefined]}
-                      accessibilityRole="button"
-                      accessibilityLabel={distanceFilter ? `Filter by ${distanceFilter} miles, currently active` : 'Filter by distance'}
-                      accessibilityHint={distanceFilter ? 'Tap to clear distance filter' : 'Tap to select distance radius'}
-                      accessibilityState={{ selected: isActive, disabled: !permission?.granted }}
-                    >
-                      <MaterialIcons
-                        name={item.icon}
-                        size={SIZING.ICON_SMALL}
-                        color={isActive ? '#052e1b' : '#d1fae5'}
-                        style={{ marginRight: SPACING.COMPACT_GAP }}
-                        accessibilityElementsHidden={true}
-                      />
-                      <Text style={[styles.chipLabel, isActive && styles.chipLabelActive]}>{distanceFilter ? `${distanceFilter}mi` : item.label}</Text>
-                    </TouchableOpacity>
-                  )
-                }
-                return (
-                  <TouchableOpacity
-                    onPress={() => handleSetActiveCategory(isActive ? 'all' : (item.id as any))}
-                    style={[styles.chip, isActive && styles.chipActive]}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Filter by ${item.label}${isActive ? ', currently active' : ''}`}
-                    accessibilityHint={isActive ? 'Tap to remove filter and show all bounties' : `Tap to filter bounties by ${item.label}`}
-                    accessibilityState={{ selected: isActive }}
-                  >
-                    <MaterialIcons
-                      name={item.icon}
-                      size={SIZING.ICON_SMALL}
-                      color={isActive ? '#052e1b' : '#d1fae5'}
-                      style={{ marginRight: SPACING.COMPACT_GAP }}
-                      accessibilityElementsHidden={true}
-                    />
-                    <Text style={[styles.chipLabel, isActive && styles.chipLabelActive]}>{item.label}</Text>
-                  </TouchableOpacity>
-                )
-              }}
-            />
-          </View>
 
-          {/* Distance dropdown */}
-          {distanceDropdownOpen && (
-            distanceChipLayout ? (
-              (() => {
-                const windowWidth = Dimensions.get('window').width
-                const dropdownWidth = Math.max(160, distanceChipLayout.width)
-                let left = distanceChipLayout.x
-                if (left + dropdownWidth > windowWidth - 8) {
-                  left = Math.max(8, windowWidth - dropdownWidth - 8)
-                }
-                const top = distanceChipLayout.y + distanceChipLayout.height + 2
-                return (
-                  <View style={[styles.distanceDropdown, { position: 'absolute', left, top, width: dropdownWidth }]}>
-                    {permission?.granted && userLocation ? (
-                      DISTANCE_OPTIONS.map((m) => (
-                        <TouchableOpacity key={m} onPress={() => { setDistanceFilter(distanceFilter === m ? null : m); setDistanceDropdownOpen(false) }} style={styles.distanceOption}>
-                          <Text style={{ color: '#e6ffee', fontWeight: '700' }}>{m} mi</Text>
-                        </TouchableOpacity>
-                      ))
-                    ) : (
-                      <Text style={styles.dropdownNotice}>Location permission required to use distance filter.</Text>
-                    )}
-                  </View>
-                )
-              })()
-            ) : (
-              <View style={styles.distanceDropdown}>
-                {permission?.granted && userLocation ? (
-                  DISTANCE_OPTIONS.map((m) => (
-                    <TouchableOpacity key={m} onPress={() => { setDistanceFilter(distanceFilter === m ? null : m); setDistanceDropdownOpen(false) }} style={styles.distanceOption}>
-                      <Text style={{ color: '#e6ffee', fontWeight: '700' }}>{m} mi</Text>
-                    </TouchableOpacity>
-                  ))
-                ) : (
-                  <Text style={styles.dropdownNotice}>Location permission required to use distance filter.</Text>
-                )}
-              </View>
-            )
-          )}
-        </Animated.View>
-        <LinearGradient
-          colors={['rgba(5,150,105,0.0)', 'rgba(5,150,105,0.25)', 'rgba(5,150,105,0.55)']}
-          style={styles.gradientSeparator}
-          pointerEvents="none"
+
+
+
+
+
+
+
+
+      {/* ← This View measures the true available height */}
+      <View
+        style={{ flex: 1 }}
+        onLayout={(e) => setListHeight(e.nativeEvent.layout.height)}
+      >
+        <Animated.FlatList
+          ref={bountyListRef}
+          data={filteredBounties}
+          keyExtractor={keyExtractor}
+          pagingEnabled
+          snapToInterval={listHeight}
+          snapToAlignment="start"
+          decelerationRate="fast"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{
+            paddingTop: 0,
+            paddingBottom: 0,
+            paddingHorizontal: 0,
+          }}
+          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
+          scrollEventThrottle={16}
+          onEndReachedThreshold={0.5}
+          onEndReached={handleEndReached}
+          ItemSeparatorComponent={ItemSeparator}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ffffff" />}
+          
+          ListEmptyComponent={EmptyListComponent}
+          ListFooterComponent={ListFooterComponent}
+          renderItem={renderBountyItem}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={5}
+          windowSize={5}
+          initialNumToRender={3}
         />
-      </Animated.View>
-
-      {/* Bounty List with scroll listener (content extends under BottomNav) */}
-      <Animated.FlatList
-        ref={bountyListRef}
-        data={filteredBounties}
-        keyExtractor={keyExtractor}
-        contentContainerStyle={{
-          paddingHorizontal: 16,
-          paddingTop: HEADER_EXPANDED + headerTopPad + 10,
-          paddingBottom: 160,
-        }}
-        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
-        scrollEventThrottle={16}
-        onEndReachedThreshold={0.5}
-        onEndReached={handleEndReached}
-        ItemSeparatorComponent={ItemSeparator}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ffffff" />}
-        ListHeaderComponent={TrendingSection}
-        ListEmptyComponent={EmptyListComponent}
-        ListFooterComponent={ListFooterComponent}
-        renderItem={renderBountyItem}
-        removeClippedSubviews={true}
-        maxToRenderPerBatch={10}
-        updateCellsBatchingPeriod={100}
-        initialNumToRender={8}
-        windowSize={10}
-        getItemLayout={getItemLayout}
-      />
-      {/* Subtle gradient fade behind BottomNav to imply depth */}
+      </View>
       <LinearGradient
-        colors={['rgba(5,150,105,0)', 'rgba(5,150,105,0.5)', '#059669']}
-        style={styles.bottomFade}
+        colors={[
+          `${theme.background}00`,
+          `${theme.background}CC`,
+          theme.background,
+        ] as [string, string, string]}
+        style={s.bottomFade}
         pointerEvents="none"
       />
     </View>
   )
 })
 
-const styles = StyleSheet.create({
-  dashboardArea: { flex: 1 },
-  collapsingHeader: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, backgroundColor: '#059669' },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
-    paddingBottom: SPACING.COMPACT_GAP,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: HEADER_LAYOUT.iconToTitleGap,
-    transform: [
-      { translateX: -2 },
-      { translateY: -1 },
-    ],
-  },
-  searchWrapper: {
-    paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
-    marginBottom: SPACING.COMPACT_GAP,
-  },
-  searchButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(5,46,27,0.35)',
-    borderRadius: 999,
-    paddingVertical: 10,
-    paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
-    minHeight: SIZING.MIN_TOUCH_TARGET,
-  },
-  searchIcon: { marginRight: SPACING.COMPACT_GAP },
-  searchText: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: TYPOGRAPHY.SIZE_SMALL,
-  },
-  filtersRow: { paddingVertical: SPACING.COMPACT_GAP },
-  gradientSeparator: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 40 },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(5,46,27,0.2)',
-    paddingHorizontal: 14,
-    height: 36,
-    borderRadius: 999,
-    marginRight: SPACING.COMPACT_GAP,
-    minHeight: SIZING.MIN_TOUCH_TARGET,
-  },
-  chipActive: { backgroundColor: '#a7f3d0' },
-  chipLabel: {
-    color: '#d1fae5',
-    fontSize: TYPOGRAPHY.SIZE_SMALL,
-    fontWeight: '600',
-  },
-  chipLabelActive: { color: '#052e1b' },
-  disabledChip: { opacity: 0.5 },
-  distanceDropdown: {
-    position: 'absolute',
-    top: 48,
-    right: SPACING.SCREEN_HORIZONTAL,
-    backgroundColor: 'rgba(2,44,34,0.9)',
-    padding: SPACING.COMPACT_GAP,
-    borderRadius: SPACING.COMPACT_GAP,
-    zIndex: 60,
-  },
-  distanceOption: {
-    paddingVertical: SPACING.COMPACT_GAP,
-    paddingHorizontal: SPACING.ELEMENT_GAP,
-  },
-  dropdownNotice: {
-    color: '#f3fff9',
-    padding: SPACING.COMPACT_GAP,
-    fontSize: TYPOGRAPHY.SIZE_XSMALL,
-  },
-  bottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 140, zIndex: 50 },
-  // Trending section styles
-  trendingSection: {
-    marginBottom: 16,
-    marginHorizontal: -16,
-    paddingHorizontal: 16,
-  },
-  trendingHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-  },
-  trendingTitle: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  trendingCard: {
-    width: 200,
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    borderRadius: 12,
-    padding: 12,
-    marginRight: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(252,211,77,0.2)',
-  },
-  trendingCardHeader: {
-    marginBottom: 8,
-  },
-  trendingCardTitle: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  trendingAmount: {
-    color: '#6ee7b7',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  trendingHonorBadge: {
-    backgroundColor: '#fcd34d',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-    alignSelf: 'flex-start',
-  },
-  trendingHonorText: {
-    color: '#065f46',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  trendingNewBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
-  },
-  trendingNewText: {
-    color: '#6ee7b7',
-    fontSize: 11,
-    fontWeight: '500',
-  },
-})
+function makeStyles(t: AppTheme) {
+  return StyleSheet.create({
+    dashboardArea: {
+      flex: 1,
+      backgroundColor: t.background,
+    },
+    collapsingHeader: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      top: 0,
+      zIndex: 10,
+      backgroundColor: t.background,
+      borderBottomWidth: 0.5,
+      borderBottomColor: t.border,
+    },
+    headerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
+      paddingTop: 12,
+      paddingBottom: SPACING.COMPACT_GAP,
+    },
+    headerLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: HEADER_LAYOUT.iconToTitleGap,
+      transform: [{ translateX: -2 }, { translateY: -1 }],
+    },
+    searchWrapper: {
+      paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
+      marginBottom: SPACING.COMPACT_GAP,
+      marginTop: 12,
+    },
+    searchButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: t.surfaceSecondary,
+      borderRadius: 999,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      borderWidth: 1,
+      borderColor: t.border,
+      shadowColor: '#000',
+      shadowOpacity: 0.05,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 2,
+    },
+    searchIcon: { marginRight: SPACING.COMPACT_GAP },
+    searchText: {
+      color: t.textDisabled,
+      fontSize: 14,
+      fontWeight: '500',
+      flex: 1,
+    },
+    filtersRow: { paddingVertical: SPACING.COMPACT_GAP },
+    gradientSeparator: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 40 },
+    chip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: t.surfaceSecondary,
+      borderWidth: 1,
+      borderColor: t.border,
+      paddingHorizontal: 14,
+      height: 36,
+      borderRadius: 999,
+      marginRight: SPACING.COMPACT_GAP,
+      minHeight: SIZING.MIN_TOUCH_TARGET,
+    },
+    chipActive: {
+      backgroundColor: t.surface,
+      borderColor: t.primary,
+    },
+    chipLabel: {
+      color: t.text,
+      fontSize: TYPOGRAPHY.SIZE_SMALL,
+      fontWeight: '600',
+    },
+    chipLabelActive: { color: t.primaryLight },
+    disabledChip: { opacity: 0.4 },
+    distanceDropdown: {
+      position: 'absolute',
+      top: 48,
+      right: SPACING.SCREEN_HORIZONTAL,
+      backgroundColor: t.surface,
+      borderWidth: 1,
+      borderColor: t.border,
+      borderRadius: 12,
+      padding: SPACING.COMPACT_GAP,
+      zIndex: 60,
+      shadowColor: '#000',
+      shadowOpacity: 0.08,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 4,
+    },
+    distanceOption: {
+      paddingVertical: SPACING.COMPACT_GAP,
+      paddingHorizontal: SPACING.ELEMENT_GAP,
+    },
+    dropdownNotice: {
+      color: t.textSecondary,
+      padding: SPACING.COMPACT_GAP,
+      fontSize: TYPOGRAPHY.SIZE_XSMALL,
+    },
+    bottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 140, zIndex: 50 },
+    trendingSection: {
+      marginBottom: 16,
+      marginHorizontal: -16,
+      paddingHorizontal: 16,
+    },
+    trendingHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 8,
+    },
+    trendingTitle: {
+      color: t.text,
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    trendingCard: {
+      width: 200,
+      backgroundColor: t.surface,
+      borderRadius: 16,
+      padding: 14,
+      marginRight: 10,
+      borderWidth: 1,
+      borderColor: t.border,
+    },
+    trendingCardHeader: { marginBottom: 8 },
+    trendingCardTitle: {
+      color: t.text,
+      fontSize: 14,
+      fontWeight: '600',
+      marginBottom: 4,
+    },
+    trendingAmount: {
+      color: t.primary,
+      fontSize: 15,
+      fontWeight: '700',
+    },
+    trendingHonorBadge: {
+      backgroundColor: '#FEF3C7',
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 6,
+      alignSelf: 'flex-start',
+    },
+    trendingHonorText: {
+      color: '#92400E',
+      fontSize: 11,
+      fontWeight: '700',
+    },
+    trendingNewBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      marginTop: 4,
+    },
+    trendingNewText: {
+      color: t.primary,
+      fontSize: 11,
+      fontWeight: '500',
+    },
+    resultsRow: {
+      paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
+      paddingBottom: 6,
+    },
+    resultsText: {
+      fontSize: TYPOGRAPHY.SIZE_XSMALL,
+      color: t.textSecondary,
+      fontWeight: '500',
+    },
+    searchIconRight: {
+      marginRight: 10,
+    },
+  })
+}

@@ -21,7 +21,7 @@ const FAQS = [
 
 export const FAQScreen: React.FC<FAQScreenProps> = ({ onBack }) => {
   return (
-    <View className="flex-1 bg-emerald-600">
+    <View className="flex-1 bg-[#059669]">
       <View className="flex-row justify-between items-center p-4 pt-8">
         <View className="flex-row items-center">
           <BrandingLogo size="small" />
@@ -35,10 +35,10 @@ export const FAQScreen: React.FC<FAQScreenProps> = ({ onBack }) => {
         {FAQS.map((f, i) => (
           <View key={i} className="bg-black/30 rounded-xl p-4 mb-4">
             <Text className="text-white font-medium mb-1">{f.q}</Text>
-            <Text className="text-emerald-200 text-xs leading-5">{f.a}</Text>
+            <Text className="text-[#9CA3AF] text-xs leading-5">{f.a}</Text>
           </View>
         ))}
-        <TouchableOpacity onPress={onBack} className="mt-2 self-start px-4 py-2 rounded-md bg-emerald-700">
+        <TouchableOpacity onPress={onBack} className="mt-2 self-start px-4 py-2 rounded-md bg-[#111827]">
           <Text className="text-white text-sm font-medium">Back to Settings</Text>
         </TouchableOpacity>
       </ScrollView>

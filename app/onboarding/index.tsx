@@ -9,12 +9,16 @@ import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 
 const ONBOARDING_KEY = '@bounty_onboarding_complete';
 
 export default function OnboardingIndex() {
   const router = useRouter();
   const { profile, loading } = useAuthProfile();
+  const { theme } = useAppThemeContext();
+  const styles = makeStyles(theme);
 
   useEffect(() => {
     // Wait until auth profile service has resolved initial state
@@ -49,16 +53,18 @@ export default function OnboardingIndex() {
 
   return (
     <View style={styles.container}>
-      <ActivityIndicator size="large" color="#a7f3d0" />
+      <ActivityIndicator size="large" color={theme.textSecondary} />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#059669',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+  });
+}

@@ -5,6 +5,7 @@ import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import { AddressAutocomplete } from '../../../components/AddressAutocomplete';
 import { addressAutocompleteService, isPlaceDetailsError } from '../../../lib/services/address-autocomplete-service';
 import { sanitizeAddressText } from '../../../lib/utils/address-sanitization';
@@ -22,7 +23,8 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const insets = useSafeAreaInsets();
   const BOTTOM_NAV_OFFSET = 60;
-  
+  const { theme } = useAppThemeContext();
+
   // Address library for saved addresses
   const { addresses } = useAddressLibrary();
   
@@ -126,7 +128,7 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
   }, [])
 
   return (
-    <View className="flex-1 bg-emerald-600">
+    <View className="flex-1" style={{ backgroundColor: theme.background }}>
       <ScrollView
         ref={scrollRef}
         className="flex-1 px-4 pt-2"
@@ -140,17 +142,17 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
       >
         {/* Work Type Selection */}
         <View className="mb-6">
-          <Text className="text-emerald-100 text-base font-semibold mb-3">
+          <Text className="text-base font-semibold mb-3" style={{ color: theme.text }}>
             Where will the work be done? *
           </Text>
           <View className="flex-row gap-3">
             <TouchableOpacity
               onPress={() => handleWorkTypeChange('in_person')}
-              className={`flex-1 p-4 rounded-lg border-2 ${
-                draft.workType === 'in_person'
-                  ? 'bg-emerald-400 border-emerald-400'
-                  : 'bg-emerald-700/50 border-emerald-500/50'
-              }`}
+              className="flex-1 p-4 rounded-lg border-2"
+              style={{
+                backgroundColor: draft.workType === 'in_person' ? theme.primary : theme.surfaceSecondary,
+                borderColor: draft.workType === 'in_person' ? theme.primary : theme.border,
+              }}
               accessibilityLabel="In person work"
               accessibilityRole="button"
               accessibilityState={{ selected: draft.workType === 'in_person' }}
@@ -159,13 +161,9 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
                 <MaterialIcons
                   name="place"
                   size={32}
-                  color={draft.workType === 'in_person' ? '#065f46' : '#fff'}
+                  color={draft.workType === 'in_person' ? '#fff' : theme.textDisabled}
                 />
-                <Text
-                  className={`mt-2 font-semibold ${
-                    draft.workType === 'in_person' ? 'text-emerald-900' : 'text-white'
-                  }`}
-                >
+                <Text className="mt-2 font-semibold" style={{ color: draft.workType === 'in_person' ? '#fff' : theme.text }}>
                   In Person
                 </Text>
               </View>
@@ -173,11 +171,11 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
 
             <TouchableOpacity
               onPress={() => handleWorkTypeChange('online')}
-              className={`flex-1 p-4 rounded-lg border-2 ${
-                draft.workType === 'online'
-                  ? 'bg-emerald-400 border-emerald-400'
-                  : 'bg-emerald-700/50 border-emerald-500/50'
-              }`}
+              className="flex-1 p-4 rounded-lg border-2"
+              style={{
+                backgroundColor: draft.workType === 'online' ? theme.primary : theme.surfaceSecondary,
+                borderColor: draft.workType === 'online' ? theme.primary : theme.border,
+              }}
               accessibilityLabel="Online work"
               accessibilityRole="button"
               accessibilityState={{ selected: draft.workType === 'online' }}
@@ -186,13 +184,9 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
                 <MaterialIcons
                   name="language"
                   size={32}
-                  color={draft.workType === 'online' ? '#065f46' : '#fff'}
+                  color={draft.workType === 'online' ? '#fff' : theme.textDisabled}
                 />
-                <Text
-                  className={`mt-2 font-semibold ${
-                    draft.workType === 'online' ? 'text-emerald-900' : 'text-white'
-                  }`}
-                >
+                <Text className="mt-2 font-semibold" style={{ color: draft.workType === 'online' ? '#fff' : theme.text }}>
                   Online
                 </Text>
               </View>
@@ -203,7 +197,7 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
         {/* Location Input (only for in-person) */}
         {draft.workType === 'in_person' && (
           <View className="mb-6">
-            <Text className="text-emerald-100 text-base font-semibold mb-2">
+            <Text className="text-base font-semibold mb-2" style={{ color: theme.text }}>
               Location *
             </Text>
             
@@ -227,15 +221,15 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
               <ValidationMessage message={errors.location} />
             )}
             
-            <View className="mt-3 bg-emerald-700/20 rounded-lg p-3 border border-emerald-500/30">
+            <View className="mt-3 rounded-lg p-3 border" style={{ backgroundColor: theme.surface, borderColor: theme.border }}>
               <View className="flex-row items-start">
                 <MaterialIcons
                   name="info-outline"
                   size={16}
-                  color="rgba(110, 231, 183, 0.8)"
+                  color={theme.primaryLight}
                   style={{ marginRight: 6, marginTop: 2 }}
                 />
-                <Text className="text-emerald-200/70 text-xs flex-1">
+                <Text className="text-xs flex-1" style={{ color: theme.textSecondary }}>
                   Your exact address won
                   {"'"}
                   t be shared until you accept someone for the job. Start typing to see suggestions from Google Places and your saved addresses.
@@ -247,19 +241,19 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
 
         {/* Remote Work Info */}
         {draft.workType === 'online' && (
-          <View className="mb-6 bg-emerald-700/20 rounded-lg p-4 border border-emerald-500/30">
+          <View className="mb-6 rounded-lg p-4 border" style={{ backgroundColor: theme.surface, borderColor: theme.border }}>
             <View className="flex-row items-start">
               <MaterialIcons
                 name="cloud"
                 size={20}
-                color="rgba(110, 231, 183, 0.8)"
+                color={theme.primaryLight}
                 style={{ marginRight: 8, marginTop: 2 }}
               />
               <View className="flex-1">
-                <Text className="text-emerald-100 font-semibold mb-1">
+                <Text className="font-semibold mb-1" style={{ color: theme.text }}>
                   Remote Work
                 </Text>
-                <Text className="text-emerald-200/70 text-sm">
+                <Text className="text-sm" style={{ color: theme.textSecondary }}>
                   This bounty can be completed from anywhere. Perfect for digital tasks!
                 </Text>
               </View>
@@ -269,26 +263,26 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
 
         {/* Visibility Info */}
         <View className="mb-6">
-          <Text className="text-emerald-100 text-base font-semibold mb-3">
+          <Text className="text-base font-semibold mb-3" style={{ color: theme.text }}>
             Who can see this bounty?
           </Text>
-          <View className="bg-emerald-700/20 rounded-lg p-4 border border-emerald-500/30">
+          <View className="rounded-lg p-4 border" style={{ backgroundColor: theme.surface, borderColor: theme.border }}>
             <View className="flex-row items-start mb-3">
               <MaterialIcons
                 name="public"
                 size={20}
-                color="rgba(110, 231, 183, 0.8)"
+                color={theme.primaryLight}
                 style={{ marginRight: 8, marginTop: 2 }}
               />
               <View className="flex-1">
-                <Text className="text-emerald-100 font-semibold">Public</Text>
-                <Text className="text-emerald-200/70 text-sm mt-1">
+                <Text className="font-semibold" style={{ color: theme.text }}>Public</Text>
+                <Text className="text-sm mt-1" style={{ color: theme.textSecondary }}>
                   Your bounty will be visible to all users
                   {draft.workType === 'in_person' && ' in your area'}
                 </Text>
               </View>
             </View>
-            <Text className="text-emerald-200/60 text-xs">
+            <Text className="text-xs" style={{ color: theme.textSecondary }}>
               Future updates will add options for private bounties and targeted visibility.
             </Text>
           </View>
@@ -297,40 +291,39 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
 
       {/* Navigation Buttons */}
       <View
-        className="px-4 pb-4 pt-3 bg-emerald-600 border-t border-emerald-700/50"
-        style={{ marginBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 8) }}
+        className="px-4 pb-4 pt-3 border-t"
+        style={{ backgroundColor: theme.background, borderColor: theme.border, marginBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 8) }}
       >
         <View className="flex-row gap-3">
           <TouchableOpacity
             onPress={onBack}
-            className="flex-1 bg-emerald-700/50 py-3 rounded-lg flex-row items-center justify-center"
+            className="flex-1 py-3 rounded-lg flex-row items-center justify-center"
+            style={{ backgroundColor: theme.surfaceSecondary }}
             accessibilityLabel="Go back"
             accessibilityRole="button"
           >
-            <MaterialIcons name="arrow-back" size={20} color="#fff" />
-            <Text className="text-white font-semibold ml-2">Back</Text>
+            <MaterialIcons name="arrow-back" size={20} color={theme.text} />
+            <Text className="font-semibold ml-2" style={{ color: theme.text }}>Back</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={handleNext}
             disabled={!isValid}
-            className={`flex-1 py-3 rounded-lg flex-row items-center justify-center ${
-              isValid ? 'bg-emerald-500' : 'bg-emerald-700/30'
-            }`}
+            className="flex-1 py-3 rounded-lg flex-row items-center justify-center"
+            style={{ backgroundColor: isValid ? theme.primary : theme.surface }}
             accessibilityLabel="Continue to next step"
             accessibilityRole="button"
             accessibilityState={{ disabled: !isValid }}
           >
             <Text
-              className={`font-semibold mr-2 ${
-                isValid ? 'text-white' : 'text-emerald-400/40'
-              }`}
+              className="font-semibold mr-2"
+              style={{ color: isValid ? '#fff' : theme.textDisabled }}
             >
               Next
             </Text>
             <MaterialIcons
               name="arrow-forward"
               size={20}
-              color={isValid ? '#fff' : 'rgba(110, 231, 183, 0.4)'}
+              color={isValid ? '#fff' : theme.textDisabled}
             />
           </TouchableOpacity>
         </View>

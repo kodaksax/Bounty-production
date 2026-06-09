@@ -85,7 +85,7 @@ export default function ConnectReturnScreen() {
       case 'loading':
         return (
           <View style={styles.centerContent}>
-            <ActivityIndicator size="large" color="#a7f3d0" />
+            <ActivityIndicator size="large" color="#9CA3AF" />
             <Text style={styles.title}>Verifying Account</Text>
             <Text style={styles.description}>Checking your Stripe account status…</Text>
           </View>
@@ -126,7 +126,7 @@ export default function ConnectReturnScreen() {
               <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
             </TouchableOpacity>
             <TouchableOpacity style={styles.secondaryButton} onPress={handleRetry}>
-              <MaterialIcons name="refresh" size={20} color="#a7f3d0" />
+              <MaterialIcons name="refresh" size={20} color="#9CA3AF" />
               <Text style={styles.secondaryButtonText}>Check Again</Text>
             </TouchableOpacity>
           </View>
@@ -147,7 +147,7 @@ export default function ConnectReturnScreen() {
               <MaterialIcons name="refresh" size={20} color="#052e1b" />
             </TouchableOpacity>
             <TouchableOpacity style={styles.secondaryButton} onPress={handleGoToWallet}>
-              <MaterialIcons name="account-balance-wallet" size={20} color="#a7f3d0" />
+              <MaterialIcons name="account-balance-wallet" size={20} color="#9CA3AF" />
               <Text style={styles.secondaryButtonText}>Go to Wallet</Text>
             </TouchableOpacity>
           </View>
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#9CA3AF',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -250,7 +250,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#a7f3d0',
+    backgroundColor: '#9CA3AF',
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 999,
@@ -273,11 +273,11 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     gap: 8,
     borderWidth: 2,
-    borderColor: '#a7f3d0',
+    borderColor: '#9CA3AF',
     width: '100%',
   },
   secondaryButtonText: {
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     fontSize: 16,
     fontWeight: '600',
   },

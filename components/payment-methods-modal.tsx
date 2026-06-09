@@ -5,7 +5,7 @@ import React, { useRef, useState } from "react"
 import { Alert, Animated, Dimensions, Easing, FlatList, Modal, PanResponder, Pressable, Text, TouchableOpacity, View } from "react-native"
 import { stripeService } from '../lib/services/stripe-service'
 import { useStripe } from '../lib/stripe-context'
-import { theme } from '../lib/theme'
+import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 import { AddBankAccountModal } from "./add-bank-account-modal"
 import { AddCardModal } from "./add-card-modal"
 
@@ -32,6 +32,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
 
   const { paymentMethods, isLoading, removePaymentMethod, loadPaymentMethods, error: stripeError, clearError } = useStripe()
   const [loadFailed, setLoadFailed] = useState(false)
+  const { theme } = useAppThemeContext()
 
   // Initialize selected method type when modal opens, honoring preferredType if provided
   React.useEffect(() => {
@@ -190,7 +191,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
           ref={modalRef}
           {...panResponder.panHandlers}
           style={{
-            backgroundColor: '#059669', // emerald-600
+            backgroundColor: '#059669', // emerald-600 — intentional payment branding
             width: '100%',
             borderTopLeftRadius: 24,
             borderTopRightRadius: 24,
@@ -271,7 +272,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
             <View style={{
               flexDirection: 'row',
               marginBottom: 20,
-              backgroundColor: '#047857',
+              backgroundColor: theme.surface,
               borderRadius: 12,
               padding: 4,
             }}>
@@ -324,12 +325,16 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
-                backgroundColor: '#047857',
+                backgroundColor: theme.surface,
                 borderRadius: 14,
                 padding: 18,
                 marginBottom: 20,
                 minHeight: 56,
-                ...theme.shadows.emerald
+                shadowColor: '#059669',
+                shadowOpacity: 0.3,
+                shadowRadius: 8,
+                shadowOffset: { width: 0, height: 3 },
+                elevation: 3,
               }}
               onPress={() => selectedMethodType === 'card' ? setShowAddCard(true) : setShowAddBankAccount(true)}
               accessibilityRole="button"
@@ -378,7 +383,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
                 </Text>
                 <TouchableOpacity
                   onPress={() => refreshWithRetry(3, 1000)}
-                  style={{ marginTop: 16, backgroundColor: '#065f46', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10 }}
+                  style={{ marginTop: 16, backgroundColor: theme.surface, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10 }}
                   accessibilityRole="button"
                   accessibilityLabel="Retry loading payment methods"
                 >
@@ -421,12 +426,16 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
                   <View style={{
                     flexDirection: 'row',
                     alignItems: 'center',
-                    backgroundColor: 'rgba(16,185,129,0.25)',
+                    backgroundColor: 'rgba(255,255,255,0.1)',
                     borderRadius: 14,
                     padding: 18,
                     marginBottom: 14,
                     minHeight: 72, // Comfortable touch target height
-                    ...theme.shadows.sm
+                    shadowColor: '#000',
+                    shadowOpacity: 0.05,
+                    shadowRadius: 2,
+                    shadowOffset: { width: 0, height: 1 },
+                    elevation: 1,
                   }}>
                     <MaterialIcons name="credit-card" size={34} color="#ffffff" />
                     <View style={{ flex: 1, marginLeft: 14 }}>

@@ -2,6 +2,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 
 interface ScreenHeaderProps {
     title?: string;
@@ -14,6 +16,8 @@ interface ScreenHeaderProps {
 
 export function ScreenHeader({ title, showBack, onBack, rightNode, centerNode, transparent }: ScreenHeaderProps) {
     const router = useRouter();
+    const { theme } = useAppThemeContext();
+    const styles = makeStyles(theme);
 
     const handleBack = () => {
         if (onBack) {
@@ -30,7 +34,7 @@ export function ScreenHeader({ title, showBack, onBack, rightNode, centerNode, t
             <View style={styles.left}>
                 {showBack && (
                     <TouchableOpacity onPress={handleBack} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Back">
-                        <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
+                        <MaterialIcons name="arrow-back" size={24} color={theme.text} />
                     </TouchableOpacity>
                 )}
             </View>
@@ -44,14 +48,15 @@ export function ScreenHeader({ title, showBack, onBack, rightNode, centerNode, t
     );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 16,
         paddingVertical: 12,
-        backgroundColor: '#059669', // emerald-600
+        backgroundColor: theme.background,
     },
     transparent: {
         backgroundColor: 'transparent',
@@ -71,9 +76,10 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 18,
         fontWeight: 'bold',
-        color: '#ffffff',
+        color: theme.text,
     },
     iconButton: {
         padding: 4,
     }
-});
+  });
+}

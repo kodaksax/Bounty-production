@@ -106,7 +106,7 @@ export default function MfaChallengeScreen() {
         style={{ flex: 1 }}
       >
         <View
-          className="flex-1 bg-emerald-700/95 px-6"
+          className="flex-1 bg-[#0B0F14] px-6"
           style={{ paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }}
         >
           {/* Cancel sign-in — signs out so the session cannot bypass MFA */}
@@ -121,7 +121,7 @@ export default function MfaChallengeScreen() {
 
           {/* Icon */}
           <View className="items-center mb-8">
-            <View className="bg-emerald-600 rounded-full p-5 mb-4">
+            <View className="bg-[#059669] rounded-full p-5 mb-4">
               <MaterialIcons name="security" size={40} color="#fff" />
             </View>
             <Text className="text-2xl font-bold text-white text-center">
@@ -163,7 +163,7 @@ export default function MfaChallengeScreen() {
             onPress={handleVerify}
             disabled={isLoading || code.length !== 6}
             className={`w-full rounded-lg py-4 items-center flex-row justify-center ${
-              code.length === 6 && !isLoading ? 'bg-emerald-500' : 'bg-emerald-500/40'
+              code.length === 6 && !isLoading ? 'bg-[#059669]' : 'bg-[#059669]/40'
             }`}
             accessibilityRole="button"
             accessibilityLabel="Verify code"

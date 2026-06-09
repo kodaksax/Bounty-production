@@ -293,7 +293,7 @@ export default function DisputeDetailScreen() {
       {/* Resolution banner */}
       {isResolved && dispute.resolution && (
         <View style={styles.resolutionBanner}>
-          <MaterialIcons name="check-circle" size={20} color="#10b981" />
+          <MaterialIcons name="check-circle" size={20} color="#059669" />
           <View style={{ flex: 1 }}>
             <Text style={styles.resolutionTitle}>Resolution</Text>
             <Text style={styles.resolutionText}>{dispute.resolution}</Text>
@@ -320,7 +320,7 @@ export default function DisputeDetailScreen() {
           style={[styles.tab, activeTab === 'comments' && styles.tabActive]}
           onPress={() => setActiveTab('comments')}
         >
-          <MaterialIcons name="chat" size={18} color={activeTab === 'comments' ? '#10b981' : '#6ee7b7'} />
+          <MaterialIcons name="chat" size={18} color={activeTab === 'comments' ? '#059669' : '#6ee7b7'} />
           <Text style={[styles.tabText, activeTab === 'comments' && styles.tabTextActive]}>
             Messages ({comments.length})
           </Text>
@@ -329,7 +329,7 @@ export default function DisputeDetailScreen() {
           style={[styles.tab, activeTab === 'evidence' && styles.tabActive]}
           onPress={() => setActiveTab('evidence')}
         >
-          <MaterialIcons name="folder" size={18} color={activeTab === 'evidence' ? '#10b981' : '#6ee7b7'} />
+          <MaterialIcons name="folder" size={18} color={activeTab === 'evidence' ? '#059669' : '#6ee7b7'} />
           <Text style={[styles.tabText, activeTab === 'evidence' && styles.tabTextActive]}>
             Evidence ({evidence.length})
           </Text>
@@ -461,7 +461,7 @@ export default function DisputeDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0B0F14',
   },
   loadingContainer: {
     flex: 1,
@@ -484,7 +484,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   backBtn: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     paddingHorizontal: 24,
     paddingVertical: 10,
     borderRadius: 8,
@@ -561,15 +561,15 @@ const styles = StyleSheet.create({
   resolutionBanner: {
     flexDirection: 'row',
     gap: 12,
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
     margin: 16,
     padding: 14,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   resolutionTitle: {
-    color: '#10b981',
+    color: '#059669',
     fontSize: 13,
     fontWeight: '700',
   },
@@ -618,7 +618,7 @@ const styles = StyleSheet.create({
   },
   tabActive: {
     borderBottomWidth: 2,
-    borderBottomColor: '#10b981',
+    borderBottomColor: '#059669',
   },
   tabText: {
     color: '#6ee7b7',
@@ -626,7 +626,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   tabTextActive: {
-    color: '#10b981',
+    color: '#059669',
     fontWeight: '700',
   },
   list: {
@@ -650,8 +650,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(110, 231, 183, 0.1)',
   },
   commentBubbleMine: {
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    borderColor: 'rgba(16, 185, 129, 0.3)',
+    backgroundColor: '#374151',
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   commentHeader: {
     flexDirection: 'row',
@@ -680,7 +680,7 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: 'rgba(110, 231, 183, 0.1)',
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0B0F14',
   },
   commentInput: {
     flex: 1,
@@ -694,7 +694,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(110, 231, 183, 0.2)',
   },
   sendBtn: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -702,7 +702,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sendBtnDisabled: {
-    backgroundColor: 'rgba(16, 185, 129, 0.3)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
   addEvidenceSection: {
     gap: 10,

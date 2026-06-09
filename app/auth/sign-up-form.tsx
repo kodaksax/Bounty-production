@@ -23,6 +23,7 @@ import { ValidationPatterns } from '../../hooks/use-form-validation';
 import { config } from '../../lib/config';
 import { API_BASE_URL } from '../../lib/config/api';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import { analyticsService } from '../../lib/services/analytics-service';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { generateCorrelationId, parseAuthError } from '../../lib/utils/auth-errors';
@@ -39,8 +40,8 @@ export default function SignUpRoute() {
 }
 
 export function SignUpForm() {
-  // set status/safe-area color for this screen
-  useScreenBackground('#097959ff'); // EMERALD_800 / dark
+  const { theme } = useAppThemeContext();
+  useScreenBackground(theme.background);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
@@ -342,19 +343,19 @@ export function SignUpForm() {
         style={{ flex: 1 }}
       >
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-          <View className="flex-1 bg-emerald-700/95 px-6 pt-20 pb-8">
+          <View className="flex-1 px-6 pt-20 pb-8" style={{ backgroundColor: theme.background }}>
             <View className="flex-row items-center justify-center mb-10">
               <BrandingLogo size="large" />
             </View>
             <View className="gap-5">
               {authError ? (
                 <View className="bg-red-500/20 border border-red-400 rounded p-3">
-                  <Text className="text-red-200 text-sm">{authError}</Text>
+                  <Text style={{ color: theme.isDark ? '#fecaca' : '#991b1b', fontSize: 14 }}>{authError}</Text>
                 </View>
               ) : null}
 
               <View>
-                <Text className="text-sm text-white/80 mb-1">Username</Text>
+                <Text className="text-sm mb-1" style={{ color: theme.text }}>Username</Text>
                 <TextInput
                   value={username}
                   onChangeText={text => {
@@ -367,8 +368,9 @@ export function SignUpForm() {
                   autoComplete="username-new"
                   textContentType={Platform.OS === 'ios' ? 'username' : undefined}
                   editable={!isLoading}
-                  className={`w-full bg-white/10 rounded px-3 py-3 text-white ${fieldErrors.username ? 'border border-red-400' : ''}`}
-                  placeholderTextColor="rgba(255,255,255,0.4)"
+                  className={`w-full rounded px-3 py-3 ${fieldErrors.username ? 'border border-red-400' : ''}`}
+                  style={{ backgroundColor: theme.surfaceSecondary, color: theme.text }}
+                  placeholderTextColor={theme.textDisabled}
                   returnKeyType="next"
                   blurOnSubmit={false}
                   onSubmitEditing={() => {
@@ -379,7 +381,7 @@ export function SignUpForm() {
               </View>
 
               <View>
-                <Text className="text-sm text-white/80 mb-1">Email</Text>
+                <Text className="text-sm mb-1" style={{ color: theme.text }}>Email</Text>
                 <TextInput
                   value={email}
                   onChangeText={text => {
@@ -395,8 +397,9 @@ export function SignUpForm() {
                   autoComplete="email"
                   textContentType={Platform.OS === 'ios' ? 'emailAddress' : undefined}
                   editable={!isLoading}
-                  className={`w-full bg-white/10 rounded px-3 py-3 text-white ${fieldErrors.email ? 'border border-red-400' : ''}`}
-                  placeholderTextColor="rgba(255,255,255,0.4)"
+                  className={`w-full rounded px-3 py-3 ${fieldErrors.email ? 'border border-red-400' : ''}`}
+                  style={{ backgroundColor: theme.surfaceSecondary, color: theme.text }}
+                  placeholderTextColor={theme.textDisabled}
                   returnKeyType="next"
                   blurOnSubmit={false}
                   onSubmitEditing={() => passwordRef.current?.focus()}
@@ -420,7 +423,7 @@ export function SignUpForm() {
               </View>
 
               <View>
-                <Text className="text-sm text-white/80 mb-1">Password</Text>
+                <Text className="text-sm mb-1" style={{ color: theme.text }}>Password</Text>
                 <View className="relative">
                   <TextInput
                     ref={passwordRef}
@@ -437,8 +440,9 @@ export function SignUpForm() {
                     textContentType={Platform.OS === 'ios' ? 'newPassword' : undefined}
                     passwordRules={Platform.OS === 'ios' ? IOS_NEW_PASSWORD_RULES : undefined}
                     editable={!isLoading}
-                    className={`w-full bg-white/10 rounded px-3 py-3 text-white pr-12 ${fieldErrors.password ? 'border border-red-400' : ''}`}
-                    placeholderTextColor="rgba(255,255,255,0.4)"
+                    className={`w-full rounded px-3 py-3 pr-12 ${fieldErrors.password ? 'border border-red-400' : ''}`}
+                    style={{ backgroundColor: theme.surfaceSecondary, color: theme.text }}
+                    placeholderTextColor={theme.textDisabled}
                     returnKeyType="next"
                     blurOnSubmit={false}
                     onSubmitEditing={() => confirmPasswordRef.current?.focus()}
@@ -451,18 +455,18 @@ export function SignUpForm() {
                     <MaterialIcons
                       name={showPassword ? 'visibility-off' : 'visibility'}
                       size={20}
-                      color="#fff"
+                      color={theme.text}
                     />
                   </TouchableOpacity>
                 </View>
                 {fieldErrors.password ? <ValidationMessage message={fieldErrors.password} /> : null}
-                <Text className="text-xs text-white/60 mt-1">
+                <Text className="text-xs mt-1" style={{ color: theme.textSecondary }}>
                   Must include uppercase, lowercase, and a number
                 </Text>
               </View>
 
               <View>
-                <Text className="text-sm text-white/80 mb-1">Confirm Password</Text>
+                <Text className="text-sm mb-1" style={{ color: theme.text }}>Confirm Password</Text>
                 <View className="relative">
                   <TextInput
                     ref={confirmPasswordRef}
@@ -479,8 +483,9 @@ export function SignUpForm() {
                     textContentType={Platform.OS === 'ios' ? 'newPassword' : undefined}
                     passwordRules={Platform.OS === 'ios' ? IOS_NEW_PASSWORD_RULES : undefined}
                     editable={!isLoading}
-                    className={`w-full bg-white/10 rounded px-3 py-3 text-white pr-12 ${fieldErrors.confirmPassword ? 'border border-red-400' : ''}`}
-                    placeholderTextColor="rgba(255,255,255,0.4)"
+                    className={`w-full rounded px-3 py-3 pr-12 ${fieldErrors.confirmPassword ? 'border border-red-400' : ''}`}
+                    style={{ backgroundColor: theme.surfaceSecondary, color: theme.text }}
+                    placeholderTextColor={theme.textDisabled}
                     returnKeyType="done"
                     onSubmitEditing={handleSubmit}
                   />
@@ -492,7 +497,7 @@ export function SignUpForm() {
                     <MaterialIcons
                       name={showConfirmPassword ? 'visibility-off' : 'visibility'}
                       size={20}
-                      color="#fff"
+                      color={theme.text}
                     />
                   </TouchableOpacity>
                 </View>
@@ -511,10 +516,10 @@ export function SignUpForm() {
                   <MaterialIcons
                     name={ageVerified ? 'check-box' : 'check-box-outline-blank'}
                     size={22}
-                    color={ageVerified ? '#10b981' : '#fff'}
+                    color={ageVerified ? theme.primary : theme.text}
                   />
                 </TouchableOpacity>
-                <Text className="text-white/90">I confirm I am 18 years or older</Text>
+                <Text style={{ color: theme.text }}>I confirm I am 18 years or older</Text>
               </View>
               {fieldErrors.ageVerified ? (
                 <ValidationMessage message={fieldErrors.ageVerified} />
@@ -531,25 +536,25 @@ export function SignUpForm() {
                     <MaterialIcons
                       name={termsAccepted ? 'check-box' : 'check-box-outline-blank'}
                       size={22}
-                      color={termsAccepted ? '#10b981' : '#fff'}
+                      color={termsAccepted ? theme.primary : theme.text}
                     />
                   </TouchableOpacity>
                   <View className="flex-1 flex-row flex-wrap">
-                    <Text className="text-white/90">I accept the </Text>
+                    <Text style={{ color: theme.text }}>I accept the </Text>
                     <TouchableOpacity
                       onPress={() => setLegalModal('terms')}
                       accessibilityRole="link"
                       accessibilityLabel="View Terms of Service"
                     >
-                      <Text className="text-white underline">Terms of Service</Text>
+                      <Text className="underline" style={{ color: theme.text }}>Terms of Service</Text>
                     </TouchableOpacity>
-                    <Text className="text-white/90"> and </Text>
+                    <Text style={{ color: theme.text }}> and </Text>
                     <TouchableOpacity
                       onPress={() => setLegalModal('privacy')}
                       accessibilityRole="link"
                       accessibilityLabel="View Privacy Policy"
                     >
-                      <Text className="text-white underline">Privacy Policy</Text>
+                      <Text className="underline" style={{ color: theme.text }}>Privacy Policy</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -563,7 +568,7 @@ export function SignUpForm() {
               <TouchableOpacity
                 onPress={handleSubmit}
                 disabled={isLoading}
-                className="w-full bg-emerald-600 rounded py-3 items-center flex-row justify-center"
+                className="w-full bg-[#059669] rounded py-3 items-center flex-row justify-center"
               >
                 {isLoading ? (
                   <ActivityIndicator color="#fff" />
@@ -573,7 +578,7 @@ export function SignUpForm() {
               </TouchableOpacity>
 
               <TouchableOpacity onPress={() => router.back()}>
-                <Text className="text-white/80 text-center mt-6">Back to Sign In</Text>
+                <Text className="text-center mt-6" style={{ color: theme.text }}>Back to Sign In</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -591,7 +596,7 @@ export function SignUpForm() {
           edge here and apply the top inset manually on the header View below
           (using insets.top captured in the parent context where the provider works).
         */}
-        <SafeAreaView className="flex-1 bg-emerald-600" edges={['left', 'right', 'bottom']}>
+        <SafeAreaView className="flex-1" style={{ backgroundColor: theme.surface }} edges={['left', 'right', 'bottom']}>
           <View
             className="flex-row justify-between items-center px-4 pb-4"
             style={{ paddingTop: Math.max(insets.top, Platform.OS === 'ios' ? 44 : 16) }}
@@ -600,10 +605,11 @@ export function SignUpForm() {
               <MaterialIcons
                 name={legalModal === 'terms' ? 'gavel' : 'privacy-tip'}
                 size={24}
-                color="#fff"
+                color={theme.text}
               />
               <Text
-                className="text-lg font-bold tracking-wider ml-2 text-white flex-1"
+                className="text-lg font-bold tracking-wider ml-2 flex-1"
+                style={{ color: theme.text }}
                 numberOfLines={1}
               >
                 {legalModal === 'terms' ? 'Terms of Service' : 'Privacy Policy'}
@@ -616,12 +622,12 @@ export function SignUpForm() {
               accessibilityLabel="Close"
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             >
-              <MaterialIcons name="close" size={24} color="#fff" />
+              <MaterialIcons name="close" size={24} color={theme.text} />
             </TouchableOpacity>
           </View>
           <ScrollView className="px-4" contentContainerStyle={{ paddingBottom: 96 }}>
             {(legalModal === 'terms' ? TERMS_TEXT : PRIVACY_TEXT).split(/\n\n+/).map((p, i) => (
-              <Text key={i} className="text-emerald-100 text-sm leading-6 mb-3">
+              <Text key={i} className="text-sm leading-6 mb-3" style={{ color: theme.text }}>
                 {p}
               </Text>
             ))}

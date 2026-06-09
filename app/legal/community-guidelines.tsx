@@ -8,7 +8,7 @@ export default function CommunityGuidelinesRoute() {
   const router = useRouter();
   const paragraphs = COMMUNITY_GUIDELINES_TEXT.split(/\n\n+/);
   return (
-    <View className="flex-1 bg-emerald-600">
+    <View className="flex-1 bg-[#059669]">
       <View className="flex-row justify-between items-center p-4 pt-8">
         <View className="flex-row items-center">
           <MaterialIcons name="security" size={24} color="#fff" />
@@ -20,7 +20,7 @@ export default function CommunityGuidelinesRoute() {
       </View>
       <ScrollView className="px-4" contentContainerStyle={{ paddingBottom: 96 }}>
         {paragraphs.map((p, i) => (
-          <Text key={i} className="text-emerald-100 text-sm leading-6 mb-3">{p}</Text>
+          <Text key={i} className="text-white text-sm leading-6 mb-3">{p}</Text>
         ))}
       </ScrollView>
     </View>

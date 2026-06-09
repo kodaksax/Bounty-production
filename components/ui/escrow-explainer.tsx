@@ -29,7 +29,7 @@ export function EscrowExplainer({
       variant === 'banner' && styles.bannerContainer,
     ]}>
       <View style={styles.iconContainer}>
-        <MaterialIcons name="shield" size={variant === 'inline' ? 20 : 28} color="#10b981" />
+        <MaterialIcons name="shield" size={variant === 'inline' ? 20 : 28} color="#059669" />
       </View>
       
       <View style={styles.textContainer}>
@@ -84,7 +84,7 @@ export function EscrowExplainer({
               {/* Modal Header */}
               <View style={styles.modalHeader}>
                 <View style={styles.modalIconCircle}>
-                  <MaterialIcons name="lock" size={40} color="#10b981" />
+                  <MaterialIcons name="lock" size={40} color="#059669" />
                 </View>
                 <Text style={styles.modalTitle}>Escrow Protection</Text>
                 <Text style={styles.modalSubtitle}>
@@ -156,28 +156,28 @@ export function EscrowExplainer({
                 <Text style={styles.sectionTitle}>Your Guarantees</Text>
                 
                 <View style={styles.guarantee}>
-                  <MaterialIcons name="check-circle" size={20} color="#10b981" />
+                  <MaterialIcons name="check-circle" size={20} color="#059669" />
                   <Text style={styles.guaranteeText}>
                     Funds never released without your approval
                   </Text>
                 </View>
                 
                 <View style={styles.guarantee}>
-                  <MaterialIcons name="check-circle" size={20} color="#10b981" />
+                  <MaterialIcons name="check-circle" size={20} color="#059669" />
                   <Text style={styles.guaranteeText}>
                     Full refund if work isn't completed
                   </Text>
                 </View>
                 
                 <View style={styles.guarantee}>
-                  <MaterialIcons name="check-circle" size={20} color="#10b981" />
+                  <MaterialIcons name="check-circle" size={20} color="#059669" />
                   <Text style={styles.guaranteeText}>
                     Dispute resolution support available
                   </Text>
                 </View>
                 
                 <View style={styles.guarantee}>
-                  <MaterialIcons name="check-circle" size={20} color="#10b981" />
+                  <MaterialIcons name="check-circle" size={20} color="#059669" />
                   <Text style={styles.guaranteeText}>
                     Bank-level encryption on all transactions
                   </Text>
@@ -216,11 +216,11 @@ export function EscrowExplainer({
 export function EscrowProtectionBanner({ amount }: { amount?: number }) {
   return (
     <View style={styles.protectionBanner}>
-      <MaterialIcons name="lock" size={14} color="#10b981" />
+      <MaterialIcons name="lock" size={14} color="#059669" />
       <Text style={styles.protectionBannerText}>
         {amount ? `$${amount.toFixed(2)} protected` : 'Escrow protected'}
       </Text>
-      <MaterialIcons name="verified-user" size={12} color="#10b981" />
+      <MaterialIcons name="verified-user" size={12} color="#059669" />
     </View>
   );
 }
@@ -230,7 +230,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(16, 185, 129, 0.1)',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
+    borderColor: 'rgba(255,255,255,0.1)',
     padding: 16,
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -243,14 +243,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   bannerContainer: {
-    backgroundColor: '#065f46',
-    borderColor: '#10b981',
+    backgroundColor: '#111827',
+    borderColor: '#059669',
   },
   iconContainer: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    backgroundColor: '#374151',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
   },
   description: {
     fontSize: 13,
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     lineHeight: 20,
     marginBottom: 8,
   },
@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
   protectionBannerText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#10b981',
+    color: '#059669',
   },
   modalOverlay: {
     flex: 1,
@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modalContent: {
-    backgroundColor: '#065f46',
+    backgroundColor: '#111827',
     borderRadius: 16,
     padding: 24,
     width: '100%',
@@ -325,7 +325,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    backgroundColor: '#374151',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
@@ -338,7 +338,7 @@ const styles = StyleSheet.create({
   },
   modalSubtitle: {
     fontSize: 14,
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     textAlign: 'center',
   },
   sectionTitle: {
@@ -361,7 +361,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -381,13 +381,13 @@ const styles = StyleSheet.create({
   },
   stepDescription: {
     fontSize: 13,
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     lineHeight: 20,
   },
   stepConnector: {
     width: 2,
     height: 24,
-    backgroundColor: 'rgba(16, 185, 129, 0.3)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     marginLeft: 15,
     marginVertical: 8,
   },
@@ -405,7 +405,7 @@ const styles = StyleSheet.create({
   },
   guaranteeText: {
     fontSize: 13,
-    color: '#d1fae5',
+    color: '#1F2937',
     flex: 1,
   },
   processingInfo: {
@@ -419,12 +419,12 @@ const styles = StyleSheet.create({
   },
   processingText: {
     fontSize: 11,
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     flex: 1,
     lineHeight: 16,
   },
   closeButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     paddingVertical: 14,
     borderRadius: 8,
     alignItems: 'center',

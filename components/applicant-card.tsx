@@ -153,7 +153,7 @@ export function ApplicantCard({
           <View style={styles.avatarContainer}>
             {isNavigatingToProfile ? (
               <View style={[styles.avatar, styles.avatarLoading]}>
-                <ActivityIndicator size="small" color="#a7f3d0" />
+                <ActivityIndicator size="small" color="#9CA3AF" />
               </View>
             ) : (
               <Avatar style={styles.avatar}>
@@ -202,7 +202,7 @@ export function ApplicantCard({
           </View>{/* avoid whitespace text node */}
 
           {profileId ? (
-            <MaterialIcons name="chevron-right" size={20} color="#a7f3d0" style={{ marginLeft: 'auto' }} />
+            <MaterialIcons name="chevron-right" size={20} color="#9CA3AF" style={{ marginLeft: 'auto' }} />
           ) : null}
         </TouchableOpacity>
 
@@ -254,7 +254,7 @@ export function ApplicantCard({
               onPress={handleRequestInfo}
               disabled={isProcessing || request.status !== 'pending'}
             >
-              <MaterialIcons name="chat" size={18} color="#10b981" />
+              <MaterialIcons name="chat" size={18} color="#059669" />
               <Text style={[styles.buttonText, styles.infoButtonText]}>Ask</Text>
             </TouchableOpacity>
           )}
@@ -293,7 +293,7 @@ export function ApplicantCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#047857', // emerald-700
+    backgroundColor: '#0B0F14', // emerald-700
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -326,7 +326,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   avatarText: {
-    color: '#a7f3d0', // emerald-200
+    color: '#9CA3AF', // emerald-200
     fontSize: 16,
     fontWeight: '600',
   },
@@ -351,7 +351,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   ratingText: {
-    color: '#a7f3d0', // emerald-200
+    color: '#9CA3AF', // emerald-200
     fontSize: 12,
   },
   bountySection: {
@@ -367,7 +367,7 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(110, 231, 183, 0.15)',
   },
   messageSectionLabel: {
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     fontSize: 11,
     fontWeight: '600',
     textTransform: 'uppercase',
@@ -375,12 +375,12 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   messageText: {
-    color: '#d1fae5',
+    color: '#1F2937',
     fontSize: 14,
     lineHeight: 20,
   },
   sectionLabel: {
-    color: '#a7f3d0', // emerald-200
+    color: '#9CA3AF', // emerald-200
     fontSize: 12,
     marginBottom: 4,
   },
@@ -434,12 +434,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#dc2626', // red-600
   },
   infoButton: {
-    backgroundColor: '#047857', // emerald-700
+    backgroundColor: '#0B0F14', // emerald-700
     borderWidth: 1,
-    borderColor: '#10b981', // emerald-500
+    borderColor: '#059669', // emerald-500
   },
   acceptButton: {
-    backgroundColor: '#10b981', // emerald-500
+    backgroundColor: '#059669', // emerald-500
   },
   buttonText: {
     color: '#fff',
@@ -447,7 +447,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   infoButtonText: {
-    color: '#10b981', // emerald-500
+    color: '#059669', // emerald-500
   },
   statusBadge: {
     marginTop: 12,
@@ -461,7 +461,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   statusAccepted: {
-    color: '#10b981', // emerald-500
+    color: '#059669', // emerald-500
   },
   statusRejected: {
     color: '#dc2626', // red-600

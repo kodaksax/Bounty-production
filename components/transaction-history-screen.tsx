@@ -6,6 +6,8 @@ import { useWallet } from "lib/wallet-context"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { FlatList, RefreshControl, ScrollView, Text, TouchableOpacity, View, StyleSheet } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
+import { useAppThemeContext } from "../lib/themes/AppThemeContext"
+import type { AppTheme } from "../lib/themes/types"
 import { TransactionDetailModal } from "./transaction-detail-modal"
 import { TransactionsListSkeleton } from "./ui/skeleton-loaders"
 
@@ -38,6 +40,8 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
   const [activeFilter, setActiveFilter] = useState<"all" | "deposits" | "withdrawals" | "bounties">("all")
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const { theme } = useAppThemeContext()
+  const s = useMemo(() => makeStyles(theme), [theme])
 
   // Filter and sort transactions
   const filteredTransactions = useMemo(() => {
@@ -99,11 +103,11 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
   const getTransactionIcon = (type: Transaction["type"]) => {
     switch (type) {
       case "deposit":
-        return <MaterialIcons name="keyboard-arrow-down" size={24} color="#000000" />
+        return <MaterialIcons name="keyboard-arrow-down" size={24} color={theme.text} />
       case "withdrawal":
-        return <MaterialIcons name="keyboard-arrow-up" size={24} color="#000000" />
+        return <MaterialIcons name="keyboard-arrow-up" size={24} color={theme.text} />
       case "bounty_posted":
-        return <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+        return <MaterialIcons name="gps-fixed" size={24} color={theme.text} />
       case "bounty_completed":
         return <MaterialIcons name="check-circle" size={20} color="#60a5fa" />
       case "bounty_received":
@@ -111,7 +115,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
       case "escrow":
         return <MaterialIcons name="lock" size={20} color="#f59e0b" />
       case "release":
-        return <MaterialIcons name="lock-open" size={20} color="#10b981" />
+        return <MaterialIcons name="lock-open" size={20} color="#059669" />
       case "refund":
         return <MaterialIcons name="refresh" size={20} color="#6366f1" />
     }
@@ -144,49 +148,49 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
   const renderTransactionItem = useCallback(({ item: transaction }: { item: Transaction }) => (
     <TouchableOpacity
       key={transaction.id}
-      style={styles.transactionCard}
+      style={s.transactionCard}
       onPress={() => setSelectedTransaction(transaction)}
       activeOpacity={0.7}
     >
-      <View style={styles.transactionRow}>
-        <View style={styles.iconContainer}>
+      <View style={s.transactionRow}>
+        <View style={s.iconContainer}>
           {getTransactionIcon(transaction.type)}
         </View>
 
-        <View style={styles.transactionDetails}>
-          <View style={styles.transactionHeader}>
-            <Text style={styles.transactionTitle} numberOfLines={2}>
+        <View style={s.transactionDetails}>
+          <View style={s.transactionHeader}>
+            <Text style={s.transactionTitle} numberOfLines={2}>
               {getTransactionTitle(transaction)}
             </Text>
             <Text
               style={[
-                styles.transactionAmount,
+                s.transactionAmount,
                 { color: transaction.amount > 0 ? '#6ee7b7' : '#fca5a5' }
               ]}
             >
               {transaction.amount > 0 ? "+" : ""}${Math.abs(transaction.amount).toFixed(2)}
             </Text>
           </View>
-          <View style={styles.transactionMeta}>
-            <View style={styles.metaRow}>
-              <Text style={styles.timeText}>{format(transaction.date, "h:mm a")}</Text>
+          <View style={s.transactionMeta}>
+            <View style={s.metaRow}>
+              <Text style={s.timeText}>{format(transaction.date, "h:mm a")}</Text>
               {transaction.escrowStatus && (
-                <View style={styles.escrowBadge}>
+                <View style={s.escrowBadge}>
                   <MaterialIcons name="lock" size={10} color="#fff" />
-                  <Text style={styles.badgeText}>{transaction.escrowStatus.toUpperCase()}</Text>
+                  <Text style={s.badgeText}>{transaction.escrowStatus.toUpperCase()}</Text>
                 </View>
               )}
               {transaction.disputeStatus === "pending" && (
-                <View style={styles.disputeBadge}>
+                <View style={s.disputeBadge}>
                   <MaterialIcons name="warning" size={10} color="#fff" />
-                  <Text style={styles.badgeText}>DISPUTE</Text>
+                  <Text style={s.badgeText}>DISPUTE</Text>
                 </View>
               )}
             </View>
             {transaction.details.status && (
               <Text
                 style={[
-                  styles.statusText,
+                  s.statusText,
                   { color: transaction.details.status === "Completed" ? '#6ee7b7' : '#fde68a' }
                 ]}
               >
@@ -197,14 +201,14 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
         </View>
       </View>
     </TouchableOpacity>
-  ), [])
+  ), [s, theme])
 
   // Render date header for a group
   const renderDateHeader = useCallback((date: Date) => (
-    <View style={styles.dateHeader}>
-      <Text style={styles.dateText}>{format(date, "EEEE, MMMM d, yyyy")}</Text>
+    <View style={s.dateHeader}>
+      <Text style={s.dateText}>{format(date, "EEEE, MMMM d, yyyy")}</Text>
     </View>
-  ), [])
+  ), [s])
 
   // Flatten grouped transactions for FlatList with section headers
   const flatListData = useMemo(() => {
@@ -235,21 +239,21 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
   }, [])
 
   return (
-    <View className="flex flex-col min-h-screen bg-emerald-600 text-white">
+    <View className="flex flex-col min-h-screen" style={{ backgroundColor: theme.background }}>
       {/* Header - improved spacing for iPhone */}
       <View className="flex flex-row items-center justify-between p-5 pt-safe">
         <View className="flex flex-row items-center">
           <MaterialIcons name="gps-fixed" size={24} color="#ffffff" />
-          <Text className="text-xl font-bold tracking-wider ml-2 text-white">BOUNTY</Text>
+          <Text className="text-xl font-bold tracking-wider ml-2" style={{ color: theme.text }}>BOUNTY</Text>
         </View>
-        <TouchableOpacity 
-          onPress={onBack} 
-          style={{ 
-            padding: 10, 
-            minWidth: 44, 
+        <TouchableOpacity
+          onPress={onBack}
+          style={{
+            padding: 10,
+            minWidth: 44,
             minHeight: 44,
             justifyContent: 'center',
-            alignItems: 'center' 
+            alignItems: 'center'
           }}
         >
           <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
@@ -258,7 +262,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
 
       {/* Title */}
       <View className="px-5 py-3">
-        <Text className="text-2xl font-bold text-white">Transaction History</Text>
+        <Text className="text-2xl font-bold" style={{ color: theme.text }}>Transaction History</Text>
       </View>
 
       {/* Filters - horizontal scrollable carousel */}
@@ -273,15 +277,15 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
             paddingHorizontal: 18,
             paddingVertical: 10,
             borderRadius: 20,
-            backgroundColor: activeFilter === "all" ? '#047857' : 'rgba(4,120,87,0.4)',
+            backgroundColor: activeFilter === "all" ? theme.surface : theme.surfaceSecondary,
             minHeight: 44, // iOS touch target
             justifyContent: 'center',
             alignItems: 'center'
           }}
           onPress={() => handleFilterChange("all")}
         >
-          <Text style={{ 
-            color: activeFilter === 'all' ? '#fff' : '#d1fae5',
+          <Text style={{
+            color: activeFilter === 'all' ? theme.text : theme.textSecondary,
             fontWeight: activeFilter === 'all' ? '600' : '500',
             fontSize: 15
           }}>All Transactions</Text>
@@ -292,7 +296,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
             paddingHorizontal: 18,
             paddingVertical: 10,
             borderRadius: 20,
-            backgroundColor: activeFilter === "deposits" ? '#047857' : 'rgba(4,120,87,0.4)',
+            backgroundColor: activeFilter === "deposits" ? theme.surface : theme.surfaceSecondary,
             minHeight: 44,
             justifyContent: 'center',
             alignItems: 'center',
@@ -300,8 +304,8 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
           }}
           onPress={() => handleFilterChange("deposits")}
         >
-          <Text style={{ 
-            color: activeFilter === 'deposits' ? '#fff' : '#d1fae5',
+          <Text style={{
+            color: activeFilter === 'deposits' ? theme.text : theme.textSecondary,
             fontWeight: activeFilter === 'deposits' ? '600' : '500',
             fontSize: 15
           }}>Deposits</Text>
@@ -312,7 +316,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
             paddingHorizontal: 18,
             paddingVertical: 10,
             borderRadius: 20,
-            backgroundColor: activeFilter === "withdrawals" ? '#047857' : 'rgba(4,120,87,0.4)',
+            backgroundColor: activeFilter === "withdrawals" ? theme.surface : theme.surfaceSecondary,
             minHeight: 44,
             justifyContent: 'center',
             alignItems: 'center',
@@ -320,8 +324,8 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
           }}
           onPress={() => handleFilterChange("withdrawals")}
         >
-          <Text style={{ 
-            color: activeFilter === 'withdrawals' ? '#fff' : '#d1fae5',
+          <Text style={{
+            color: activeFilter === 'withdrawals' ? theme.text : theme.textSecondary,
             fontWeight: activeFilter === 'withdrawals' ? '600' : '500',
             fontSize: 15
           }}>Withdrawals</Text>
@@ -332,7 +336,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
             paddingHorizontal: 18,
             paddingVertical: 10,
             borderRadius: 20,
-            backgroundColor: activeFilter === "bounties" ? '#047857' : 'rgba(4,120,87,0.4)',
+            backgroundColor: activeFilter === "bounties" ? theme.surface : theme.surfaceSecondary,
             minHeight: 44,
             justifyContent: 'center',
             alignItems: 'center',
@@ -340,8 +344,8 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
           }}
           onPress={() => handleFilterChange("bounties")}
         >
-          <Text style={{ 
-            color: activeFilter === 'bounties' ? '#fff' : '#d1fae5',
+          <Text style={{
+            color: activeFilter === 'bounties' ? theme.text : theme.textSecondary,
             fontWeight: activeFilter === 'bounties' ? '600' : '500',
             fontSize: 15
           }}>Bounties</Text>
@@ -359,18 +363,18 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
       )}
 
       {/* Transaction list - Using FlatList for better scroll performance */}
-      <View style={[styles.listContainer, { paddingBottom: insets.bottom }]}>
+      <View style={[s.listContainer, { paddingBottom: insets.bottom }]}>
         {isLoading && filteredTransactions.length === 0 ? (
-          <View style={styles.loadingContainer}>
+          <View style={s.loadingContainer}>
             <TransactionsListSkeleton count={5} />
           </View>
         ) : filteredTransactions.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <View style={styles.emptyIcon}>
-              <MaterialIcons name="receipt-long" size={32} color="#86efac" />
+          <View style={s.emptyContainer}>
+            <View style={s.emptyIcon}>
+              <MaterialIcons name="receipt-long" size={32} color={theme.primaryLight} />
             </View>
-            <Text style={styles.emptyTitle}>No transactions found</Text>
-            <Text style={styles.emptySubtitle}>
+            <Text style={s.emptyTitle}>No transactions found</Text>
+            <Text style={s.emptySubtitle}>
               {activeFilter === "all"
                 ? "Your transaction history will appear here once you make deposits, withdraw funds, or complete bounties."
                 : activeFilter === "deposits"
@@ -385,7 +389,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
             data={flatListData}
             renderItem={renderItem}
             keyExtractor={keyExtractor}
-            contentContainerStyle={styles.flatListContent}
+            contentContainerStyle={s.flatListContent}
             showsVerticalScrollIndicator={true}
             initialNumToRender={15}
             maxToRenderPerBatch={10}
@@ -400,8 +404,8 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
               />
             }
             ListFooterComponent={
-              <View style={styles.listFooter}>
-                <Text style={styles.footerText}>
+              <View style={s.listFooter}>
+                <Text style={s.footerText}>
                   {filteredTransactions.length} transaction{filteredTransactions.length !== 1 ? 's' : ''}
                 </Text>
               </View>
@@ -418,7 +422,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
   )
 }
 
-const styles = StyleSheet.create({
+function makeStyles(t: AppTheme) { return StyleSheet.create({
   listContainer: {
     flex: 1,
     paddingHorizontal: 16,
@@ -437,20 +441,20 @@ const styles = StyleSheet.create({
     height: 64,
     width: 64,
     borderRadius: 32,
-    backgroundColor: 'rgba(4,120,87,0.5)',
+    backgroundColor: t.surfaceSecondary,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
   },
   emptyTitle: {
-    color: '#d1fae5',
+    color: t.text,
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 8,
     textAlign: 'center',
   },
   emptySubtitle: {
-    color: '#a7f3d0',
+    color: t.textSecondary,
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
@@ -459,16 +463,16 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   dateHeader: {
-    backgroundColor: '#059669',
+    backgroundColor: t.surfaceSecondary,
     paddingVertical: 8,
   },
   dateText: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#a7f3d0',
+    color: t.textSecondary,
   },
   transactionCard: {
-    backgroundColor: 'rgba(4,120,87,0.4)',
+    backgroundColor: t.surface,
     borderRadius: 14,
     padding: 16,
     marginBottom: 12,
@@ -487,7 +491,7 @@ const styles = StyleSheet.create({
     height: 44,
     width: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(5,150,105,0.5)',
+    backgroundColor: t.surfaceSecondary,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -504,7 +508,7 @@ const styles = StyleSheet.create({
   transactionTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#ffffff',
+    color: t.text,
     flex: 1,
     marginRight: 8,
   },
@@ -526,7 +530,7 @@ const styles = StyleSheet.create({
   },
   timeText: {
     fontSize: 12,
-    color: '#a7f3d0',
+    color: t.textSecondary,
   },
   escrowBadge: {
     flexDirection: 'row',
@@ -558,7 +562,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   footerText: {
-    color: '#a7f3d0',
+    color: t.textSecondary,
     fontSize: 13,
   },
-})
+}); }

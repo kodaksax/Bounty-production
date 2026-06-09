@@ -105,15 +105,15 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
 
   const renderAddressItem = useCallback(
     ({ item }: { item: SavedAddress }) => (
-      <View className="bg-emerald-700/50 rounded-lg p-4 mb-2">
+      <View className="bg-[#111827] rounded-lg p-4 mb-2">
         <View className="flex-row items-start justify-between">
           <View className="flex-1 mr-3">
             <Text className="text-white font-semibold text-base mb-1">{item.label}</Text>
-            <Text className="text-emerald-200 text-sm" numberOfLines={2}>
+            <Text className="text-[#9CA3AF] text-sm" numberOfLines={2}>
               {item.address}
             </Text>
             {item.latitude && item.longitude && (
-              <Text className="text-emerald-300/60 text-xs mt-1">
+              <Text className="text-[#6ee7b7]/60 text-xs mt-1">
                 Coordinates available
               </Text>
             )}
@@ -121,7 +121,7 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
           <View className="flex-row gap-2">
             <TouchableOpacity
               onPress={() => handleEdit(item)}
-              className="bg-emerald-600 p-2 rounded"
+              className="bg-[#059669] p-2 rounded"
               accessibilityLabel={`Edit ${item.label}`}
               accessibilityRole="button"
             >
@@ -146,10 +146,10 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
     () => (
       <View className="items-center justify-center py-12">
         <MaterialIcons name="place" size={64} color="rgba(110, 231, 183, 0.3)" />
-        <Text className="text-emerald-200/60 text-base mt-4 text-center">
+        <Text className="text-[#9CA3AF]/60 text-base mt-4 text-center">
           No addresses saved yet
         </Text>
-        <Text className="text-emerald-200/40 text-sm mt-2 text-center px-8">
+        <Text className="text-[#9CA3AF]/40 text-sm mt-2 text-center px-8">
           Add addresses to quickly fill in location fields when creating bounties
         </Text>
       </View>
@@ -158,7 +158,7 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
   );
 
   return (
-    <View className="flex-1 bg-emerald-600">
+    <View className="flex-1 bg-[#059669]">
       {/* Header with Back Button */}
       <View className="flex-row justify-between items-center p-4 pt-8">
         <View className="flex-row items-center">
@@ -181,14 +181,14 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
       >
         {/* Description */}
         <View className="px-4 mb-6">
-          <Text className="text-emerald-200/80 text-sm">
+          <Text className="text-[#9CA3AF]/80 text-sm">
             Manage your location settings and saved addresses
           </Text>
         </View>
 
         {/* Location Permissions Section */}
         <View className="px-4 mb-6">
-          <View className="bg-emerald-700/30 rounded-lg p-4 border border-emerald-500/30">
+          <View className="bg-[#111827] rounded-lg p-4 border border-[#374151]">
             <View className="flex-row items-center mb-3">
               <MaterialIcons name="my-location" size={24} color="#6ee7b7" />
               <Text className="text-white text-lg font-semibold ml-2">
@@ -210,7 +210,7 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
                     size={20}
                     color={permission.granted ? '#6ee7b7' : '#f87171'}
                   />
-                  <Text className="text-emerald-200 ml-2">
+                  <Text className="text-[#9CA3AF] ml-2">
                     Status:{' '}
                     <Text className="font-semibold">
                       {permission.granted ? 'Granted' : 'Denied'}
@@ -219,7 +219,7 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
                 </View>
 
                 {location && (
-                  <Text className="text-emerald-300/80 text-sm mb-3">
+                  <Text className="text-[#6ee7b7]/80 text-sm mb-3">
                     Current location: {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
                   </Text>
                 )}
@@ -228,7 +228,7 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
                   <TouchableOpacity
                     onPress={handleRequestPermission}
                     disabled={locationLoading}
-                    className="bg-emerald-500 py-3 rounded-lg mt-2"
+                    className="bg-[#059669] py-3 rounded-lg mt-2"
                     accessibilityLabel="Request location permission"
                     accessibilityRole="button"
                   >
@@ -248,7 +248,7 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
               <ActivityIndicator color="#6ee7b7" />
             )}
 
-            <Text className="text-emerald-200/60 text-xs mt-3">
+            <Text className="text-[#9CA3AF]/60 text-xs mt-3">
               Location is used to calculate distances to in-person bounties and help you find
               opportunities nearby.
             </Text>
@@ -262,7 +262,7 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
             {!showAddForm && (
               <TouchableOpacity
                 onPress={() => setShowAddForm(true)}
-                className="bg-emerald-500 px-4 py-2 rounded-lg flex-row items-center"
+                className="bg-[#059669] px-4 py-2 rounded-lg flex-row items-center"
                 accessibilityLabel="Add new address"
                 accessibilityRole="button"
               >
@@ -280,27 +280,27 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
 
           {/* Add/Edit Form */}
           {showAddForm && (
-            <View className="bg-emerald-700/50 rounded-lg p-4 mb-4 border border-emerald-500/50">
+            <View className="bg-[#111827] rounded-lg p-4 mb-4 border border-[#374151]">
               <Text className="text-white text-lg font-semibold mb-3">
                 {editingAddress ? 'Edit Address' : 'Add New Address'}
               </Text>
 
-              <Text className="text-emerald-200 text-sm mb-1">Label</Text>
+              <Text className="text-[#9CA3AF] text-sm mb-1">Label</Text>
               <TextInput
                 value={formLabel}
                 onChangeText={setFormLabel}
                 placeholder="e.g., Home, Office, Studio"
                 placeholderTextColor="rgba(110, 231, 183, 0.4)"
-                className="bg-emerald-800/50 text-white px-4 py-3 rounded-lg mb-3"
+                className="bg-[#111827]/50 text-white px-4 py-3 rounded-lg mb-3"
               />
 
-              <Text className="text-emerald-200 text-sm mb-1">Address</Text>
+              <Text className="text-[#9CA3AF] text-sm mb-1">Address</Text>
               <TextInput
                 value={formAddress}
                 onChangeText={setFormAddress}
                 placeholder="Full address (e.g., 123 Main St, City, State)"
                 placeholderTextColor="rgba(110, 231, 183, 0.4)"
-                className="bg-emerald-800/50 text-white px-4 py-3 rounded-lg mb-3"
+                className="bg-[#111827]/50 text-white px-4 py-3 rounded-lg mb-3"
                 multiline
                 numberOfLines={2}
               />
@@ -308,7 +308,7 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
               <View className="flex-row gap-2">
                 <TouchableOpacity
                   onPress={handleCancelForm}
-                  className="flex-1 bg-emerald-700/50 py-3 rounded-lg"
+                  className="flex-1 bg-[#111827] py-3 rounded-lg"
                   accessibilityLabel="Cancel"
                   accessibilityRole="button"
                 >
@@ -316,7 +316,7 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={handleAddressSubmit}
-                  className="flex-1 bg-emerald-500 py-3 rounded-lg"
+                  className="flex-1 bg-[#059669] py-3 rounded-lg"
                   accessibilityLabel={editingAddress ? 'Update address' : 'Save address'}
                   accessibilityRole="button"
                 >
