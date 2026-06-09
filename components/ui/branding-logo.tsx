@@ -1,6 +1,7 @@
 import React from 'react';
 import { AccessibilityRole, ImageStyle, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
+import { useAppThemeContext } from 'lib/themes';
 
 export interface BrandingLogoProps {
   /**
@@ -35,18 +36,21 @@ const sizeMap = {
  * BrandingLogo component - displays the BOUNTY logo image
  * Use this instead of GPS icon + BOUNTY text pattern
  */
-export function BrandingLogo({ 
-  size = 'medium', 
-  containerStyle, 
+export function BrandingLogo({
+  size = 'medium',
+  containerStyle,
   imageStyle,
   accessibilityRole = 'header',
 }: BrandingLogoProps) {
+  const { isDark } = useAppThemeContext();
   const dimensions = sizeMap[size];
-  
+
   return (
     <View style={[styles.container, containerStyle]}>
       <Image
-        source={require('../../assets/images/bounty-logo.png')}
+        source={isDark
+          ? require('../../assets/images/bounty-logo.png')
+          : require('../../assets/images/bounty-logo2.png')}
         style={[dimensions, imageStyle]}
         resizeMode="contain"
         accessibilityLabel="BOUNTY"

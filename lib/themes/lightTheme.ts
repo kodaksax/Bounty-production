@@ -26,4 +26,5 @@ export const lightTheme: AppTheme = {
   cancelled:         palette.cancelled,
   target:            palette.black,
   isDark: false,
+   
 };

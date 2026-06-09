@@ -1,5 +1,5 @@
 import { ThemeProvider } from "components/theme-provider";
-import { useAppThemeContext } from '../lib/themes/AppThemeContext';
+import { AppThemeProvider, useAppThemeContext } from '../lib/themes/AppThemeContext';
 import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
 import { Slot } from "expo-router";
@@ -283,9 +283,11 @@ function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <SafeAreaProvider>
       <GestureHandlerRootView style={styles.gestureRoot}>
-        <BackgroundColorProvider>
-          <LayoutContent />
-        </BackgroundColorProvider>
+        <AppThemeProvider>
+          <BackgroundColorProvider>
+            <LayoutContent />
+          </BackgroundColorProvider>
+        </AppThemeProvider>
       </GestureHandlerRootView>
     </SafeAreaProvider>
   );

@@ -350,7 +350,7 @@ export function SignUpForm() {
             <View className="gap-5">
               {authError ? (
                 <View className="bg-red-500/20 border border-red-400 rounded p-3">
-                  <Text className="text-red-200 text-sm">{authError}</Text>
+                  <Text style={{ color: theme.isDark ? '#fecaca' : '#991b1b', fontSize: 14 }}>{authError}</Text>
                 </View>
               ) : null}
 

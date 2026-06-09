@@ -28,6 +28,8 @@ import { useUserProfile } from '../../hooks/useUserProfile';
 import { useOnboarding } from '../../lib/context/onboarding-context';
 import { isUsernameUnique, validateUsername } from '../../lib/services/userProfile';
 import { supabase } from '../../lib/supabase';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 
 export default function UsernameScreen() {
   const router = useRouter();
@@ -36,7 +38,9 @@ export default function UsernameScreen() {
   const { userId, updateProfile: updateAuthProfile } = useAuthProfile();
   const { profile: normalized } = useNormalizedProfile();
   const { data: onboardingData, updateData: updateOnboardingData } = useOnboarding();
-  
+  const { theme } = useAppThemeContext();
+  const styles = makeStyles(theme);
+
   // Initialize state from context
   const [username, setUsername] = useState(onboardingData.username);
   const [error, setError] = useState<string | null>(null);
@@ -390,161 +394,163 @@ export default function UsernameScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#059669',
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 24,
-  },
-  brandingHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 8,
-    paddingBottom: 8,
-  },
-  brandingText: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    letterSpacing: 3,
-    marginLeft: 8,
-  },
-  header: {
-    alignItems: 'center',
-    marginTop: 16,
-    marginBottom: 32,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginTop: 12,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.8)',
-    textAlign: 'center',
-    lineHeight: 22,
-    paddingHorizontal: 16,
-  },
-  legalBox: {
-    backgroundColor: 'rgba(5,46,27,0.5)',
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(167,243,208,0.3)',
-    marginBottom: 20,
-  },
-  checkboxRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-  },
-  checkboxButton: {
-    marginRight: 4,
-  },
-  legalText: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 13,
-  },
-  linkText: {
-    color: '#9CA3AF',
-    textDecorationLine: 'underline',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  inputSection: {
-    marginBottom: 24,
-  },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(5,46,27,0.5)',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 4,
-    borderWidth: 2,
-    borderColor: 'rgba(167,243,208,0.3)',
-  },
-  atSymbol: {
-    fontSize: 24,
-    color: '#9CA3AF',
-    fontWeight: '600',
-    marginRight: 4,
-  },
-  input: {
-    flex: 1,
-    fontSize: 20,
-    color: '#ffffff',
-    paddingVertical: 14,
-    fontWeight: '500',
-  },
-  indicator: {
-    marginLeft: 8,
-  },
-  errorContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-    paddingHorizontal: 4,
-  },
-  errorText: {
-    color: '#ef4444',
-    fontSize: 14,
-    marginLeft: 6,
-  },
-  requirements: {
-    marginTop: 12,
-    paddingHorizontal: 4,
-  },
-  requirementTitle: {
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 6,
-  },
-  requirement: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 13,
-    lineHeight: 20,
-  },
-  nextButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#9CA3AF',
-    paddingVertical: 16,
-    borderRadius: 999,
-    marginBottom: 20,
-    gap: 8,
-  },
-  nextButtonDisabled: {
-    backgroundColor: 'rgba(167,243,208,0.3)',
-  },
-  nextButtonText: {
-    color: '#052e1b',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  progressContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
-    paddingTop: 8,
-  },
-  progressDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-  },
-  progressDotActive: {
-    backgroundColor: '#9CA3AF',
-  },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    content: {
+      flex: 1,
+      paddingHorizontal: 24,
+    },
+    brandingHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingTop: 8,
+      paddingBottom: 8,
+    },
+    brandingText: {
+      fontSize: 22,
+      fontWeight: 'bold',
+      color: theme.text,
+      letterSpacing: 3,
+      marginLeft: 8,
+    },
+    header: {
+      alignItems: 'center',
+      marginTop: 16,
+      marginBottom: 32,
+    },
+    title: {
+      fontSize: 26,
+      fontWeight: 'bold',
+      color: theme.text,
+      marginTop: 12,
+      marginBottom: 8,
+      textAlign: 'center',
+    },
+    subtitle: {
+      fontSize: 15,
+      color: theme.textSecondary,
+      textAlign: 'center',
+      lineHeight: 22,
+      paddingHorizontal: 16,
+    },
+    legalBox: {
+      backgroundColor: theme.surface,
+      borderRadius: 12,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+      marginBottom: 20,
+    },
+    checkboxRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+    },
+    checkboxButton: {
+      marginRight: 4,
+    },
+    legalText: {
+      color: theme.textSecondary,
+      fontSize: 13,
+    },
+    linkText: {
+      color: theme.primaryLight,
+      textDecorationLine: 'underline',
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    inputSection: {
+      marginBottom: 24,
+    },
+    inputWrapper: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.surface,
+      borderRadius: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 4,
+      borderWidth: 2,
+      borderColor: theme.border,
+    },
+    atSymbol: {
+      fontSize: 24,
+      color: theme.textSecondary,
+      fontWeight: '600',
+      marginRight: 4,
+    },
+    input: {
+      flex: 1,
+      fontSize: 20,
+      color: theme.text,
+      paddingVertical: 14,
+      fontWeight: '500',
+    },
+    indicator: {
+      marginLeft: 8,
+    },
+    errorContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 8,
+      paddingHorizontal: 4,
+    },
+    errorText: {
+      color: '#ef4444',
+      fontSize: 14,
+      marginLeft: 6,
+    },
+    requirements: {
+      marginTop: 12,
+      paddingHorizontal: 4,
+    },
+    requirementTitle: {
+      color: theme.text,
+      fontSize: 14,
+      fontWeight: '600',
+      marginBottom: 6,
+    },
+    requirement: {
+      color: theme.textSecondary,
+      fontSize: 13,
+      lineHeight: 20,
+    },
+    nextButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.primary,
+      paddingVertical: 16,
+      borderRadius: 999,
+      marginBottom: 20,
+      gap: 8,
+    },
+    nextButtonDisabled: {
+      backgroundColor: theme.surfaceSecondary,
+    },
+    nextButtonText: {
+      color: '#052e1b',
+      fontSize: 18,
+      fontWeight: 'bold',
+    },
+    progressContainer: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 8,
+      paddingTop: 8,
+    },
+    progressDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: theme.border,
+    },
+    progressDotActive: {
+      backgroundColor: theme.primary,
+    },
+  });
+}

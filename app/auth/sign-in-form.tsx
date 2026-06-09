@@ -35,7 +35,7 @@ export default function SignInRoute() {
 }
 
 export function SignInForm() {
-  const { theme } = useAppThemeContext()
+  const { theme, isDark } = useAppThemeContext()
   // set status/safe-area color to match screen background
   useScreenBackground(theme.background)
   const router = useRouter()
@@ -50,7 +50,7 @@ export function SignInForm() {
   const [rememberMe, setRememberMe] = useState(false)
   console.log('[sign-in] Component rendered', { loginAttempts, lockoutUntil, captchaVerified })
   const passwordRef = useRef<TextInput>(null)
-
+  
   // Derive active lockout and CAPTCHA requirement each render so expired
   // lockout timestamps are handled correctly without an extra state update.
   const isLockoutActive = lockoutUntil !== null && Date.now() < lockoutUntil
@@ -474,7 +474,9 @@ export function SignInForm() {
           <View className="flex-1 px-6 pt-20 pb-8" style={{ backgroundColor: theme.background }}>
             <View className="flex-row items-center justify-center mb-10">
               <Image
-                source={require('../../assets/images/bounty-logo.png')}
+                source={isDark
+                  ? require('../../assets/images/bounty-logo.png')
+                  : require('../../assets/images/bounty-logo2.png')}
                 style={{ width: 220, height: 60 }}
                 resizeMode="contain"
               />
