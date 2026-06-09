@@ -1,12 +1,20 @@
-// lib/services/analytics-service.ts - Analytics tracking service with Mixpanel
-// Lazily require native modules to avoid top-level native imports that break
-// when running inside Expo Go (which may not include those native modules).
+// lib/services/analytics-service.ts - Analytics tracking service backed by PostHog
+//
+// PostHog is the single source of truth for product analytics. This service
+// provides a typed, app-wide facade over the shared PostHog client defined in
+// `lib/posthog.ts`, so non-React surfaces (services, hooks, startup) emit the
+// exact same events into the exact same PostHog project as the React
+// `usePostHog()` hook and autocapture.
 import { Platform } from 'react-native';
-import getMixpanel, {
-  identify as mixpanelIdentify,
-  initMixpanel,
-  track as mixpanelTrack,
-} from '../mixpanel';
+import {
+    isPostHogReady,
+    capture as posthogCapture,
+    flush as posthogFlush,
+    identify as posthogIdentify,
+    reset as posthogReset,
+    screen as posthogScreen,
+    setPersonProperties as posthogSetPersonProperties,
+} from '../posthog';
 
 // Track key user events according to requirements
 export type AnalyticsEvent =
@@ -77,32 +85,25 @@ class AnalyticsService {
   private userId: string | null = null;
 
   /**
-   * Initialize analytics services. This delegates to the shared Mixpanel
-   * singleton in `lib/mixpanel.ts` so every analytics surface (this service
-   * + direct `track()` callers) shares a single SDK instance.
+   * Initialize analytics services. The shared PostHog client in `lib/posthog.ts`
+   * is constructed eagerly at import time, so initialization here is mostly a
+   * readiness check kept for API compatibility with existing callers.
    *
-   * @param mixpanelToken - Optional Mixpanel project token. Currently
-   *   unused: the underlying native SDK reads its token from env
-   *   (`EXPO_PUBLIC_MIXPANEL_TOKEN`). The parameter is kept for API
-   *   compatibility with existing callers. Passing the literal
-   *   placeholder `'YOUR_MIXPANEL_TOKEN'` skips initialization entirely.
+   * @param _legacyToken - Ignored. Retained so existing callers that pass a
+   *   Mixpanel-style token continue to compile. Passing the literal
+   *   placeholder `'YOUR_MIXPANEL_TOKEN'` still skips initialization.
    */
-  async initialize(mixpanelToken?: string): Promise<void> {
+  async initialize(_legacyToken?: string): Promise<void> {
     if (this.initialized) {
       return;
     }
 
     try {
-      const isPlaceholderToken = mixpanelToken === 'YOUR_MIXPANEL_TOKEN';
-      if (!isPlaceholderToken) {
-        try {
-          await initMixpanel();
-        } catch (e: any) {
-          // If mixpanel native package isn't installed or available in this runtime
-          // (e.g., Expo Go), just warn and continue — analytics remains optional.
-          // eslint-disable-next-line no-console
-          console.warn('[Analytics] mixpanel-react-native not available:', e?.message || e);
-        }
+      if (_legacyToken !== 'YOUR_MIXPANEL_TOKEN' && !isPostHogReady()) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          '[Analytics] PostHog client not ready — events will be dropped until configured'
+        );
       }
 
       this.initialized = true;
@@ -127,11 +128,11 @@ class AnalyticsService {
     this.userId = userId;
 
     try {
-      // Identify in Mixpanel via the shared singleton.
+      // Identify in PostHog via the shared client.
       try {
-        mixpanelIdentify(userId, properties);
+        posthogIdentify(userId, properties);
       } catch {
-        // ignore — mixpanel may not be ready
+        // ignore — PostHog may not be ready
       }
 
       // Set user in Sentry
@@ -142,7 +143,6 @@ class AnalyticsService {
       } catch {
         // ignore
       }
-
     } catch (error) {
       console.error('[Analytics] Failed to identify user:', error);
       try {
@@ -169,10 +169,10 @@ class AnalyticsService {
         userId: this.userId,
       };
 
-      // Track in Mixpanel via the shared singleton. The helper is a no-op when
-      // the native SDK hasn't initialized yet (e.g. in Expo Go).
+      // Track in PostHog via the shared client. The helper is a no-op when
+      // the client hasn't initialized yet (e.g. missing key in Expo Go).
       try {
-        mixpanelTrack(event, enrichedProperties);
+        posthogCapture(event, enrichedProperties);
       } catch {
         // ignore — never let analytics failures bubble up to the caller
       }
@@ -190,7 +190,6 @@ class AnalyticsService {
       } catch {
         // ignore when Sentry is not installed in this runtime
       }
-
     } catch (error) {
       console.error('[Analytics] Failed to track event:', error);
       try {
@@ -210,15 +209,9 @@ class AnalyticsService {
   async updateUserProperties(properties: AnalyticsProperties): Promise<void> {
     try {
       try {
-        const mp = getMixpanel();
-        if (mp) {
-          const people = typeof mp.getPeople === 'function' ? mp.getPeople() : mp.people;
-          if (people && typeof people.set === 'function') {
-            await people.set(properties);
-          }
-        }
+        posthogSetPersonProperties(properties);
       } catch {
-        // ignore — mixpanel may not be ready
+        // ignore — PostHog may not be ready
       }
 
       try {
@@ -228,7 +221,6 @@ class AnalyticsService {
       } catch {
         // ignore
       }
-
     } catch (error) {
       console.error('[Analytics] Failed to update user properties:', error);
       try {
@@ -242,19 +234,23 @@ class AnalyticsService {
   }
 
   /**
-   * Increment a user property
+   * Increment a user property.
+   *
+   * PostHog does not support atomic client-side increments of person
+   * properties (that is a server-side operation). To preserve the analytics
+   * signal we capture a dedicated event carrying the property name and delta,
+   * which can be aggregated in PostHog insights.
+   *
    * @param property - Property name
    * @param value - Value to increment by (default: 1)
    */
   async incrementUserProperty(property: string, value: number = 1): Promise<void> {
     try {
-      const mp = getMixpanel();
-      if (mp) {
-        const people = typeof mp.getPeople === 'function' ? mp.getPeople() : mp.people;
-        if (people && typeof people.increment === 'function') {
-          await people.increment(property, value);
-        }
-      }
+      posthogCapture('user_property_incremented', {
+        property,
+        increment: value,
+        userId: this.userId,
+      });
     } catch (error) {
       console.error('[Analytics] Failed to increment user property:', error);
       try {
@@ -280,7 +276,7 @@ class AnalyticsService {
       };
 
       try {
-        mixpanelTrack('screen_view', screenProperties);
+        posthogScreen(screenName, screenProperties);
       } catch {
         // ignore
       }
@@ -297,7 +293,6 @@ class AnalyticsService {
       } catch {
         // ignore
       }
-
     } catch (error) {
       console.error('[Analytics] Failed to track screen view:', error);
       try {
@@ -316,7 +311,11 @@ class AnalyticsService {
    * @param duration - Duration in milliseconds
    * @param properties - Additional properties
    */
-  async trackTiming(eventName: string, duration: number, properties?: AnalyticsProperties): Promise<void> {
+  async trackTiming(
+    eventName: string,
+    duration: number,
+    properties?: AnalyticsProperties
+  ): Promise<void> {
     try {
       const timingProperties = {
         ...properties,
@@ -324,11 +323,10 @@ class AnalyticsService {
       };
 
       try {
-        mixpanelTrack(eventName, timingProperties);
+        posthogCapture(eventName, timingProperties);
       } catch {
         // ignore
       }
-
     } catch (error) {
       console.error('[Analytics] Failed to track timing:', error);
       try {
@@ -349,10 +347,7 @@ class AnalyticsService {
       this.userId = null;
 
       try {
-        const mp = getMixpanel();
-        if (mp && typeof mp.reset === 'function') {
-          await mp.reset();
-        }
+        posthogReset();
       } catch {
         // ignore
       }
@@ -364,7 +359,6 @@ class AnalyticsService {
       } catch {
         // ignore
       }
-
     } catch (error) {
       console.error('[Analytics] Failed to reset analytics:', error);
       try {
@@ -382,10 +376,7 @@ class AnalyticsService {
    */
   async flush(): Promise<void> {
     try {
-      const mp = getMixpanel();
-      if (mp && typeof mp.flush === 'function') {
-        await mp.flush();
-      }
+      await posthogFlush();
     } catch (error) {
       console.error('[Analytics] Failed to flush events:', error);
     }

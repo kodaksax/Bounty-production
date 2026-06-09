@@ -77,7 +77,12 @@
           "merchantIdentifier": "merchant.com.bountyexpo-workspace"
         }
       ],
-      "@react-native-google-signin/google-signin",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "androidClientId": "${EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID}"
+        }
+      ],
       [
         "expo-splash-screen",
         {
@@ -125,7 +130,8 @@
           "organization": "bounty-4e",
           "project": "react-native"
         }
-      ]
+      ],
+      "expo-localization"
     ],
     "experiments": {
       "typedRoutes": true
