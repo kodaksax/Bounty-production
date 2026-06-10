@@ -448,7 +448,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                   end={{ x: 1, y: 1 }}
                   style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
                 />
-                <Text style={s.gridHeaderTitle}>Find your Bounty</Text>
+                <Text style={s.gridHeaderTitle}>Find a Bounty</Text>
                 <View style={s.gridHeaderSubRow}>
                   <Text style={s.gridHeaderSubtitle}>Explore tasks near you</Text>
                   <View style={s.gridHeaderCountBadge}>

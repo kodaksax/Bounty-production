@@ -6,13 +6,13 @@ import type { AppTheme } from './types';
 export const lightTheme: AppTheme = {
   background:        palette.navy[50],    // #F9FAFB — warm off-white page bg
   surface:           palette.white,       // #FFFFFF — pure white cards
-  surfaceSecondary:  palette.navy[100],   // #F3F4F6 — light gray inputs
+  surfaceSecondary:  palette.navy[200],   // #E5E7EB — distinct from white surface
 
-  border:            palette.navy[200],   // #E5E7EB
+  border:            palette.navy[300],   // #D1D5DB — visible borders
 
-  text:              palette.navy[900],   // #111827 — near-black primary text
-  textSecondary:     palette.navy[500],   // #6B7280
-  textDisabled:      palette.navy[400],   // #9CA3AF
+  text:              '#18181B',           // near-neutral dark (zinc-900, no navy cast)
+  textSecondary:     palette.navy[600],   // #4B5563
+  textDisabled:      palette.navy[500],   // #6B7280
 
   primary:           palette.green[600],  // #059669 — same CTA green
   primaryLight:      palette.green[700],  // #047857 — darker for contrast on white

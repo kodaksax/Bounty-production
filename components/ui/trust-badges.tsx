@@ -268,12 +268,12 @@ export function TrustBadgesCompact() {
 function makeStyles(theme: AppTheme) {
   return StyleSheet.create({
     container: {
-      backgroundColor: theme.isDark ? 'rgba(5,95,70,0.3)' : 'rgba(5,150,105,0.1)',
+      backgroundColor: theme.isDark ? 'rgba(5,95,70,0.3)' : theme.surface,
       borderRadius: 16,
       padding: 16,
       marginBottom: 16,
       borderWidth: 1,
-      borderColor: theme.isDark ? 'rgba(167,243,208,0.3)' : theme.primary,
+      borderColor: theme.isDark ? 'rgba(167,243,208,0.3)' : 'rgba(5,150,105,0.35)',
     },
     header: {
       flexDirection: 'row',
@@ -303,14 +303,14 @@ function makeStyles(theme: AppTheme) {
       width: '30%',
       alignItems: 'center',
       padding: 12,
-      backgroundColor: theme.isDark ? 'rgba(6,78,59,0.5)' : 'rgba(5,150,105,0.08)',
+      backgroundColor: theme.isDark ? 'rgba(6,78,59,0.5)' : theme.surfaceSecondary,
       borderRadius: 12,
     },
     listBadge: {
       flexDirection: 'row',
       alignItems: 'center',
       padding: 12,
-      backgroundColor: theme.isDark ? 'rgba(6,78,59,0.5)' : 'rgba(5,150,105,0.08)',
+      backgroundColor: theme.isDark ? 'rgba(6,78,59,0.5)' : theme.surfaceSecondary,
       borderRadius: 12,
       gap: 12,
     },
@@ -344,7 +344,9 @@ function makeStyles(theme: AppTheme) {
     compactBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: theme.isDark ? 'rgba(5,95,70,0.3)' : 'rgba(5,150,105,0.1)',
+      backgroundColor: theme.isDark ? 'rgba(5,95,70,0.3)' : theme.surfaceSecondary,
+      borderWidth: 1,
+      borderColor: theme.isDark ? 'rgba(167,243,208,0.15)' : theme.border,
       paddingHorizontal: 10,
       paddingVertical: 6,
       borderRadius: 16,
