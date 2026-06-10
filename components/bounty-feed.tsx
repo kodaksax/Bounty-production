@@ -1,5 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons'
 import { useLocation } from 'app/hooks/useLocation'
+import { BountyCompactItem } from 'components/bounty-compact-item'
 import { BountyListItem } from 'components/bounty-list-item'
 import { NotificationsBell } from 'components/notifications-bell'
 import { BrandingLogo } from 'components/ui/branding-logo'
@@ -12,6 +13,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRe
 import { Alert, Animated, Dimensions, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useValidUserId } from '../hooks/useValidUserId'
 import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../lib/constants/accessibility'
+import { useBountyFormat } from '../lib/bounty-format-context'
 import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 import type { AppTheme } from '../lib/themes/types'
 import { bountyRequestService } from '../lib/services/bounty-request-service'
@@ -57,6 +59,8 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   const [distanceChipLayout, setDistanceChipLayout] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
 
   const { theme } = useAppThemeContext()
+  const { bountyFormat } = useBountyFormat()
+  const isCompact = bountyFormat === 'compact'
   const s = useMemo(() => makeStyles(theme), [theme])
 
   const scrollY = useRef(new Animated.Value(0)).current
@@ -310,23 +314,27 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
 
   const renderBountyItem = useCallback(({ item }: { item: Bounty }) => {
     const distance = bountyDistances.get(String(item.id)) ?? calculateDistance(item.location || '')
+    const props = {
+      id: item.id,
+      title: item.title,
+      username: item.username,
+      price: Number(item.amount),
+      distance,
+      description: item.description,
+      isForHonor: Boolean(item.is_for_honor),
+      user_id: item.user_id,
+      work_type: item.work_type,
+      poster_avatar: item.poster_avatar,
+    }
+    if (isCompact) {
+      return <BountyCompactItem {...props} />
+    }
     return (
       <View style={{ height: listHeight }}>
-        <BountyListItem
-          id={item.id}
-          title={item.title}
-          username={item.username}
-          price={Number(item.amount)}
-          distance={distance}
-          description={item.description}
-          isForHonor={Boolean(item.is_for_honor)}
-          user_id={item.user_id}
-          work_type={item.work_type}
-          poster_avatar={item.poster_avatar}
-        />
+        <BountyListItem {...props} />
       </View>
     )
-  }, [bountyDistances, calculateDistance, listHeight])
+  }, [bountyDistances, calculateDistance, listHeight, isCompact])
 
   const handleEndReached = useCallback(() => {
     if (!isLoadingBounties && !loadingMore && hasMore) loadBounties()
@@ -433,8 +441,8 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
           ref={bountyListRef}
           data={filteredBounties}
           keyExtractor={keyExtractor}
-          pagingEnabled
-          snapToInterval={listHeight}
+          pagingEnabled={!isCompact}
+          snapToInterval={isCompact ? undefined : listHeight}
           snapToAlignment="start"
           decelerationRate="fast"
           showsVerticalScrollIndicator={false}
