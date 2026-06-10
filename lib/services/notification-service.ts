@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 import { API_BASE_URL } from 'lib/config/api';
 import { ERROR_LOG_THROTTLE } from 'lib/config/network';
 import { LOG_KEYS, shouldLog } from 'lib/utils/log-throttle';
@@ -272,18 +273,21 @@ export class NotificationService {
         console.error('Error registering push token:', error);
       }
       
-      // Fallback: try saving directly to Supabase if available (RLS should allow inserting own token)
+      // Fallback: save the token directly via Supabase. In production builds the
+      // app talks to Supabase Edge Functions, where no `/notifications/register-token`
+      // route exists, so the REST call above 404s and this is the only path that
+      // actually persists the token. Without it the `push_tokens` row is never
+      // created and cross-user events (messages, applications, acceptances, status
+      // changes) processed by the `process-notification` edge function find no
+      // token to push to.
       try {
         const { data: { session } } = await supabase.auth.getSession();
         const userId = session?.user?.id
-        if (userId) {
-          const { error: sbErr } = await supabase.from('push_tokens').upsert({ user_id: userId, token, device_id: deviceId }).select('id').single()
-          if (!sbErr) {
-            if (__DEV__) {
-              console.log('[NotificationService] Successfully registered push token via Supabase fallback');
-            }
-            return
+        if (userId && await this.savePushTokenViaSupabase(userId, token, deviceId)) {
+          if (__DEV__) {
+            console.log('[NotificationService] Successfully registered push token via Supabase fallback');
           }
+          return
         }
       } catch {}
       // As a last resort, cache and retry later so the user isn't blocked
@@ -300,8 +304,65 @@ export class NotificationService {
   }
 
   /**
-   * Fetch notifications from the backend
+   * Determine whether a PostgREST/Supabase error was caused by referencing a
+   * column that does not exist in the current schema. Used to transparently
+   * fall back between the canonical `profile_id` owner column and the legacy
+   * `user_id` column on the `push_tokens` table.
    */
+  private isMissingColumnError(error: any, column: string): boolean {
+    if (!error) return false;
+    const code = String(error.code ?? '');
+    const message = String(error.message ?? '').toLowerCase();
+    const col = column.toLowerCase();
+    return (
+      code === '42703' ||
+      code === 'PGRST204' ||
+      (message.includes('column') && message.includes(col) && message.includes('does not exist'))
+    );
+  }
+
+  /**
+   * Persist a push token directly via Supabase.
+   *
+   * The canonical `push_tokens` schema uses `profile_id` as the owner column,
+   * but some older environments use `user_id`. Try the canonical column first
+   * and transparently fall back to the legacy one when the column is missing.
+   * Upsert on the unique `token` column so re-registering an existing token
+   * refreshes ownership and re-enables it (a token previously disabled by
+   * delivery failures would otherwise never receive pushes again).
+   *
+   * Returns true when the token was persisted, false otherwise so the caller
+   * can cache it for a later retry.
+   */
+  private async savePushTokenViaSupabase(userId: string, token: string, deviceId?: string): Promise<boolean> {
+    const platform = Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : undefined;
+    const ownerColumns: Array<'profile_id' | 'user_id'> = ['profile_id', 'user_id'];
+    for (const ownerColumn of ownerColumns) {
+      try {
+        const row: Record<string, unknown> = {
+          [ownerColumn]: userId,
+          token,
+          device_id: deviceId ?? null,
+          enabled: true,
+        };
+        if (platform) row.platform = platform;
+
+        const { error } = await supabase
+          .from('push_tokens')
+          .upsert(row, { onConflict: 'token' });
+
+        if (!error) return true;
+        // If this owner column does not exist in the current schema, try the next candidate.
+        if (this.isMissingColumnError(error, ownerColumn)) continue;
+        // Any other error (e.g. RLS, network): stop and let the caller cache for retry.
+        return false;
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+
   async fetchNotifications(limit: number = 50, offset: number = 0): Promise<Notification[]> {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -665,12 +726,12 @@ export class NotificationService {
           body: JSON.stringify({ token }),
         });
       } catch {
-        // Best-effort: also try Supabase fallback
+        // Best-effort: also try Supabase fallback. `token` is globally unique, so
+        // deleting by token alone is sufficient and avoids the owner-column
+        // (`profile_id` vs `user_id`) schema mismatch. RLS still restricts the
+        // delete to the user's own row.
         try {
-          const userId = session.user?.id;
-          if (userId) {
-            await supabase.from('push_tokens').delete().eq('user_id', userId).eq('token', token);
-          }
+          await supabase.from('push_tokens').delete().eq('token', token);
         } catch {}
       }
 
