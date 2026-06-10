@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
 
-export type BountyFormat = 'card' | 'compact'
+export type BountyFormat = 'card' | 'compact' | 'grid'
 
 const STORAGE_KEY = 'bounty_display_format'
 
@@ -20,7 +20,7 @@ export function BountyFormatProvider({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((stored) => {
-      if (stored === 'card' || stored === 'compact') setFormatState(stored)
+      if (stored === 'card' || stored === 'compact' || stored === 'grid') setFormatState(stored)
     })
   }, [])
 

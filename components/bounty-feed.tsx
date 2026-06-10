@@ -1,6 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons'
 import { useLocation } from 'app/hooks/useLocation'
 import { BountyCompactItem } from 'components/bounty-compact-item'
+import { BountyGridFeed } from 'components/bounty-grid-feed'
 import { BountyListItem } from 'components/bounty-list-item'
 import { NotificationsBell } from 'components/notifications-bell'
 import { BrandingLogo } from 'components/ui/branding-logo'
@@ -403,27 +404,25 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
 
 
       
-      {/* Search Bar */}
-          <View style={s.searchWrapper}>
-            
-            <TouchableOpacity
-              accessibilityRole="button"
-              accessibilityLabel="Open search"
-              onPress={() => router.push('/tabs/search')}
-              style={s.searchButton}
-            >
-              <MaterialIcons
-                name="search"
-                size={20}
-                color={theme.textDisabled}
-                style={s.searchIcon}
-              />
-        <Text style={s.searchText}>Search bounties or users...</Text>
-
-          
-            </TouchableOpacity>
-          </View>
-
+      {/* Search Bar — only shown for card/compact; grid gets it inside the list header */}
+          {bountyFormat !== 'grid' && (
+            <View style={s.searchWrapper}>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Open search"
+                onPress={() => router.push('/tabs/search')}
+                style={s.searchButton}
+              >
+                <MaterialIcons
+                  name="search"
+                  size={20}
+                  color={theme.textDisabled}
+                  style={s.searchIcon}
+                />
+                <Text style={s.searchText}>Search bounties or users...</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
 
 
@@ -437,35 +436,67 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         style={{ flex: 1 }}
         onLayout={(e) => setListHeight(e.nativeEvent.layout.height)}
       >
-        <Animated.FlatList
-          ref={bountyListRef}
-          data={filteredBounties}
-          keyExtractor={keyExtractor}
-          pagingEnabled={!isCompact}
-          snapToInterval={isCompact ? undefined : listHeight}
-          snapToAlignment="start"
-          decelerationRate="fast"
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{
-            paddingTop: 0,
-            paddingBottom: 0,
-            paddingHorizontal: 0,
-          }}
-          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
-          scrollEventThrottle={16}
-          onEndReachedThreshold={0.5}
-          onEndReached={handleEndReached}
-          ItemSeparatorComponent={ItemSeparator}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ffffff" />}
-          
-          ListEmptyComponent={EmptyListComponent}
-          ListFooterComponent={ListFooterComponent}
-          renderItem={renderBountyItem}
-          removeClippedSubviews={true}
-          maxToRenderPerBatch={5}
-          windowSize={5}
-          initialNumToRender={3}
-        />
+        {bountyFormat === 'grid' ? (
+          <BountyGridFeed
+            bounties={filteredBounties}
+            bountyDistances={bountyDistances}
+            listHeader={
+              <View style={[s.searchWrapper, s.searchWrapperGrid]}>
+                <LinearGradient
+                  colors={['#064e3b', '#059669', '#10b981']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+                />
+                <Text style={s.gridHeaderTitle}>Find your Bounty</Text>
+                <View style={s.gridHeaderSubRow}>
+                  <Text style={s.gridHeaderSubtitle}>Explore tasks near you</Text>
+                  <View style={s.gridHeaderCountBadge}>
+                    <Text style={s.gridHeaderCountText}>{filteredBounties.length} active bounties</Text>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Open search"
+                  onPress={() => router.push('/tabs/search')}
+                  style={[s.searchButton, s.searchButtonGrid]}
+                >
+                  <MaterialIcons name="search" size={20} color="rgba(255,255,255,0.75)" style={s.searchIcon} />
+                  <Text style={[s.searchText, s.searchTextGrid]}>Search bounties or users...</Text>
+                </TouchableOpacity>
+              </View>
+            }
+          />
+        ) : (
+          <Animated.FlatList
+            ref={bountyListRef}
+            data={filteredBounties}
+            keyExtractor={keyExtractor}
+            pagingEnabled={!isCompact}
+            snapToInterval={isCompact ? undefined : listHeight}
+            snapToAlignment="start"
+            decelerationRate="fast"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{
+              paddingTop: 0,
+              paddingBottom: 0,
+              paddingHorizontal: 0,
+            }}
+            onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
+            scrollEventThrottle={16}
+            onEndReachedThreshold={0.5}
+            onEndReached={handleEndReached}
+            ItemSeparatorComponent={ItemSeparator}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ffffff" />}
+            ListEmptyComponent={EmptyListComponent}
+            ListFooterComponent={ListFooterComponent}
+            renderItem={renderBountyItem}
+            removeClippedSubviews={true}
+            maxToRenderPerBatch={5}
+            windowSize={5}
+            initialNumToRender={3}
+          />
+        )}
       </View>
       <LinearGradient
         colors={[
@@ -515,6 +546,13 @@ function makeStyles(t: AppTheme) {
       marginBottom: SPACING.COMPACT_GAP,
       marginTop: 12,
     },
+    searchWrapperGrid: {
+      paddingTop: 64,
+      paddingBottom: 36,
+      marginTop: 0,
+      marginHorizontal: -SPACING.SCREEN_HORIZONTAL,
+      overflow: 'hidden',
+    },
     searchButton: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -531,12 +569,21 @@ function makeStyles(t: AppTheme) {
       shadowOffset: { width: 0, height: 4 },
       elevation: 2,
     },
+    searchButtonGrid: {
+      backgroundColor: 'rgba(255,255,255,0.15)',
+      borderColor: 'rgba(255,255,255,0.3)',
+      shadowOpacity: 0,
+      elevation: 0,
+    },
     searchIcon: { marginRight: SPACING.COMPACT_GAP },
     searchText: {
       color: t.textDisabled,
       fontSize: 14,
       fontWeight: '500',
       flex: 1,
+    },
+    searchTextGrid: {
+      color: 'rgba(255,255,255,0.72)',
     },
     filtersRow: { paddingVertical: SPACING.COMPACT_GAP },
     gradientSeparator: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 40 },
@@ -660,6 +707,37 @@ function makeStyles(t: AppTheme) {
     },
     searchIconRight: {
       marginRight: 10,
+    },
+    gridHeaderTitle: {
+      color: '#ffffff',
+      fontSize: 40,
+      fontWeight: '800',
+      letterSpacing: -0.5,
+      marginBottom: 6,
+    },
+    gridHeaderSubRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 18,
+    },
+    gridHeaderSubtitle: {
+      color: 'rgba(255,255,255,0.72)',
+      fontSize: 13,
+      fontWeight: '500',
+    },
+    gridHeaderCountBadge: {
+      backgroundColor: 'rgba(255,255,255,0.18)',
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.3)',
+    },
+    gridHeaderCountText: {
+      color: '#ffffff',
+      fontSize: 12,
+      fontWeight: '700',
     },
   })
 }

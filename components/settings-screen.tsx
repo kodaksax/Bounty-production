@@ -142,6 +142,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
             {([
               ['card',    '🃏', 'Card'],
               ['compact', '☰',  'Compact'],
+              ['grid',    '⊞',  'Grid'],
             ] as [BountyFormat, string, string][]).map(([value, icon, label]) => {
               const active = bountyFormat === value
               return (

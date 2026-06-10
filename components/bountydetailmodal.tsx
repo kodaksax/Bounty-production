@@ -472,13 +472,13 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
               </View>
               <View style={styles.headerActions}>
                 <TouchableOpacity onPress={handleShare} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Share bounty">
-                  <MaterialIcons name="share" size={20} color="white" />
+                  <MaterialIcons name="share" size={20} color={theme.text} />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={handleReport} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Report bounty">
-                  <MaterialIcons name="report" size={20} color="white" />
+                  <MaterialIcons name="report" size={20} color={theme.text} />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={handleClose} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Close">
-                  <MaterialIcons name="close" size={20} color="white" />
+                  <MaterialIcons name="close" size={20} color={theme.text} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -504,7 +504,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                   >
                     {profileLoading ? (
                       <View style={styles.profileLoadingContainer}>
-                        <ActivityIndicator size="small" color="#9CA3AF" />
+                        <ActivityIndicator size="small" color={theme.textSecondary} />
                         <Text style={styles.loadingText}>Loading profile...</Text>
                       </View>
                     ) : (
@@ -522,7 +522,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                           <Text style={styles.postTime}>Posted 2h ago</Text>
                         </View>
                         {posterId && (
-                          <MaterialIcons name="chevron-right" size={20} color="#9CA3AF" style={{ marginLeft: 'auto' }} />
+                          <MaterialIcons name="chevron-right" size={20} color={theme.textSecondary} style={{ marginLeft: 'auto' }} />
                         )}
                       </>
                     )}
@@ -571,19 +571,19 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                       {([
                         bounty.timeline && {
                           icon: 'schedule' as const,
-                          color: '#9CA3AF',
+                          color: theme.textSecondary,
                           label: 'Timeline',
                           value: bounty.timeline,
                         },
                         bounty.skills_required && {
                           icon: 'build' as const,
-                          color: '#9CA3AF',
+                          color: theme.textSecondary,
                           label: 'Skills Required',
                           value: bounty.skills_required,
                         },
                         bounty.location && bounty.work_type !== 'online' && {
                           icon: 'place' as const,
-                          color: '#9CA3AF',
+                          color: theme.textSecondary,
                           label: 'Location',
                           value: bounty.location,
                         },
@@ -616,7 +616,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                       <Text style={styles.sectionHeader}>Attachments</Text>
                       {isLoadingAttachments ? (
                         <View style={styles.attachmentsLoadingContainer}>
-                          <ActivityIndicator size="small" color="#9CA3AF" />
+                          <ActivityIndicator size="small" color={theme.textSecondary} />
                           <Text style={styles.attachmentsLoadingText}>Loading attachments...</Text>
                         </View>
                       ) : (
@@ -640,7 +640,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                                       resizeMode="cover"
                                     />
                                   ) : (
-                                    <MaterialIcons name="description" size={20} color="#9CA3AF" />
+                                    <MaterialIcons name="description" size={20} color={theme.textSecondary} />
                                   )}
                                 </View>
                                 <View style={styles.attachmentInfo}>
@@ -650,7 +650,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                                   </Text>
                                 </View>
                                 <View style={styles.downloadButton}>
-                                  <MaterialIcons name="arrow-forward" size={16} color="#9CA3AF" />
+                                  <MaterialIcons name="arrow-forward" size={16} color={theme.textSecondary} />
                                 </View>
                               </TouchableOpacity>
                             )
@@ -670,7 +670,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                 <TextInput
                   style={styles.messageInput}
                   placeholder="Add a short message to the poster (optional)…"
-                  placeholderTextColor="rgba(167, 243, 208, 0.5)"
+                  placeholderTextColor={theme.isDark ? 'rgba(167,243,208,0.5)' : theme.textDisabled}
                   value={applicationMessage}
                   onChangeText={setApplicationMessage}
                   multiline
@@ -731,11 +731,11 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   )
 }
 
-function makeStyles(_theme: AppTheme) {
+function makeStyles(theme: AppTheme) {
   return StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
@@ -744,14 +744,14 @@ function makeStyles(_theme: AppTheme) {
     borderRadius: 24,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
+    shadowOpacity: theme.isDark ? 0.15 : 0.1,
     shadowRadius: 8,
     elevation: 5,
     backgroundColor: 'transparent',
   },
   card: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: theme.isDark ? '#059669' : theme.surface,
     borderRadius: 24,
     overflow: 'hidden',
   },
@@ -760,9 +760,11 @@ function makeStyles(_theme: AppTheme) {
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 16,
-    backgroundColor: '#0B0F14',
+    backgroundColor: theme.isDark ? '#0B0F14' : theme.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
+    borderBottomWidth: theme.isDark ? 0 : 1,
+    borderBottomColor: theme.border,
   },
   headerLeft: {
     flexDirection: 'row',
@@ -781,23 +783,25 @@ function makeStyles(_theme: AppTheme) {
     fontSize: 18,
     fontWeight: 'bold',
     letterSpacing: 1.6,
-    color: 'white',
+    color: theme.text,
   },
   closeButton: {
     padding: 8,
   },
   scrollContainer: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: theme.isDark ? '#059669' : theme.surface,
   },
   scrollContent: {
     padding: 16,
   },
   bountyCard: {
-    backgroundColor: '#0B0F14cc',
+    backgroundColor: theme.isDark ? '#0B0F14cc' : theme.surfaceSecondary,
     borderRadius: 12,
     overflow: 'hidden',
     marginBottom: 16,
+    borderWidth: theme.isDark ? 0 : 1,
+    borderColor: theme.border,
   },
   cardContent: {
     padding: 16,
@@ -815,7 +819,7 @@ function makeStyles(_theme: AppTheme) {
     flex: 1,
   },
   loadingText: {
-    color: '#9CA3AF',
+    color: theme.textSecondary,
     fontSize: 14,
     fontStyle: 'italic',
   },
@@ -826,29 +830,29 @@ function makeStyles(_theme: AppTheme) {
     width: 40,
     height: 40,
     borderWidth: 1,
-    borderColor: '#6ee7b780',
+    borderColor: theme.isDark ? '#6ee7b780' : theme.border,
   },
   avatarFallback: {
-    backgroundColor: '#064e3b',
+    backgroundColor: theme.isDark ? '#064e3b' : theme.surfaceSecondary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarText: {
-    color: '#ffffff',
+    color: theme.text,
     fontSize: 12,
   },
   username: {
     fontSize: 14,
-    color: '#ffffff',
+    color: theme.text,
   },
   postTime: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: theme.textSecondary,
   },
   title: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: 'white',
+    color: theme.text,
     marginBottom: 12,
   },
   priceDistanceContainer: {
@@ -860,26 +864,26 @@ function makeStyles(_theme: AppTheme) {
   onlineText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#ffffff',
+    color: theme.isDark ? '#ffffff' : theme.primary,
   },
   priceContainer: {
-    backgroundColor: '#064e3b80',
+    backgroundColor: theme.isDark ? '#064e3b80' : 'rgba(5,150,105,0.08)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
   },
   priceText: {
-    color: '#6ee7b7',
+    color: theme.isDark ? '#6ee7b7' : theme.primary,
     fontWeight: 'bold',
   },
   distanceText: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: theme.textSecondary,
   },
   onlineBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1F2937',
+    backgroundColor: theme.isDark ? '#1F2937' : 'rgba(5,150,105,0.08)',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
@@ -888,13 +892,13 @@ function makeStyles(_theme: AppTheme) {
   categoryPill: {
     marginTop: 8,
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: theme.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(5,150,105,0.08)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
   },
   categoryPillText: {
-    color: '#9CA3AF',
+    color: theme.textSecondary,
     fontSize: 12,
     fontWeight: '600',
   },
@@ -917,7 +921,9 @@ function makeStyles(_theme: AppTheme) {
   },
   additionalDetailsContainer: {
     marginBottom: 16,
-    backgroundColor: '#05543280',
+    backgroundColor: theme.isDark ? '#05543280' : theme.surfaceSecondary,
+    borderWidth: theme.isDark ? 0 : 1,
+    borderColor: theme.border,
     padding: 12,
     borderRadius: 8,
   },
@@ -933,12 +939,12 @@ function makeStyles(_theme: AppTheme) {
   detailLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#9CA3AF',
+    color: theme.textSecondary,
     marginBottom: 2,
   },
   detailValue: {
     fontSize: 14,
-    color: '#ffffff',
+    color: theme.text,
     lineHeight: 18,
   },
   attachmentsSection: {
@@ -947,11 +953,11 @@ function makeStyles(_theme: AppTheme) {
   sectionHeader: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#9CA3AF',
+    color: theme.textSecondary,
     marginBottom: 8,
   },
   descriptionText: {
-    color: 'white',
+    color: theme.text,
     fontSize: 14,
     lineHeight: 20,
   },
@@ -963,19 +969,19 @@ function makeStyles(_theme: AppTheme) {
     alignItems: 'center',
     justifyContent: 'center',
     padding: 16,
-    backgroundColor: '#05543280',
+    backgroundColor: theme.isDark ? '#05543280' : theme.surfaceSecondary,
     borderRadius: 8,
     gap: 12,
   },
   attachmentsLoadingText: {
-    color: '#9CA3AF',
+    color: theme.textSecondary,
     fontSize: 14,
     fontStyle: 'italic',
   },
   attachmentItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#05543280',
+    backgroundColor: theme.isDark ? '#05543280' : theme.surfaceSecondary,
     padding: 12,
     borderRadius: 8,
   },
@@ -983,7 +989,7 @@ function makeStyles(_theme: AppTheme) {
     width: 40,
     height: 40,
     borderRadius: 6,
-    backgroundColor: '#064e3b',
+    backgroundColor: theme.isDark ? '#064e3b' : theme.border,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -993,11 +999,11 @@ function makeStyles(_theme: AppTheme) {
   },
   attachmentName: {
     fontSize: 14,
-    color: 'white',
+    color: theme.text,
   },
   attachmentSize: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: theme.textSecondary,
   },
   downloadButton: {
     padding: 8,
@@ -1005,9 +1011,9 @@ function makeStyles(_theme: AppTheme) {
   actionContainer: {
     padding: 16,
     paddingTop: 16,
-    backgroundColor: '#0B0F14',
+    backgroundColor: theme.isDark ? '#0B0F14' : theme.background,
     borderTopWidth: 1,
-    borderTopColor: '#05966920',
+    borderTopColor: theme.isDark ? '#05966920' : theme.border,
   },
   acceptButton: {
     width: '100%',
@@ -1027,16 +1033,16 @@ function makeStyles(_theme: AppTheme) {
     opacity: 0.6,
   },
   acceptButtonText: {
-    color: 'white',
+    color: '#ffffff',
     fontWeight: '500',
     fontSize: 16,
   },
   messageInput: {
-    backgroundColor: '#06402a',
+    backgroundColor: theme.isDark ? '#06402a' : theme.surfaceSecondary,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.3)',
-    color: '#ffffff',
+    borderColor: theme.isDark ? 'rgba(110, 231, 183, 0.3)' : theme.border,
+    color: theme.text,
     fontSize: 14,
     padding: 12,
     minHeight: 72,
