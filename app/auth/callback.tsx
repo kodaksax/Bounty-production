@@ -21,6 +21,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
 import { ROUTES } from '../../lib/routes';
 import { supabase } from '../../lib/supabase';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation';
 
 type CallbackStatus = 'loading' | 'success' | 'error' | 'expired';
@@ -29,7 +31,9 @@ export default function AuthCallbackScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
-  
+  const { theme } = useAppThemeContext();
+  const styles = makeStyles(theme);
+
   const [status, setStatus] = useState<CallbackStatus>('loading');
   const [message, setMessage] = useState('Processing your request...');
   const [errorDetails, setErrorDetails] = useState('');
@@ -44,9 +48,9 @@ export default function AuthCallbackScreen() {
       const access_token = Array.isArray(params.access_token) ? params.access_token[0] : params.access_token;
       const refresh_token = Array.isArray(params.refresh_token) ? params.refresh_token[0] : params.refresh_token;
 
-      console.log('[auth-callback] Received parameters:', { 
-        hasToken: !!token, 
-        type, 
+      console.log('[auth-callback] Received parameters:', {
+        hasToken: !!token,
+        type,
         hasAccessToken: !!access_token,
         hasRefreshToken: !!refresh_token
       });
@@ -71,7 +75,7 @@ export default function AuthCallbackScreen() {
 
           setStatus('success');
           setMessage('Email Confirmed!');
-          
+
           // Wait a moment to show success, then redirect to onboarding
           // (new users need to complete profile setup before accessing the app)
           setTimeout(() => {
@@ -148,7 +152,7 @@ export default function AuthCallbackScreen() {
 
           setStatus('success');
           setMessage('Successfully Signed In!');
-          
+
           setTimeout(() => {
             router.replace('/tabs/bounty-app' as Href);
             try { markInitialNavigationDone(); } catch {}
@@ -189,7 +193,7 @@ export default function AuthCallbackScreen() {
     // Try to open default email app
     const emailUrl = 'message://';
     const canOpen = await Linking.canOpenURL(emailUrl);
-    
+
     if (canOpen) {
       await Linking.openURL(emailUrl);
     } else {
@@ -205,7 +209,7 @@ export default function AuthCallbackScreen() {
       case 'loading':
         return (
           <View style={styles.centerContent}>
-            <ActivityIndicator size="large" color="#9CA3AF" />
+            <ActivityIndicator size="large" color={theme.primary} />
             <Text style={styles.title}>{message}</Text>
             <Text style={styles.description}>
               {isRecovery
@@ -241,7 +245,7 @@ export default function AuthCallbackScreen() {
 
             {/* Help section */}
             <View style={styles.helpBox}>
-              <MaterialIcons name="info-outline" size={20} color="#9CA3AF" />
+              <MaterialIcons name="info-outline" size={20} color={theme.textSecondary} />
               <View style={styles.helpContent}>
                 <Text style={styles.helpTitle}>
                   {isRecovery ? 'Need a new reset link?' : 'Need a new confirmation email?'}
@@ -263,14 +267,14 @@ export default function AuthCallbackScreen() {
                     <MaterialIcons name="arrow-forward" size={20} color="#ffffff" />
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.secondaryButton} onPress={handleGoToSignIn}>
-                    <MaterialIcons name="login" size={20} color="#9CA3AF" />
+                    <MaterialIcons name="login" size={20} color={theme.text} />
                     <Text style={styles.secondaryButtonText}>Back to Sign In</Text>
                   </TouchableOpacity>
                 </>
               ) : (
                 <>
                   <TouchableOpacity style={styles.secondaryButton} onPress={handleOpenEmail}>
-                    <MaterialIcons name="email" size={20} color="#9CA3AF" />
+                    <MaterialIcons name="email" size={20} color={theme.text} />
                     <Text style={styles.secondaryButtonText}>Check Email</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.primaryButton} onPress={handleGoToSignIn}>
@@ -307,133 +311,135 @@ export default function AuthCallbackScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0B0F14',
-    paddingHorizontal: 24,
-  },
-  brandingHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 24,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingBottom: 24,
-  },
-  centerContent: {
-    width: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  successIconCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#9CA3AF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 6,
-    marginBottom: 24,
-  },
-  errorIconCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#fecaca',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 6,
-    marginBottom: 24,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  description: {
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.85)',
-    textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 32,
-    paddingHorizontal: 20,
-  },
-  helpBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#1F2937',
-    borderRadius: 12,
-    padding: 16,
-    width: '100%',
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#374151',
-  },
-  helpContent: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  helpTitle: {
-    color: '#9CA3AF',
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  helpText: {
-    color: 'rgba(255,255,255,0.75)',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  errorActions: {
-    width: '100%',
-    gap: 12,
-  },
-  primaryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#059669',
-    paddingVertical: 16,
-    borderRadius: 999,
-    gap: 8,
-  },
-  primaryButtonText: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  secondaryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#1F2937',
-    paddingVertical: 16,
-    borderRadius: 999,
-    gap: 8,
-    borderWidth: 2,
-    borderColor: '#374151',
-  },
-  secondaryButtonText: {
-    color: '#9CA3AF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+      paddingHorizontal: 24,
+    },
+    brandingHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 24,
+    },
+    scrollView: {
+      flex: 1,
+    },
+    scrollContent: {
+      flexGrow: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingBottom: 24,
+    },
+    centerContent: {
+      width: '100%',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    successIconCircle: {
+      width: 120,
+      height: 120,
+      borderRadius: 60,
+      backgroundColor: theme.surfaceSecondary,
+      justifyContent: 'center',
+      alignItems: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.2,
+      shadowRadius: 8,
+      elevation: 6,
+      marginBottom: 24,
+    },
+    errorIconCircle: {
+      width: 120,
+      height: 120,
+      borderRadius: 60,
+      backgroundColor: '#fecaca',
+      justifyContent: 'center',
+      alignItems: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.2,
+      shadowRadius: 8,
+      elevation: 6,
+      marginBottom: 24,
+    },
+    title: {
+      fontSize: 28,
+      fontWeight: 'bold',
+      color: theme.text,
+      marginBottom: 16,
+      textAlign: 'center',
+    },
+    description: {
+      fontSize: 16,
+      color: theme.text,
+      textAlign: 'center',
+      lineHeight: 24,
+      marginBottom: 32,
+      paddingHorizontal: 20,
+    },
+    helpBox: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      backgroundColor: theme.surfaceSecondary,
+      borderRadius: 12,
+      padding: 16,
+      width: '100%',
+      marginBottom: 24,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    helpContent: {
+      flex: 1,
+      marginLeft: 12,
+    },
+    helpTitle: {
+      color: theme.text,
+      fontSize: 15,
+      fontWeight: '600',
+      marginBottom: 4,
+    },
+    helpText: {
+      color: theme.text,
+      fontSize: 14,
+      lineHeight: 20,
+    },
+    errorActions: {
+      width: '100%',
+      gap: 12,
+    },
+    primaryButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#059669',
+      paddingVertical: 16,
+      borderRadius: 999,
+      gap: 8,
+    },
+    primaryButtonText: {
+      color: '#ffffff',
+      fontSize: 18,
+      fontWeight: 'bold',
+    },
+    secondaryButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.surface,
+      paddingVertical: 16,
+      borderRadius: 999,
+      gap: 8,
+      borderWidth: 2,
+      borderColor: theme.border,
+    },
+    secondaryButtonText: {
+      color: theme.text,
+      fontSize: 16,
+      fontWeight: '600',
+    },
+  });
+}

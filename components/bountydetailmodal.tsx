@@ -2,7 +2,8 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { BrandingLogo } from "components/ui/branding-logo"
 import { useRouter } from "expo-router"
-import { theme } from "lib/theme"
+import { useAppThemeContext } from '../lib/themes/AppThemeContext'
+import type { AppTheme } from '../lib/themes/types'
 import { formatCategoryLabel } from 'lib/utils/data-utils'
 import { shareBounty } from "lib/utils/share-utils"
 import { useEffect, useRef, useState } from "react"
@@ -74,6 +75,8 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   const { isEmailVerified, session } = useAuthContext()
   const currentUserId = session?.user?.id ?? null
   const { triggerHaptic } = useHapticFeedback()
+  const { theme } = useAppThemeContext()
+  const styles = makeStyles(theme)
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState("")
   const [isClosing, setIsClosing] = useState(false)
@@ -728,7 +731,8 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   )
 }
 
-const styles = StyleSheet.create({
+function makeStyles(_theme: AppTheme) {
+  return StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',
@@ -738,13 +742,16 @@ const styles = StyleSheet.create({
   },
   cardShadow: {
     borderRadius: 24,
-    ...theme.shadows.lg,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
     backgroundColor: 'transparent',
   },
-  // Inner rounded card
   card: {
     flex: 1,
-    backgroundColor: '#059669', // emerald-600
+    backgroundColor: '#059669',
     borderRadius: 24,
     overflow: 'hidden',
   },
@@ -753,8 +760,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 16,
-    backgroundColor: '#0B0F14', // emerald-700
-    // Optional: ensure the darker header follows the rounded top
+    backgroundColor: '#0B0F14',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
   },
@@ -782,13 +788,13 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     flex: 1,
-    backgroundColor: '#059669', // emerald-600
+    backgroundColor: '#059669',
   },
   scrollContent: {
     padding: 16,
   },
   bountyCard: {
-    backgroundColor: '#0B0F14cc', // emerald-700/80
+    backgroundColor: '#0B0F14cc',
     borderRadius: 12,
     overflow: 'hidden',
     marginBottom: 16,
@@ -809,7 +815,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   loadingText: {
-    color: '#9CA3AF', // emerald-300
+    color: '#9CA3AF',
     fontSize: 14,
     fontStyle: 'italic',
   },
@@ -820,24 +826,24 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderWidth: 1,
-    borderColor: '#6ee7b780', // emerald-400/30
+    borderColor: '#6ee7b780',
   },
   avatarFallback: {
-    backgroundColor: '#064e3b', // emerald-900
+    backgroundColor: '#064e3b',
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarText: {
-    color: '#9CA3AF', // emerald-200
+    color: '#ffffff',
     fontSize: 12,
   },
   username: {
     fontSize: 14,
-    color: '#1F2937', // emerald-100
+    color: '#ffffff',
   },
   postTime: {
     fontSize: 12,
-    color: '#9CA3AF', // emerald-300
+    color: '#9CA3AF',
   },
   title: {
     fontSize: 20,
@@ -854,26 +860,26 @@ const styles = StyleSheet.create({
   onlineText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#111827', // emerald-800
+    color: '#ffffff',
   },
   priceContainer: {
-    backgroundColor: '#064e3b80', // emerald-900/50
+    backgroundColor: '#064e3b80',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
   },
   priceText: {
-    color: '#6ee7b7', // emerald-400
+    color: '#6ee7b7',
     fontWeight: 'bold',
   },
   distanceText: {
     fontSize: 14,
-    color: '#9CA3AF', // emerald-200
+    color: '#9CA3AF',
   },
   onlineBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1F2937', // emerald-100
+    backgroundColor: '#1F2937',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
@@ -895,14 +901,14 @@ const styles = StyleSheet.create({
   honorBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#9CA3AF', // emerald-200
+    backgroundColor: '#9CA3AF',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 6,
     gap: 4,
   },
   honorText: {
-    color: '#052e1b', // emerald-950
+    color: '#052e1b',
     fontWeight: '800',
     fontSize: 13,
   },
@@ -911,7 +917,7 @@ const styles = StyleSheet.create({
   },
   additionalDetailsContainer: {
     marginBottom: 16,
-    backgroundColor: '#05543280', // emerald-800/50
+    backgroundColor: '#05543280',
     padding: 12,
     borderRadius: 8,
   },
@@ -927,12 +933,12 @@ const styles = StyleSheet.create({
   detailLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#9CA3AF', // emerald-300
+    color: '#9CA3AF',
     marginBottom: 2,
   },
   detailValue: {
     fontSize: 14,
-    color: '#1F2937', // emerald-100
+    color: '#ffffff',
     lineHeight: 18,
   },
   attachmentsSection: {
@@ -941,7 +947,7 @@ const styles = StyleSheet.create({
   sectionHeader: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#9CA3AF', // emerald-200
+    color: '#9CA3AF',
     marginBottom: 8,
   },
   descriptionText: {
@@ -957,19 +963,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 16,
-    backgroundColor: '#05543280', // emerald-800/50
+    backgroundColor: '#05543280',
     borderRadius: 8,
     gap: 12,
   },
   attachmentsLoadingText: {
-    color: '#9CA3AF', // emerald-300
+    color: '#9CA3AF',
     fontSize: 14,
     fontStyle: 'italic',
   },
   attachmentItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#05543280', // emerald-800/50
+    backgroundColor: '#05543280',
     padding: 12,
     borderRadius: 8,
   },
@@ -977,7 +983,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 6,
-    backgroundColor: '#064e3b', // emerald-900
+    backgroundColor: '#064e3b',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -991,7 +997,7 @@ const styles = StyleSheet.create({
   },
   attachmentSize: {
     fontSize: 12,
-    color: '#9CA3AF', // emerald-300
+    color: '#9CA3AF',
   },
   downloadButton: {
     padding: 8,
@@ -999,21 +1005,25 @@ const styles = StyleSheet.create({
   actionContainer: {
     padding: 16,
     paddingTop: 16,
-    backgroundColor: '#0B0F14', // emerald-700
+    backgroundColor: '#0B0F14',
     borderTopWidth: 1,
-    borderTopColor: '#05966920', // emerald-600/20
+    borderTopColor: '#05966920',
   },
   acceptButton: {
     width: '100%',
     paddingVertical: 16,
-    backgroundColor: '#059669', // emerald-500
+    backgroundColor: '#059669',
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    ...theme.shadows.emerald,
+    shadowColor: '#00912C',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
   },
   acceptButtonDisabled: {
-    backgroundColor: '#059669', // emerald-600 (darker)
+    backgroundColor: '#059669',
     opacity: 0.6,
   },
   acceptButtonText: {
@@ -1022,17 +1032,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   messageInput: {
-    backgroundColor: '#06402a', // emerald-900-ish tint
+    backgroundColor: '#06402a',
     borderRadius: 10,
     borderWidth: 1,
     borderColor: 'rgba(110, 231, 183, 0.3)',
-    color: '#1F2937',
+    color: '#ffffff',
     fontSize: 14,
     padding: 12,
     minHeight: 72,
     marginBottom: 10,
     textAlignVertical: 'top',
   },
-});
+  });
+}
 
 
