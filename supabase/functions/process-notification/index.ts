@@ -64,8 +64,8 @@ function mapTypeToPreferenceKey(type: unknown): string | null {
 
 function readToggle(prefs: Record<string, unknown> | null | undefined, base: string): boolean | undefined {
   if (!prefs) return undefined
-  const bare = (prefs as any)[base]
-  const enabled = (prefs as any)[`${base}_enabled`]
+  const bare = prefs[base]
+  const enabled = prefs[`${base}_enabled`]
   const value = bare ?? enabled
   if (value === null || value === undefined) return undefined
   return Boolean(value)
@@ -78,8 +78,8 @@ function decideChannels(prefs: Record<string, unknown> | null | undefined, type:
     const typeEnabled = readToggle(prefs, key)
     if (typeEnabled === false) return { inApp: false, push: false }
   }
-  const inApp = (prefs as any).in_app_enabled === false ? false : true
-  const push = (prefs as any).push_enabled === false ? false : true
+  const inApp = prefs.in_app_enabled === false ? false : true
+  const push = prefs.push_enabled === false ? false : true
   return { inApp, push }
 }
 
@@ -170,8 +170,8 @@ Deno.serve(async (req: Request) => {
 
     // Determine the notification type from the outbox payload so we can honor
     // per-type user preferences and stamp the in-app `notifications` row.
-    const outboxData = (rows.data && typeof rows.data === 'object') ? rows.data : {}
-    const notificationType = typeof (outboxData as any).type === 'string' ? (outboxData as any).type : 'system'
+    const outboxData: Record<string, unknown> = (rows.data && typeof rows.data === 'object') ? rows.data : {}
+    const notificationType = typeof outboxData.type === 'string' ? outboxData.type : 'system'
 
     // Load notification preferences for all recipients in a single query.
     // Missing rows / columns default to "allow" inside decideChannels().
@@ -181,9 +181,10 @@ Deno.serve(async (req: Request) => {
         .from('notification_preferences')
         .select('*')
         .in('user_id', recipients)
-      for (const p of (prefsRows || [])) {
-        if (p && typeof (p as any).user_id === 'string') {
-          prefsByUser.set((p as any).user_id, p as Record<string, unknown>)
+      for (const p of ((prefsRows || []) as Record<string, unknown>[])) {
+        const userId = p?.user_id
+        if (typeof userId === 'string') {
+          prefsByUser.set(userId, p)
         }
       }
     } catch (e) {
