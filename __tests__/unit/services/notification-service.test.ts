@@ -447,6 +447,50 @@ describe('NotificationService', () => {
       expect(supabase.from).toHaveBeenCalledWith('push_tokens');
     });
 
+    it('should persist via Supabase using profile_id and onConflict token when the REST route is missing (production)', async () => {
+      // In production the app talks to Supabase Edge Functions where no
+      // `/notifications/register-token` route exists, so the REST call 404s and
+      // the Supabase fallback is the only path that persists the token.
+      (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+        data: { session: MOCK_SESSION },
+      });
+      (global as any).fetch = jest.fn().mockResolvedValue(makeErrorResponse(404));
+      const upsert = jest.fn().mockResolvedValue({ error: null });
+      (supabase.from as jest.Mock).mockImplementation(() => makeFromMock({ upsert }));
+
+      await notificationService.registerPushToken('ExponentPushToken[tok]', 'device-1');
+
+      expect(supabase.from).toHaveBeenCalledWith('push_tokens');
+      expect(upsert).toHaveBeenCalledTimes(1);
+      const [row, options] = upsert.mock.calls[0];
+      expect(row).toMatchObject({
+        profile_id: 'user-123',
+        token: 'ExponentPushToken[tok]',
+        device_id: 'device-1',
+        enabled: true,
+      });
+      expect(row).not.toHaveProperty('user_id');
+      expect(options).toEqual({ onConflict: 'token' });
+    });
+
+    it('should fall back to the legacy user_id column when profile_id is missing', async () => {
+      (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+        data: { session: MOCK_SESSION },
+      });
+      (global as any).fetch = jest.fn().mockResolvedValue(makeErrorResponse(404));
+      const upsert = jest
+        .fn()
+        .mockResolvedValueOnce({ error: { code: '42703', message: "column \"profile_id\" does not exist" } })
+        .mockResolvedValueOnce({ error: null });
+      (supabase.from as jest.Mock).mockImplementation(() => makeFromMock({ upsert }));
+
+      await notificationService.registerPushToken('ExponentPushToken[tok]', 'device-2');
+
+      expect(upsert).toHaveBeenCalledTimes(2);
+      expect(upsert.mock.calls[0][0]).toMatchObject({ profile_id: 'user-123' });
+      expect(upsert.mock.calls[1][0]).toMatchObject({ user_id: 'user-123', enabled: true });
+    });
+
     it('should cache the token when both API and Supabase fail', async () => {
       (supabase.auth.getSession as jest.Mock).mockResolvedValue({
         data: { session: MOCK_SESSION },
