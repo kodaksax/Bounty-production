@@ -170,7 +170,27 @@ await new Promise(resolve => setTimeout(resolve, 1000));
 await notificationService.requestPermissionsAndRegisterToken();
 ```
 
-### Issue: Tokens not registering on first launch
+### Issue: Cross-user events deliver in-app but no push on production (App Store) builds
+
+**Symptoms:** The notification bell updates for events triggered by another user
+(new message, application, acceptance, bounty status change), but no push
+notification is delivered on a production/TestFlight build.
+
+**Root Cause:** Production builds route `API_BASE_URL` to Supabase Edge Functions
+(`https://<ref>.supabase.co/functions/v1`), where no `/notifications/register-token`
+route exists, so REST token registration returns 404 and the client falls back to
+writing the token directly to Supabase. The fallback previously targeted a
+non-existent `user_id` column (the canonical `push_tokens` schema uses
+`profile_id`), so the token was never persisted. With no row in `push_tokens`, the
+`process-notification` edge function finds no token and skips the push, while the
+in-app `notifications` row it inserts still updates the bell.
+
+**Status:** FIXED. The Supabase fallback in `lib/services/notification-service.ts`
+now upserts on the unique `token` column using `profile_id` (with a legacy
+`user_id` fallback), sets `enabled: true` so previously-disabled tokens are
+re-enabled, and records `platform`.
+
+### Issue: Token registration fails due to network timeout or profile creation delay
 
 **Cause:** Network timeout or profile creation delay
 

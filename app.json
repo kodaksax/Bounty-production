@@ -32,8 +32,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/bounty-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/images/brandmark-design (3).png",
+        "backgroundColor": "#008e2a"
       },
       "googleServicesFile": "./google-services.json",
       "package": "app.bountyfinder.BOUNTYExpo",
