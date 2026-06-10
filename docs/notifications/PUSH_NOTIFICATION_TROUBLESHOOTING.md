@@ -190,7 +190,7 @@ now upserts on the unique `token` column using `profile_id` (with a legacy
 `user_id` fallback), sets `enabled: true` so previously-disabled tokens are
 re-enabled, and records `platform`.
 
-
+### Issue: Token registration fails due to network timeout or profile creation delay
 
 **Cause:** Network timeout or profile creation delay
 
