@@ -289,7 +289,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
                 accessibilityLabel="Cards"
               >
                 <Text style={{
-                  color: 'white',
+                  color: selectedMethodType === 'card' ? 'white' : (theme.isDark ? 'rgba(255,255,255,0.7)' : theme.textSecondary),
                   textAlign: 'center',
                   fontWeight: selectedMethodType === 'card' ? '600' : '400',
                   fontSize: 15,
@@ -310,7 +310,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
                 accessibilityLabel="Bank Accounts"
               >
                 <Text style={{
-                  color: 'white',
+                  color: selectedMethodType === 'bank_account' ? 'white' : (theme.isDark ? 'rgba(255,255,255,0.7)' : theme.textSecondary),
                   textAlign: 'center',
                   fontWeight: selectedMethodType === 'bank_account' ? '600' : '400',
                   fontSize: 15,
@@ -340,9 +340,9 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
               accessibilityRole="button"
               accessibilityLabel={`Add new ${selectedMethodType === 'card' ? 'card' : 'bank account'}`}
             >
-              <MaterialIcons name="add" size={26} color="#ffffff" />
+              <MaterialIcons name="add" size={26} color={theme.isDark ? '#ffffff' : theme.primary} />
               <Text style={{
-                color: 'white',
+                color: theme.text,
                 fontWeight: '600',
                 marginLeft: 10,
                 fontSize: 16
