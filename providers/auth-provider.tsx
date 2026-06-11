@@ -301,10 +301,15 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           sessionIdRef.current = session.user.id
           previousUserIdRef.current = session.user.id
           
-          // Sync session with auth profile service
+          // Sync session with auth profile service.
+          // Race against a timeout so a slow/unavailable network on app restore
+          // never blocks setIsLoading(false) indefinitely. setSession continues
+          // in the background and notifies listeners when the profile arrives.
           try {
-            await authProfileService.setSession(session)
-            // Mark that profile fetch has completed (successfully or not)
+            await Promise.race([
+              authProfileService.setSession(session),
+              new Promise<void>(resolve => setTimeout(resolve, 8_000)),
+            ])
             profileFetchCompletedRef.current = true
           } catch (e) {
             // Profile service errors shouldn't block auth flow
@@ -314,7 +319,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
             profileFetchCompletedRef.current = true
           }
 
-          // Explicitly clear loading now that profile fetch is complete.
+          // Explicitly clear loading now that profile fetch is complete (or timed out).
           // The profile subscription fires during setSession() while
           // profileFetchCompletedRef is still false, so it cannot clear loading
           // on its own. Forcing it here ensures we never get stuck in a
@@ -435,10 +440,15 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       // Reset profile fetch flag for events that trigger profile fetch
       profileFetchCompletedRef.current = false
       
-      // Sync session with auth profile service
+      // Sync session with auth profile service.
+      // Race against a timeout so a slow/unavailable network never blocks
+      // setIsLoading(false) indefinitely. setSession continues in the background
+      // and notifies listeners when the profile arrives.
         try {
-          await authProfileService.setSession(session)
-          // Mark profile fetch as completed after setSession finishes
+          await Promise.race([
+            authProfileService.setSession(session),
+            new Promise<void>(resolve => setTimeout(resolve, 8_000)),
+          ])
           profileFetchCompletedRef.current = true
         } catch (e) {
           // Profile service errors shouldn't block auth flow
@@ -448,7 +458,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           profileFetchCompletedRef.current = true
         }
 
-      // Explicitly clear loading now that profile fetch is complete.
+      // Explicitly clear loading now that profile fetch is complete (or timed out).
       // The profile subscription fires during setSession() while
       // profileFetchCompletedRef is still false, so it cannot clear loading
       // on its own. Forcing it here ensures we never get stuck in a
