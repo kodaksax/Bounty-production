@@ -4,6 +4,11 @@ import type { AppTheme } from './types';
 // Light theme — same Bounty brand identity, inverted surfaces.
 // Green CTAs stay identical; accent icons shift to a darker green for contrast.
 export const lightTheme: AppTheme = {
+  foreground:        '#18181B',           // primary text/icons (matches text)
+  accent1:           palette.green[600],  // #059669 — brand / CTA
+  accent2:           palette.green[700],  // #047857 — highlight (darker for contrast)
+  accent3:           '#3B82F6',           // informational (richer blue on light bg)
+
   background:        palette.navy[50],    // #F9FAFB — warm off-white page bg
   surface:           palette.white,       // #FFFFFF — pure white cards
   surfaceSecondary:  palette.navy[200],   // #E5E7EB — distinct from white surface
