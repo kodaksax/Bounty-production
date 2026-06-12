@@ -603,23 +603,52 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     // on foreground re-arms the loop (and immediately refreshes an expired token
     // if needed). Calling stopAutoRefresh() on background avoids unnecessary
     // network activity while the app is not visible.
-    const handleAppStateChange = async (nextState: AppStateStatus) => {
+    //
+    // The in-flight flag prevents overlapping async executions if AppState fires
+    // rapidly (e.g. foreground→background→foreground in quick succession).
+    let appStateOpInFlight = false
+    let pendingAppState: AppStateStatus | null = null
+
+    const handleAppStateChange = (nextState: AppStateStatus) => {
       devLog('[AuthProvider] AppState changed:', nextState)
-      if (nextState === 'active') {
-        devLog('[AuthProvider] App foregrounded – restarting Supabase auto-refresh')
+
+      // If an operation is already in flight, record the latest desired state and
+      // let the in-flight operation apply it when it finishes.
+      if (appStateOpInFlight) {
+        pendingAppState = nextState
+        return
+      }
+
+      const applyState = async (state: AppStateStatus) => {
+        appStateOpInFlight = true
         try {
-          await supabase.auth.startAutoRefresh()
-        } catch (e) {
-          reportWarning('[AuthProvider] startAutoRefresh failed on foreground:', e)
-        }
-      } else if (nextState === 'background' || nextState === 'inactive') {
-        devLog('[AuthProvider] App backgrounded – stopping Supabase auto-refresh')
-        try {
-          await supabase.auth.stopAutoRefresh()
-        } catch (e) {
-          // Non-critical: swallow errors from stopAutoRefresh
+          if (state === 'active') {
+            devLog('[AuthProvider] App foregrounded – restarting Supabase auto-refresh')
+            try {
+              await supabase.auth.startAutoRefresh()
+            } catch (e) {
+              reportWarning('[AuthProvider] startAutoRefresh failed on foreground:', e)
+            }
+          } else if (state === 'background' || state === 'inactive') {
+            devLog('[AuthProvider] App backgrounded – stopping Supabase auto-refresh')
+            try {
+              await supabase.auth.stopAutoRefresh()
+            } catch (e) {
+              // Non-critical: swallow errors from stopAutoRefresh
+            }
+          }
+        } finally {
+          appStateOpInFlight = false
+          // If a newer state arrived while we were busy, apply it now.
+          if (pendingAppState !== null) {
+            const next = pendingAppState
+            pendingAppState = null
+            applyState(next)
+          }
         }
       }
+
+      applyState(nextState)
     }
 
     const appStateSubscription = AppState.addEventListener('change', handleAppStateChange)
