@@ -72,6 +72,11 @@ export default function AuthProvider({ children }: PropsWithChildren) {
   const lastProfileLogRef = useRef<string | null>(null)
   // Track previous user ID so we can clear their data when they sign out or switch
   const previousUserIdRef = useRef<string | null>(null)
+  // AppState refresh-control refs – declared here (not inside useEffect) so the
+  // values survive across re-renders and are guaranteed to be the same closure
+  // instance used by the listener callback.
+  const appStateOpInFlightRef = useRef<boolean>(false)
+  const pendingAppStateRef = useRef<AppStateStatus | null>(null)
 
   /**
    * Manually refresh the session token with promise-based queueing
@@ -604,55 +609,66 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     // if needed). Calling stopAutoRefresh() on background avoids unnecessary
     // network activity while the app is not visible.
     //
-    // The in-flight flag prevents overlapping async executions if AppState fires
-    // rapidly (e.g. foreground→background→foreground in quick succession).
-    let appStateOpInFlight = false
-    let pendingAppState: AppStateStatus | null = null
+    // appStateOpInFlightRef / pendingAppStateRef are component-level refs so the
+    // same instance is shared with the cleanup path and survives any re-renders.
+    // When a state change arrives while an async operation is already in progress,
+    // it is recorded as the pending state and applied immediately after the
+    // in-flight operation completes (loop, not recursion).
 
     const handleAppStateChange = (nextState: AppStateStatus) => {
       devLog('[AuthProvider] AppState changed:', nextState)
 
-      // If an operation is already in flight, record the latest desired state and
-      // let the in-flight operation apply it when it finishes.
-      if (appStateOpInFlight) {
-        pendingAppState = nextState
+      // If an operation is already in flight, record the latest desired state so
+      // it is applied once the current operation finishes.
+      if (appStateOpInFlightRef.current) {
+        pendingAppStateRef.current = nextState
         return
       }
 
-      const applyState = async (state: AppStateStatus) => {
-        appStateOpInFlight = true
-        try {
-          if (state === 'active') {
-            devLog('[AuthProvider] App foregrounded – restarting Supabase auto-refresh')
-            try {
-              await supabase.auth.startAutoRefresh()
-            } catch (e) {
-              reportWarning('[AuthProvider] startAutoRefresh failed on foreground:', e)
+      // Drain the queue: process `nextState` then any state that arrived while
+      // we were busy. This loop replaces recursion and is straightforward to
+      // follow: each await keeps appStateOpInFlightRef true so arriving events
+      // only update pendingAppStateRef instead of starting a second chain.
+      const drain = async (state: AppStateStatus) => {
+        appStateOpInFlightRef.current = true
+        let current: AppStateStatus = state
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          try {
+            if (current === 'active') {
+              devLog('[AuthProvider] App foregrounded – restarting Supabase auto-refresh')
+              try {
+                await supabase.auth.startAutoRefresh()
+              } catch (e) {
+                reportWarning('[AuthProvider] startAutoRefresh failed on foreground:', e)
+              }
+            } else if (current === 'background' || current === 'inactive') {
+              devLog('[AuthProvider] App backgrounded – stopping Supabase auto-refresh')
+              try {
+                await supabase.auth.stopAutoRefresh()
+              } catch (e) {
+                devLog('[AuthProvider] stopAutoRefresh failed (non-critical):', e)
+              }
             }
-          } else if (state === 'background' || state === 'inactive') {
-            devLog('[AuthProvider] App backgrounded – stopping Supabase auto-refresh')
-            try {
-              await supabase.auth.stopAutoRefresh()
-            } catch (e) {
-              // Non-critical: swallow errors from stopAutoRefresh
+          } finally {
+            // Check for a state that arrived while we were awaiting.
+            if (pendingAppStateRef.current !== null) {
+              current = pendingAppStateRef.current
+              pendingAppStateRef.current = null
+              // continue the while loop with the new state
+            } else {
+              appStateOpInFlightRef.current = false
+              break
             }
-          }
-        } finally {
-          appStateOpInFlight = false
-          // If a newer state arrived while we were busy, apply it now.
-          if (pendingAppState !== null) {
-            const next = pendingAppState
-            pendingAppState = null
-            applyState(next)
           }
         }
       }
 
-      applyState(nextState)
+      drain(nextState)
     }
 
     const appStateSubscription = AppState.addEventListener('change', handleAppStateChange)
-    
+
     // Cleanup subscription and timer on unmount
     return () => {
       isMountedRef.current = false
