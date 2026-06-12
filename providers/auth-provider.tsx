@@ -4,6 +4,7 @@ import { AuthContext } from 'hooks/use-auth-context'
 import { DEFERRED_PUSH_REGISTRATION_KEY } from 'lib/constants'
 import { cachedDataService } from 'lib/services/cached-data-service'
 import { notificationService } from 'lib/services/notification-service'
+import { AppState, AppStateStatus } from 'react-native'
 import { PropsWithChildren, useContext, useEffect, useRef, useState } from 'react'
 import { clearBountyDraftForUser } from '../app/hooks/useBountyDraft'
 import { clearAllSessionData } from '../lib/auth-session-storage'
@@ -594,6 +595,34 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       reportError(e, '[AuthProvider] onAuthStateChange registration failed:')
     }
     devLog('[AuthProvider] mounted')
+
+    // AppState listener: restart Supabase token auto-refresh when the app
+    // returns to the foreground. On React Native, JS timers are paused while
+    // the app is backgrounded, so the built-in auto-refresh loop can miss its
+    // window and leave the user with an expired token. Calling startAutoRefresh()
+    // on foreground re-arms the loop (and immediately refreshes an expired token
+    // if needed). Calling stopAutoRefresh() on background avoids unnecessary
+    // network activity while the app is not visible.
+    const handleAppStateChange = async (nextState: AppStateStatus) => {
+      devLog('[AuthProvider] AppState changed:', nextState)
+      if (nextState === 'active') {
+        devLog('[AuthProvider] App foregrounded – restarting Supabase auto-refresh')
+        try {
+          await supabase.auth.startAutoRefresh()
+        } catch (e) {
+          reportWarning('[AuthProvider] startAutoRefresh failed on foreground:', e)
+        }
+      } else if (nextState === 'background' || nextState === 'inactive') {
+        devLog('[AuthProvider] App backgrounded – stopping Supabase auto-refresh')
+        try {
+          await supabase.auth.stopAutoRefresh()
+        } catch (e) {
+          // Non-critical: swallow errors from stopAutoRefresh
+        }
+      }
+    }
+
+    const appStateSubscription = AppState.addEventListener('change', handleAppStateChange)
     
     // Cleanup subscription and timer on unmount
     return () => {
@@ -607,6 +636,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         clearTimeout(refreshTimerRef.current)
         refreshTimerRef.current = null
       }
+      appStateSubscription.remove()
     }
     
   }, [])
