@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const dotenv = require('dotenv');
 const { withAppBuildGradle } = require('@expo/config-plugins');
+const withRemoveMediaPermissions = require('./plugins/withRemoveMediaPermissions');
 
 // Environment resolution order:
 // 1) APP_ENV (primary source of truth for this app)
@@ -134,6 +135,12 @@ module.exports = ({ config }) => {
     }
     return c;
   });
+
+  // Strip restricted photo/video permissions (READ_MEDIA_IMAGES, READ_MEDIA_VIDEO,
+  // etc.) from the generated Android manifest. Bounty only uses the system photo
+  // picker for user-initiated selection and must not request these permissions
+  // (Google Play policy compliance).
+  result = withRemoveMediaPermissions(result);
 
   return result;
 };

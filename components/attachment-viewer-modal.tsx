@@ -1,8 +1,9 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
-// Lazy-load expo-media-library at runtime to avoid crashing when the
-// native module is not present (e.g. running in Expo Go or mismatched dev client).
-// The module will be imported dynamically inside handlers when needed.
+// Saving media is performed through the system share sheet (expo-sharing) so the
+// app never requests the restricted READ_MEDIA_IMAGES / READ_MEDIA_VIDEO
+// permissions (Google Play policy compliance). expo-media-library is intentionally
+// not used here.
 import * as Sharing from 'expo-sharing';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { useEffect, useMemo, useState } from 'react';
@@ -148,38 +149,11 @@ export function AttachmentViewerModal({
 
     setIsDownloading(true);
     try {
-      // For images and videos on device, save to photos/gallery when possible
+      // For images and videos, download (if remote) then open the system share
+      // sheet so the user can save the file through the OS. We intentionally
+      // avoid expo-media-library / READ_MEDIA_* permissions to comply with
+      // Google Play's restricted photo/video permission policy.
       if ((fileType === 'image' || fileType === 'video') && Platform.OS !== 'web') {
-        // Lazy-import expo-media-library and feature-detect the native module
-        // to avoid crashing when running in environments that don't include
-        // the native module (e.g. mismatched Expo Go / dev client).
-        let mediaLib: any = null;
-        try {
-          mediaLib = await import('expo-media-library');
-        } catch (err) {
-          mediaLib = null;
-        }
-
-        let mediaLibAvailable = !!(
-          mediaLib &&
-          typeof mediaLib.requestPermissionsAsync === 'function' &&
-          typeof mediaLib.saveToLibraryAsync === 'function'
-        );
-
-        if (mediaLibAvailable) {
-          try {
-            const permResult = await mediaLib.requestPermissionsAsync();
-            const status = permResult?.status ?? permResult;
-            if (status !== 'granted') {
-              Alert.alert('Permission required', 'Please grant photo permissions to save media to your device.');
-              return;
-            }
-          } catch (err) {
-            console.warn('[AttachmentViewer] MediaLibrary not available:', err);
-            mediaLibAvailable = false;
-          }
-        }
-
         // Determine filename with extension (prefer name/uri, then common mime-type map)
         const suggestedName = attachment.name || `file-${Date.now()}`;
         const extMatch = (suggestedName || uri || '').match(/(\.[a-z0-9]+)(?:\?.*)?$/i);
@@ -252,66 +226,22 @@ export function AttachmentViewerModal({
           finalLocalUri = downloadResult.uri;
         }
 
-        // Save to library if available, otherwise fallback to sharing
-        if (mediaLib && typeof mediaLib.saveToLibraryAsync === 'function') {
+        // Save via the system share sheet (no restricted media permissions).
+        const isAvailable = await Sharing.isAvailableAsync();
+        if (isAvailable) {
           try {
-            await mediaLib.saveToLibraryAsync(finalLocalUri);
-            Alert.alert('Saved', 'Media saved to your device gallery.');
-          } catch (err) {
-            const e = err as any;
-            console.error('[AttachmentViewer] MediaLibrary save error:', e);
-
-            const rawMsg = (e && (e.message || e.toString())) || 'Unknown error';
-            const userMessage = (() => {
-              const m = String(rawMsg).toLowerCase();
-              if (/insufficient|no space|enospc|disk full/.test(m)) {
-                return 'Unable to save media: insufficient storage on device.';
-              }
-              if (/permission|denied|not authorized|not allowed/.test(m)) {
-                return 'Unable to save media: permission denied. Please enable photo/storage permissions in your device settings.';
-              }
-              if (/format|unsupported|not supported|invalid file/.test(m)) {
-                return 'Unable to save media: file format not supported by your device.';
-              }
-              return `Unable to save media: ${rawMsg}`;
-            })();
-
-            const isAvailable = await Sharing.isAvailableAsync();
-            if (isAvailable) {
-              try {
-                await Sharing.shareAsync(finalLocalUri, {
-                  mimeType: mimeType,
-                  dialogTitle: 'Share File',
-                  UTI: mimeType,
-                });
-                Alert.alert('Could not save', `${userMessage}\nOpened share sheet as a fallback.`);
-              } catch (shareErr) {
-                console.error('[AttachmentViewer] Sharing fallback error:', shareErr);
-                Alert.alert('Error', userMessage);
-              }
-            } else {
-              Alert.alert('Error', userMessage);
-              throw e;
-            }
-          }
-        } else {
-          // Native MediaLibrary missing — open share sheet as fallback
-          const isAvailable = await Sharing.isAvailableAsync();
-          if (isAvailable) {
-            try {
-              await Sharing.shareAsync(finalLocalUri, {
-                mimeType: mimeType,
-                dialogTitle: 'Share File',
-                UTI: mimeType,
-              });
-              Alert.alert('Saved', 'Opened share sheet as a fallback to save/share the file.');
-            } catch (shareErr) {
-              console.error('[AttachmentViewer] Sharing fallback error:', shareErr);
-              Alert.alert('Error', 'Unable to save file on this device.');
-            }
-          } else {
+            await Sharing.shareAsync(finalLocalUri, {
+              mimeType: mimeType,
+              dialogTitle: 'Save File',
+              UTI: mimeType,
+            });
+            Alert.alert('Save', 'Opened the share sheet so you can save this file to your device.');
+          } catch (shareErr) {
+            console.error('[AttachmentViewer] Sharing error:', shareErr);
             Alert.alert('Error', 'Unable to save file on this device.');
           }
+        } else {
+          Alert.alert('Error', 'Saving is not available on this device.');
         }
       } else if (fileType === 'pdf' || fileType === 'document' || fileType === 'other') {
         // For documents and other files, use sharing
