@@ -27,6 +27,10 @@ const withRemoveMediaPermissions = (config) => {
   return withAndroidManifest(config, (cfg) => {
     const manifest = cfg.modResults.manifest;
 
+    // Each entry in `uses-permission` is parsed XML of the form
+    // { $: { 'android:name': 'android.permission.XXX' } }, so the permission
+    // name lives at `perm.$['android:name']`. Optional chaining guards against
+    // malformed/empty nodes.
     if (Array.isArray(manifest['uses-permission'])) {
       manifest['uses-permission'] = manifest['uses-permission'].filter(
         (perm) => !RESTRICTED_MEDIA_PERMISSIONS.includes(perm?.$?.['android:name'])

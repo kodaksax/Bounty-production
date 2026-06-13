@@ -235,13 +235,13 @@ export function AttachmentViewerModal({
               dialogTitle: 'Save File',
               UTI: mimeType,
             });
-            Alert.alert('Save', 'Opened the share sheet so you can save this file to your device.');
+            Alert.alert('Share to Save', 'Use the share sheet to save this file to your device.');
           } catch (shareErr) {
             console.error('[AttachmentViewer] Sharing error:', shareErr);
             Alert.alert('Error', 'Unable to save file on this device.');
           }
         } else {
-          Alert.alert('Error', 'Saving is not available on this device.');
+          Alert.alert('Error', 'Saving is not supported on this device.');
         }
       } else if (fileType === 'pdf' || fileType === 'document' || fileType === 'other') {
         // For documents and other files, use sharing
