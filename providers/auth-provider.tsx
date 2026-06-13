@@ -305,10 +305,13 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           // Race against a timeout so a slow/unavailable network on app restore
           // never blocks setIsLoading(false) indefinitely. setSession continues
           // in the background and notifies listeners when the profile arrives.
+          let sessionSyncTimeout: ReturnType<typeof setTimeout> | undefined
           try {
             await Promise.race([
               authProfileService.setSession(session),
-              new Promise<void>(resolve => setTimeout(resolve, 8_000)),
+              new Promise<void>(resolve => {
+                sessionSyncTimeout = setTimeout(resolve, 8_000)
+              }),
             ])
             profileFetchCompletedRef.current = true
           } catch (e) {
@@ -317,6 +320,10 @@ export default function AuthProvider({ children }: PropsWithChildren) {
             reportWarning('[AuthProvider] Profile service unavailable during session sync:', e)
             // Even on error, mark as completed to avoid blocking
             profileFetchCompletedRef.current = true
+          } finally {
+            if (sessionSyncTimeout) {
+              clearTimeout(sessionSyncTimeout)
+            }
           }
 
           // Explicitly clear loading now that profile fetch is complete (or timed out).
@@ -444,10 +451,13 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       // Race against a timeout so a slow/unavailable network never blocks
       // setIsLoading(false) indefinitely. setSession continues in the background
       // and notifies listeners when the profile arrives.
+        let sessionSyncTimeout: ReturnType<typeof setTimeout> | undefined
         try {
           await Promise.race([
             authProfileService.setSession(session),
-            new Promise<void>(resolve => setTimeout(resolve, 8_000)),
+            new Promise<void>(resolve => {
+              sessionSyncTimeout = setTimeout(resolve, 8_000)
+            }),
           ])
           profileFetchCompletedRef.current = true
         } catch (e) {
@@ -456,6 +466,10 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           reportWarning('[AuthProvider] Profile service unavailable during session sync:', e)
           // Mark as completed even on error to avoid blocking
           profileFetchCompletedRef.current = true
+        } finally {
+          if (sessionSyncTimeout) {
+            clearTimeout(sessionSyncTimeout)
+          }
         }
 
       // Explicitly clear loading now that profile fetch is complete (or timed out).

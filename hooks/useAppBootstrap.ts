@@ -83,8 +83,9 @@ export function useAppBootstrap(): AppBootstrapState {
 
     // Slow path: profile says incomplete, is null (fetch failed), or the DB
     // flag was never written (e.g. network error during done.tsx submit).
-    // Fall back to the per-user AsyncStorage flag, then verify the profile
-    // row actually exists before trusting it.
+    // Fall back to the per-user AsyncStorage flag and trust it here so
+    // bootstrap isn't blocked by a network call. Profile existence verification
+    // happens later in bounty-app.tsx with its own safety timeout.
     let cancelled = false
 
     ;(async () => {
