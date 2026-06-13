@@ -23,13 +23,20 @@ export type FeatureRequestStatus =
 export const SUPPORT_REQUEST_EMAIL = 'support@bountyapp.com';
 export const SUPPORT_REQUEST_SUBJECT = 'Bounty Support Request';
 
-/** Public store listings used by the "Rate Bounty" action. */
+/**
+ * Public store listings used by the "Rate Bounty" action.
+ * NOTE: `APP_STORE_URL` contains a placeholder App Store ID that must be
+ * replaced with the real numeric app ID before production release.
+ */
 export const APP_STORE_URL = 'https://apps.apple.com/app/id0000000000';
 export const PLAY_STORE_URL =
   'https://play.google.com/store/apps/details?id=com.bountyapp.app';
 
 /** Private storage bucket for optional bug-report screenshots. */
 const SCREENSHOT_BUCKET = 'feedback-screenshots';
+
+/** Lifetime of generated screenshot signed URLs (1 year, in seconds). */
+const SCREENSHOT_URL_EXPIRY_SECONDS = 60 * 60 * 24 * 365;
 
 /** Window during which an identical submission is treated as a duplicate. */
 const DUPLICATE_WINDOW_MS = 5000;
@@ -105,7 +112,7 @@ async function uploadScreenshot(uri: string, userId: string): Promise<string | n
     try {
       const { data } = await supabase.storage
         .from(SCREENSHOT_BUCKET)
-        .createSignedUrl(path, 60 * 60 * 24 * 365);
+        .createSignedUrl(path, SCREENSHOT_URL_EXPIRY_SECONDS);
       return data?.signedUrl || result.url || null;
     } catch {
       return result.url || null;

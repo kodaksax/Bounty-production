@@ -59,6 +59,8 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
 
   const canSubmit = subject.trim().length > 0 && description.trim().length > 0 && !submitting;
 
+  const inputClassName = 'bg-black/30 rounded-md px-3 py-2 text-white mb-4';
+
   const handlePickScreenshot = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -119,7 +121,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
         placeholder={subjectPlaceholder || subjectLabel}
         placeholderTextColor="#a7f3d0"
         accessibilityLabel={subjectLabel}
-        className="bg-black/30 rounded-md px-3 py-2 text-white mb-4"
+        className={inputClassName}
       />
 
       <Text className="text-xs text-emerald-100 mb-1">Description</Text>
@@ -133,7 +135,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
         numberOfLines={6}
         textAlignVertical="top"
         accessibilityLabel="Description"
-        className="bg-black/30 rounded-md px-3 py-2 text-white mb-4"
+        className={inputClassName}
       />
 
       {allowScreenshot && (
