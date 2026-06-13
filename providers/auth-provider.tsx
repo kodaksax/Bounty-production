@@ -4,6 +4,7 @@ import { AuthContext } from 'hooks/use-auth-context'
 import { DEFERRED_PUSH_REGISTRATION_KEY } from 'lib/constants'
 import { cachedDataService } from 'lib/services/cached-data-service'
 import { notificationService } from 'lib/services/notification-service'
+import { AppState, AppStateStatus } from 'react-native'
 import { PropsWithChildren, useContext, useEffect, useRef, useState } from 'react'
 import { clearBountyDraftForUser } from '../app/hooks/useBountyDraft'
 import { clearAllSessionData } from '../lib/auth-session-storage'
@@ -71,6 +72,11 @@ export default function AuthProvider({ children }: PropsWithChildren) {
   const lastProfileLogRef = useRef<string | null>(null)
   // Track previous user ID so we can clear their data when they sign out or switch
   const previousUserIdRef = useRef<string | null>(null)
+  // AppState refresh-control refs – declared here (not inside useEffect) so the
+  // values survive across re-renders and are guaranteed to be the same closure
+  // instance used by the listener callback.
+  const appStateOpInFlightRef = useRef<boolean>(false)
+  const pendingAppStateRef = useRef<AppStateStatus | null>(null)
 
   /**
    * Manually refresh the session token with promise-based queueing
@@ -594,7 +600,82 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       reportError(e, '[AuthProvider] onAuthStateChange registration failed:')
     }
     devLog('[AuthProvider] mounted')
-    
+
+    // AppState listener: restart Supabase token auto-refresh when the app
+    // returns to the foreground. On React Native, JS timers are paused while
+    // the app is backgrounded, so the built-in auto-refresh loop can miss its
+    // window and leave the user with an expired token. Calling startAutoRefresh()
+    // on foreground re-arms the loop (and immediately refreshes an expired token
+    // if needed). Calling stopAutoRefresh() on background avoids unnecessary
+    // network activity while the app is not visible.
+    //
+    // appStateOpInFlightRef / pendingAppStateRef are component-level refs so the
+    // same instance is shared with the cleanup path and survives any re-renders.
+    // When a state change arrives while an async operation is already in progress,
+    // it is recorded as the pending state and applied immediately after the
+    // in-flight operation completes (loop, not recursion).
+
+    const handleAppStateChange = (nextState: AppStateStatus) => {
+      devLog('[AuthProvider] AppState changed:', nextState)
+
+      // If an operation is already in flight, record the latest desired state so
+      // it is applied once the current operation finishes.
+      if (appStateOpInFlightRef.current) {
+        pendingAppStateRef.current = nextState
+        return
+      }
+
+      // Drain the queue: process `nextState` then any state that arrived while
+      // we were busy. This loop replaces recursion and is straightforward to
+      // follow: each await keeps appStateOpInFlightRef true so arriving events
+      // only update pendingAppStateRef instead of starting a second chain.
+      const drain = async (state: AppStateStatus) => {
+        appStateOpInFlightRef.current = true
+        let current: AppStateStatus = state
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          try {
+            if (current === 'active') {
+              devLog('[AuthProvider] App foregrounded – restarting Supabase auto-refresh')
+              try {
+                await supabase.auth.startAutoRefresh()
+              } catch (e) {
+                reportWarning('[AuthProvider] startAutoRefresh failed on foreground:', e)
+              }
+            } else if (current === 'background' || current === 'inactive') {
+              devLog('[AuthProvider] App backgrounded – stopping Supabase auto-refresh')
+              try {
+                await supabase.auth.stopAutoRefresh()
+              } catch (e) {
+                devLog('[AuthProvider] stopAutoRefresh failed (non-critical):', e)
+              }
+            }
+          } finally {
+            // Check for a state that arrived while we were awaiting.
+            if (pendingAppStateRef.current !== null) {
+              current = pendingAppStateRef.current
+              pendingAppStateRef.current = null
+              // continue the while loop with the new state
+            } else {
+              appStateOpInFlightRef.current = false
+              break
+            }
+          }
+        }
+      }
+
+      drain(nextState)
+    }
+
+    let appStateSubscription: { remove?: () => void } | null = null
+    try {
+      if (AppState?.addEventListener) {
+        appStateSubscription = AppState.addEventListener('change', handleAppStateChange)
+      }
+    } catch (e) {
+      devLog('[AuthProvider] AppState listener unavailable; skipping auto-refresh app-state hooks', e)
+    }
+
     // Cleanup subscription and timer on unmount
     return () => {
       isMountedRef.current = false
@@ -606,6 +687,12 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       if (refreshTimerRef.current) {
         clearTimeout(refreshTimerRef.current)
         refreshTimerRef.current = null
+      }
+      try {
+        appStateSubscription?.remove?.()
+      } catch (e) {
+        // swallow AppState cleanup errors
+        devLog('[AuthProvider] AppState cleanup failed (non-critical):', e)
       }
     }
     
