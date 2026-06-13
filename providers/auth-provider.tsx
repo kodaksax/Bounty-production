@@ -667,7 +667,14 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       drain(nextState)
     }
 
-    const appStateSubscription = AppState.addEventListener('change', handleAppStateChange)
+    let appStateSubscription: { remove?: () => void } | null = null
+    try {
+      if (AppState?.addEventListener) {
+        appStateSubscription = AppState.addEventListener('change', handleAppStateChange)
+      }
+    } catch (e) {
+      devLog('[AuthProvider] AppState listener unavailable; skipping auto-refresh app-state hooks')
+    }
 
     // Cleanup subscription and timer on unmount
     return () => {
@@ -681,7 +688,11 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         clearTimeout(refreshTimerRef.current)
         refreshTimerRef.current = null
       }
-      appStateSubscription.remove()
+      try {
+        appStateSubscription?.remove?.()
+      } catch (e) {
+        // swallow AppState cleanup errors
+      }
     }
     
   }, [])
