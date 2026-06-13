@@ -10,7 +10,7 @@ import { isSupabaseConfigured, supabase, supabaseEnv } from '../supabase';
 import { logger } from '../utils/error-logger';
 
 const PROFILE_CACHE_KEY_PREFIX = 'BE:authProfile';
-const PROFILE_CACHE_EXPIRY = 5 * 60 * 1000; // 5 minutes
+const PROFILE_CACHE_EXPIRY = 30 * 60 * 1000; // 30 minutes — long enough to survive typical background restores
 
 // Helper to generate user-specific cache key
 const getProfileCacheKey = (userId: string) => `${PROFILE_CACHE_KEY_PREFIX}:${userId}`;
