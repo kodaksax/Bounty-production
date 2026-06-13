@@ -2,7 +2,7 @@
 
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AddMoneyScreen } from "../../components/add-money-screen";
@@ -19,6 +19,8 @@ import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/
 import { useHapticFeedback } from '../../lib/haptic-feedback';
 import { StripePaymentMethod, stripeService } from '../../lib/services/stripe-service';
 import { useStripe } from '../../lib/stripe-context';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 import { useWallet, type WalletTransactionRecord } from '../../lib/wallet-context';
 
 
@@ -35,6 +37,8 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   const { paymentMethods, isLoading: stripeLoading, error: stripeError, loadPaymentMethods } = useStripe();
   const { triggerHaptic } = useHapticFeedback();
   const { session } = useAuthContext();
+  const { theme } = useAppThemeContext();
+  const s = useMemo(() => makeStyles(theme), [theme]);
 
   // Refresh wallet data from API when user is authenticated
   useEffect(() => {
@@ -105,7 +109,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
       {/* Payout Failed Banner - shown when most recent payout failed */}
       <PayoutFailedBanner />
       <FlatList<WalletTransactionRecord>
-        style={styles.container}
+        style={s.container}
         data={transactions}
         keyExtractor={(tx: WalletTransactionRecord) => tx.id}
         showsVerticalScrollIndicator={false}
@@ -113,14 +117,14 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
         ListHeaderComponent={() => (
           <>
             {/* Header */}
-            <View style={styles.header}>
-              <View style={styles.headerTitleRow}>
+            <View style={s.header}>
+              <View style={s.headerTitleRow}>
                 <BrandingLogo size="medium" />
               </View>
             </View>
 
             {/* Balance Card */}
-            <View style={styles.sectionPad}>
+            <View style={s.sectionPad}>
               {/* Warning if secure storage for sensitive keys is unavailable */}
               {!secureStoreAvailable && (
                 <View style={{ backgroundColor: '#FEF3C7', padding: 10, borderRadius: 8, marginBottom: 10 }}>
@@ -130,14 +134,14 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
                   </Text>
                 </View>
               )}
-              <View style={styles.balanceCard}>
-                <View style={styles.balanceCardHeader}>
-                  <Text style={styles.balanceLabel}>BALANCE</Text>
-                  <Text style={styles.balanceAmount}>${balance.toFixed(2)}</Text>
+              <View style={s.balanceCard}>
+                <View style={s.balanceCardHeader}>
+                  <Text style={s.balanceLabel}>BALANCE</Text>
+                  <Text style={s.balanceAmount}>${balance.toFixed(2)}</Text>
                 </View>
-                <View style={styles.balanceActionsRow}>
+                <View style={s.balanceActionsRow}>
                   <TouchableOpacity
-                    style={styles.actionButton}
+                    style={s.actionButton}
                     onPress={() => {
                       triggerHaptic('medium');
                       setShowAddMoney(true);
@@ -146,11 +150,11 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
                     accessibilityLabel="Add money to wallet"
                     accessibilityHint="Add funds to your wallet using a payment method"
                   >
-                    <MaterialIcons name="add" size={20} color="#fff" accessibilityElementsHidden={true} />
-                    <Text style={styles.actionButtonText}>Add Money</Text>
+                    <MaterialIcons name="add" size={20} color="#ffffff" accessibilityElementsHidden={true} />
+                    <Text style={s.actionButtonText}>Add Money</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={styles.actionButton}
+                    style={s.actionButton}
                     onPress={() => {
                       triggerHaptic('medium');
                       setShowWithdraw(true);
@@ -159,8 +163,8 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
                     accessibilityLabel="Withdraw money from wallet"
                     accessibilityHint="Transfer funds from your wallet to your bank account"
                   >
-                    <MaterialIcons name="keyboard-arrow-down" size={20} color="#fff" accessibilityElementsHidden={true} />
-                    <Text style={styles.actionButtonText}>Withdraw</Text>
+                    <MaterialIcons name="keyboard-arrow-down" size={20} color="#ffffff" accessibilityElementsHidden={true} />
+                    <Text style={s.actionButtonText}>Withdraw</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -168,16 +172,16 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
 
 
             {/* Linked Accounts Section */}
-            <View style={styles.sectionPad}>
-              <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionTitle}>Linked Accounts</Text>
+            <View style={s.sectionPad}>
+              <View style={s.sectionHeaderRow}>
+                <Text style={s.sectionTitle}>Linked Accounts</Text>
                 <TouchableOpacity
                   onPress={() => setShowPaymentMethods(true)}
                   accessibilityRole="button"
                   accessibilityLabel="Manage payment methods"
                   accessibilityHint="Add, remove, or update payment methods"
                 >
-                  <Text style={styles.sectionManage}>Manage</Text>
+                  <Text style={s.sectionManage}>Manage</Text>
                 </TouchableOpacity>
               </View>
 
@@ -189,17 +193,17 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
                 </View>
               ) : stripeError ? (
                 <View
-                  style={styles.accountCard}
+                  style={s.accountCard}
                   accessible={true}
                   accessibilityRole="alert"
                   accessibilityLabel="Unable to load payment methods. Service may be temporarily unavailable."
                 >
-                  <View style={[styles.accountIcon, { backgroundColor: '#ef4444' }]}>
-                    <MaterialIcons name="cloud-off" size={24} color="#fff" accessibilityElementsHidden={true} />
+                  <View style={[s.accountIcon, { backgroundColor: '#ef4444' }]}>
+                    <MaterialIcons name="cloud-off" size={24} color="#ffffff" accessibilityElementsHidden={true} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.accountName}>Unable to Load Payment Methods</Text>
-                    <Text style={styles.accountSub}>Service temporarily unavailable</Text>
+                    <Text style={s.accountName}>Unable to Load Payment Methods</Text>
+                    <Text style={s.accountSub}>Service temporarily unavailable</Text>
                   </View>
                   <TouchableOpacity
                     onPress={loadPaymentMethods}
@@ -208,34 +212,34 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
                     accessibilityLabel="Retry loading payment methods"
                     accessibilityHint="Double tap to reload payment methods"
                   >
-                    <MaterialIcons name="refresh" size={20} color="#fff" accessibilityElementsHidden={true} />
+                    <MaterialIcons name="refresh" size={20} color="#ffffff" accessibilityElementsHidden={true} />
                   </TouchableOpacity>
                 </View>
               ) : paymentMethods.length === 0 ? (
                 <TouchableOpacity
-                  style={styles.accountCard}
+                  style={s.accountCard}
                   onPress={() => setShowPaymentMethods(true)}
                 >
-                  <View style={styles.accountIcon}>
-                    <MaterialIcons name="add" size={24} color="#fff" />
+                  <View style={s.accountIcon}>
+                    <MaterialIcons name="add" size={24} color="#ffffff" />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.accountName}>Add Payment Method</Text>
-                    <Text style={styles.accountSub}>No payment methods added yet</Text>
+                    <Text style={s.accountName}>Add Payment Method</Text>
+                    <Text style={s.accountSub}>No payment methods added yet</Text>
                   </View>
                 </TouchableOpacity>
               ) : (
                 <View style={{ paddingBottom: SPACING.COMPACT_GAP }}>
                   {paymentMethods.map((method: StripePaymentMethod, index: number) => (
-                    <View key={method.id} style={styles.accountCard}>
-                      <View style={styles.accountIcon}>
-                        <MaterialIcons name="credit-card" size={24} color="#fff" />
+                    <View key={method.id} style={s.accountCard}>
+                      <View style={s.accountIcon}>
+                        <MaterialIcons name="credit-card" size={24} color="#ffffff" />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.accountName}>
+                        <Text style={s.accountName}>
                           {stripeService.formatCardDisplay(method)}
                         </Text>
-                        <Text style={styles.accountSub}>
+                        <Text style={s.accountSub}>
                           {index === 0 ? 'Default Payment Method' : `Added ${new Date(method.created * 1000).toLocaleDateString()}`}
                         </Text>
                       </View>
@@ -246,18 +250,18 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
             </View>
 
             {/* Transaction History header (moved into header so it renders once) */}
-            <View style={[styles.sectionPad, { marginTop: 8 }]}> 
-              <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionTitle}>Transaction History</Text>
+            <View style={[s.sectionPad, { marginTop: 8 }]}>
+              <View style={s.sectionHeaderRow}>
+                <Text style={s.sectionTitle}>Transaction History</Text>
                 <TouchableOpacity onPress={() => setShowTransactionHistory(true)}>
-                  <Text style={styles.sectionManage}>View All</Text>
+                  <Text style={s.sectionManage}>View All</Text>
                 </TouchableOpacity>
               </View>
             </View>
           </>
         )}
         ListEmptyComponent={() => (
-          <View style={[styles.sectionPad, { flex: 1 }]}> 
+          <View style={[s.sectionPad, { flex: 1 }]}>
             <View style={{ minHeight: 200 }}>
               <EmptyState
                 icon="receipt-long"
@@ -271,11 +275,11 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
           </View>
         )}
         renderItem={({ item: tx }: { item: WalletTransactionRecord }) => (
-          <View style={[styles.sectionPad, { marginTop: 8 }]}> 
+          <View style={[s.sectionPad, { marginTop: 8 }]}>
             <View style={{ minHeight: 64 }}>
-              <View style={styles.bountyCard}>
-                <Text style={styles.bountyName}>{getTransactionLabel(tx)}</Text>
-                <Text style={[styles.bountyAmount, { color: tx.amount > 0 ? '#6ee7b7' : '#fca5a5' }]}>{tx.amount > 0 ? '+' : ''}${Math.abs(tx.amount).toFixed(2)}</Text>
+              <View style={s.bountyCard}>
+                <Text style={s.bountyName}>{getTransactionLabel(tx)}</Text>
+                <Text style={[s.bountyAmount, { color: tx.amount > 0 ? theme.primaryLight : '#fca5a5' }]}>{tx.amount > 0 ? '+' : ''}${Math.abs(tx.amount).toFixed(2)}</Text>
               </View>
             </View>
           </View>
@@ -291,10 +295,10 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
 
 export default WalletScreen;
 
-const styles = StyleSheet.create({
+function makeStyles(t: AppTheme) { return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669',
+    backgroundColor: t.background,
   },
   header: {
     flexDirection: 'row',
@@ -302,7 +306,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     paddingTop: 20,
     paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
-    backgroundColor: '#059669',
+    backgroundColor: t.background,
     gap: SPACING.COMPACT_GAP,
   },
   headerTitleRow: {
@@ -315,7 +319,7 @@ const styles = StyleSheet.create({
     ],
   },
   headerTitle: {
-    color: '#fff',
+    color: t.text,
     fontSize: HEADER_LAYOUT.titleFontSize,
     fontWeight: 'bold',
     letterSpacing: TYPOGRAPHY.LETTER_SPACING_WIDE,
@@ -332,7 +336,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.SECTION_GAP,
   },
   balanceCard: {
-    backgroundColor: '#047857',
+    backgroundColor: t.surface,
     borderRadius: SPACING.SCREEN_HORIZONTAL,
     padding: SPACING.CARD_PADDING,
     shadowColor: '#000',
@@ -345,13 +349,13 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.SCREEN_HORIZONTAL,
   },
   balanceLabel: {
-    color: '#6ee7b7',
+    color: t.primaryLight,
     fontSize: TYPOGRAPHY.SIZE_SMALL,
     textTransform: 'uppercase',
     fontWeight: 'bold',
   },
   balanceAmount: {
-    color: '#fff',
+    color: t.text,
     fontSize: 32,
     fontWeight: 'bold',
     marginTop: 4,
@@ -365,7 +369,7 @@ const styles = StyleSheet.create({
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#065f46',
+    backgroundColor: t.primary,
     borderRadius: 10,
     paddingVertical: SPACING.ELEMENT_GAP,
     paddingHorizontal: 18,
@@ -386,12 +390,12 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.COMPACT_GAP,
   },
   sectionTitle: {
-    color: '#fff',
+    color: t.textSecondary,
     fontSize: TYPOGRAPHY.SIZE_BODY,
     fontWeight: 'bold',
   },
   sectionManage: {
-    color: '#6ee7b7',
+    color: t.primaryLight,
     fontSize: TYPOGRAPHY.SIZE_SMALL,
     fontWeight: 'bold',
     minWidth: SIZING.MIN_TOUCH_TARGET,
@@ -402,7 +406,7 @@ const styles = StyleSheet.create({
   accountCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#047857cc',
+    backgroundColor: t.surface,
     borderRadius: SPACING.ELEMENT_GAP,
     padding: SPACING.SCREEN_HORIZONTAL,
     marginBottom: SPACING.COMPACT_GAP,
@@ -414,26 +418,26 @@ const styles = StyleSheet.create({
   accountIcon: {
     height: SIZING.AVATAR_MEDIUM,
     width: SIZING.AVATAR_MEDIUM,
-    backgroundColor: '#065f46',
+    backgroundColor: t.surfaceSecondary,
     borderRadius: SPACING.COMPACT_GAP,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: SPACING.ELEMENT_GAP,
   },
   accountName: {
-    color: '#fff',
+    color: t.text,
     fontSize: TYPOGRAPHY.SIZE_BODY,
     fontWeight: 'bold',
   },
   accountSub: {
-    color: '#6ee7b7',
+    color: t.textSecondary,
     fontSize: TYPOGRAPHY.SIZE_SMALL - 1,
   },
   bountyCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#047857cc',
+    backgroundColor: t.surface,
     borderRadius: SPACING.ELEMENT_GAP,
     padding: SPACING.SCREEN_HORIZONTAL,
     marginBottom: SPACING.COMPACT_GAP,
@@ -442,12 +446,12 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
   },
   bountyName: {
-    color: '#fff',
+    color: t.text,
     fontSize: TYPOGRAPHY.SIZE_BODY,
     fontWeight: 'bold',
   },
   bountyAmount: {
-    color: '#fff',
+    color: t.text,
     fontSize: TYPOGRAPHY.SIZE_BODY,
     fontWeight: 'bold',
   },
@@ -456,10 +460,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyStateText: {
-    color: '#6ee7b7',
+    color: t.primaryLight,
     fontSize: TYPOGRAPHY.SIZE_SMALL,
     opacity: 0.9,
   },
   // bottom nav indicator removed; using shared BottomNav at app level
-});
-
+}); }

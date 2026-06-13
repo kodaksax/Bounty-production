@@ -131,7 +131,7 @@ export function DisputeSubmissionForm({
       {/* Bounty Info */}
       <View className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-6">
         <Text className="text-sm text-emerald-600 font-medium mb-1">Bounty</Text>
-        <Text className="text-base text-emerald-900 font-semibold" numberOfLines={2}>
+        <Text className="text-base text-white font-semibold" numberOfLines={2}>
           {bountyTitle}
         </Text>
       </View>
@@ -248,7 +248,7 @@ export function DisputeSubmissionForm({
             onPress={handleAddTextEvidence}
             disabled={isSubmitting || !textEvidence.trim()}
             className={`rounded-lg py-2 px-4 flex-row items-center justify-center ${
-              isSubmitting || !textEvidence.trim() ? 'bg-gray-300' : 'bg-emerald-600'
+              isSubmitting || !textEvidence.trim() ? 'bg-gray-300' : 'bg-[#059669]'
             }`}
           >
             <MaterialIcons
@@ -272,7 +272,7 @@ export function DisputeSubmissionForm({
             onPress={handlePickImage}
             disabled={isSubmitting}
             className={`flex-1 rounded-lg py-3 px-4 flex-row items-center justify-center border-2 ${
-              isSubmitting ? 'border-gray-300 bg-gray-100' : 'border-emerald-600 bg-white'
+              isSubmitting ? 'border-gray-300 bg-gray-100' : 'border-[#059669] bg-white'
             }`}
           >
             <MaterialIcons
@@ -293,7 +293,7 @@ export function DisputeSubmissionForm({
             onPress={handlePickDocument}
             disabled={isSubmitting}
             className={`flex-1 rounded-lg py-3 px-4 flex-row items-center justify-center border-2 ${
-              isSubmitting ? 'border-gray-300 bg-gray-100' : 'border-emerald-600 bg-white'
+              isSubmitting ? 'border-gray-300 bg-gray-100' : 'border-[#059669] bg-white'
             }`}
           >
             <MaterialIcons
@@ -318,7 +318,7 @@ export function DisputeSubmissionForm({
           onPress={handleSubmit}
           disabled={isSubmitting || !reason.trim()}
           className={`rounded-lg py-4 ${
-            isSubmitting || !reason.trim() ? 'bg-gray-300' : 'bg-emerald-600'
+            isSubmitting || !reason.trim() ? 'bg-gray-300' : 'bg-[#059669]'
           }`}
         >
           {isSubmitting ? (

@@ -190,7 +190,7 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
   }
 
   return (
-    <View className="flex flex-col min-h-screen bg-emerald-600">
+    <View className="flex flex-col min-h-screen bg-[#059669]">
       {/* Search Header */}
       <View className="p-4 pt-8">
         <View className="flex items-center gap-3">
@@ -205,7 +205,7 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
       <View className="px-4 mb-4">
         <View
           className={cn(
-            "relative flex items-center bg-emerald-700/50 rounded-full transition-all",
+            "relative flex items-center bg-[#111827] rounded-full transition-all",
             isInputFocused ? "ring-2 ring-white/30" : "",
           )}
         >
@@ -218,7 +218,7 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
             onFocus={() => setIsInputFocused(true)}
             onBlur={() => setIsInputFocused(false)}
             placeholder="Search bounties or users..."
-            className="w-full bg-transparent border-none py-2 pl-10 pr-10 text-white placeholder:text-emerald-300/70 focus:outline-none"
+            className="w-full bg-transparent border-none py-2 pl-10 pr-10 text-white placeholder:text-[#6ee7b7]/70 focus:outline-none"
             placeholderTextColor="#6ee7b7"
             style={{ paddingLeft: 40, paddingRight: 40 }}
           />
@@ -235,14 +235,14 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
         {searchQuery.trim() === "" ? (
           <>
             {initialLoadTried && allBounties.length === 0 && !isLoading && (
-              <View className="mb-4 p-3 rounded-lg bg-emerald-700/40">
-                <Text className="text-sm text-emerald-100 font-medium mb-1">No bounties loaded</Text>
-                <Text className="text-xs text-emerald-300/80 mb-2">
+              <View className="mb-4 p-3 rounded-lg bg-[#111827]">
+                <Text className="text-sm text-white font-medium mb-1">No bounties loaded</Text>
+                <Text className="text-xs text-[#6ee7b7]/80 mb-2">
                   {loadError === 'network'
                     ? 'Could not reach API server. If on a physical device, ensure API_BASE_URL points to your computer\'s LAN IP (not localhost).'
                     : 'There are currently no open bounties.'}
                 </Text>
-                <TouchableOpacity onPress={refreshBounties} className="bg-emerald-600 rounded-full px-3 py-1 self-start">
+                <TouchableOpacity onPress={refreshBounties} className="bg-[#059669] rounded-full px-3 py-1 self-start">
                   <Text className="text-white text-xs">Retry</Text>
                 </TouchableOpacity>
               </View>
@@ -255,8 +255,8 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
             {recentSearches.length > 0 && (
               <View className="mb-4">
                 <View className="flex justify-between items-center mb-2">
-                  <Text className="text-sm font-medium text-emerald-200">Recent searches</Text>
-                  <TouchableOpacity onPress={() => setRecentSearches([])} className="text-xs text-emerald-300">
+                  <Text className="text-sm font-medium text-[#9CA3AF]">Recent searches</Text>
+                  <TouchableOpacity onPress={() => setRecentSearches([])} className="text-xs text-[#6ee7b7]">
                     Clear all
                   </TouchableOpacity>
                 </View>
@@ -265,7 +265,7 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
                     <TouchableOpacity
                       key={index}
                       onPress={() => handleSearch(search)}
-                      className="flex items-center justify-between w-full p-2 rounded-lg bg-emerald-700/30 hover:bg-emerald-700/50 transition-colors"
+                      className="flex items-center justify-between w-full p-2 rounded-lg bg-[#111827] hover:bg-[#111827] transition-colors"
                     >
                       <View className="flex items-center">
                         <MaterialIcons name="search" size={16} color="#6ee7b7" style={{ marginRight: 12 }} />
@@ -286,18 +286,18 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
               </View>
             )}
             <View>
-              <Text className="text-sm font-medium text-emerald-200 mb-2">Suggested searches</Text>
+              <Text className="text-sm font-medium text-[#9CA3AF] mb-2">Suggested searches</Text>
               <View className="space-y-2">
                 <TouchableOpacity
                   onPress={() => handleSearch("@Jon_Doe")}
-                  className="flex items-center w-full p-2 rounded-lg bg-emerald-700/30 hover:bg-emerald-700/50 transition-colors"
+                  className="flex items-center w-full p-2 rounded-lg bg-[#111827] hover:bg-[#111827] transition-colors"
                 >
                   <MaterialIcons name="search" size={16} color="#6ee7b7" style={{ marginRight: 12 }} />
                   <Text className="text-white">@Jon_Doe</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => handleSearch("package")}
-                  className="flex items-center w-full p-2 rounded-lg bg-emerald-700/30 hover:bg-emerald-700/50 transition-colors"
+                  className="flex items-center w-full p-2 rounded-lg bg-[#111827] hover:bg-[#111827] transition-colors"
                 >
                   <MaterialIcons name="search" size={16} color="#6ee7b7" style={{ marginRight: 12 }} />
                   <Text className="text-white">package delivery</Text>
@@ -308,46 +308,46 @@ export function SearchScreen({ onBack }: SearchScreenProps) {
         ) : isSearching ? (
           <View className="flex flex-col items-center justify-center mt-12">
             <ActivityIndicator color="#6ee7b7" />
-            <Text className="mt-3 text-emerald-100">Searching...</Text>
+            <Text className="mt-3 text-white">Searching...</Text>
           </View>
         ) : searchError ? (
           <View className="flex flex-col items-center justify-center mt-12">
-            <Text className="mb-2 text-emerald-100 font-medium">Search failed</Text>
-            <Text className="text-xs text-emerald-300/80 mb-4 text-center px-4">{searchError}</Text>
-            <TouchableOpacity onPress={() => runSearch(searchQuery)} className="bg-emerald-600 rounded-full px-4 py-2">
+            <Text className="mb-2 text-white font-medium">Search failed</Text>
+            <Text className="text-xs text-[#6ee7b7]/80 mb-4 text-center px-4">{searchError}</Text>
+            <TouchableOpacity onPress={() => runSearch(searchQuery)} className="bg-[#059669] rounded-full px-4 py-2">
               <Text className="text-white text-sm">Retry</Text>
             </TouchableOpacity>
           </View>
         ) : searchResults.length > 0 ? (
           <View className="space-y-3 pb-4">
             {searchResults.map((bounty) => (
-              <View key={bounty.id} className="bg-emerald-700/40 rounded-lg p-3">
+              <View key={bounty.id} className="bg-[#111827] rounded-lg p-3">
                 <View className="flex items-center gap-3 mb-2">
-                  <Avatar className="h-8 w-8 border border-emerald-400/30">
+                  <Avatar className="h-8 w-8 border border-[#059669]/30">
                     <AvatarImage src={`/placeholder.svg?height=32&width=32`} alt={bounty.username} />
-                    <AvatarFallback className="bg-emerald-900 text-emerald-200 text-xs">
+                    <AvatarFallback className="bg-[#0B0F14] text-[#9CA3AF] text-xs">
                       {bounty.username.substring(1, 3).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <View>
-                    <Text className="text-sm text-emerald-100">{highlightMatch(bounty.username, searchQuery)}</Text>
-                    <View className="text-xs text-emerald-300">{bounty.timeAgo}</View>
+                    <Text className="text-sm text-white">{highlightMatch(bounty.username, searchQuery)}</Text>
+                    <View className="text-xs text-[#6ee7b7]">{bounty.timeAgo}</View>
                   </View>
                 </View>
                 <Text className="font-medium text-white mb-2">{highlightMatch(bounty.title, searchQuery)}</Text>
                 <View className="flex justify-between items-center">
-                  <View className="bg-emerald-900/50 px-2 py-1 rounded text-emerald-400 font-bold text-sm">
+                  <View className="bg-[#0B0F14]/50 px-2 py-1 rounded text-[#6ee7b7] font-bold text-sm">
                     ${bounty.amount}
                   </View>
-                  <View className="text-sm text-emerald-200">{bounty.distance} mi</View>
+                  <View className="text-sm text-[#9CA3AF]">{bounty.distance} mi</View>
                 </View>
               </View>
             ))}
           </View>
         ) : (
           <View className="flex flex-col items-center justify-center mt-16 text-center">
-            <Text className="mb-2 text-emerald-100 font-medium">No Results Found</Text>
-            <Text className="text-sm text-emerald-300/70">Try a different search term</Text>
+            <Text className="mb-2 text-white font-medium">No Results Found</Text>
+            <Text className="text-sm text-[#6ee7b7]/70">Try a different search term</Text>
           </View>
         )}
       </ScrollView>

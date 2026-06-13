@@ -94,15 +94,15 @@ export function CaptchaChallenge({ onVerified, onReset }: CaptchaChallengeProps)
 
       {verified ? (
         <View className="flex-row items-center gap-2">
-          <MaterialIcons name="check-circle" size={18} color="#34d399" />
-          <Text className="text-emerald-300 text-sm">Verification passed</Text>
+          <MaterialIcons name="check-circle" size={18} color="#059669" />
+          <Text className="text-[#6ee7b7] text-sm">Verification passed</Text>
         </View>
       ) : (
         <>
           <View className="flex-row items-center justify-between mb-2">
             <Text className="text-white text-sm">
               What is{' '}
-              <Text className="font-bold text-emerald-300">{challenge.question}</Text>
+              <Text className="font-bold text-[#6ee7b7]">{challenge.question}</Text>
               {'?'}
             </Text>
             <TouchableOpacity

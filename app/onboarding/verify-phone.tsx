@@ -21,6 +21,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
 import { sendPhoneOTP, verifyPhoneOTP } from '../../lib/services/phone-verification-service';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 
 export default function VerifyPhoneScreen() {
   const router = useRouter();
@@ -30,6 +32,8 @@ export default function VerifyPhoneScreen() {
   // Phone number passed from previous screen
   const phoneNumber = (params.phone as string) || '';
 
+  const { theme } = useAppThemeContext();
+  const styles = makeStyles(theme);
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isResending, setIsResending] = useState(false);
@@ -180,7 +184,7 @@ export default function VerifyPhoneScreen() {
         {/* Header */}
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <MaterialIcons name="arrow-back" size={24} color="#a7f3d0" />
+            <MaterialIcons name="arrow-back" size={24} color="#9CA3AF" />
           </TouchableOpacity>
           <View style={styles.brandingHeader}>
             <BrandingLogo size="small" />
@@ -191,7 +195,7 @@ export default function VerifyPhoneScreen() {
         {/* Content */}
         <View style={styles.content}>
           <View style={styles.iconCircle}>
-            <MaterialIcons name="sms" size={48} color="#a7f3d0" />
+            <MaterialIcons name="sms" size={48} color="#9CA3AF" />
           </View>
           <Text style={styles.title}>Enter Verification Code</Text>
           <Text style={styles.subtitle}>
@@ -287,7 +291,7 @@ export default function VerifyPhoneScreen() {
 
         {/* Info Box */}
         <View style={styles.infoBox}>
-          <MaterialIcons name="info-outline" size={18} color="#a7f3d0" />
+          <MaterialIcons name="info-outline" size={18} color="#9CA3AF" />
           <Text style={styles.infoText}>
             Phone verification is recommended and helps build trust with other users. You can always verify later from your profile.
           </Text>
@@ -297,162 +301,164 @@ export default function VerifyPhoneScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#059669',
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 8,
-    marginBottom: 16,
-  },
-  backButton: {
-    padding: 8,
-  },
-  brandingHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  iconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(5,46,27,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(167,243,208,0.3)',
-  },
-  content: {
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginTop: 16,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.8)',
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  phoneNumber: {
-    fontWeight: '600',
-    color: '#a7f3d0',
-  },
-  otpContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
-    marginBottom: 16,
-  },
-  otpInput: {
-    width: 48,
-    height: 56,
-    borderRadius: 12,
-    backgroundColor: 'rgba(5,46,27,0.5)',
-    borderWidth: 2,
-    borderColor: 'rgba(167,243,208,0.3)',
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    textAlign: 'center',
-  },
-  otpInputFilled: {
-    borderColor: '#a7f3d0',
-    backgroundColor: 'rgba(167,243,208,0.1)',
-  },
-  otpInputError: {
-    borderColor: '#ef4444',
-  },
-  errorContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-    gap: 6,
-  },
-  errorText: {
-    color: '#ef4444',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  verifyButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#a7f3d0',
-    paddingVertical: 16,
-    borderRadius: 999,
-    marginBottom: 16,
-    gap: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  verifyButtonText: {
-    color: '#052e1b',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  resendContainer: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  resendLabel: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  resendButton: {
-    paddingVertical: 4,
-  },
-  resendText: {
-    color: '#f59e0b',
-    fontSize: 14,
-    fontWeight: '600',
-    textDecorationLine: 'underline',
-  },
-  resendCooldown: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 14,
-  },
-  skipButton: {
-    alignItems: 'center',
-    paddingVertical: 12,
-    marginBottom: 16,
-  },
-  skipButtonText: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 15,
-    textDecorationLine: 'underline',
-  },
-  infoBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: 'rgba(5,46,27,0.5)',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(167,243,208,0.3)',
-  },
-  infoText: {
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: 13,
-    lineHeight: 20,
-    marginLeft: 12,
-    flex: 1,
-  },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    scrollContent: {
+      flexGrow: 1,
+      paddingHorizontal: 24,
+    },
+    headerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: 8,
+      marginBottom: 16,
+    },
+    backButton: {
+      padding: 8,
+    },
+    brandingHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    iconCircle: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      backgroundColor: theme.surface,
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 2,
+      borderColor: theme.border,
+    },
+    content: {
+      alignItems: 'center',
+      marginBottom: 32,
+    },
+    title: {
+      fontSize: 26,
+      fontWeight: 'bold',
+      color: theme.text,
+      marginTop: 16,
+      marginBottom: 8,
+      textAlign: 'center',
+    },
+    subtitle: {
+      fontSize: 15,
+      color: theme.textSecondary,
+      textAlign: 'center',
+      lineHeight: 22,
+    },
+    phoneNumber: {
+      fontWeight: '600',
+      color: theme.textSecondary,
+    },
+    otpContainer: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 8,
+      marginBottom: 16,
+    },
+    otpInput: {
+      width: 48,
+      height: 56,
+      borderRadius: 12,
+      backgroundColor: theme.surface,
+      borderWidth: 2,
+      borderColor: theme.border,
+      fontSize: 24,
+      fontWeight: 'bold',
+      color: theme.text,
+      textAlign: 'center',
+    },
+    otpInputFilled: {
+      borderColor: theme.primary,
+      backgroundColor: theme.surfaceSecondary,
+    },
+    otpInputError: {
+      borderColor: '#ef4444',
+    },
+    errorContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 16,
+      gap: 6,
+    },
+    errorText: {
+      color: '#ef4444',
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    verifyButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.primary,
+      paddingVertical: 16,
+      borderRadius: 999,
+      marginBottom: 16,
+      gap: 8,
+    },
+    buttonDisabled: {
+      opacity: 0.6,
+    },
+    verifyButtonText: {
+      color: '#052e1b',
+      fontSize: 18,
+      fontWeight: 'bold',
+    },
+    resendContainer: {
+      alignItems: 'center',
+      marginBottom: 24,
+    },
+    resendLabel: {
+      color: theme.textSecondary,
+      fontSize: 14,
+      marginBottom: 8,
+    },
+    resendButton: {
+      paddingVertical: 4,
+    },
+    resendText: {
+      color: '#f59e0b',
+      fontSize: 14,
+      fontWeight: '600',
+      textDecorationLine: 'underline',
+    },
+    resendCooldown: {
+      color: theme.textSecondary,
+      fontSize: 14,
+    },
+    skipButton: {
+      alignItems: 'center',
+      paddingVertical: 12,
+      marginBottom: 16,
+    },
+    skipButtonText: {
+      color: theme.textSecondary,
+      fontSize: 15,
+      textDecorationLine: 'underline',
+    },
+    infoBox: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      backgroundColor: theme.surface,
+      borderRadius: 12,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    infoText: {
+      color: theme.textSecondary,
+      fontSize: 13,
+      lineHeight: 20,
+      marginLeft: 12,
+      flex: 1,
+    },
+  });
+}

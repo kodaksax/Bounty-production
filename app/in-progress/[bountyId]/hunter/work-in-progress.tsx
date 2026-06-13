@@ -392,7 +392,7 @@ export default function HunterWorkInProgressScreen() {
               <MaterialIcons
                 name={showProgressForm ? 'remove' : 'add'}
                 size={20}
-                color="#10b981"
+                color="#059669"
               />
               <Text style={styles.addUpdateText}>
                 {showProgressForm ? 'Hide' : 'Add Update'}
@@ -531,15 +531,15 @@ export default function HunterWorkInProgressScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0B0F14',
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0B0F14',
   },
   errorContainer: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0B0F14',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
@@ -551,7 +551,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -629,7 +629,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   amount: {
-    color: '#10b981',
+    color: '#059669',
     fontSize: 24,
     fontWeight: '700',
   },
@@ -671,13 +671,13 @@ const styles = StyleSheet.create({
     minWidth: 120,
   },
   stageItemActive: {
-    backgroundColor: 'rgba(16, 185, 129, 0.3)',
-    borderColor: '#10b981',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderColor: '#059669',
     borderWidth: 2,
   },
   stageItemCompleted: {
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    borderColor: '#10b981',
+    backgroundColor: '#374151',
+    borderColor: '#059669',
   },
   stageItemLocked: {
     opacity: 0.5,
@@ -692,7 +692,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   stageIconActive: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
   },
   stageIconCompleted: {
     backgroundColor: '#059669',
@@ -717,10 +717,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    backgroundColor: '#374151',
   },
   addUpdateText: {
-    color: '#10b981',
+    color: '#059669',
     fontSize: 13,
     fontWeight: '600',
   },
@@ -744,7 +744,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(110, 231, 183, 0.2)',
   },
   postUpdateButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -774,7 +774,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   completeButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -811,7 +811,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(110, 231, 183, 0.2)',
   },
   sendButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -840,7 +840,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   expandText: {
-    color: '#10b981',
+    color: '#059669',
     fontSize: 14,
     fontWeight: '600',
     marginTop: 4,
@@ -860,7 +860,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   nextButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

@@ -7,7 +7,7 @@ interface HelpSupportScreenProps { onBack: () => void; onNavigateContact: () => 
 
 export const HelpSupportScreen: React.FC<HelpSupportScreenProps> = ({ onBack, onNavigateContact, onNavigateTerms, onNavigateFAQ }) => {
   return (
-    <View className="flex-1 bg-emerald-600">
+    <View className="flex-1 bg-[#059669]">
       <View className="flex-row justify-between items-center p-4 pt-8">
         <View className="flex-row items-center">
           <BrandingLogo size="small" />
@@ -29,11 +29,11 @@ export const HelpSupportScreen: React.FC<HelpSupportScreenProps> = ({ onBack, on
 const SupportBlock = ({ title, description, icon, actionLabel, onPress }: { title: string; description: string; icon: any; actionLabel: string; onPress: () => void }) => (
   <View className="bg-black/30 rounded-xl p-4 mb-4">
     <View className="flex-row items-center mb-2">
-      <MaterialIcons name={icon} size={20} color="#34d399" />
+      <MaterialIcons name={icon} size={20} color="#059669" />
       <Text className="ml-2 text-white font-medium">{title}</Text>
     </View>
-    <Text className="text-emerald-200 text-xs leading-4 mb-3">{description}</Text>
-    <TouchableOpacity onPress={onPress} className="self-start px-3 py-1 rounded-md bg-emerald-700">
+    <Text className="text-[#9CA3AF] text-xs leading-4 mb-3">{description}</Text>
+    <TouchableOpacity onPress={onPress} className="self-start px-3 py-1 rounded-md bg-[#111827]">
       <Text className="text-xs text-white font-medium">{actionLabel}</Text>
     </TouchableOpacity>
   </View>

@@ -33,11 +33,11 @@ export function SqlInitializer({ onInitialized }: { onInitialized: () => void })
   }
 
   return (
-    <View className="fixed inset-0 bg-emerald-600 flex flex-col items-center justify-center p-6 z-50">
-      <View className="bg-emerald-700 rounded-lg p-6 w-full max-w-md">
+    <View className="fixed inset-0 bg-[#059669] flex flex-col items-center justify-center p-6 z-50">
+      <View className="bg-[#111827] rounded-lg p-6 w-full max-w-md">
         <Text className="text-xl font-bold text-white mb-4">Database Setup Required</Text>
 
-        <Text className="text-emerald-100 mb-6">
+        <Text className="text-white mb-6">
           The database tables required for this application don&apos;t exist yet. Let&apos;s create them using SQL.
         </Text>
 
@@ -49,7 +49,7 @@ export function SqlInitializer({ onInitialized }: { onInitialized: () => void })
         )}
 
         {log.length > 0 && (
-          <View className="bg-black/30 rounded-md p-3 mb-4 text-emerald-100 max-h-40 overflow-y-auto">
+          <View className="bg-black/30 rounded-md p-3 mb-4 text-white max-h-40 overflow-y-auto">
             <Text className="font-medium mb-2">Log:</Text>
             {log.map((entry, index) => (
               <Text key={index} className="text-xs mb-1">
@@ -60,9 +60,9 @@ export function SqlInitializer({ onInitialized }: { onInitialized: () => void })
         )}
 
         <View className="mb-4">
-          <Text className="text-emerald-100 mb-2">Please run the following SQL to create the necessary tables:</Text>
+          <Text className="text-white mb-2">Please run the following SQL to create the necessary tables:</Text>
 
-          <View className="bg-black/30 rounded-md p-3 text-emerald-100 max-h-60 overflow-y-auto text-xs">
+          <View className="bg-black/30 rounded-md p-3 text-white max-h-60 overflow-y-auto text-xs">
             <Text>{`
 -- Create profiles table
 CREATE TABLE IF NOT EXISTS profiles (
@@ -178,7 +178,7 @@ ON CONFLICT DO NOTHING;
           </View>
         </View>
 
-        <Button onPress={onInitialized} className="w-full bg-emerald-500 hover:bg-emerald-400 text-white">
+        <Button onPress={onInitialized} className="w-full bg-[#059669] hover:bg-[#059669] text-white">
           I've Run the SQL
         </Button>
       </View>

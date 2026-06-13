@@ -337,7 +337,7 @@ export default function ReviewAndVerifyScreen() {
         <MaterialIcons
           name={item.type === 'image' ? 'image' : 'insert-drive-file'}
           size={32}
-          color="#10b981"
+          color="#059669"
         />
       </View>
       <View style={styles.proofInfo}>
@@ -355,7 +355,7 @@ export default function ReviewAndVerifyScreen() {
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#10b981" />
+        <ActivityIndicator size="large" color="#059669" />
         <Text style={styles.loadingText}>Loading review...</Text>
       </View>
     );
@@ -539,11 +539,11 @@ export default function ReviewAndVerifyScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0B0F14',
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0B0F14',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 16,
@@ -554,7 +554,7 @@ const styles = StyleSheet.create({
   },
   errorContainer: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0B0F14',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 16,
@@ -566,7 +566,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -591,9 +591,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0B0F14',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(16, 185, 129, 0.2)',
+    borderBottomColor: '#374151',
   },
   backIcon: {
     padding: 8,
@@ -607,18 +607,18 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0B0F14',
   },
   content: {
     padding: 16,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0B0F14',
   },
   hunterCard: {
     backgroundColor: 'rgba(5, 150, 105, 0.3)',
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.2)',
+    borderColor: '#374151',
     marginBottom: 16,
   },
   hunterInfo: {
@@ -634,7 +634,7 @@ const styles = StyleSheet.create({
   avatarFallbackText: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#10b981',
+    color: '#059669',
   },
   hunterDetails: {
     flex: 1,
@@ -660,7 +660,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.2)',
+    borderColor: '#374151',
     marginBottom: 16,
   },
   bountyTitle: {
@@ -670,7 +670,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   bountyAmount: {
-    color: '#10b981',
+    color: '#059669',
     fontSize: 24,
     fontWeight: '700',
   },
@@ -698,13 +698,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.2)',
+    borderColor: '#374151',
   },
   proofIcon: {
     width: 48,
     height: 48,
     borderRadius: 8,
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    backgroundColor: '#374151',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -731,7 +731,7 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.2)',
+    borderColor: '#374151',
   },
   emptyProofText: {
     color: '#6ee7b7',
@@ -767,7 +767,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.2)',
+    borderColor: '#374151',
     minHeight: 100,
     textAlignVertical: 'top',
   },
@@ -793,7 +793,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   nextButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

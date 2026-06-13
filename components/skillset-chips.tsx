@@ -1,6 +1,8 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { useAppThemeContext } from '../lib/themes/AppThemeContext';
+import type { AppTheme } from '../lib/themes/types';
 
 interface Skill {
   id: string;
@@ -18,10 +20,12 @@ interface SkillsetChipsProps {
  * Used on Profile screen to show skills as horizontal chips
  */
 export function SkillsetChips({ skills }: SkillsetChipsProps) {
+  const { theme } = useAppThemeContext();
+  const styles = makeStyles(theme);
   const alias: Record<string, string> = { heart: "favorite", target: "gps-fixed", globe: "public" };
   const getIconComponent = (iconName: string) => {
     const mappedName = alias[iconName] || iconName;
-    return <MaterialIcons name={mappedName as any} size={16} color="#d1fae5" />;
+    return <MaterialIcons name={mappedName as any} size={16} color={theme.text} />;
   };
 
   if (!skills || skills.length === 0) {
@@ -42,7 +46,7 @@ export function SkillsetChips({ skills }: SkillsetChipsProps) {
           </Text>
           {skill.credentialUrl && (
             <View style={styles.credentialBadge}>
-              <MaterialIcons name="attach-file" size={12} color="#34d399" />
+              <MaterialIcons name="attach-file" size={12} color="#059669" />
             </View>
           )}
         </View>
@@ -51,44 +55,46 @@ export function SkillsetChips({ skills }: SkillsetChipsProps) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  chip: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(6, 78, 59, 0.4)",
-    borderRadius: 16,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    gap: 6,
-  },
-  iconContainer: {
-    width: 20,
-    height: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  chipText: {
-    fontSize: 13,
-    color: "#d1fae5",
-    maxWidth: 150,
-  },
-  credentialBadge: {
-    marginLeft: 2,
-  },
-  emptyState: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: "rgba(6, 78, 59, 0.2)",
-    borderRadius: 8,
-  },
-  emptyText: {
-    fontSize: 13,
-    color: "#6ee7b7",
-    fontStyle: "italic",
-  },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    chip: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: theme.surfaceSecondary,
+      borderRadius: 16,
+      paddingVertical: 6,
+      paddingHorizontal: 12,
+      gap: 6,
+    },
+    iconContainer: {
+      width: 20,
+      height: 20,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    chipText: {
+      fontSize: 13,
+      color: theme.text,
+      maxWidth: 150,
+    },
+    credentialBadge: {
+      marginLeft: 2,
+    },
+    emptyState: {
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      backgroundColor: theme.surfaceSecondary,
+      borderRadius: 8,
+    },
+    emptyText: {
+      fontSize: 13,
+      color: theme.primaryLight,
+      fontStyle: "italic",
+    },
+  });
+}

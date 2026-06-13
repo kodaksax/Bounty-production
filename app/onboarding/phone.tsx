@@ -24,6 +24,8 @@ import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
 import { useOnboarding } from '../../lib/context/onboarding-context';
 import { sendPhoneOTP } from '../../lib/services/phone-verification-service';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 
 export default function PhoneScreen() {
   const router = useRouter();
@@ -32,6 +34,8 @@ export default function PhoneScreen() {
   const { updateProfile: updateAuthProfile } = useAuthProfile();
   const { data: onboardingData, updateData: updateOnboardingData } = useOnboarding();
 
+  const { theme } = useAppThemeContext();
+  const styles = makeStyles(theme);
   const [phone, setPhone] = useState(onboardingData.phone);
   const [saving, setSaving] = useState(false);
 
@@ -149,7 +153,7 @@ export default function PhoneScreen() {
         {/* Header with Back Button and Branding */}
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <MaterialIcons name="arrow-back" size={24} color="#a7f3d0" />
+            <MaterialIcons name="arrow-back" size={24} color="#9CA3AF" />
           </TouchableOpacity>
           <View style={styles.brandingHeader}>
             <BrandingLogo size="small" />
@@ -160,7 +164,7 @@ export default function PhoneScreen() {
         {/* Trust Badge Header */}
         <View style={styles.trustBadgeHeader}>
           <View style={styles.trustBadge}>
-            <MaterialIcons name="verified" size={20} color="#10b981" />
+            <MaterialIcons name="verified" size={20} color="#059669" />
             <Text style={styles.trustBadgeText}>Build Your Trust Score</Text>
           </View>
         </View>
@@ -168,7 +172,7 @@ export default function PhoneScreen() {
         {/* Content */}
         <View style={styles.content}>
           <View style={styles.iconCircle}>
-            <MaterialIcons name="phone-android" size={48} color="#a7f3d0" />
+            <MaterialIcons name="phone-android" size={48} color="#9CA3AF" />
           </View>
           <Text style={styles.title}>Verify Your Phone</Text>
           <Text style={styles.subtitle}>
@@ -183,7 +187,7 @@ export default function PhoneScreen() {
             <Text style={styles.trustBenefitText}>Earn a verified badge on your profile</Text>
           </View>
           <View style={styles.trustBenefitItem}>
-            <MaterialIcons name="trending-up" size={18} color="#34d399" />
+            <MaterialIcons name="trending-up" size={18} color="#059669" />
             <Text style={styles.trustBenefitText}>Increase your chances of getting responses on your bounties</Text>
           </View>
           <View style={styles.trustBenefitItem}>
@@ -206,7 +210,7 @@ export default function PhoneScreen() {
               maxLength={20}
             />
             <View style={styles.privacyNote}>
-              <MaterialIcons name="lock" size={16} color="#a7f3d0" />
+              <MaterialIcons name="lock" size={16} color="#9CA3AF" />
               <Text style={styles.privacyText}>
                 Never shared publicly — only used for verification
               </Text>
@@ -215,7 +219,7 @@ export default function PhoneScreen() {
 
           {/* Info box */}
           <View style={styles.infoBox}>
-            <MaterialIcons name="security" size={20} color="#a7f3d0" />
+            <MaterialIcons name="security" size={20} color="#9CA3AF" />
             <Text style={styles.infoText}>
               We use bank-level encryption to protect your data. Your phone number is never displayed to other users.
             </Text>
@@ -255,193 +259,195 @@ export default function PhoneScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#059669',
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 8,
-    marginBottom: 16,
-  },
-  backButton: {
-    padding: 8,
-  },
-  brandingHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  brandingText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    letterSpacing: 2,
-    marginLeft: 6,
-  },
-  trustBadgeHeader: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  trustBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(16,185,129,0.2)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(16,185,129,0.4)',
-  },
-  trustBadgeText: {
-    color: '#10b981',
-    fontSize: 14,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  iconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(5,46,27,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(167,243,208,0.3)',
-  },
-  content: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginTop: 16,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.8)',
-    textAlign: 'center',
-    lineHeight: 22,
-    paddingHorizontal: 16,
-  },
-  trustBenefits: {
-    backgroundColor: 'rgba(5,46,27,0.5)',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(167,243,208,0.2)',
-    gap: 12,
-  },
-  trustBenefitItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  trustBenefitText: {
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: 14,
-    marginLeft: 12,
-    flex: 1,
-  },
-  inputSection: {
-    marginBottom: 24,
-  },
-  field: {
-    marginBottom: 20,
-  },
-  label: {
-    color: '#a7f3d0',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: 'rgba(5,46,27,0.5)',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 18,
-    color: '#ffffff',
-    borderWidth: 2,
-    borderColor: 'rgba(167,243,208,0.3)',
-    letterSpacing: 1,
-  },
-  privacyNote: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-    paddingHorizontal: 4,
-  },
-  privacyText: {
-    color: '#a7f3d0',
-    fontSize: 13,
-    marginLeft: 6,
-    flex: 1,
-  },
-  infoBox: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(5,46,27,0.5)',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(167,243,208,0.3)',
-  },
-  infoText: {
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: 13,
-    lineHeight: 20,
-    marginLeft: 12,
-    flex: 1,
-  },
-  actions: {
-    marginBottom: 24,
-  },
-  nextButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#a7f3d0',
-    paddingVertical: 16,
-    borderRadius: 999,
-    marginBottom: 12,
-    gap: 8,
-  },
-  nextButtonText: {
-    color: '#052e1b',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  skipButton: {
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  skipButtonText: {
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: 16,
-  },
-  progressContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
-    paddingTop: 16,
-  },
-  progressDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-  },
-  progressDotActive: {
-    backgroundColor: '#a7f3d0',
-  },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    scrollContent: {
+      flexGrow: 1,
+      paddingHorizontal: 24,
+    },
+    headerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: 8,
+      marginBottom: 16,
+    },
+    backButton: {
+      padding: 8,
+    },
+    brandingHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    brandingText: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: theme.text,
+      letterSpacing: 2,
+      marginLeft: 6,
+    },
+    trustBadgeHeader: {
+      alignItems: 'center',
+      marginBottom: 16,
+    },
+    trustBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.surface,
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    trustBadgeText: {
+      color: '#059669',
+      fontSize: 14,
+      fontWeight: '600',
+      marginLeft: 8,
+    },
+    iconCircle: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      backgroundColor: theme.surface,
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 2,
+      borderColor: theme.border,
+    },
+    content: {
+      alignItems: 'center',
+      marginBottom: 20,
+    },
+    title: {
+      fontSize: 26,
+      fontWeight: 'bold',
+      color: theme.text,
+      marginTop: 16,
+      marginBottom: 8,
+      textAlign: 'center',
+    },
+    subtitle: {
+      fontSize: 15,
+      color: theme.textSecondary,
+      textAlign: 'center',
+      lineHeight: 22,
+      paddingHorizontal: 16,
+    },
+    trustBenefits: {
+      backgroundColor: theme.surface,
+      borderRadius: 16,
+      padding: 16,
+      marginBottom: 24,
+      borderWidth: 1,
+      borderColor: theme.border,
+      gap: 12,
+    },
+    trustBenefitItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    trustBenefitText: {
+      color: theme.text,
+      fontSize: 14,
+      marginLeft: 12,
+      flex: 1,
+    },
+    inputSection: {
+      marginBottom: 24,
+    },
+    field: {
+      marginBottom: 20,
+    },
+    label: {
+      color: theme.textSecondary,
+      fontSize: 14,
+      fontWeight: '600',
+      marginBottom: 8,
+    },
+    input: {
+      backgroundColor: theme.surface,
+      borderRadius: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      fontSize: 18,
+      color: theme.text,
+      borderWidth: 2,
+      borderColor: theme.border,
+      letterSpacing: 1,
+    },
+    privacyNote: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 8,
+      paddingHorizontal: 4,
+    },
+    privacyText: {
+      color: theme.textSecondary,
+      fontSize: 13,
+      marginLeft: 6,
+      flex: 1,
+    },
+    infoBox: {
+      flexDirection: 'row',
+      backgroundColor: theme.surface,
+      borderRadius: 12,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    infoText: {
+      color: theme.textSecondary,
+      fontSize: 13,
+      lineHeight: 20,
+      marginLeft: 12,
+      flex: 1,
+    },
+    actions: {
+      marginBottom: 24,
+    },
+    nextButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.primary,
+      paddingVertical: 16,
+      borderRadius: 999,
+      marginBottom: 12,
+      gap: 8,
+    },
+    nextButtonText: {
+      color: '#052e1b',
+      fontSize: 18,
+      fontWeight: 'bold',
+    },
+    skipButton: {
+      alignItems: 'center',
+      paddingVertical: 12,
+    },
+    skipButtonText: {
+      color: theme.textSecondary,
+      fontSize: 16,
+    },
+    progressContainer: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 8,
+      paddingTop: 16,
+    },
+    progressDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: theme.border,
+    },
+    progressDotActive: {
+      backgroundColor: theme.primary,
+    },
+  });
+}

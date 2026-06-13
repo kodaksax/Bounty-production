@@ -225,7 +225,7 @@ describe('ReceiptService', () => {
       };
 
       const html = receiptService.generateReceiptHTML(transaction);
-      expect(html).toContain('#10b981'); // Green color
+      expect(html).toContain('#059669'); // Green color
     });
 
     it('should use red color for negative amounts', () => {

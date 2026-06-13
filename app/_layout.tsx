@@ -1,4 +1,5 @@
 import { ThemeProvider } from "components/theme-provider";
+import { AppThemeProvider, useAppThemeContext } from '../lib/themes/AppThemeContext';
 import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
 import { Slot } from "expo-router";
@@ -10,7 +11,8 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import "../global.css";
 import { useAuthContext } from '../hooks/use-auth-context';
 import { useSessionMonitor } from '../hooks/useSessionMonitor';
-import { AdminProvider } from '../lib/admin-context';
+import { AdminProvider } from '../lib/admin-context'
+import { BountyFormatProvider } from '../lib/bounty-format-context';
 import { COLORS } from "../lib/constants/accessibility";
 import { BackgroundColorProvider, useBackgroundColor } from '../lib/context/BackgroundColorContext';
 import { NotificationProvider } from '../lib/context/notification-context';
@@ -76,6 +78,17 @@ const getBarStyleForHex = (hex: string): "light" | "dark" => {
   return lum > 0.5 ? "dark" : "light";
 };
 
+// Keeps BackgroundColorContext (used for status-bar tinting) in sync with the
+// active theme so the status-bar color flips instantly when the user toggles.
+const ThemeSyncer = () => {
+  const { theme } = useAppThemeContext();
+  const { setColor } = useBackgroundColor();
+  React.useEffect(() => {
+    setColor(theme.background);
+  }, [theme.background, setColor]);
+  return null;
+};
+
 const RootFrame = ({ children, bgColor = COLORS.EMERALD_500 }: { children: React.ReactNode; bgColor?: string }) => {
   const insets = useSafeAreaInsets();
   const barStyle = getBarStyleForHex(bgColor);
@@ -138,6 +151,7 @@ const LayoutContent = () => {
                     <NotificationProvider>
                       <WebSocketProvider>
                         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+                          <ThemeSyncer />
                           <View style={styles.inner}>
                             <Slot />
                           </View>
@@ -270,9 +284,13 @@ function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <SafeAreaProvider>
       <GestureHandlerRootView style={styles.gestureRoot}>
-        <BackgroundColorProvider>
-          <LayoutContent />
-        </BackgroundColorProvider>
+        <AppThemeProvider>
+          <BountyFormatProvider>
+            <BackgroundColorProvider>
+              <LayoutContent />
+            </BackgroundColorProvider>
+          </BountyFormatProvider>
+        </AppThemeProvider>
       </GestureHandlerRootView>
     </SafeAreaProvider>
   );
@@ -296,7 +314,7 @@ const SessionMonitorGate = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669', // emerald-600
+    backgroundColor: '#0B0F14', // page background
   },
   inner: {
     flex: 1,

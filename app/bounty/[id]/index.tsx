@@ -109,7 +109,7 @@ export default function BountyDetailRouter() {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#a7f3d0" />
+          <ActivityIndicator size="large" color="#9CA3AF" />
           <Text style={styles.loadingText}>Loading bounty...</Text>
         </View>
       </View>
@@ -136,7 +136,7 @@ export default function BountyDetailRouter() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#a7f3d0" />
+        <ActivityIndicator size="large" color="#9CA3AF" />
         <Text style={styles.loadingText}>Redirecting...</Text>
       </View>
     </View>
@@ -146,7 +146,7 @@ export default function BountyDetailRouter() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0B0F14',
   },
   loadingContainer: {
     flex: 1,

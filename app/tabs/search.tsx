@@ -6,12 +6,15 @@ import {
     FlatList,
     Modal,
     ScrollView,
+    StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
 import { SPACING } from '../../lib/constants/accessibility';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 import { bountyService } from '../../lib/services/bounty-service';
 import type { Bounty } from '../../lib/services/database.types';
 import { recentSearchService } from '../../lib/services/recent-search-service';
@@ -19,7 +22,7 @@ import { searchService } from '../../lib/services/search-service';
 import { userSearchService } from '../../lib/services/user-search-service';
 import type { AutocompleteSuggestion, BountySearchFilters, RecentSearch, UserProfile } from '../../lib/types';
 import { logger } from '../../lib/utils/error-logger';
-
+import type { TrendingBounty } from '../../lib/types'
 type SearchTab = 'bounties' | 'users';
 
 // Debounce delay for autocomplete (500ms as per requirements)
@@ -38,6 +41,8 @@ interface BountyRowItem {
 
 export default function EnhancedSearchScreen() {
   const router = useRouter();
+  const { theme } = useAppThemeContext();
+  const s = useMemo(() => makeStyles(theme), [theme]);
   const { q } = useLocalSearchParams<{ q?: string }>();
   const [activeTab, setActiveTab] = useState<SearchTab>('bounties');
   const [query, setQuery] = useState('');
@@ -50,13 +55,27 @@ export default function EnhancedSearchScreen() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autocompleteRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const filtersPersistRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [trendingBounties, setTrendingBounties] = useState<TrendingBounty[]>([])
+  const [isLoadingTrending, setIsLoadingTrending] = useState(true)
 
   // Autocomplete state
   const [suggestions, setSuggestions] = useState<AutocompleteSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [filtersLoaded, setFiltersLoaded] = useState(false);
-
+  // Load trending bounties
+  const loadTrendingBounties = useCallback(async () => {
+    setIsLoadingTrending(true)
+    try {
+      const trending = await searchService.getTrendingBounties(5)
+      const unique = Array.from(new Map(trending.map(t => [String(t.id), t])).values())
+      setTrendingBounties(unique)
+    } catch (error) {
+      console.error('Error loading trending bounties:', error)
+    } finally {
+      setIsLoadingTrending(false)
+    }
+  }, [])
   // Bounty filters
   const [filters, setFilters] = useState<BountySearchFilters>({
     sortBy: 'date_desc',
@@ -81,6 +100,11 @@ export default function EnhancedSearchScreen() {
     };
     loadSavedFilters();
   }, []);
+   useEffect(() => {
+   
+    loadTrendingBounties()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Persist filters when they change (debounced to reduce I/O overhead)
   useEffect(() => {
@@ -264,41 +288,41 @@ export default function EnhancedSearchScreen() {
 
     return (
       <TouchableOpacity
-        style={styles.card}
+        style={s.card}
         onPress={() => router.push(`/bounty/${item.id}/public`)}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
         accessibilityHint="Opens bounty details"
       >
-        <View style={styles.cardHeader}>
-          <Text style={styles.cardTitle}>{item.title}</Text>
+        <View style={s.cardHeader}>
+          <Text style={s.cardTitle}>{item.title}</Text>
           {item.is_for_honor && (
-            <View style={styles.honorBadge}>
-              <Text style={styles.honorText}>Honor</Text>
+            <View style={s.honorBadge}>
+              <Text style={s.honorText}>Honor</Text>
             </View>
           )}
         </View>
         {item.description ? (
-          <Text style={styles.cardDesc} numberOfLines={2}>
+          <Text style={s.cardDesc} numberOfLines={2}>
             {item.description}
           </Text>
         ) : null}
-        <View style={styles.metaRow}>
+        <View style={s.metaRow}>
           {item.amount != null && !item.is_for_honor && (
-            <Text style={styles.amount}>${item.amount}</Text>
+            <Text style={s.amount}>${item.amount}</Text>
           )}
           {item.location && (
-            <Text style={styles.location} numberOfLines={1}>
+            <Text style={s.location} numberOfLines={1}>
               📍 {item.location}
             </Text>
           )}
           {item.created_at && (
-            <Text style={styles.time}>{timeAgo(item.created_at)}</Text>
+            <Text style={s.time}>{timeAgo(item.created_at)}</Text>
           )}
         </View>
         {item.status && item.status !== 'open' && (
-          <View style={styles.statusBadge}>
-            <Text style={styles.statusText}>{item.status}</Text>
+          <View style={s.statusBadge}>
+            <Text style={s.statusText}>{item.status}</Text>
           </View>
         )}
       </TouchableOpacity>
@@ -312,28 +336,28 @@ export default function EnhancedSearchScreen() {
 
     return (
       <TouchableOpacity
-        style={styles.card}
+        style={s.card}
         onPress={() => router.push(`/profile/${item.id}`)}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
         accessibilityHint="Opens user profile"
       >
-        <View style={styles.cardHeader}>
-          <Text style={styles.cardTitle}>{item.username}</Text>
+        <View style={s.cardHeader}>
+          <Text style={s.cardTitle}>{item.username}</Text>
           {(item.verificationStatus === 'verified' || item.verificationStatus === 'trusted') && (
-            <MaterialIcons name="verified" size={16} color="#6ee7b7" accessibilityElementsHidden={true} />
+            <MaterialIcons name="verified" size={16} color={theme.primaryLight} accessibilityElementsHidden={true} />
           )}
         </View>
         {item.bio && (
-          <Text style={styles.cardDesc} numberOfLines={2}>
+          <Text style={s.cardDesc} numberOfLines={2}>
             {item.bio}
           </Text>
         )}
         {item.skills && item.skills.length > 0 && (
-          <View style={styles.skillsRow}>
+          <View style={s.skillsRow}>
             {item.skills.slice(0, 3).map((skill, idx) => (
-              <View key={`${item.id}-skill-${idx}-${skill.toLowerCase()}`} style={styles.skillChip}>
-                <Text style={styles.skillText}>{skill}</Text>
+              <View key={`${item.id}-skill-${idx}-${skill.toLowerCase()}`} style={s.skillChip}>
+                <Text style={s.skillText}>{skill}</Text>
               </View>
             ))}
           </View>
@@ -343,16 +367,16 @@ export default function EnhancedSearchScreen() {
   }, [router]);
 
   const renderRecentSearch = useCallback(({ item }: { item: RecentSearch }) => (
-    <View style={styles.recentSearchItem}>
+    <View style={s.recentSearchItem}>
       <TouchableOpacity
-        style={styles.recentSearchContent}
+        style={s.recentSearchContent}
         onPress={() => handleRecentSearchClick(item)}
         accessibilityRole="button"
         accessibilityLabel={`Recent search: ${item.query}`}
         accessibilityHint="Tap to repeat this search"
       >
-        <MaterialIcons name="history" size={18} color="#6ee7b7" accessibilityElementsHidden={true} />
-        <Text style={styles.recentSearchText}>{item.query}</Text>
+        <MaterialIcons name="history" size={18} color={theme.primaryLight} accessibilityElementsHidden={true} />
+        <Text style={s.recentSearchText}>{item.query}</Text>
       </TouchableOpacity>
       <TouchableOpacity
         onPress={() => handleRemoveRecentSearch(item.id)}
@@ -360,7 +384,7 @@ export default function EnhancedSearchScreen() {
         accessibilityLabel="Remove recent search"
         accessibilityHint="Removes this search from history"
       >
-        <MaterialIcons name="close" size={18} color="#93e5c7" accessibilityElementsHidden={true} />
+        <MaterialIcons name="close" size={18} color={theme.primaryLight} accessibilityElementsHidden={true} />
       </TouchableOpacity>
     </View>
   ), [handleRecentSearchClick, handleRemoveRecentSearch]);
@@ -384,55 +408,29 @@ export default function EnhancedSearchScreen() {
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <View style={s.container}>
+      <View style={s.header}>
         <TouchableOpacity
           onPress={() => router.back()}
-          style={styles.backBtn}
+          style={s.backBtn}
           accessibilityRole="button"
           accessibilityLabel="Go back"
           accessibilityHint="Returns to previous screen"
         >
-          <MaterialIcons name="arrow-back" size={22} color="#fff" accessibilityElementsHidden={true} />
+          <MaterialIcons name="arrow-back" size={22} color={theme.text} accessibilityElementsHidden={true} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle} accessibilityRole="header">Search</Text>
+        <Text style={s.headerTitle} accessibilityRole="header">Search</Text>
       </View>
 
-      {/* Tab switcher */}
-      <View style={styles.tabRow}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'bounties' && styles.tabActive]}
-          onPress={() => setActiveTab('bounties')}
-          accessibilityRole="tab"
-          accessibilityLabel="Search bounties"
-          accessibilityState={{ selected: activeTab === 'bounties' }}
-          accessibilityHint="Switches to bounty search"
-        >
-          <Text style={[styles.tabText, activeTab === 'bounties' && styles.tabTextActive]}>
-            Bounties
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'users' && styles.tabActive]}
-          onPress={() => setActiveTab('users')}
-          accessibilityRole="tab"
-          accessibilityLabel="Search users"
-          accessibilityState={{ selected: activeTab === 'users' }}
-          accessibilityHint="Switches to user search"
-        >
-          <Text style={[styles.tabText, activeTab === 'users' && styles.tabTextActive]}>
-            Users
-          </Text>
-        </TouchableOpacity>
-      </View>
+     
 
       {/* Search bar */}
-      <View style={styles.searchRow}>
-        <MaterialIcons name="search" size={20} color="#6ee7b7" style={styles.iconMarginHorizontal8} accessibilityElementsHidden={true} />
+      <View style={s.searchRow}>
+        <MaterialIcons name="search" size={20} color={theme.primaryLight} style={s.iconMarginHorizontal8} accessibilityElementsHidden={true} />
         <TextInput
           value={query}
           placeholder={activeTab === 'bounties' ? 'Search bounties...' : 'Search users...'}
-          placeholderTextColor="#93e5c7"
+          placeholderTextColor="#6B7280"
           onChangeText={(text) => {
             setQuery(text);
             if (!text.trim()) {
@@ -445,7 +443,7 @@ export default function EnhancedSearchScreen() {
             }
           }}
           returnKeyType="search"
-          style={styles.input}
+          style={s.input}
           accessibilityRole="search"
           accessibilityLabel={activeTab === 'bounties' ? 'Search bounties' : 'Search users'}
           accessibilityHint="Type to search with autocomplete suggestions"
@@ -453,47 +451,73 @@ export default function EnhancedSearchScreen() {
         {!!query && !isSearching && (
           <TouchableOpacity
               onPress={() => { setQuery(''); setShowSuggestions(false); }}
-              style={styles.smallPadding}
+              style={s.smallPadding}
               accessibilityRole="button"
               accessibilityLabel="Clear search"
               accessibilityHint="Clears the search text"
             >
-            <MaterialIcons name="close" size={18} color="#6ee7b7" accessibilityElementsHidden={true} />
+            <MaterialIcons name="close" size={18} color={theme.primaryLight} accessibilityElementsHidden={true} />
           </TouchableOpacity>
         )}
-        {(isSearching || isLoadingSuggestions) && <ActivityIndicator color="#6ee7b7" size="small" style={styles.activityMarginRight} accessibilityLabel="Loading search results" />}
+        {(isSearching || isLoadingSuggestions) && <ActivityIndicator color={theme.primaryLight} size="small" style={s.activityMarginRight} accessibilityLabel="Loading search results" />}
         {activeTab === 'bounties' && (
           <>
             <TouchableOpacity
               onPress={() => router.push('/search/saved-searches')}
-              style={styles.filterBtn}
+              style={s.filterBtn}
               accessibilityRole="button"
               accessibilityLabel="Saved searches"
               accessibilityHint="View and manage saved searches"
             >
-              <MaterialIcons name="bookmark-outline" size={20} color="#6ee7b7" accessibilityElementsHidden={true} />
+              <MaterialIcons name="bookmark-outline" size={20} color={theme.primaryLight} accessibilityElementsHidden={true} />
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => setShowFilters(true)}
-              style={styles.filterBtn}
+              style={s.filterBtn}
               accessibilityRole="button"
               accessibilityLabel={hasActiveFilters ? "Filter (active)" : "Filter"}
               accessibilityHint="Opens filter options for bounty search"
             >
-              <MaterialIcons name="tune" size={20} color={hasActiveFilters ? '#fcd34d' : '#6ee7b7'} accessibilityElementsHidden={true} />
-              {hasActiveFilters && <View style={styles.filterDot} />}
+              <MaterialIcons name="tune" size={20} color={hasActiveFilters ? '#fcd34d' : theme.primaryLight} accessibilityElementsHidden={true} />
+              {hasActiveFilters && <View style={s.filterDot} />}
             </TouchableOpacity>
           </>
         )}
       </View>
-
+       {/* Tab switcher */}
+      <View style={s.tabRow}>
+        <TouchableOpacity
+          style={[s.tab, activeTab === 'bounties' && s.tabActive]}
+          onPress={() => setActiveTab('bounties')}
+          accessibilityRole="tab"
+          accessibilityLabel="Search bounties"
+          accessibilityState={{ selected: activeTab === 'bounties' }}
+          accessibilityHint="Switches to bounty search"
+        >
+          <Text style={[s.tabText, activeTab === 'bounties' && s.tabTextActive]}>
+            Bounties
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.tab, activeTab === 'users' && s.tabActive]}
+          onPress={() => setActiveTab('users')}
+          accessibilityRole="tab"
+          accessibilityLabel="Search users"
+          accessibilityState={{ selected: activeTab === 'users' }}
+          accessibilityHint="Switches to user search"
+        >
+          <Text style={[s.tabText, activeTab === 'users' && s.tabTextActive]}>
+            Users
+          </Text>
+        </TouchableOpacity>
+      </View>
       {/* Autocomplete Suggestions */}
       {showSuggestions && suggestions.length > 0 && (
-        <View style={styles.suggestionsContainer}>
+        <View style={s.suggestionsContainer}>
           {suggestions.map((suggestion) => (
             <TouchableOpacity
               key={suggestion.id}
-              style={styles.suggestionItem}
+              style={s.suggestionItem}
               onPress={() => handleSuggestionPress(suggestion)}
               accessibilityRole="button"
               accessibilityLabel={`${suggestion.type === 'bounty' ? 'Bounty' : suggestion.type === 'user' ? 'User' : 'Skill'}: ${suggestion.text}${suggestion.subtitle ? ', ' + suggestion.subtitle : ''}`}
@@ -502,17 +526,17 @@ export default function EnhancedSearchScreen() {
               <MaterialIcons
                 name={suggestion.icon as any || 'search'}
                 size={18}
-                color="#6ee7b7"
-                style={styles.iconMarginRight10}
+                color={theme.primaryLight}
+                style={s.iconMarginRight10}
               />
-              <View style={styles.flex1}>
-                <Text style={styles.suggestionText}>{suggestion.text}</Text>
+              <View style={s.flex1}>
+                <Text style={s.suggestionText}>{suggestion.text}</Text>
                 {suggestion.subtitle && (
-                  <Text style={styles.suggestionSubtext}>{suggestion.subtitle}</Text>
+                  <Text style={s.suggestionSubtext}>{suggestion.subtitle}</Text>
                 )}
               </View>
-              <View style={styles.suggestionTypeBadge}>
-                <Text style={styles.suggestionTypeText}>
+              <View style={s.suggestionTypeBadge}>
+                <Text style={s.suggestionTypeText}>
                   {suggestion.type === 'bounty' ? 'Bounty' : suggestion.type === 'user' ? 'User' : 'Skill'}
                 </Text>
               </View>
@@ -522,8 +546,8 @@ export default function EnhancedSearchScreen() {
       )}
 
       {error && (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>⚠ {error}</Text>
+        <View style={s.errorBox}>
+          <Text style={s.errorText}>⚠ {error}</Text>
           <TouchableOpacity
             onPress={() => {
               if (activeTab === 'bounties') {
@@ -532,20 +556,20 @@ export default function EnhancedSearchScreen() {
                 performUserSearch(query);
               }
             }}
-            style={styles.retryBtn}
+            style={s.retryBtn}
           >
-            <Text style={styles.retryText}>Retry</Text>
+            <Text style={s.retryText}>Retry</Text>
           </TouchableOpacity>
         </View>
       )}
 
       {/* Recent searches */}
       {!query && recentSearches.length > 0 && (
-        <View style={styles.recentSection}>
-          <View style={styles.recentHeader}>
-            <Text style={styles.recentTitle}>Recent Searches</Text>
+        <View style={s.recentSection}>
+          <View style={s.recentHeader}>
+            <Text style={s.recentTitle}>Recent Searches</Text>
             <TouchableOpacity onPress={() => recentSearchService.clearAll().then(loadRecentSearches)}>
-              <Text style={styles.clearText}>Clear</Text>
+              <Text style={s.clearText}>Clear</Text>
             </TouchableOpacity>
           </View>
           <FlatList
@@ -561,18 +585,56 @@ export default function EnhancedSearchScreen() {
         </View>
       )}
 
+      {/* Trending Bounties — shown only when search is empty */}
+{!query && !isSearching && trendingBounties.length > 0 && (
+  <View style={s.trendingSection}>
+    <View style={s.trendingHeader}>
+      <MaterialIcons name="local-fire-department" size={18} color="#059669" />
+      <Text style={s.trendingTitle}>Trending</Text>
+    </View>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+      {trendingBounties.map((bounty) => (
+        <TouchableOpacity
+          key={String(bounty.id)}
+          style={s.trendingCard}
+          onPress={() => router.push(`/bounty/${bounty.id}/public`)}
+        >
+          <Text style={s.trendingCardTitle} numberOfLines={2}>
+            {bounty.title}
+          </Text>
+          {bounty.isForHonor ? (
+            <View style={s.trendingHonorBadge}>
+              <Text style={s.trendingHonorText}>For Honor</Text>
+            </View>
+          ) : (
+            <Text style={s.trendingAmount}>
+              ${bounty.amount ?? 0}
+            </Text>
+          )}
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+  </View>
+)}
+
+
+
+
+
+
+
       {/* Results */}
       {activeTab === 'bounties' ? (
           <FlatList
           data={bountyResults}
           keyExtractor={keyExtractorBounty}
           renderItem={renderBountyItem}
-          contentContainerStyle={styles.resultsContainer}
+          contentContainerStyle={s.resultsContainer}
           keyboardDismissMode="on-drag"
           ListEmptyComponent={
             query && !isSearching && !error ? (
-              <View style={styles.emptyCenter}>
-                <Text style={styles.emptyText}>
+              <View style={s.emptyCenter}>
+                <Text style={s.emptyText}>
                   No bounties found for {"\""}
                   {query}
                   {"\""}
@@ -590,12 +652,12 @@ export default function EnhancedSearchScreen() {
           data={userResults}
           keyExtractor={keyExtractorUser}
           renderItem={renderUserItem}
-          contentContainerStyle={styles.resultsContainer}
+          contentContainerStyle={s.resultsContainer}
           keyboardDismissMode="on-drag"
           ListEmptyComponent={
             query && !isSearching && !error ? (
-              <View style={styles.emptyCenter}>
-                <Text style={styles.emptyText}>
+              <View style={s.emptyCenter}>
+                <Text style={s.emptyText}>
                   No users found for {"\""}
                   {query}
                   {"\""}
@@ -612,19 +674,19 @@ export default function EnhancedSearchScreen() {
 
       {/* Filter Modal */}
       <Modal visible={showFilters} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Filter Bounties</Text>
+        <View style={s.modalOverlay}>
+          <View style={s.modalContent}>
+            <View style={s.modalHeader}>
+              <Text style={s.modalTitle}>Filter Bounties</Text>
               <TouchableOpacity onPress={() => setShowFilters(false)}>
-                <MaterialIcons name="close" size={24} color="#fff" />
+                <MaterialIcons name="close" size={24} color={theme.text} />
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.filterScroll}>
+            <ScrollView style={s.filterScroll}>
               {/* Sort By */}
-              <Text style={styles.filterLabel}>Sort By</Text>
-              <View style={styles.filterGroup}>
+              <Text style={s.filterLabel}>Sort By</Text>
+              <View style={s.filterGroup}>
                 {[
                   { value: 'date_desc', label: 'Newest First' },
                   { value: 'date_asc', label: 'Oldest First' },
@@ -634,15 +696,15 @@ export default function EnhancedSearchScreen() {
                   <TouchableOpacity
                     key={option.value}
                     style={[
-                      styles.filterOption,
-                      filters.sortBy === option.value && styles.filterOptionActive,
+                      s.filterOption,
+                      filters.sortBy === option.value && s.filterOptionActive,
                     ]}
                     onPress={() => setFilters({ ...filters, sortBy: option.value as any })}
                   >
                     <Text
                       style={[
-                        styles.filterOptionText,
-                        filters.sortBy === option.value && styles.filterOptionTextActive,
+                        s.filterOptionText,
+                        filters.sortBy === option.value && s.filterOptionTextActive,
                       ]}
                     >
                       {option.label}
@@ -652,8 +714,8 @@ export default function EnhancedSearchScreen() {
               </View>
 
               {/* Status */}
-              <Text style={styles.filterLabel}>Status</Text>
-              <View style={styles.filterGroup}>
+              <Text style={s.filterLabel}>Status</Text>
+              <View style={s.filterGroup}>
                 {[
                   { value: 'open', label: 'Open' },
                   { value: 'in_progress', label: 'In Progress' },
@@ -662,8 +724,8 @@ export default function EnhancedSearchScreen() {
                   <TouchableOpacity
                     key={option.value}
                     style={[
-                      styles.filterOption,
-                      filters.status?.includes(option.value) && styles.filterOptionActive,
+                      s.filterOption,
+                      filters.status?.includes(option.value) && s.filterOptionActive,
                     ]}
                     onPress={() => {
                       const currentStatus = filters.status || ['open'];
@@ -675,8 +737,8 @@ export default function EnhancedSearchScreen() {
                   >
                     <Text
                       style={[
-                        styles.filterOptionText,
-                        filters.status?.includes(option.value) && styles.filterOptionTextActive,
+                        s.filterOptionText,
+                        filters.status?.includes(option.value) && s.filterOptionTextActive,
                       ]}
                     >
                       {option.label}
@@ -686,8 +748,8 @@ export default function EnhancedSearchScreen() {
               </View>
 
               {/* Work Type */}
-              <Text style={styles.filterLabel}>Work Type</Text>
-              <View style={styles.filterGroup}>
+              <Text style={s.filterLabel}>Work Type</Text>
+              <View style={s.filterGroup}>
                 {[
                   { value: undefined, label: 'All' },
                   { value: 'online', label: 'Online' },
@@ -696,15 +758,15 @@ export default function EnhancedSearchScreen() {
                   <TouchableOpacity
                     key={option.label}
                     style={[
-                      styles.filterOption,
-                      filters.workType === option.value && styles.filterOptionActive,
+                      s.filterOption,
+                      filters.workType === option.value && s.filterOptionActive,
                     ]}
                     onPress={() => setFilters({ ...filters, workType: option.value as any })}
                   >
                     <Text
                       style={[
-                        styles.filterOptionText,
-                        filters.workType === option.value && styles.filterOptionTextActive,
+                        s.filterOptionText,
+                        filters.workType === option.value && s.filterOptionTextActive,
                       ]}
                     >
                       {option.label}
@@ -714,23 +776,23 @@ export default function EnhancedSearchScreen() {
               </View>
 
               {/* Amount Range */}
-              <Text style={styles.filterLabel}>Amount Range</Text>
-              <View style={styles.amountRow}>
+              <Text style={s.filterLabel}>Amount Range</Text>
+              <View style={s.amountRow}>
                 <TextInput
-                  style={styles.amountInput}
+                  style={s.amountInput}
                   placeholder="Min"
-                  placeholderTextColor="#93e5c7"
+                  placeholderTextColor={theme.textDisabled}
                   keyboardType="numeric"
                   value={filters.minAmount?.toString() || ''}
                   onChangeText={(text) =>
                     setFilters({ ...filters, minAmount: text ? parseFloat(text) : undefined })
                   }
                 />
-                <Text style={styles.amountSeparator}>-</Text>
+                <Text style={s.amountSeparator}>-</Text>
                 <TextInput
-                  style={styles.amountInput}
+                  style={s.amountInput}
                   placeholder="Max"
-                  placeholderTextColor="#93e5c7"
+                  placeholderTextColor={theme.textDisabled}
                   keyboardType="numeric"
                   value={filters.maxAmount?.toString() || ''}
                   onChangeText={(text) =>
@@ -740,15 +802,15 @@ export default function EnhancedSearchScreen() {
               </View>
             </ScrollView>
 
-            <View style={styles.modalFooter}>
-              <TouchableOpacity style={styles.clearFiltersBtn} onPress={clearFilters}>
-                <Text style={styles.clearFiltersBtnText}>Clear All</Text>
+            <View style={s.modalFooter}>
+              <TouchableOpacity style={s.clearFiltersBtn} onPress={clearFilters}>
+                <Text style={s.clearFiltersBtnText}>Clear All</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.applyFiltersBtn}
+                style={s.applyFiltersBtn}
                 onPress={() => setShowFilters(false)}
               >
-                <Text style={styles.applyFiltersBtnText}>Apply Filters</Text>
+                <Text style={s.applyFiltersBtnText}>Apply Filters</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -770,200 +832,493 @@ function timeAgo(ts?: string) {
   return days + 'd ago';
 }
 
-// Styles
-const styles = {
-  container: { flex: 1, backgroundColor: '#059669' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingTop: 54,
-    paddingHorizontal: SPACING.ELEMENT_GAP,
-    paddingBottom: SPACING.ELEMENT_GAP,
-  },
-  backBtn: { padding: SPACING.COMPACT_GAP, marginRight: 4 },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '700', marginLeft: 4 },
-  tabRow: {
-    flexDirection: 'row',
-    paddingHorizontal: SPACING.ELEMENT_GAP,
-    marginBottom: SPACING.COMPACT_GAP,
-    gap: SPACING.COMPACT_GAP,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: SPACING.COMPACT_GAP,
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 8,
-  },
-  tabActive: { backgroundColor: 'rgba(255,255,255,0.2)' },
-  tabText: { color: '#d1fae5', fontSize: 14, fontWeight: '600' },
-  tabTextActive: { color: '#fff' },
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: SPACING.ELEMENT_GAP,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 24,
-    paddingVertical: 6,
-    marginBottom: 4,
-  },
-  input: { flex: 1, color: 'white', paddingVertical: 4, fontSize: 15 },
-  iconMarginHorizontal8: { marginHorizontal: 8 },
-  smallPadding: { padding: 4 },
-  activityMarginRight: { marginRight: 8 },
-  iconMarginRight10: { marginRight: 10 },
-  flex1: { flex: 1 },
-  resultsContainer: { padding: 12, paddingBottom: 100 },
-  emptyCenter: { padding: 24, alignItems: 'center' },
-  emptyText: { color: '#ecfdf5' },
-  filterBtn: { padding: SPACING.COMPACT_GAP, position: 'relative' },
-  filterDot: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#fcd34d',
-  },
-  card: {
-    backgroundColor: 'rgba(0,0,0,0.15)',
-    borderRadius: 12,
-    padding: SPACING.ELEMENT_GAP,
-    marginBottom: 10,
-  },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
-  cardTitle: { color: '#fff', fontSize: 15, fontWeight: '600', flex: 1 },
-  cardDesc: { color: '#d1fae5', fontSize: 13, marginBottom: 6 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.COMPACT_GAP, flexWrap: 'wrap' },
-  amount: { color: '#6ee7b7', fontWeight: '700', fontSize: 13 },
-  location: { color: '#a7f3d0', fontSize: 11, flex: 1 },
-  time: { color: '#a7f3d0', fontSize: 11 },
-  honorBadge: { backgroundColor: '#fcd34d', paddingHorizontal: SPACING.COMPACT_GAP, paddingVertical: 2, borderRadius: 4 },
-  honorText: { color: '#065f46', fontSize: 10, fontWeight: '700' },
-  statusBadge: { marginTop: 4, alignSelf: 'flex-start', paddingHorizontal: SPACING.COMPACT_GAP, paddingVertical: 2, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 4 },
-  statusText: { color: '#d1fae5', fontSize: 10, textTransform: 'capitalize' },
-  skillsRow: { flexDirection: 'row', gap: 6, marginTop: 6, flexWrap: 'wrap' },
-  skillChip: { backgroundColor: 'rgba(110,231,183,0.2)', paddingHorizontal: SPACING.COMPACT_GAP, paddingVertical: 4, borderRadius: 12 },
-  skillText: { color: '#6ee7b7', fontSize: 11 },
-  recentSection: { paddingHorizontal: SPACING.ELEMENT_GAP, paddingVertical: SPACING.COMPACT_GAP },
-  recentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.COMPACT_GAP },
-  recentTitle: { color: '#d1fae5', fontSize: 13, fontWeight: '600' },
-  clearText: { color: '#6ee7b7', fontSize: 12 },
-  recentSearchItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: SPACING.COMPACT_GAP },
-  recentSearchContent: { flexDirection: 'row', alignItems: 'center', gap: SPACING.COMPACT_GAP, flex: 1 },
-  recentSearchText: { color: '#ecfdf5', fontSize: 14 },
-  errorBox: { backgroundColor: 'rgba(220,38,38,0.15)', margin: SPACING.ELEMENT_GAP, padding: 10, borderRadius: 8 },
-  errorText: { color: '#fee2e2', marginBottom: 6, fontSize: 13 },
-  retryBtn: {
-    backgroundColor: '#065f46',
-    paddingHorizontal: SPACING.ELEMENT_GAP,
-    paddingVertical: 6,
-    borderRadius: 20,
-    alignSelf: 'flex-start',
-  },
-  retryText: { color: 'white', fontSize: 12, fontWeight: '600' },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#047857',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '80%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: SPACING.CARD_PADDING,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
-  },
-  modalTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
-  filterScroll: { padding: SPACING.CARD_PADDING },
-  filterLabel: { color: '#d1fae5', fontSize: 14, fontWeight: '600', marginBottom: SPACING.COMPACT_GAP, marginTop: 12 },
-  filterGroup: { gap: SPACING.COMPACT_GAP },
-  filterOption: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    paddingVertical: SPACING.ELEMENT_GAP,
-    paddingHorizontal: SPACING.CARD_PADDING,
-    borderRadius: 8,
-  },
-  filterOptionActive: { backgroundColor: '#6ee7b7' },
-  filterOptionText: { color: '#ecfdf5', fontSize: 14 },
-  filterOptionTextActive: { color: '#065f46', fontWeight: '600' },
-  amountRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.COMPACT_GAP },
-  amountInput: {
-    flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    color: 'white',
-    paddingVertical: SPACING.ELEMENT_GAP,
-    paddingHorizontal: SPACING.CARD_PADDING,
-    borderRadius: 8,
-    fontSize: 14,
-  },
-  amountSeparator: { color: '#d1fae5', fontSize: 16 },
-  modalFooter: {
-    flexDirection: 'row',
-    padding: SPACING.CARD_PADDING,
-    gap: SPACING.ELEMENT_GAP,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
-  },
-  clearFiltersBtn: {
-    flex: 1,
-    paddingVertical: SPACING.ELEMENT_GAP,
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 8,
-  },
-  clearFiltersBtnText: { color: '#ecfdf5', fontSize: 14, fontWeight: '600' },
-  applyFiltersBtn: {
-    flex: 1,
-    paddingVertical: SPACING.ELEMENT_GAP,
-    alignItems: 'center',
-    backgroundColor: '#6ee7b7',
-    borderRadius: 8,
-  },
-  applyFiltersBtnText: { color: '#065f46', fontSize: 14, fontWeight: '700' },
-  // Autocomplete styles
-  suggestionsContainer: {
-    marginHorizontal: SPACING.ELEMENT_GAP,
-    backgroundColor: 'rgba(0,0,0,0.25)',
-    borderRadius: 12,
-    marginBottom: SPACING.COMPACT_GAP,
-    overflow: 'hidden',
-  },
-  suggestionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: SPACING.ELEMENT_GAP,
-    paddingHorizontal: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
-  },
-  suggestionText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  suggestionSubtext: {
-    color: '#a7f3d0',
-    fontSize: 11,
-    marginTop: 2,
-  },
-  suggestionTypeBadge: {
-    backgroundColor: 'rgba(110,231,183,0.15)',
-    paddingHorizontal: SPACING.COMPACT_GAP,
-    paddingVertical: 3,
-    borderRadius: 10,
-  },
-  suggestionTypeText: {
-    color: '#6ee7b7',
-    fontSize: 10,
-    fontWeight: '600',
-  },
-} as const;
+function makeStyles(t: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: t.background,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingTop: 54,
+      paddingHorizontal: SPACING.ELEMENT_GAP,
+      paddingBottom: SPACING.ELEMENT_GAP,
+      backgroundColor: t.background,
+    },
+    backBtn: {
+      padding: SPACING.COMPACT_GAP,
+      marginRight: 4,
+    },
+    headerTitle: {
+      color: t.text,
+      fontSize: 18,
+      fontWeight: '700',
+      marginLeft: 4,
+    },
+    tabRow: {
+      flexDirection: 'row',
+      paddingHorizontal: SPACING.ELEMENT_GAP,
+      marginBottom: SPACING.COMPACT_GAP,
+      gap: SPACING.COMPACT_GAP,
+    },
+    tab: {
+      flex: 1,
+      paddingVertical: SPACING.COMPACT_GAP,
+      alignItems: 'center',
+      backgroundColor: t.surface,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: t.border,
+    },
+    tabActive: {
+      backgroundColor: t.surfaceSecondary,
+      borderColor: t.primary,
+    },
+    tabText: {
+      color: t.textSecondary,
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    tabTextActive: {
+      color: t.primaryLight,
+    },
+    searchRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginHorizontal: SPACING.ELEMENT_GAP,
+      backgroundColor: t.surface,
+      borderRadius: 999,
+      marginBottom: 16,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      borderWidth: 1,
+      borderColor: t.border,
+      shadowColor: '#000',
+      shadowOpacity: t.isDark ? 0.3 : 0.06,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 3,
+    },
+    input: {
+      flex: 1,
+      color: t.text,
+      paddingVertical: 4,
+      fontSize: 15,
+    },
+    searchIconRight: {
+      marginLeft: 10,
+    },
+    iconMarginHorizontal8: {
+      marginHorizontal: 8,
+      marginRight: 10,
+    },
+    smallPadding: {
+      padding: 4,
+    },
+    activityMarginRight: {
+      marginRight: 8,
+    },
+    iconMarginRight10: {
+      marginRight: 10,
+    },
+    flex1: {
+      flex: 1,
+    },
+    resultsContainer: {
+      padding: 12,
+      paddingBottom: 100,
+    },
+    emptyCenter: {
+      padding: 24,
+      alignItems: 'center',
+    },
+    emptyText: {
+      color: t.textSecondary,
+    },
+    filterBtn: {
+      padding: SPACING.COMPACT_GAP,
+      position: 'relative',
+    },
+    filterDot: {
+      position: 'absolute',
+      top: 6,
+      right: 6,
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: t.primary,
+    },
+    card: {
+      backgroundColor: t.surface,
+      borderRadius: 14,
+      padding: SPACING.ELEMENT_GAP,
+      marginBottom: 10,
+      borderWidth: 1,
+      borderColor: t.border,
+      shadowColor: '#000',
+      shadowOpacity: t.isDark ? 0.3 : 0.06,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 3 },
+      elevation: 2,
+    },
+    cardHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 4,
+    },
+    cardTitle: {
+      color: t.text,
+      fontSize: 15,
+      fontWeight: '600',
+      flex: 1,
+    },
+    cardDesc: {
+      color: t.textSecondary,
+      fontSize: 13,
+      marginBottom: 6,
+    },
+    metaRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: SPACING.COMPACT_GAP,
+      flexWrap: 'wrap',
+    },
+    amount: {
+      color: t.primary,
+      fontWeight: '700',
+      fontSize: 13,
+    },
+    location: {
+      color: t.textSecondary,
+      fontSize: 11,
+      flex: 1,
+    },
+    time: {
+      color: t.textDisabled,
+      fontSize: 11,
+    },
+    // Semantic amber — preserved across themes
+    honorBadge: {
+      backgroundColor: 'rgba(245,158,11,0.12)',
+      paddingHorizontal: SPACING.COMPACT_GAP,
+      paddingVertical: 2,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: 'rgba(245,158,11,0.25)',
+    },
+    honorText: {
+      color: '#fbbf24',
+      fontSize: 10,
+      fontWeight: '700',
+    },
+    statusBadge: {
+      marginTop: 4,
+      alignSelf: 'flex-start',
+      paddingHorizontal: SPACING.COMPACT_GAP,
+      paddingVertical: 2,
+      backgroundColor: t.surfaceSecondary,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: t.border,
+    },
+    statusText: {
+      color: t.textSecondary,
+      fontSize: 10,
+      textTransform: 'capitalize',
+    },
+    skillsRow: {
+      flexDirection: 'row',
+      gap: 6,
+      marginTop: 6,
+      flexWrap: 'wrap',
+    },
+    skillChip: {
+      backgroundColor: t.isDark ? 'rgba(16,185,129,0.12)' : 'rgba(5,150,105,0.08)',
+      paddingHorizontal: SPACING.COMPACT_GAP,
+      paddingVertical: 4,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: t.isDark ? 'rgba(16,185,129,0.3)' : 'rgba(5,150,105,0.2)',
+    },
+    skillText: {
+      color: t.primaryLight,
+      fontSize: 11,
+    },
+    recentSection: {
+      paddingHorizontal: SPACING.ELEMENT_GAP,
+      paddingVertical: SPACING.COMPACT_GAP,
+    },
+    recentHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: SPACING.COMPACT_GAP,
+    },
+    recentTitle: {
+      color: t.text,
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    clearText: {
+      color: t.primary,
+      fontSize: 12,
+    },
+    recentSearchItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: SPACING.COMPACT_GAP,
+    },
+    recentSearchContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: SPACING.COMPACT_GAP,
+      flex: 1,
+    },
+    recentSearchText: {
+      color: t.text,
+      fontSize: 14,
+    },
+    // Semantic red — preserved
+    errorBox: {
+      backgroundColor: 'rgba(239,68,68,0.08)',
+      margin: SPACING.ELEMENT_GAP,
+      padding: 10,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: 'rgba(239,68,68,0.2)',
+    },
+    errorText: {
+      color: '#f87171',
+      marginBottom: 6,
+      fontSize: 13,
+    },
+    retryBtn: {
+      backgroundColor: t.primary,
+      paddingHorizontal: SPACING.ELEMENT_GAP,
+      paddingVertical: 6,
+      borderRadius: 20,
+      alignSelf: 'flex-start',
+    },
+    retryText: {
+      color: '#ffffff',
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.7)',
+      justifyContent: 'flex-end',
+    },
+    modalContent: {
+      backgroundColor: t.surface,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      maxHeight: '80%' as any,
+      borderWidth: 1,
+      borderColor: t.border,
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: SPACING.CARD_PADDING,
+      borderBottomWidth: 1,
+      borderBottomColor: t.border,
+    },
+    modalTitle: {
+      color: t.text,
+      fontSize: 18,
+      fontWeight: '700',
+    },
+    filterScroll: {
+      padding: SPACING.CARD_PADDING,
+    },
+    filterLabel: {
+      color: t.textSecondary,
+      fontSize: 14,
+      fontWeight: '600',
+      marginBottom: SPACING.COMPACT_GAP,
+      marginTop: 12,
+    },
+    filterGroup: {
+      gap: SPACING.COMPACT_GAP,
+    },
+    filterOption: {
+      backgroundColor: t.surfaceSecondary,
+      paddingVertical: SPACING.ELEMENT_GAP,
+      paddingHorizontal: SPACING.CARD_PADDING,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: t.border,
+    },
+    filterOptionActive: {
+      backgroundColor: t.surface,
+      borderColor: t.primary,
+    },
+    filterOptionText: {
+      color: t.textSecondary,
+      fontSize: 14,
+    },
+    filterOptionTextActive: {
+      color: t.primaryLight,
+      fontWeight: '600',
+    },
+    amountRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: SPACING.COMPACT_GAP,
+    },
+    amountInput: {
+      flex: 1,
+      backgroundColor: t.surfaceSecondary,
+      color: t.text,
+      paddingVertical: SPACING.ELEMENT_GAP,
+      paddingHorizontal: SPACING.CARD_PADDING,
+      borderRadius: 8,
+      fontSize: 14,
+      borderWidth: 1,
+      borderColor: t.border,
+    },
+    amountSeparator: {
+      color: t.textDisabled,
+      fontSize: 16,
+    },
+    modalFooter: {
+      flexDirection: 'row',
+      padding: SPACING.CARD_PADDING,
+      gap: SPACING.ELEMENT_GAP,
+      borderTopWidth: 1,
+      borderTopColor: t.border,
+    },
+    clearFiltersBtn: {
+      flex: 1,
+      paddingVertical: SPACING.ELEMENT_GAP,
+      alignItems: 'center',
+      backgroundColor: t.surfaceSecondary,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: t.border,
+    },
+    clearFiltersBtnText: {
+      color: t.textSecondary,
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    applyFiltersBtn: {
+      flex: 1,
+      paddingVertical: SPACING.ELEMENT_GAP,
+      alignItems: 'center',
+      backgroundColor: t.primary,
+      borderRadius: 8,
+      shadowColor: t.primary,
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 3 },
+      elevation: 3,
+    },
+    applyFiltersBtnText: {
+      color: '#ffffff',
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    suggestionsContainer: {
+      marginHorizontal: SPACING.ELEMENT_GAP,
+      backgroundColor: t.surface,
+      borderRadius: 12,
+      marginBottom: SPACING.COMPACT_GAP,
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: t.border,
+    },
+    suggestionItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: SPACING.ELEMENT_GAP,
+      paddingHorizontal: 14,
+      borderBottomWidth: 1,
+      borderBottomColor: t.border,
+    },
+    suggestionText: {
+      color: t.text,
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    suggestionSubtext: {
+      color: t.textSecondary,
+      fontSize: 11,
+      marginTop: 2,
+    },
+    suggestionTypeBadge: {
+      backgroundColor: t.isDark ? 'rgba(16,185,129,0.12)' : 'rgba(5,150,105,0.08)',
+      paddingHorizontal: SPACING.COMPACT_GAP,
+      paddingVertical: 3,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: t.isDark ? 'rgba(16,185,129,0.3)' : 'rgba(5,150,105,0.2)',
+    },
+    suggestionTypeText: {
+      color: t.primaryLight,
+      fontSize: 10,
+      fontWeight: '600',
+    },
+    trendingSection: {
+      marginBottom: 12,
+      paddingHorizontal: SPACING.ELEMENT_GAP,
+    },
+    trendingHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 10,
+    },
+    trendingTitle: {
+      color: t.text,
+      fontSize: 15,
+      fontWeight: '600',
+    },
+    // Gold border/amount kept as decorative accent for trending cards
+    trendingCard: {
+      width: 200,
+      backgroundColor: t.surface,
+      borderRadius: 12,
+      padding: 16,
+      marginRight: 10,
+      borderWidth: 1.5,
+      borderColor: '#D4AF37',
+      gap: 80,
+      shadowColor: '#D4AF37',
+      shadowOpacity: 0.25,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 3,
+    },
+    trendingCardTitle: {
+      color: t.text,
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    trendingAmount: {
+      color: '#D4AF37',
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    // Semantic amber — preserved
+    trendingHonorBadge: {
+      backgroundColor: 'rgba(245,158,11,0.12)',
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 6,
+      alignSelf: 'flex-start',
+      borderWidth: 1,
+      borderColor: 'rgba(245,158,11,0.25)',
+    },
+    trendingHonorText: {
+      color: '#fbbf24',
+      fontSize: 11,
+      fontWeight: '700',
+    },
+  })
+}

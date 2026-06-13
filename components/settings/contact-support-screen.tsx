@@ -18,7 +18,7 @@ export const ContactSupportScreen: React.FC<ContactSupportScreenProps> = ({ onBa
   };
 
   return (
-    <View className="flex-1 bg-emerald-600">
+    <View className="flex-1 bg-[#059669]">
       <View className="flex-row justify-between items-center p-4 pt-8">
         <View className="flex-row items-center">
           <BrandingLogo size="small" />
@@ -29,13 +29,13 @@ export const ContactSupportScreen: React.FC<ContactSupportScreenProps> = ({ onBa
       </View>
       <ScrollView className="px-4" contentContainerStyle={{ paddingBottom: 64 }}>
         <Text className="text-xl font-semibold text-white mb-4">Contact Support</Text>
-        <Text className="text-emerald-200 text-xs leading-4 mb-4">Provide detailed information so our team can respond quickly.</Text>
-        <Text className="text-xs text-emerald-100 mb-1">Subject</Text>
-        <TextInput value={subject} onChangeText={setSubject} placeholder="Issue subject" placeholderTextColor="#a7f3d0" className="bg-black/30 rounded-md px-3 py-2 text-white mb-4" />
-        <Text className="text-xs text-emerald-100 mb-1">Details</Text>
-        <TextInput value={details} onChangeText={setDetails} placeholder="Describe the issue or request" placeholderTextColor="#a7f3d0" multiline numberOfLines={6} textAlignVertical="top" className="bg-black/30 rounded-md px-3 py-2 text-white mb-4" />
+        <Text className="text-[#9CA3AF] text-xs leading-4 mb-4">Provide detailed information so our team can respond quickly.</Text>
+        <Text className="text-xs text-white mb-1">Subject</Text>
+        <TextInput value={subject} onChangeText={setSubject} placeholder="Issue subject" placeholderTextColor="#9CA3AF" className="bg-black/30 rounded-md px-3 py-2 text-white mb-4" />
+        <Text className="text-xs text-white mb-1">Details</Text>
+        <TextInput value={details} onChangeText={setDetails} placeholder="Describe the issue or request" placeholderTextColor="#9CA3AF" multiline numberOfLines={6} textAlignVertical="top" className="bg-black/30 rounded-md px-3 py-2 text-white mb-4" />
         <View className="flex-row gap-3">
-          <TouchableOpacity onPress={submit} disabled={!subject || !details} className={`px-4 py-2 rounded-md ${subject && details ? 'bg-emerald-700' : 'bg-emerald-900 opacity-60'}`}>
+          <TouchableOpacity onPress={submit} disabled={!subject || !details} className={`px-4 py-2 rounded-md ${subject && details ? 'bg-[#111827]' : 'bg-[#0B0F14] opacity-60'}`}>
             <Text className="text-white text-sm font-medium">Submit Request</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={onBack} className="px-4 py-2 rounded-md bg-black/30">

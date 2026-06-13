@@ -80,7 +80,7 @@ export function ConnectionStatus({
 
   if (!showStatus) return null;
 
-  const backgroundColor = isOnline ? '#10b981' : '#ef4444'; // green-500 : red-500
+  const backgroundColor = isOnline ? '#059669' : '#ef4444'; // green-500 : red-500
   const icon = isOnline ? 'wifi' : 'wifi-off';
   const message = isOnline
     ? 'Back online'
