@@ -347,6 +347,10 @@ export function EnhancedProfileSection({
               disabled={followLoading}
               className="px-4 py-2 rounded-lg"
               style={{ backgroundColor: isFollowing ? theme.surfaceSecondary : theme.primary, borderWidth: isFollowing ? 1 : 0, borderColor: theme.border }}
+              accessibilityRole="button"
+              accessibilityLabel={isFollowing ? 'Following' : 'Follow'}
+              accessibilityHint={isFollowing ? 'Double tap to unfollow this user' : 'Double tap to follow this user'}
+              accessibilityState={{ disabled: followLoading }}
             >
               {followLoading ? (
                 <ActivityIndicator size="small" color={isFollowing ? '#059669' : '#ffffff'} />
@@ -551,6 +555,8 @@ export function EnhancedProfileSection({
                       ? { backgroundColor: theme.surfaceSecondary, borderColor: theme.primary }
                       : { backgroundColor: theme.surfaceSecondary, borderColor: theme.border }}
                     onPress={() => setIsReordering(!isReordering)}
+                    accessibilityRole="button"
+                    accessibilityLabel={isReordering ? 'Done reordering' : 'Reorder portfolio items'}
                   >
                     <Text className="text-xs" style={{ color: isReordering ? theme.primary : theme.textSecondary }}>{isReordering ? 'Done' : 'Reorder'}</Text>
                   </TouchableOpacity>
@@ -560,6 +566,9 @@ export function EnhancedProfileSection({
                   style={{ backgroundColor: theme.primary }}
                   onPress={pickAndUpload}
                   disabled={isPicking || isUploading || items.length >= MAX_PORTFOLIO_ITEMS}
+                  accessibilityRole="button"
+                  accessibilityLabel={isUploading ? `Uploading ${Math.round((progress || 0) * 100)}%` : 'Add portfolio item'}
+                  accessibilityState={{ disabled: isPicking || isUploading || items.length >= MAX_PORTFOLIO_ITEMS }}
                 >
                   <Text className="text-xs text-white">
                     {isUploading ? `${Math.round((progress || 0) * 100)}%` : 'Add Item'}
@@ -612,6 +621,9 @@ export function EnhancedProfileSection({
                     onLongPress={() =>
                       isOwnProfile && !isReordering && handleDeletePortfolioItem(item.id)
                     }
+                    accessibilityRole="button"
+                    accessibilityLabel={item.title || item.name || 'Portfolio item'}
+                    accessibilityHint={isReordering ? 'Use the arrow buttons to reorder' : isOwnProfile ? 'Double tap to view, long press to delete' : 'Double tap to view'}
                   >
                     <View
                       className={`w-32 h-32 rounded-lg overflow-hidden items-center justify-center border ${
@@ -666,8 +678,11 @@ export function EnhancedProfileSection({
                                   );
                                   await refresh();
                                 }}
+                                accessibilityRole="button"
+                                accessibilityLabel="Move item left"
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                               >
-                                <MaterialIcons name="arrow-back" size={16} color="white" />
+                                <MaterialIcons name="arrow-back" size={16} color="white" accessibilityElementsHidden />
                               </TouchableOpacity>
                             )}
                             {index < items.length - 1 && (
@@ -686,8 +701,11 @@ export function EnhancedProfileSection({
                                   );
                                   await refresh();
                                 }}
+                                accessibilityRole="button"
+                                accessibilityLabel="Move item right"
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                               >
-                                <MaterialIcons name="arrow-forward" size={16} color="white" />
+                                <MaterialIcons name="arrow-forward" size={16} color="white" accessibilityElementsHidden />
                               </TouchableOpacity>
                             )}
                           </View>
@@ -698,8 +716,11 @@ export function EnhancedProfileSection({
                       <TouchableOpacity
                         className="absolute top-1 right-1 bg-red-500 rounded-full p-1"
                         onPress={() => handleDeletePortfolioItem(item.id)}
+                        accessibilityRole="button"
+                        accessibilityLabel="Delete portfolio item"
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       >
-                        <MaterialIcons name="close" size={16} color="white" />
+                        <MaterialIcons name="close" size={16} color="white" accessibilityElementsHidden />
                       </TouchableOpacity>
                     )}
                   </TouchableOpacity>

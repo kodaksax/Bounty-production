@@ -569,6 +569,9 @@ export function SignUpForm() {
                 onPress={handleSubmit}
                 disabled={isLoading}
                 className="w-full bg-[#059669] rounded py-3 items-center flex-row justify-center"
+                accessibilityRole="button"
+                accessibilityLabel="Create account"
+                accessibilityState={{ disabled: isLoading }}
               >
                 {isLoading ? (
                   <ActivityIndicator color="#fff" />
@@ -577,7 +580,11 @@ export function SignUpForm() {
                 )}
               </TouchableOpacity>
 
-              <TouchableOpacity onPress={() => router.back()}>
+              <TouchableOpacity
+                onPress={() => router.back()}
+                accessibilityRole="button"
+                accessibilityLabel="Back to sign in"
+              >
                 <Text className="text-center mt-6" style={{ color: theme.text }}>Back to Sign In</Text>
               </TouchableOpacity>
             </View>

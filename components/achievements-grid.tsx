@@ -57,6 +57,9 @@ export function AchievementsGrid({ badgesEarned }: AchievementsGridProps) {
             borderWidth: achievement.isEarned ? 1 : 0,
             borderColor: achievement.isEarned ? "#fbbf24" : "transparent",
           }}
+          accessible={true}
+          accessibilityRole="text"
+          accessibilityLabel={`${achievement.name}, ${achievement.isEarned ? 'earned' : 'locked'}`}
         >
           <View
             style={{

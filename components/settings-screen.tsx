@@ -281,7 +281,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
           icon="delete-forever" />
 
         <View className="mt-6 mb-10 items-center">
-          <TouchableOpacity onPress={onBack} style={s.backButton} className="px-4 py-2 rounded-md">
+          <TouchableOpacity onPress={onBack} style={s.backButton} className="px-4 py-2 rounded-md" accessibilityRole="button" accessibilityLabel="Back to home">
             <Text style={s.backButtonText} className="text-sm font-medium">Back to Home</Text>
           </TouchableOpacity>
         </View>
@@ -317,11 +317,11 @@ function SettingsCard({ theme, title, description, primaryLabel, secondaryLabel,
         {description}
       </Text>
       <View className="flex-row gap-2">
-        <TouchableOpacity onPress={onPrimary} style={s.primaryButton} className="px-3 py-1 rounded-md">
+        <TouchableOpacity onPress={onPrimary} style={s.primaryButton} className="px-3 py-1 rounded-md" accessibilityRole="button" accessibilityLabel={primaryLabel}>
           <Text style={s.primaryButtonText} className="text-xs font-medium">{primaryLabel}</Text>
         </TouchableOpacity>
         {secondaryLabel && onSecondary && (
-          <TouchableOpacity onPress={onSecondary} style={s.secondaryButton} className="px-3 py-1 rounded-md">
+          <TouchableOpacity onPress={onSecondary} style={s.secondaryButton} className="px-3 py-1 rounded-md" accessibilityRole="button" accessibilityLabel={secondaryLabel}>
             <Text style={s.cardTitle} className="text-xs font-medium">{secondaryLabel}</Text>
           </TouchableOpacity>
         )}
