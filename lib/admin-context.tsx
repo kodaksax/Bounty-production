@@ -128,7 +128,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       }
     };
     loadAdminStatus();
-  }, [verifyAdminStatusRef]);
+  }, []);
 
   // Listen for auth state changes
   useEffect(() => {
@@ -164,7 +164,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         // Swallow unsubscribe errors - best effort cleanup
       }
     };
-  }, [isSupabaseConfigured, supabase, setIsAdminRef, setAdminTabEnabledRef, verifyAdminStatusRef]);
+  }, [isSupabaseConfigured]);
 
   return (
     <AdminContext.Provider value={{ isAdmin, isAdminTabEnabled, isLoading, setIsAdmin, setAdminTabEnabled, verifyAdminStatus }}>
