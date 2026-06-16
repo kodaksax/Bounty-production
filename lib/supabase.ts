@@ -227,8 +227,10 @@ function makeStubClient(): any {
  * 1. Maintains a direct reference to the real target once resolved to avoid "proxy of proxy" chains.
  * 2. Caches sub-property proxies (like .auth) to ensure stable object identity.
  * 3. Correctly preserves `this` context for SDK methods.
+ *
+ * Exported for unit testing of the pre-resolution call path.
  */
-function makeDeferredProxy<T extends object>(
+export function makeDeferredProxy<T extends object>(
   getRealTarget: () => Promise<T>,
   path: string = 'supabase'
 ): T {
@@ -248,7 +250,17 @@ function makeDeferredProxy<T extends object>(
     }
   });
 
-  return new Proxy({} as T, {
+  // IMPORTANT: the Proxy target MUST be callable (a function), not a plain
+  // object. A Proxy only exposes a [[Call]] internal method when its target is
+  // callable; otherwise the `apply` trap below is dead code and invoking the
+  // proxy throws "TypeError: Object is not a function" (Hermes) the moment any
+  // chained Supabase method (e.g. `supabase.auth.onAuthStateChange(...)` or
+  // `supabase.from(...).select()`) is called before the real client has
+  // finished initializing. Using a no-op function target keeps the proxy
+  // callable so pre-resolution calls are correctly queued via `apply`.
+  const callableTarget = (() => {}) as unknown as T;
+
+  return new Proxy(callableTarget, {
     get(_t, prop) {
       // 1. Direct access to resolved target if available
       if (resolvedTarget) {
