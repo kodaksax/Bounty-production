@@ -18,7 +18,7 @@ import { makeDeferredProxy } from '../../../lib/supabase';
 
 describe('makeDeferredProxy pre-resolution call safety', () => {
   it('does not throw when a nested method is called before the target resolves', async () => {
-    let resolveTarget!: (t: unknown) => void;
+    let resolveTarget: (t: unknown) => void = () => {};
     const targetPromise = new Promise<unknown>((res) => {
       resolveTarget = res;
     });
