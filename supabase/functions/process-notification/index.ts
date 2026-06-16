@@ -161,6 +161,13 @@ Deno.serve(async (req: Request) => {
 
     if (fetchErr) {
       console.error('[process-notification] fetch error', fetchErr)
+      const { error: markFailedErr } = await supabaseAdmin
+        .from('notifications_outbox')
+        .update({ status: 'failed', last_error: String(fetchErr), attempts: outboxAttempts + 1 })
+        .eq('id', id)
+      if (markFailedErr) {
+        console.error('[process-notification] failed to mark outbox row failed after fetch error', markFailedErr)
+      }
       return jsonResponse({ error: 'Failed to fetch outbox item' }, 500)
     }
 
@@ -323,12 +330,15 @@ Deno.serve(async (req: Request) => {
     // rather than leaving it stuck in 'pending' with no last_error.
     if (supabaseAdmin && outboxId) {
       try {
-        await supabaseAdmin
+        const { error: markFailedErr } = await supabaseAdmin
           .from('notifications_outbox')
           .update({ status: 'failed', last_error: String(error), attempts: outboxAttempts + 1 })
           .eq('id', outboxId)
+        if (markFailedErr) {
+          console.error('[process-notification] failed to record error on outbox row', markFailedErr)
+        }
       } catch (updateErr) {
-        console.error('[process-notification] failed to record error on outbox row', updateErr)
+        console.error('[process-notification] failed to record error on outbox row (exception)', updateErr)
       }
     }
     return jsonResponse({ error: String(error) }, 500)
