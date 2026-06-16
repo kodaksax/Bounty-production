@@ -1,6 +1,6 @@
 // lib/admin-context.tsx - Admin authentication and role management context
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { isSupabaseConfigured, supabase } from './supabase';
 
 interface AdminContextValue {
@@ -24,26 +24,40 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   const [isAdminTabEnabled, setIsAdminTabEnabledState] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Verify admin status with backend
-  const verifyAdminStatus = async (): Promise<boolean> => {
+  // Define helpers BEFORE any useEffect that references them, with useCallback
+  // so the function identities are stable across re-renders. This prevents the
+  // stale-closure crash that occurred when onAuthStateChange fired TOKEN_REFRESHED
+  // (~1 hour after login) and called the initial-render version of these functions.
+  const setIsAdmin = useCallback(async (value: boolean) => {
+    try {
+      await AsyncStorage.setItem(ADMIN_KEY, String(value));
+      if (!value) {
+        await AsyncStorage.removeItem(ADMIN_VERIFIED_AT_KEY);
+      }
+      setIsAdminState(value);
+    } catch (error) {
+      console.error('[AdminContext] Error saving admin status:', error);
+    }
+  }, []);
+
+  const setAdminTabEnabled = useCallback(async (value: boolean) => {
+    try {
+      await AsyncStorage.setItem(ADMIN_TAB_ENABLED_KEY, String(value));
+      setIsAdminTabEnabledState(value);
+    } catch (error) {
+      console.error('[AdminContext] Error saving admin tab preference:', error);
+    }
+  }, []);
+
+  const verifyAdminStatus = useCallback(async (): Promise<boolean> => {
     if (!isSupabaseConfigured) {
       console.error('[AdminContext] Supabase not configured - cannot verify admin status');
       return false;
     }
 
-    // Diagnostic: surface runtime types for supabase auth surface in Release.
-    // eslint-disable-next-line no-console
-    console.debug('[admin.debug] verifyAdminStatus types', {
-      supabaseType: typeof supabase,
-      authType: typeof (supabase as any).auth,
-      getSessionType: typeof (supabase as any).auth?.getSession,
-      onAuthStateChangeType: typeof (supabase as any).auth?.onAuthStateChange,
-    });
-
     try {
-      // Get current session
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
+
       if (sessionError || !session) {
         await setIsAdmin(false);
         return false;
@@ -51,20 +65,29 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
 
       // Check app_metadata for admin role (not user_metadata, which is user-writable)
       const isAdminUser = session.user?.app_metadata?.role === 'admin';
-      
+
       if (isAdminUser) {
         await AsyncStorage.setItem(ADMIN_VERIFIED_AT_KEY, Date.now().toString());
       }
-      
+
       await setIsAdmin(isAdminUser);
       return isAdminUser;
-      
+
     } catch (error) {
       console.error('[AdminContext] Error verifying admin status:', error);
       await setIsAdmin(false);
       return false;
     }
-  };
+  }, [setIsAdmin]);
+
+  // Refs so the long-lived onAuthStateChange subscription always calls the
+  // current function, not the one captured at mount.
+  const verifyAdminStatusRef = useRef(verifyAdminStatus);
+  verifyAdminStatusRef.current = verifyAdminStatus;
+  const setIsAdminRef = useRef(setIsAdmin);
+  setIsAdminRef.current = setIsAdmin;
+  const setAdminTabEnabledRef = useRef(setAdminTabEnabled);
+  setAdminTabEnabledRef.current = setAdminTabEnabled;
 
   // Load and verify admin status on mount
   useEffect(() => {
@@ -80,24 +103,24 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
 
         const stored = await AsyncStorage.getItem(ADMIN_KEY);
         const verifiedAt = await AsyncStorage.getItem(ADMIN_VERIFIED_AT_KEY);
-        
+
         if (stored === 'true' && verifiedAt) {
           const verifiedTime = parseInt(verifiedAt, 10);
           const isExpired = Date.now() - verifiedTime > VERIFICATION_EXPIRY;
-          
+
           if (!isExpired) {
             // Use cached value if recent
             setIsAdminState(true);
             setIsLoading(false);
             // Still verify in background
-            verifyAdminStatus();
+            verifyAdminStatusRef.current();
             return;
           }
         }
-        
+
         // Verify with backend if cache expired or not found
-        await verifyAdminStatus();
-        
+        await verifyAdminStatusRef.current();
+
       } catch (error) {
         console.error('[AdminContext] Error loading admin status:', error);
       } finally {
@@ -111,17 +134,22 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!isSupabaseConfigured) return;
 
-    const ret = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_OUT') {
-        await setIsAdmin(false);
-        // Reset admin tab visibility preference on sign out for all users.
-        // This ensures the admin tab is hidden on the next sign in (initial login behavior).
-        await setAdminTabEnabled(false);
-      } else if (event === 'SIGNED_IN') {
-        await setAdminTabEnabled(false);
-        await verifyAdminStatus();
-      } else if (event === 'TOKEN_REFRESHED') {
-        await verifyAdminStatus();
+    const ret = supabase.auth.onAuthStateChange(async (event, _session) => {
+      try {
+        if (event === 'SIGNED_OUT') {
+          await setIsAdminRef.current(false);
+          // Reset admin tab visibility preference on sign out for all users.
+          // This ensures the admin tab is hidden on the next sign in (initial login behavior).
+          await setAdminTabEnabledRef.current(false);
+        } else if (event === 'SIGNED_IN') {
+          await setAdminTabEnabledRef.current(false);
+          await verifyAdminStatusRef.current();
+        }
+        // TOKEN_REFRESHED is intentionally NOT handled here. Token refresh does
+        // not change admin role, and handling it caused a TypeError crash after
+        // the first token expiry (~1 hour) due to stale closures in the callback.
+      } catch (e) {
+        console.error('[AdminContext] Error handling auth state change:', e);
       }
     });
 
@@ -136,28 +164,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         // Swallow unsubscribe errors - best effort cleanup
       }
     };
-  }, []);
-
-  const setIsAdmin = async (value: boolean) => {
-    try {
-      await AsyncStorage.setItem(ADMIN_KEY, String(value));
-      if (!value) {
-        await AsyncStorage.removeItem(ADMIN_VERIFIED_AT_KEY);
-      }
-      setIsAdminState(value);
-    } catch (error) {
-      console.error('[AdminContext] Error saving admin status:', error);
-    }
-  };
-
-  const setAdminTabEnabled = async (value: boolean) => {
-    try {
-      await AsyncStorage.setItem(ADMIN_TAB_ENABLED_KEY, String(value));
-      setIsAdminTabEnabledState(value);
-    } catch (error) {
-      console.error('[AdminContext] Error saving admin tab preference:', error);
-    }
-  };
+  }, [isSupabaseConfigured]);
 
   return (
     <AdminContext.Provider value={{ isAdmin, isAdminTabEnabled, isLoading, setIsAdmin, setAdminTabEnabled, verifyAdminStatus }}>
