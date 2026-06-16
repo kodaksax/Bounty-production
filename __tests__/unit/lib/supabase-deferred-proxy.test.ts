@@ -25,14 +25,10 @@ describe('makeDeferredProxy pre-resolution call safety', () => {
 
     const proxy = makeDeferredProxy(() => targetPromise as Promise<object>, 'test') as any;
 
-    // Access a nested method before the underlying client has resolved.
-    const method = proxy.auth.onAuthStateChange;
-    expect(typeof method).toBe('function');
-
-    // Invoking it before resolution must not throw synchronously.
+    // Invoking a nested method before resolution must not throw synchronously.
     let result: any;
     expect(() => {
-      result = method(() => {});
+      result = proxy.auth.onAuthStateChange(() => {});
     }).not.toThrow();
 
     // The pre-resolution call returns a thenable that settles after resolution.
@@ -52,9 +48,9 @@ describe('makeDeferredProxy pre-resolution call safety', () => {
     const from = jest.fn(() => 'table-builder');
     const proxy = makeDeferredProxy(async () => ({ from }), 'test') as any;
 
-    // Allow the proxy to resolve its real target.
-    await Promise.resolve();
-    await Promise.resolve();
+    // Await the proxy directly — its `then` trap delegates to getRealTarget(),
+    // so this deterministically waits for the real target to be resolved.
+    await proxy;
 
     const builder = proxy.from('notifications');
     expect(from).toHaveBeenCalledWith('notifications');

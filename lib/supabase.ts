@@ -303,11 +303,18 @@ export function makeDeferredProxy<T extends object>(
         return subProxy;
       }
 
-      // 7. Return a stable deferred proxy for the sub-property
+      // 7. Return a stable deferred proxy for the sub-property.
+      // Bind function-valued properties to their parent so every invocation
+      // path (direct call, `apply`, or queued pre-resolution call) uses the
+      // correct receiver. A bound function ignores the `this` supplied to
+      // `apply`, so even `resolvedTarget.apply(resolvedTarget, args)` in the
+      // `apply` trap below behaves correctly when `resolvedTarget` is a
+      // method bound here.
       const subProxy = makeDeferredProxy(
         async () => {
           const target = await getRealTarget();
-          return (target as any)[prop];
+          const val = (target as any)[prop];
+          return typeof val === 'function' ? val.bind(target) : val;
         },
         `${path}.${String(prop)}`
       );
@@ -329,7 +336,9 @@ export function makeDeferredProxy<T extends object>(
             if (typeof target !== 'function') {
               throw new Error(`Target at ${path} is not a function`);
             }
-            // Use the target itself as the `this` context for SDK compliance
+            // Function-valued sub-properties are already bound to their parent
+            // (see step 7 in the `get` trap), so `apply` inherits the correct
+            // receiver regardless of what we pass as `thisArg`.
             resolve((target as any).apply(target, args));
           } catch (err) {
             reject(err);
