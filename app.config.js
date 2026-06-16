@@ -17,7 +17,7 @@ const APP_ENV = process.env.APP_ENV || process.env.EXPO_PUBLIC_ENVIRONMENT || 'd
 if (!process.env.APP_ENV && process.env.EAS_BUILD_PROFILE === 'production') {
   throw new Error(
     '[FATAL] APP_ENV is not set but EAS_BUILD_PROFILE is production. ' +
-    'Ensure APP_ENV=production is defined in the eas.json production env block and EAS secrets are configured.'
+      'Ensure APP_ENV=production is defined in the eas.json production env block and EAS secrets are configured.'
   );
 }
 
@@ -56,12 +56,42 @@ if (APP_ENV === 'production') {
   }
 }
 
+// Guard against the wrong Supabase project being baked into a bundle.
+// Ref map is loaded from the single source of truth shared with lib/config/env-guard.ts.
+// To add/change an environment, edit lib/config/supabase-refs.json only.
+{
+  const { byAppEnv: APP_ENV_TO_SUPABASE_REF } = require('./lib/config/supabase-refs.json');
+  const expectedRef = APP_ENV_TO_SUPABASE_REF[APP_ENV];
+  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+  let actualRef;
+  try {
+    actualRef = supabaseUrl ? new URL(supabaseUrl).hostname.split('.')[0] : undefined;
+  } catch {
+    actualRef = undefined;
+  }
+  if (expectedRef && actualRef && actualRef !== expectedRef) {
+    const message =
+      `[env-guard] APP_ENV="${APP_ENV}" expects Supabase project "${expectedRef}" ` +
+      `but EXPO_PUBLIC_SUPABASE_URL resolved to "${actualRef}". ` +
+      `Check your .env.${APP_ENV} file and how this bundle is being built/updated.`;
+    // A production bundle pointing at the wrong project is catastrophic
+    // (real money/PII) — abort. Lower environments only warn so local
+    // experiments aren't blocked.
+    if (APP_ENV === 'production') {
+      throw new Error(`[FATAL] ${message}`);
+    } else {
+      console.warn(`[build-time warning] ${message}`);
+    }
+  }
+}
+
 // Detect likely secret-like env keys and warn at build-time if any are present.
 // We intentionally only check variable NAMES (not values) and ignore EXPO_PUBLIC_* keys.
 {
-  const secretNamePattern = /SECRET|SERVICE_ROLE|PRIVATE_KEY|SERVICE_KEY|SERVICE_ACCOUNT|_TOKEN|_PASSWORD/i;
+  const secretNamePattern =
+    /SECRET|SERVICE_ROLE|PRIVATE_KEY|SERVICE_KEY|SERVICE_ACCOUNT|_TOKEN|_PASSWORD/i;
   const unsafe = Object.keys(process.env).filter(
-    (k) => secretNamePattern.test(k) && !k.startsWith('EXPO_PUBLIC_')
+    k => secretNamePattern.test(k) && !k.startsWith('EXPO_PUBLIC_')
   );
   if (unsafe.length > 0) {
     // Short, non-sensitive warning: list variable NAMES only
@@ -100,33 +130,46 @@ module.exports = ({ config }) => {
         (config.android && config.android.googleServicesFile) ||
         './google-services.json',
       // Override Android adaptive icon foreground for dev/preview builds.
-      ...(envIcon ? {
-        adaptiveIcon: {
-          ...((config.android && config.android.adaptiveIcon) || {}),
-          foregroundImage: envIcon,
-        },
-      } : {}),
+      ...(envIcon
+        ? {
+            adaptiveIcon: {
+              ...((config.android && config.android.adaptiveIcon) || {}),
+              foregroundImage: envIcon,
+            },
+          }
+        : {}),
     },
     extra: {
       ...(config.extra || {}),
       APP_ENV,
       EXPO_PUBLIC_API_URL:
-        process.env.EXPO_PUBLIC_API_URL || process.env.EXPO_PUBLIC_API_BASE_URL || (config.extra && config.extra.EXPO_PUBLIC_API_URL) || null,
+        process.env.EXPO_PUBLIC_API_URL ||
+        process.env.EXPO_PUBLIC_API_BASE_URL ||
+        (config.extra && config.extra.EXPO_PUBLIC_API_URL) ||
+        null,
       EXPO_PUBLIC_SUPABASE_URL:
-        process.env.EXPO_PUBLIC_SUPABASE_URL || (config.extra && config.extra.EXPO_PUBLIC_SUPABASE_URL) || null,
+        process.env.EXPO_PUBLIC_SUPABASE_URL ||
+        (config.extra && config.extra.EXPO_PUBLIC_SUPABASE_URL) ||
+        null,
       EXPO_PUBLIC_SUPABASE_ANON_KEY:
-        process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || (config.extra && config.extra.EXPO_PUBLIC_SUPABASE_ANON_KEY) || null,
+        process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
+        (config.extra && config.extra.EXPO_PUBLIC_SUPABASE_ANON_KEY) ||
+        null,
       EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL:
-        process.env.EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL || (config.extra && config.extra.EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL) || null,
+        process.env.EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL ||
+        (config.extra && config.extra.EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL) ||
+        null,
       EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY:
-        process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || (config.extra && config.extra.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY) || null,
+        process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ||
+        (config.extra && config.extra.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY) ||
+        null,
     },
   };
 
   // Disable Android release lint checks to prevent Maven Central rate-limit
   // failures (HTTP 429) during generateReleaseLintModel tasks, which download
   // lint-only JARs not needed for AAB/APK output.
-  result = withAppBuildGradle(result, (c) => {
+  result = withAppBuildGradle(result, c => {
     if (!c.modResults.contents.includes('checkReleaseBuilds')) {
       c.modResults.contents = c.modResults.contents.replace(
         /android\s*\{/,

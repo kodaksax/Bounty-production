@@ -5,6 +5,7 @@ import {
     getRememberMePreference,
 } from './auth-session-storage';
 import { config } from './config';
+import { checkEnvironmentIntegrity } from './config/env-guard';
 
 // Use centralized frontend config for env access
 const supabaseUrl = config.supabase.url;
@@ -53,6 +54,40 @@ function validateSupabaseShape(obj: any): obj is SupabaseClient {
 
 async function initSupabase(): Promise<void> {
   if (realSupabase || !isSupabaseConfigured) return;
+
+  // HARD ENVIRONMENT GUARD — runs before any real client is created.
+  // The immutable build channel (baked into the native binary) is the source of
+  // truth for which environment this binary belongs to. If an OTA update shipped
+  // a bundle whose Supabase URL doesn't match the channel, refuse to create the
+  // real client and fall back to the inert stub. This is the safety net that
+  // would have prevented prod balances/transactions leaking into the dev project.
+  const integrity = checkEnvironmentIntegrity(supabaseUrl);
+  if (!integrity.ok) {
+    // eslint-disable-next-line no-console
+    console.error(
+      `[supabase] CRITICAL ENVIRONMENT MISMATCH — ${integrity.reason} ` +
+        `(channel=${integrity.channel}, expected=${integrity.expectedRef}, actual=${integrity.actualRef}). ` +
+        `Refusing to initialize the real Supabase client.`
+    );
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+      const Sentry = require('@sentry/react-native');
+      if (Sentry && typeof Sentry.captureMessage === 'function') {
+        Sentry.setContext?.('env_guard', {
+          channel: integrity.channel,
+          expectedRef: integrity.expectedRef,
+          actualRef: integrity.actualRef,
+        });
+        Sentry.captureMessage(`[env-guard] ${integrity.reason}`, 'fatal');
+      }
+    } catch {
+      // ignore if Sentry isn't available at startup
+    }
+    try { (supabaseEnv as any).mismatch = true; } catch {}
+    realSupabase = makeStubClient();
+    return;
+  }
+
   // Add safe, non-secret context to Sentry (best-effort) so errors during
   // early startup include whether Supabase envs were present.
   try {
