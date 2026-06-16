@@ -161,9 +161,10 @@ Deno.serve(async (req: Request) => {
 
     if (fetchErr) {
       console.error('[process-notification] fetch error', fetchErr)
+      const nextAttempts = ((rows && typeof rows.attempts === 'number') ? rows.attempts : outboxAttempts) + 1
       const { error: markFailedErr } = await supabaseAdmin
         .from('notifications_outbox')
-        .update({ status: 'failed', last_error: String(fetchErr), attempts: outboxAttempts + 1 })
+        .update({ status: 'failed', last_error: String(fetchErr), attempts: nextAttempts })
         .eq('id', id)
       if (markFailedErr) {
         console.error('[process-notification] failed to mark outbox row failed after fetch error', markFailedErr)
