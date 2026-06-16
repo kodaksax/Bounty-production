@@ -161,7 +161,17 @@ Deno.serve(async (req: Request) => {
 
     if (fetchErr) {
       console.error('[process-notification] fetch error', fetchErr)
-      const nextAttempts = ((rows && typeof rows.attempts === 'number') ? rows.attempts : outboxAttempts) + 1
+      let nextAttempts = outboxAttempts + 1
+      const { data: attemptsRow, error: attemptsErr } = await supabaseAdmin
+        .from('notifications_outbox')
+        .select('attempts')
+        .eq('id', id)
+        .maybeSingle()
+      if (attemptsErr) {
+        console.error('[process-notification] failed to refresh attempts after fetch error', attemptsErr)
+      } else if (attemptsRow && typeof attemptsRow.attempts === 'number') {
+        nextAttempts = attemptsRow.attempts + 1
+      }
       const { error: markFailedErr } = await supabaseAdmin
         .from('notifications_outbox')
         .update({ status: 'failed', last_error: String(fetchErr), attempts: nextAttempts })
