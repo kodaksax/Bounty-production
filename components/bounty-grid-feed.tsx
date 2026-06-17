@@ -1,8 +1,10 @@
 "use client"
 
 import React, { useEffect, useMemo, useRef } from "react"
-import { Animated, FlatList, StyleSheet, Text, View } from "react-native"
-import { SPACING, TYPOGRAPHY } from '../lib/constants/accessibility'
+import { Animated, Dimensions, FlatList, ScrollView, StyleSheet, View } from "react-native"
+import { SPACING } from '../lib/constants/accessibility'
+
+const FEATURED_CARD_WIDTH = Dimensions.get('window').width * 0.78
 import type { Bounty } from '../lib/services/database.types'
 import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 import type { AppTheme } from '../lib/themes/types'
@@ -78,33 +80,43 @@ function getBountyCategory(bounty: Bounty): string {
 
 // ── Data shaping ───────────────────────────────────────────────────────────
 
-type HeaderRow   = { type: 'header';   categoryKey: string }
-type FeaturedRow = { type: 'featured'; item: Bounty; categoryKey: string }
-type PairRow     = { type: 'pair';     left: Bounty; right: Bounty | null; categoryKey: string }
-type GridRow     = HeaderRow | FeaturedRow | PairRow
+type FeaturedCarouselRow = { type: 'featuredCarousel'; items: Array<{ item: Bounty; categoryKey: string }> }
+type PairRow             = { type: 'pair'; left: Bounty; right: Bounty | null; categoryKey: string }
+type GridRow             = FeaturedCarouselRow | PairRow
+
+const FEATURED_COUNT = 3
 
 function buildGridRows(bounties: Bounty[]): GridRow[] {
-  const grouped: Record<string, Bounty[]> = {}
-  for (const b of bounties) {
-    const cat = getBountyCategory(b)
-    if (!grouped[cat]) grouped[cat] = []
-    grouped[cat].push(b)
-  }
+  // Sort globally: highest price first, honor (no price) last
+  const sorted = [...bounties].sort((a, b) => {
+    const aHonor = Boolean(a.is_for_honor)
+    const bHonor = Boolean(b.is_for_honor)
+    if (aHonor && !bHonor) return 1
+    if (!aHonor && bHonor) return -1
+    return Number(b.amount || 0) - Number(a.amount || 0)
+  })
+
+  const featured = sorted.slice(0, FEATURED_COUNT)
+  const rest     = sorted.slice(FEATURED_COUNT)
 
   const rows: GridRow[] = []
-  for (const catKey of CATEGORY_ORDER) {
-    const raw = grouped[catKey]
-    if (!raw?.length) continue
 
-    // Sort descending by price so the featured slot is always the highest-paying
-    const items = [...raw].sort((a, b) => Number(b.amount) - Number(a.amount))
-
-    rows.push({ type: 'header', categoryKey: catKey })
-    rows.push({ type: 'featured', item: items[0], categoryKey: catKey })
-    for (let i = 1; i < items.length; i += 2) {
-      rows.push({ type: 'pair', left: items[i], right: items[i + 1] ?? null, categoryKey: catKey })
-    }
+  if (featured.length > 0) {
+    rows.push({
+      type: 'featuredCarousel',
+      items: featured.map(b => ({ item: b, categoryKey: getBountyCategory(b) })),
+    })
   }
+
+  for (let i = 0; i < rest.length; i += 2) {
+    rows.push({
+      type: 'pair',
+      left: rest[i],
+      right: rest[i + 1] ?? null,
+      categoryKey: getBountyCategory(rest[i]),
+    })
+  }
+
   return rows
 }
 
@@ -141,7 +153,7 @@ function AnimatedRow({ index, children }: AnimatedRowProps) {
 interface BountyGridFeedProps {
   bounties: Bounty[]
   bountyDistances: Map<string, number | null>
-  listHeader?: React.ReactNode
+  listHeader?: React.ReactElement
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
@@ -155,29 +167,36 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
   const renderRow = ({ item, index }: { item: GridRow; index: number }) => {
     let content: React.ReactNode
 
-    if (item.type === 'header') {
-      const def = CATEGORY_DEFS[item.categoryKey]
+    if (item.type === 'featuredCarousel') {
       content = (
-        <Text style={s.sectionTitle}>{def.label}</Text>
-      )
-    } else if (item.type === 'featured') {
-      const def = CATEGORY_DEFS[item.categoryKey]
-      const b = item.item
-      content = (
-        <BountyFeaturedItem
-          id={b.id}
-          title={b.title}
-          username={b.username}
-          price={Number(b.amount)}
-          distance={bountyDistances.get(String(b.id)) ?? null}
-          description={b.description}
-          isForHonor={Boolean(b.is_for_honor)}
-          user_id={b.user_id}
-          work_type={b.work_type}
-          poster_avatar={b.poster_avatar}
-          categoryColor={def.color}
-          categoryLabel={def.label}
-        />
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={s.carousel}
+          contentContainerStyle={s.carouselContent}
+        >
+          {item.items.map(({ item: b, categoryKey }) => {
+            const def = CATEGORY_DEFS[categoryKey]
+            return (
+              <View key={String(b.id)} style={{ width: FEATURED_CARD_WIDTH, height: 220 }}>
+                <BountyFeaturedItem
+                  id={b.id}
+                  title={b.title}
+                  username={b.username}
+                  price={Number(b.amount)}
+                  distance={bountyDistances.get(String(b.id)) ?? null}
+                  description={b.description}
+                  isForHonor={Boolean(b.is_for_honor)}
+                  user_id={b.user_id}
+                  work_type={b.work_type}
+                  poster_avatar={b.poster_avatar}
+                  categoryColor={def.color}
+                  categoryLabel={def.label}
+                />
+              </View>
+            )
+          })}
+        </ScrollView>
       )
     } else {
       const { left, right } = item
@@ -226,14 +245,12 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
     <FlatList
       data={rows}
       keyExtractor={(item, i) =>
-        item.type === 'header'   ? `h-${item.categoryKey}` :
-        item.type === 'featured' ? `f-${String(item.item.id)}` :
-        `p-${i}`
+        item.type === 'featuredCarousel' ? 'featured-carousel' : `p-${i}`
       }
       renderItem={renderRow}
       contentContainerStyle={s.list}
       showsVerticalScrollIndicator={false}
-      ListHeaderComponent={listHeader ? () => <>{listHeader}</> : undefined}
+      ListHeaderComponent={listHeader ?? undefined}
       removeClippedSubviews
       maxToRenderPerBatch={8}
       windowSize={7}
@@ -251,17 +268,18 @@ function makeStyles(t: AppTheme) {
       paddingBottom: 120,
       paddingTop: 8,
     },
+    carousel: {
+      marginHorizontal: -SPACING.SCREEN_HORIZONTAL,
+      marginBottom: 14,
+    },
+    carouselContent: {
+      paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
+      gap: 12,
+    },
     pairRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       marginBottom: 10,
-    },
-    sectionTitle: {
-      fontSize: 35,
-      fontWeight: 'bold',
-      color: t.text,
-      marginTop: 24,
-      marginBottom: 12,
     },
   })
 }

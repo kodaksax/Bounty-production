@@ -71,7 +71,7 @@ function BountyFeaturedItemComponent({
 
   return (
     <>
-      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <Animated.View style={{ transform: [{ scale: scaleAnim }], flex: 1 }}>
       <TouchableOpacity
         activeOpacity={0.82}
         style={s.card}
@@ -173,6 +173,7 @@ export const BountyFeaturedItem = React.memo(BountyFeaturedItemComponent, (prev,
 function makeStyles(t: AppTheme) {
   return StyleSheet.create({
     card: {
+      flex: 1,
       backgroundColor: t.isDark ? 'rgba(5,150,105,0.1)' : 'rgba(5,150,105,0.05)',
       borderRadius: 16,
       borderWidth: 1,
@@ -180,7 +181,6 @@ function makeStyles(t: AppTheme) {
       borderTopWidth: 3,
       borderTopColor: '#059669',
       overflow: 'hidden',
-      marginBottom: 10,
       shadowColor: '#059669',
       shadowOffset: { width: 0, height: 5 },
       shadowOpacity: t.isDark ? 0.35 : 0.18,
