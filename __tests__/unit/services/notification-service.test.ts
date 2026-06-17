@@ -392,10 +392,21 @@ describe('NotificationService', () => {
   // ─── registerPushToken ─────────────────────────────────────────────────────
 
   describe('registerPushToken', () => {
-    it('should return early when there is no active session', async () => {
+    it('should queue token and set deferred registration when there is no active session', async () => {
+      AsyncStorage.getItem.mockResolvedValue(null);
+      AsyncStorage.setItem.mockResolvedValue(undefined);
+
       await notificationService.registerPushToken('ExponentPushToken[tok]');
 
       expect((global as any).fetch).not.toHaveBeenCalled();
+      expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+        'notifications:pending_tokens',
+        expect.stringContaining('ExponentPushToken[tok]')
+      );
+      expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+        'notifications:register_on_signin',
+        'true'
+      );
     });
 
     it('should POST the token with correct body and auth header', async () => {

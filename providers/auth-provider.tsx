@@ -602,7 +602,9 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         devLog('[AuthProvider] Token refreshed by Supabase')
       }
       // If a deferred push registration was requested during onboarding, run it now.
-      if (_event === 'SIGNED_IN') {
+      // Also run on INITIAL_SESSION to cover cold starts where the auth session
+      // restores after notification permission/token retrieval already happened.
+      if (_event === 'SIGNED_IN' || _event === 'INITIAL_SESSION') {
         try {
           const deferred = await AsyncStorage.getItem(DEFERRED_PUSH_REGISTRATION_KEY)
           if (deferred && session?.user) {
