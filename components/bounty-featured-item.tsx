@@ -106,8 +106,13 @@ function BountyFeaturedItemComponent({
             <Text style={s.coverChipText}>{categoryLabel}</Text>
           </View>
 
-          {/* Info below cover */}
-          <View style={s.info}>
+          {/* Info below cover — banner green */}
+          <LinearGradient
+            colors={['#064e3b', '#059669']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={s.info}
+          >
             <Text style={s.title} numberOfLines={2}>{title}</Text>
             {description ? (
               <Text style={s.description} numberOfLines={1}>{description}</Text>
@@ -115,7 +120,7 @@ function BountyFeaturedItemComponent({
             <View style={s.metaRow}>
               {isForHonor ? (
                 <View style={s.honorBadge}>
-                  <MaterialIcons name="favorite" size={11} color="#052e1b" />
+                  <MaterialIcons name="favorite" size={11} color="#064e3b" />
                   <Text style={s.honorText}>For Honor</Text>
                 </View>
               ) : (
@@ -123,7 +128,7 @@ function BountyFeaturedItemComponent({
               )}
               <Text style={s.username} numberOfLines={1}>@{resolvedUsername}</Text>
             </View>
-          </View>
+          </LinearGradient>
         </TouchableOpacity>
       </Animated.View>
 
@@ -189,14 +194,14 @@ function makeStyles(t: AppTheme) {
     },
     title: {
       fontSize: 15,
-      fontWeight: '700',
-      color: t.text,
+      fontWeight: '800',
+      color: '#ffffff',
       lineHeight: 21,
       letterSpacing: -0.2,
     },
     description: {
       fontSize: 12,
-      color: t.textSecondary,
+      color: 'rgba(255,255,255,0.72)',
       lineHeight: 17,
     },
     metaRow: {
@@ -208,25 +213,25 @@ function makeStyles(t: AppTheme) {
     price: {
       fontSize: 16,
       fontWeight: '800',
-      color: t.text,
+      color: '#fcd34d',
     },
     honorBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: '#9CA3AF',
+      backgroundColor: 'rgba(255,255,255,0.88)',
       borderRadius: 999,
       paddingHorizontal: 8,
       paddingVertical: 3,
       gap: 4,
     },
     honorText: {
-      color: '#052e1b',
+      color: '#064e3b',
       fontWeight: '800',
       fontSize: 11,
     },
     username: {
       fontSize: 12,
-      color: t.textSecondary,
+      color: 'rgba(255,255,255,0.60)',
     },
   })
 }
