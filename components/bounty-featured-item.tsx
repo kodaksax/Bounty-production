@@ -1,16 +1,17 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
-import { useRouter } from 'expo-router'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { LinearGradient } from 'expo-linear-gradient'
-import { Animated, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Animated, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
 import { useHapticFeedback } from '../lib/haptic-feedback'
+import type { AttachmentMeta } from '../lib/services/database.types'
 import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 import type { AppTheme } from '../lib/themes/types'
 import { BountyDetailModal } from "./bountydetailmodal"
-import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar'
+
+const COVER_HEIGHT = 165
 
 export interface BountyFeaturedItemProps {
   id: string | number
@@ -25,22 +26,21 @@ export interface BountyFeaturedItemProps {
   poster_avatar?: string
   categoryColor: string
   categoryLabel: string
+  attachments_json?: string
 }
 
 function BountyFeaturedItemComponent({
   id, title, username, price, distance, description,
   isForHonor, user_id, work_type, poster_avatar,
-  categoryColor, categoryLabel,
+  categoryColor, categoryLabel, attachments_json,
 }: BountyFeaturedItemProps) {
   const { theme } = useAppThemeContext()
   const s = useMemo(() => makeStyles(theme), [theme])
 
   const [showDetail, setShowDetail] = useState(false)
-  const router = useRouter()
   const { triggerHaptic } = useHapticFeedback()
   const { profile: posterProfile, loading: profileLoading } = useNormalizedProfile(user_id ?? undefined)
   const [resolvedUsername, setResolvedUsername] = useState<string>(username || 'Loading...')
-  const avatarUrl = poster_avatar || posterProfile?.avatar
 
   useEffect(() => {
     if (username) { setResolvedUsername(username); return }
@@ -48,16 +48,10 @@ function BountyFeaturedItemComponent({
     setResolvedUsername(profileLoading ? 'Loading...' : 'Anonymous')
   }, [username, posterProfile?.username, profileLoading])
 
-  const handleAvatarPress = useCallback((e: any) => {
-    e.stopPropagation()
-    triggerHaptic('light')
-    if (user_id) router.push(`/profile/${user_id}`)
-  }, [user_id, router, triggerHaptic])
-
   const scaleAnim = useRef(new Animated.Value(1)).current
 
   const handlePressIn = useCallback(() => {
-    Animated.spring(scaleAnim, { toValue: 1.02, useNativeDriver: true, speed: 24, bounciness: 5 }).start()
+    Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true, speed: 24, bounciness: 5 }).start()
   }, [scaleAnim])
 
   const handlePressOut = useCallback(() => {
@@ -69,64 +63,59 @@ function BountyFeaturedItemComponent({
     setShowDetail(true)
   }, [triggerHaptic])
 
+  const firstImageUri = useMemo(() => {
+    if (!attachments_json) return null
+    try {
+      const attachments: AttachmentMeta[] = JSON.parse(attachments_json)
+      const found = attachments.find(a => a.remoteUri && a.mimeType?.startsWith('image/'))
+      return found?.remoteUri ?? null
+    } catch {
+      return null
+    }
+  }, [attachments_json])
+
   return (
     <>
       <Animated.View style={{ transform: [{ scale: scaleAnim }], flex: 1 }}>
-      <TouchableOpacity
-        activeOpacity={0.82}
-        style={s.card}
-        onPress={handlePress}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        accessibilityRole="button"
-        accessibilityLabel={`Featured: ${title} by ${resolvedUsername}`}
-        accessibilityHint="Tap to view bounty details"
-      >
-        {/* Glass sheen — diagonal highlight across the top half */}
-        <LinearGradient
-          colors={['rgba(255,255,255,0.09)', 'rgba(255,255,255,0)']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-          pointerEvents="none"
-        />
-        <View style={s.content}>
-          {/* Header row: category chip + avatar */}
-          <View style={s.header}>
-            <View style={[s.categoryChip, { backgroundColor: categoryColor + '22', borderColor: categoryColor + '55' }]}>
-              <Text style={[s.categoryChipText, { color: categoryColor }]}>{categoryLabel}</Text>
-            </View>
-            <TouchableOpacity
-              onPress={handleAvatarPress}
-              disabled={!user_id}
-              accessibilityRole="button"
-              accessibilityLabel={`View ${resolvedUsername}'s profile`}
+        <TouchableOpacity
+          activeOpacity={1}
+          style={s.card}
+          onPress={handlePress}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+          accessibilityRole="button"
+          accessibilityLabel={`Featured: ${title} by ${resolvedUsername}`}
+          accessibilityHint="Tap to view bounty details"
+        >
+          {/* Cover — image or gradient placeholder */}
+          {firstImageUri ? (
+            <Image source={{ uri: firstImageUri }} style={s.cover} resizeMode="cover" />
+          ) : (
+            <LinearGradient
+              colors={[categoryColor + 'cc', categoryColor + '66', '#064e3b']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={s.cover}
             >
-              <Avatar style={[s.avatar, { borderColor: theme.border }]}>
-                <AvatarImage src={avatarUrl || "/placeholder.svg?height=32&width=32"} alt={resolvedUsername} />
-                <AvatarFallback style={s.avatarFallback}>
-                  <Text style={s.avatarText}>
-                    {resolvedUsername.substring(0, 2).toUpperCase()}
-                  </Text>
-                </AvatarFallback>
-              </Avatar>
-            </TouchableOpacity>
+              <MaterialIcons name="work-outline" size={40} color="rgba(255,255,255,0.25)" />
+            </LinearGradient>
+          )}
+
+          {/* Category chip overlaid on image bottom-left */}
+          <View style={[s.coverChip, { backgroundColor: categoryColor }]}>
+            <Text style={s.coverChipText}>{categoryLabel}</Text>
           </View>
 
-          {/* Title — larger than grid cards */}
-          <Text style={s.title} numberOfLines={2}>{title}</Text>
-
-          {/* Description preview */}
-          {description ? (
-            <Text style={s.description} numberOfLines={2}>{description}</Text>
-          ) : null}
-
-          {/* Footer: price + username + CTA */}
-          <View style={s.footer}>
-            <View style={s.footerMeta}>
+          {/* Info below cover */}
+          <View style={s.info}>
+            <Text style={s.title} numberOfLines={2}>{title}</Text>
+            {description ? (
+              <Text style={s.description} numberOfLines={1}>{description}</Text>
+            ) : null}
+            <View style={s.metaRow}>
               {isForHonor ? (
                 <View style={s.honorBadge}>
-                  <MaterialIcons name="favorite" size={12} color="#052e1b" />
+                  <MaterialIcons name="favorite" size={11} color="#052e1b" />
                   <Text style={s.honorText}>For Honor</Text>
                 </View>
               ) : (
@@ -134,19 +123,8 @@ function BountyFeaturedItemComponent({
               )}
               <Text style={s.username} numberOfLines={1}>@{resolvedUsername}</Text>
             </View>
-            <TouchableOpacity
-              style={s.applyBtn}
-              onPress={handlePress}
-              activeOpacity={0.85}
-              accessibilityRole="button"
-              accessibilityLabel="View and apply for this bounty"
-            >
-              <Text style={s.applyBtnText}>View & Apply</Text>
-              <MaterialIcons name="arrow-forward" size={14} color="#fff" />
-            </TouchableOpacity>
           </View>
-        </View>
-      </TouchableOpacity>
+        </TouchableOpacity>
       </Animated.View>
 
       {showDetail && (
@@ -167,94 +145,70 @@ export const BountyFeaturedItem = React.memo(BountyFeaturedItemComponent, (prev,
   prev.title === next.title &&
   prev.price === next.price &&
   prev.user_id === next.user_id &&
-  prev.categoryColor === next.categoryColor
+  prev.categoryColor === next.categoryColor &&
+  prev.attachments_json === next.attachments_json
 )
 
 function makeStyles(t: AppTheme) {
   return StyleSheet.create({
     card: {
       flex: 1,
-      backgroundColor: t.isDark ? 'rgba(5,150,105,0.1)' : 'rgba(5,150,105,0.05)',
+      backgroundColor: t.surface,
       borderRadius: 16,
-      borderWidth: 1,
-      borderColor: t.isDark ? 'rgba(110,231,183,0.28)' : 'rgba(5,150,105,0.22)',
-      borderTopWidth: 3,
-      borderTopColor: '#059669',
       overflow: 'hidden',
-      shadowColor: '#059669',
-      shadowOffset: { width: 0, height: 5 },
-      shadowOpacity: t.isDark ? 0.35 : 0.18,
-      shadowRadius: 16,
-      elevation: 6,
-    },
-    content: {
-      flex: 1,
-      padding: 14,
-    },
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 10,
-    },
-    categoryChip: {
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 20,
       borderWidth: 1,
+      borderColor: t.border,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: t.isDark ? 0.3 : 0.1,
+      shadowRadius: 8,
+      elevation: 4,
     },
-    categoryChipText: {
-      fontSize: 11,
-      fontWeight: '700',
-    },
-    avatar: {
-      width: 32,
-      height: 32,
-      borderRadius: 16,
-      borderWidth: 2,
-    },
-    avatarFallback: {
-      backgroundColor: t.surfaceSecondary,
-      width: 32,
-      height: 32,
-      borderRadius: 16,
+    cover: {
+      width: '100%',
+      height: COVER_HEIGHT,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    avatarText: {
+    coverChip: {
+      position: 'absolute',
+      top: COVER_HEIGHT - 28,
+      left: 12,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 20,
+    },
+    coverChipText: {
       fontSize: 11,
-      fontWeight: '800',
-      color: t.text,
+      fontWeight: '700',
+      color: '#fff',
+    },
+    info: {
+      padding: 12,
+      gap: 4,
     },
     title: {
-      fontSize: 17,
-      fontWeight: '800',
+      fontSize: 15,
+      fontWeight: '700',
       color: t.text,
-      lineHeight: 23,
-      marginBottom: 6,
-      letterSpacing: -0.3,
+      lineHeight: 21,
+      letterSpacing: -0.2,
     },
     description: {
-      fontSize: 13,
+      fontSize: 12,
       color: t.textSecondary,
-      lineHeight: 18,
-      marginBottom: 12,
+      lineHeight: 17,
     },
-    footer: {
+    metaRow: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingTop: 10,
-      borderTopWidth: 1,
-      borderTopColor: t.surfaceSecondary,
-    },
-    footerMeta: {
-      gap: 2,
+      marginTop: 2,
     },
     price: {
-      fontSize: 20,
+      fontSize: 16,
       fontWeight: '800',
-      color: '#fcd34d',
+      color: t.text,
     },
     honorBadge: {
       flexDirection: 'row',
@@ -271,22 +225,8 @@ function makeStyles(t: AppTheme) {
       fontSize: 11,
     },
     username: {
-      fontSize: 11,
+      fontSize: 12,
       color: t.textSecondary,
-    },
-    applyBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      paddingHorizontal: 14,
-      paddingVertical: 10,
-      borderRadius: 10,
-      backgroundColor: '#059669',
-    },
-    applyBtnText: {
-      color: '#fff',
-      fontWeight: '700',
-      fontSize: 13,
     },
   })
 }

@@ -178,7 +178,7 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
           {item.items.map(({ item: b, categoryKey }) => {
             const def = CATEGORY_DEFS[categoryKey]
             return (
-              <View key={String(b.id)} style={{ width: FEATURED_CARD_WIDTH, height: 220 }}>
+              <View key={String(b.id)} style={{ width: FEATURED_CARD_WIDTH, height: 290 }}>
                 <BountyFeaturedItem
                   id={b.id}
                   title={b.title}
@@ -192,6 +192,7 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
                   poster_avatar={b.poster_avatar}
                   categoryColor={def.color}
                   categoryLabel={def.label}
+                  attachments_json={b.attachments_json}
                 />
               </View>
             )
