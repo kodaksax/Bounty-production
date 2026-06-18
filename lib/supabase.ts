@@ -5,6 +5,7 @@ import {
     getRememberMePreference,
 } from './auth-session-storage';
 import { config } from './config';
+import { checkEnvironmentIntegrity } from './config/env-guard';
 
 // Use centralized frontend config for env access
 const supabaseUrl = config.supabase.url;
@@ -53,6 +54,40 @@ function validateSupabaseShape(obj: any): obj is SupabaseClient {
 
 async function initSupabase(): Promise<void> {
   if (realSupabase || !isSupabaseConfigured) return;
+
+  // HARD ENVIRONMENT GUARD — runs before any real client is created.
+  // The immutable build channel (baked into the native binary) is the source of
+  // truth for which environment this binary belongs to. If an OTA update shipped
+  // a bundle whose Supabase URL doesn't match the channel, refuse to create the
+  // real client and fall back to the inert stub. This is the safety net that
+  // would have prevented prod balances/transactions leaking into the dev project.
+  const integrity = checkEnvironmentIntegrity(supabaseUrl);
+  if (!integrity.ok) {
+    // eslint-disable-next-line no-console
+    console.error(
+      `[supabase] CRITICAL ENVIRONMENT MISMATCH — ${integrity.reason} ` +
+        `(channel=${integrity.channel}, expected=${integrity.expectedRef}, actual=${integrity.actualRef}). ` +
+        `Refusing to initialize the real Supabase client.`
+    );
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+      const Sentry = require('@sentry/react-native');
+      if (Sentry && typeof Sentry.captureMessage === 'function') {
+        Sentry.setContext?.('env_guard', {
+          channel: integrity.channel,
+          expectedRef: integrity.expectedRef,
+          actualRef: integrity.actualRef,
+        });
+        Sentry.captureMessage(`[env-guard] ${integrity.reason}`, 'fatal');
+      }
+    } catch {
+      // ignore if Sentry isn't available at startup
+    }
+    try { (supabaseEnv as any).mismatch = true; } catch {}
+    realSupabase = makeStubClient();
+    return;
+  }
+
   // Add safe, non-secret context to Sentry (best-effort) so errors during
   // early startup include whether Supabase envs were present.
   try {
@@ -227,8 +262,10 @@ function makeStubClient(): any {
  * 1. Maintains a direct reference to the real target once resolved to avoid "proxy of proxy" chains.
  * 2. Caches sub-property proxies (like .auth) to ensure stable object identity.
  * 3. Correctly preserves `this` context for SDK methods.
+ *
+ * Exported for unit testing of the pre-resolution call path.
  */
-function makeDeferredProxy<T extends object>(
+export function makeDeferredProxy<T extends object>(
   getRealTarget: () => Promise<T>,
   path: string = 'supabase'
 ): T {
@@ -248,7 +285,17 @@ function makeDeferredProxy<T extends object>(
     }
   });
 
-  return new Proxy({} as T, {
+  // IMPORTANT: the Proxy target MUST be callable (a function), not a plain
+  // object. A Proxy only exposes a [[Call]] internal method when its target is
+  // callable; otherwise the `apply` trap below is dead code and invoking the
+  // proxy throws "TypeError: Object is not a function" (Hermes) the moment any
+  // chained Supabase method (e.g. `supabase.auth.onAuthStateChange(...)` or
+  // `supabase.from(...).select()`) is called before the real client has
+  // finished initializing. Using a no-op function target keeps the proxy
+  // callable so pre-resolution calls are correctly queued via `apply`.
+  const callableTarget = (() => {}) as unknown as T;
+
+  return new Proxy(callableTarget, {
     get(_t, prop) {
       // 1. Direct access to resolved target if available
       if (resolvedTarget) {
@@ -291,11 +338,18 @@ function makeDeferredProxy<T extends object>(
         return subProxy;
       }
 
-      // 7. Return a stable deferred proxy for the sub-property
+      // 7. Return a stable deferred proxy for the sub-property.
+      // Bind function-valued properties to their parent so every invocation
+      // path (direct call, `apply`, or queued pre-resolution call) uses the
+      // correct receiver. A bound function ignores the `this` supplied to
+      // `apply`, so even `resolvedTarget.apply(resolvedTarget, args)` in the
+      // `apply` trap below behaves correctly when `resolvedTarget` is a
+      // method bound here.
       const subProxy = makeDeferredProxy(
         async () => {
           const target = await getRealTarget();
-          return (target as any)[prop];
+          const val = (target as any)[prop];
+          return typeof val === 'function' ? val.bind(target) : val;
         },
         `${path}.${String(prop)}`
       );
@@ -317,7 +371,9 @@ function makeDeferredProxy<T extends object>(
             if (typeof target !== 'function') {
               throw new Error(`Target at ${path} is not a function`);
             }
-            // Use the target itself as the `this` context for SDK compliance
+            // Function-valued sub-properties are already bound to their parent
+            // (see step 7 in the `get` trap), so `apply` inherits the correct
+            // receiver regardless of what we pass as `thisArg`.
             resolve((target as any).apply(target, args));
           } catch (err) {
             reject(err);

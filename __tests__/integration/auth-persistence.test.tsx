@@ -11,6 +11,8 @@ jest.mock('../../lib/supabase', () => ({
     auth: {
       getSession: jest.fn(),
       refreshSession: jest.fn(),
+      startAutoRefresh: jest.fn(),
+      stopAutoRefresh: jest.fn(),
       onAuthStateChange: jest.fn(() => ({
         data: {
           subscription: {
@@ -77,6 +79,13 @@ try {
 }
 
 // Require modules after mocks so imports inside modules pick up jest mocks
+const reactNative = require('react-native');
+if (!reactNative.AppState || typeof reactNative.AppState.addEventListener !== 'function') {
+  reactNative.AppState = {
+    addEventListener: jest.fn(() => ({ remove: jest.fn() })),
+  };
+}
+
 const { supabase } = require('../../lib/supabase');
 const AuthProvider = require('../../providers/auth-provider').default;
 
@@ -195,6 +204,54 @@ describe('Authentication State Persistence', () => {
       await waitFor(() => {
         expect(supabase.auth.getSession).toHaveBeenCalled();
       });
+    });
+  });
+
+  describe('AppState-driven auto-refresh control', () => {
+    it('should start and stop Supabase auto-refresh on app state transitions', async () => {
+      let appStateCallback: ((state: string) => void) | undefined;
+      const removeAppStateListener = jest.fn();
+      const { AppState } = require('react-native');
+
+      (AppState.addEventListener as jest.Mock).mockImplementation((_event: string, callback: (state: string) => void) => {
+        appStateCallback = callback;
+        return {
+          remove: removeAppStateListener,
+        };
+      });
+
+      (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+        data: { session: null },
+        error: null,
+      });
+
+      const TestComponent = () => <></>;
+      const { unmount } = render(
+        <AuthProvider>
+          <TestComponent />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(AppState.addEventListener).toHaveBeenCalledWith('change', expect.any(Function));
+      });
+
+      act(() => {
+        appStateCallback?.('active');
+      });
+      await waitFor(() => {
+        expect(supabase.auth.startAutoRefresh).toHaveBeenCalledTimes(1);
+      });
+
+      act(() => {
+        appStateCallback?.('background');
+      });
+      await waitFor(() => {
+        expect(supabase.auth.stopAutoRefresh).toHaveBeenCalledTimes(1);
+      });
+
+      unmount();
+      expect(removeAppStateListener).toHaveBeenCalledTimes(1);
     });
   });
 
