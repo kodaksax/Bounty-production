@@ -25,6 +25,7 @@ import { ConnectionStatus } from "../../components/connection-status"
 import { OfflineStatusBadge } from "../../components/offline-status-badge"
 import { WalletBalanceButton } from "../../components/ui/wallet-balance-button"
 
+import { useAuthContext } from "../../hooks/use-auth-context"
 import { useConversations } from "../../hooks/useConversations"
 import { useNormalizedProfile } from "../../hooks/useNormalizedProfile"
 import { useValidUserId } from "../../hooks/useValidUserId"
@@ -264,10 +265,25 @@ const ConversationItem = React.memo(function ConversationItem({
   onDelete,
 }: ConversationItemProps) {
   const { theme } = useAppThemeContext()
+  const router = useRouter()
+  const { session } = useAuthContext()
   const time = useMemo(
     () => formatConversationTime(conversation.updatedAt),
     [conversation.updatedAt]
   )
+
+  const otherUserId = useMemo(() => {
+    const currentId = session?.user?.id
+    if (!currentId || !conversation.participantIds?.length) return null
+    return conversation.participantIds.find(id => id !== currentId) ?? null
+  }, [conversation.participantIds, session?.user?.id])
+
+  const handleAvatarPress = useCallback(() => {
+    if (otherUserId) {
+      const referrer = encodeURIComponent('/tabs/bounty-app?screen=messages')
+      router.push(`/profile/${otherUserId}?referrer=${referrer}`)
+    }
+  }, [otherUserId, router])
 
   return (
     <Swipeable
@@ -285,7 +301,12 @@ const ConversationItem = React.memo(function ConversationItem({
         className="flex-row items-center px-3 py-3 mb-2 rounded-2xl"
         style={{ backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border }}
       >
-        <View className="mr-3">
+        <TouchableOpacity
+          onPress={handleAvatarPress}
+          disabled={!otherUserId}
+          className="mr-3"
+          activeOpacity={0.7}
+        >
           <Avatar className="h-12 w-12">
             <AvatarImage
               src={conversation.avatar || "/placeholder.svg"}
@@ -297,7 +318,7 @@ const ConversationItem = React.memo(function ConversationItem({
               </Text>
             </AvatarFallback>
           </Avatar>
-        </View>
+        </TouchableOpacity>
 
         <View className="flex-1 ml-2">
           <Text className="font-semibold" style={{ color: theme.text }}>
