@@ -1,6 +1,7 @@
 // Lazily require expo-notifications to avoid native import at module evaluation time
 import { useRouter } from 'expo-router';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import { navigationIntent } from '../services/navigation-intent';
 import { notificationService } from '../services/notification-service';
 import { supabase } from '../supabase';
@@ -140,10 +141,36 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     }
   }, [handleNotificationTap]);
 
+  // Re-attempt token registration whenever the app comes to the foreground.
+  // This covers two cases that the mount-time call misses:
+  //   1. Session wasn't ready at mount → registerPushToken skipped silently
+  //   2. User enabled notifications in iOS Settings after denying at first prompt
+  useEffect(() => {
+    let lastAppState = AppState.currentState;
+
+    const handleAppStateChange = (nextState: AppStateStatus) => {
+      if (lastAppState !== 'active' && nextState === 'active') {
+        notificationService.requestPermissionsAndRegisterToken().then((token) => {
+          if (__DEV__) {
+            console.log('[NotificationContext] foreground re-registration result:', token ?? 'no token (permissions denied or session missing)');
+          }
+        }).catch(() => {});
+      }
+      lastAppState = nextState;
+    };
+
+    const sub = AppState.addEventListener('change', handleAppStateChange);
+    return () => sub.remove();
+  }, []);
+
   // Setup notification listeners and request permissions on mount
   useEffect(() => {
     // Request permissions and register token
-    notificationService.requestPermissionsAndRegisterToken();
+    notificationService.requestPermissionsAndRegisterToken().then((token) => {
+      if (__DEV__) {
+        console.log('[NotificationContext] mount registration result:', token ?? 'no token (permissions denied or session missing)');
+      }
+    }).catch(() => {});
 
     // Check if app was opened from a notification
     checkInitialNotification();
