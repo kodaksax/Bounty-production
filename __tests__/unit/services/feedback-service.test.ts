@@ -21,9 +21,11 @@ jest.mock('../../../lib/services/storage-service', () => ({
   },
 }));
 
-// Mock data-utils
-jest.mock('../../../lib/utils/data-utils', () => ({
-  getCurrentUserId: jest.fn(),
+// Mock auth-profile-service
+jest.mock('../../../lib/services/auth-profile-service', () => ({
+  authProfileService: {
+    getAuthUserId: jest.fn(),
+  },
 }));
 
 import {
@@ -37,7 +39,7 @@ import {
 
 const { supabase } = require('../../../lib/supabase');
 const { storageService } = require('../../../lib/services/storage-service');
-const { getCurrentUserId } = require('../../../lib/utils/data-utils');
+const { authProfileService } = require('../../../lib/services/auth-profile-service');
 const { Platform } = require('react-native');
 
 /** Build a Supabase query chain for `.insert(...).select(...).single()`. */
@@ -53,7 +55,7 @@ describe('Feedback Service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     __resetFeedbackGuards();
-    getCurrentUserId.mockReturnValue('user-123');
+    authProfileService.getAuthUserId.mockReturnValue('user-123');
     Platform.OS = 'ios';
   });
 
@@ -80,8 +82,7 @@ describe('Feedback Service', () => {
           app_version: '1.0.0',
         })
       );
-      // Auto-included timestamp
-      expect(chain.insert.mock.calls[0][0]).toHaveProperty('created_at');
+      expect(chain.insert.mock.calls[0][0]).not.toHaveProperty('created_at');
     });
 
     it('uploads a screenshot and stores a signed URL when provided', async () => {
@@ -101,6 +102,7 @@ describe('Feedback Service', () => {
 
       expect(result.success).toBe(true);
       expect(storageService.uploadFile).toHaveBeenCalled();
+      expect(signedChain.createSignedUrl).toHaveBeenCalledWith(expect.any(String), 60 * 60);
       expect(chain.insert).toHaveBeenCalledWith(
         expect.objectContaining({ screenshot_url: 'https://signed/x.jpg' })
       );
@@ -150,7 +152,7 @@ describe('Feedback Service', () => {
     });
 
     it('requires authentication (RLS: user must own the submission)', async () => {
-      getCurrentUserId.mockReturnValue(null);
+      authProfileService.getAuthUserId.mockReturnValue(null);
       const result = await feedbackService.submitBugReport({ subject: 'x', description: 'y' });
       expect(result.success).toBe(false);
       expect(result.error).toBe('User not authenticated');
@@ -169,6 +171,21 @@ describe('Feedback Service', () => {
       expect(second.error).toBe('Duplicate submission ignored');
       // Only the first submission hit the database.
       expect(chain.insert).toHaveBeenCalledTimes(1);
+    });
+
+    it('allows the same submission again after the dedupe window expires', async () => {
+      jest.useFakeTimers();
+      const chain = createInsertChain({ data: { id: 'report-5' }, error: null });
+      supabase.from.mockReturnValue(chain);
+
+      const first = await feedbackService.submitBugReport({ subject: 'Dup', description: 'Same' });
+      jest.advanceTimersByTime(5001);
+      const second = await feedbackService.submitBugReport({ subject: 'Dup', description: 'Same' });
+
+      expect(first.success).toBe(true);
+      expect(second.success).toBe(true);
+      expect(chain.insert).toHaveBeenCalledTimes(2);
+      jest.useRealTimers();
     });
   });
 
@@ -202,7 +219,7 @@ describe('Feedback Service', () => {
     });
 
     it('requires authentication', async () => {
-      getCurrentUserId.mockReturnValue(null);
+      authProfileService.getAuthUserId.mockReturnValue(null);
       const result = await feedbackService.submitFeatureRequest({
         title: 'x',
         description: 'y',

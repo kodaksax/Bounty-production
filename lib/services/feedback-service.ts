@@ -9,7 +9,7 @@
 import { Platform } from 'react-native';
 import { supabase } from '../supabase';
 import { storageService } from './storage-service';
-import { getCurrentUserId } from '../utils/data-utils';
+import { authProfileService } from './auth-profile-service';
 
 export type FeedbackReportStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
 export type FeatureRequestStatus =
@@ -35,8 +35,8 @@ export const PLAY_STORE_URL =
 /** Private storage bucket for optional bug-report screenshots. */
 const SCREENSHOT_BUCKET = 'feedback-screenshots';
 
-/** Lifetime of generated screenshot signed URLs (1 year, in seconds). */
-const SCREENSHOT_URL_EXPIRY_SECONDS = 60 * 60 * 24 * 365;
+/** Lifetime of generated screenshot signed URLs (1 hour, in seconds). */
+const SCREENSHOT_URL_EXPIRY_SECONDS = 60 * 60;
 
 /** Window during which an identical submission is treated as a duplicate. */
 const DUPLICATE_WINDOW_MS = 5000;
@@ -70,9 +70,16 @@ export function __resetFeedbackGuards(): void {
 }
 
 function isDuplicate(key: string): boolean {
+  const now = Date.now();
+  for (const [submissionKey, lastSubmittedAt] of recentSubmissions.entries()) {
+    if (now - lastSubmittedAt >= DUPLICATE_WINDOW_MS) {
+      recentSubmissions.delete(submissionKey);
+    }
+  }
+
   if (inFlight.has(key)) return true;
   const last = recentSubmissions.get(key);
-  return typeof last === 'number' && Date.now() - last < DUPLICATE_WINDOW_MS;
+  return typeof last === 'number' && now - last < DUPLICATE_WINDOW_MS;
 }
 
 /** Best-effort retrieval of the installed app version. */
@@ -125,8 +132,8 @@ async function uploadScreenshot(uri: string, userId: string): Promise<string | n
 
 export const feedbackService = {
   /**
-   * Submit a bug report. Automatically attaches app version, platform, user id
-   * (if authenticated) and a timestamp. Stores the row in `feedback_reports`
+   * Submit a bug report. Automatically attaches app version, platform, and user id
+   * (if authenticated). Stores the row in `feedback_reports`
    * with a default status of "open".
    */
   async submitBugReport(input: SubmitBugReportInput): Promise<SubmitResult> {
@@ -140,7 +147,7 @@ export const feedbackService = {
       return { success: false, error: 'Description is required' };
     }
 
-    const userId = getCurrentUserId();
+    const userId = authProfileService.getAuthUserId();
     if (!userId) {
       return { success: false, error: 'User not authenticated' };
     }
@@ -167,7 +174,6 @@ export const feedbackService = {
           app_version: getAppVersion(),
           platform: getPlatform(),
           status: 'open',
-          created_at: new Date().toISOString(),
         })
         .select('id')
         .single();
@@ -207,7 +213,7 @@ export const feedbackService = {
       return { success: false, error: 'Description is required' };
     }
 
-    const userId = getCurrentUserId();
+    const userId = authProfileService.getAuthUserId();
     if (!userId) {
       return { success: false, error: 'User not authenticated' };
     }
@@ -226,7 +232,6 @@ export const feedbackService = {
           title,
           description,
           status: 'submitted',
-          created_at: new Date().toISOString(),
         })
         .select('id')
         .single();

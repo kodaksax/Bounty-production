@@ -63,8 +63,8 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
 
   const handlePickScreenshot = async () => {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
         Alert.alert('Permission Required', 'Please allow access to your photo library.');
         return;
       }

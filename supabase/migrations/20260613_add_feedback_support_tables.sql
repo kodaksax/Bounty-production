@@ -64,6 +64,8 @@ CREATE INDEX IF NOT EXISTS idx_feedback_reports_user_id ON public.feedback_repor
 CREATE INDEX IF NOT EXISTS idx_feedback_reports_status  ON public.feedback_reports(status);
 CREATE INDEX IF NOT EXISTS idx_feedback_reports_created ON public.feedback_reports(created_at);
 
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.feedback_reports TO authenticated;
+
 -- ============================================================================
 -- feature_requests
 -- ============================================================================
@@ -102,6 +104,8 @@ CREATE POLICY "Admins can delete feature requests"
 CREATE INDEX IF NOT EXISTS idx_feature_requests_user_id ON public.feature_requests(user_id);
 CREATE INDEX IF NOT EXISTS idx_feature_requests_status  ON public.feature_requests(status);
 CREATE INDEX IF NOT EXISTS idx_feature_requests_created ON public.feature_requests(created_at);
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.feature_requests TO authenticated;
 
 -- ============================================================================
 -- Storage bucket for bug-report screenshots (private)
