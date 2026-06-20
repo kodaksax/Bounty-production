@@ -77,7 +77,6 @@ describe('Feedback Service', () => {
           user_id: 'user-123',
           subject: 'App crashes',
           description: 'It crashes on launch',
-          status: 'open',
           platform: 'ios',
           app_version: '1.0.0',
         })
@@ -207,7 +206,6 @@ describe('Feedback Service', () => {
           user_id: 'user-123',
           title: 'Dark mode',
           description: 'Please add dark mode',
-          status: 'submitted',
         })
       );
     });

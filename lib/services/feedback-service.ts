@@ -173,7 +173,6 @@ export const feedbackService = {
           screenshot_url: screenshotUrl,
           app_version: getAppVersion(),
           platform: getPlatform(),
-          status: 'open',
         })
         .select('id')
         .single();
@@ -231,7 +230,6 @@ export const feedbackService = {
           user_id: userId,
           title,
           description,
-          status: 'submitted',
         })
         .select('id')
         .single();
