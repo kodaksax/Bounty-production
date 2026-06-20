@@ -158,8 +158,14 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
         <View className="flex-row items-center">
           <BrandingLogo size="small" />
         </View>
-        <TouchableOpacity onPress={handleSave} className="p-2">
-          <MaterialIcons name="close" size={24} color={theme.text} />
+        <TouchableOpacity
+          onPress={handleSave}
+          className="p-2"
+          accessibilityRole="button"
+          accessibilityLabel="Save and close"
+          accessibilityHint="Saves skillset changes and returns to profile"
+        >
+          <MaterialIcons name="check" size={24} color={theme.text} />
         </TouchableOpacity>
       </View>
 
@@ -167,10 +173,10 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
       <View className="flex-row items-center justify-between px-4 pb-2">
         <Text className="text-base font-bold" style={{ color: theme.text }}>Edit Skillsets</Text>
         <View className="flex-row">
-          <TouchableOpacity onPress={addNewSkill} className="px-3 py-2 rounded-lg mr-2" style={{ backgroundColor: theme.surfaceSecondary }}>
+          <TouchableOpacity onPress={addNewSkill} className="px-3 py-2 rounded-lg mr-2" style={{ backgroundColor: theme.surfaceSecondary }} accessibilityRole="button" accessibilityLabel="Add new skill">
             <Text className="text-sm" style={{ color: theme.text }}>Add</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={handleSave} className="px-3 py-2 bg-[#059669] rounded-lg">
+          <TouchableOpacity onPress={handleSave} className="px-3 py-2 bg-[#059669] rounded-lg" accessibilityRole="button" accessibilityLabel="Save skillsets">
             <Text className="text-white text-sm font-semibold">Save</Text>
           </TouchableOpacity>
         </View>
@@ -203,7 +209,13 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
                     <Text className="text-xs mt-1" style={{ color: theme.primaryLight }} numberOfLines={1}>Attached: {skill.credentialUrl.split('/').pop()}</Text>
                   )}
                 </View>
-                <TouchableOpacity onPress={() => removeSkill(skill.id)} className="ml-2 p-2">
+                <TouchableOpacity
+                  onPress={() => removeSkill(skill.id)}
+                  className="ml-2 p-2"
+                  accessibilityRole="button"
+                  accessibilityLabel="Delete skill"
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
                   <MaterialIcons name="delete" size={20} color={theme.text} />
                 </TouchableOpacity>
               </View>
@@ -213,19 +225,38 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
                   <Text className="text-xs font-semibold mb-1" style={{ color: theme.textSecondary }}>Select Icon</Text>
                   <View className="flex-row flex-wrap -m-1 mb-3">
                     {ICON_LIBRARY.map(ic => (
-                      <TouchableOpacity key={ic} onPress={() => changeIcon(skill.id, ic)} className="m-1 h-9 w-9 rounded-lg items-center justify-center" style={{ backgroundColor: skill.icon === ic ? theme.primary : theme.surfaceSecondary }}>
+                      <TouchableOpacity
+                        key={ic}
+                        onPress={() => changeIcon(skill.id, ic)}
+                        className="m-1 h-11 w-11 rounded-lg items-center justify-center"
+                        style={{ backgroundColor: skill.icon === ic ? theme.primary : theme.surfaceSecondary }}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Select ${ic} icon`}
+                        accessibilityState={{ selected: skill.icon === ic }}
+                      >
                         <MaterialIcons name={ic as any} size={18} color={skill.icon === ic ? '#ffffff' : theme.primaryLight} />
                       </TouchableOpacity>
                     ))}
                   </View>
                   <View className="flex-row">
-                    <TouchableOpacity onPress={() => attachCredential(skill.id)} className={`flex-1 ${skill.credentialUrl ? 'mr-2' : ''} px-3 py-2 rounded-lg flex-row items-center justify-center`} style={{ backgroundColor: theme.surfaceSecondary }}>
-                      <MaterialIcons name="attach-file" size={18} color={theme.primaryLight} />
+                    <TouchableOpacity
+                      onPress={() => attachCredential(skill.id)}
+                      className={`flex-1 ${skill.credentialUrl ? 'mr-2' : ''} px-3 py-2 rounded-lg flex-row items-center justify-center`}
+                      style={{ backgroundColor: theme.surfaceSecondary }}
+                      accessibilityRole="button"
+                      accessibilityLabel={skill.credentialUrl ? 'Replace credential file' : 'Attach credential file'}
+                    >
+                      <MaterialIcons name="attach-file" size={18} color={theme.primaryLight} accessibilityElementsHidden />
                       <Text className="text-sm ml-1" style={{ color: theme.primaryLight }}>{skill.credentialUrl ? 'Replace Credential' : 'Attach Credential'}</Text>
                     </TouchableOpacity>
                     {skill.credentialUrl && (
-                      <TouchableOpacity onPress={() => removeCredential(skill.id)} className="flex-1 px-3 py-2 bg-red-600/70 rounded-lg flex-row items-center justify-center">
-                        <MaterialIcons name="close" size={18} color="#fff" />
+                      <TouchableOpacity
+                        onPress={() => removeCredential(skill.id)}
+                        className="flex-1 px-3 py-2 bg-red-600/70 rounded-lg flex-row items-center justify-center"
+                        accessibilityRole="button"
+                        accessibilityLabel="Remove credential file"
+                      >
+                        <MaterialIcons name="close" size={18} color="#fff" accessibilityElementsHidden />
                         <Text className="text-white text-sm ml-1">Remove Credential</Text>
                       </TouchableOpacity>
                     )}

@@ -1,6 +1,8 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { Animated, LayoutAnimation, Platform, StyleSheet, Text, TouchableOpacity, UIManager, View } from 'react-native';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -14,11 +16,9 @@ interface AnimatedSectionProps {
   locked?: boolean;
 }
 
-/**
- * Collapsible/animated section with header and expandable content.
- * Uses LayoutAnimation for smooth expansion/collapse.
- */
 export function AnimatedSection({ title, expanded, onToggle, children, locked = false }: AnimatedSectionProps) {
+  const { theme } = useAppThemeContext();
+  const s = useMemo(() => makeStyles(theme), [theme]);
   const rotateAnim = useRef(new Animated.Value(expanded ? 1 : 0)).current;
 
   useEffect(() => {
@@ -34,15 +34,17 @@ export function AnimatedSection({ title, expanded, onToggle, children, locked = 
     outputRange: ['0deg', '180deg'],
   });
 
+  const accentColor = theme.isDark ? '#6ee7b7' : theme.primary;
+
   const handleToggle = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     onToggle();
   };
 
   return (
-    <View style={styles.container}>
+    <View style={s.container}>
       <TouchableOpacity
-        style={styles.header}
+        style={s.header}
         onPress={handleToggle}
         activeOpacity={0.7}
         accessibilityRole="button"
@@ -50,19 +52,17 @@ export function AnimatedSection({ title, expanded, onToggle, children, locked = 
         accessibilityHint="Tap to toggle section"
         disabled={(locked ?? false)}
       >
-        <Text style={styles.title}>{title}</Text>
+        <Text style={[s.title, { color: accentColor }]}>{title}</Text>
         {locked ? (
-          <MaterialIcons name="lock" size={20} color="rgba(255,255,255,0.45)" />
+          <MaterialIcons name="lock" size={20} color={theme.textDisabled} />
         ) : (
           <Animated.View style={{ transform: [{ rotate }] }}>
-            <MaterialIcons name="expand-more" size={24} color="#6ee7b7" />
+            <MaterialIcons name="expand-more" size={24} color={accentColor} />
           </Animated.View>
         )}
       </TouchableOpacity>
       {expanded && (
-        // Use pointerEvents='box-none' so the container itself doesn't block
-        // parent scroll gestures while children remain interactive.
-        <View style={styles.content} pointerEvents="box-none">
+        <View style={s.content} pointerEvents="box-none">
           {children}
         </View>
       )}
@@ -70,30 +70,31 @@ export function AnimatedSection({ title, expanded, onToggle, children, locked = 
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    backgroundColor: 'rgba(5, 150, 105, 0.15)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#374151',
-    marginVertical: 8,
-    overflow: 'hidden',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 12,
-  },
-  title: {
-    color: '#6ee7b7',
-    fontSize: 14,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  content: {
-    padding: 12,
-    paddingTop: 0,
-  },
-});
+function makeStyles(t: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      backgroundColor: t.isDark ? 'rgba(5, 150, 105, 0.15)' : 'rgba(5, 150, 105, 0.06)',
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: t.isDark ? '#374151' : 'rgba(5, 150, 105, 0.25)',
+      marginVertical: 8,
+      overflow: 'hidden',
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: 12,
+    },
+    title: {
+      fontSize: 14,
+      fontWeight: '600',
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    content: {
+      padding: 12,
+      paddingTop: 0,
+    },
+  });
+}

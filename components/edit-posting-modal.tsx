@@ -14,6 +14,8 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppThemeContext } from "../lib/themes/AppThemeContext";
+import type { AppTheme } from "../lib/themes/types";
 
 interface EditPostingModalProps {
   visible: boolean;
@@ -29,6 +31,9 @@ export function EditPostingModal({
   onSave,
 }: EditPostingModalProps) {
   const insets = useSafeAreaInsets();
+  const { theme } = useAppThemeContext();
+  const styles = makeStyles(theme);
+
   const [formData, setFormData] = useState({
     title: bounty.title || "",
     description: bounty.description || "",
@@ -124,7 +129,7 @@ export function EditPostingModal({
                 disabled={isSubmitting}
                 style={styles.closeButton}
               >
-                <MaterialIcons name="close" size={24} color="#1F2937" />
+                <MaterialIcons name="close" size={24} color={theme.text} />
               </TouchableOpacity>
             </View>
 
@@ -143,7 +148,7 @@ export function EditPostingModal({
                 <TextInput
                   style={styles.input}
                   placeholder="Enter title"
-                  placeholderTextColor="#6ee7b780"
+                  placeholderTextColor={theme.textDisabled}
                   value={formData.title}
                   onChangeText={(text) =>
                     setFormData({ ...formData, title: text })
@@ -159,7 +164,7 @@ export function EditPostingModal({
                 <TextInput
                   style={[styles.input, styles.textArea]}
                   placeholder="Describe what you need"
-                  placeholderTextColor="#6ee7b780"
+                  placeholderTextColor={theme.textDisabled}
                   value={formData.description}
                   onChangeText={(text) =>
                     setFormData({ ...formData, description: text })
@@ -205,7 +210,7 @@ export function EditPostingModal({
                   <TextInput
                     style={styles.input}
                     placeholder="0"
-                    placeholderTextColor="#6ee7b780"
+                    placeholderTextColor={theme.textDisabled}
                     value={formData.amount === 0 ? "" : String(formData.amount)}
                     onChangeText={(text) => {
                       const num = parseFloat(text) || 0;
@@ -223,7 +228,7 @@ export function EditPostingModal({
                 <TextInput
                   style={styles.input}
                   placeholder="Enter location"
-                  placeholderTextColor="#6ee7b780"
+                  placeholderTextColor={theme.textDisabled}
                   value={formData.location}
                   onChangeText={(text) =>
                     setFormData({ ...formData, location: text })
@@ -269,139 +274,140 @@ export function EditPostingModal({
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    justifyContent: "flex-end",
-  },
-  modal: {
-    backgroundColor: "#0B0F14", // emerald-700
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    // Use a fixed relative height so content gets layout below the header
-    height: "90%",
-    width: "100%",
-    overflow: "hidden",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#059669",
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#fff",
-  },
-  closeButton: {
-    padding: 4,
-  },
-  content: {
-    flex: 1,
-  },
-  contentContainer: {
-    padding: 20,
-  },
-  field: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#1F2937",
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: "#111827",
-    borderRadius: 12,
-    padding: 12,
-    color: "#fff",
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: "#059669",
-  },
-  textArea: {
-    minHeight: 100,
-    textAlignVertical: "top",
-  },
-  toggleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#111827",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-  },
-  toggleLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  toggleLabel: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#fff",
-  },
-  toggle: {
-    width: 52,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#6b7280",
-    padding: 2,
-    justifyContent: "center",
-  },
-  toggleActive: {
-    backgroundColor: "#059669",
-  },
-  toggleThumb: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "#fff",
-  },
-  toggleThumbActive: {
-    alignSelf: "flex-end",
-  },
-  errorBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#dc2626",
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-    gap: 8,
-  },
-  errorText: {
-    flex: 1,
-    color: "#fff",
-    fontSize: 14,
-  },
-  saveButton: {
-    backgroundColor: "#059669",
-    padding: 16,
-    borderRadius: 12,
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  saveButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  cancelButton: {
-    padding: 12,
-    alignItems: "center",
-  },
-  cancelButtonText: {
-    color: "#9CA3AF",
-    fontSize: 14,
-  },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+    },
+    overlay: {
+      flex: 1,
+      backgroundColor: "rgba(0, 0, 0, 0.7)",
+      justifyContent: "flex-end",
+    },
+    modal: {
+      backgroundColor: theme.surface,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      height: "90%",
+      width: "100%",
+      overflow: "hidden",
+    },
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      padding: 20,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.primary,
+    },
+    title: {
+      fontSize: 20,
+      fontWeight: "700",
+      color: theme.text,
+    },
+    closeButton: {
+      padding: 4,
+    },
+    content: {
+      flex: 1,
+    },
+    contentContainer: {
+      padding: 20,
+    },
+    field: {
+      marginBottom: 20,
+    },
+    label: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: theme.text,
+      marginBottom: 8,
+    },
+    input: {
+      backgroundColor: theme.surfaceSecondary,
+      borderRadius: 12,
+      padding: 12,
+      color: theme.text,
+      fontSize: 16,
+      borderWidth: 1,
+      borderColor: theme.primary,
+    },
+    textArea: {
+      minHeight: 100,
+      textAlignVertical: "top",
+    },
+    toggleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      backgroundColor: theme.surfaceSecondary,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 20,
+    },
+    toggleLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    toggleLabel: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: theme.text,
+    },
+    toggle: {
+      width: 52,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: theme.border,
+      padding: 2,
+      justifyContent: "center",
+    },
+    toggleActive: {
+      backgroundColor: "#059669",
+    },
+    toggleThumb: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: "#fff",
+    },
+    toggleThumbActive: {
+      alignSelf: "flex-end",
+    },
+    errorBanner: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: "#dc2626",
+      padding: 12,
+      borderRadius: 8,
+      marginBottom: 16,
+      gap: 8,
+    },
+    errorText: {
+      flex: 1,
+      color: "#fff",
+      fontSize: 14,
+    },
+    saveButton: {
+      backgroundColor: "#059669",
+      padding: 16,
+      borderRadius: 12,
+      alignItems: "center",
+      marginBottom: 12,
+    },
+    saveButtonText: {
+      color: "#fff",
+      fontSize: 16,
+      fontWeight: "700",
+    },
+    cancelButton: {
+      padding: 12,
+      alignItems: "center",
+    },
+    cancelButtonText: {
+      color: theme.text,
+      fontSize: 14,
+    },
+  });
+}

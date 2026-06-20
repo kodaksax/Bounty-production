@@ -7,7 +7,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     ActionSheetIOS,
     Alert,
@@ -48,7 +48,7 @@ export default function DetailsScreen() {
   const { profile: normalized } = useNormalizedProfile();
   const { data: onboardingData, updateData: updateOnboardingData } = useOnboarding();
   const { theme } = useAppThemeContext();
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
 
   // Initialize from context, then fallback to profile data
   const [displayName, setDisplayName] = useState<string>(
@@ -384,7 +384,7 @@ export default function DetailsScreen() {
         {/* Header with Back Button and Branding */}
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <MaterialIcons name="arrow-back" size={24} color="#9CA3AF" />
+            <MaterialIcons name="arrow-back" size={24} color={theme.textSecondary} />
           </TouchableOpacity>
           <View style={styles.brandingHeader}>
             <BrandingLogo size="small" />
@@ -401,7 +401,7 @@ export default function DetailsScreen() {
               </View>
             ) : (
               <View style={styles.avatarPlaceholder}>
-                <MaterialIcons name="account-circle" size={80} color="rgba(255,255,255,0.4)" />
+                <MaterialIcons name="account-circle" size={80} color={theme.textDisabled} />
               </View>
             )}
             <View style={styles.avatarEditBadge}>
@@ -434,7 +434,7 @@ export default function DetailsScreen() {
               value={displayName}
               onChangeText={setDisplayName}
               placeholder="e.g., John Doe"
-              placeholderTextColor="rgba(255,255,255,0.4)"
+              placeholderTextColor={theme.textDisabled}
               autoCapitalize="words"
             />
             <Text style={styles.hint}>
@@ -452,7 +452,7 @@ export default function DetailsScreen() {
               value={title}
               onChangeText={setTitle}
               placeholder="e.g., Full Stack Developer"
-              placeholderTextColor="rgba(255,255,255,0.4)"
+              placeholderTextColor={theme.textDisabled}
               autoCapitalize="words"
             />
             <Text style={styles.hint}>Your professional title or role</Text>
@@ -466,7 +466,7 @@ export default function DetailsScreen() {
               value={bio}
               onChangeText={setBio}
               placeholder="Tell others about yourself..."
-              placeholderTextColor="rgba(255,255,255,0.4)"
+              placeholderTextColor={theme.textDisabled}
               multiline
               numberOfLines={3}
               maxLength={200}
@@ -482,7 +482,7 @@ export default function DetailsScreen() {
               value={location}
               onChangeText={setLocation}
               placeholder="e.g., San Francisco, CA"
-              placeholderTextColor="rgba(255,255,255,0.4)"
+              placeholderTextColor={theme.textDisabled}
               autoCapitalize="words"
             />
             <Text style={styles.hint}>City and state/country</Text>
@@ -525,7 +525,7 @@ export default function DetailsScreen() {
                   <View key={skill} style={styles.customSkillChip}>
                     <Text style={styles.customSkillText}>{skill}</Text>
                     <TouchableOpacity onPress={() => removeSkill(skill)}>
-                      <MaterialIcons name="close" size={16} color="#9CA3AF" />
+                      <MaterialIcons name="close" size={16} color={theme.textSecondary} />
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -539,7 +539,7 @@ export default function DetailsScreen() {
                 value={customSkill}
                 onChangeText={setCustomSkill}
                 placeholder="Add another skill..."
-                placeholderTextColor="rgba(255,255,255,0.4)"
+                placeholderTextColor={theme.textDisabled}
                 onSubmitEditing={addCustomSkill}
                 returnKeyType="done"
               />
@@ -701,13 +701,13 @@ function makeStyles(theme: AppTheme) {
       marginBottom: 8,
     },
     input: {
-      backgroundColor: theme.surface,
+      backgroundColor: theme.surfaceSecondary,
       borderRadius: 12,
       paddingHorizontal: 16,
       paddingVertical: 12,
       fontSize: 16,
       color: theme.text,
-      borderWidth: 2,
+      borderWidth: 1,
       borderColor: theme.border,
     },
     bioInput: {

@@ -45,6 +45,9 @@ module.exports = {
     '^providers/(.*)$': '<rootDir>/providers/$1',
     '^stripe$': '<rootDir>/node_modules/stripe',
     '^@supabase/supabase-js$': '<rootDir>/node_modules/@supabase/supabase-js',
+    // expo-updates ships untransformed ESM and is native-only; map to a stub so
+    // suites that import lib/supabase (via lib/config/env-guard) can parse.
+    '^expo-updates$': '<rootDir>/__mocks__/expo-updates.js',
   },
   transform: {
     '^.+\\.tsx?$': [

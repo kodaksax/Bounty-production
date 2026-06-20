@@ -27,7 +27,6 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useEffect, useRef, useState } from 'react'
-import { authProfileService } from '../lib/services/auth-profile-service'
 import { getOnboardingCompleteKey } from '../lib/storage/onboarding'
 import { useAuthContext } from './use-auth-context'
 
@@ -84,8 +83,9 @@ export function useAppBootstrap(): AppBootstrapState {
 
     // Slow path: profile says incomplete, is null (fetch failed), or the DB
     // flag was never written (e.g. network error during done.tsx submit).
-    // Fall back to the per-user AsyncStorage flag, then verify the profile
-    // row actually exists before trusting it.
+    // Fall back to the per-user AsyncStorage flag and trust it here so
+    // bootstrap isn't blocked by a network call. Profile existence verification
+    // happens later in bounty-app.tsx with its own safety timeout.
     let cancelled = false
 
     ;(async () => {
@@ -94,16 +94,13 @@ export function useAppBootstrap(): AppBootstrapState {
       try {
         const stored = await AsyncStorage.getItem(getOnboardingCompleteKey(userId))
         if (stored === 'true') {
-          // Local flag is set — verify the profile row exists in Supabase
-          // before trusting it (the flag could be stale if the row was deleted).
-          try {
-            const row = await authProfileService.getProfileById(userId, { bypassCache: true })
-            onboardingComplete = row != null
-          } catch {
-            // Profile check failed — default to showing onboarding so the
-            // user can complete the flow rather than landing in a broken state.
-            onboardingComplete = false
-          }
+          // Trust the per-user AsyncStorage flag directly — making an uncached
+          // Supabase network call here blocks bootstrap indefinitely when the
+          // network is slow or unavailable on app restore (a common scenario).
+          // Profile row existence is verified by bounty-app.tsx which has its
+          // own safety timeout; stale flags (deleted profile rows) are handled
+          // there by redirecting the user back through onboarding.
+          onboardingComplete = true
         }
       } catch {
         // AsyncStorage unavailable — default to onboarding (safe fallback).

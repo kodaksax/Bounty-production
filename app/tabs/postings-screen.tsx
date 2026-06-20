@@ -35,6 +35,7 @@ import { useBountyForm } from '../../hooks/useBountyForm'
 import { useRejectRequest } from '../../hooks/useRejectRequest'
 import { useWallet } from '../../lib/wallet-context'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
+import type { AppTheme } from '../../lib/themes/types'
 
 
 
@@ -119,6 +120,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   const BOTTOM_NAV_OFFSET = 60// height of BottomNav + gap so sticky actions sit fully above it
   const { balance, deposit, createEscrow, refundEscrow } = useWallet()
   const { theme } = useAppThemeContext()
+  const styles = makeStyles(theme)
   // Filter chip state for each tab; kept separate so toggling one doesn't affect the other.
   // In Progress supports: all, review, applied, in_progress, rejected.
   // My Postings supports: all, review, open, in_progress.
@@ -1362,36 +1364,38 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
 
 export default PostingsScreen;
 
-const styles = StyleSheet.create({
-  confirmationOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 50,
-  },
-  headerBase: {
-    position: 'absolute',
-    top: -55,
-    left: 0,
-    right: 0,
-    zIndex: 20,
-    backgroundColor: '#0B0F14',
-  },
-  headerShadow: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 6,
-  },
-  translateY2: { transform: [{ translateY: 2 }] },
-  titleText: { fontSize: 20, color: 'white' },
-  errorBox: { marginHorizontal: 16, marginBottom: 16, padding: 12, backgroundColor: 'rgba(239,68,68,0.45)', borderRadius: 8 },
-  errorText: { color: 'white', fontSize: 14 },
-  errorCloseButton: { position: 'absolute', right: 8, top: 8, padding: 8 },
-  errorCloseText: { color: 'white', fontSize: 16 },
-  amountScrollContent: { paddingHorizontal: 8 },
-  scrollHeight48: { height: 48 },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    confirmationOverlay: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 50,
+    },
+    headerBase: {
+      position: 'absolute',
+      top: -55,
+      left: 0,
+      right: 0,
+      zIndex: 20,
+      backgroundColor: theme.background,
+    },
+    headerShadow: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.2,
+      shadowRadius: 6,
+      elevation: 6,
+    },
+    translateY2: { transform: [{ translateY: 2 }] },
+    titleText: { fontSize: 20, color: theme.text },
+    errorBox: { marginHorizontal: 16, marginBottom: 16, padding: 12, backgroundColor: 'rgba(239,68,68,0.45)', borderRadius: 8 },
+    errorText: { color: theme.text, fontSize: 14 },
+    errorCloseButton: { position: 'absolute', right: 8, top: 8, padding: 8 },
+    errorCloseText: { color: theme.text, fontSize: 16 },
+    amountScrollContent: { paddingHorizontal: 8 },
+    scrollHeight48: { height: 48 },
+  });
+}

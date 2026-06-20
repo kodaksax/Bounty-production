@@ -568,7 +568,12 @@ export default function EnhancedSearchScreen() {
         <View style={s.recentSection}>
           <View style={s.recentHeader}>
             <Text style={s.recentTitle}>Recent Searches</Text>
-            <TouchableOpacity onPress={() => recentSearchService.clearAll().then(loadRecentSearches)}>
+            <TouchableOpacity
+              onPress={() => recentSearchService.clearAll().then(loadRecentSearches)}
+              accessibilityRole="button"
+              accessibilityLabel="Clear recent searches"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
               <Text style={s.clearText}>Clear</Text>
             </TouchableOpacity>
           </View>
@@ -598,6 +603,9 @@ export default function EnhancedSearchScreen() {
           key={String(bounty.id)}
           style={s.trendingCard}
           onPress={() => router.push(`/bounty/${bounty.id}/public`)}
+          accessibilityRole="button"
+          accessibilityLabel={bounty.title}
+          accessibilityHint="Opens bounty details"
         >
           <Text style={s.trendingCardTitle} numberOfLines={2}>
             {bounty.title}

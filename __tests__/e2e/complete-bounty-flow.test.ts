@@ -1251,7 +1251,7 @@ describe('Complete Bounty Flow E2E Tests', () => {
           description: 'React Native',
           amount: 50000,
           status: 'open',
-          location: 'San Francisco, CA',
+          location: ', CA',
           createdAt: new Date().toISOString(),
         },
         {

@@ -548,7 +548,12 @@ export function SignInForm() {
               <View>
                 <View className="flex-row items-center justify-between mb-1">
                   <Text className="text-sm" style={{ color: theme.text }}>Password</Text>
-                  <TouchableOpacity onPress={() => router.push('/auth/reset-password')}>
+                  <TouchableOpacity
+                    onPress={() => router.push('/auth/reset-password')}
+                    accessibilityRole="link"
+                    accessibilityLabel="Forgot password"
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
                     <Text className="text-[11px]" style={{ color: theme.textSecondary }}>Forgot?</Text>
                   </TouchableOpacity>
                 </View>
@@ -577,7 +582,9 @@ export function SignInForm() {
                   <TouchableOpacity
                     onPress={() => setShowPassword(s => !s)}
                     className="absolute right-3 top-1/2 -translate-y-1/2"
+                    accessibilityRole="button"
                     accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
                     <MaterialIcons name={showPassword ? 'visibility-off' : 'visibility'} size={20} color={theme.text} />
                   </TouchableOpacity>
@@ -611,7 +618,7 @@ export function SignInForm() {
                 </View>
               )}
 
-              <TouchableOpacity onPress={handleSubmit} disabled={isSubmitting} className="w-full bg-[#059669] rounded py-3 items-center flex-row justify-center">
+              <TouchableOpacity onPress={handleSubmit} disabled={isSubmitting} className="w-full bg-[#059669] rounded py-3 items-center flex-row justify-center" accessibilityRole="button" accessibilityLabel="Sign in" accessibilityState={{ disabled: isSubmitting }}>
                 {isSubmitting ? (
                   <>
                     <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />
@@ -728,6 +735,9 @@ export function SignInForm() {
                   promptAsync()
                 }}
                 className={`w-full rounded py-3 items-center flex-row justify-center mt-2 ${isGoogleConfigured ? 'bg-white' : 'bg-white/40'}`}
+                accessibilityRole="button"
+                accessibilityLabel={isGoogleConfigured ? 'Continue with Google' : 'Google sign-in unavailable'}
+                accessibilityState={{ disabled: !isGoogleConfigured || isSubmitting || !request || socialAuthLoading }}
               >
                 {socialAuthLoading ? (
                   <ActivityIndicator color="#000" />
@@ -738,7 +748,11 @@ export function SignInForm() {
                 )}
               </TouchableOpacity>
 
-              <TouchableOpacity onPress={() => router.push('/auth/sign-up-form')}>
+              <TouchableOpacity
+                onPress={() => router.push('/auth/sign-up-form')}
+                accessibilityRole="button"
+                accessibilityLabel="Create an account"
+              >
                 <Text className="text-center mt-6" style={{ color: theme.text }}>New here? Create an account</Text>
               </TouchableOpacity>
 

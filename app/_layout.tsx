@@ -11,7 +11,8 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import "../global.css";
 import { useAuthContext } from '../hooks/use-auth-context';
 import { useSessionMonitor } from '../hooks/useSessionMonitor';
-import { AdminProvider } from '../lib/admin-context';
+import { AdminProvider } from '../lib/admin-context'
+import { BountyFormatProvider } from '../lib/bounty-format-context';
 import { COLORS } from "../lib/constants/accessibility";
 import { BackgroundColorProvider, useBackgroundColor } from '../lib/context/BackgroundColorContext';
 import { NotificationProvider } from '../lib/context/notification-context';
@@ -284,9 +285,11 @@ function RootLayout({ children }: { children: React.ReactNode }) {
     <SafeAreaProvider>
       <GestureHandlerRootView style={styles.gestureRoot}>
         <AppThemeProvider>
-          <BackgroundColorProvider>
-            <LayoutContent />
-          </BackgroundColorProvider>
+          <BountyFormatProvider>
+            <BackgroundColorProvider>
+              <LayoutContent />
+            </BackgroundColorProvider>
+          </BountyFormatProvider>
         </AppThemeProvider>
       </GestureHandlerRootView>
     </SafeAreaProvider>

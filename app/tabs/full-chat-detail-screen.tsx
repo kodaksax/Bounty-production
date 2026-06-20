@@ -4,7 +4,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { Avatar, AvatarFallback, AvatarImage } from 'components/ui/avatar';
 import { useRouter } from 'expo-router';
-import React, { useRef, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 import {
@@ -80,7 +80,19 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
 
 
  const listRef = useRef<FlatList<Message>>(null);
+ const hasScrolledToBottom = useRef(false);
  const typingUsersRef = useTypingIndicator(conversation.realConversationId);
+
+ // Scroll to bottom once when messages are first available
+ useEffect(() => {
+   if (mergedMessages.length > 0 && !hasScrolledToBottom.current) {
+     const timer = setTimeout(() => {
+       listRef.current?.scrollToEnd({ animated: false })
+       hasScrolledToBottom.current = true
+     }, 80)
+     return () => clearTimeout(timer)
+   }
+ }, [mergedMessages.length])
 
 
  const otherUserId =
@@ -288,6 +300,18 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
            initialNumToRender={15}
            windowSize={10}
            removeClippedSubviews={true}
+           onLayout={() => {
+             if (!hasScrolledToBottom.current) {
+               listRef.current?.scrollToEnd({ animated: false })
+               hasScrolledToBottom.current = true
+             }
+           }}
+           onContentSizeChange={() => {
+             if (!hasScrolledToBottom.current) {
+               listRef.current?.scrollToEnd({ animated: false })
+               hasScrolledToBottom.current = true
+             }
+           }}
            onScrollToIndexFailed={info => {
              const wait = new Promise(resolve => setTimeout(resolve, 500));
              wait.then(() => {

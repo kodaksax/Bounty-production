@@ -1,6 +1,15 @@
 export type ThemeMode = 'dark' | 'light' | 'system';
 
 export type AppTheme = {
+  // ── Customization knobs ───────────────────────────────────────────────────
+  // High-level tokens for easy app-wide theming. Tweak these five values to
+  // restyle the whole app: foreground (primary text/icons), background (page),
+  // and three accents (accent1 = brand/CTA, accent2 = highlight, accent3 = info).
+  foreground: string;         // primary text / icon color
+  accent1: string;            // primary brand accent (CTA, active states)
+  accent2: string;            // secondary accent (highlights, accent icons)
+  accent3: string;            // tertiary accent (informational emphasis)
+
   // ── Backgrounds ──────────────────────────────────────────────────────────
   background: string;         // outermost page / screen root
   surface: string;            // cards, sections, modals

@@ -8,6 +8,7 @@ import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } f
 import { useAuthProfile } from "../hooks/useAuthProfile"
 import { useNormalizedProfile } from "../hooks/useNormalizedProfile"
 import { useAdmin } from "../lib/admin-context"
+import { type BountyFormat, useBountyFormat } from "../lib/bounty-format-context"
 import { useAppThemeContext } from "../lib/themes/AppThemeContext"
 import type { AppTheme, ThemeMode } from "../lib/themes/types"
 import { markIntentionalSignOut } from "../lib/utils/session-handler"
@@ -30,6 +31,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
   const [panel, setPanel] = useState<Panel>('root')
   const { isAdmin, isAdminTabEnabled, setAdminTabEnabled } = useAdmin()
   const { theme, mode: themeMode, setTheme } = useAppThemeContext()
+  const { bountyFormat, setBountyFormat } = useBountyFormat()
   const s = makeStyles(theme)
 
   const { profile: authProfile } = useAuthProfile()
@@ -127,6 +129,43 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
             })}
           </View>
         </View>
+        {/* ── Bounty Display Format ────────────────────────────────────────── */}
+        <View style={s.card} className="rounded-xl p-4 mb-4">
+          <View className="flex-row items-center mb-3">
+            <MaterialIcons name="view-list" size={22} color={theme.primaryLight} />
+            <Text style={s.cardTitle} className="ml-2 font-medium text-sm">Bounty Display</Text>
+          </View>
+          <Text style={s.cardDescription} className="text-xs leading-4 mb-3">
+            Choose how bounties appear in your feed.
+          </Text>
+          <View className="flex-row gap-2">
+            {([
+              ['card',    '🃏', 'Card'],
+              ['compact', '☰',  'Compact'],
+              ['grid',    '⊞',  'Grid'],
+            ] as [BountyFormat, string, string][]).map(([value, icon, label]) => {
+              const active = bountyFormat === value
+              return (
+                <TouchableOpacity
+                  key={value}
+                  onPress={() => setBountyFormat(value)}
+                  style={active ? s.themeChipActive : s.themeChipInactive}
+                  className="flex-1 py-2 rounded-lg items-center border"
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: active }}
+                  accessibilityLabel={`${label} format`}
+                >
+                  <Text className="text-base">{icon}</Text>
+                  <Text style={active ? s.themeChipLabelActive : s.themeChipLabelInactive}
+                    className="text-xs font-medium mt-0.5">
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              )
+            })}
+          </View>
+        </View>
+
         <SettingsCard theme={theme} title="Location & Visibility"
           description="Manage location permissions, saved addresses, and control how location data is used."
           primaryLabel="Open" onPrimary={() => setPanel('location')} icon="place" />
@@ -242,7 +281,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
           icon="delete-forever" />
 
         <View className="mt-6 mb-10 items-center">
-          <TouchableOpacity onPress={onBack} style={s.backButton} className="px-4 py-2 rounded-md">
+          <TouchableOpacity onPress={onBack} style={s.backButton} className="px-4 py-2 rounded-md" accessibilityRole="button" accessibilityLabel="Back to home">
             <Text style={s.backButtonText} className="text-sm font-medium">Back to Home</Text>
           </TouchableOpacity>
         </View>
@@ -278,11 +317,11 @@ function SettingsCard({ theme, title, description, primaryLabel, secondaryLabel,
         {description}
       </Text>
       <View className="flex-row gap-2">
-        <TouchableOpacity onPress={onPrimary} style={s.primaryButton} className="px-3 py-1 rounded-md">
+        <TouchableOpacity onPress={onPrimary} style={s.primaryButton} className="px-3 py-1 rounded-md" accessibilityRole="button" accessibilityLabel={primaryLabel}>
           <Text style={s.primaryButtonText} className="text-xs font-medium">{primaryLabel}</Text>
         </TouchableOpacity>
         {secondaryLabel && onSecondary && (
-          <TouchableOpacity onPress={onSecondary} style={s.secondaryButton} className="px-3 py-1 rounded-md">
+          <TouchableOpacity onPress={onSecondary} style={s.secondaryButton} className="px-3 py-1 rounded-md" accessibilityRole="button" accessibilityLabel={secondaryLabel}>
             <Text style={s.cardTitle} className="text-xs font-medium">{secondaryLabel}</Text>
           </TouchableOpacity>
         )}

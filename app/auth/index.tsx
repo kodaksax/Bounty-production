@@ -14,6 +14,8 @@ import type { Href } from 'expo-router';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 
 export default function AuthIndex() {
   const router = useRouter();
@@ -21,6 +23,8 @@ export default function AuthIndex() {
   const params = useLocalSearchParams<Record<string, string | string[]>>();
   // Guard so we only redirect once, even if params reference changes on re-renders.
   const redirected = useRef(false);
+  const { theme } = useAppThemeContext();
+  const styles = makeStyles(theme);
 
   useEffect(() => {
     if (redirected.current) return;
@@ -47,16 +51,18 @@ export default function AuthIndex() {
   // Show a minimal loading indicator while the redirect takes effect.
   return (
     <View style={styles.container}>
-      <ActivityIndicator size="large" color="#9CA3AF" />
+      <ActivityIndicator size="large" color={theme.primary} />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0B0F14',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+  });
+}

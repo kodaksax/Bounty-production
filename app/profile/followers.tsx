@@ -3,7 +3,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { followService } from "lib/services/follow-service";
 import { userProfileService } from "lib/services/user-profile-service";
 import type { UserProfile } from "lib/types";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -13,11 +13,15 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppThemeContext } from "../../lib/themes/AppThemeContext";
+import type { AppTheme } from "../../lib/themes/types";
 
 export default function FollowersScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { theme } = useAppThemeContext();
+  const styles = makeStyles(theme);
 
   const [followers, setFollowers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,7 +37,7 @@ export default function FollowersScreen() {
       setError(null);
 
       const followRelations = await followService.getFollowers(userId || "");
-      
+
       // Fetch profiles for all followers
       const followerProfiles = await Promise.all(
         followRelations.map((f) => userProfileService.getProfile(f.followerId))
@@ -66,13 +70,13 @@ export default function FollowersScreen() {
         <Text style={styles.followerUsername}>{item.username}</Text>
         {item.title && <Text style={styles.followerTitle}>{item.title}</Text>}
       </View>
-      <MaterialIcons name="chevron-right" size={24} color="#9ca3af" />
+      <MaterialIcons name="chevron-right" size={24} color={theme.textSecondary} />
     </TouchableOpacity>
   );
 
   const renderEmpty = () => (
     <View style={styles.emptyState}>
-      <MaterialIcons name="people-outline" size={64} color="#6b7280" />
+      <MaterialIcons name="people-outline" size={64} color={theme.textSecondary} />
       <Text style={styles.emptyTitle}>No followers yet</Text>
       <Text style={styles.emptyText}>
         When people follow this user, they
@@ -87,7 +91,7 @@ export default function FollowersScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <MaterialIcons name="arrow-back" size={24} color="#fffef5" />
+          <MaterialIcons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Followers</Text>
       </View>
@@ -103,7 +107,7 @@ export default function FollowersScreen() {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#059669" />
+          <ActivityIndicator size="large" color={theme.primary} />
         </View>
       ) : (
         <FlatList
@@ -121,111 +125,113 @@ export default function FollowersScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#0B0F14",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#0B0F14",
-  },
-  backButton: {
-    marginRight: 12,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#fffef5",
-    letterSpacing: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  errorBanner: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "#dc2626",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginHorizontal: 16,
-    marginBottom: 8,
-    borderRadius: 8,
-  },
-  errorBannerText: {
-    flex: 1,
-    color: "#fff",
-    fontSize: 14,
-  },
-  retryText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  listContent: {
-    paddingHorizontal: 16,
-  },
-  followerItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#374151",
-  },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#059669",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  avatarText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#fffef5",
-  },
-  followerInfo: {
-    flex: 1,
-  },
-  followerName: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#fffef5",
-    marginBottom: 2,
-  },
-  followerUsername: {
-    fontSize: 14,
-    color: "#9ca3af",
-    marginBottom: 2,
-  },
-  followerTitle: {
-    fontSize: 13,
-    color: "#059669",
-  },
-  emptyState: {
-    alignItems: "center",
-    paddingVertical: 64,
-    paddingHorizontal: 32,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: "#fffef5",
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: "#9ca3af",
-    textAlign: "center",
-    lineHeight: 20,
-  },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: theme.background,
+    },
+    backButton: {
+      marginRight: 12,
+    },
+    headerTitle: {
+      fontSize: 20,
+      fontWeight: "bold",
+      color: theme.text,
+      letterSpacing: 1,
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    errorBanner: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      backgroundColor: "#dc2626",
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      marginHorizontal: 16,
+      marginBottom: 8,
+      borderRadius: 8,
+    },
+    errorBannerText: {
+      flex: 1,
+      color: "#fff",
+      fontSize: 14,
+    },
+    retryText: {
+      color: "#fff",
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    listContent: {
+      paddingHorizontal: 16,
+    },
+    followerItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    avatar: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: theme.primary,
+      justifyContent: "center",
+      alignItems: "center",
+      marginRight: 12,
+    },
+    avatarText: {
+      fontSize: 18,
+      fontWeight: "bold",
+      color: "#ffffff",
+    },
+    followerInfo: {
+      flex: 1,
+    },
+    followerName: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: theme.text,
+      marginBottom: 2,
+    },
+    followerUsername: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      marginBottom: 2,
+    },
+    followerTitle: {
+      fontSize: 13,
+      color: theme.primary,
+    },
+    emptyState: {
+      alignItems: "center",
+      paddingVertical: 64,
+      paddingHorizontal: 32,
+    },
+    emptyTitle: {
+      fontSize: 20,
+      fontWeight: "600",
+      color: theme.text,
+      marginTop: 16,
+      marginBottom: 8,
+    },
+    emptyText: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      textAlign: "center",
+      lineHeight: 20,
+    },
+  });
+}

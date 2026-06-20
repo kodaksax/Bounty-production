@@ -1,9 +1,11 @@
 // components/applicant-card.tsx - Applicant card with explicit confirmation for accept/reject
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useGlobalSearchParams, usePathname, useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { BountyRequestWithDetails } from '../lib/services/bounty-request-service';
+import { useAppThemeContext } from '../lib/themes/AppThemeContext';
+import type { AppTheme } from '../lib/themes/types';
 import { getAvatarInitials, getValidAvatarUrl } from '../lib/utils/avatar-utils';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { ReputationScoreCompact } from './ui/reputation-score';
@@ -25,6 +27,9 @@ export function ApplicantCard({
   onRequestMoreInfo,
   referrerOverride,
 }: ApplicantCardProps) {
+  const { theme } = useAppThemeContext();
+  const s = useMemo(() => makeStyles(theme), [theme]);
+
   const [isProcessing, setIsProcessing] = useState(false);
   const [actionType, setActionType] = useState<'accept' | 'reject' | null>(null);
   const [isNavigatingToProfile, setIsNavigatingToProfile] = useState(false);
@@ -36,18 +41,13 @@ export function ApplicantCard({
     : '';
   const referrerValue = `${pathname || ''}${searchString}`;
 
-  // Track component mounted state to prevent state updates after unmount
   const isMountedRef = useRef(true);
-  // Track navigation timeout for cleanup
   const navigationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Brief loading indicator timeout for visual feedback during navigation transition
   const NAVIGATION_LOADING_TIMEOUT_MS = 400;
 
   useEffect(() => {
     return () => {
       isMountedRef.current = false;
-      // Clear navigation timeout on unmount to prevent memory leaks
       if (navigationTimeoutRef.current) {
         clearTimeout(navigationTimeoutRef.current);
       }
@@ -114,16 +114,11 @@ export function ApplicantCard({
     const id = (request as any).hunter_id || (request as any).user_id;
     if (id) {
       setIsNavigatingToProfile(true);
-      // Prefer an explicit override when provided by the caller (e.g., Postings
-      // screen wants to ensure the Requests tab is restored). Otherwise fall
-      // back to the computed pathname+search value.
       const finalRef = referrerOverride ?? referrerValue;
       router.push(`/profile/${id}?referrer=${encodeURIComponent(finalRef)}`);
-      // Clear any existing timeout before setting a new one
       if (navigationTimeoutRef.current) {
         clearTimeout(navigationTimeoutRef.current);
       }
-      // Reset state after navigation transition - stored in ref for cleanup
       navigationTimeoutRef.current = setTimeout(() => {
         if (isMountedRef.current) {
           setIsNavigatingToProfile(false);
@@ -133,36 +128,33 @@ export function ApplicantCard({
   }, [request, router]);
 
   const profileId = (request as any).hunter_id || (request as any).user_id;
-
-  // Get a valid avatar URL, filtering out placeholder URLs
-  // Prefer 'avatar' field but fallback to legacy 'avatar_url'
   const validAvatarUrl = getValidAvatarUrl(request.profile?.avatar || request.profile?.avatar_url);
 
   return (
     <TextGuard>
-      <View style={styles.card}>
-        {/* Header with avatar and applicant info - Clickable to navigate to profile */}
+      <View style={s.card}>
+        {/* Header with avatar and applicant info */}
         <TouchableOpacity
-          style={styles.header}
+          style={s.header}
           onPress={handleProfilePress}
           disabled={!profileId || isNavigatingToProfile}
           accessibilityRole="button"
           accessibilityLabel={`View ${request.profile?.username || 'applicant'}'s profile`}
           accessibilityHint="Opens the applicant's profile page"
         >
-          <View style={styles.avatarContainer}>
+          <View style={s.avatarContainer}>
             {isNavigatingToProfile ? (
-              <View style={[styles.avatar, styles.avatarLoading]}>
-                <ActivityIndicator size="small" color="#9CA3AF" />
+              <View style={[s.avatar, s.avatarLoading]}>
+                <ActivityIndicator size="small" color={theme.textSecondary} />
               </View>
             ) : (
-              <Avatar style={styles.avatar}>
+              <Avatar style={s.avatar}>
                 <AvatarImage
                   src={validAvatarUrl}
                   alt={request.profile?.username || 'Applicant'}
                 />
-                <AvatarFallback style={styles.avatarFallback}>
-                  <Text style={styles.avatarText}>
+                <AvatarFallback style={s.avatarFallback}>
+                  <Text style={s.avatarText}>
                     {getAvatarInitials(request.profile?.username)}
                   </Text>
                 </AvatarFallback>
@@ -170,12 +162,11 @@ export function ApplicantCard({
             )}
           </View>
 
-          <View style={styles.applicantInfo}>{/* avoid whitespace text node */}
-            <View style={styles.nameRow}>
-              <Text style={styles.applicantName}>
+          <View style={s.applicantInfo}>
+            <View style={s.nameRow}>
+              <Text style={s.applicantName}>
                 {request.profile?.username || 'Unknown User'}
               </Text>
-              {/* Verification Badge */}
               <VerificationBadge
                 status={
                   typeof (request.profile as any)?.verificationStatus === 'string'
@@ -187,54 +178,53 @@ export function ApplicantCard({
                 showExplanation={true}
               />
             </View>
-            {/* Reputation Score - prominently displayed */}
-            <View style={styles.ratingContainer}>
+            <View style={s.ratingContainer}>
               <ReputationScoreCompact
                 averageRating={request.profile?.averageRating || 0}
                 ratingCount={request.profile?.ratingCount || 0}
               />
               {request.profile?.ratingCount ? (
-                <Text style={styles.ratingText}>
+                <Text style={s.ratingText}>
                   ({request.profile.ratingCount} review{request.profile.ratingCount !== 1 ? 's' : ''})
                 </Text>
               ) : null}
             </View>
-          </View>{/* avoid whitespace text node */}
+          </View>
 
           {profileId ? (
-            <MaterialIcons name="chevron-right" size={20} color="#9CA3AF" style={{ marginLeft: 'auto' }} />
+            <MaterialIcons name="chevron-right" size={20} color={theme.textSecondary} style={{ marginLeft: 'auto' }} />
           ) : null}
         </TouchableOpacity>
 
         {/* Bounty details */}
-        <View style={styles.bountySection}>
-          <Text style={styles.sectionLabel}>Applied for:</Text>
-          <Text style={styles.bountyTitle}>{request.bounty?.title || 'Untitled Bounty'}</Text>
+        <View style={s.bountySection}>
+          <Text style={s.sectionLabel}>Applied for:</Text>
+          <Text style={s.bountyTitle}>{request.bounty?.title || 'Untitled Bounty'}</Text>
           {request.bounty?.amount > 0 && !request.bounty?.is_for_honor && (
-            <View style={styles.amountBadge}>
-              <Text style={styles.amountText}>${request.bounty.amount}</Text>
+            <View style={s.amountBadge}>
+              <Text style={s.amountText}>${request.bounty.amount}</Text>
             </View>
           )}
           {request.bounty?.is_for_honor && (
-            <View style={styles.honorBadge}>
+            <View style={s.honorBadge}>
               <MaterialIcons name="favorite" size={14} color="#fff" />
-              <Text style={styles.honorText}>For Honor</Text>
+              <Text style={s.honorText}>For Honor</Text>
             </View>
           )}
         </View>
 
         {/* Hunter's application message */}
         {request.message ? (
-          <View style={styles.messageSection}>
-            <Text style={styles.messageSectionLabel}>Message from applicant</Text>
-            <Text style={styles.messageText}>{request.message}</Text>
+          <View style={s.messageSection}>
+            <Text style={s.messageSectionLabel}>Message from applicant</Text>
+            <Text style={s.messageText}>{request.message}</Text>
           </View>
         ) : null}
 
         {/* Action buttons */}
-        <View style={styles.actions}>
+        <View style={s.actions}>
           <TouchableOpacity
-            style={[styles.button, styles.rejectButton]}
+            style={[s.button, s.rejectButton]}
             onPress={handleReject}
             disabled={isProcessing || request.status !== 'pending'}
           >
@@ -243,24 +233,24 @@ export function ApplicantCard({
             ) : (
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <MaterialIcons name="close" size={18} color="#fff" />
-                <Text style={styles.buttonText}>Reject</Text>
+                <Text style={s.buttonText}>Reject</Text>
               </View>
             )}
           </TouchableOpacity>
 
           {onRequestMoreInfo && (
             <TouchableOpacity
-              style={[styles.button, styles.infoButton]}
+              style={[s.button, s.infoButton]}
               onPress={handleRequestInfo}
               disabled={isProcessing || request.status !== 'pending'}
             >
-              <MaterialIcons name="chat" size={18} color="#059669" />
-              <Text style={[styles.buttonText, styles.infoButtonText]}>Ask</Text>
+              <MaterialIcons name="chat" size={18} color={theme.primary} />
+              <Text style={[s.buttonText, s.infoButtonText]}>Ask</Text>
             </TouchableOpacity>
           )}
 
           <TouchableOpacity
-            style={[styles.button, styles.acceptButton]}
+            style={[s.button, s.acceptButton]}
             onPress={handleAccept}
             disabled={isProcessing || request.status !== 'pending'}
           >
@@ -269,7 +259,7 @@ export function ApplicantCard({
             ) : (
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <MaterialIcons name="check" size={18} color="#fff" />
-                <Text style={styles.buttonText}>Accept</Text>
+                <Text style={s.buttonText}>Accept</Text>
               </View>
             )}
           </TouchableOpacity>
@@ -277,10 +267,10 @@ export function ApplicantCard({
 
         {/* Status badge for non-pending requests */}
         {request.status !== 'pending' && (
-          <View style={styles.statusBadge}>
+          <View style={s.statusBadge}>
             <Text style={[
-              styles.statusText,
-              request.status === 'accepted' ? styles.statusAccepted : styles.statusRejected
+              s.statusText,
+              request.status === 'accepted' ? s.statusAccepted : s.statusRejected
             ]}>
               {request.status === 'accepted' ? '✓ Accepted' : '✕ Rejected'}
             </Text>
@@ -291,179 +281,183 @@ export function ApplicantCard({
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: '#0B0F14', // emerald-700
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.2)',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  avatarContainer: {
-    position: 'relative',
-  },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderWidth: 2,
-    borderColor: '#6ee7b7', // emerald-400
-    borderRadius: 24,
-  },
-  avatarLoading: {
-    backgroundColor: '#064e3b', // emerald-900
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarFallback: {
-    backgroundColor: '#064e3b', // emerald-900
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    color: '#9CA3AF', // emerald-200
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  applicantInfo: {
-    marginLeft: 12,
-    flex: 1,
-  },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
-  },
-  applicantName: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  ratingText: {
-    color: '#9CA3AF', // emerald-200
-    fontSize: 12,
-  },
-  bountySection: {
-    marginBottom: 16,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(110, 231, 183, 0.2)',
-  },
-  messageSection: {
-    marginBottom: 16,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(110, 231, 183, 0.15)',
-  },
-  messageSectionLabel: {
-    color: '#9CA3AF',
-    fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-    marginBottom: 6,
-  },
-  messageText: {
-    color: '#1F2937',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  sectionLabel: {
-    color: '#9CA3AF', // emerald-200
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  bountyTitle: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '500',
-    marginBottom: 8,
-  },
-  amountBadge: {
-    backgroundColor: '#064e3b', // emerald-900
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-  },
-  amountText: {
-    color: '#6ee7b7', // emerald-400
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  honorBadge: {
-    backgroundColor: '#ef4444', // red-500
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-  },
-  honorText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 12,
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  button: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 8,
-    gap: 6,
-  },
-  rejectButton: {
-    backgroundColor: '#dc2626', // red-600
-  },
-  infoButton: {
-    backgroundColor: '#0B0F14', // emerald-700
-    borderWidth: 1,
-    borderColor: '#059669', // emerald-500
-  },
-  acceptButton: {
-    backgroundColor: '#059669', // emerald-500
-  },
-  buttonText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  infoButtonText: {
-    color: '#059669', // emerald-500
-  },
-  statusBadge: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(110, 231, 183, 0.2)',
-  },
-  statusText: {
-    textAlign: 'center',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  statusAccepted: {
-    color: '#059669', // emerald-500
-  },
-  statusRejected: {
-    color: '#dc2626', // red-600
-  },
-});
+function makeStyles(t: AppTheme) {
+  return StyleSheet.create({
+    card: {
+      backgroundColor: t.surface,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: t.isDark ? 'rgba(110,231,183,0.2)' : t.border,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 16,
+    },
+    avatarContainer: {
+      position: 'relative',
+    },
+    avatar: {
+      width: 48,
+      height: 48,
+      borderWidth: 2,
+      borderColor: t.isDark ? '#6ee7b7' : t.primary,
+      borderRadius: 24,
+    },
+    avatarLoading: {
+      backgroundColor: t.isDark ? '#064e3b' : 'rgba(5,150,105,0.12)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    avatarFallback: {
+      backgroundColor: t.isDark ? '#064e3b' : 'rgba(5,150,105,0.12)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    avatarText: {
+      color: t.textSecondary,
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    applicantInfo: {
+      marginLeft: 12,
+      flex: 1,
+    },
+    nameRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 4,
+    },
+    applicantName: {
+      color: t.text,
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    ratingContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    ratingText: {
+      color: t.textSecondary,
+      fontSize: 12,
+    },
+    bountySection: {
+      marginBottom: 16,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: t.isDark ? 'rgba(110,231,183,0.2)' : t.border,
+    },
+    messageSection: {
+      marginBottom: 16,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: t.isDark ? 'rgba(110,231,183,0.15)' : t.border,
+    },
+    messageSectionLabel: {
+      color: t.textSecondary,
+      fontSize: 11,
+      fontWeight: '600',
+      textTransform: 'uppercase',
+      letterSpacing: 0.4,
+      marginBottom: 6,
+    },
+    messageText: {
+      color: t.text,
+      fontSize: 14,
+      lineHeight: 20,
+    },
+    sectionLabel: {
+      color: t.textSecondary,
+      fontSize: 12,
+      marginBottom: 4,
+    },
+    bountyTitle: {
+      color: t.text,
+      fontSize: 15,
+      fontWeight: '500',
+      marginBottom: 8,
+    },
+    amountBadge: {
+      backgroundColor: t.isDark ? '#064e3b' : 'rgba(5,150,105,0.12)',
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 6,
+      alignSelf: 'flex-start',
+    },
+    amountText: {
+      color: t.isDark ? '#6ee7b7' : t.primary,
+      fontWeight: '600',
+      fontSize: 14,
+    },
+    // Unique color — kept as designed
+    honorBadge: {
+      backgroundColor: '#ef4444',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 6,
+      alignSelf: 'flex-start',
+    },
+    honorText: {
+      color: '#fff',
+      fontWeight: '600',
+      fontSize: 12,
+    },
+    actions: {
+      flexDirection: 'row',
+      gap: 8,
+    },
+    button: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 10,
+      borderRadius: 8,
+      gap: 6,
+    },
+    // Unique colors — kept as designed
+    rejectButton: {
+      backgroundColor: '#dc2626',
+    },
+    infoButton: {
+      backgroundColor: t.surface,
+      borderWidth: 1,
+      borderColor: t.primary,
+    },
+    acceptButton: {
+      backgroundColor: '#059669',
+    },
+    buttonText: {
+      color: '#fff',
+      fontWeight: '600',
+      fontSize: 14,
+    },
+    infoButtonText: {
+      color: t.primary,
+    },
+    statusBadge: {
+      marginTop: 12,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: t.isDark ? 'rgba(110,231,183,0.2)' : t.border,
+    },
+    statusText: {
+      textAlign: 'center',
+      fontWeight: '600',
+      fontSize: 14,
+    },
+    statusAccepted: {
+      color: '#059669',
+    },
+    statusRejected: {
+      color: '#dc2626',
+    },
+  });
+}

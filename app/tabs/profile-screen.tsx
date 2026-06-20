@@ -371,6 +371,8 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             <TouchableOpacity
               style={styles.editButton}
               onPress={() => setIsEditing(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Edit skillsets"
             >
               <Text style={styles.editButtonText}>Edit</Text>
             </TouchableOpacity>
@@ -449,10 +451,10 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
           <TouchableOpacity
             className="flex-row items-center justify-between rounded-lg p-3 touch-target-min"
             style={{ backgroundColor: theme.surface }}
-            onPress={() => {
-              // Navigate to history screen
-              setShowHistory(true)
-            }}
+            onPress={() => setShowHistory(true)}
+            accessibilityRole="button"
+            accessibilityLabel="View history"
+            accessibilityHint="Opens your completed, archived, and deleted bounties"
           >
             <View className="flex-row items-center">
               <MaterialIcons name="history" size={20} color={theme.textSecondary} />

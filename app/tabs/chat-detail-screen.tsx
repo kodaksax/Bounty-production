@@ -52,6 +52,7 @@ export function ChatDetailScreen({
   const [showReportModal, setShowReportModal] = useState(false)
   const [inputText, setInputText] = useState('')
   const listRef = useRef<FlatList<Message>>(null)
+  const hasScrolledToBottom = useRef(false)
   const typingUsersRef = useTypingIndicator(conversation.id)
   const insets = useSafeAreaInsets()
   // Use a slightly larger offset to guarantee composer is above BottomNav
@@ -254,6 +255,18 @@ export function ChatDetailScreen({
               windowSize={10}
               removeClippedSubviews={true}
               getItemLayout={getItemLayout}
+              onLayout={() => {
+                if (!hasScrolledToBottom.current) {
+                  listRef.current?.scrollToEnd({ animated: false })
+                  hasScrolledToBottom.current = true
+                }
+              }}
+              onContentSizeChange={() => {
+                if (!hasScrolledToBottom.current) {
+                  listRef.current?.scrollToEnd({ animated: false })
+                  hasScrolledToBottom.current = true
+                }
+              }}
               onScrollToIndexFailed={(info) => {
                 const wait = new Promise(resolve => setTimeout(resolve, 500))
                 wait.then(() => {

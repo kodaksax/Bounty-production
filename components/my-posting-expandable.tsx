@@ -1080,7 +1080,7 @@ export function MyPostingExpandable({
       {/* Tap-to-expand hint — shown only when collapsed */}
       {!expanded && (
         <View style={styles.tapHint}>
-          <MaterialIcons name="expand-more" size={14} color="rgba(110, 231, 183, 0.6)" />
+          <MaterialIcons name="expand-more" size={14} color={theme.textSecondary} />
           <Text style={styles.tapHintText}>Tap card to see progress & actions</Text>
         </View>
       )}
@@ -1151,7 +1151,7 @@ export function MyPostingExpandable({
           {/* Pre-acceptance info when open */}
           {bounty.status === 'open' && (
             <View style={styles.infoBox}>
-              <MaterialIcons name="hourglass-empty" size={18} color="#6ee7b7" />
+              <MaterialIcons name="hourglass-empty" size={18} color={theme.isDark ? '#6ee7b7' : theme.primary} />
               {isOwner ? (
                 <Text style={styles.infoText}>
                   Awaiting a hunter. Review requests in the Requests tab.
@@ -1235,13 +1235,13 @@ export function MyPostingExpandable({
                       accessibilityHint="Opens quick tools including dispute and message actions"
                     >
                       <View style={styles.posterToolsToggleLeft}>
-                        <MaterialIcons name="gavel" size={18} color="#9CA3AF" />
+                        <MaterialIcons name="gavel" size={18} color={theme.textSecondary} />
                         <Text style={styles.posterToolsToggleText}>Poster Flow Tools</Text>
                       </View>
                       <MaterialIcons
                         name={posterToolsExpanded ? 'expand-less' : 'expand-more'}
                         size={20}
-                        color="#9CA3AF"
+                        color={theme.textSecondary}
                       />
                     </TouchableOpacity>
 
@@ -1322,7 +1322,7 @@ export function MyPostingExpandable({
                   )}
 
                   <View style={styles.infoBox}>
-                    <MaterialIcons name="info-outline" size={18} color="#6ee7b7" />
+                    <MaterialIcons name="info-outline" size={18} color={theme.isDark ? '#6ee7b7' : theme.primary} />
                     <Text style={styles.infoText}>
                       Congrats on being selected! Begin work on the bounty, money is in escrow; once
                       complete press the next button.
@@ -1422,13 +1422,13 @@ export function MyPostingExpandable({
                       accessibilityHint="Opens quick tools including dispute and message actions"
                     >
                       <View style={styles.hunterToolsToggleLeft}>
-                        <MaterialIcons name="build-circle" size={18} color="#9CA3AF" />
+                        <MaterialIcons name="build-circle" size={18} color={theme.textSecondary} />
                         <Text style={styles.hunterToolsToggleText}>Hunter Flow Tools</Text>
                       </View>
                       <MaterialIcons
                         name={hunterToolsExpanded ? 'expand-less' : 'expand-more'}
                         size={20}
-                        color="#9CA3AF"
+                        color={theme.textSecondary}
                       />
                     </TouchableOpacity>
 
@@ -1438,7 +1438,7 @@ export function MyPostingExpandable({
                           style={styles.hunterToolBtn}
                           onPress={handleMessagePoster}
                         >
-                          <MaterialIcons name="chat" size={18} color="#6ee7b7" />
+                          <MaterialIcons name="chat" size={18} color={theme.isDark ? '#6ee7b7' : theme.primary} />
                           <Text style={styles.hunterToolText}>Message Poster</Text>
                         </TouchableOpacity>
 
@@ -1518,7 +1518,7 @@ export function MyPostingExpandable({
                 )}
 
                 <View style={styles.infoBox}>
-                  <MaterialIcons name="rate-review" size={18} color="#6ee7b7" />
+                  <MaterialIcons name="rate-review" size={18} color={theme.isDark ? '#6ee7b7' : theme.primary} />
                   <Text style={styles.infoText}>
                     The hunter has submitted their work for review. Review the submission and
                     approve or request changes.
@@ -1565,7 +1565,7 @@ export function MyPostingExpandable({
                       <DisputeFrozenBanner message="A dispute has been opened for this bounty. The flow is paused until an admin resolves the dispute." />
                     )}
                     <View style={styles.infoBox}>
-                      <MaterialIcons name="hourglass-top" size={18} color="#6ee7b7" />
+                      <MaterialIcons name="hourglass-top" size={18} color={theme.isDark ? '#6ee7b7' : theme.primary} />
                       <Text style={styles.infoText}>
                         Waiting for poster to review your submission.
                       </Text>
@@ -1607,7 +1607,7 @@ export function MyPostingExpandable({
                             <MaterialIcons
                               name={item.type === 'image' ? 'image' : 'insert-drive-file'}
                               size={24}
-                              color="#6ee7b7"
+                              color={theme.isDark ? '#6ee7b7' : theme.primary}
                             />
                           </View>
                           <View style={styles.proofInfo}>
@@ -1713,7 +1713,7 @@ export function MyPostingExpandable({
                 {!bounty.is_for_honor && (
                   <View style={styles.receiptCard}>
                     <View style={styles.receiptHeader}>
-                      <MaterialIcons name="receipt" size={24} color="#6ee7b7" />
+                      <MaterialIcons name="receipt" size={24} color={theme.isDark ? '#6ee7b7' : theme.primary} />
                       <Text style={styles.receiptTitle}>Transaction Receipt</Text>
                     </View>
                     <View style={styles.receiptDivider} />
@@ -1885,7 +1885,7 @@ export function MyPostingExpandable({
           {/* Conversation hint - only show when status is 'open', not when in_progress since bounty has already been accepted */}
           {!conversation && bounty.status === 'open' && (
             <View style={styles.infoBox}>
-              <MaterialIcons name="chat-bubble-outline" size={18} color="#6ee7b7" />
+              <MaterialIcons name="chat-bubble-outline" size={18} color={theme.isDark ? '#6ee7b7' : theme.primary} />
               <Text style={styles.infoText}>
                 {isOwner
                   ? 'Conversation will appear after acceptance.'
@@ -1931,7 +1931,7 @@ export function MyPostingExpandable({
 function makeStyles(theme: AppTheme) {
   return StyleSheet.create({
     panel: {
-      backgroundColor: 'rgba(5, 150, 105, 0.25)',
+      backgroundColor: theme.isDark ? 'rgba(5, 150, 105, 0.25)' : theme.surface,
       borderRadius: 12,
       padding: 12,
       borderWidth: 1,
@@ -1963,7 +1963,9 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'flex-start',
       gap: 8,
-      backgroundColor: 'rgba(5, 46, 27, 0.35)',
+      backgroundColor: theme.isDark ? 'rgba(5, 46, 27, 0.35)' : 'rgba(5, 150, 105, 0.07)',
+      borderWidth: 1,
+      borderColor: theme.isDark ? 'transparent' : 'rgba(5, 150, 105, 0.15)',
       padding: 10,
       borderRadius: 8,
       marginBottom: 8,
@@ -2034,24 +2036,24 @@ function makeStyles(theme: AppTheme) {
       fontSize: 11,
     },
     messageTextArea: {
-      backgroundColor: 'rgba(5, 150, 105, 0.2)',
+      backgroundColor: theme.isDark ? 'rgba(5, 150, 105, 0.2)' : theme.surfaceSecondary,
       borderRadius: 12,
       padding: 12,
       color: theme.text,
       fontSize: 14,
       minHeight: 100,
       borderWidth: 1,
-      borderColor: 'rgba(110, 231, 183, 0.2)',
+      borderColor: theme.border,
     },
     proofItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: 'rgba(5, 150, 105, 0.2)',
+      backgroundColor: theme.isDark ? 'rgba(5, 150, 105, 0.2)' : theme.surfaceSecondary,
       borderRadius: 12,
       padding: 12,
       gap: 12,
       borderWidth: 1,
-      borderColor: 'rgba(110, 231, 183, 0.2)',
+      borderColor: theme.border,
       marginBottom: 8,
     },
     proofIcon: {
@@ -2165,12 +2167,12 @@ function makeStyles(theme: AppTheme) {
       textAlign: 'center',
     },
     receiptCard: {
-      backgroundColor: 'rgba(5, 150, 105, 0.1)',
+      backgroundColor: theme.isDark ? 'rgba(5, 150, 105, 0.1)' : theme.surfaceSecondary,
       borderRadius: 12,
       padding: 16,
       gap: 12,
       borderWidth: 1,
-      borderColor: 'rgba(110, 231, 183, 0.2)',
+      borderColor: theme.border,
     },
     receiptHeader: {
       flexDirection: 'row',
@@ -2184,7 +2186,7 @@ function makeStyles(theme: AppTheme) {
     },
     receiptDivider: {
       height: 1,
-      backgroundColor: 'rgba(110, 231, 183, 0.2)',
+      backgroundColor: theme.border,
     },
     receiptRow: {
       flexDirection: 'row',
@@ -2225,14 +2227,14 @@ function makeStyles(theme: AppTheme) {
       alignItems: 'center',
     },
     readyBadgeText: {
-      color: '#052e1b',
+      color: theme.text,
       fontSize: 12,
       marginLeft: 6,
       fontWeight: '600',
     },
     headerReviewBtn: {
       marginLeft: 8,
-      backgroundColor: 'rgba(167,243,208,0.9)',
+      backgroundColor: theme.isDark ? 'rgba(167,243,208,0.9)' : theme.primary,
       padding: 6,
       borderRadius: 8,
     },
@@ -2261,7 +2263,7 @@ function makeStyles(theme: AppTheme) {
       paddingBottom: 6,
     },
     tapHintText: {
-      color: 'rgba(110, 231, 183, 0.5)',
+      color: theme.textSecondary,
       fontSize: 11,
     },
     hunterToolsSection: {
@@ -2272,9 +2274,9 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      backgroundColor: 'rgba(5, 46, 27, 0.5)',
+      backgroundColor: theme.surfaceSecondary,
       borderWidth: 1,
-      borderColor: 'rgba(110, 231, 183, 0.35)',
+      borderColor: theme.border,
       borderRadius: 10,
       paddingHorizontal: 12,
       paddingVertical: 10,
@@ -2290,10 +2292,10 @@ function makeStyles(theme: AppTheme) {
       fontWeight: '700',
     },
     hunterToolsMenu: {
-      backgroundColor: 'rgba(5, 46, 27, 0.45)',
+      backgroundColor: theme.surface,
       borderRadius: 10,
       borderWidth: 1,
-      borderColor: 'rgba(110, 231, 183, 0.25)',
+      borderColor: theme.border,
       padding: 10,
       gap: 8,
     },
@@ -2338,9 +2340,9 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      backgroundColor: 'rgba(5, 46, 27, 0.5)',
+      backgroundColor: theme.surfaceSecondary,
       borderWidth: 1,
-      borderColor: 'rgba(110, 231, 183, 0.35)',
+      borderColor: theme.border,
       borderRadius: 10,
       paddingHorizontal: 12,
       paddingVertical: 10,
@@ -2356,10 +2358,10 @@ function makeStyles(theme: AppTheme) {
       fontWeight: '700',
     },
     posterToolsMenu: {
-      backgroundColor: 'rgba(5, 46, 27, 0.45)',
+      backgroundColor: theme.surface,
       borderRadius: 10,
       borderWidth: 1,
-      borderColor: 'rgba(110, 231, 183, 0.25)',
+      borderColor: theme.border,
       padding: 10,
       gap: 8,
     },
