@@ -1,67 +1,85 @@
-"use client"
+'use client';
 
-import { MaterialIcons } from "@expo/vector-icons"
-import { useRouter } from 'expo-router'
-import React, { useCallback, useEffect, useMemo, useState } from "react"
-import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from "react-native"
-import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
-import { SPACING } from '../lib/constants/accessibility'
-import { useHapticFeedback } from '../lib/haptic-feedback'
-import { useAppThemeContext } from '../lib/themes/AppThemeContext'
-import type { AppTheme } from '../lib/themes/types'
-import { BountyDetailModal } from "./bountydetailmodal"
-import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar'
+import { MaterialIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useNormalizedProfile } from '../hooks/useNormalizedProfile';
+import { SPACING } from '../lib/constants/accessibility';
+import { useHapticFeedback } from '../lib/haptic-feedback';
+import { useAppThemeContext } from '../lib/themes/AppThemeContext';
+import type { AppTheme } from '../lib/themes/types';
+import { BountyDetailModal } from './bountydetailmodal';
+import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window')
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export interface BountyListItemProps {
-  id: string | number
-  title: string
-  username?: string
-  price: number
-  distance: number | null
-  description?: string
-  isForHonor?: boolean
-  user_id?: string | null
-  work_type?: 'online' | 'in_person'
-  poster_avatar?: string
+  id: string | number;
+  title: string;
+  username?: string;
+  price: number;
+  distance: number | null;
+  description?: string;
+  isForHonor?: boolean;
+  user_id?: string | null;
+  work_type?: 'online' | 'in_person';
+  poster_avatar?: string;
 }
 
 function BountyListItemComponent({
-  id, title, username, price, distance, description,
-  isForHonor, user_id, work_type, poster_avatar
+  id,
+  title,
+  username,
+  price,
+  distance,
+  description,
+  isForHonor,
+  user_id,
+  work_type,
+  poster_avatar,
 }: BountyListItemProps) {
-  const { theme } = useAppThemeContext()
-  const s = useMemo(() => makeStyles(theme), [theme])
+  const { theme } = useAppThemeContext();
+  const s = useMemo(() => makeStyles(theme), [theme]);
 
-  const [showDetail, setShowDetail] = useState(false)
-  const router = useRouter()
-  const { triggerHaptic } = useHapticFeedback()
-  const { profile: posterProfile, loading: profileLoading } = useNormalizedProfile(user_id ?? undefined)
-  const [resolvedUsername, setResolvedUsername] = useState<string>(username || 'Loading...')
-  const avatarUrl = poster_avatar || posterProfile?.avatar
+  const [showDetail, setShowDetail] = useState(false);
+  const router = useRouter();
+  const { triggerHaptic } = useHapticFeedback();
+  const { profile: posterProfile, loading: profileLoading } = useNormalizedProfile(
+    user_id ?? undefined
+  );
+  const [resolvedUsername, setResolvedUsername] = useState<string>(username || 'Loading...');
+  const avatarUrl = poster_avatar || posterProfile?.avatar;
 
   useEffect(() => {
-    if (username) { setResolvedUsername(username); return }
-    if (posterProfile?.username) { setResolvedUsername(posterProfile.username); return }
-    setResolvedUsername(profileLoading ? 'Loading...' : 'Anonymous')
-  }, [username, posterProfile?.username, profileLoading])
+    if (username) {
+      setResolvedUsername(username);
+      return;
+    }
+    if (posterProfile?.username) {
+      setResolvedUsername(posterProfile.username);
+      return;
+    }
+    setResolvedUsername(profileLoading ? 'Loading...' : 'Anonymous');
+  }, [username, posterProfile?.username, profileLoading]);
 
-  const handleAvatarPress = useCallback((e: any) => {
-    e.stopPropagation()
-    triggerHaptic('light')
-    if (user_id) router.push(`/profile/${user_id}`)
-  }, [user_id, router, triggerHaptic])
+  const handleAvatarPress = useCallback(
+    (e: any) => {
+      e.stopPropagation();
+      triggerHaptic('light');
+      if (user_id) router.push(`/profile/${user_id}`);
+    },
+    [user_id, router, triggerHaptic]
+  );
 
   const handleBountyPress = useCallback(() => {
-    triggerHaptic('light')
-    setShowDetail(true)
-  }, [triggerHaptic])
+    triggerHaptic('light');
+    setShowDetail(true);
+  }, [triggerHaptic]);
 
   return (
     <>
       <View style={s.page}>
-
         {/* Top: poster info */}
         <View style={s.posterRow}>
           <TouchableOpacity
@@ -72,11 +90,12 @@ function BountyListItemComponent({
             accessibilityLabel={`View ${resolvedUsername}'s profile`}
           >
             <Avatar style={s.avatar}>
-              <AvatarImage src={avatarUrl || "/placeholder.svg?height=48&width=48"} alt={resolvedUsername} />
+              <AvatarImage
+                src={avatarUrl || '/placeholder.svg?height=48&width=48'}
+                alt={resolvedUsername}
+              />
               <AvatarFallback style={s.avatarFallback}>
-                <Text style={s.avatarText}>
-                  {resolvedUsername.substring(0, 2).toUpperCase()}
-                </Text>
+                <Text style={s.avatarText}>{resolvedUsername.substring(0, 2).toUpperCase()}</Text>
               </AvatarFallback>
             </Avatar>
           </TouchableOpacity>
@@ -92,7 +111,7 @@ function BountyListItemComponent({
               </View>
             ) : (
               <View style={s.inPersonBadge}>
-                <MaterialIcons name="place" size={12} color="#f59e0b" />
+                <MaterialIcons name="near-me" size={12} color="#059669" />
                 <Text style={s.inPersonText}>In Person</Text>
               </View>
             )}
@@ -105,14 +124,16 @@ function BountyListItemComponent({
             <Text style={s.title}>{title}</Text>
             {isForHonor && (
               <View style={s.honorBadgeLarge}>
-                <MaterialIcons name="favorite" size={16} color="#92400E" />
+                <MaterialIcons name="favorite" size={16} color="#059669" />
                 <Text style={s.honorBadgeLargeText}>For Honor</Text>
               </View>
             )}
           </View>
 
           {description ? (
-            <Text style={s.description} numberOfLines={4}>{description}</Text>
+            <Text style={s.description} numberOfLines={4}>
+              {description}
+            </Text>
           ) : null}
 
           <View style={s.locationRow}>
@@ -157,35 +178,43 @@ function BountyListItemComponent({
             <MaterialIcons name="arrow-forward" size={18} color="#fff" />
           </TouchableOpacity>
         </View>
-
       </View>
 
       {showDetail && (
         <BountyDetailModal
           bounty={{
-            id, username: resolvedUsername, title, price,
-            distance, description, user_id, work_type,
-            poster_avatar, is_for_honor: isForHonor
+            id,
+            username: resolvedUsername,
+            title,
+            price,
+            distance,
+            description,
+            user_id,
+            work_type,
+            poster_avatar,
+            is_for_honor: isForHonor,
           }}
           onClose={() => setShowDetail(false)}
         />
       )}
     </>
-  )
+  );
 }
 
-export const BountyListItem = React.memo(BountyListItemComponent, (prev, next) =>
-  prev.id === next.id &&
-  prev.title === next.title &&
-  prev.username === next.username &&
-  prev.price === next.price &&
-  prev.distance === next.distance &&
-  prev.description === next.description &&
-  prev.isForHonor === next.isForHonor &&
-  prev.user_id === next.user_id &&
-  prev.work_type === next.work_type &&
-  prev.poster_avatar === next.poster_avatar
-)
+export const BountyListItem = React.memo(
+  BountyListItemComponent,
+  (prev, next) =>
+    prev.id === next.id &&
+    prev.title === next.title &&
+    prev.username === next.username &&
+    prev.price === next.price &&
+    prev.distance === next.distance &&
+    prev.description === next.description &&
+    prev.isForHonor === next.isForHonor &&
+    prev.user_id === next.user_id &&
+    prev.work_type === next.work_type &&
+    prev.poster_avatar === next.poster_avatar
+);
 
 function makeStyles(t: AppTheme) {
   return StyleSheet.create({
@@ -262,17 +291,17 @@ function makeStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 4,
-      backgroundColor: 'rgba(245,158,11,0.1)',
+      backgroundColor: t.isDark ? 'rgba(16,185,129,0.1)' : 'rgba(5,150,105,0.08)',
       paddingHorizontal: 10,
       paddingVertical: 5,
       borderRadius: 20,
       borderWidth: 1,
-      borderColor: 'rgba(245,158,11,0.25)',
+      borderColor: t.isDark ? 'rgba(16,185,129,0.3)' : 'rgba(5,150,105,0.25)',
     },
     inPersonText: {
       fontSize: 12,
       fontWeight: '600',
-      color: '#fbbf24',
+      color: t.primary,
     },
 
     // Main content
@@ -290,16 +319,16 @@ function makeStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
-      backgroundColor: 'rgba(245,158,11,0.12)',
+      backgroundColor: t.isDark ? 'rgba(16,185,129,0.12)' : 'rgba(5,150,105,0.08)',
       paddingHorizontal: 12,
       paddingVertical: 6,
       borderRadius: 20,
       alignSelf: 'flex-start',
       borderWidth: 1,
-      borderColor: 'rgba(245,158,11,0.3)',
+      borderColor: t.isDark ? 'rgba(16,185,129,0.3)' : 'rgba(5,150,105,0.25)',
     },
     honorBadgeLargeText: {
-      color: '#fbbf24',
+      color: t.primary,
       fontWeight: '700',
       fontSize: 13,
     },
@@ -368,7 +397,7 @@ function makeStyles(t: AppTheme) {
     priceValueHonor: {
       fontSize: 16,
       fontWeight: '700',
-      color: '#fbbf24',           // semantic: honor/reward = amber
+      color: t.primary,
     },
     applyButton: {
       flexDirection: 'row',
@@ -389,5 +418,5 @@ function makeStyles(t: AppTheme) {
       fontWeight: '700',
       fontSize: 15,
     },
-  })
+  });
 }
