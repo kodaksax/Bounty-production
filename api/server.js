@@ -1140,11 +1140,13 @@ app.post('/api/bounties/:id/complete', async (req, res) => {
     
     // Fetch and return updated bounty
     const [updatedRows] = await conn.execute('SELECT * FROM bounties WHERE id = ?', [req.params.id]);
-    // Fire push notifications (best-effort)
+    // Fire push notification to the hunter — their work was approved and payment released.
+    // The "submitted for review" notification fires earlier, when the hunter submits work
+    // via completion-service.ts (submitCompletion → notifications_outbox).
     try {
       const updated = updatedRows[0];
-      const title = `Review Needed`;
-      const bodyMsg = `Bounty '${String(updated.title || '').slice(0,80)}' has been submitted for review`;
+      const title = `Work Approved!`;
+      const bodyMsg = `Your work on '${String(updated.title || '').slice(0,80)}' has been approved and payment has been released.`;
       await notifyBountyParticipants(req.params.id, title, bodyMsg, 'complete');
     } catch (notifyErr) {
       console.warn('[complete] push notification error', notifyErr && notifyErr.message ? notifyErr.message : notifyErr);

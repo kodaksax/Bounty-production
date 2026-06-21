@@ -160,6 +160,33 @@ export const completionService = {
 
         if (error) throw new Error(error?.message ?? JSON.stringify(error));
 
+        // Notify the poster that the hunter has submitted work for review.
+        // Insert into notifications_outbox so process-notification sends both
+        // an in-app bell entry and a push notification.
+        try {
+          const { data: bountyRow } = await supabase
+            .from('bounties')
+            .select('poster_id, user_id, title')
+            .eq('id', submission.bounty_id)
+            .maybeSingle();
+
+          const posterId = bountyRow?.poster_id ?? bountyRow?.user_id;
+          const bountyTitle = String(bountyRow?.title ?? '').slice(0, 80);
+
+          if (posterId) {
+            await supabase.from('notifications_outbox').insert({
+              recipients: [posterId],
+              title: 'Review Needed',
+              body: `A hunter has submitted their work on "${bountyTitle}" for your review.`,
+              data: { bountyId: submission.bounty_id, hunterId: submission.hunter_id, type: 'review_needed' },
+              bounty_id: String(submission.bounty_id),
+            });
+          }
+        } catch (notifErr) {
+          // Non-fatal: submission succeeded, notification is best-effort
+          logger.warning('Failed to send review-needed notification', { error: notifErr });
+        }
+
         return {
           ...data,
           proof_items: JSON.parse(data.proof_items || '[]'),
