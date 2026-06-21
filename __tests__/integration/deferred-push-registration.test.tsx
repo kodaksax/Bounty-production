@@ -116,6 +116,35 @@ describe('Deferred push registration', () => {
     })
   })
 
+  it('consumes deferred push registration flag on INITIAL_SESSION', async () => {
+    const mockSession = {
+      access_token: 'token-initial',
+      user: { id: 'user-initial', email: 'initial@b.com' },
+    }
+
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null }, error: null })
+    let captured: any = null
+    supabase.auth.onAuthStateChange.mockImplementation((cb: any) => {
+      captured = cb
+      return { data: { subscription: { unsubscribe: jest.fn() } } }
+    })
+
+    AsyncStorage.getItem.mockResolvedValue('true')
+
+    render(<AuthProvider><></></AuthProvider>)
+
+    await waitFor(async () => {
+      expect(captured).toBeDefined()
+      await captured('INITIAL_SESSION', mockSession)
+    })
+
+    await waitFor(() => {
+      expect(AsyncStorage.getItem).toHaveBeenCalledWith(DEFERRED_PUSH_REGISTRATION_KEY)
+      expect(AsyncStorage.removeItem).toHaveBeenCalledWith(DEFERRED_PUSH_REGISTRATION_KEY)
+      expect(notificationService.requestPermissionsAndRegisterToken).toHaveBeenCalled()
+    })
+  })
+
   it('handles registration failure gracefully (logs and continues)', async () => {
     const mockSession = { access_token: 't2', user: { id: 'u2' } }
 
