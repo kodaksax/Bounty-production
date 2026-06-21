@@ -81,6 +81,13 @@ const ENV_ICONS = {
 const envIcon = ENV_ICONS[APP_ENV]; // undefined for production → app.json default
 const GOOGLE_IOS_URL_SCHEME_PREFIX = 'com.googleusercontent.apps.';
 
+/**
+ * Keeps app.json plugin declarations as the source of truth while rewriting the
+ * Google Sign-In plugin to use real env values only when its required iOS URL
+ * scheme is available.
+ * @param {Array<string | [string, Record<string, string>]>} plugins
+ * @returns {Array<string | [string, Record<string, string>]>}
+ */
 function resolvePlugins(plugins = []) {
   const iosUrlScheme = process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME;
   const androidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
@@ -96,6 +103,9 @@ function resolvePlugins(plugins = []) {
     }
 
     if (!hasValidGoogleIosUrlScheme) {
+      // CI/export validation intentionally runs without Google Sign-In secrets.
+      // Dropping the plugin here lets Metro/Expo export succeed while the app
+      // already treats Google Sign-In as disabled until valid env vars exist.
       return [];
     }
 
