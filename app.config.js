@@ -93,7 +93,8 @@ function resolvePlugins(plugins = []) {
   const androidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
   const hasValidGoogleIosUrlScheme =
     typeof iosUrlScheme === 'string' &&
-    iosUrlScheme.startsWith(GOOGLE_IOS_URL_SCHEME_PREFIX);
+    iosUrlScheme.startsWith(GOOGLE_IOS_URL_SCHEME_PREFIX) &&
+    iosUrlScheme.length > GOOGLE_IOS_URL_SCHEME_PREFIX.length;
 
   return plugins.flatMap((plugin) => {
     const pluginName = Array.isArray(plugin) ? plugin[0] : plugin;
@@ -105,7 +106,8 @@ function resolvePlugins(plugins = []) {
     if (!hasValidGoogleIosUrlScheme) {
       // CI/export validation intentionally runs without Google Sign-In secrets.
       // Dropping the plugin here lets Metro/Expo export succeed while the app
-      // already treats Google Sign-In as disabled until valid env vars exist.
+      // already treats Google Sign-In as disabled until valid env vars exist;
+      // see app/auth/sign-in-form.tsx and lib/config/validation.ts.
       return [];
     }
 
