@@ -80,7 +80,8 @@
       [
         "@react-native-google-signin/google-signin",
         {
-          "androidClientId": "${EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID}"
+          "androidClientId": "${EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID}",
+          "iosUrlScheme":  "${EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME}"
         }
       ],
       [
