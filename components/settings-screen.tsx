@@ -11,6 +11,7 @@ import { useAdmin } from "../lib/admin-context"
 import { markIntentionalSignOut } from "../lib/utils/session-handler"
 import { ContactSupportScreen } from "./settings/contact-support-screen"
 import { FAQScreen } from "./settings/faq-screen"
+import { FeedbackSupportScreen } from "./settings/feedback-support-screen"
 import { HelpSupportScreen } from "./settings/help-support-screen"
 import { LocationSettingsScreen } from "./settings/location-settings-screen"
 import { NotificationsCenterScreen } from "./settings/notifications-center-screen"
@@ -22,7 +23,7 @@ interface SettingsScreenProps {
   navigation?: any // Accept navigation prop for navigation actions
 }
 
-type Panel = 'root' | 'editProfile' | 'privacy' | 'notifications' | 'location' | 'help' | 'contact' | 'terms' | 'faq'
+type Panel = 'root' | 'editProfile' | 'privacy' | 'notifications' | 'location' | 'help' | 'contact' | 'terms' | 'faq' | 'feedback'
 
 export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {}) {
   const [panel, setPanel] = useState<Panel>('root')
@@ -61,6 +62,7 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
   if (panel === 'contact') return <ContactSupportScreen onBack={() => setPanel('help')} />
   if (panel === 'terms') return <TermsPrivacyScreen onBack={() => setPanel('help')} />
   if (panel === 'faq') return <FAQScreen onBack={() => setPanel('help')} />
+  if (panel === 'feedback') return <FeedbackSupportScreen onBack={() => setPanel('root')} />
 
   // Root panel
   return (
@@ -113,6 +115,14 @@ export function SettingsScreen({ onBack, navigation }: SettingsScreenProps = {})
           primaryLabel="Open"
           onPrimary={() => setPanel('help')}
           icon="help-center"
+        />
+
+        <SettingsCard
+          title="Feedback & Support"
+          description="Report a bug, suggest a feature, contact our support team, or rate Bounty on the app store."
+          primaryLabel="Open"
+          onPrimary={() => setPanel('feedback')}
+          icon="feedback"
         />
 
         {/* Admin Tab Toggle - only visible to users with admin permissions */}
