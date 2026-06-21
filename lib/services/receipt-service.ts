@@ -118,7 +118,7 @@ ${transaction.details.title ? `Description: ${transaction.details.title}\n` : ''
     const typeLabel = this.getTypeLabel(transaction.type);
     const amount = Math.abs(transaction.amount);
     const sign = transaction.amount >= 0 ? '+' : '-';
-    const amountColor = transaction.amount >= 0 ? '#10b981' : '#ef4444';
+    const amountColor = transaction.amount >= 0 ? '#059669' : '#ef4444';
 
     return `
 <!DOCTYPE html>

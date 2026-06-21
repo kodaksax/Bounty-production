@@ -11,30 +11,30 @@ export function SkeletonCard() {
     <View style={styles.card}>
       {/* Header: avatar and poster info */}
       <View style={styles.header}>
-        <Skeleton className="h-10 w-10 rounded-full bg-emerald-700/40" />
+        <Skeleton className="h-10 w-10 rounded-full bg-[#111827]" />
         <View style={styles.headerText}>
-          <Skeleton className="h-4 w-32 mb-2 bg-emerald-700/40" />
-          <Skeleton className="h-3 w-20 bg-emerald-700/40" />
+          <Skeleton className="h-4 w-32 mb-2 bg-[#111827]" />
+          <Skeleton className="h-3 w-20 bg-[#111827]" />
         </View>
       </View>
       
       {/* Title */}
-      <Skeleton className="h-5 w-full mb-2 bg-emerald-700/40" />
+      <Skeleton className="h-5 w-full mb-2 bg-[#111827]" />
       
       {/* Description lines */}
-      <Skeleton className="h-3 w-full mb-2 bg-emerald-700/40" />
-      <Skeleton className="h-3 w-4/5 mb-3 bg-emerald-700/40" />
+      <Skeleton className="h-3 w-full mb-2 bg-[#111827]" />
+      <Skeleton className="h-3 w-4/5 mb-3 bg-[#111827]" />
       
       {/* Footer: amount, location, and actions */}
       <View style={styles.footer}>
-        <Skeleton className="h-4 w-24 bg-emerald-700/40" />
-        <Skeleton className="h-4 w-28 bg-emerald-700/40" />
+        <Skeleton className="h-4 w-24 bg-[#111827]" />
+        <Skeleton className="h-4 w-28 bg-[#111827]" />
       </View>
       
       {/* Action buttons */}
       <View style={styles.actions}>
-        <Skeleton className="h-10 flex-1 rounded-lg mr-2 bg-emerald-700/40" />
-        <Skeleton className="h-10 flex-1 rounded-lg bg-emerald-700/40" />
+        <Skeleton className="h-10 flex-1 rounded-lg mr-2 bg-[#111827]" />
+        <Skeleton className="h-10 flex-1 rounded-lg bg-[#111827]" />
       </View>
     </View>
   );
@@ -60,7 +60,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.2)',
+    borderColor: '#374151',
   },
   header: {
     flexDirection: 'row',

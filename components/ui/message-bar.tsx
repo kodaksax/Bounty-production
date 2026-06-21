@@ -1,6 +1,16 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import React, { useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 
 interface MessageBarProps {
   conversationId: string | null;
@@ -21,6 +31,8 @@ export function MessageBar({
 }: MessageBarProps) {
   const [messageText, setMessageText] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const { theme } = useAppThemeContext();
+  const styles = makeStyles(theme);
 
   const handleSend = async () => {
     const trimmed = messageText.trim();
@@ -52,7 +64,7 @@ export function MessageBar({
         <TextInput
           style={styles.input}
           placeholder={placeholder}
-          placeholderTextColor="rgba(255,254,245,0.4)"
+          placeholderTextColor={theme.textDisabled}
           value={messageText}
           onChangeText={setMessageText}
           multiline
@@ -80,44 +92,46 @@ export function MessageBar({
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    gap: 8,
-  },
-  label: {
-    color: '#6ee7b7',
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'flex-end',
-  },
-  input: {
-    flex: 1,
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
-    borderRadius: 12,
-    padding: 12,
-    color: '#fff',
-    fontSize: 14,
-    minHeight: 48,
-    maxHeight: 120,
-    borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.2)',
-    textAlignVertical: 'top',
-  },
-  sendButton: {
-    backgroundColor: '#10b981',
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sendButtonDisabled: {
-    backgroundColor: 'rgba(16, 185, 129, 0.3)',
-  },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      gap: 8,
+    },
+    label: {
+      color: theme.primaryLight,
+      fontSize: 12,
+      fontWeight: '600',
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    inputContainer: {
+      flexDirection: 'row',
+      gap: 8,
+      alignItems: 'flex-end',
+    },
+    input: {
+      flex: 1,
+      backgroundColor: theme.surfaceSecondary,
+      borderRadius: 12,
+      padding: 12,
+      color: theme.text,
+      fontSize: 14,
+      minHeight: 48,
+      maxHeight: 120,
+      borderWidth: 1,
+      borderColor: theme.border,
+      textAlignVertical: 'top',
+    },
+    sendButton: {
+      backgroundColor: '#059669',
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    sendButtonDisabled: {
+      backgroundColor: theme.isDark ? 'rgba(255,255,255,0.1)' : theme.border,
+    },
+  });
+}

@@ -322,7 +322,7 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
   };
 
   return (
-    <View className="flex-1 bg-emerald-600">
+    <View className="flex-1 bg-[#059669]">
       <TotpEnrollmentModal
         visible={enrollModalVisible}
         totp={enrollTotp}
@@ -345,13 +345,13 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
         {/* Password */}
         <View className="bg-black/30 rounded-xl p-4 mb-5">
           <SectionHeader icon="lock" title="Password" subtitle="Change your password to keep account secure." />
-          <Text className="text-xs text-emerald-200 mb-1">Current Password</Text>
-          <TextInput value={state.passwordCurrent} onChangeText={v => persist({ passwordCurrent: v })} secureTextEntry placeholder="••••••" placeholderTextColor="#a7f3d0" className="bg-black/40 rounded-md px-3 py-2 text-white mb-3" />
-          <Text className="text-xs text-emerald-200 mb-1">New Password</Text>
-          <TextInput value={state.passwordNew} onChangeText={v => persist({ passwordNew: v })} secureTextEntry placeholder="At least 8 characters" placeholderTextColor="#a7f3d0" className="bg-black/40 rounded-md px-3 py-2 text-white mb-3" />
-          <Text className="text-xs text-emerald-200 mb-1">Confirm New Password</Text>
-          <TextInput value={state.passwordConfirm} onChangeText={v => persist({ passwordConfirm: v })} secureTextEntry placeholder="Repeat new password" placeholderTextColor="#a7f3d0" className="bg-black/40 rounded-md px-3 py-2 text-white mb-4" />
-          <TouchableOpacity onPress={changePassword} className="self-start px-4 py-2 rounded-md bg-emerald-700">
+          <Text className="text-xs text-[#9CA3AF] mb-1">Current Password</Text>
+          <TextInput value={state.passwordCurrent} onChangeText={v => persist({ passwordCurrent: v })} secureTextEntry placeholder="••••••" placeholderTextColor="#9CA3AF" className="bg-black/40 rounded-md px-3 py-2 text-white mb-3" />
+          <Text className="text-xs text-[#9CA3AF] mb-1">New Password</Text>
+          <TextInput value={state.passwordNew} onChangeText={v => persist({ passwordNew: v })} secureTextEntry placeholder="At least 8 characters" placeholderTextColor="#9CA3AF" className="bg-black/40 rounded-md px-3 py-2 text-white mb-3" />
+          <Text className="text-xs text-[#9CA3AF] mb-1">Confirm New Password</Text>
+          <TextInput value={state.passwordConfirm} onChangeText={v => persist({ passwordConfirm: v })} secureTextEntry placeholder="Repeat new password" placeholderTextColor="#9CA3AF" className="bg-black/40 rounded-md px-3 py-2 text-white mb-4" />
+          <TouchableOpacity onPress={changePassword} className="self-start px-4 py-2 rounded-md bg-[#111827]">
             <Text className="text-white text-xs font-medium">Update Password</Text>
           </TouchableOpacity>
         </View>
@@ -361,11 +361,11 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
           <SectionHeader icon="security" title="Two-Factor Authentication" subtitle="Add an extra layer of protection." />
           <View className="flex-row items-center justify-between mt-1">
             <View className="flex-1 mr-4">
-              <Text className="text-emerald-100 text-xs mb-1">Require a second factor when signing in on a new device.</Text>
+              <Text className="text-white text-xs mb-1">Require a second factor when signing in on a new device.</Text>
               {twoFactorEnabled && (
                 <View className="flex-row items-center mt-1">
-                  <MaterialIcons name="check-circle" size={14} color="#10b981" />
-                  <Text className="text-emerald-400 text-[10px] ml-1">Enabled</Text>
+                  <MaterialIcons name="check-circle" size={14} color="#059669" />
+                  <Text className="text-[#6ee7b7] text-[10px] ml-1">Enabled</Text>
                 </View>
               )}
               {!emailVerified && !twoFactorEnabled && (
@@ -373,7 +373,7 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
               )}
             </View>
             {isEnabling2FA ? (
-              <ActivityIndicator size="small" color="#10b981" />
+              <ActivityIndicator size="small" color="#059669" />
             ) : (
               <Switch
                 value={twoFactorEnabled}
@@ -399,16 +399,16 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
               <View className="flex-1 mr-3">
                 <View className="flex-row items-center gap-2">
                   <Text className="text-white text-xs font-medium">{s.device_name}</Text>
-                  {s.is_current && <View className="bg-emerald-500/20 px-1.5 py-0.5 rounded"><Text className="text-emerald-400 text-[10px]">Current</Text></View>}
+                  {s.is_current && <View className="bg-[#059669]/20 px-1.5 py-0.5 rounded"><Text className="text-[#6ee7b7] text-[10px]">Current</Text></View>}
                 </View>
-                <Text className="text-emerald-300 text-[10px]">{s.device_type} • {new Date(s.last_active).toLocaleDateString()}</Text>
+                <Text className="text-[#6ee7b7] text-[10px]">{s.device_type} • {new Date(s.last_active).toLocaleDateString()}</Text>
               </View>
               {s.is_active ? (
-                <TouchableOpacity onPress={() => revokeSession(s.id)} className="px-3 py-1 rounded-md bg-emerald-700">
+                <TouchableOpacity onPress={() => revokeSession(s.id)} className="px-3 py-1 rounded-md bg-[#111827]">
                   <Text className="text-white text-[10px] font-medium">Revoke</Text>
                 </TouchableOpacity>
               ) : (
-                <Text className="text-[10px] text-emerald-400">Revoked</Text>
+                <Text className="text-[10px] text-[#6ee7b7]">Revoked</Text>
               )}
             </View>
           ))}
@@ -421,7 +421,7 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
             title="Data Export (GDPR)"
             subtitle="Download a copy of all your personal data in JSON format. Includes profile, bounties, messages, transactions, and more."
           />
-          <TouchableOpacity disabled={state.exporting} onPress={exportData} className={`self-start px-4 py-2 rounded-md ${state.exporting ? 'bg-emerald-900 opacity-60' : 'bg-emerald-700'}`}>
+          <TouchableOpacity disabled={state.exporting} onPress={exportData} className={`self-start px-4 py-2 rounded-md ${state.exporting ? 'bg-[#0B0F14] opacity-60' : 'bg-[#111827]'}`}>
             <Text className="text-white text-xs font-medium">{state.exporting ? 'Preparing Export…' : 'Export My Data'}</Text>
           </TouchableOpacity>
         </View>
@@ -434,16 +434,16 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
 const SectionHeader = ({ icon, title, subtitle }: { icon: any; title: string; subtitle: string }) => (
   <View className="mb-3">
     <View className="flex-row items-center mb-1">
-      <MaterialIcons name={icon} size={18} color="#34d399" />
+      <MaterialIcons name={icon} size={18} color="#059669" />
       <Text className="ml-2 text-white font-medium text-sm">{title}</Text>
     </View>
-    <Text className="text-emerald-300 text-[11px] leading-4">{subtitle}</Text>
+    <Text className="text-[#6ee7b7] text-[11px] leading-4">{subtitle}</Text>
   </View>
 );
 
 const ToggleRow = ({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) => (
   <View className="flex-row items-center justify-between py-2">
-    <Text className="text-emerald-100 text-xs flex-1 mr-4">{label}</Text>
+    <Text className="text-white text-xs flex-1 mr-4">{label}</Text>
     <Switch value={value} onValueChange={onChange} />
   </View>
 );

@@ -155,7 +155,7 @@ export function ChatDetailScreen({
   }, [conversation.id])
 
   return (
-    <View className="flex flex-col h-screen bg-emerald-600 text-white">
+    <View className="flex flex-col h-screen bg-[#0B0F14] text-white">
       {/* Header */}
       <View className="p-4 pt-8 pb-2">
         <View className="flex-row justify-between items-center">
@@ -164,7 +164,7 @@ export function ChatDetailScreen({
           </View>
           <Text className="text-lg font-bold">$ {balance.toFixed(2)}</Text>
         </View>
-        <View className="h-px bg-emerald-500/50 my-2" />
+        <View className="h-px bg-[#374151] my-2" />
       </View>
 
       {/* Chat Header */}
@@ -183,7 +183,7 @@ export function ChatDetailScreen({
   }}
   className="mr-1 p-2 touch-target-min"
 >
-  <MaterialIcons name="arrow-back" size={24} color="#000000" />
+  <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
 </TouchableOpacity>
           <TouchableOpacity 
             className="flex-row items-center"
@@ -196,7 +196,7 @@ export function ChatDetailScreen({
           >
             <Avatar className="h-10 w-10 mr-2">
               <AvatarImage src={avatarUrl || "/placeholder.svg?height=40&width=40"} alt={displayName} />
-              <AvatarFallback className="bg-emerald-700 text-emerald-200">
+              <AvatarFallback className="bg-[#1F2937] text-[#9CA3AF]">
                 {displayName.substring(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
@@ -208,10 +208,10 @@ export function ChatDetailScreen({
         </View>
         <View className="flex-row gap-3">
           <TouchableOpacity className="text-white">
-            <MaterialIcons name="phone" size={24} color="#000000" />
+            <MaterialIcons name="phone" size={24} color="#9CA3AF" />
           </TouchableOpacity>
           <TouchableOpacity className="text-white">
-            <MaterialIcons name="videocam" size={24} color="#000000" />
+            <MaterialIcons name="videocam" size={24} color="#9CA3AF" />
           </TouchableOpacity>
         </View>
       </View>

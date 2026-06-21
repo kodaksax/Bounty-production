@@ -9,7 +9,7 @@ export const getDisputeStatusColor = (status: string): string => {
     case 'under_review':
       return '#3b82f6'; // blue
     case 'resolved':
-      return '#10b981'; // emerald
+      return '#059669'; // emerald
     case 'closed':
       return '#6b7280'; // gray
     default:

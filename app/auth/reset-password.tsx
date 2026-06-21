@@ -4,6 +4,7 @@ import { BrandingLogo } from 'components/ui/branding-logo'
 import { Label } from 'components/ui/label'
 import { useRouter } from 'expo-router'
 import { requestPasswordReset } from 'lib/services/auth-service'
+import { useAppThemeContext } from 'lib/themes/AppThemeContext'
 import { isValidEmail } from 'lib/utils/password-validation'
 import { useCallback, useEffect, useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
@@ -19,6 +20,7 @@ export default function ResetPasswordRoute() { return <ResetPasswordScreen /> }
 
 export function ResetPasswordScreen() {
   const router = useRouter()
+  const { theme } = useAppThemeContext()
   const [email, setEmail] = useState('')
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -103,9 +105,9 @@ export function ResetPasswordScreen() {
 
     try {
       setLoading(true)
-      
+
       const result = await requestPasswordReset(email.trim().toLowerCase())
-      
+
       if (result.success) {
         setMessage(result.message)
         setEmailSent(true)
@@ -134,20 +136,20 @@ export function ResetPasswordScreen() {
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-        <View className="flex-1 bg-emerald-700/95 px-6 pt-20 pb-8">
+        <View className="flex-1 px-6 pt-20 pb-8" style={{ backgroundColor: theme.background }}>
           {/* Header */}
           <View className="flex-row items-center justify-center mb-6">
             <BrandingLogo size="large" />
           </View>
-          
+
           {/* Title and Description */}
           <View className="items-center mb-8">
-            <View className="bg-white/10 rounded-full p-4 mb-4">
-              <MaterialIcons name="lock-reset" size={32} color="#fff" />
+            <View className="rounded-full p-4 mb-4" style={{ backgroundColor: theme.isDark ? 'rgba(255,255,255,0.1)' : theme.surfaceSecondary }}>
+              <MaterialIcons name="lock-reset" size={32} color={theme.text} />
             </View>
-            <Text className="text-white font-bold text-xl mb-2">Reset Password</Text>
-            <Text className="text-white/70 text-center text-sm px-4">
-              {emailSent 
+            <Text className="font-bold text-xl mb-2" style={{ color: theme.text }}>Reset Password</Text>
+            <Text className="text-center text-sm px-4" style={{ color: theme.text }}>
+              {emailSent
                 ? "We've sent you an email with instructions to reset your password."
                 : "Enter your email address and we'll send you a link to reset your password."}
             </Text>
@@ -158,20 +160,20 @@ export function ResetPasswordScreen() {
             <View className="bg-red-500/20 border border-red-400 rounded-lg p-4 mb-4 flex-row items-start">
               <MaterialIcons name="error-outline" size={20} color="#f87171" style={{ marginTop: 2 }} />
               <View className="ml-3 flex-1">
-                <Text className="text-red-200 text-sm">{error}</Text>
+                <Text style={{ color: theme.isDark ? '#fecaca' : '#991b1b', fontSize: 14 }}>{error}</Text>
               </View>
               <TouchableOpacity onPress={() => setError(null)}>
                 <MaterialIcons name="close" size={20} color="#f87171" />
               </TouchableOpacity>
             </View>
           )}
-          
+
           {/* Success Message */}
           {message && (
-            <View className="bg-emerald-600/30 border border-emerald-400 rounded-lg p-4 mb-4 flex-row items-start">
-              <MaterialIcons name="check-circle" size={20} color="#34d399" style={{ marginTop: 2 }} />
+            <View className="rounded-lg p-4 mb-4 flex-row items-start" style={{ backgroundColor: theme.surfaceSecondary, borderWidth: 1, borderColor: theme.border }}>
+              <MaterialIcons name="check-circle" size={20} color="#059669" style={{ marginTop: 2 }} />
               <View className="ml-3 flex-1">
-                <Text className="text-emerald-200 text-sm">{message}</Text>
+                <Text style={{ color: theme.text, fontSize: 14 }}>{message}</Text>
               </View>
             </View>
           )}
@@ -180,27 +182,35 @@ export function ResetPasswordScreen() {
             {/* Email Input */}
             {!emailSent && (
               <View>
-                <Label className="text-white/80 mb-1">Email Address</Label>
+                <Label className="mb-1" style={{ color: theme.text }}>Email Address</Label>
                 <View className="relative">
                   <TextInput
-                    value={email} 
+                    value={email}
                     onChangeText={(text) => {
                       setEmail(text)
                       if (fieldError) setFieldError(null)
-                    }} 
-                    placeholder="you@example.com" 
-                    autoCapitalize="none" 
+                    }}
+                    placeholder="you@example.com"
+                    autoCapitalize="none"
                     autoComplete="email"
                     keyboardType="email-address"
                     editable={!loading}
-                    placeholderTextColor="rgba(255,255,255,0.4)"
+                    placeholderTextColor={theme.isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'}
                     textContentType={Platform.OS === 'ios' ? 'emailAddress' : undefined}
-                    className={`w-full bg-white/10 rounded-lg pl-12 pr-4 py-3 text-white ${
-                      fieldError ? 'border border-red-400' : ''
-                    }`}
+                    style={{
+                      color: theme.text,
+                      backgroundColor: theme.isDark ? 'rgba(255,255,255,0.1)' : theme.surfaceSecondary,
+                      borderRadius: 8,
+                      paddingLeft: 48,
+                      paddingRight: 16,
+                      paddingVertical: 12,
+                      fontSize: 16,
+                      borderWidth: fieldError ? 1 : 0,
+                      borderColor: fieldError ? '#f87171' : 'transparent',
+                    }}
                   />
                   <View className="absolute left-3 top-1/2 -translate-y-1/2">
-                    <MaterialIcons name="email" size={20} color="rgba(255,255,255,0.5)" />
+                    <MaterialIcons name="email" size={20} color={theme.textSecondary} />
                   </View>
                 </View>
                 {fieldError && (
@@ -220,40 +230,40 @@ export function ResetPasswordScreen() {
                   onPress={() => {
                     // This is a placeholder - in production, use expo-mail-composer
                   }}
-                  className="w-full bg-emerald-600 rounded-lg py-3 items-center"
+                  className="w-full bg-[#059669] rounded-lg py-3 items-center"
                 >
                   <Text className="text-white font-medium">Open Email App</Text>
                 </TouchableOpacity>
 
                 {/* Resend Email */}
-                <TouchableOpacity 
-                  onPress={handleResend} 
+                <TouchableOpacity
+                  onPress={handleResend}
                   disabled={loading || resendCooldown > 0 || isLockedOut()}
                   className="py-3 items-center"
                 >
                   {loading ? (
-                    <ActivityIndicator color="#fff" />
+                    <ActivityIndicator color={theme.primary} />
                   ) : resendCooldown > 0 ? (
-                    <Text className="text-white/50 text-sm">
+                    <Text className="text-sm" style={{ color: theme.textSecondary }}>
                       Resend available in {resendCooldown}s
                     </Text>
                   ) : (
-                    <Text className="text-white/80 text-sm">
+                    <Text className="text-sm" style={{ color: theme.text }}>
                       Didn
                       {"'"}
-                      t receive the email? <Text className="text-emerald-300 underline">Resend</Text>
+                      t receive the email? <Text className="text-[#6ee7b7] underline">Resend</Text>
                     </Text>
                   )}
                 </TouchableOpacity>
 
                 {/* Additional Help */}
-                <View className="bg-white/10 rounded-lg p-4 mt-4">
-                  <Text className="text-white/60 text-xs text-center mb-2">
+                <View className="rounded-lg p-4 mt-4" style={{ backgroundColor: theme.isDark ? 'rgba(255,255,255,0.1)' : theme.surfaceSecondary }}>
+                  <Text className="text-xs text-center mb-2" style={{ color: theme.textSecondary }}>
                     Check your spam folder if you don
                     {"'"}
                     t see the email.
                   </Text>
-                  <Text className="text-white/60 text-xs text-center">
+                  <Text className="text-xs text-center" style={{ color: theme.textSecondary }}>
                     The reset link will expire in 1 hour.
                   </Text>
                 </View>
@@ -264,8 +274,8 @@ export function ResetPasswordScreen() {
                 onPress={handleReset}
                 className={`w-full rounded-lg py-3 items-center ${
                   loading || resendCooldown > 0 || isLockedOut()
-                    ? 'bg-emerald-600/50'
-                    : 'bg-emerald-600'
+                    ? 'bg-[#059669]/50'
+                    : 'bg-[#059669]'
                 }`}
               >
                 {loading ? (
@@ -277,20 +287,20 @@ export function ResetPasswordScreen() {
             )}
 
             {/* Back to Sign In */}
-            <TouchableOpacity 
-              onPress={() => router.push('/auth/sign-in-form')} 
+            <TouchableOpacity
+              onPress={() => router.push('/auth/sign-in-form')}
               className="flex-row items-center justify-center py-3 mt-2"
             >
-              <MaterialIcons name="arrow-back" size={18} color="rgba(255,255,255,0.8)" />
-              <Text className="text-white/80 ml-2">Back to Sign In</Text>
+              <MaterialIcons name="arrow-back" size={18} color={theme.text} />
+              <Text className="ml-2" style={{ color: theme.text }}>Back to Sign In</Text>
             </TouchableOpacity>
           </View>
 
           {/* Security Note */}
           <View className="mt-auto pt-8">
-            <View className="flex-row items-center justify-center bg-white/10 rounded-lg p-3">
-              <MaterialIcons name="security" size={16} color="rgba(255,255,255,0.5)" />
-              <Text className="text-white/50 text-xs ml-2">
+            <View className="flex-row items-center justify-center rounded-lg p-3" style={{ backgroundColor: theme.isDark ? 'rgba(255,255,255,0.1)' : theme.surfaceSecondary }}>
+              <MaterialIcons name="security" size={16} color={theme.textSecondary} />
+              <Text className="text-xs ml-2" style={{ color: theme.textSecondary }}>
                 Your security is our priority. Reset links are single-use and expire after 1 hour.
               </Text>
             </View>

@@ -7,7 +7,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     ActionSheetIOS,
     Alert,
@@ -31,6 +31,8 @@ import { useOnboarding } from '../../lib/context/onboarding-context';
 import { attachmentService } from '../../lib/services/attachment-service';
 import { Profile } from '../../lib/services/database.types';
 import { supabase } from '../../lib/supabase';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 
 const COMMON_SKILLS = [
   'Handyman', 'Cleaning', 'Moving', 'Delivery', 'Pet Care',
@@ -45,6 +47,8 @@ export default function DetailsScreen() {
   const { session } = useAuthContext();
   const { profile: normalized } = useNormalizedProfile();
   const { data: onboardingData, updateData: updateOnboardingData } = useOnboarding();
+  const { theme } = useAppThemeContext();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
 
   // Initialize from context, then fallback to profile data
   const [displayName, setDisplayName] = useState<string>(
@@ -380,7 +384,7 @@ export default function DetailsScreen() {
         {/* Header with Back Button and Branding */}
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <MaterialIcons name="arrow-back" size={24} color="#a7f3d0" />
+            <MaterialIcons name="arrow-back" size={24} color={theme.textSecondary} />
           </TouchableOpacity>
           <View style={styles.brandingHeader}>
             <BrandingLogo size="small" />
@@ -397,7 +401,7 @@ export default function DetailsScreen() {
               </View>
             ) : (
               <View style={styles.avatarPlaceholder}>
-                <MaterialIcons name="account-circle" size={80} color="rgba(255,255,255,0.4)" />
+                <MaterialIcons name="account-circle" size={80} color={theme.textDisabled} />
               </View>
             )}
             <View style={styles.avatarEditBadge}>
@@ -430,7 +434,7 @@ export default function DetailsScreen() {
               value={displayName}
               onChangeText={setDisplayName}
               placeholder="e.g., John Doe"
-              placeholderTextColor="rgba(255,255,255,0.4)"
+              placeholderTextColor={theme.textDisabled}
               autoCapitalize="words"
             />
             <Text style={styles.hint}>
@@ -448,7 +452,7 @@ export default function DetailsScreen() {
               value={title}
               onChangeText={setTitle}
               placeholder="e.g., Full Stack Developer"
-              placeholderTextColor="rgba(255,255,255,0.4)"
+              placeholderTextColor={theme.textDisabled}
               autoCapitalize="words"
             />
             <Text style={styles.hint}>Your professional title or role</Text>
@@ -462,7 +466,7 @@ export default function DetailsScreen() {
               value={bio}
               onChangeText={setBio}
               placeholder="Tell others about yourself..."
-              placeholderTextColor="rgba(255,255,255,0.4)"
+              placeholderTextColor={theme.textDisabled}
               multiline
               numberOfLines={3}
               maxLength={200}
@@ -478,7 +482,7 @@ export default function DetailsScreen() {
               value={location}
               onChangeText={setLocation}
               placeholder="e.g., San Francisco, CA"
-              placeholderTextColor="rgba(255,255,255,0.4)"
+              placeholderTextColor={theme.textDisabled}
               autoCapitalize="words"
             />
             <Text style={styles.hint}>City and state/country</Text>
@@ -521,7 +525,7 @@ export default function DetailsScreen() {
                   <View key={skill} style={styles.customSkillChip}>
                     <Text style={styles.customSkillText}>{skill}</Text>
                     <TouchableOpacity onPress={() => removeSkill(skill)}>
-                      <MaterialIcons name="close" size={16} color="#a7f3d0" />
+                      <MaterialIcons name="close" size={16} color={theme.textSecondary} />
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -535,7 +539,7 @@ export default function DetailsScreen() {
                 value={customSkill}
                 onChangeText={setCustomSkill}
                 placeholder="Add another skill..."
-                placeholderTextColor="rgba(255,255,255,0.4)"
+                placeholderTextColor={theme.textDisabled}
                 onSubmitEditing={addCustomSkill}
                 returnKeyType="done"
               />
@@ -582,249 +586,251 @@ export default function DetailsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#059669',
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 8,
-    marginBottom: 16,
-  },
-  backButton: {
-    padding: 8,
-  },
-  brandingHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  brandingText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    letterSpacing: 2,
-    marginLeft: 6,
-  },
-  avatarSection: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  avatarContainer: {
-    position: 'relative',
-  },
-  avatarImageWrapper: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    overflow: 'hidden',
-    borderWidth: 3,
-    borderColor: '#a7f3d0',
-  },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-  },
-  avatarPlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(5,46,27,0.5)',
-    borderWidth: 3,
-    borderColor: 'rgba(167,243,208,0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarEditBadge: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#a7f3d0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#059669',
-  },
-  avatarHint: {
-    color: '#a7f3d0',
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 8,
-  },
-  avatarSubhint: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 12,
-    marginTop: 4,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-    textAlign: 'center',
-    lineHeight: 20,
-    paddingHorizontal: 16,
-  },
-  inputSection: {
-    marginBottom: 24,
-  },
-  field: {
-    marginBottom: 20,
-  },
-  label: {
-    color: '#a7f3d0',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: 'rgba(5,46,27,0.5)',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: '#ffffff',
-    borderWidth: 2,
-    borderColor: 'rgba(167,243,208,0.3)',
-  },
-  bioInput: {
-    minHeight: 80,
-    textAlignVertical: 'top',
-    paddingTop: 12,
-  },
-  hint: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 12,
-    marginTop: 6,
-    paddingHorizontal: 4,
-  },
-  hintWithMargin: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 12,
-    marginTop: 6,
-    marginBottom: 8,
-    paddingHorizontal: 4,
-  },
-  skillsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12,
-  },
-  skillChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(5,46,27,0.5)',
-    borderWidth: 2,
-    borderColor: 'rgba(167,243,208,0.3)',
-  },
-  skillChipSelected: {
-    backgroundColor: '#a7f3d0',
-    borderColor: '#a7f3d0',
-  },
-  skillChipText: {
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  skillChipTextSelected: {
-    color: '#052e1b',
-    fontWeight: '600',
-  },
-  customSkillsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12,
-  },
-  customSkillChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: '#097959',
-    borderWidth: 1,
-    borderColor: '#a7f3d0',
-  },
-  customSkillText: {
-    color: '#a7f3d0',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  customSkillInput: {
-    position: 'relative',
-  },
-  addSkillButton: {
-    position: 'absolute',
-    right: 8,
-    top: 8,
-    backgroundColor: '#a7f3d0',
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  actions: {
-    marginBottom: 24,
-  },
-  nextButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#a7f3d0',
-    paddingVertical: 16,
-    borderRadius: 999,
-    marginBottom: 12,
-    gap: 8,
-  },
-  nextButtonText: {
-    color: '#052e1b',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  skipButton: {
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  skipButtonText: {
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: 16,
-  },
-  progressContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
-    paddingTop: 16,
-  },
-  progressDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-  },
-  progressDotActive: {
-    backgroundColor: '#a7f3d0',
-  },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    scrollContent: {
+      flexGrow: 1,
+      paddingHorizontal: 24,
+    },
+    headerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: 8,
+      marginBottom: 16,
+    },
+    backButton: {
+      padding: 8,
+    },
+    brandingHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    brandingText: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: theme.text,
+      letterSpacing: 2,
+      marginLeft: 6,
+    },
+    avatarSection: {
+      alignItems: 'center',
+      marginBottom: 20,
+    },
+    avatarContainer: {
+      position: 'relative',
+    },
+    avatarImageWrapper: {
+      width: 100,
+      height: 100,
+      borderRadius: 50,
+      overflow: 'hidden',
+      borderWidth: 3,
+      borderColor: theme.border,
+    },
+    avatarImage: {
+      width: '100%',
+      height: '100%',
+    },
+    avatarPlaceholder: {
+      width: 100,
+      height: 100,
+      borderRadius: 50,
+      backgroundColor: theme.surface,
+      borderWidth: 3,
+      borderColor: theme.border,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    avatarEditBadge: {
+      position: 'absolute',
+      bottom: 0,
+      right: 0,
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: theme.primary,
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 2,
+      borderColor: theme.background,
+    },
+    avatarHint: {
+      color: theme.textSecondary,
+      fontSize: 14,
+      fontWeight: '600',
+      marginTop: 8,
+    },
+    avatarSubhint: {
+      color: theme.textSecondary,
+      fontSize: 12,
+      marginTop: 4,
+    },
+    header: {
+      alignItems: 'center',
+      marginBottom: 24,
+    },
+    title: {
+      fontSize: 24,
+      fontWeight: 'bold',
+      color: theme.text,
+      marginBottom: 8,
+      textAlign: 'center',
+    },
+    subtitle: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      textAlign: 'center',
+      lineHeight: 20,
+      paddingHorizontal: 16,
+    },
+    inputSection: {
+      marginBottom: 24,
+    },
+    field: {
+      marginBottom: 20,
+    },
+    label: {
+      color: theme.textSecondary,
+      fontSize: 14,
+      fontWeight: '600',
+      marginBottom: 8,
+    },
+    input: {
+      backgroundColor: theme.surfaceSecondary,
+      borderRadius: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      fontSize: 16,
+      color: theme.text,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    bioInput: {
+      minHeight: 80,
+      textAlignVertical: 'top',
+      paddingTop: 12,
+    },
+    hint: {
+      color: theme.textSecondary,
+      fontSize: 12,
+      marginTop: 6,
+      paddingHorizontal: 4,
+    },
+    hintWithMargin: {
+      color: theme.textSecondary,
+      fontSize: 12,
+      marginTop: 6,
+      marginBottom: 8,
+      paddingHorizontal: 4,
+    },
+    skillsContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginBottom: 12,
+    },
+    skillChip: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 20,
+      backgroundColor: theme.surface,
+      borderWidth: 2,
+      borderColor: theme.border,
+    },
+    skillChipSelected: {
+      backgroundColor: theme.primary,
+      borderColor: theme.primary,
+    },
+    skillChipText: {
+      color: theme.textSecondary,
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    skillChipTextSelected: {
+      color: '#052e1b',
+      fontWeight: '600',
+    },
+    customSkillsContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginBottom: 12,
+    },
+    customSkillChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 20,
+      backgroundColor: theme.surfaceSecondary,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    customSkillText: {
+      color: theme.textSecondary,
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    customSkillInput: {
+      position: 'relative',
+    },
+    addSkillButton: {
+      position: 'absolute',
+      right: 8,
+      top: 8,
+      backgroundColor: theme.primary,
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    actions: {
+      marginBottom: 24,
+    },
+    nextButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.primary,
+      paddingVertical: 16,
+      borderRadius: 999,
+      marginBottom: 12,
+      gap: 8,
+    },
+    nextButtonText: {
+      color: '#052e1b',
+      fontSize: 18,
+      fontWeight: 'bold',
+    },
+    skipButton: {
+      alignItems: 'center',
+      paddingVertical: 12,
+    },
+    skipButtonText: {
+      color: theme.textSecondary,
+      fontSize: 16,
+    },
+    progressContainer: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 8,
+      paddingTop: 16,
+    },
+    progressDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: theme.border,
+    },
+    progressDotActive: {
+      backgroundColor: theme.primary,
+    },
+  });
+}

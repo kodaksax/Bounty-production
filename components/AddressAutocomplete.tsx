@@ -207,7 +207,7 @@ export function AddressAutocomplete({
           }}
           placeholder={placeholder}
           placeholderTextColor="rgba(110, 231, 183, 0.4)"
-          className={`bg-emerald-700/50 text-white px-4 py-3 rounded-lg text-base ${inputClassName || ''}`}
+          className={`bg-[#111827] text-white px-4 py-3 rounded-lg text-base ${inputClassName || ''}`}
           editable={!disabled}
           accessibilityLabel="Address input"
           accessibilityRole="search"
@@ -256,7 +256,7 @@ export function AddressAutocomplete({
       {/* Suggestions List */}
       {(showSuggestions || (showSavedAddresses && filteredSavedAddresses.length > 0)) && (
         <View
-          className={`mt-2 bg-emerald-700/50 rounded-lg border border-emerald-500/50 overflow-hidden ${suggestionsClassName || ''}`}
+          className={`mt-2 bg-[#111827] rounded-lg border border-[#374151] overflow-hidden ${suggestionsClassName || ''}`}
           accessibilityLiveRegion="polite"
         >
           {/* Hidden text for screen readers to announce suggestion count */}
@@ -271,8 +271,8 @@ export function AddressAutocomplete({
           {/* Saved Addresses Section */}
           {showSavedAddresses && filteredSavedAddresses.length > 0 && (
             <>
-              <View className="px-3 py-2 bg-emerald-800/30 border-b border-emerald-500/30">
-                <Text className="text-emerald-200/80 text-xs font-semibold">
+              <View className="px-3 py-2 bg-[#1F2937] border-b border-[#374151]">
+                <Text className="text-[#9CA3AF]/80 text-xs font-semibold">
                   Saved Addresses
                 </Text>
               </View>
@@ -283,7 +283,7 @@ export function AddressAutocomplete({
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     onPress={() => handleSelectSavedAddress(item)}
-                    className="px-3 py-3 border-b border-emerald-500/20 flex-row items-center"
+                    className="px-3 py-3 border-b border-[#374151]/20 flex-row items-center"
                     accessibilityLabel={`Select saved address: ${item.label}`}
                     accessibilityRole="button"
                   >
@@ -297,7 +297,7 @@ export function AddressAutocomplete({
                       <Text className="text-white font-semibold text-sm mb-1">
                         {item.label}
                       </Text>
-                      <Text className="text-emerald-200/70 text-xs" numberOfLines={1}>
+                      <Text className="text-[#9CA3AF]/70 text-xs" numberOfLines={1}>
                         {item.address}
                       </Text>
                     </View>
@@ -311,8 +311,8 @@ export function AddressAutocomplete({
           {isConfigured && suggestions.length > 0 && (
             <>
               {showSavedAddresses && filteredSavedAddresses.length > 0 && (
-                <View className="px-3 py-2 bg-emerald-800/30 border-b border-emerald-500/30">
-                  <Text className="text-emerald-200/80 text-xs font-semibold">
+                <View className="px-3 py-2 bg-[#1F2937] border-b border-[#374151]">
+                  <Text className="text-[#9CA3AF]/80 text-xs font-semibold">
                     Suggested Addresses
                   </Text>
                 </View>
@@ -324,7 +324,7 @@ export function AddressAutocomplete({
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     onPress={() => handleSelectSuggestion(item)}
-                    className="px-3 py-3 border-b border-emerald-500/20 flex-row items-center"
+                    className="px-3 py-3 border-b border-[#374151]/20 flex-row items-center"
                     accessibilityLabel={`Select address: ${item.description}`}
                     accessibilityRole="button"
                   >
@@ -339,7 +339,7 @@ export function AddressAutocomplete({
                         {item.mainText}
                       </Text>
                       {item.secondaryText && (
-                        <Text className="text-emerald-200/70 text-xs mt-0.5">
+                        <Text className="text-[#9CA3AF]/70 text-xs mt-0.5">
                           {item.secondaryText}
                         </Text>
                       )}

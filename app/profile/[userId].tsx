@@ -6,6 +6,8 @@ import { useFollow } from "hooks/useFollow";
 import { useNormalizedProfile } from "hooks/useNormalizedProfile";
 import { FOLLOW_FEATURE_ENABLED } from "lib/feature-flags";
 import { ROUTES } from 'lib/routes';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 import { resendVerification } from "lib/services/auth-service";
 import { supabase } from "lib/supabase";
 import { getCurrentUserId } from "lib/utils/data-utils";
@@ -43,6 +45,8 @@ export default function UserProfileScreen() {
   const insets = useSafeAreaInsets();
   const currentUserId = getCurrentUserId();
   const { session } = useAuthContext();
+  const { theme } = useAppThemeContext();
+  const styles = makeStyles(theme);
 
   const { profile, loading, error } = useNormalizedProfile(userId);
   const {
@@ -436,7 +440,7 @@ export default function UserProfileScreen() {
             accessibilityRole="button"
             accessibilityLabel="More options"
           >
-            <MaterialIcons name="more-vert" size={24} color="#ffffff" />
+            <MaterialIcons name="more-vert" size={24} color={theme.text} />
           </TouchableOpacity>
         ) : null}
       />
@@ -449,7 +453,7 @@ export default function UserProfileScreen() {
           <View style={styles.moreMenuBackdrop} />
           <View style={[styles.moreMenuContainer, { top: 48 }]}>
             <TouchableOpacity style={styles.moreMenuItem} onPress={handleShare}>
-              <MaterialIcons name="share" size={20} color="#a7f3d0" />
+              <MaterialIcons name="share" size={20} color="#9CA3AF" />
               <Text style={styles.moreMenuText}>Share Profile</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.moreMenuItem} onPress={handleReport}>
@@ -495,7 +499,7 @@ export default function UserProfileScreen() {
         <View style={styles.actionButtons}>
           {isOwnProfile ? (
             <TouchableOpacity style={styles.primaryButton} onPress={handleEditProfile}>
-              <MaterialIcons name="edit" size={18} color="#065f46" />
+              <MaterialIcons name="edit" size={18} color="#111827" />
               <Text style={styles.primaryButtonText}>Edit Profile</Text>
             </TouchableOpacity>
           ) : (
@@ -506,13 +510,13 @@ export default function UserProfileScreen() {
                 disabled={followLoading}
               >
                 {followLoading ? (
-                  <ActivityIndicator size="small" color={isFollowing ? "#10b981" : "#ffffff"} />
+                  <ActivityIndicator size="small" color={isFollowing ? "#059669" : "#ffffff"} />
                 ) : (
                   <>
                     <MaterialIcons
                       name={isFollowing ? "person-remove" : "person-add"}
                       size={18}
-                      color={isFollowing ? "#10b981" : "#ffffff"}
+                      color={isFollowing ? "#059669" : "#ffffff"}
                     />
                     <Text style={[styles.secondaryButtonText, isFollowing && styles.followingButtonText]}>
                       {isFollowing ? "Following" : "Follow"}
@@ -541,7 +545,7 @@ export default function UserProfileScreen() {
                   disabled={resendLoading}
                 >
                   {resendLoading ? (
-                    <ActivityIndicator size="small" color="#065f46" />
+                    <ActivityIndicator size="small" color="#111827" />
                   ) : (
                     <Text style={styles.resendButtonText}>Resend email</Text>
                   )}
@@ -597,300 +601,304 @@ export default function UserProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#059669", // emerald-600
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#059669", // emerald-600
-  },
-  headerCenter: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  backButton: {
-    padding: 4,
-  },
-  moreButton: {
-    padding: 4,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#ffffff",
-    letterSpacing: 1.6,
-  },
-  moreMenuContainer: {
-    position: "absolute",
-    top: 60,
-    right: 16,
-    backgroundColor: "#047857", // emerald-700
-    borderRadius: 8,
-    padding: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 8,
-    zIndex: 100,
-  },
-  moreMenuWrapper: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 90,
-  },
-  moreMenuBackdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'transparent',
-  },
-  moreMenuItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 12,
-  },
-  moreMenuText: {
-    fontSize: 14,
-    color: "#ffffff",
-    fontWeight: "500",
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: "#a7f3d0", // emerald-200
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 32,
-  },
-  errorTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#ffffff",
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  errorText: {
-    fontSize: 14,
-    color: "#a7f3d0", // emerald-200
-    textAlign: "center",
-    marginBottom: 24,
-  },
-  retryButton: {
-    backgroundColor: "#10b981", // emerald-500
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  errorBanner: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "#dc2626",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginHorizontal: 16,
-    marginBottom: 8,
-    borderRadius: 8,
-  },
-  offlineBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: 'rgba(220,38,38,0.12)',
-    padding: 10,
-    marginHorizontal: 16,
-    marginBottom: 12,
-    borderRadius: 8,
-  },
-  offlineText: {
-    color: '#fffef5',
-    flex: 1,
-    marginRight: 8,
-  },
-  offlineRetry: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#b91c1c',
-    borderRadius: 8,
-  },
-  offlineRetryText: {
-    color: '#fff',
-    marginLeft: 8,
-  },
-  errorBannerText: {
-    flex: 1,
-    color: "#fff",
-    fontSize: 14,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 16,
-  },
-  actionButtons: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 16,
-    paddingHorizontal: 16,
-  },
-  primaryButton: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#a7f3d0", // emerald-200
-    paddingVertical: 12,
-    borderRadius: 12,
-    gap: 6,
-  },
-  primaryButtonDisabled: {
-    opacity: 0.6,
-  },
-  primaryButtonText: {
-    color: "#065f46", // emerald-800
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  secondaryButton: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: "#a7f3d0", // emerald-200
-    paddingVertical: 12,
-    borderRadius: 12,
-    gap: 6,
-  },
-  secondaryButtonText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  followingButton: {
-    backgroundColor: "rgba(167, 243, 208, 0.1)",
-  },
-  followingButtonText: {
-    color: "#10b981",
-  },
-  statsContainer: {
-    flexDirection: "row",
-    backgroundColor: "rgba(167, 243, 208, 0.1)",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    marginHorizontal: 16,
-  },
-  statItem: {
-    flex: 1,
-    alignItems: "center",
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: "#047857", // emerald-700
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#ffffff",
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 14,
-    color: "#a7f3d0", // emerald-200
-  },
-  section: {
-    marginBottom: 16,
-    paddingHorizontal: 16,
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#ffffff",
-    marginBottom: 12,
-  },
-  verificationSection: {
-    paddingHorizontal: 16,
-    marginBottom: 12,
-    gap: 6,
-  },
-  emailBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-start",
-    backgroundColor: "#a7f3d0", // emerald-200
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-    gap: 4,
-  },
-  emailBadgeText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#065f46", // emerald-800
-  },
-  resendPrompt: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    flexWrap: "wrap",
-  },
-  resendPromptText: {
-    fontSize: 12,
-    color: "#fbbf24", // amber-400
-    fontWeight: "500",
-  },
-  resendButton: {
-    backgroundColor: "#a7f3d0",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-    minWidth: 40,
-    alignItems: "center",
-  },
-  resendButtonDisabled: {
-    opacity: 0.6,
-  },
-  resendButtonText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#065f46",
-  },
-  resendMessageText: {
-    fontSize: 12,
-    color: "#a7f3d0",
-    fontStyle: "italic",
-  },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: theme.background,
+    },
+    headerCenter: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    backButton: {
+      padding: 4,
+    },
+    moreButton: {
+      padding: 4,
+    },
+    headerTitle: {
+      fontSize: 18,
+      fontWeight: "bold",
+      color: theme.text,
+      letterSpacing: 1.6,
+    },
+    moreMenuContainer: {
+      position: "absolute",
+      top: 60,
+      right: 16,
+      backgroundColor: theme.surface,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 8,
+      padding: 8,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.25,
+      shadowRadius: 8,
+      elevation: 8,
+      zIndex: 100,
+    },
+    moreMenuWrapper: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 90,
+    },
+    moreMenuBackdrop: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'transparent',
+    },
+    moreMenuItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      gap: 12,
+    },
+    moreMenuText: {
+      fontSize: 14,
+      color: theme.text,
+      fontWeight: "500",
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    loadingText: {
+      marginTop: 12,
+      fontSize: 16,
+      color: theme.textSecondary,
+    },
+    errorContainer: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      paddingHorizontal: 32,
+    },
+    errorTitle: {
+      fontSize: 20,
+      fontWeight: "bold",
+      color: theme.text,
+      marginTop: 16,
+      marginBottom: 8,
+    },
+    errorText: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      textAlign: "center",
+      marginBottom: 24,
+    },
+    retryButton: {
+      backgroundColor: "#059669",
+      paddingHorizontal: 24,
+      paddingVertical: 12,
+      borderRadius: 8,
+    },
+    retryButtonText: {
+      color: "#ffffff",
+      fontSize: 16,
+      fontWeight: "600",
+    },
+    errorBanner: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      backgroundColor: "#dc2626",
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      marginHorizontal: 16,
+      marginBottom: 8,
+      borderRadius: 8,
+    },
+    offlineBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: 'rgba(220,38,38,0.12)',
+      padding: 10,
+      marginHorizontal: 16,
+      marginBottom: 12,
+      borderRadius: 8,
+    },
+    offlineText: {
+      color: '#fffef5',
+      flex: 1,
+      marginRight: 8,
+    },
+    offlineRetry: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      backgroundColor: '#b91c1c',
+      borderRadius: 8,
+    },
+    offlineRetryText: {
+      color: '#fff',
+      marginLeft: 8,
+    },
+    errorBannerText: {
+      flex: 1,
+      color: "#fff",
+      fontSize: 14,
+    },
+    scrollView: {
+      flex: 1,
+    },
+    scrollContent: {
+      paddingHorizontal: 16,
+    },
+    actionButtons: {
+      flexDirection: "row",
+      gap: 12,
+      marginBottom: 16,
+      paddingHorizontal: 16,
+    },
+    primaryButton: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: theme.surfaceSecondary,
+      paddingVertical: 12,
+      borderRadius: 12,
+      gap: 6,
+    },
+    primaryButtonDisabled: {
+      opacity: 0.6,
+    },
+    primaryButtonText: {
+      color: theme.text,
+      fontSize: 16,
+      fontWeight: "600",
+    },
+    secondaryButton: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "transparent",
+      borderWidth: 1,
+      borderColor: theme.border,
+      paddingVertical: 12,
+      borderRadius: 12,
+      gap: 6,
+    },
+    secondaryButtonText: {
+      color: theme.text,
+      fontSize: 16,
+      fontWeight: "600",
+    },
+    followingButton: {
+      backgroundColor: "rgba(167, 243, 208, 0.1)",
+    },
+    followingButtonText: {
+      color: "#059669",
+    },
+    statsContainer: {
+      flexDirection: "row",
+      backgroundColor: theme.surfaceSecondary,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 16,
+      marginHorizontal: 16,
+    },
+    statItem: {
+      flex: 1,
+      alignItems: "center",
+    },
+    statDivider: {
+      width: 1,
+      backgroundColor: theme.border,
+    },
+    statValue: {
+      fontSize: 24,
+      fontWeight: "bold",
+      color: theme.text,
+      marginBottom: 4,
+    },
+    statLabel: {
+      fontSize: 14,
+      color: theme.textSecondary,
+    },
+    section: {
+      marginBottom: 16,
+      paddingHorizontal: 16,
+    },
+    sectionTitle: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: theme.text,
+      marginBottom: 12,
+    },
+    verificationSection: {
+      paddingHorizontal: 16,
+      marginBottom: 12,
+      gap: 6,
+    },
+    emailBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      alignSelf: "flex-start",
+      backgroundColor: theme.surfaceSecondary,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 20,
+      gap: 4,
+    },
+    emailBadgeText: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: theme.text,
+    },
+    resendPrompt: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      flexWrap: "wrap",
+    },
+    resendPromptText: {
+      fontSize: 12,
+      color: "#fbbf24",
+      fontWeight: "500",
+    },
+    resendButton: {
+      backgroundColor: theme.surfaceSecondary,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 20,
+      minWidth: 40,
+      alignItems: "center",
+    },
+    resendButtonDisabled: {
+      opacity: 0.6,
+    },
+    resendButtonText: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: theme.text,
+    },
+    resendMessageText: {
+      fontSize: 12,
+      color: theme.textSecondary,
+      fontStyle: "italic",
+    },
+  });
+}
