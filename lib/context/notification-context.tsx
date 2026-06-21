@@ -154,6 +154,10 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           if (__DEV__) {
             console.log('[NotificationContext] foreground re-registration result:', token ?? 'no token (permissions denied or session missing)');
           }
+        }).catch((error) => {
+          if (__DEV__) {
+            console.warn('[NotificationContext] foreground re-registration failed:', error);
+          }
         });
       }
       lastAppState = nextState;
@@ -169,6 +173,10 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     notificationService.requestPermissionsAndRegisterToken().then((token) => {
       if (__DEV__) {
         console.log('[NotificationContext] mount registration result:', token ?? 'no token (permissions denied or session missing)');
+      }
+    }).catch((error) => {
+      if (__DEV__) {
+        console.warn('[NotificationContext] mount registration failed:', error);
       }
     });
 
