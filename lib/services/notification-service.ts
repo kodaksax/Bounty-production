@@ -205,18 +205,17 @@ export class NotificationService {
       if (!session?.access_token) {
         try {
           const pendingStr = await AsyncStorage.getItem(PENDING_PUSH_TOKENS_KEY)
-          let parsed: unknown[] = []
+          let parsed: { token: string, deviceId?: string }[] = []
           if (pendingStr) {
             try {
               const candidate = JSON.parse(pendingStr)
-              parsed = Array.isArray(candidate) ? candidate : []
+              parsed = this.parsePendingPushTokens(candidate)
             } catch {
               parsed = []
             }
           }
-          const pendingTokens = parsed as { token: string, deviceId?: string }[]
-          pendingTokens.push({ token, deviceId })
-          await AsyncStorage.setItem(PENDING_PUSH_TOKENS_KEY, JSON.stringify(pendingTokens))
+          parsed.push({ token, deviceId })
+          await AsyncStorage.setItem(PENDING_PUSH_TOKENS_KEY, JSON.stringify(parsed))
           await AsyncStorage.setItem(DEFERRED_PUSH_REGISTRATION_KEY, 'true')
         } catch (e) {
           if (__DEV__) {
@@ -319,7 +318,7 @@ export class NotificationService {
         if (pendingStr) {
           try {
             const candidate = JSON.parse(pendingStr)
-            pending = Array.isArray(candidate) ? candidate as { token: string, deviceId?: string }[] : []
+            pending = this.parsePendingPushTokens(candidate)
           } catch {
             pending = []
           }
@@ -789,7 +788,7 @@ export class NotificationService {
           await AsyncStorage.removeItem(PENDING_PUSH_TOKENS_KEY)
           return
         }
-        pending = candidate as { token: string, deviceId?: string }[]
+        pending = this.parsePendingPushTokens(candidate)
       } catch {
         await AsyncStorage.removeItem(PENDING_PUSH_TOKENS_KEY)
         return
@@ -799,6 +798,24 @@ export class NotificationService {
         try { await this.registerPushToken(p.token, p.deviceId) } catch {}
       }
     } catch {}
+  }
+
+  /**
+   * Parse and validate cached pending push token entries from AsyncStorage.
+   * Keeps only records with a non-empty token and an optional string deviceId.
+   */
+  private parsePendingPushTokens(value: unknown): { token: string, deviceId?: string }[] {
+    if (!Array.isArray(value)) return []
+    return value.filter((item): item is { token: string, deviceId?: string } => {
+      if (!item || typeof item !== 'object') return false
+      const tokenValue = (item as any).token
+      const deviceIdValue = (item as any).deviceId
+      return (
+        typeof tokenValue === 'string' &&
+        tokenValue.length > 0 &&
+        (deviceIdValue === undefined || typeof deviceIdValue === 'string')
+      )
+    })
   }
 
   /**
