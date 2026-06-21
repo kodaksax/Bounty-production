@@ -79,6 +79,34 @@ const ENV_ICONS = {
   preview: './assets/images/icon-preview.png',
 };
 const envIcon = ENV_ICONS[APP_ENV]; // undefined for production → app.json default
+const GOOGLE_IOS_URL_SCHEME_PREFIX = 'com.googleusercontent.apps.';
+
+function resolvePlugins(plugins = []) {
+  const iosUrlScheme = process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME;
+  const androidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
+  const hasValidGoogleIosUrlScheme =
+    typeof iosUrlScheme === 'string' &&
+    iosUrlScheme.startsWith(GOOGLE_IOS_URL_SCHEME_PREFIX);
+
+  return plugins.flatMap((plugin) => {
+    const pluginName = Array.isArray(plugin) ? plugin[0] : plugin;
+
+    if (pluginName !== '@react-native-google-signin/google-signin') {
+      return [plugin];
+    }
+
+    if (!hasValidGoogleIosUrlScheme) {
+      return [];
+    }
+
+    const googlePluginConfig = { iosUrlScheme };
+    if (androidClientId) {
+      googlePluginConfig.androidClientId = androidClientId;
+    }
+
+    return [[pluginName, googlePluginConfig]];
+  });
+}
 
 module.exports = ({ config }) => {
   let result = {
@@ -106,6 +134,7 @@ module.exports = ({ config }) => {
         },
       } : {}),
     },
+    plugins: resolvePlugins(config.plugins),
     extra: {
       ...(config.extra || {}),
       APP_ENV,
