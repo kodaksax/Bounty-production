@@ -387,6 +387,26 @@ describe('NotificationService', () => {
 
       await expect(notificationService.requestPermissionsAndRegisterToken()).resolves.not.toThrow();
     });
+
+    it('should clear invalid pending token payloads during flush', async () => {
+      Notifications.getPermissionsAsync.mockResolvedValue({ status: 'granted' });
+      Notifications.getExpoPushTokenAsync.mockResolvedValue({ data: 'ExponentPushToken[new]' });
+      (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+        data: { session: MOCK_SESSION },
+      });
+      AsyncStorage.setItem.mockResolvedValue(undefined);
+      AsyncStorage.removeItem.mockResolvedValue(undefined);
+      AsyncStorage.getItem.mockImplementation((key: string) => {
+        if (key === 'notifications:pending_tokens') {
+          return Promise.resolve('{not-json');
+        }
+        return Promise.resolve(null);
+      });
+      (global as any).fetch = jest.fn().mockResolvedValue(makeSuccessResponse());
+
+      await expect(notificationService.requestPermissionsAndRegisterToken()).resolves.not.toThrow();
+      expect(AsyncStorage.removeItem).toHaveBeenCalledWith('notifications:pending_tokens');
+    });
   });
 
   // ─── registerPushToken ─────────────────────────────────────────────────────
@@ -402,6 +422,22 @@ describe('NotificationService', () => {
       expect(AsyncStorage.setItem).toHaveBeenCalledWith(
         'notifications:pending_tokens',
         expect.stringContaining('ExponentPushToken[tok]')
+      );
+      expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+        'notifications:register_on_signin',
+        'true'
+      );
+    });
+
+    it('should recover from invalid cached pending tokens when queuing without a session', async () => {
+      AsyncStorage.getItem.mockResolvedValue('{not-json');
+      AsyncStorage.setItem.mockResolvedValue(undefined);
+
+      await expect(notificationService.registerPushToken('ExponentPushToken[tok]')).resolves.not.toThrow();
+
+      expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+        'notifications:pending_tokens',
+        JSON.stringify([{ token: 'ExponentPushToken[tok]' }])
       );
       expect(AsyncStorage.setItem).toHaveBeenCalledWith(
         'notifications:register_on_signin',

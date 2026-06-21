@@ -315,7 +315,15 @@ export class NotificationService {
       // As a last resort, cache and retry later so the user isn't blocked
       try {
         const pendingStr = await AsyncStorage.getItem(PENDING_PUSH_TOKENS_KEY)
-        const pending = pendingStr ? JSON.parse(pendingStr) as { token: string, deviceId?: string }[] : []
+        let pending: { token: string, deviceId?: string }[] = []
+        if (pendingStr) {
+          try {
+            const candidate = JSON.parse(pendingStr)
+            pending = Array.isArray(candidate) ? candidate as { token: string, deviceId?: string }[] : []
+          } catch {
+            pending = []
+          }
+        }
         pending.push({ token, deviceId })
         await AsyncStorage.setItem(PENDING_PUSH_TOKENS_KEY, JSON.stringify(pending))
         if (__DEV__) {
@@ -774,7 +782,18 @@ export class NotificationService {
     try {
       const str = await AsyncStorage.getItem(PENDING_PUSH_TOKENS_KEY)
       if (!str) return
-      const pending = JSON.parse(str) as { token: string, deviceId?: string }[]
+      let pending: { token: string, deviceId?: string }[] = []
+      try {
+        const candidate = JSON.parse(str)
+        if (!Array.isArray(candidate)) {
+          await AsyncStorage.removeItem(PENDING_PUSH_TOKENS_KEY)
+          return
+        }
+        pending = candidate as { token: string, deviceId?: string }[]
+      } catch {
+        await AsyncStorage.removeItem(PENDING_PUSH_TOKENS_KEY)
+        return
+      }
       await AsyncStorage.removeItem(PENDING_PUSH_TOKENS_KEY)
       for (const p of pending) {
         try { await this.registerPushToken(p.token, p.deviceId) } catch {}
