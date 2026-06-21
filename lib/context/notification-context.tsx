@@ -154,7 +154,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           if (__DEV__) {
             console.log('[NotificationContext] foreground re-registration result:', token ?? 'no token (permissions denied or session missing)');
           }
-        }).catch(() => {});
+        });
       }
       lastAppState = nextState;
     };
@@ -170,7 +170,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       if (__DEV__) {
         console.log('[NotificationContext] mount registration result:', token ?? 'no token (permissions denied or session missing)');
       }
-    }).catch(() => {});
+    });
 
     // Check if app was opened from a notification
     checkInitialNotification();
