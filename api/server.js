@@ -1146,7 +1146,8 @@ app.post('/api/bounties/:id/complete', async (req, res) => {
     // submits work via completion-service.ts (submitCompletion → notifications_outbox).
     try {
       const updated = updatedRows[0];
-      const hunterId = bounty.accepted_by || null;
+      // Use updated row for all fields so both title and accepted_by come from the same snapshot.
+      const hunterId = updated.accepted_by || null;
       if (hunterId && supabaseAdmin) {
         const title = `Work Approved!`;
         const bodyMsg = `Your work on '${String(updated.title || '').slice(0,80)}' has been approved.`;

@@ -173,6 +173,7 @@ export const completionService = {
           if (bountyErr) {
             logger.warning('Failed to fetch bounty for review-needed notification', { error: bountyErr });
           } else {
+            // Production schema uses poster_id; legacy/staging rows may use user_id.
             const posterId = bountyRow?.poster_id ?? bountyRow?.user_id;
             const bountyTitle = String(bountyRow?.title ?? '').slice(0, 80);
 

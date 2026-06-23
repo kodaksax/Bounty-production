@@ -271,6 +271,70 @@ describe('CompletionService', () => {
         expect.objectContaining({ error: expect.objectContaining({ message: 'RLS violation' }) })
       );
     });
+
+    it('should still succeed and log a warning when bounty fetch fails', async () => {
+      const mockData = {
+        id: 'submission123',
+        ...mockSubmission,
+        status: 'pending',
+        submitted_at: '2024-01-01T00:00:00Z',
+        proof_items: JSON.stringify(mockProofItems),
+      };
+
+      mockSupabase.from.mockImplementation((table: string) => {
+        if (table === 'completion_submissions') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                eq: jest.fn().mockReturnValue({
+                  eq: jest.fn().mockReturnValue({
+                    order: jest.fn().mockReturnValue({
+                      limit: jest.fn().mockReturnValue({
+                        maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
+                      }),
+                    }),
+                  }),
+                }),
+              }),
+            }),
+            insert: jest.fn().mockReturnValue({
+              select: jest.fn().mockReturnValue({
+                single: jest.fn().mockResolvedValue({ data: mockData, error: null }),
+              }),
+            }),
+          };
+        }
+        if (table === 'bounties') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                maybeSingle: jest.fn().mockResolvedValue({
+                  data: null,
+                  error: { message: 'Permission denied' },
+                }),
+              }),
+            }),
+          };
+        }
+        return {};
+      });
+
+      const { logger } = require('../../../lib/utils/error-logger');
+
+      const result = await completionService.submitCompletion(mockSubmission);
+
+      // Submission should still succeed despite the bounty fetch failure
+      expect(result).toBeDefined();
+      expect(result?.id).toBe('submission123');
+      // Warning should have been logged for the failed bounty lookup
+      expect(logger.warning).toHaveBeenCalledWith(
+        'Failed to fetch bounty for review-needed notification',
+        expect.objectContaining({ error: expect.objectContaining({ message: 'Permission denied' }) })
+      );
+      // notifications_outbox should not have been called
+      const calls = mockSupabase.from.mock.calls.map((c: any[]) => c[0]);
+      expect(calls).not.toContain('notifications_outbox');
+    });
   });
 
   describe('getSubmission', () => {
