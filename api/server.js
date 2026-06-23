@@ -1149,7 +1149,7 @@ app.post('/api/bounties/:id/complete', async (req, res) => {
       const hunterId = bounty.accepted_by || null;
       if (hunterId && supabaseAdmin) {
         const title = `Work Approved!`;
-        const bodyMsg = `Your work on '${String(updated.title || '').slice(0,80)}' has been approved and payment has been released.`;
+        const bodyMsg = `Your work on '${String(updated.title || '').slice(0,80)}' has been approved.`;
         const { error: outboxErr } = await supabaseAdmin.from('notifications_outbox').insert({
           recipients: [hunterId],
           title,

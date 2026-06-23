@@ -82,25 +82,48 @@ describe('CompletionService', () => {
         proof_items: JSON.stringify(mockProofItems),
       };
 
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            eq: jest.fn().mockReturnValue({
+      // Mock per-table behavior: completion_submissions, bounties, notifications_outbox
+      mockSupabase.from.mockImplementation((table: string) => {
+        if (table === 'completion_submissions') {
+          return {
+            select: jest.fn().mockReturnValue({
               eq: jest.fn().mockReturnValue({
-                order: jest.fn().mockReturnValue({
-                  limit: jest.fn().mockReturnValue({
-                    maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
+                eq: jest.fn().mockReturnValue({
+                  eq: jest.fn().mockReturnValue({
+                    order: jest.fn().mockReturnValue({
+                      limit: jest.fn().mockReturnValue({
+                        maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
+                      }),
+                    }),
                   }),
                 }),
               }),
             }),
-          }),
-        }),
-        insert: jest.fn().mockReturnValue({
-          select: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue({ data: mockData, error: null }),
-          }),
-        }),
+            insert: jest.fn().mockReturnValue({
+              select: jest.fn().mockReturnValue({
+                single: jest.fn().mockResolvedValue({ data: mockData, error: null }),
+              }),
+            }),
+          };
+        }
+        if (table === 'bounties') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                maybeSingle: jest.fn().mockResolvedValue({
+                  data: { poster_id: 'poster123', title: 'Test Bounty' },
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === 'notifications_outbox') {
+          return {
+            insert: jest.fn().mockResolvedValue({ data: null, error: null }),
+          };
+        }
+        return {};
       });
 
       const result = await completionService.submitCompletion(mockSubmission);
@@ -109,6 +132,11 @@ describe('CompletionService', () => {
       expect(result?.id).toBe('submission123');
       expect(result?.status).toBe('pending');
       expect(result?.proof_items).toEqual(mockProofItems);
+
+      // Verify notification enqueue was attempted
+      const calls = mockSupabase.from.mock.calls.map((c: any[]) => c[0]);
+      expect(calls).toContain('bounties');
+      expect(calls).toContain('notifications_outbox');
     });
 
     it('should prevent duplicate pending submissions', async () => {
@@ -176,6 +204,72 @@ describe('CompletionService', () => {
 
       await expect(completionService.submitCompletion(mockSubmission))
         .rejects.toThrow('Database error');
+    });
+
+    it('should still succeed and log a warning when notification enqueue fails', async () => {
+      const mockData = {
+        id: 'submission123',
+        ...mockSubmission,
+        status: 'pending',
+        submitted_at: '2024-01-01T00:00:00Z',
+        proof_items: JSON.stringify(mockProofItems),
+      };
+
+      mockSupabase.from.mockImplementation((table: string) => {
+        if (table === 'completion_submissions') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                eq: jest.fn().mockReturnValue({
+                  eq: jest.fn().mockReturnValue({
+                    order: jest.fn().mockReturnValue({
+                      limit: jest.fn().mockReturnValue({
+                        maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
+                      }),
+                    }),
+                  }),
+                }),
+              }),
+            }),
+            insert: jest.fn().mockReturnValue({
+              select: jest.fn().mockReturnValue({
+                single: jest.fn().mockResolvedValue({ data: mockData, error: null }),
+              }),
+            }),
+          };
+        }
+        if (table === 'bounties') {
+          return {
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                maybeSingle: jest.fn().mockResolvedValue({
+                  data: { poster_id: 'poster123', title: 'Test Bounty' },
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === 'notifications_outbox') {
+          return {
+            insert: jest.fn().mockResolvedValue({ data: null, error: { message: 'RLS violation' } }),
+          };
+        }
+        return {};
+      });
+
+      const { logger } = require('../../../lib/utils/error-logger');
+
+      const result = await completionService.submitCompletion(mockSubmission);
+
+      // Submission should still succeed despite the outbox failure
+      expect(result).toBeDefined();
+      expect(result?.id).toBe('submission123');
+      // Warning should have been logged for the failed enqueue
+      expect(logger.warning).toHaveBeenCalledWith(
+        'Failed to enqueue review-needed notification',
+        expect.objectContaining({ error: expect.objectContaining({ message: 'RLS violation' }) })
+      );
     });
   });
 
