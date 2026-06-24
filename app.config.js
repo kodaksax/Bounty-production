@@ -110,6 +110,46 @@ const ENV_ICONS = {
   preview: './assets/images/icon-preview.png',
 };
 const envIcon = ENV_ICONS[APP_ENV]; // undefined for production → app.json default
+const GOOGLE_IOS_URL_SCHEME_PREFIX = 'com.googleusercontent.apps.';
+
+/**
+ * Keeps app.json plugin declarations as the source of truth while rewriting the
+ * Google Sign-In plugin to use real env values only when its required iOS URL
+ * scheme is available.
+ * @param {Array<string | [string, Record<string, string>]>} plugins
+ * @returns {Array<string | [string, Record<string, string>]>}
+ */
+function resolvePlugins(plugins = []) {
+  const iosUrlScheme = process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME;
+  const androidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
+  const hasValidGoogleIosUrlScheme =
+    typeof iosUrlScheme === 'string' &&
+    iosUrlScheme.startsWith(GOOGLE_IOS_URL_SCHEME_PREFIX) &&
+    iosUrlScheme.length > GOOGLE_IOS_URL_SCHEME_PREFIX.length;
+
+  return plugins.flatMap((plugin) => {
+    const pluginName = Array.isArray(plugin) ? plugin[0] : plugin;
+
+    if (pluginName !== '@react-native-google-signin/google-signin') {
+      return [plugin];
+    }
+
+    if (!hasValidGoogleIosUrlScheme) {
+      // CI/export validation intentionally runs without Google Sign-In secrets.
+      // Dropping the plugin here lets Metro/Expo export succeed while the app
+      // already treats Google Sign-In as disabled until valid env vars exist;
+      // see app/auth/sign-in-form.tsx and lib/config/validation.ts.
+      return [];
+    }
+
+    const googlePluginConfig = { iosUrlScheme };
+    if (androidClientId) {
+      googlePluginConfig.androidClientId = androidClientId;
+    }
+
+    return [[pluginName, googlePluginConfig]];
+  });
+}
 
 module.exports = ({ config }) => {
   let result = {
@@ -139,6 +179,7 @@ module.exports = ({ config }) => {
           }
         : {}),
     },
+    plugins: resolvePlugins(config.plugins),
     extra: {
       ...(config.extra || {}),
       APP_ENV,
