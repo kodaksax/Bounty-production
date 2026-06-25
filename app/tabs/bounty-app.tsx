@@ -130,6 +130,7 @@ function BountyAppInner() {
   const allowedInitialTabs = new Set(['new', 'inProgress', 'myPostings', 'requests'])
   const paramInitialTab = typeof initialTab === 'string' && initialTab.length > 0 && allowedInitialTabs.has(initialTab) ? initialTab : undefined
   const [activeScreen, setActiveScreen] = useState(paramScreen)
+
   const [showBottomNav, setShowBottomNav] = useState(true)
   const [pendingInitialTab, setPendingInitialTab] = useState<string | undefined>(paramInitialTab)
 

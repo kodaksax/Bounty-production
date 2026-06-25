@@ -9,6 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { useRouter } from 'expo-router'
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { Alert, Animated, Dimensions, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useValidUserId } from '../hooks/useValidUserId'
 import { SIZING, SPACING, TYPOGRAPHY } from '../lib/constants/accessibility'
 import { useBountyFormat } from '../lib/bounty-format-context'
@@ -56,6 +57,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   const { theme } = useAppThemeContext()
   const { bountyFormat } = useBountyFormat()
   const isCompact = bountyFormat === 'compact'
+  const insets = useSafeAreaInsets()
   const s = useMemo(() => makeStyles(theme), [theme])
 
   const scrollY = useRef(new Animated.Value(0)).current
@@ -522,14 +524,14 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
 
       {/* List area */}
       {bountyFormat === 'grid' ? (
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 1, marginTop: -(insets.top + 8) }}>
           <BountyGridFeed
             bounties={filteredBounties}
             bountyDistances={bountyDistances}
             listHeader={
               <View>
                 {/* Banner */}
-                <View style={s.gridBanner}>
+                <View style={[s.gridBanner, { paddingTop: insets.top + 2 }]}>
                   <LinearGradient
                     colors={['#064e3b', '#059669', '#10b981']}
                     start={{ x: 0, y: 0 }}
