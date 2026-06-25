@@ -100,6 +100,9 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   const [isLoadingAttachments, setIsLoadingAttachments] = useState(false)
   const [viewerAttachment, setViewerAttachment] = useState<AttachmentMeta | null>(null)
   const [viewerVisible, setViewerVisible] = useState(false)
+  const imageScrollRef = useRef<ScrollView>(null)
+  const [currentImageIndex, setCurrentImageIndex] = useState(0)
+  const [carouselWidth, setCarouselWidth] = useState(0)
 
   // Track mounted state to prevent showing alerts after unmount
   const isMountedRef = useRef(true)
@@ -222,7 +225,33 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
     bounty.description ||
     "I need someone to mow my lawn. The yard is approximately 1/4 acre with some slopes. I have a lawn mower you can use, or you can bring your own equipment. The grass is about 3 inches tall now. Please trim around the edges and clean up afterward. This should take about 2 hours to complete. I need this done by this weekend."
 
-  
+  const imageAttachments = actualAttachments.filter(a =>
+    !!(a.mimeType?.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp)$/i.test(a.name))
+  )
+  const otherAttachments = actualAttachments.filter(a =>
+    !(a.mimeType?.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp)$/i.test(a.name))
+  )
+
+  const goToPrev = () => {
+    const newIdx = Math.max(0, currentImageIndex - 1)
+    if (carouselWidth > 0) imageScrollRef.current?.scrollTo({ x: newIdx * carouselWidth, animated: true })
+    setCurrentImageIndex(newIdx)
+  }
+
+  const goToNext = () => {
+    const newIdx = Math.min(imageAttachments.length - 1, currentImageIndex + 1)
+    if (carouselWidth > 0) imageScrollRef.current?.scrollTo({ x: newIdx * carouselWidth, animated: true })
+    setCurrentImageIndex(newIdx)
+  }
+
+  const handleCarouselScroll = (e: any) => {
+    if (carouselWidth > 0) {
+      const idx = Math.round(e.nativeEvent.contentOffset.x / carouselWidth)
+      setCurrentImageIndex(idx)
+    }
+  }
+
+
 
   // Handle Share button
   const handleShare = async () => {
@@ -489,7 +518,55 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
               style={styles.scrollContainer}
               contentContainerStyle={styles.scrollContent}
             >
-              <View style={styles.bountyCard}>
+              <View
+                style={styles.bountyCard}
+                onLayout={e => setCarouselWidth(e.nativeEvent.layout.width)}
+              >
+                {/* Image carousel — Airbnb style */}
+                {imageAttachments.length > 0 && carouselWidth > 0 ? (
+                  <View style={styles.imageCarousel}>
+                    <ScrollView
+                      ref={imageScrollRef}
+                      horizontal
+                      pagingEnabled
+                      showsHorizontalScrollIndicator={false}
+                      onMomentumScrollEnd={handleCarouselScroll}
+                      scrollEventThrottle={16}
+                    >
+                      {imageAttachments.map(att => (
+                        <TouchableOpacity
+                          key={att.id}
+                          activeOpacity={0.95}
+                          onPress={() => handleAttachmentOpen(att)}
+                          style={{ width: carouselWidth }}
+                        >
+                          <Image
+                            source={{ uri: att.remoteUri || att.uri }}
+                            style={[styles.carouselImage, { width: carouselWidth }]}
+                            resizeMode="cover"
+                          />
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                    {currentImageIndex > 0 && (
+                      <TouchableOpacity style={[styles.carouselArrow, styles.carouselArrowLeft]} onPress={goToPrev}>
+                        <MaterialIcons name="chevron-left" size={28} color="#fff" />
+                      </TouchableOpacity>
+                    )}
+                    {currentImageIndex < imageAttachments.length - 1 && (
+                      <TouchableOpacity style={[styles.carouselArrow, styles.carouselArrowRight]} onPress={goToNext}>
+                        <MaterialIcons name="chevron-right" size={28} color="#fff" />
+                      </TouchableOpacity>
+                    )}
+                    {imageAttachments.length > 1 && (
+                      <View style={styles.carouselDots}>
+                        {imageAttachments.map((_, idx) => (
+                          <View key={idx} style={[styles.carouselDot, idx === currentImageIndex && styles.carouselDotActive]} />
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                ) : null}
                 <View style={styles.cardContent}>
                   {/* User info - Clickable to navigate to profile */}
                   <TouchableOpacity
@@ -610,8 +687,8 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                     </View>
                   )}
 
-                  {/* Attachments */}
-                  {(isLoadingAttachments || actualAttachments.length > 0) && (
+                  {/* Non-image attachments (images shown in carousel above) */}
+                  {(isLoadingAttachments || otherAttachments.length > 0) && (
                     <View style={styles.attachmentsSection}>
                       <Text style={styles.sectionHeader}>Attachments</Text>
                       {isLoadingAttachments ? (
@@ -621,10 +698,8 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                         </View>
                       ) : (
                         <View style={styles.attachmentsContainer}>
-                          {actualAttachments.map((attachment) => {
-                            const isImage = !!(attachment.mimeType && attachment.mimeType.startsWith('image/')) || (!!attachment.name && /\.(jpg|jpeg|png|gif|webp)$/i.test(attachment.name))
+                          {otherAttachments.map((attachment) => {
                             const sizeInMB = attachment.size ? (attachment.size / (1024 * 1024)).toFixed(1) : 'Unknown'
-
                             return (
                               <TouchableOpacity
                                 key={attachment.id}
@@ -632,16 +707,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                                 onPress={() => handleAttachmentOpen(attachment)}
                               >
                                 <View style={styles.attachmentIcon}>
-                                  {isImage ? (
-                                    // Show thumbnail when available (prefer remoteUri, fallback to local uri)
-                                    <Image
-                                      source={{ uri: attachment.remoteUri || attachment.uri }}
-                                      style={{ width: 40, height: 40, borderRadius: 6 }}
-                                      resizeMode="cover"
-                                    />
-                                  ) : (
-                                    <MaterialIcons name="description" size={20} color={theme.textSecondary} />
-                                  )}
+                                  <MaterialIcons name="description" size={20} color={theme.textSecondary} />
                                 </View>
                                 <View style={styles.attachmentInfo}>
                                   <Text style={styles.attachmentName}>{attachment.name}</Text>
@@ -1007,6 +1073,51 @@ function makeStyles(theme: AppTheme) {
   },
   downloadButton: {
     padding: 8,
+  },
+  imageCarousel: {
+    position: 'relative',
+    height: 220,
+  },
+  carouselImage: {
+    height: 220,
+  },
+  carouselArrow: {
+    position: 'absolute',
+    top: 88,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: 22,
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  carouselArrowLeft: {
+    left: 10,
+  },
+  carouselArrowRight: {
+    right: 10,
+  },
+  carouselDots: {
+    position: 'absolute',
+    bottom: 10,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  carouselDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.55)',
+  },
+  carouselDotActive: {
+    backgroundColor: '#fff',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginTop: -1,
   },
   actionContainer: {
     padding: 16,
