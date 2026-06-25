@@ -78,6 +78,8 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
         const error = validateAmount(amount, false);
         setErrors({ ...errors, amount: error || '' });
       }
+    } else {
+      onUpdate({ amount: 0, isForHonor: false });
     }
   };
 

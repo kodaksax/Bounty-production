@@ -112,6 +112,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
                 </View>
               )}
             </View>
+            <Text style={[styles.navLabel, activeScreen === "messages" && styles.navLabelActive]}>Inbox</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => handleNavigate("wallet")}
@@ -126,6 +127,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
               color={activeScreen === "wallet" ? theme.text : theme.textSecondary}
               size={NAV_ICON_SIZE}
             />
+            <Text style={[styles.navLabel, activeScreen === "wallet" && styles.navLabelActive]}>Wallet</Text>
           </TouchableOpacity>
         </View>
 
@@ -175,6 +177,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
               color={activeScreen === "postings" ? theme.text : theme.textSecondary}
               size={NAV_ICON_SIZE}
             />
+            <Text style={[styles.navLabel, activeScreen === "postings" && styles.navLabelActive]}>Activity</Text>
           </TouchableOpacity>
           {showAdmin ? (
             <TouchableOpacity
@@ -190,6 +193,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
                 color={activeScreen === "admin" ? "#00dc50" : theme.text}
                 size={NAV_ICON_SIZE}
               />
+              <Text style={[styles.navLabel, activeScreen === "admin" && styles.navLabelActive]}>Admin</Text>
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
@@ -205,6 +209,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
                 color={activeScreen === "profile" ? theme.target : theme.target}
                 size={NAV_ICON_SIZE}
               />
+              <Text style={[styles.navLabel, activeScreen === "profile" && styles.navLabelActive]}>Profile</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -248,14 +253,23 @@ function makeStyles(theme: AppTheme) {
       justifyContent: "center",
     },
     navButton: {
-      padding: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
       borderRadius: 16,
       backgroundColor: "transparent",
       minWidth: SIZING.MIN_TOUCH_TARGET,
-      minHeight: SIZING.MIN_TOUCH_TARGET,
       alignItems: 'center',
       justifyContent: 'center',
       marginTop: -28,
+    },
+    navLabel: {
+      fontSize: 10,
+      fontWeight: '600',
+      marginTop: 3,
+      color: theme.textSecondary,
+    },
+    navLabelActive: {
+      color: theme.text,
     },
     iconWrapper: {
       position: 'relative',
