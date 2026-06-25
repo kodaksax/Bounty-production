@@ -497,7 +497,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
             {/* Header - iPhone optimized */}
             <View style={styles.header}>
               <View style={styles.headerLeft}>
-                <BrandingLogo size="small" />
+                <BrandingLogo size="medium" />
               </View>
               <View style={styles.headerActions}>
                 <TouchableOpacity onPress={handleShare} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Share bounty">
