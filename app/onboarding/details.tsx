@@ -296,7 +296,7 @@ export default function DetailsScreen() {
           const retrySuccess = await saveToSupabase();
           if (retrySuccess) {
             setSaving(false);
-            router.push('/onboarding/phone');
+            router.push('/onboarding/identity-verification');
           } else {
             setSaving(false);
             // Show option to skip after second failed attempt
@@ -311,16 +311,16 @@ export default function DetailsScreen() {
                     const finalSuccess = await saveToSupabase();
                     setSaving(false);
                     if (finalSuccess) {
-                      router.push('/onboarding/phone');
+                      router.push('/onboarding/identity-verification');
                     } else {
                       // After 3 attempts, just allow skip
                       Alert.alert('Unable to Save', 'Please skip for now and try again later from your profile settings.', [
-                        { text: 'OK', onPress: () => router.push('/onboarding/phone') }
+                        { text: 'OK', onPress: () => router.push('/onboarding/identity-verification') }
                       ]);
                     }
                   }
                 },
-                { text: 'Skip for now', style: 'cancel', onPress: () => router.push('/onboarding/phone') }
+                { text: 'Skip for now', style: 'cancel', onPress: () => router.push('/onboarding/identity-verification') }
               ]
             );
           }
@@ -337,7 +337,7 @@ export default function DetailsScreen() {
             {
               text: 'Skip for now',
               style: 'cancel',
-              onPress: () => router.push('/onboarding/phone'),
+              onPress: () => router.push('/onboarding/identity-verification'),
             },
           ]
         );
@@ -353,7 +353,7 @@ export default function DetailsScreen() {
           {
             text: 'Skip for now',
             style: 'cancel',
-            onPress: () => router.push('/onboarding/phone'),
+            onPress: () => router.push('/onboarding/identity-verification'),
           },
         ]
       );
@@ -361,11 +361,11 @@ export default function DetailsScreen() {
     }
 
     setSaving(false);
-    router.push('/onboarding/phone');
+    router.push('/onboarding/identity-verification');
   };
 
   const handleSkip = () => {
-    router.push('/onboarding/phone');
+    router.push('/onboarding/identity-verification');
   };
 
   const handleBack = () => {
