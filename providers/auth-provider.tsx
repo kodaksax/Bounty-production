@@ -453,39 +453,60 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       // Reset profile fetch flag for events that trigger profile fetch
       profileFetchCompletedRef.current = false
       
-      // Sync session with auth profile service.
-      // Race against a timeout so a slow/unavailable network never blocks
-      // setIsLoading(false) indefinitely. setSession continues in the background
-      // and notifies listeners when the profile arrives.
+      // Sync session with auth profile service — DEFERRED off gotrue's auth lock.
+      //
+      // This callback runs *synchronously inside* the Supabase auth storage lock
+      // (gotrue's `_acquireLock`). `authProfileService.setSession()` hydrates the
+      // profile by issuing `supabase.from(...)` queries, and every such query
+      // internally calls `auth.getSession()` which re-acquires that same lock.
+      // Awaiting the query here therefore DEADLOCKS: the query waits for the lock
+      // to release, but the lock cannot release until this callback (and its
+      // awaited work) returns. This is exactly the "dead-lock by using await on a
+      // call to another method of the Supabase library" hazard documented on
+      // onAuthStateChange.
+      //
+      // It surfaced on cold start with "remember me": the restored session is
+      // expired, so getSession() refreshes it and fires TOKEN_REFRESHED *inside*
+      // the lock. The deadlocked profile query left the profile null and every
+      // subsequent data query hung — the bounty feed loaded forever and returning
+      // users were forced back through onboarding.
+      //
+      // Scheduling the sync on a macrotask lets the current lock release first so
+      // the profile queries run unobstructed. State that must stay in lock-step
+      // with the event (session, isLoading re-arm, recovery/analytics below)
+      // remains synchronous.
+      setTimeout(() => {
         let sessionSyncTimeout: ReturnType<typeof setTimeout> | undefined
-        try {
-          await Promise.race([
-            authProfileService.setSession(session),
-            new Promise<void>(resolve => {
-              sessionSyncTimeout = setTimeout(resolve, 8_000)
-            }),
-          ])
-          profileFetchCompletedRef.current = true
-        } catch (e) {
-          // Profile service errors shouldn't block auth flow
-          // These can occur when service is unavailable or during tests
-          reportWarning('[AuthProvider] Profile service unavailable during session sync:', e)
-          // Mark as completed even on error to avoid blocking
-          profileFetchCompletedRef.current = true
-        } finally {
-          if (sessionSyncTimeout) {
-            clearTimeout(sessionSyncTimeout)
+        ;(async () => {
+          try {
+            await Promise.race([
+              authProfileService.setSession(session),
+              new Promise<void>(resolve => {
+                sessionSyncTimeout = setTimeout(resolve, 8_000)
+              }),
+            ])
+            profileFetchCompletedRef.current = true
+          } catch (e) {
+            // Profile service errors shouldn't block auth flow
+            // These can occur when service is unavailable or during tests
+            reportWarning('[AuthProvider] Profile service unavailable during session sync:', e)
+            // Mark as completed even on error to avoid blocking
+            profileFetchCompletedRef.current = true
+          } finally {
+            if (sessionSyncTimeout) {
+              clearTimeout(sessionSyncTimeout)
+            }
+            // Explicitly clear loading now that profile fetch is complete (or timed
+            // out). The profile subscription fires during setSession() while
+            // profileFetchCompletedRef is still false, so it cannot clear loading
+            // on its own. Forcing it here ensures we never get stuck in a loading
+            // state waiting for a notification that won't come.
+            if (isMountedRef.current) {
+              setIsLoading(false)
+            }
           }
-        }
-
-      // Explicitly clear loading now that profile fetch is complete (or timed out).
-      // The profile subscription fires during setSession() while
-      // profileFetchCompletedRef is still false, so it cannot clear loading
-      // on its own. Forcing it here ensures we never get stuck in a
-      // loading state waiting for a notification that won't come.
-      if (isMountedRef.current) {
-        setIsLoading(false)
-      }
+        })()
+      }, 0)
       
       // Email verification gate: Check if email is verified
       const verified = Boolean(
