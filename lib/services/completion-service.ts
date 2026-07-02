@@ -160,6 +160,43 @@ export const completionService = {
 
         if (error) throw new Error(error?.message ?? JSON.stringify(error));
 
+        // Notify the poster that the hunter has submitted work for review.
+        // Insert into notifications_outbox so process-notification sends both
+        // an in-app bell entry and a push notification.
+        try {
+          const { data: bountyRow, error: bountyErr } = await supabase
+            .from('bounties')
+            .select('poster_id, user_id, title')
+            .eq('id', submission.bounty_id)
+            .maybeSingle();
+
+          if (bountyErr) {
+            logger.warning('Failed to fetch bounty for review-needed notification', { error: bountyErr });
+          } else {
+            // Production schema uses poster_id; legacy/staging rows may use user_id.
+            // The user_id fallback is kept for backwards compatibility with older rows
+            // and should be removed once all data is migrated to poster_id.
+            const posterId = bountyRow?.poster_id ?? bountyRow?.user_id;
+            const bountyTitle = String(bountyRow?.title ?? '').slice(0, 80);
+
+            if (posterId) {
+              const { error: outboxErr } = await supabase.from('notifications_outbox').insert({
+                recipients: [posterId],
+                title: 'Review Needed',
+                body: `A hunter has submitted their work on "${bountyTitle}" for your review.`,
+                data: { bountyId: submission.bounty_id, hunterId: submission.hunter_id, type: 'review_needed' },
+                bounty_id: String(submission.bounty_id),
+              });
+              if (outboxErr) {
+                logger.warning('Failed to enqueue review-needed notification', { error: outboxErr });
+              }
+            }
+          }
+        } catch (notifErr) {
+          // Non-fatal: submission succeeded, notification is best-effort
+          logger.warning('Failed to send review-needed notification', { error: notifErr });
+        }
+
         return {
           ...data,
           proof_items: JSON.parse(data.proof_items || '[]'),

@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { API_BASE_URL } from 'lib/config/api';
+import { DEFERRED_PUSH_REGISTRATION_KEY } from 'lib/constants';
 import { ERROR_LOG_THROTTLE } from 'lib/config/network';
 import { LOG_KEYS, shouldLog } from 'lib/utils/log-throttle';
 import { supabase } from '../supabase';
@@ -18,6 +19,7 @@ try {
 const NOTIFICATION_CACHE_KEY = 'notifications:cache';
 const LAST_FETCH_KEY = 'notifications:last_fetch';
 const PERMISSION_STATUS_KEY = 'notifications:permission_status';
+const PENDING_PUSH_TOKENS_KEY = 'notifications:pending_tokens';
 
 // Helper to safely read response text without throwing further errors
 async function safeReadResponseText(response: Response): Promise<string> {
@@ -201,8 +203,27 @@ export class NotificationService {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
+        try {
+          const pendingStr = await AsyncStorage.getItem(PENDING_PUSH_TOKENS_KEY)
+          let parsed: { token: string, deviceId?: string }[] = []
+          if (pendingStr) {
+            try {
+              const candidate = JSON.parse(pendingStr)
+              parsed = this.parsePendingPushTokens(candidate)
+            } catch {
+              parsed = []
+            }
+          }
+          parsed.push({ token, deviceId })
+          await AsyncStorage.setItem(PENDING_PUSH_TOKENS_KEY, JSON.stringify(parsed))
+          await AsyncStorage.setItem(DEFERRED_PUSH_REGISTRATION_KEY, 'true')
+        } catch (e) {
+          if (__DEV__) {
+            console.warn('[NotificationService] Failed to persist deferred push token registration', e)
+          }
+        }
         if (__DEV__) {
-          console.log('[NotificationService] No active session - skipping push token registration');
+          console.log('[NotificationService] No active session - deferred push token registration');
         }
         return;
       }
@@ -292,10 +313,18 @@ export class NotificationService {
       } catch {}
       // As a last resort, cache and retry later so the user isn't blocked
       try {
-        const pendingStr = await AsyncStorage.getItem('notifications:pending_tokens')
-        const pending = pendingStr ? JSON.parse(pendingStr) as {token:string, deviceId?:string}[] : []
+        const pendingStr = await AsyncStorage.getItem(PENDING_PUSH_TOKENS_KEY)
+        let pending: { token: string, deviceId?: string }[] = []
+        if (pendingStr) {
+          try {
+            const candidate = JSON.parse(pendingStr)
+            pending = this.parsePendingPushTokens(candidate)
+          } catch {
+            pending = []
+          }
+        }
         pending.push({ token, deviceId })
-        await AsyncStorage.setItem('notifications:pending_tokens', JSON.stringify(pending))
+        await AsyncStorage.setItem(PENDING_PUSH_TOKENS_KEY, JSON.stringify(pending))
         if (__DEV__) {
           console.log('[NotificationService] Cached push token for later registration');
         }
@@ -737,7 +766,7 @@ export class NotificationService {
 
       // Clear any locally cached pending tokens for this device
       try {
-        await AsyncStorage.removeItem('notifications:pending_tokens');
+        await AsyncStorage.removeItem(PENDING_PUSH_TOKENS_KEY);
       } catch {}
     } catch (error) {
       // Non-fatal: log and continue logout
@@ -750,14 +779,43 @@ export class NotificationService {
    */
   private async flushPendingPushTokens() {
     try {
-      const str = await AsyncStorage.getItem('notifications:pending_tokens')
+      const str = await AsyncStorage.getItem(PENDING_PUSH_TOKENS_KEY)
       if (!str) return
-      const pending = JSON.parse(str) as {token:string, deviceId?:string}[]
-      await AsyncStorage.removeItem('notifications:pending_tokens')
+      let pending: { token: string, deviceId?: string }[] = []
+      try {
+        const candidate = JSON.parse(str)
+        if (!Array.isArray(candidate)) {
+          await AsyncStorage.removeItem(PENDING_PUSH_TOKENS_KEY)
+          return
+        }
+        pending = this.parsePendingPushTokens(candidate)
+      } catch {
+        await AsyncStorage.removeItem(PENDING_PUSH_TOKENS_KEY)
+        return
+      }
+      await AsyncStorage.removeItem(PENDING_PUSH_TOKENS_KEY)
       for (const p of pending) {
         try { await this.registerPushToken(p.token, p.deviceId) } catch {}
       }
     } catch {}
+  }
+
+  /**
+   * Parse and validate cached pending push token entries from AsyncStorage.
+   * Keeps only records with a non-empty token and an optional string deviceId.
+   */
+  private parsePendingPushTokens(value: unknown): { token: string, deviceId?: string }[] {
+    if (!Array.isArray(value)) return []
+    return value.filter((item): item is { token: string, deviceId?: string } => {
+      if (!item || typeof item !== 'object') return false
+      const tokenValue = (item as any).token
+      const deviceIdValue = (item as any).deviceId
+      return (
+        typeof tokenValue === 'string' &&
+        tokenValue.length > 0 &&
+        (deviceIdValue === undefined || typeof deviceIdValue === 'string')
+      )
+    })
   }
 
   /**

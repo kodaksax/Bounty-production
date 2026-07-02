@@ -124,15 +124,21 @@ function sanitizeUuid(value: unknown): string {
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-  if (!supabaseUrl || !serviceRoleKey) return jsonResponse({ error: 'Supabase Edge Function is not configured' }, 500)
-
-  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  })
+  // Track the outbox id and supabase client so the top-level catch can record
+  // the failure reason on the row instead of swallowing it as an opaque 500.
+  let supabaseAdmin: ReturnType<typeof createClient> | null = null
+  let outboxId: string | null = null
+  let outboxAttempts = 0
 
   try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    if (!supabaseUrl || !serviceRoleKey) return jsonResponse({ error: 'Supabase Edge Function is not configured' }, 500)
+
+    supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
+
     if (req.method !== 'POST') return jsonResponse({ error: 'Invalid method' }, 405)
 
     let payload: any
@@ -144,6 +150,7 @@ Deno.serve(async (req: Request) => {
 
     // Support both direct {id} and Supabase Webhook {record: {id}} formats
     const id = sanitizeUuid(payload.record?.id || payload.id);
+    outboxId = id;
 
     // Fetch outbox row
     const { data: rows, error: fetchErr } = await supabaseAdmin
@@ -154,10 +161,30 @@ Deno.serve(async (req: Request) => {
 
     if (fetchErr) {
       console.error('[process-notification] fetch error', fetchErr)
+      let nextAttempts = outboxAttempts + 1
+      const { data: attemptsRow, error: attemptsErr } = await supabaseAdmin
+        .from('notifications_outbox')
+        .select('attempts')
+        .eq('id', id)
+        .maybeSingle()
+      if (attemptsErr) {
+        console.error('[process-notification] failed to refresh attempts after fetch error', attemptsErr)
+      } else if (attemptsRow && typeof attemptsRow.attempts === 'number') {
+        nextAttempts = attemptsRow.attempts + 1
+      }
+      const { error: markFailedErr } = await supabaseAdmin
+        .from('notifications_outbox')
+        .update({ status: 'failed', last_error: String(fetchErr), attempts: nextAttempts })
+        .eq('id', id)
+      if (markFailedErr) {
+        console.error('[process-notification] failed to mark outbox row failed after fetch error', markFailedErr)
+      }
       return jsonResponse({ error: 'Failed to fetch outbox item' }, 500)
     }
 
     if (!rows) return jsonResponse({ error: 'Outbox item not found' }, 404)
+
+    outboxAttempts = typeof rows.attempts === 'number' ? rows.attempts : 0
 
     if (rows.status === 'sent') return jsonResponse({ message: 'Already processed' })
 
@@ -308,6 +335,23 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ ok: true, sent, inApp: inAppRecipients.length, prunedTokens: invalidTokens.length })
   } catch (error) {
     console.error('[process-notification] error', error)
+    // Best-effort: persist the failure reason on the outbox row so the cause is
+    // diagnosable in the DB instead of being lost as an opaque 500. Marks the row
+    // 'failed' and bumps attempts, consistent with the Expo-delivery error path,
+    // rather than leaving it stuck in 'pending' with no last_error.
+    if (supabaseAdmin && outboxId) {
+      try {
+        const { error: markFailedErr } = await supabaseAdmin
+          .from('notifications_outbox')
+          .update({ status: 'failed', last_error: String(error), attempts: outboxAttempts + 1 })
+          .eq('id', outboxId)
+        if (markFailedErr) {
+          console.error('[process-notification] failed to record error on outbox row', markFailedErr)
+        }
+      } catch (updateErr) {
+        console.error('[process-notification] failed to record error on outbox row (exception)', updateErr)
+      }
+    }
     return jsonResponse({ error: String(error) }, 500)
   }
 })

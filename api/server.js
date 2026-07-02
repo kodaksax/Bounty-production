@@ -1140,12 +1140,28 @@ app.post('/api/bounties/:id/complete', async (req, res) => {
     
     // Fetch and return updated bounty
     const [updatedRows] = await conn.execute('SELECT * FROM bounties WHERE id = ?', [req.params.id]);
-    // Fire push notifications (best-effort)
+    // Notify only the hunter — their work was approved and payment released.
+    // The poster triggered this action so they don't need a notification.
+    // The "submitted for review" notification fires earlier, when the hunter
+    // submits work via completion-service.ts (submitCompletion → notifications_outbox).
     try {
       const updated = updatedRows[0];
-      const title = `Review Needed`;
-      const bodyMsg = `Bounty '${String(updated.title || '').slice(0,80)}' has been submitted for review`;
-      await notifyBountyParticipants(req.params.id, title, bodyMsg, 'complete');
+      // Use updated row for all fields so both title and accepted_by come from the same snapshot.
+      const hunterId = updated.accepted_by || null;
+      if (hunterId && supabaseAdmin) {
+        const title = `Work Approved!`;
+        const bodyMsg = `Your work on '${String(updated.title || '').slice(0,80)}' has been approved.`;
+        const { error: outboxErr } = await supabaseAdmin.from('notifications_outbox').insert({
+          recipients: [hunterId],
+          title,
+          body: bodyMsg,
+          data: { bountyId: String(req.params.id), type: 'completion' },
+          bounty_id: String(req.params.id),
+        });
+        if (outboxErr) {
+          console.warn('[complete] outbox insert failed:', outboxErr.message);
+        }
+      }
     } catch (notifyErr) {
       console.warn('[complete] push notification error', notifyErr && notifyErr.message ? notifyErr.message : notifyErr);
     }

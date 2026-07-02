@@ -14,6 +14,7 @@ import type { AppTheme, ThemeMode } from "../lib/themes/types"
 import { markIntentionalSignOut } from "../lib/utils/session-handler"
 import { ContactSupportScreen } from "./settings/contact-support-screen"
 import { FAQScreen } from "./settings/faq-screen"
+import { FeedbackSupportScreen } from "./settings/feedback-support-screen"
 import { HelpSupportScreen } from "./settings/help-support-screen"
 import { LocationSettingsScreen } from "./settings/location-settings-screen"
 import { NotificationsCenterScreen } from "./settings/notifications-center-screen"
@@ -25,7 +26,7 @@ interface SettingsScreenProps {
   navigation?: any
 }
 
-type Panel = 'root' | 'editProfile' | 'privacy' | 'notifications' | 'location' | 'help' | 'contact' | 'terms' | 'faq'
+type Panel = 'root' | 'editProfile' | 'privacy' | 'notifications' | 'location' | 'help' | 'contact' | 'terms' | 'faq' | 'feedback'
 
 export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
   const [panel, setPanel] = useState<Panel>('root')
@@ -60,11 +61,12 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
   // Panel routing
   if (panel === 'privacy')       return <PrivacySecurityScreen onBack={() => setPanel('root')} />
   if (panel === 'notifications') return <NotificationsCenterScreen onBack={() => setPanel('root')} />
-  if (panel === 'location')      return <LocationSettingsScreen onBack={() => setPanel('root')} />
-  if (panel === 'help')          return <HelpSupportScreen onBack={() => setPanel('root')} onNavigateContact={() => setPanel('contact')} onNavigateTerms={() => setPanel('terms')} onNavigateFAQ={() => setPanel('faq')} />
-  if (panel === 'contact')       return <ContactSupportScreen onBack={() => setPanel('help')} />
-  if (panel === 'terms')         return <TermsPrivacyScreen onBack={() => setPanel('help')} />
-  if (panel === 'faq')           return <FAQScreen onBack={() => setPanel('help')} />
+  if (panel === 'location') return <LocationSettingsScreen onBack={() => setPanel('root')} />
+  if (panel === 'help') return <HelpSupportScreen onBack={() => setPanel('root')} onNavigateContact={() => setPanel('contact')} onNavigateTerms={() => setPanel('terms')} onNavigateFAQ={() => setPanel('faq')} />
+  if (panel === 'contact') return <ContactSupportScreen onBack={() => setPanel('help')} />
+  if (panel === 'terms') return <TermsPrivacyScreen onBack={() => setPanel('help')} />
+  if (panel === 'faq') return <FAQScreen onBack={() => setPanel('help')} />
+  if (panel === 'feedback') return <FeedbackSupportScreen onBack={() => setPanel('root')} />
 
   return (
     <View style={s.screen} className="flex-1">
@@ -174,7 +176,15 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
           description="FAQs, a direct contact form, and links to legal documentation."
           primaryLabel="Open" onPrimary={() => setPanel('help')} icon="help-center" />
 
-        {/* ── Admin toggle ─────────────────────────────────────────────────── */}
+        <SettingsCard
+          title="Feedback & Support"
+          description="Report a bug, suggest a feature, contact our support team, or rate Bounty on the app store."
+          primaryLabel="Open"
+          onPrimary={() => setPanel('feedback')}
+          icon="feedback"
+        />
+
+        {/* Admin Tab Toggle - only visible to users with admin permissions */}
         {isAdmin && (
           <View style={s.card} className="rounded-xl p-4 mb-4">
             <View className="flex-row items-center justify-between">
