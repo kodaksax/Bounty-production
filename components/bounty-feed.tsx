@@ -20,6 +20,8 @@ import { locationService } from '../lib/services/location-service'
 import { searchService } from '../lib/services/search-service'
 import { storage } from '../lib/storage'
 import type { TrendingBounty } from '../lib/types'
+import { logger } from '../lib/utils/error-logger'
+import { withTimeout } from '../lib/utils/withTimeout'
 
 export type BountyFeedHandle = {
   /** Reload the first page of bounties (reset pagination). */
@@ -192,20 +194,44 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       setApplicationsLoaded(true)
       return
     }
+    const startedAt = Date.now()
+    logger.info('feed.applications.request_started', { userId: uid })
     try {
-      const requests = await bountyRequestService.getAll({ userId: uid })
+      // Timeout-protect this fetch: it gates the skeleton loader via
+      // `applicationsLoaded`, so an un-timed hang here (stalled network, auth
+      // lock deadlock, unresolved Supabase deferred proxy) would otherwise keep
+      // the feed on the skeleton screen forever.
+      const requests = await withTimeout(
+        bountyRequestService.getAll({ userId: uid }),
+        API_TIMEOUTS.DEFAULT
+      )
       const ids = new Set<string>(
         requests
           .filter(r => r.bounty_id != null)
           .map(r => String(r.bounty_id))
       )
       setAppliedBountyIds(ids)
+      logger.info('feed.applications.request_completed', {
+        userId: uid,
+        durationMs: Date.now() - startedAt,
+        count: ids.size,
+        success: true,
+      })
     } catch (error) {
-      console.error('Error loading user applications:', error)
+      // Non-fatal: applications only drive client-side filtering. On failure we
+      // proceed with an unfiltered feed rather than blocking the UI. The finally
+      // block guarantees `applicationsLoaded` is set so the skeleton clears.
+      const message = error instanceof Error ? error.message : String(error)
+      logger.warning('feed.applications.request_failed', {
+        userId: uid,
+        durationMs: Date.now() - startedAt,
+        timedOut: message.includes('timed out'),
+        error: message,
+      })
     } finally {
       setApplicationsLoaded(true)
     }
-  }, [currentUserId])
+  }, [validUserId, currentUserId])
 
   // Debounced setter to avoid rapid re-render/update cycles when users tap filters quickly
   const activeCategoryTimerRef = useRef<number | null>(null)
@@ -242,17 +268,18 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     } else {
       setLoadingMore(true)
     }
+    const pageOffset = reset ? 0 : offsetRef.current
+    const startedAt = Date.now()
+    logger.info('feed.bounties.request_started', { reset, offset: pageOffset, pageSize: PAGE_SIZE })
     try {
-      const pageOffset = reset ? 0 : offsetRef.current
-      const fetchedBounties = await Promise.race<Bounty[]>([
+      // Timeout-protect the fetch so a hung request always reaches a terminal
+      // state (error UI) instead of leaving the feed on the skeleton forever.
+      // `withTimeout` also guarantees the timer is cleared once the request
+      // settles, avoiding a lingering timer leak.
+      const fetchedBounties = await withTimeout(
         bountyService.getAll({ status: 'open', limit: PAGE_SIZE, offset: pageOffset }),
-        new Promise<never>((_, reject) =>
-          setTimeout(
-            () => reject(new Error('Service unavailable — please try again shortly')),
-            API_TIMEOUTS.DEFAULT
-          )
-        ),
-      ])
+        API_TIMEOUTS.DEFAULT
+      )
 
       const mergeUniqueById = (existing: Bounty[], incoming: Bounty[]) => {
         const map = new Map<string, Bounty>()
@@ -262,22 +289,39 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         return Array.from(map.values())
       }
 
+      // Defensive null handling: a malformed/empty response must not throw.
+      const safeBounties = Array.isArray(fetchedBounties) ? fetchedBounties : []
+
       if (reset) {
-        setBounties(mergeUniqueById([], fetchedBounties))
+        setBounties(mergeUniqueById([], safeBounties))
       } else {
-        setBounties(prev => mergeUniqueById(prev, fetchedBounties))
+        setBounties(prev => mergeUniqueById(prev, safeBounties))
       }
-      offsetRef.current = pageOffset + fetchedBounties.length
-      setHasMore(fetchedBounties.length === PAGE_SIZE)
+      offsetRef.current = pageOffset + safeBounties.length
+      setHasMore(safeBounties.length === PAGE_SIZE)
       setLoadError(null)
+      logger.info('feed.bounties.request_completed', {
+        reset,
+        durationMs: Date.now() - startedAt,
+        count: safeBounties.length,
+        success: true,
+      })
     } catch (error) {
-      console.error('Error loading bounties:', error)
+      const message = error instanceof Error ? error.message : String(error)
+      logger.error('feed.bounties.request_failed', {
+        reset,
+        durationMs: Date.now() - startedAt,
+        timedOut: message.includes('timed out'),
+        error: message,
+      })
       if (reset) {
-        setLoadError(error as Error)
+        setLoadError(error instanceof Error ? error : new Error(message))
         setBounties(prev => prev.length === 0 ? [] : prev)
         setHasMore(false)
       }
     } finally {
+      // Guaranteed exit: both loading flags are always cleared so the skeleton
+      // can never persist because of this request.
       setIsLoadingBounties(false)
       setLoadingMore(false)
     }
@@ -416,14 +460,9 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   const ItemSeparator = useCallback(() => <View style={{ height: 2 }} />, [])
 
   const EmptyListComponent = useCallback(() => {
-    if (isLoadingBounties || !applicationsLoaded) {
-      return (
-        <View style={{ width: '100%' }}>
-          <PostingsListSkeleton count={5} />
-        </View>
-      )
-    }
-
+    // Error/offline state takes precedence: it must always be reachable, even if
+    // the (non-critical) applications request hasn't resolved yet. Otherwise a
+    // hung applications load could hide a legitimate error behind the skeleton.
     if (loadError) {
       return (
         <EmptyState
@@ -433,6 +472,15 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
           actionLabel="Try Again"
           onAction={() => loadBounties({ reset: true })}
         />
+      )
+    }
+
+    // Skeleton only while a legitimate request is actively pending.
+    if (isLoadingBounties || !applicationsLoaded) {
+      return (
+        <View style={{ width: '100%' }}>
+          <PostingsListSkeleton count={5} />
+        </View>
       )
     }
     // If a category filter is active, offer a clear-filter empty state.
