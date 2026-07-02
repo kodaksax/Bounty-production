@@ -19,6 +19,8 @@ import { Animated,
   View, } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -42,7 +44,7 @@ const slides: SlideData[] = [
     icon: 'gps-fixed',
     title: 'Welcome to Bounty',
     description: 'The trusted marketplace for getting things done. Post a task, find local help, and pay safely — all in one place.',
-    color: '#a7f3d0',
+    color: '#9CA3AF',
   },
   {
     id: '2',
@@ -56,14 +58,14 @@ const slides: SlideData[] = [
     icon: 'people',
     title: 'Step 2: Review & Accept',
     description: 'Receive applications from qualified hunters. Review their profiles and ratings, then accept the best match. Funds are held safely in escrow.',
-    color: '#34d399',
+    color: '#059669',
   },
   {
     id: '4',
     icon: 'chat-bubble',
     title: 'Step 3: Chat & Coordinate',
     description: 'Message your hunter directly in the app. Share details, coordinate timing, and track progress. Everything stays organized in one place.',
-    color: '#10b981',
+    color: '#059669',
   },
   {
     id: '5',
@@ -84,7 +86,7 @@ const slides: SlideData[] = [
     icon: 'security',
     title: 'Safe & Secure',
     description: 'Payments protected by escrow. Verified profiles and ratings. Phone verification adds extra security. Your money is always safe.',
-    color: '#a7f3d0',
+    color: '#9CA3AF',
   },
 ];
 
@@ -95,6 +97,8 @@ export default function OnboardingCarousel() {
   const [showSkipModal, setShowSkipModal] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
+  const { theme } = useAppThemeContext();
+  const styles = makeStyles(theme);
 
   const handleNext = () => {
     if (currentIndex < slides.length - 1) {
@@ -158,7 +162,7 @@ export default function OnboardingCarousel() {
             </View>
           )}
           
-          <View style={[styles.iconContainer, { backgroundColor: 'rgba(5,46,27,0.5)' }]}>
+          <View style={[styles.iconContainer, { backgroundColor: theme.surface }]}>
             <MaterialIcons name={item.icon} size={80} color={item.color} />
           </View>
 
@@ -303,176 +307,178 @@ export default function OnboardingCarousel() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#059669',
-  },
-  brandingHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  brandingText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    letterSpacing: 3,
-    marginLeft: 8,
-  },
-  skipButton: {
-    position: 'absolute',
-    top: 60,
-    right: 24,
-    zIndex: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-  },
-  skipText: {
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  slide: {
-    width: SCREEN_WIDTH,
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
-  },
-  slideContent: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepBadge: {
-    backgroundColor: 'rgba(167,243,208,0.3)',
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 20,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(167,243,208,0.5)',
-  },
-  stepBadgeText: {
-    color: '#a7f3d0',
-    fontSize: 12,
-    fontWeight: 'bold',
-    letterSpacing: 1.5,
-  },
-  iconContainer: {
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 40,
-    borderWidth: 3,
-    borderColor: 'rgba(167,243,208,0.3)',
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  description: {
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.85)',
-    textAlign: 'center',
-    lineHeight: 24,
-    paddingHorizontal: 20,
-  },
-  dotsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 40,
-    height: 24,
-  },
-  dot: {
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#a7f3d0',
-    marginHorizontal: 4,
-  },
-  actionContainer: {
-    paddingHorizontal: 24,
-    paddingBottom: 40,
-  },
-  nextButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#a7f3d0',
-    paddingVertical: 16,
-    borderRadius: 999,
-    gap: 8,
-  },
-  nextButtonText: {
-    color: '#052e1b',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  modalContent: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 24,
-    width: '100%',
-    maxWidth: 400,
-    alignItems: 'center',
-  },
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#052e1b',
-    marginTop: 16,
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  modalDescription: {
-    fontSize: 16,
-    color: '#4b5563',
-    textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 24,
-  },
-  modalActions: {
-    flexDirection: 'row',
-    gap: 12,
-    width: '100%',
-  },
-  modalButtonPrimary: {
-    flex: 1,
-    backgroundColor: '#059669',
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  modalButtonSecondary: {
-    flex: 1,
-    backgroundColor: '#e5e7eb',
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  modalButtonTextPrimary: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  modalButtonTextSecondary: {
-    color: '#052e1b',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    brandingHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingTop: 16,
+      paddingBottom: 8,
+    },
+    brandingText: {
+      fontSize: 24,
+      fontWeight: 'bold',
+      color: theme.text,
+      letterSpacing: 3,
+      marginLeft: 8,
+    },
+    skipButton: {
+      position: 'absolute',
+      top: 60,
+      right: 24,
+      zIndex: 10,
+      paddingVertical: 8,
+      paddingHorizontal: 16,
+    },
+    skipText: {
+      color: theme.textSecondary,
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    slide: {
+      width: SCREEN_WIDTH,
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 40,
+    },
+    slideContent: {
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    stepBadge: {
+      backgroundColor: theme.surface,
+      paddingHorizontal: 16,
+      paddingVertical: 6,
+      borderRadius: 20,
+      marginBottom: 20,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    stepBadgeText: {
+      color: theme.textSecondary,
+      fontSize: 12,
+      fontWeight: 'bold',
+      letterSpacing: 1.5,
+    },
+    iconContainer: {
+      width: 160,
+      height: 160,
+      borderRadius: 80,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 40,
+      borderWidth: 3,
+      borderColor: theme.border,
+    },
+    title: {
+      fontSize: 28,
+      fontWeight: 'bold',
+      color: theme.text,
+      marginBottom: 16,
+      textAlign: 'center',
+    },
+    description: {
+      fontSize: 16,
+      color: theme.textSecondary,
+      textAlign: 'center',
+      lineHeight: 24,
+      paddingHorizontal: 20,
+    },
+    dotsContainer: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 40,
+      height: 24,
+    },
+    dot: {
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: theme.primary,
+      marginHorizontal: 4,
+    },
+    actionContainer: {
+      paddingHorizontal: 24,
+      paddingBottom: 40,
+    },
+    nextButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.primary,
+      paddingVertical: 16,
+      borderRadius: 999,
+      gap: 8,
+    },
+    nextButtonText: {
+      color: '#052e1b',
+      fontSize: 18,
+      fontWeight: 'bold',
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.7)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 24,
+    },
+    modalContent: {
+      backgroundColor: theme.surface,
+      borderRadius: 16,
+      padding: 24,
+      width: '100%',
+      maxWidth: 400,
+      alignItems: 'center',
+    },
+    modalTitle: {
+      fontSize: 22,
+      fontWeight: 'bold',
+      color: theme.text,
+      marginTop: 16,
+      marginBottom: 12,
+      textAlign: 'center',
+    },
+    modalDescription: {
+      fontSize: 16,
+      color: theme.textSecondary,
+      textAlign: 'center',
+      lineHeight: 24,
+      marginBottom: 24,
+    },
+    modalActions: {
+      flexDirection: 'row',
+      gap: 12,
+      width: '100%',
+    },
+    modalButtonPrimary: {
+      flex: 1,
+      backgroundColor: '#059669',
+      paddingVertical: 12,
+      borderRadius: 8,
+      alignItems: 'center',
+    },
+    modalButtonSecondary: {
+      flex: 1,
+      backgroundColor: theme.surfaceSecondary,
+      paddingVertical: 12,
+      borderRadius: 8,
+      alignItems: 'center',
+    },
+    modalButtonTextPrimary: {
+      color: '#ffffff',
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    modalButtonTextSecondary: {
+      color: theme.text,
+      fontSize: 16,
+      fontWeight: '600',
+    },
+  });
+}

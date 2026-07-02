@@ -2,7 +2,8 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { BrandingLogo } from "components/ui/branding-logo"
 import { useRouter } from "expo-router"
-import { theme } from "lib/theme"
+import { useAppThemeContext } from '../lib/themes/AppThemeContext'
+import type { AppTheme } from '../lib/themes/types'
 import { formatCategoryLabel } from 'lib/utils/data-utils'
 import { shareBounty } from "lib/utils/share-utils"
 import { useEffect, useRef, useState } from "react"
@@ -74,6 +75,8 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   const { isEmailVerified, session } = useAuthContext()
   const currentUserId = session?.user?.id ?? null
   const { triggerHaptic } = useHapticFeedback()
+  const { theme } = useAppThemeContext()
+  const styles = makeStyles(theme)
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState("")
   const [isClosing, setIsClosing] = useState(false)
@@ -97,6 +100,9 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   const [isLoadingAttachments, setIsLoadingAttachments] = useState(false)
   const [viewerAttachment, setViewerAttachment] = useState<AttachmentMeta | null>(null)
   const [viewerVisible, setViewerVisible] = useState(false)
+  const imageScrollRef = useRef<ScrollView>(null)
+  const [currentImageIndex, setCurrentImageIndex] = useState(0)
+  const [carouselWidth, setCarouselWidth] = useState(0)
 
   // Track mounted state to prevent showing alerts after unmount
   const isMountedRef = useRef(true)
@@ -219,7 +225,33 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
     bounty.description ||
     "I need someone to mow my lawn. The yard is approximately 1/4 acre with some slopes. I have a lawn mower you can use, or you can bring your own equipment. The grass is about 3 inches tall now. Please trim around the edges and clean up afterward. This should take about 2 hours to complete. I need this done by this weekend."
 
-  
+  const imageAttachments = actualAttachments.filter(a =>
+    !!(a.mimeType?.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp)$/i.test(a.name))
+  )
+  const otherAttachments = actualAttachments.filter(a =>
+    !(a.mimeType?.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp)$/i.test(a.name))
+  )
+
+  const goToPrev = () => {
+    const newIdx = Math.max(0, currentImageIndex - 1)
+    if (carouselWidth > 0) imageScrollRef.current?.scrollTo({ x: newIdx * carouselWidth, animated: true })
+    setCurrentImageIndex(newIdx)
+  }
+
+  const goToNext = () => {
+    const newIdx = Math.min(imageAttachments.length - 1, currentImageIndex + 1)
+    if (carouselWidth > 0) imageScrollRef.current?.scrollTo({ x: newIdx * carouselWidth, animated: true })
+    setCurrentImageIndex(newIdx)
+  }
+
+  const handleCarouselScroll = (e: any) => {
+    if (carouselWidth > 0) {
+      const idx = Math.round(e.nativeEvent.contentOffset.x / carouselWidth)
+      setCurrentImageIndex(idx)
+    }
+  }
+
+
 
   // Handle Share button
   const handleShare = async () => {
@@ -465,17 +497,17 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
             {/* Header - iPhone optimized */}
             <View style={styles.header}>
               <View style={styles.headerLeft}>
-                <BrandingLogo size="small" />
+                <BrandingLogo size="medium" />
               </View>
               <View style={styles.headerActions}>
                 <TouchableOpacity onPress={handleShare} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Share bounty">
-                  <MaterialIcons name="share" size={20} color="white" />
+                  <MaterialIcons name="share" size={20} color={theme.text} />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={handleReport} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Report bounty">
-                  <MaterialIcons name="report" size={20} color="white" />
+                  <MaterialIcons name="report" size={20} color={theme.text} />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={handleClose} style={styles.closeButton} accessibilityRole="button" accessibilityLabel="Close">
-                  <MaterialIcons name="close" size={20} color="white" />
+                  <MaterialIcons name="close" size={20} color={theme.text} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -486,7 +518,55 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
               style={styles.scrollContainer}
               contentContainerStyle={styles.scrollContent}
             >
-              <View style={styles.bountyCard}>
+              <View
+                style={styles.bountyCard}
+                onLayout={e => setCarouselWidth(e.nativeEvent.layout.width)}
+              >
+                {/* Image carousel — Airbnb style */}
+                {imageAttachments.length > 0 && carouselWidth > 0 ? (
+                  <View style={styles.imageCarousel}>
+                    <ScrollView
+                      ref={imageScrollRef}
+                      horizontal
+                      pagingEnabled
+                      showsHorizontalScrollIndicator={false}
+                      onMomentumScrollEnd={handleCarouselScroll}
+                      scrollEventThrottle={16}
+                    >
+                      {imageAttachments.map(att => (
+                        <TouchableOpacity
+                          key={att.id}
+                          activeOpacity={0.95}
+                          onPress={() => handleAttachmentOpen(att)}
+                          style={{ width: carouselWidth }}
+                        >
+                          <Image
+                            source={{ uri: att.remoteUri || att.uri }}
+                            style={[styles.carouselImage, { width: carouselWidth }]}
+                            resizeMode="cover"
+                          />
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                    {currentImageIndex > 0 && (
+                      <TouchableOpacity style={[styles.carouselArrow, styles.carouselArrowLeft]} onPress={goToPrev}>
+                        <MaterialIcons name="chevron-left" size={28} color="#fff" />
+                      </TouchableOpacity>
+                    )}
+                    {currentImageIndex < imageAttachments.length - 1 && (
+                      <TouchableOpacity style={[styles.carouselArrow, styles.carouselArrowRight]} onPress={goToNext}>
+                        <MaterialIcons name="chevron-right" size={28} color="#fff" />
+                      </TouchableOpacity>
+                    )}
+                    {imageAttachments.length > 1 && (
+                      <View style={styles.carouselDots}>
+                        {imageAttachments.map((_, idx) => (
+                          <View key={idx} style={[styles.carouselDot, idx === currentImageIndex && styles.carouselDotActive]} />
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                ) : null}
                 <View style={styles.cardContent}>
                   {/* User info - Clickable to navigate to profile */}
                   <TouchableOpacity
@@ -501,7 +581,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                   >
                     {profileLoading ? (
                       <View style={styles.profileLoadingContainer}>
-                        <ActivityIndicator size="small" color="#a7f3d0" />
+                        <ActivityIndicator size="small" color={theme.textSecondary} />
                         <Text style={styles.loadingText}>Loading profile...</Text>
                       </View>
                     ) : (
@@ -519,7 +599,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                           <Text style={styles.postTime}>Posted 2h ago</Text>
                         </View>
                         {posterId && (
-                          <MaterialIcons name="chevron-right" size={20} color="#a7f3d0" style={{ marginLeft: 'auto' }} />
+                          <MaterialIcons name="chevron-right" size={20} color={theme.textSecondary} style={{ marginLeft: 'auto' }} />
                         )}
                       </>
                     )}
@@ -544,7 +624,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                     </View>
                     {bounty.work_type === 'online' ? (
                       <View style={styles.onlineBadge}>
-                        <MaterialIcons name="wifi" size={14} color="#10b981" />
+                        <MaterialIcons name="wifi" size={14} color="#059669" />
                         <Text style={styles.onlineText}>Online</Text>
                       </View>
                     ) : bounty.distance === null ? (
@@ -568,19 +648,19 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                       {([
                         bounty.timeline && {
                           icon: 'schedule' as const,
-                          color: '#a7f3d0',
+                          color: theme.textSecondary,
                           label: 'Timeline',
                           value: bounty.timeline,
                         },
                         bounty.skills_required && {
                           icon: 'build' as const,
-                          color: '#a7f3d0',
+                          color: theme.textSecondary,
                           label: 'Skills Required',
                           value: bounty.skills_required,
                         },
                         bounty.location && bounty.work_type !== 'online' && {
                           icon: 'place' as const,
-                          color: '#a7f3d0',
+                          color: theme.textSecondary,
                           label: 'Location',
                           value: bounty.location,
                         },
@@ -607,21 +687,19 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                     </View>
                   )}
 
-                  {/* Attachments */}
-                  {(isLoadingAttachments || actualAttachments.length > 0) && (
+                  {/* Non-image attachments (images shown in carousel above) */}
+                  {(isLoadingAttachments || otherAttachments.length > 0) && (
                     <View style={styles.attachmentsSection}>
                       <Text style={styles.sectionHeader}>Attachments</Text>
                       {isLoadingAttachments ? (
                         <View style={styles.attachmentsLoadingContainer}>
-                          <ActivityIndicator size="small" color="#a7f3d0" />
+                          <ActivityIndicator size="small" color={theme.textSecondary} />
                           <Text style={styles.attachmentsLoadingText}>Loading attachments...</Text>
                         </View>
                       ) : (
                         <View style={styles.attachmentsContainer}>
-                          {actualAttachments.map((attachment) => {
-                            const isImage = !!(attachment.mimeType && attachment.mimeType.startsWith('image/')) || (!!attachment.name && /\.(jpg|jpeg|png|gif|webp)$/i.test(attachment.name))
+                          {otherAttachments.map((attachment) => {
                             const sizeInMB = attachment.size ? (attachment.size / (1024 * 1024)).toFixed(1) : 'Unknown'
-
                             return (
                               <TouchableOpacity
                                 key={attachment.id}
@@ -629,16 +707,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                                 onPress={() => handleAttachmentOpen(attachment)}
                               >
                                 <View style={styles.attachmentIcon}>
-                                  {isImage ? (
-                                    // Show thumbnail when available (prefer remoteUri, fallback to local uri)
-                                    <Image
-                                      source={{ uri: attachment.remoteUri || attachment.uri }}
-                                      style={{ width: 40, height: 40, borderRadius: 6 }}
-                                      resizeMode="cover"
-                                    />
-                                  ) : (
-                                    <MaterialIcons name="description" size={20} color="#a7f3d0" />
-                                  )}
+                                  <MaterialIcons name="description" size={20} color={theme.textSecondary} />
                                 </View>
                                 <View style={styles.attachmentInfo}>
                                   <Text style={styles.attachmentName}>{attachment.name}</Text>
@@ -647,7 +716,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                                   </Text>
                                 </View>
                                 <View style={styles.downloadButton}>
-                                  <MaterialIcons name="arrow-forward" size={16} color="#a7f3d0" />
+                                  <MaterialIcons name="arrow-forward" size={16} color={theme.textSecondary} />
                                 </View>
                               </TouchableOpacity>
                             )
@@ -667,7 +736,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                 <TextInput
                   style={styles.messageInput}
                   placeholder="Add a short message to the poster (optional)…"
-                  placeholderTextColor="rgba(167, 243, 208, 0.5)"
+                  placeholderTextColor={theme.textDisabled}
                   value={applicationMessage}
                   onChangeText={setApplicationMessage}
                   multiline
@@ -728,23 +797,27 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   )
 }
 
-const styles = StyleSheet.create({
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
   },
   cardShadow: {
     borderRadius: 24,
-    ...theme.shadows.lg,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: theme.isDark ? 0.15 : 0.1,
+    shadowRadius: 8,
+    elevation: 5,
     backgroundColor: 'transparent',
   },
-  // Inner rounded card
   card: {
     flex: 1,
-    backgroundColor: '#059669', // emerald-600
+    backgroundColor: theme.surface,
     borderRadius: 24,
     overflow: 'hidden',
   },
@@ -753,10 +826,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 16,
-    backgroundColor: '#047857', // emerald-700
-    // Optional: ensure the darker header follows the rounded top
+    backgroundColor: theme.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
   },
   headerLeft: {
     flexDirection: 'row',
@@ -775,23 +849,25 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     letterSpacing: 1.6,
-    color: 'white',
+    color: theme.text,
   },
   closeButton: {
     padding: 8,
   },
   scrollContainer: {
     flex: 1,
-    backgroundColor: '#059669', // emerald-600
+    backgroundColor: theme.surface,
   },
   scrollContent: {
     padding: 16,
   },
   bountyCard: {
-    backgroundColor: '#047857cc', // emerald-700/80
+    backgroundColor: theme.surfaceSecondary,
     borderRadius: 12,
     overflow: 'hidden',
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: theme.border,
   },
   cardContent: {
     padding: 16,
@@ -809,7 +885,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   loadingText: {
-    color: '#a7f3d0', // emerald-300
+    color: theme.textSecondary,
     fontSize: 14,
     fontStyle: 'italic',
   },
@@ -820,29 +896,29 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderWidth: 1,
-    borderColor: '#6ee7b780', // emerald-400/30
+    borderColor: theme.border,
   },
   avatarFallback: {
-    backgroundColor: '#064e3b', // emerald-900
+    backgroundColor: theme.surfaceSecondary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarText: {
-    color: '#a7f3d0', // emerald-200
+    color: theme.text,
     fontSize: 12,
   },
   username: {
     fontSize: 14,
-    color: '#d1fae5', // emerald-100
+    color: theme.text,
   },
   postTime: {
     fontSize: 12,
-    color: '#a7f3d0', // emerald-300
+    color: theme.textSecondary,
   },
   title: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: 'white',
+    color: theme.text,
     marginBottom: 12,
   },
   priceDistanceContainer: {
@@ -854,26 +930,26 @@ const styles = StyleSheet.create({
   onlineText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#065f46', // emerald-800
+    color: theme.isDark ? '#ffffff' : theme.primary,
   },
   priceContainer: {
-    backgroundColor: '#064e3b80', // emerald-900/50
+    backgroundColor: theme.isDark ? '#064e3b80' : 'rgba(5,150,105,0.08)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
   },
   priceText: {
-    color: '#6ee7b7', // emerald-400
+    color: theme.isDark ? '#6ee7b7' : theme.primary,
     fontWeight: 'bold',
   },
   distanceText: {
     fontSize: 14,
-    color: '#a7f3d0', // emerald-200
+    color: theme.textSecondary,
   },
   onlineBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#d1fae5', // emerald-100
+    backgroundColor: theme.isDark ? '#1F2937' : 'rgba(5,150,105,0.08)',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
@@ -882,27 +958,27 @@ const styles = StyleSheet.create({
   categoryPill: {
     marginTop: 8,
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: theme.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(5,150,105,0.08)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
   },
   categoryPillText: {
-    color: '#a7f3d0',
+    color: theme.textSecondary,
     fontSize: 12,
     fontWeight: '600',
   },
   honorBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#a7f3d0', // emerald-200
+    backgroundColor: '#9CA3AF',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 6,
     gap: 4,
   },
   honorText: {
-    color: '#052e1b', // emerald-950
+    color: '#052e1b',
     fontWeight: '800',
     fontSize: 13,
   },
@@ -911,7 +987,9 @@ const styles = StyleSheet.create({
   },
   additionalDetailsContainer: {
     marginBottom: 16,
-    backgroundColor: '#05543280', // emerald-800/50
+    backgroundColor: theme.surfaceSecondary,
+    borderWidth: 1,
+    borderColor: theme.border,
     padding: 12,
     borderRadius: 8,
   },
@@ -927,12 +1005,12 @@ const styles = StyleSheet.create({
   detailLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#a7f3d0', // emerald-300
+    color: theme.textSecondary,
     marginBottom: 2,
   },
   detailValue: {
     fontSize: 14,
-    color: '#d1fae5', // emerald-100
+    color: theme.text,
     lineHeight: 18,
   },
   attachmentsSection: {
@@ -941,11 +1019,11 @@ const styles = StyleSheet.create({
   sectionHeader: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#a7f3d0', // emerald-200
+    color: theme.textSecondary,
     marginBottom: 8,
   },
   descriptionText: {
-    color: 'white',
+    color: theme.text,
     fontSize: 14,
     lineHeight: 20,
   },
@@ -957,19 +1035,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 16,
-    backgroundColor: '#05543280', // emerald-800/50
+    backgroundColor: theme.surfaceSecondary,
     borderRadius: 8,
     gap: 12,
   },
   attachmentsLoadingText: {
-    color: '#a7f3d0', // emerald-300
+    color: theme.textSecondary,
     fontSize: 14,
     fontStyle: 'italic',
   },
   attachmentItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#05543280', // emerald-800/50
+    backgroundColor: theme.surfaceSecondary,
     padding: 12,
     borderRadius: 8,
   },
@@ -977,7 +1055,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 6,
-    backgroundColor: '#064e3b', // emerald-900
+    backgroundColor: theme.border,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -987,52 +1065,102 @@ const styles = StyleSheet.create({
   },
   attachmentName: {
     fontSize: 14,
-    color: 'white',
+    color: theme.text,
   },
   attachmentSize: {
     fontSize: 12,
-    color: '#a7f3d0', // emerald-300
+    color: theme.textSecondary,
   },
   downloadButton: {
     padding: 8,
   },
+  imageCarousel: {
+    position: 'relative',
+    height: 220,
+  },
+  carouselImage: {
+    height: 220,
+  },
+  carouselArrow: {
+    position: 'absolute',
+    top: 88,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: 22,
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  carouselArrowLeft: {
+    left: 10,
+  },
+  carouselArrowRight: {
+    right: 10,
+  },
+  carouselDots: {
+    position: 'absolute',
+    bottom: 10,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  carouselDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.55)',
+  },
+  carouselDotActive: {
+    backgroundColor: '#fff',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginTop: -1,
+  },
   actionContainer: {
     padding: 16,
     paddingTop: 16,
-    backgroundColor: '#047857', // emerald-700
+    backgroundColor: theme.background,
     borderTopWidth: 1,
-    borderTopColor: '#05966920', // emerald-600/20
+    borderTopColor: theme.border,
   },
   acceptButton: {
     width: '100%',
     paddingVertical: 16,
-    backgroundColor: '#10b981', // emerald-500
+    backgroundColor: '#059669',
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    ...theme.shadows.emerald,
+    shadowColor: '#00912C',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
   },
   acceptButtonDisabled: {
-    backgroundColor: '#059669', // emerald-600 (darker)
+    backgroundColor: '#059669',
     opacity: 0.6,
   },
   acceptButtonText: {
-    color: 'white',
+    color: '#ffffff',
     fontWeight: '500',
     fontSize: 16,
   },
   messageInput: {
-    backgroundColor: '#06402a', // emerald-900-ish tint
+    backgroundColor: theme.surfaceSecondary,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.3)',
-    color: '#d1fae5',
+    borderColor: theme.border,
+    color: theme.text,
     fontSize: 14,
     padding: 12,
     minHeight: 72,
     marginBottom: 10,
     textAlignVertical: 'top',
   },
-});
+  });
+}
 
 

@@ -49,13 +49,13 @@ function BountyRequestItemComponent({
   }, [deadline]);
   
   return (
-    <View className="bg-emerald-800/50 backdrop-blur-sm rounded-lg overflow-hidden mb-3">
+    <View className="bg-[#111827]/50 backdrop-blur-sm rounded-lg overflow-hidden mb-3">
       <View className="p-3">
         <View className="flex items-center gap-3">
-          <View className="h-10 w-10 rounded-full bg-emerald-500 flex items-center justify-center border border-emerald-400/30">
+          <View className="h-10 w-10 rounded-full bg-[#059669] flex items-center justify-center border border-[#059669]/30">
             <Avatar className="h-8 w-8">
               <AvatarImage src={validAvatarUrl} alt={username} />
-              <AvatarFallback className="bg-emerald-900 text-emerald-200 text-xs">
+              <AvatarFallback className="bg-[#0B0F14] text-[#9CA3AF] text-xs">
                 {avatarInitials}
               </AvatarFallback>
             </Avatar>
@@ -63,10 +63,10 @@ function BountyRequestItemComponent({
 
           <View className="flex-1">
             <View className="flex justify-between items-center">
-              <Text className="text-sm text-emerald-100">{username}</Text>
+              <Text className="text-sm text-white">{username}</Text>
               <View className="flex items-center gap-2">
-                <Text className="text-xs text-emerald-300">{timeAgo}</Text>
-                <TouchableOpacity onPress={onMenuClick} className="text-emerald-300">
+                <Text className="text-xs text-[#6ee7b7]">{timeAgo}</Text>
+                <TouchableOpacity onPress={onMenuClick} className="text-[#6ee7b7]">
                   <MaterialIcons name="more-vert" size={24} color="#000000" />
                 </TouchableOpacity>
               </View>
@@ -74,13 +74,13 @@ function BountyRequestItemComponent({
             <Text className="text-white font-medium mt-0.5">{title}</Text>
             <View className="flex-row gap-2 mt-1">
               {workType && (
-                <View className="bg-emerald-700/40 px-2 py-0.5 rounded">
-                  <Text className="text-emerald-200 text-[10px] uppercase tracking-wide">{workType === 'online' ? 'Online' : 'In Person'}</Text>
+                <View className="bg-[#111827] px-2 py-0.5 rounded">
+                  <Text className="text-[#9CA3AF] text-[10px] uppercase tracking-wide">{workType === 'online' ? 'Online' : 'In Person'}</Text>
                 </View>
               )}
               {displayDeadline && (
-                <View className="bg-emerald-900/40 px-2 py-0.5 rounded">
-                  <Text className="text-emerald-300 text-[10px] tracking-wide">Due: {displayDeadline}</Text>
+                <View className="bg-[#0B0F14]/40 px-2 py-0.5 rounded">
+                  <Text className="text-[#6ee7b7] text-[10px] tracking-wide">Due: {displayDeadline}</Text>
                 </View>
               )}
             </View>
@@ -88,8 +88,8 @@ function BountyRequestItemComponent({
         </View>
 
         <View className="flex justify-between items-center mt-2">
-          <View className="bg-emerald-900/50 px-2 py-1 rounded text-emerald-400 font-bold text-sm">${amount}</View>
-          <View className="text-sm text-emerald-200">{distance} mi</View>
+          <View className="bg-[#0B0F14]/50 px-2 py-1 rounded text-[#6ee7b7] font-bold text-sm">${amount}</View>
+          <View className="text-sm text-[#9CA3AF]">{distance} mi</View>
         </View>
       </View>
     </View>

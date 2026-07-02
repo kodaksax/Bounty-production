@@ -18,6 +18,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
 import { useAuthContext } from '../../hooks/use-auth-context';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation';
 
 export default function EmailConfirmationScreen() {
@@ -25,6 +27,8 @@ export default function EmailConfirmationScreen() {
   const insets = useSafeAreaInsets();
   const pulseAnim = React.useRef(new Animated.Value(1)).current;
   const { session } = useAuthContext();
+  const { theme } = useAppThemeContext();
+  const styles = makeStyles(theme);
 
   // Auto-navigate to onboarding when the session is established
   // (e.g. after the user clicks the confirmation link in their email)
@@ -79,7 +83,7 @@ export default function EmailConfirmationScreen() {
           ]}
         >
           <View style={styles.iconCircle}>
-            <MaterialIcons name="mark-email-read" size={64} color="#052e1b" />
+            <MaterialIcons name="mark-email-read" size={64} color="#059669" />
           </View>
         </Animated.View>
 
@@ -131,7 +135,7 @@ export default function EmailConfirmationScreen() {
 
         {/* Info box */}
         <View style={styles.infoBox}>
-          <MaterialIcons name="info-outline" size={18} color="#a7f3d0" />
+          <MaterialIcons name="info-outline" size={18} color={theme.textSecondary} />
           <Text style={styles.infoText}>
             Can
             {"'"}
@@ -144,136 +148,137 @@ export default function EmailConfirmationScreen() {
       <View style={styles.actions}>
         <TouchableOpacity style={styles.primaryButton} onPress={handleGoToSignIn}>
           <Text style={styles.primaryButtonText}>Go to Sign In</Text>
-          <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
+          <MaterialIcons name="arrow-forward" size={20} color="#ffffff" />
         </TouchableOpacity>
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#059669',
-    paddingHorizontal: 24,
-  },
-  brandingHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 24,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingBottom: 24,
-  },
-
-  iconContainer: {
-    marginBottom: 24,
-  },
-  iconCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#a7f3d0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 32,
-    textAlign: 'center',
-  },
-  stepsContainer: {
-    width: '100%',
-    backgroundColor: 'rgba(5,46,27,0.4)',
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 2,
-    borderColor: 'rgba(167,243,208,0.3)',
-    marginBottom: 24,
-  },
-  step: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  stepNumber: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#a7f3d0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  stepNumberText: {
-    color: '#052e1b',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  stepContent: {
-    flex: 1,
-  },
-  stepTitle: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  stepDescription: {
-    color: 'rgba(255,255,255,0.75)',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  stepDivider: {
-    width: 2,
-    height: 20,
-    backgroundColor: 'rgba(167,243,208,0.3)',
-    marginLeft: 13,
-    marginVertical: 8,
-  },
-  infoBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: 'rgba(5,46,27,0.4)',
-    borderRadius: 12,
-    padding: 14,
-    width: '100%',
-  },
-  infoText: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 13,
-    lineHeight: 20,
-    marginLeft: 10,
-    flex: 1,
-  },
-  actions: {
-    paddingVertical: 24,
-  },
-  primaryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#a7f3d0',
-    paddingVertical: 16,
-    borderRadius: 999,
-    gap: 8,
-  },
-  primaryButtonText: {
-    color: '#052e1b',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+      paddingHorizontal: 24,
+    },
+    brandingHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 24,
+    },
+    scrollView: {
+      flex: 1,
+    },
+    scrollContent: {
+      flexGrow: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingBottom: 24,
+    },
+    iconContainer: {
+      marginBottom: 24,
+    },
+    iconCircle: {
+      width: 120,
+      height: 120,
+      borderRadius: 60,
+      backgroundColor: theme.surfaceSecondary,
+      justifyContent: 'center',
+      alignItems: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.2,
+      shadowRadius: 8,
+      elevation: 6,
+    },
+    title: {
+      fontSize: 28,
+      fontWeight: 'bold',
+      color: theme.text,
+      marginBottom: 32,
+      textAlign: 'center',
+    },
+    stepsContainer: {
+      width: '100%',
+      backgroundColor: theme.surfaceSecondary,
+      borderRadius: 16,
+      padding: 20,
+      borderWidth: 2,
+      borderColor: theme.border,
+      marginBottom: 24,
+    },
+    step: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+    },
+    stepNumber: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: '#059669',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 12,
+    },
+    stepNumberText: {
+      color: '#ffffff',
+      fontSize: 14,
+      fontWeight: 'bold',
+    },
+    stepContent: {
+      flex: 1,
+    },
+    stepTitle: {
+      color: theme.text,
+      fontSize: 16,
+      fontWeight: '600',
+      marginBottom: 4,
+    },
+    stepDescription: {
+      color: theme.text,
+      fontSize: 14,
+      lineHeight: 20,
+    },
+    stepDivider: {
+      width: 2,
+      height: 20,
+      backgroundColor: theme.border,
+      marginLeft: 13,
+      marginVertical: 8,
+    },
+    infoBox: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      backgroundColor: theme.surfaceSecondary,
+      borderRadius: 12,
+      padding: 14,
+      width: '100%',
+    },
+    infoText: {
+      color: theme.text,
+      fontSize: 13,
+      lineHeight: 20,
+      marginLeft: 10,
+      flex: 1,
+    },
+    actions: {
+      paddingVertical: 24,
+    },
+    primaryButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#059669',
+      paddingVertical: 16,
+      borderRadius: 999,
+      gap: 8,
+    },
+    primaryButtonText: {
+      color: '#ffffff',
+      fontSize: 18,
+      fontWeight: 'bold',
+    },
+  });
+}

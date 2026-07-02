@@ -24,10 +24,14 @@ import { SkillsetEditScreen } from "../../components/skillset-edit-screen";
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { useAuthProfile } from "../../hooks/useAuthProfile";
 import { useNormalizedProfile } from "../../hooks/useNormalizedProfile";
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 
 // Update the ProfileScreen component to include real-time statistics
 export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   const router = useRouter();
+  const { theme } = useAppThemeContext();
+  const styles = makeStyles(theme);
   const [isEditing, setIsEditing] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
@@ -276,16 +280,16 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   }
 
   return (
-    <View className="flex flex-col h-screen bg-emerald-600 text-white">
+    <View className="flex flex-col h-screen" style={{ backgroundColor: theme.background }}>
       {/* Connection Status Banner - appears at top when offline */}
       <ConnectionStatus showQueueCount={true} />
       {/* Update Message Banner */}
       {updateMessage && (
         <View style={{ position: 'absolute', top: 60, left: 16, right: 16, zIndex: 50 }}>
-          <View className="bg-emerald-800 rounded-lg px-4 py-3 flex-row items-center justify-between shadow-lg">
-            <Text className="text-white text-sm flex-1">{updateMessage}</Text>
+          <View className="rounded-lg px-4 py-3 flex-row items-center justify-between shadow-lg" style={{ backgroundColor: theme.surfaceSecondary }}>
+            <Text className="text-sm flex-1" style={{ color: theme.text }}>{updateMessage}</Text>
             <TouchableOpacity onPress={() => setUpdateMessage(null)}>
-              <MaterialIcons name="close" size={18} color="white" />
+              <MaterialIcons name="close" size={18} color={theme.text} />
             </TouchableOpacity>
           </View>
         </View>
@@ -306,7 +310,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             <MaterialIcons
               name="share"
               size={22}
-              color="#ffffff"
+              color={theme.text}
               accessibilityElementsHidden={true}
             />
           </TouchableOpacity>
@@ -319,7 +323,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             <MaterialIcons
               name="settings"
               size={24}
-              color="#ffffff"
+              color={theme.text}
               accessibilityElementsHidden={true}
             />
           </TouchableOpacity>
@@ -334,8 +338,8 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            tintColor="#ffffff"
-            colors={['#10b981']}
+           tintColor={theme.textSecondary}
+            colors={['#374151']}
           />
         }
       >
@@ -367,6 +371,8 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             <TouchableOpacity
               style={styles.editButton}
               onPress={() => setIsEditing(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Edit skillsets"
             >
               <Text style={styles.editButtonText}>Edit</Text>
             </TouchableOpacity>
@@ -409,7 +415,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
                   : 'Verify your identity'
               }
             >
-              <MaterialIcons name="verified-user" size={20} color="#a7f3d0" />
+              <MaterialIcons name="verified-user" size={20} color={theme.textSecondary} />
               <View style={styles.verifyIdentityTextWrap}>
                 <Text style={styles.verifyIdentityTitle}>
                   {authProfile?.id_verification_status === 'rejected'
@@ -422,7 +428,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
                     : 'Unlock trust badges and faster payouts.'}
                 </Text>
               </View>
-              <MaterialIcons name="chevron-right" size={20} color="rgba(255,255,255,0.6)" />
+              <MaterialIcons name="chevron-right" size={20} color={theme.textSecondary} />
             </TouchableOpacity>
           )}
         </View>
@@ -443,17 +449,18 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
         {/* History Link (raised by 20px) */}
         <View style={{ marginTop: -20 }} className="px-4 py-2">
           <TouchableOpacity
-            className="flex-row items-center justify-between bg-emerald-700/30 rounded-lg p-3 touch-target-min"
-            onPress={() => {
-              // Navigate to history screen
-              setShowHistory(true)
-            }}
+            className="flex-row items-center justify-between rounded-lg p-3 touch-target-min"
+            style={{ backgroundColor: theme.surface }}
+            onPress={() => setShowHistory(true)}
+            accessibilityRole="button"
+            accessibilityLabel="View history"
+            accessibilityHint="Opens your completed, archived, and deleted bounties"
           >
             <View className="flex-row items-center">
-              <MaterialIcons name="history" size={20} color="#a7f3d0" />
-              <Text className="text-sm font-medium text-white ml-2">View History</Text>
+              <MaterialIcons name="history" size={20} color={theme.textSecondary} />
+              <Text className="text-sm font-medium ml-2" style={{ color: theme.text }}>View History</Text>
             </View>
-            <MaterialIcons name="chevron-right" size={20} color="#a7f3d0" />
+            <MaterialIcons name="chevron-right" size={20} color={theme.textSecondary} />
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -467,56 +474,59 @@ export default ProfileScreen;
 
 // formatTimeAgo removed with Activity section
 
-const styles = StyleSheet.create({
-  section: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  verifyIdentityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginTop: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    backgroundColor: 'rgba(5,46,27,0.45)',
-    borderWidth: 1,
-    borderColor: 'rgba(167,243,208,0.3)',
-  },
-  verifyIdentityTextWrap: {
-    flex: 1,
-  },
-  verifyIdentityTitle: {
-    color: '#a7f3d0',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  verifyIdentitySubtitle: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 12,
-    marginTop: 2,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#ffffff",
-  },
-  editButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: "#10b981",
-    borderRadius: 4,
-  },
-  editButtonText: {
-    fontSize: 12,
-    color: "#6ee7b7",
-  },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    section: {
+      backgroundColor: theme.surface,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    },
+    verifyIdentityRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      marginTop: 12,
+      paddingVertical: 12,
+      paddingHorizontal: 14,
+      borderRadius: 12,
+      backgroundColor: theme.isDark ? 'rgba(5,46,27,0.45)' : 'rgba(5,150,105,0.1)',
+      borderWidth: 1,
+      borderColor: theme.isDark ? 'rgba(167,243,208,0.3)' : theme.primary,
+    },
+    verifyIdentityTextWrap: {
+      flex: 1,
+    },
+    verifyIdentityTitle: {
+      color: theme.text,
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    verifyIdentitySubtitle: {
+      color: theme.text,
+      fontSize: 12,
+      marginTop: 2,
+    },
+    sectionHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 12,
+    },
+    sectionTitle: {
+      fontSize: 17,
+      fontWeight: "600",
+      color: theme.text,
+    },
+    editButton: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 4,
+    },
+    editButtonText: {
+      fontSize: 12,
+      color: theme.primaryLight,
+    },
+  });
+}

@@ -28,6 +28,8 @@ import { useAttachmentUpload } from '../hooks/use-attachment-upload';
 import { logClientError } from '../lib/services/monitoring';
 
 import { useWallet } from '../lib/wallet-context';
+import { useAppThemeContext } from '../lib/themes/AppThemeContext';
+import type { AppTheme } from '../lib/themes/types';
 import { AttachmentViewerModal } from './attachment-viewer-modal';
 import { BountyCard } from './bounty-card';
 import { PosterReviewModal } from './poster-review-modal';
@@ -267,6 +269,8 @@ export function MyPostingExpandable({
   // Hunter completion submission state
   const [startTime] = useState(Date.now());
   const { transactions } = useWallet();
+  const { theme } = useAppThemeContext();
+  const styles = makeStyles(theme);
 
   useEffect(() => {
     // Reset non-draft UI state when bounty changes; draft state is reset via reducer
@@ -1076,7 +1080,7 @@ export function MyPostingExpandable({
       {/* Tap-to-expand hint — shown only when collapsed */}
       {!expanded && (
         <View style={styles.tapHint}>
-          <MaterialIcons name="expand-more" size={14} color="rgba(110, 231, 183, 0.6)" />
+          <MaterialIcons name="expand-more" size={14} color={theme.textSecondary} />
           <Text style={styles.tapHintText}>Tap card to see progress & actions</Text>
         </View>
       )}
@@ -1147,7 +1151,7 @@ export function MyPostingExpandable({
           {/* Pre-acceptance info when open */}
           {bounty.status === 'open' && (
             <View style={styles.infoBox}>
-              <MaterialIcons name="hourglass-empty" size={18} color="#6ee7b7" />
+              <MaterialIcons name="hourglass-empty" size={18} color={theme.isDark ? '#6ee7b7' : theme.primary} />
               {isOwner ? (
                 <Text style={styles.infoText}>
                   Awaiting a hunter. Review requests in the Requests tab.
@@ -1231,13 +1235,13 @@ export function MyPostingExpandable({
                       accessibilityHint="Opens quick tools including dispute and message actions"
                     >
                       <View style={styles.posterToolsToggleLeft}>
-                        <MaterialIcons name="gavel" size={18} color="#a7f3d0" />
+                        <MaterialIcons name="gavel" size={18} color={theme.textSecondary} />
                         <Text style={styles.posterToolsToggleText}>Poster Flow Tools</Text>
                       </View>
                       <MaterialIcons
                         name={posterToolsExpanded ? 'expand-less' : 'expand-more'}
                         size={20}
-                        color="#a7f3d0"
+                        color={theme.textSecondary}
                       />
                     </TouchableOpacity>
 
@@ -1318,7 +1322,7 @@ export function MyPostingExpandable({
                   )}
 
                   <View style={styles.infoBox}>
-                    <MaterialIcons name="info-outline" size={18} color="#6ee7b7" />
+                    <MaterialIcons name="info-outline" size={18} color={theme.isDark ? '#6ee7b7' : theme.primary} />
                     <Text style={styles.infoText}>
                       Congrats on being selected! Begin work on the bounty, money is in escrow; once
                       complete press the next button.
@@ -1418,13 +1422,13 @@ export function MyPostingExpandable({
                       accessibilityHint="Opens quick tools including dispute and message actions"
                     >
                       <View style={styles.hunterToolsToggleLeft}>
-                        <MaterialIcons name="build-circle" size={18} color="#a7f3d0" />
+                        <MaterialIcons name="build-circle" size={18} color={theme.textSecondary} />
                         <Text style={styles.hunterToolsToggleText}>Hunter Flow Tools</Text>
                       </View>
                       <MaterialIcons
                         name={hunterToolsExpanded ? 'expand-less' : 'expand-more'}
                         size={20}
-                        color="#a7f3d0"
+                        color={theme.textSecondary}
                       />
                     </TouchableOpacity>
 
@@ -1434,7 +1438,7 @@ export function MyPostingExpandable({
                           style={styles.hunterToolBtn}
                           onPress={handleMessagePoster}
                         >
-                          <MaterialIcons name="chat" size={18} color="#6ee7b7" />
+                          <MaterialIcons name="chat" size={18} color={theme.isDark ? '#6ee7b7' : theme.primary} />
                           <Text style={styles.hunterToolText}>Message Poster</Text>
                         </TouchableOpacity>
 
@@ -1514,7 +1518,7 @@ export function MyPostingExpandable({
                 )}
 
                 <View style={styles.infoBox}>
-                  <MaterialIcons name="rate-review" size={18} color="#6ee7b7" />
+                  <MaterialIcons name="rate-review" size={18} color={theme.isDark ? '#6ee7b7' : theme.primary} />
                   <Text style={styles.infoText}>
                     The hunter has submitted their work for review. Review the submission and
                     approve or request changes.
@@ -1561,7 +1565,7 @@ export function MyPostingExpandable({
                       <DisputeFrozenBanner message="A dispute has been opened for this bounty. The flow is paused until an admin resolves the dispute." />
                     )}
                     <View style={styles.infoBox}>
-                      <MaterialIcons name="hourglass-top" size={18} color="#6ee7b7" />
+                      <MaterialIcons name="hourglass-top" size={18} color={theme.isDark ? '#6ee7b7' : theme.primary} />
                       <Text style={styles.infoText}>
                         Waiting for poster to review your submission.
                       </Text>
@@ -1578,7 +1582,7 @@ export function MyPostingExpandable({
                       <TextInput
                         style={styles.messageTextArea}
                         placeholder="Describe your completed work..."
-                        placeholderTextColor="rgba(255,254,245,0.4)"
+                        placeholderTextColor={theme.textDisabled}
                         value={completionMessage}
                         onChangeText={t => dispatchDraft({ type: 'setMessage', message: t })}
                         multiline
@@ -1603,7 +1607,7 @@ export function MyPostingExpandable({
                             <MaterialIcons
                               name={item.type === 'image' ? 'image' : 'insert-drive-file'}
                               size={24}
-                              color="#6ee7b7"
+                              color={theme.isDark ? '#6ee7b7' : theme.primary}
                             />
                           </View>
                           <View style={styles.proofInfo}>
@@ -1629,7 +1633,7 @@ export function MyPostingExpandable({
                             (readyToSubmitPressed || !!readyRecord) && !hasDispute ? 'add' : 'lock'
                           }
                           size={20}
-                          color="#10b981"
+                          color="#059669"
                         />
                         <Text style={styles.addFileText}>
                           {hasDispute
@@ -1676,7 +1680,7 @@ export function MyPostingExpandable({
               <View style={{ gap: 16 }}>
                 {/* Success Message */}
                 <View style={styles.successPanel}>
-                  <MaterialIcons name="check-circle" size={48} color="#10b981" />
+                  <MaterialIcons name="check-circle" size={48} color="#059669" />
                   <Text style={styles.successTitle}>Payout Released!</Text>
                   <Text style={styles.successText}>
                     {isOwner
@@ -1709,7 +1713,7 @@ export function MyPostingExpandable({
                 {!bounty.is_for_honor && (
                   <View style={styles.receiptCard}>
                     <View style={styles.receiptHeader}>
-                      <MaterialIcons name="receipt" size={24} color="#6ee7b7" />
+                      <MaterialIcons name="receipt" size={24} color={theme.isDark ? '#6ee7b7' : theme.primary} />
                       <Text style={styles.receiptTitle}>Transaction Receipt</Text>
                     </View>
                     <View style={styles.receiptDivider} />
@@ -1728,7 +1732,7 @@ export function MyPostingExpandable({
                     <View style={styles.receiptRow}>
                       <Text style={styles.receiptLabel}>Status</Text>
                       <View style={styles.statusPill}>
-                        <MaterialIcons name="check-circle" size={16} color="#10b981" />
+                        <MaterialIcons name="check-circle" size={16} color="#059669" />
                         <Text style={styles.statusPillText}>Completed</Text>
                       </View>
                     </View>
@@ -1881,7 +1885,7 @@ export function MyPostingExpandable({
           {/* Conversation hint - only show when status is 'open', not when in_progress since bounty has already been accepted */}
           {!conversation && bounty.status === 'open' && (
             <View style={styles.infoBox}>
-              <MaterialIcons name="chat-bubble-outline" size={18} color="#6ee7b7" />
+              <MaterialIcons name="chat-bubble-outline" size={18} color={theme.isDark ? '#6ee7b7' : theme.primary} />
               <Text style={styles.infoText}>
                 {isOwner
                   ? 'Conversation will appear after acceptance.'
@@ -1924,465 +1928,468 @@ export function MyPostingExpandable({
   );
 }
 
-const styles = StyleSheet.create({
-  panel: {
-    backgroundColor: 'rgba(5, 150, 105, 0.25)',
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.2)',
-    marginTop: -8,
-    marginBottom: 12,
-  },
-  panelHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  panelTitle: { color: '#fff', fontWeight: '700' },
-  amount: { color: '#fff', fontWeight: '800' },
-  timelineRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  timelineItem: { flexDirection: 'row', alignItems: 'center' },
-  bubble: { width: 12, height: 12, borderRadius: 6 },
-  bubbleIdle: { backgroundColor: 'rgba(110,231,183,0.3)' },
-  bubbleActive: { backgroundColor: '#10b981' },
-  bubbleCompleted: { backgroundColor: '#059669' },
-  connector: {
-    width: 18,
-    height: 2,
-    backgroundColor: 'rgba(110,231,183,0.35)',
-    marginHorizontal: 6,
-  },
-  infoBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    backgroundColor: 'rgba(5, 46, 27, 0.35)',
-    padding: 10,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  infoText: { color: '#d1fae5', fontSize: 12, flex: 1 },
-  actionsRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
-  primaryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#10b981',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  primaryText: { color: '#fff', fontWeight: '600' },
-  muted: { color: '#a7f3d0', fontSize: 12 },
-  honorBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#a7f3d0',
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    gap: 4,
-  },
-  honorBadgeText: { color: '#052e1b', fontWeight: '800', fontSize: 12 },
-  reviewSubmissionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#fbbf24',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  reviewSubmissionText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 15,
-  },
-  timerContainer: {
-    alignItems: 'center',
-    paddingVertical: 20,
-    gap: 8,
-    backgroundColor: 'rgba(5, 150, 105, 0.1)',
-    borderRadius: 12,
-  },
-  timerLabel: {
-    color: '#6ee7b7',
-    fontSize: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  timerValue: {
-    color: '#fff',
-    fontSize: 48,
-    fontWeight: '700',
-  },
-  timerHint: {
-    color: 'rgba(255,254,245,0.6)',
-    fontSize: 11,
-  },
-  messageTextArea: {
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
-    borderRadius: 12,
-    padding: 12,
-    color: '#fff',
-    fontSize: 14,
-    minHeight: 100,
-    borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.2)',
-  },
-  proofItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
-    borderRadius: 12,
-    padding: 12,
-    gap: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.2)',
-    marginBottom: 8,
-  },
-  proofIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    backgroundColor: 'rgba(5, 150, 105, 0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  proofInfo: {
-    flex: 1,
-    gap: 4,
-  },
-  proofName: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  proofSize: {
-    color: '#6ee7b7',
-    fontSize: 12,
-  },
-  sectionTitle: {
-    color: '#a7f3d0',
-    fontSize: 13,
-    fontWeight: '700',
-    marginBottom: 6,
-  },
-  addFileBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    paddingVertical: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#10b981',
-    borderStyle: 'dashed',
-  },
-  addFileText: {
-    color: '#10b981',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  successPanel: {
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-    borderRadius: 12,
-    padding: 24,
-    alignItems: 'center',
-    gap: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
-  },
-  successTitle: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '600',
-  },
-  successText: {
-    color: 'rgba(255,254,245,0.8)',
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  payoutAmountCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
-    borderRadius: 12,
-    padding: 20,
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 12,
-    width: '100%',
-  },
-  payoutLabel: {
-    color: '#6ee7b7',
-    fontSize: 14,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  payoutAmount: {
-    color: '#10b981',
-    fontSize: 32,
-    fontWeight: '700',
-  },
-  payoutSubtext: {
-    color: 'rgba(255,254,245,0.7)',
-    fontSize: 12,
-  },
-  honorCard: {
-    backgroundColor: 'rgba(236, 72, 153, 0.15)',
-    borderRadius: 12,
-    padding: 20,
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 12,
-    width: '100%',
-  },
-  honorTitle: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  honorCardText: {
-    color: 'rgba(255,254,245,0.8)',
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  receiptCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.1)',
-    borderRadius: 12,
-    padding: 16,
-    gap: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.2)',
-  },
-  receiptHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  receiptTitle: {
-    color: '#6ee7b7',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  receiptDivider: {
-    height: 1,
-    backgroundColor: 'rgba(110, 231, 183, 0.2)',
-  },
-  receiptRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  receiptLabel: {
-    color: 'rgba(255,254,245,0.7)',
-    fontSize: 14,
-  },
-  receiptValue: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '500',
-    maxWidth: '60%',
-    textAlign: 'right',
-  },
-  statusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  statusPillText: {
-    color: '#10b981',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  readyBadge: {
-    backgroundColor: '#d1fae5',
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  readyBadgeText: {
-    color: '#052e1b',
-    fontSize: 12,
-    marginLeft: 6,
-    fontWeight: '600',
-  },
-  headerReviewBtn: {
-    marginLeft: 8,
-    backgroundColor: 'rgba(167,243,208,0.9)',
-    padding: 6,
-    borderRadius: 8,
-  },
-  withdrawButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
-  },
-  withdrawButtonText: {
-    color: '#ef4444',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  tapHint: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    // Sits in the gap below the card, above the next item
-    paddingTop: 2,
-    paddingBottom: 6,
-  },
-  tapHintText: {
-    color: 'rgba(110, 231, 183, 0.5)',
-    fontSize: 11,
-  },
-  hunterToolsSection: {
-    marginTop: 2,
-    gap: 8,
-  },
-  hunterToolsToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: 'rgba(5, 46, 27, 0.5)',
-    borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.35)',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  hunterToolsToggleLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  hunterToolsToggleText: {
-    color: '#a7f3d0',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  hunterToolsMenu: {
-    backgroundColor: 'rgba(5, 46, 27, 0.45)',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.25)',
-    padding: 10,
-    gap: 8,
-  },
-  hunterToolBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: 'rgba(5, 150, 105, 0.25)',
-  },
-  hunterToolBtnDanger: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: 'rgba(239, 68, 68, 0.2)',
-  },
-  hunterToolText: {
-    color: '#d1fae5',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  hunterToolTextDanger: {
-    color: '#ef4444',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  hunterToolTextWarning: {
-    color: '#f59e0b',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  posterToolsSection: {
-    marginTop: 2,
-    gap: 8,
-  },
-  posterToolsToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: 'rgba(5, 46, 27, 0.5)',
-    borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.35)',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  posterToolsToggleLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  posterToolsToggleText: {
-    color: '#a7f3d0',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  posterToolsMenu: {
-    backgroundColor: 'rgba(5, 46, 27, 0.45)',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.25)',
-    padding: 10,
-    gap: 8,
-  },
-  actionsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginTop: 12,
-    justifyContent: 'space-between',
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  archiveButton: {
-    backgroundColor: '#059669',
-  },
-  deleteButton: {
-    backgroundColor: '#ef4444',
-  },
-  actionButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    panel: {
+      backgroundColor: theme.isDark ? 'rgba(5, 150, 105, 0.25)' : theme.surface,
+      borderRadius: 12,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+      marginTop: -8,
+      marginBottom: 12,
+    },
+    panelHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 8,
+    },
+    panelTitle: { color: theme.text, fontWeight: '700' },
+    amount: { color: theme.text, fontWeight: '800' },
+    timelineRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+    timelineItem: { flexDirection: 'row', alignItems: 'center' },
+    bubble: { width: 12, height: 12, borderRadius: 6 },
+    bubbleIdle: { backgroundColor: 'rgba(110,231,183,0.3)' },
+    bubbleActive: { backgroundColor: '#059669' },
+    bubbleCompleted: { backgroundColor: '#059669' },
+    connector: {
+      width: 18,
+      height: 2,
+      backgroundColor: 'rgba(110,231,183,0.35)',
+      marginHorizontal: 6,
+    },
+    infoBox: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 8,
+      backgroundColor: theme.isDark ? 'rgba(5, 46, 27, 0.35)' : 'rgba(5, 150, 105, 0.07)',
+      borderWidth: 1,
+      borderColor: theme.isDark ? 'transparent' : 'rgba(5, 150, 105, 0.15)',
+      padding: 10,
+      borderRadius: 8,
+      marginBottom: 8,
+    },
+    infoText: { color: theme.text, fontSize: 12, flex: 1 },
+    actionsRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
+    primaryBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: '#059669',
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 10,
+    },
+    primaryText: { color: '#fff', fontWeight: '600' },
+    muted: { color: theme.textSecondary, fontSize: 12 },
+    honorBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#9CA3AF',
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      gap: 4,
+    },
+    honorBadgeText: { color: '#052e1b', fontWeight: '800', fontSize: 12 },
+    reviewSubmissionBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      backgroundColor: '#fbbf24',
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      borderRadius: 10,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 4,
+      elevation: 5,
+    },
+    reviewSubmissionText: {
+      color: '#fff',
+      fontWeight: '700',
+      fontSize: 15,
+    },
+    timerContainer: {
+      alignItems: 'center',
+      paddingVertical: 20,
+      gap: 8,
+      backgroundColor: 'rgba(5, 150, 105, 0.1)',
+      borderRadius: 12,
+    },
+    timerLabel: {
+      color: theme.primaryLight,
+      fontSize: 12,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    timerValue: {
+      color: theme.text,
+      fontSize: 48,
+      fontWeight: '700',
+    },
+    timerHint: {
+      color: theme.textSecondary,
+      fontSize: 11,
+    },
+    messageTextArea: {
+      backgroundColor: theme.isDark ? 'rgba(5, 150, 105, 0.2)' : theme.surfaceSecondary,
+      borderRadius: 12,
+      padding: 12,
+      color: theme.text,
+      fontSize: 14,
+      minHeight: 100,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    proofItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.isDark ? 'rgba(5, 150, 105, 0.2)' : theme.surfaceSecondary,
+      borderRadius: 12,
+      padding: 12,
+      gap: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+      marginBottom: 8,
+    },
+    proofIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 8,
+      backgroundColor: 'rgba(5, 150, 105, 0.3)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    proofInfo: {
+      flex: 1,
+      gap: 4,
+    },
+    proofName: {
+      color: theme.text,
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    proofSize: {
+      color: theme.primaryLight,
+      fontSize: 12,
+    },
+    sectionTitle: {
+      color: theme.textSecondary,
+      fontSize: 13,
+      fontWeight: '700',
+      marginBottom: 6,
+    },
+    addFileBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      backgroundColor: theme.border,
+      paddingVertical: 12,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.primary,
+      borderStyle: 'dashed',
+    },
+    addFileText: {
+      color: theme.primary,
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    buttonDisabled: {
+      opacity: 0.5,
+    },
+    successPanel: {
+      backgroundColor: 'rgba(16, 185, 129, 0.1)',
+      borderRadius: 12,
+      padding: 24,
+      alignItems: 'center',
+      gap: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    successTitle: {
+      color: theme.text,
+      fontSize: 20,
+      fontWeight: '600',
+    },
+    successText: {
+      color: theme.textSecondary,
+      fontSize: 14,
+      textAlign: 'center',
+      lineHeight: 20,
+    },
+    payoutAmountCard: {
+      backgroundColor: 'rgba(5, 150, 105, 0.2)',
+      borderRadius: 12,
+      padding: 20,
+      alignItems: 'center',
+      gap: 8,
+      marginTop: 12,
+      width: '100%',
+    },
+    payoutLabel: {
+      color: theme.primaryLight,
+      fontSize: 14,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    payoutAmount: {
+      color: '#059669',
+      fontSize: 32,
+      fontWeight: '700',
+    },
+    payoutSubtext: {
+      color: theme.textSecondary,
+      fontSize: 12,
+    },
+    honorCard: {
+      backgroundColor: 'rgba(236, 72, 153, 0.15)',
+      borderRadius: 12,
+      padding: 20,
+      alignItems: 'center',
+      gap: 8,
+      marginTop: 12,
+      width: '100%',
+    },
+    honorTitle: {
+      color: theme.text,
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    honorCardText: {
+      color: theme.textSecondary,
+      fontSize: 14,
+      textAlign: 'center',
+    },
+    receiptCard: {
+      backgroundColor: theme.isDark ? 'rgba(5, 150, 105, 0.1)' : theme.surfaceSecondary,
+      borderRadius: 12,
+      padding: 16,
+      gap: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    receiptHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    receiptTitle: {
+      color: theme.primaryLight,
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    receiptDivider: {
+      height: 1,
+      backgroundColor: theme.border,
+    },
+    receiptRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    receiptLabel: {
+      color: theme.textSecondary,
+      fontSize: 14,
+    },
+    receiptValue: {
+      color: theme.text,
+      fontSize: 14,
+      fontWeight: '500',
+      maxWidth: '60%',
+      textAlign: 'right',
+    },
+    statusPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: theme.border,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 999,
+    },
+    statusPillText: {
+      color: '#059669',
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    readyBadge: {
+      backgroundColor: theme.surfaceSecondary,
+      borderRadius: 12,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    readyBadgeText: {
+      color: theme.text,
+      fontSize: 12,
+      marginLeft: 6,
+      fontWeight: '600',
+    },
+    headerReviewBtn: {
+      marginLeft: 8,
+      backgroundColor: theme.isDark ? 'rgba(167,243,208,0.9)' : theme.primary,
+      padding: 6,
+      borderRadius: 8,
+    },
+    withdrawButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: 'rgba(239, 68, 68, 0.1)',
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: 'rgba(239, 68, 68, 0.3)',
+    },
+    withdrawButtonText: {
+      color: '#ef4444',
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    tapHint: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+      paddingTop: 2,
+      paddingBottom: 6,
+    },
+    tapHintText: {
+      color: theme.textSecondary,
+      fontSize: 11,
+    },
+    hunterToolsSection: {
+      marginTop: 2,
+      gap: 8,
+    },
+    hunterToolsToggle: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: theme.surfaceSecondary,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    hunterToolsToggleLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    hunterToolsToggleText: {
+      color: theme.textSecondary,
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    hunterToolsMenu: {
+      backgroundColor: theme.surface,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.border,
+      padding: 10,
+      gap: 8,
+    },
+    hunterToolBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 10,
+      borderRadius: 8,
+      backgroundColor: 'rgba(5, 150, 105, 0.25)',
+    },
+    hunterToolBtnDanger: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 10,
+      borderRadius: 8,
+      backgroundColor: 'rgba(239, 68, 68, 0.2)',
+    },
+    hunterToolText: {
+      color: theme.text,
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    hunterToolTextDanger: {
+      color: '#ef4444',
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    hunterToolTextWarning: {
+      color: '#f59e0b',
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    posterToolsSection: {
+      marginTop: 2,
+      gap: 8,
+    },
+    posterToolsToggle: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: theme.surfaceSecondary,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    posterToolsToggleLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    posterToolsToggleText: {
+      color: theme.textSecondary,
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    posterToolsMenu: {
+      backgroundColor: theme.surface,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.border,
+      padding: 10,
+      gap: 8,
+    },
+    actionsContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      marginTop: 12,
+      justifyContent: 'space-between',
+    },
+    actionButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 10,
+    },
+    archiveButton: {
+      backgroundColor: '#059669',
+    },
+    deleteButton: {
+      backgroundColor: '#ef4444',
+    },
+    actionButtonText: {
+      color: '#fff',
+      fontSize: 14,
+      fontWeight: '700',
+    },
+  });
+}

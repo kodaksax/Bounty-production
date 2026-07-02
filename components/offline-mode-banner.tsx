@@ -65,7 +65,7 @@ export function OfflineModeBanner({ showDetails = true, style }: OfflineModeBann
     return null;
   }
 
-  const backgroundColor = !isOnline ? '#f59e0b' : queuedItemsCount > 0 ? '#3b82f6' : '#10b981';
+  const backgroundColor = !isOnline ? '#f59e0b' : queuedItemsCount > 0 ? '#3b82f6' : '#059669';
   const icon = !isOnline ? 'cloud-off' : isChecking ? 'sync' : 'cloud-done';
 
   return (

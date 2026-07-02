@@ -1,6 +1,7 @@
 import React from 'react';
 import { AccessibilityRole, ImageStyle, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
+import { useAppThemeContext } from 'lib/themes';
 
 export interface BrandingLogoProps {
   /**
@@ -23,6 +24,11 @@ export interface BrandingLogoProps {
    * Defaults to 'header' to maintain parity with previous implementation
    */
   accessibilityRole?: AccessibilityRole;
+  /**
+   * Always use the white logo regardless of theme.
+   * Use on screens with a colored/dark background in both light and dark modes.
+   */
+  forceWhite?: boolean;
 }
 
 const sizeMap = {
@@ -35,20 +41,24 @@ const sizeMap = {
  * BrandingLogo component - displays the BOUNTY logo image
  * Use this instead of GPS icon + BOUNTY text pattern
  */
-export function BrandingLogo({ 
-  size = 'medium', 
-  containerStyle, 
+export function BrandingLogo({
+  size = 'medium',
+  containerStyle,
   imageStyle,
   accessibilityRole = 'header',
+  forceWhite = false,
 }: BrandingLogoProps) {
+  const { isDark } = useAppThemeContext();
   const dimensions = sizeMap[size];
-  
+
   return (
     <View style={[styles.container, containerStyle]}>
       <Image
-        source={require('../../assets/images/bounty-logo.png')}
+        source={(isDark || forceWhite)
+          ? require('../../assets/images/bounty-logo.png')
+          : require('../../assets/images/bounty-logo2.png')}
         style={[dimensions, imageStyle]}
-        resizeMode="contain"
+        contentFit="contain"
         accessibilityLabel="BOUNTY"
         accessibilityRole={accessibilityRole}
       />

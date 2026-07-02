@@ -14,12 +14,12 @@ export const TermsPrivacyScreen: React.FC<TermsPrivacyScreenProps> = ({ onBack }
     // Very simple renderer: split by double newlines into paragraphs
     const parts = text.split(/\n\n+/);
     return parts.map((p, idx) => (
-      <Text key={idx} className="text-emerald-100 text-sm leading-6 mb-3">{p}</Text>
+      <Text key={idx} className="text-white text-sm leading-6 mb-3">{p}</Text>
     ));
   };
 
   return (
-    <View className="flex-1 bg-emerald-600">
+    <View className="flex-1 bg-[#059669]">
       <View className="flex-row justify-between items-center p-4 pt-8">
         <View className="flex-row items-center">
           <MaterialIcons name="gavel" size={24} color="#fff" />
@@ -31,18 +31,18 @@ export const TermsPrivacyScreen: React.FC<TermsPrivacyScreenProps> = ({ onBack }
       </View>
 
       {/* Tabs */}
-      <View className="flex-row mx-4 mb-2 rounded-lg overflow-hidden border border-emerald-500/40">
-        <TouchableOpacity onPress={() => setTab('terms')} className={`flex-1 items-center py-3 ${tab==='terms' ? 'bg-emerald-700' : 'bg-black/20'}`} accessibilityRole="tab" accessibilityState={{ selected: tab==='terms' }}>
+      <View className="flex-row mx-4 mb-2 rounded-lg overflow-hidden border border-[#374151]/40">
+        <TouchableOpacity onPress={() => setTab('terms')} className={`flex-1 items-center py-3 ${tab==='terms' ? 'bg-[#111827]' : 'bg-black/20'}`} accessibilityRole="tab" accessibilityState={{ selected: tab==='terms' }}>
           <Text className="text-white font-medium">Terms of Service</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => setTab('privacy')} className={`flex-1 items-center py-3 ${tab==='privacy' ? 'bg-emerald-700' : 'bg-black/20'}`} accessibilityRole="tab" accessibilityState={{ selected: tab==='privacy' }}>
+        <TouchableOpacity onPress={() => setTab('privacy')} className={`flex-1 items-center py-3 ${tab==='privacy' ? 'bg-[#111827]' : 'bg-black/20'}`} accessibilityRole="tab" accessibilityState={{ selected: tab==='privacy' }}>
           <Text className="text-white font-medium">Privacy Policy</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView className="px-4" contentContainerStyle={{ paddingBottom: 96 }}>
         {renderMarkdownLike(content)}
-        <TouchableOpacity onPress={onBack} className="mt-4 self-start px-4 py-2 rounded-md bg-emerald-700">
+        <TouchableOpacity onPress={onBack} className="mt-4 self-start px-4 py-2 rounded-md bg-[#111827]">
           <Text className="text-white text-sm font-medium">Back to Settings</Text>
         </TouchableOpacity>
       </ScrollView>

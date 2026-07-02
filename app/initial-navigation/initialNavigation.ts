@@ -41,6 +41,9 @@ export function isInitialNavigationDone() {
   return done;
 }
 
+// Not a route — exported only as utilities consumed by _layout.tsx
+export default undefined;
+
 export function onInitialNavigationDone(cb: () => void) {
   if (done) {
     // Call immediately if already done

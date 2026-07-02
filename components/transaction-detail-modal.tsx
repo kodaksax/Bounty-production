@@ -166,7 +166,7 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
         {(transaction as any).escrowStatus && (
           <View style={styles.escrowBlock}>
             <View style={styles.escrowHeaderRow}>
-              <MaterialIcons name="lock" size={18} color="#10b981" />
+              <MaterialIcons name="lock" size={18} color="#059669" />
               <Text style={styles.escrowTitle}>Escrow Information</Text>
             </View>
             <Text style={styles.escrowText}>
@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
   summaryHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   summaryIcon: { height: 48, width: 48, borderRadius: 24, backgroundColor: 'rgba(4,120,87,0.4)', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
   summaryTitle: { color: '#fff', fontSize: 16, fontWeight: '600', marginBottom: 4 },
-  summaryMeta: { color: '#d1fae5', fontSize: 13 },
+  summaryMeta: { color: '#1F2937', fontSize: 13 },
   amountPill: { backgroundColor: 'rgba(4,120,87,0.55)', borderRadius: 16, paddingVertical: 14, paddingHorizontal: 18, marginBottom: 14 },
   amountText: { fontSize: 24, fontWeight: '700', textAlign: 'center', letterSpacing: 0.5 },
   amountPositive: { color: '#6ee7b7' },
@@ -246,14 +246,14 @@ const styles = StyleSheet.create({
   detailContent: { flex: 1 },
   detailLabel: { color: '#6ee7b7', fontSize: 11, marginBottom: 2 },
   detailValue: { color: '#fff', fontSize: 14, fontWeight: '500' },
-  escrowBlock: { marginHorizontal: 24, marginTop: 12, marginBottom: 8, backgroundColor: 'rgba(4,120,87,0.5)', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: '#047857' },
+  escrowBlock: { marginHorizontal: 24, marginTop: 12, marginBottom: 8, backgroundColor: 'rgba(4,120,87,0.5)', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: '#0B0F14' },
   escrowHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 6 },
   escrowTitle: { color: '#fff', fontSize: 14, fontWeight: '600', marginLeft: 6 },
-  escrowText: { color: '#d1fae5', fontSize: 12, lineHeight: 18 },
+  escrowText: { color: '#1F2937', fontSize: 12, lineHeight: 18 },
   actionsSection: { paddingHorizontal: 24, paddingTop: 10, gap: 12 },
-  actionPrimary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#065f46', paddingVertical: 14, borderRadius: 24, ...theme.shadows.emerald },
+  actionPrimary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#111827', paddingVertical: 14, borderRadius: 24, ...theme.shadows.emerald },
   actionPrimaryDisabled: { opacity: 0.6 },
   actionPrimaryText: { color: '#fff', fontSize: 15, fontWeight: '600', marginLeft: 8 },
-  actionSecondary: { backgroundColor: '#047857', paddingVertical: 14, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
+  actionSecondary: { backgroundColor: '#0B0F14', paddingVertical: 14, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
   actionSecondaryText: { color: '#fff', fontSize: 15, fontWeight: '600' },
 });

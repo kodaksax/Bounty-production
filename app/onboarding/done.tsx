@@ -28,6 +28,8 @@ import { authProfileService } from '../../lib/services/auth-profile-service';
 import { Profile } from '../../lib/services/database.types';
 import { notificationService } from '../../lib/services/notification-service';
 import { getOnboardingCompleteKey } from '../../lib/storage/onboarding';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 /**
  * Maximum time to wait for pre-navigation work (e.g. profile sync, push registration)
  * before proceeding to the main app. 8s is a compromise: long enough for slow mobile
@@ -97,6 +99,8 @@ export default function DoneScreen() {
     : normalized?.skills || (localProfile as any)?.skills || [];
   const hasPhone = !!onboardingData.phone || !!(normalized?._raw && (normalized as any)._raw.phone) || !!(localProfile as any)?.phone;
 
+  const { theme } = useAppThemeContext();
+  const styles = makeStyles(theme);
   const [scaleAnim] = useState(new Animated.Value(0));
   const [fadeAnim] = useState(new Animated.Value(0));
   const [isLoading, setIsLoading] = useState(false);
@@ -332,14 +336,14 @@ export default function DoneScreen() {
             <Text style={styles.summaryTitle}>Your Profile Summary</Text>
 
             <View style={styles.summaryItem}>
-              <MaterialIcons name="person" size={18} color="#a7f3d0" />
+              <MaterialIcons name="person" size={18} color={theme.textSecondary} />
               <Text style={styles.summaryLabel}>Username</Text>
               <Text style={styles.summaryValue}>@{displayUsername}</Text>
             </View>
 
             {displayName && (
               <View style={styles.summaryItem}>
-                <MaterialIcons name="badge" size={18} color="#a7f3d0" />
+                <MaterialIcons name="badge" size={18} color="#9CA3AF" />
                 <Text style={styles.summaryLabel}>Name</Text>
                 <Text style={styles.summaryValue}>{displayName}</Text>
               </View>
@@ -347,7 +351,7 @@ export default function DoneScreen() {
 
             {displayTitle && (
               <View style={styles.summaryItem}>
-                <MaterialIcons name="work" size={18} color="#a7f3d0" />
+                <MaterialIcons name="work" size={18} color="#9CA3AF" />
                 <Text style={styles.summaryLabel}>Title</Text>
                 <Text style={styles.summaryValue}>{displayTitle}</Text>
               </View>
@@ -355,7 +359,7 @@ export default function DoneScreen() {
 
             {displayLocation && (
               <View style={styles.summaryItem}>
-                <MaterialIcons name="location-on" size={18} color="#a7f3d0" />
+                <MaterialIcons name="location-on" size={18} color="#9CA3AF" />
                 <Text style={styles.summaryLabel}>Location</Text>
                 <Text style={styles.summaryValue}>{displayLocation}</Text>
               </View>
@@ -364,7 +368,7 @@ export default function DoneScreen() {
             {displayBio && (
               <View style={styles.summaryItemColumn}>
                 <View style={styles.summaryItemRow}>
-                  <MaterialIcons name="info-outline" size={18} color="#a7f3d0" />
+                  <MaterialIcons name="info-outline" size={18} color="#9CA3AF" />
                   <Text style={styles.summaryLabel}>Bio</Text>
                 </View>
                 <Text style={styles.summaryBio}>{displayBio}</Text>
@@ -374,7 +378,7 @@ export default function DoneScreen() {
             {displaySkills.length > 0 && (
               <View style={styles.summaryItemColumn}>
                 <View style={styles.summaryItemRow}>
-                  <MaterialIcons name="star" size={18} color="#a7f3d0" />
+                  <MaterialIcons name="star" size={18} color="#9CA3AF" />
                   <Text style={styles.summaryLabel}>Skills</Text>
                 </View>
                 <View style={styles.skillsRow}>
@@ -392,7 +396,7 @@ export default function DoneScreen() {
 
             {hasPhone && (
               <View style={styles.summaryItem}>
-                <MaterialIcons name="phone" size={18} color="#a7f3d0" />
+                <MaterialIcons name="phone" size={18} color="#9CA3AF" />
                 <Text style={styles.summaryLabel}>Phone</Text>
                 <Text style={styles.summaryValue}>✓ Added (private)</Text>
               </View>
@@ -437,165 +441,165 @@ export default function DoneScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#059669',
-  },
-  brandingHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    zIndex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 24,
-  },
-  // Combined style for non-scrolling content area — avoids mixing
-  // `scrollView` (container) and `scrollContent` (inner content)
-  contentContainer: {
-    flex: 1,
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 24,
-  },
-  checkCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#a7f3d0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.9)',
-    marginBottom: 24,
-  },
-  summaryCard: {
-    backgroundColor: 'rgba(5,46,27,0.5)',
-    borderRadius: 16,
-    padding: 16,
-    width: '100%',
-    borderWidth: 2,
-    borderColor: 'rgba(167,243,208,0.3)',
-    marginBottom: 16,
-  },
-  summaryTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#a7f3d0',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  summaryItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  summaryItemColumn: {
-    marginBottom: 10,
-  },
-  summaryItemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  summaryLabel: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 13,
-    marginLeft: 8,
-    minWidth: 70,
-  },
-  summaryValue: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '500',
-    flex: 1,
-  },
-  summaryBio: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 12,
-    lineHeight: 18,
-    marginLeft: 26,
-  },
-  skillsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginLeft: 26,
-  },
-  skillBadge: {
-    backgroundColor: 'rgba(167,243,208,0.2)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  skillBadgeText: {
-    color: '#a7f3d0',
-    fontSize: 11,
-    fontWeight: '500',
-  },
-  moreSkills: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 11,
-    alignSelf: 'center',
-  },
-  infoText: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 13,
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  bottomBar: {
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    backgroundColor: '#059669',
-  },
-  continueButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#a7f3d0',
-    paddingVertical: 16,
-    borderRadius: 999,
-    gap: 8,
-    marginBottom: 16,
-  },
-  continueButtonText: {
-    color: '#052e1b',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  progressContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
-    paddingBottom: 4,
-  },
-  progressDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-  },
-  progressDotActive: {
-    backgroundColor: '#a7f3d0',
-  },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    brandingHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 12,
+      paddingHorizontal: 24,
+      zIndex: 1,
+    },
+    scrollView: {
+      flex: 1,
+    },
+    scrollContent: {
+      alignItems: 'center',
+      paddingHorizontal: 24,
+      paddingTop: 16,
+      paddingBottom: 24,
+    },
+    contentContainer: {
+      flex: 1,
+      alignItems: 'center',
+      paddingHorizontal: 24,
+      paddingTop: 16,
+      paddingBottom: 24,
+    },
+    checkCircle: {
+      width: 120,
+      height: 120,
+      borderRadius: 60,
+      backgroundColor: theme.primary,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 24,
+    },
+    title: {
+      fontSize: 28,
+      fontWeight: 'bold',
+      color: theme.text,
+      marginBottom: 8,
+    },
+    subtitle: {
+      fontSize: 16,
+      color: theme.textSecondary,
+      marginBottom: 24,
+    },
+    summaryCard: {
+      backgroundColor: theme.surface,
+      borderRadius: 16,
+      padding: 16,
+      width: '100%',
+      borderWidth: 2,
+      borderColor: theme.border,
+      marginBottom: 16,
+    },
+    summaryTitle: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: theme.textSecondary,
+      marginBottom: 12,
+      textAlign: 'center',
+    },
+    summaryItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 10,
+    },
+    summaryItemColumn: {
+      marginBottom: 10,
+    },
+    summaryItemRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 6,
+    },
+    summaryLabel: {
+      color: theme.textSecondary,
+      fontSize: 13,
+      marginLeft: 8,
+      minWidth: 70,
+    },
+    summaryValue: {
+      color: theme.text,
+      fontSize: 13,
+      fontWeight: '500',
+      flex: 1,
+    },
+    summaryBio: {
+      color: theme.textSecondary,
+      fontSize: 12,
+      lineHeight: 18,
+      marginLeft: 26,
+    },
+    skillsRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+      marginLeft: 26,
+    },
+    skillBadge: {
+      backgroundColor: theme.surfaceSecondary,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 12,
+    },
+    skillBadgeText: {
+      color: theme.textSecondary,
+      fontSize: 11,
+      fontWeight: '500',
+    },
+    moreSkills: {
+      color: theme.textSecondary,
+      fontSize: 11,
+      alignSelf: 'center',
+    },
+    infoText: {
+      color: theme.textSecondary,
+      fontSize: 13,
+      textAlign: 'center',
+      lineHeight: 18,
+    },
+    bottomBar: {
+      paddingHorizontal: 24,
+      paddingTop: 12,
+      backgroundColor: theme.background,
+    },
+    continueButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.primary,
+      paddingVertical: 16,
+      borderRadius: 999,
+      gap: 8,
+      marginBottom: 16,
+    },
+    continueButtonText: {
+      color: '#052e1b',
+      fontSize: 18,
+      fontWeight: 'bold',
+    },
+    progressContainer: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 8,
+      paddingBottom: 4,
+    },
+    progressDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: theme.border,
+    },
+    progressDotActive: {
+      backgroundColor: theme.primary,
+    },
+  });
+}

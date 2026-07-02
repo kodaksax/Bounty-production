@@ -75,7 +75,7 @@ export function RatingPromptModal({
               disabled={isSubmitting}
               style={styles.closeButton}
             >
-              <MaterialIcons name="close" size={24} color="#d1fae5" />
+              <MaterialIcons name="close" size={24} color="#1F2937" />
             </TouchableOpacity>
           </View>
 
@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modal: {
-    backgroundColor: "#047857", // emerald-700
+    backgroundColor: "#0B0F14", // emerald-700
     borderRadius: 16,
     width: "100%",
     maxWidth: 400,
@@ -204,7 +204,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   infoCard: {
-    backgroundColor: "#065f46",
+    backgroundColor: "#111827",
     padding: 16,
     borderRadius: 12,
     marginBottom: 24,
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
   },
   userName: {
     fontSize: 14,
-    color: "#a7f3d0",
+    color: "#9CA3AF",
   },
   starsContainer: {
     marginBottom: 24,
@@ -225,7 +225,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#d1fae5",
+    color: "#1F2937",
     marginBottom: 12,
   },
   stars: {
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   commentInput: {
-    backgroundColor: "#065f46",
+    backgroundColor: "#111827",
     borderRadius: 12,
     padding: 12,
     color: "#fff",
@@ -271,7 +271,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   submitButton: {
-    backgroundColor: "#10b981",
+    backgroundColor: "#059669",
     padding: 16,
     borderRadius: 12,
     alignItems: "center",
@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   skipButtonText: {
-    color: "#a7f3d0",
+    color: "#9CA3AF",
     fontSize: 14,
   },
 });

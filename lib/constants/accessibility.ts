@@ -102,19 +102,19 @@ export const TYPOGRAPHY = {
 export const COLORS = {
   // Emerald theme
   EMERALD_50: '#ecfdf5',
-  EMERALD_100: '#d1fae5',
-  EMERALD_200: '#a7f3d0',
+  EMERALD_100: '#1F2937',
+  EMERALD_200: '#9CA3AF',
   EMERALD_300: '#6ee7b7',      // Light text on dark bg (7.4:1 contrast)
-  EMERALD_400: '#34d399',
-  EMERALD_500: '#10b981',      // Primary green (3.1:1 on white)
+  EMERALD_400: '#059669',
+  EMERALD_500: '#059669',      // Primary green (3.1:1 on white)
   EMERALD_600: '#059669',      // Darker green (4.6:1 on white)
-  EMERALD_700: '#047857',      // AA compliant on white (6.4:1)
-  EMERALD_800: '#065f46',
+  EMERALD_700: '#0B0F14',      // AA compliant on white (6.4:1)
+  EMERALD_800: '#111827',
   EMERALD_900: '#064e3b',
   
   // Background colors
   BG_DARK: '#0a1f14',          // Dark emerald background
-  BG_DARK_SECONDARY: '#1a3d2e', // Slightly lighter bg
+  BG_DARK_SECONDARY: '#0B0F14', // Slightly lighter bg
   BG_CARD: 'rgba(5, 150, 105, 0.1)', // Card background
   
   // Text colors (all AA compliant on dark backgrounds)
@@ -126,7 +126,7 @@ export const COLORS = {
   // Status colors
   ERROR: '#dc2626',            // Red-600
   WARNING: '#f59e0b',          // Amber-500
-  SUCCESS: '#10b981',          // Emerald-500
+  SUCCESS: '#059669',          // Emerald-500
   INFO: '#3b82f6',             // Blue-500
   
   // Border colors

@@ -177,7 +177,7 @@ export default function CancellationResponseScreen() {
   
   if (loading) {
     return (
-      <View className="flex-1 bg-white items-center justify-center">
+      <View className="flex-1 bg-[#0B0F14] items-center justify-center">
         <ActivityIndicator size="large" color="#059669" />
       </View>
     );
@@ -185,18 +185,18 @@ export default function CancellationResponseScreen() {
   
   if (!bounty || !cancellation) {
     return (
-      <View className="flex-1 bg-white items-center justify-center p-6">
+      <View className="flex-1 bg-[#0B0F14] items-center justify-center p-6">
         <AlertCircle size={48} color="#dc2626" />
-        <Text className="text-lg font-semibold text-gray-900 mt-4">
+        <Text className="text-lg font-semibold text-white mt-4">
           Cancellation request not found
         </Text>
-        <Text className="text-gray-600 text-center mt-2">
+        <Text className="text-[#9CA3AF] text-center mt-2">
           The cancellation request could not be loaded. Please contact support if you believe this is an error.
         </Text>
         <View className="mt-6 space-y-3 w-full max-w-xs">
           <TouchableOpacity
             onPress={handleContactSupport}
-            className="bg-emerald-600 px-6 py-3 rounded-lg flex-row items-center justify-center"
+            className="bg-[#059669] px-6 py-3 rounded-lg flex-row items-center justify-center"
           >
             <Mail size={18} color="white" />
             <Text className="text-white font-semibold ml-2">Contact Support</Text>
@@ -205,7 +205,7 @@ export default function CancellationResponseScreen() {
             onPress={() => router.back()}
             className="px-6 py-3 rounded-lg mt-3"
           >
-            <Text className="text-gray-600 font-medium text-center">Go Back</Text>
+            <Text className="text-[#9CA3AF] font-medium text-center">Go Back</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -219,16 +219,16 @@ export default function CancellationResponseScreen() {
     const isDisputed = cancellation.status === 'disputed';
     
     return (
-      <View className="flex-1 bg-white items-center justify-center p-6">
+      <View className="flex-1 bg-[#0B0F14] items-center justify-center p-6">
         {isAccepted && <CheckCircle size={48} color="#059669" />}
         {isRejected && <XCircle size={48} color="#dc2626" />}
         {isDisputed && <Flag size={48} color="#f59e0b" />}
-        <Text className="text-lg font-semibold text-gray-900 mt-4">
+        <Text className="text-lg font-semibold text-white mt-4">
           {isAccepted && 'Cancellation Accepted'}
           {isRejected && 'Cancellation Rejected'}
           {isDisputed && 'Under Dispute'}
         </Text>
-        <Text className="text-gray-600 text-center mt-2">
+        <Text className="text-[#9CA3AF] text-center mt-2">
           {isAccepted && 'This cancellation request has already been accepted and the bounty has been cancelled.'}
           {isRejected && 'This cancellation request was rejected. If you disagree with this decision, you can open a dispute.'}
           {isDisputed && 'This cancellation is currently under dispute. Our support team will review and resolve it.'}
@@ -246,7 +246,7 @@ export default function CancellationResponseScreen() {
           {isDisputed && (
             <TouchableOpacity
               onPress={handleContactSupport}
-              className="bg-emerald-600 px-6 py-3 rounded-lg flex-row items-center justify-center"
+              className="bg-[#059669] px-6 py-3 rounded-lg flex-row items-center justify-center"
             >
               <Mail size={18} color="white" />
               <Text className="text-white font-semibold ml-2">Contact Support</Text>
@@ -256,7 +256,7 @@ export default function CancellationResponseScreen() {
             onPress={() => router.back()}
             className="px-6 py-3 rounded-lg mt-3"
           >
-            <Text className="text-gray-600 font-medium text-center">Go Back</Text>
+            <Text className="text-[#9CA3AF] font-medium text-center">Go Back</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -267,10 +267,10 @@ export default function CancellationResponseScreen() {
     (bounty.amount * (cancellation.refundPercentage ?? 100)) / 100;
   
   return (
-    <View className="flex-1 bg-white">
+    <View className="flex-1 bg-[#0B0F14]">
       <ScrollView className="flex-1">
         {/* Header */}
-        <View className="bg-emerald-600 px-4 py-6 pt-12">
+        <View className="bg-[#111827] px-4 py-6 pt-12">
           <TouchableOpacity
             onPress={() => router.back()}
             className="mb-4"
@@ -280,7 +280,7 @@ export default function CancellationResponseScreen() {
           <Text className="text-2xl font-bold text-white">
             Cancellation Request
           </Text>
-          <Text className="text-emerald-100 mt-1">
+          <Text className="text-[#9CA3AF] mt-1">
             {bounty.title}
           </Text>
         </View>
@@ -304,32 +304,32 @@ export default function CancellationResponseScreen() {
           </View>
           
           {/* Cancellation Details */}
-          <View className="bg-gray-50 rounded-lg p-4 mb-6">
-            <Text className="text-sm text-gray-500 mb-1">Requested By</Text>
+          <View className="bg-[#1F2937] rounded-lg p-4 mb-6">
+            <Text className="text-sm text-[#9CA3AF] mb-1">Requested By</Text>
             <Text className="text-base font-medium text-gray-900 capitalize mb-3">
               {cancellation.requesterType}
             </Text>
             
-            <Text className="text-sm text-gray-500 mb-1">Reason</Text>
+            <Text className="text-sm text-[#9CA3AF] mb-1">Reason</Text>
             <Text className="text-base text-gray-900 mb-3">
               {cancellation.reason}
             </Text>
             
-            <Text className="text-sm text-gray-500 mb-1">Proposed Refund</Text>
-            <Text className="text-2xl font-bold text-gray-900">
+            <Text className="text-sm text-[#9CA3AF] mb-1">Proposed Refund</Text>
+            <Text className="text-2xl font-bold text-white">
               ${refundAmount.toFixed(2)}
             </Text>
-            <Text className="text-sm text-gray-500 mt-1">
+            <Text className="text-sm text-[#9CA3AF] mt-1">
               ({cancellation.refundPercentage ?? 100}% of ${bounty.amount.toFixed(2)})
             </Text>
           </View>
           
           {/* Response Message */}
           <View className="mb-6">
-            <Text className="text-base font-semibold text-gray-900 mb-2">
+            <Text className="text-base font-semibold text-white mb-2">
               Your Response {action === 'reject' && '*'}
             </Text>
-            <Text className="text-sm text-gray-600 mb-3">
+            <Text className="text-sm text-[#9CA3AF] mb-3">
               {action === 'reject' 
                 ? 'Please explain why you are rejecting this request (required).'
                 : 'Optional: Add a message to the requester.'}
@@ -341,7 +341,7 @@ export default function CancellationResponseScreen() {
               multiline
               numberOfLines={4}
               textAlignVertical="top"
-              className="border border-gray-300 rounded-lg p-3 text-base text-gray-900"
+              className="border border-[#374151] rounded-lg p-3 text-base text-white"
               style={{ minHeight: 100 }}
             />
           </View>
@@ -352,7 +352,7 @@ export default function CancellationResponseScreen() {
               onPress={handleAccept}
               disabled={submitting}
               className={`flex-row items-center justify-center rounded-lg py-4 ${
-                submitting ? 'bg-gray-300' : 'bg-emerald-600'
+                submitting ? 'bg-[#374151]' : 'bg-[#059669]'
               }`}
             >
               {submitting && action === 'accept' ? (
@@ -371,7 +371,7 @@ export default function CancellationResponseScreen() {
               onPress={handleReject}
               disabled={submitting}
               className={`flex-row items-center justify-center rounded-lg py-4 border-2 ${
-                submitting ? 'bg-gray-100 border-gray-300' : 'bg-white border-red-600'
+                submitting ? 'bg-[#1F2937] border-[#374151]' : 'bg-[#0B0F14] border-red-600'
               }`}
             >
               {submitting && action === 'reject' ? (

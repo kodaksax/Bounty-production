@@ -36,19 +36,19 @@ export function InProgressBountyItem({
 
   return (
     <TouchableOpacity onPress={handlePress} activeOpacity={0.7}>
-      <View className="bg-emerald-800/50 backdrop-blur-sm rounded-lg overflow-hidden mb-3">
+      <View className="bg-[#111827]/50 backdrop-blur-sm rounded-lg overflow-hidden mb-3">
         <View className="p-3">
           <View className="flex items-center gap-3">
-            <Avatar className="h-8 w-8 border border-emerald-400/30">
+            <Avatar className="h-8 w-8 border border-[#059669]/30">
               <AvatarImage src={avatarSrc || "/placeholder.svg?height=32&width=32"} alt={username} />
-              <AvatarFallback className="bg-emerald-900 text-emerald-200 text-xs">
+              <AvatarFallback className="bg-[#0B0F14] text-[#9CA3AF] text-xs">
                 {username.substring(1, 3).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <View className="flex-1">
               <View className="flex justify-between items-center">
-                <Text className="text-sm text-emerald-100">{username}</Text>
-                <Text className="text-xs text-emerald-300">{timeAgo}</Text>
+                <Text className="text-sm text-white">{username}</Text>
+                <Text className="text-xs text-[#6ee7b7]">{timeAgo}</Text>
               </View>
               <Text className="text-white font-medium mt-0.5">{title}</Text>
             </View>
@@ -61,17 +61,17 @@ export function InProgressBountyItem({
                   <Text className="text-white font-bold text-xs">For Honor</Text>
                 </View>
               ) : (
-                <View className="bg-emerald-900/50 px-2 py-1 rounded">
-                  <Text className="text-emerald-400 font-bold text-xs">${amount}</Text>
+                <View className="bg-[#0B0F14]/50 px-2 py-1 rounded">
+                  <Text className="text-[#6ee7b7] font-bold text-xs">${amount}</Text>
                 </View>
               )}
               {workType && (
-                <View className="bg-emerald-700/40 px-2 py-1 rounded">
-                  <Text className="text-emerald-200 text-[10px] tracking-wide uppercase">{workType === 'online' ? 'Online' : 'In Person'}</Text>
+                <View className="bg-[#111827] px-2 py-1 rounded">
+                  <Text className="text-[#9CA3AF] text-[10px] tracking-wide uppercase">{workType === 'online' ? 'Online' : 'In Person'}</Text>
                 </View>
               )}
             </View>
-            <Text className="text-sm text-emerald-200">{distance} mi</Text>
+            <Text className="text-sm text-[#9CA3AF]">{distance} mi</Text>
           </View>
         </View>
       </View>

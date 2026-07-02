@@ -1,77 +1,72 @@
-import * as React from 'react'
-import { createContext, useContext, useEffect, useState } from 'react'
-import { theme as designTheme } from '../lib/theme'
+/**
+ * Thin bridge that wraps AppThemeProvider and re-exports a backwards-compatible
+ * interface so existing code using `useTheme()` / `<ThemeProvider>` continues to
+ * work without changes.
+ *
+ * New code should import directly from 'lib/themes'.
+ */
+import * as React from 'react';
+import { AppThemeProvider, useAppThemeContext } from '../lib/themes/AppThemeContext';
+import type { ThemeMode } from '../lib/themes/types';
+import { theme as legacyDesignTheme } from '../lib/theme';
 
-type Theme = 'dark' | 'light' | 'system'
+// ─── Legacy interface (kept for backwards compat) ────────────────────────────
 
-type ThemeProviderProps = {
-  children: React.ReactNode
-  defaultTheme?: Theme
-  attribute?: string
-  enableSystem?: boolean
+type LegacyThemeValue = {
+  theme: ThemeMode;
+  setTheme: (mode: ThemeMode) => void;
+  isDark: boolean;
+  toggleTheme: () => void;
+  // Design-system tokens (static shape preserved; values now come from active theme)
+  colors: typeof legacyDesignTheme.colors;
+  spacing: typeof legacyDesignTheme.spacing;
+  borderRadius: typeof legacyDesignTheme.borderRadius;
+  typography: typeof legacyDesignTheme.typography;
+  shadows: typeof legacyDesignTheme.shadows;
+  animations: typeof legacyDesignTheme.animations;
+};
+
+// ─── Public hook ──────────────────────────────────────────────────────────────
+
+export function useTheme(): LegacyThemeValue {
+  const ctx = useAppThemeContext();
+
+  return {
+    theme: ctx.mode,
+    setTheme: ctx.setTheme,
+    isDark: ctx.isDark,
+    toggleTheme: ctx.toggleTheme,
+    // Pass through static design-system tokens; color values are in ctx.theme
+    colors: legacyDesignTheme.colors,
+    spacing: legacyDesignTheme.spacing,
+    borderRadius: legacyDesignTheme.borderRadius,
+    typography: legacyDesignTheme.typography,
+    shadows: legacyDesignTheme.shadows,
+    animations: legacyDesignTheme.animations,
+  };
 }
 
-type ThemeProviderState = {
-  theme: Theme
-  setTheme: (theme: Theme) => void
-  colors: typeof designTheme.colors
-  spacing: typeof designTheme.spacing
-  borderRadius: typeof designTheme.borderRadius
-  typography: typeof designTheme.typography
-  shadows: typeof designTheme.shadows
-  animations: typeof designTheme.animations
-}
+// ─── Provider ─────────────────────────────────────────────────────────────────
 
-const initialState: ThemeProviderState = {
-  theme: 'dark',
-  setTheme: () => null,
-  colors: designTheme.colors,
-  spacing: designTheme.spacing,
-  borderRadius: designTheme.borderRadius,
-  typography: designTheme.typography,
-  shadows: designTheme.shadows,
-  animations: designTheme.animations,
+interface ThemeProviderProps {
+  children: React.ReactNode;
+  defaultTheme?: ThemeMode | 'system';
+  attribute?: string;
+  enableSystem?: boolean;
 }
-
-const ThemeProviderContext = createContext<ThemeProviderState>(initialState)
 
 export function ThemeProvider({
   children,
   defaultTheme = 'dark',
-  enableSystem = true,
-  ...props
 }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(defaultTheme)
-
-  useEffect(() => {
-    // In React Native, we can use Appearance API to detect system theme
-    // For now, just use the default theme
-    setTheme(defaultTheme)
-  }, [defaultTheme])
-
-  const value = {
-    theme,
-    setTheme,
-    colors: designTheme.colors,
-    spacing: designTheme.spacing,
-    borderRadius: designTheme.borderRadius,
-    typography: designTheme.typography,
-    shadows: designTheme.shadows,
-    animations: designTheme.animations,
-  }
+  const mode: ThemeMode =
+    defaultTheme === 'light' ? 'light' :
+    defaultTheme === 'system' ? 'system' :
+    'dark';
 
   return (
-    <ThemeProviderContext.Provider value={value}>
+    <AppThemeProvider defaultMode={mode}>
       {children}
-    </ThemeProviderContext.Provider>
-  )
-}
-
-export const useTheme = () => {
-  const context = useContext(ThemeProviderContext)
-
-  if (context === undefined)
-    throw new Error('useTheme must be used within a ThemeProvider')
-
-  return context
+    </AppThemeProvider>
+  );
 }

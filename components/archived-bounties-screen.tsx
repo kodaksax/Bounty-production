@@ -66,7 +66,7 @@ export function ArchivedBountiesScreen({ onBack }: ArchivedBountiesScreenProps) 
   )
 
   return (
-    <View className="flex flex-col min-h-screen bg-emerald-600">
+    <View className="flex flex-col min-h-screen bg-[#059669]">
       {/* Header: icon + title on left, back on right */}
       <View className="flex flex-row justify-between items-center p-4 pt-8">
         <View className="flex flex-row items-center gap-3">
@@ -101,7 +101,7 @@ export function ArchivedBountiesScreen({ onBack }: ArchivedBountiesScreenProps) 
             <View className="flex-1 items-center justify-center py-16">
               <MaterialIcons name="archive" size={64} color="rgba(255,255,255,0.5)" />
               <Text className="text-white text-xl font-bold mt-4">No Archived Bounties</Text>
-              <Text className="text-emerald-200 text-center mt-2 px-8">
+              <Text className="text-[#9CA3AF] text-center mt-2 px-8">
                 Bounties you archive will appear here for future reference
               </Text>
             </View>

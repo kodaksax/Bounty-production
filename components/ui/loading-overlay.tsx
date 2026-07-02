@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
     gap: SPACING.ELEMENT_GAP,
   },
   message: {
-    color: '#d1fae5',
+    color: '#1F2937',
     fontSize: TYPOGRAPHY.SIZE_BODY,
     fontWeight: '500',
     textAlign: 'center',

@@ -110,7 +110,7 @@ const Input = React.forwardRef<TextInput, InputProps>(
     // Determine border color based on state
     const getBorderColor = () => {
       if (error) return '#ef4444' // red-500
-      if (isValid) return '#10b981' // emerald-500
+      if (isValid) return '#059669' // emerald-500
       if (isFocused) return '#059669' // emerald-600
       return variant === 'outline' ? '#3b82f6' : '#d1d5db'
     }
@@ -144,7 +144,7 @@ const Input = React.forwardRef<TextInput, InputProps>(
             error && inputStyles.errorBorder,
             isValid && inputStyles.validBorder,
             {
-              borderColor: error ? '#ef4444' : isValid ? '#10b981' :
+              borderColor: error ? '#ef4444' : isValid ? '#059669' :
                 prefersReducedMotion ? getBorderColor() : animatedBorderColor
             },
           ]}
@@ -207,7 +207,7 @@ const Input = React.forwardRef<TextInput, InputProps>(
             <MaterialIcons
               name="check-circle"
               size={20}
-              color="#10b981"
+              color="#059669"
               style={inputStyles.rightIcon}
               accessibilityLabel="Valid input"
             />
@@ -296,7 +296,7 @@ const inputStyles = StyleSheet.create({
     borderColor: '#ef4444',
   },
   validBorder: {
-    borderColor: '#10b981',
+    borderColor: '#059669',
   },
   leftIcon: {
     marginLeft: SPACING.ELEMENT_GAP,

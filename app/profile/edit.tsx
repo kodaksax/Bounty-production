@@ -23,6 +23,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAttachmentUpload } from "../../hooks/use-attachment-upload";
 import { useAuthContext } from "../../hooks/use-auth-context";
 import { useBackHandler } from "../../hooks/useBackHandler";
+import { useAppThemeContext } from "../../lib/themes/AppThemeContext";
+import type { AppTheme } from "../../lib/themes/types";
 
 type EditProfileFormData = {
   name: string;
@@ -55,6 +57,8 @@ export default function EditProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { session } = useAuthContext();
+  const { theme } = useAppThemeContext();
+  const styles = makeStyles(theme);
 
   // IMPORTANT: Always get the current user ID from session to prevent data leaks
   // Do NOT use a static or cached userId - it must be derived from the active session
@@ -310,7 +314,7 @@ export default function EditProfileScreen() {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#10b981" />
+          <ActivityIndicator size="large" color={theme.primary} />
           <Text style={styles.loadingText}>Loading profile...</Text>
         </View>
       </View>
@@ -388,14 +392,14 @@ export default function EditProfileScreen() {
                 />
               ) : bannerUpload.isUploading ? (
                 <>
-                  <ActivityIndicator size="large" color="#6b7280" />
+                  <ActivityIndicator size="large" color={theme.textSecondary} />
                   <Text style={styles.bannerHelpText}>
                     Uploading... {Math.round(bannerUpload.progress * 100)}%
                   </Text>
                 </>
               ) : (
                 <>
-                  <MaterialIcons name="image" size={32} color="#6b7280" />
+                  <MaterialIcons name="image" size={32} color={theme.textSecondary} />
                   <Text style={styles.bannerHelpText}>Tap to upload banner</Text>
                 </>
               )}
@@ -452,7 +456,7 @@ export default function EditProfileScreen() {
                 onFocus={() => setFocusedField('name')}
                 onBlur={() => setFocusedField(null)}
                 placeholder="Your display name"
-                placeholderTextColor="#6b7280"
+                placeholderTextColor={theme.textDisabled}
                 accessibilityLabel="Display name"
                 accessibilityHint="Enter your display name"
                 returnKeyType="next"
@@ -471,7 +475,7 @@ export default function EditProfileScreen() {
                 onFocus={() => setFocusedField('username')}
                 onBlur={() => setFocusedField(null)}
                 placeholder="@username"
-                placeholderTextColor="#6b7280"
+                placeholderTextColor={theme.textDisabled}
                 autoCapitalize="none"
                 accessibilityLabel="Username"
                 accessibilityHint="Enter your unique username"
@@ -491,7 +495,7 @@ export default function EditProfileScreen() {
                 onFocus={() => setFocusedField('bio')}
                 onBlur={() => setFocusedField(null)}
                 placeholder="Tell others about yourself..."
-                placeholderTextColor="#6b7280"
+                placeholderTextColor={theme.textDisabled}
                 multiline
                 numberOfLines={4}
                 maxLength={maxBioLength}
@@ -521,7 +525,7 @@ export default function EditProfileScreen() {
                 onFocus={() => setFocusedField('location')}
                 onBlur={() => setFocusedField(null)}
                 placeholder="City, Country"
-                placeholderTextColor="#6b7280"
+                placeholderTextColor={theme.textDisabled}
                 accessibilityLabel="Location"
                 accessibilityHint="Enter your city and country"
                 returnKeyType="next"
@@ -540,7 +544,7 @@ export default function EditProfileScreen() {
                 onFocus={() => setFocusedField('portfolio')}
                 onBlur={() => setFocusedField(null)}
                 placeholder="https://yourwebsite.com"
-                placeholderTextColor="#6b7280"
+                placeholderTextColor={theme.textDisabled}
                 keyboardType="url"
                 autoCapitalize="none"
                 accessibilityLabel="Website or Portfolio URL"
@@ -565,7 +569,7 @@ export default function EditProfileScreen() {
                 onFocus={() => setFocusedField('skillsets')}
                 onBlur={() => setFocusedField(null)}
                 placeholder="e.g., React, Node.js, Design"
-                placeholderTextColor="#6b7280"
+                placeholderTextColor={theme.textDisabled}
                 accessibilityLabel="Skillsets"
                 accessibilityHint="Enter your skills separated by commas"
                 returnKeyType="done"
@@ -576,7 +580,7 @@ export default function EditProfileScreen() {
           </View>
 
           <View style={styles.infoBox}>
-            <MaterialIcons name="info-outline" size={16} color="#6ee7b7" />
+            <MaterialIcons name="info-outline" size={16} color={theme.primary} />
             <Text style={styles.infoText}>
               Badges and Achievements are earned automatically and cannot be edited here.
             </Text>
@@ -590,227 +594,229 @@ export default function EditProfileScreen() {
 // Banner configuration
 const BANNER_HEIGHT = 140; // Increased from 120px for better visual presence
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#064e3b", // emerald-900
-  },
-  pinnedHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: "#047857", // emerald-700
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 255, 255, 0.1)",
-  },
-  headerButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    minHeight: 44, // Ensure minimum touch target height
-  },
-  headerTitle: {
-    flex: 1,
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#ffffff",
-    textAlign: "center",
-  },
-  cancelText: {
-    fontSize: 16,
-    color: "#ffffff",
-    fontWeight: "500",
-  },
-  saveButton: {
-    backgroundColor: "#10b981", // emerald-500
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    minWidth: 60,
-    alignItems: "center",
-  },
-  saveButtonDisabled: {
-    backgroundColor: "#6b7280",
-    opacity: 0.5,
-  },
-  saveText: {
-    fontSize: 16,
-    color: "#ffffff",
-    fontWeight: "600",
-  },
-  saveTextDisabled: {
-    opacity: 0.6,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: "#d1d5db",
-  },
-  errorBanner: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "#dc2626",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginBottom: 8,
-    borderRadius: 8,
-  },
-  errorBannerText: {
-    flex: 1,
-    color: "#fff",
-    fontSize: 14,
-  },
-  keyboardAvoidingView: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingTop: 0,
-  },
-  bannerSection: {
-    position: "relative",
-    marginBottom: 60,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  bannerPlaceholder: {
-    height: BANNER_HEIGHT,
-    backgroundColor: "#047857",
-    justifyContent: "center",
-    alignItems: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 255, 255, 0.1)",
-  },
-  bannerHelpText: {
-    fontSize: 13,
-    color: "#d1fae5",
-    marginTop: 6,
-    fontStyle: "italic",
-    fontWeight: "500",
-  },
-  avatarOverlap: {
-    position: "absolute",
-    bottom: -50,
-    left: 16,
-  },
-  avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: "#10b981",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 5,
-    borderColor: "#064e3b",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 8,
-  },
-  avatarText: {
-    fontSize: 40,
-    fontWeight: "bold",
-    color: "#ffffff",
-  },
-  avatarChangeButton: {
-    position: "absolute",
-    bottom: -4,
-    right: -4,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#10b981",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 4,
-    borderColor: "#064e3b",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3,
-    elevation: 5,
-  },
-  fieldGroup: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#a7f3d0",
-    marginBottom: 16,
-    paddingHorizontal: 16,
-  },
-  fieldContainer: {
-    backgroundColor: "rgba(16, 185, 129, 0.08)",
-    paddingHorizontal: 16,
-    paddingVertical: 14, // Increased for better mobile touch targets (44x44 minimum)
-    marginBottom: 1,
-    borderLeftWidth: 3,
-    borderLeftColor: "transparent",
-  },
-  fieldContainerFocused: {
-    backgroundColor: "rgba(16, 185, 129, 0.12)",
-    borderLeftColor: "#10b981",
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#6ee7b7",
-    marginBottom: 6,
-  },
-  input: {
-    backgroundColor: "transparent",
-    borderWidth: 0,
-    paddingHorizontal: 0,
-    paddingVertical: 6,
-    fontSize: 16,
-    color: "#ffffff",
-    lineHeight: 22,
-  },
-  textArea: {
-    minHeight: 80,
-    textAlignVertical: "top",
-  },
-  characterCounter: {
-    fontSize: 11,
-    color: "#6b7280",
-    textAlign: "right",
-    marginTop: 4,
-  },
-  helpText: {
-    fontSize: 11,
-    color: "#6ee7b7",
-    marginTop: 4,
-    fontStyle: "italic",
-  },
-  infoBox: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    backgroundColor: "rgba(16, 185, 129, 0.12)",
-    padding: 12,
-    marginHorizontal: 16,
-    marginTop: 8,
-    marginBottom: 24,
-    borderRadius: 8,
-    gap: 8,
-  },
-  infoText: {
-    flex: 1,
-    fontSize: 12,
-    color: "#d1fae5",
-    lineHeight: 16,
-  },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    pinnedHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      backgroundColor: theme.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    headerButton: {
+      paddingHorizontal: 8,
+      paddingVertical: 8,
+      minHeight: 44,
+    },
+    headerTitle: {
+      flex: 1,
+      fontSize: 18,
+      fontWeight: "700",
+      color: theme.text,
+      textAlign: "center",
+    },
+    cancelText: {
+      fontSize: 16,
+      color: theme.text,
+      fontWeight: "500",
+    },
+    saveButton: {
+      backgroundColor: "#059669",
+      borderRadius: 16,
+      paddingHorizontal: 16,
+      paddingVertical: 6,
+      minWidth: 60,
+      alignItems: "center",
+    },
+    saveButtonDisabled: {
+      backgroundColor: theme.border,
+      opacity: 0.5,
+    },
+    saveText: {
+      fontSize: 16,
+      color: "#ffffff",
+      fontWeight: "600",
+    },
+    saveTextDisabled: {
+      opacity: 0.6,
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    loadingText: {
+      marginTop: 12,
+      fontSize: 16,
+      color: theme.text,
+    },
+    errorBanner: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      backgroundColor: "#dc2626",
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      marginBottom: 8,
+      borderRadius: 8,
+    },
+    errorBannerText: {
+      flex: 1,
+      color: "#fff",
+      fontSize: 14,
+    },
+    keyboardAvoidingView: {
+      flex: 1,
+    },
+    scrollView: {
+      flex: 1,
+    },
+    scrollContent: {
+      paddingTop: 0,
+    },
+    bannerSection: {
+      position: "relative",
+      marginBottom: 60,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 3,
+    },
+    bannerPlaceholder: {
+      height: BANNER_HEIGHT,
+      backgroundColor: theme.surfaceSecondary,
+      justifyContent: "center",
+      alignItems: "center",
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    bannerHelpText: {
+      fontSize: 13,
+      color: theme.textSecondary,
+      marginTop: 6,
+      fontStyle: "italic",
+      fontWeight: "500",
+    },
+    avatarOverlap: {
+      position: "absolute",
+      bottom: -50,
+      left: 16,
+    },
+    avatar: {
+      width: 100,
+      height: 100,
+      borderRadius: 50,
+      backgroundColor: "#059669",
+      justifyContent: "center",
+      alignItems: "center",
+      borderWidth: 5,
+      borderColor: theme.background,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 5,
+      elevation: 8,
+    },
+    avatarText: {
+      fontSize: 40,
+      fontWeight: "bold",
+      color: "#ffffff",
+    },
+    avatarChangeButton: {
+      position: "absolute",
+      bottom: -4,
+      right: -4,
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: "#059669",
+      justifyContent: "center",
+      alignItems: "center",
+      borderWidth: 4,
+      borderColor: theme.background,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 3,
+      elevation: 5,
+    },
+    fieldGroup: {
+      marginBottom: 24,
+    },
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: theme.text,
+      marginBottom: 16,
+      paddingHorizontal: 16,
+    },
+    fieldContainer: {
+      backgroundColor: theme.isDark ? "rgba(16, 185, 129, 0.08)" : "rgba(5, 150, 105, 0.06)",
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      marginBottom: 1,
+      borderLeftWidth: 3,
+      borderLeftColor: "transparent",
+    },
+    fieldContainerFocused: {
+      backgroundColor: theme.isDark ? "rgba(16, 185, 129, 0.12)" : "rgba(5, 150, 105, 0.1)",
+      borderLeftColor: "#059669",
+    },
+    label: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: theme.isDark ? "#6ee7b7" : "#059669",
+      marginBottom: 6,
+    },
+    input: {
+      backgroundColor: "transparent",
+      borderWidth: 0,
+      paddingHorizontal: 0,
+      paddingVertical: 6,
+      fontSize: 16,
+      color: theme.text,
+      lineHeight: 22,
+    },
+    textArea: {
+      minHeight: 80,
+      textAlignVertical: "top",
+    },
+    characterCounter: {
+      fontSize: 11,
+      color: theme.textSecondary,
+      textAlign: "right",
+      marginTop: 4,
+    },
+    helpText: {
+      fontSize: 11,
+      color: theme.isDark ? "#6ee7b7" : "#059669",
+      marginTop: 4,
+      fontStyle: "italic",
+    },
+    infoBox: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      backgroundColor: theme.isDark ? "rgba(16, 185, 129, 0.12)" : "rgba(5, 150, 105, 0.08)",
+      padding: 12,
+      marginHorizontal: 16,
+      marginTop: 8,
+      marginBottom: 24,
+      borderRadius: 8,
+      gap: 8,
+    },
+    infoText: {
+      flex: 1,
+      fontSize: 12,
+      color: theme.text,
+      lineHeight: 16,
+    },
+  });
+}

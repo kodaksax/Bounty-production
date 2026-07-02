@@ -435,7 +435,7 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
                   )}
                 </View>
                 <View style={styles.methodCheckCircle}>
-                  <MaterialIcons name="check" size={16} color="#34d399" />
+                  <MaterialIcons name="check" size={16} color="#059669" />
                 </View>
               </TouchableOpacity>
             </>
@@ -477,7 +477,7 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
           )}
 
           {/* Divider */}
-          <View style={{ height: 1, backgroundColor: '#047857', marginVertical: 12 }} />
+          <View style={{ height: 1, backgroundColor: '#0B0F14', marginVertical: 12 }} />
 
           {/* Payment Methods */}
           {isLoading ? (
@@ -521,7 +521,7 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
                 </View>
                 <View style={styles.methodCheckCircle}>
                   {selectedMethod === method.id && (
-                    <MaterialIcons name="check" size={16} color="#34d399" />
+                    <MaterialIcons name="check" size={16} color="#059669" />
                   )}
                 </View>
               </TouchableOpacity>
@@ -614,7 +614,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   balanceLabel: {
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     fontSize: 14,
   },
   balanceSubLabel: {
@@ -623,14 +623,14 @@ const styles = StyleSheet.create({
   },
   progressBarBg: {
     height: 8,
-    backgroundColor: '#047857',
+    backgroundColor: '#0B0F14',
     borderRadius: 4,
     overflow: 'hidden',
     marginBottom: 4,
   },
   progressBar: {
     height: 8,
-    backgroundColor: '#34d399',
+    backgroundColor: '#059669',
     borderRadius: 4,
   },
   amountBox: {
@@ -638,13 +638,13 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   amountLabel: {
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     fontSize: 14,
     marginBottom: 4,
   },
   amountInput: {
-    backgroundColor: '#047857',
-    borderColor: '#10b981',
+    backgroundColor: '#0B0F14',
+    borderColor: '#059669',
     borderWidth: 1,
     borderRadius: 8,
     color: '#fff',
@@ -674,16 +674,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   methodRowActive: {
-    backgroundColor: '#047857',
+    backgroundColor: '#0B0F14',
   },
   methodRowInactive: {
-    backgroundColor: '#04785799',
+    backgroundColor: '#0B0F1499',
   },
   methodIconCircle: {
     height: 32,
     width: 32,
     borderRadius: 16,
-    backgroundColor: '#065f46',
+    backgroundColor: '#111827',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -702,7 +702,7 @@ const styles = StyleSheet.create({
     width: 20,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#34d399',
+    borderColor: '#059669',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -714,7 +714,7 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: '#059669',
     borderTopWidth: 1,
-    borderTopColor: '#10b981',
+    borderTopColor: '#059669',
     ...theme.shadows.lg,
   },
 
@@ -725,10 +725,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   bottomButtonActive: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
   },
   bottomButtonInactive: {
-    backgroundColor: '#04785799',
+    backgroundColor: '#0B0F1499',
   },
   bottomButtonText: {
     color: '#fff',

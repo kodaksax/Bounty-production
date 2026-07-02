@@ -227,7 +227,7 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#10b981" />
+        <ActivityIndicator size="large" color="#059669" />
       </View>
     );
   }
@@ -265,7 +265,7 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
               <MaterialIcons
                 name={emailVerified ? 'check-circle' : 'cancel'}
                 size={24}
-                color={emailVerified ? '#10b981' : '#ef4444'}
+                color={emailVerified ? '#059669' : '#ef4444'}
               />
             </View>
             <View style={styles.divider} />
@@ -279,7 +279,7 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
               <MaterialIcons
                 name={phoneVerified ? 'check-circle' : 'cancel'}
                 size={24}
-                color={phoneVerified ? '#10b981' : '#ef4444'}
+                color={phoneVerified ? '#059669' : '#ef4444'}
               />
             </View>
           </View>
@@ -314,13 +314,13 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
                 </Text>
               </View>
               {isEnabling2FA ? (
-                <ActivityIndicator size="small" color="#10b981" />
+                <ActivityIndicator size="small" color="#059669" />
               ) : (
                 <Switch
                   value={twoFactorEnabled}
                   onValueChange={twoFactorEnabled ? handleDisable2FA : handleEnable2FA}
                   trackColor={{ false: '#374151', true: '#059669' }}
-                  thumbColor={twoFactorEnabled ? '#10b981' : '#9ca3af'}
+                  thumbColor={twoFactorEnabled ? '#059669' : '#9ca3af'}
                 />
               )}
             </TouchableOpacity>
@@ -366,13 +366,13 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#065f46',
+    backgroundColor: '#111827',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#065f46',
+    backgroundColor: '#111827',
   },
   scrollContent: {
     paddingBottom: 40,
@@ -464,7 +464,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   enabledBadge: {
-    backgroundColor: 'rgba(16,185,129,0.2)',
+    backgroundColor: '#374151',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4,
@@ -472,7 +472,7 @@ const styles = StyleSheet.create({
   enabledBadgeText: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#10b981',
+    color: '#059669',
   },
   recommendedBadge: {
     backgroundColor: 'rgba(245,158,11,0.2)',

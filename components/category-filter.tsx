@@ -17,7 +17,7 @@ export function CategoryFilter({ label, icon, isActive = false, onClick }: Categ
       onPress={onClick}
       className={cn(
         "flex items-center space-x-2 px-5 py-2.5 rounded-full whitespace-nowrap touch-target-min shadow-sm",
-        isActive ? "bg-emerald-800/80 text-white" : "bg-white/20 text-white/90",
+        isActive ? "bg-[#111827]/80 text-white" : "bg-white/20 text-white/90",
       )}
     >
       {icon && <View className="text-lg">{icon}</View>}

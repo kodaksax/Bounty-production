@@ -1,5 +1,4 @@
 'use client';
-
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
@@ -26,6 +25,7 @@ import {
   View,
 } from 'react-native';
 import { showReportAlert } from './ReportModal';
+import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import { ReputationScoreCompact } from './ui/reputation-score';
 import { EnhancedProfileSectionSkeleton, PortfolioSkeleton } from './ui/skeleton-loaders';
 import { VerificationBadge, type VerificationLevel } from './ui/verification-badge';
@@ -34,8 +34,8 @@ import { VerificationBadge, type VerificationLevel } from './ui/verification-bad
  * Progress bar component for upload progress
  */
 function UploadProgressBar({ progress, message }: { progress: number; message?: string | null }) {
+  const { theme } = useAppThemeContext();
   const [showBar, setShowBar] = useState(false);
-
   useEffect(() => {
     if (progress > 0 && progress < 1) {
       setShowBar(true);
@@ -47,19 +47,17 @@ function UploadProgressBar({ progress, message }: { progress: number; message?: 
       setShowBar(false);
     }
   }, [progress]);
-
   if (!showBar) return null;
-
   return (
-    <View className="bg-emerald-900/50 rounded-lg p-3 mb-3">
+    <View className="rounded-lg p-3 mb-3" style={{ backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border }}>
       <View className="flex-row items-center justify-between mb-2">
-        <Text className="text-sm text-white">{message || 'Uploading…'}</Text>
-        <Text className="text-sm text-emerald-300">{Math.round(progress * 100)}%</Text>
+        <Text className="text-sm" style={{ color: theme.textSecondary }}>{message || 'Uploading…'}</Text>
+        <Text className="text-sm font-medium" style={{ color: theme.primary }}>{Math.round(progress * 100)}%</Text>
       </View>
-      <View className="h-2 bg-emerald-800 rounded-full overflow-hidden">
+      <View className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: theme.surfaceSecondary }}>
         <View
-          className="h-full bg-emerald-400 rounded-full"
-          style={{ width: `${Math.round(progress * 100)}%` }}
+          className="h-full rounded-full"
+          style={{ width: `${Math.round(progress * 100)}%`, backgroundColor: theme.primary }}
         />
       </View>
     </View>
@@ -86,29 +84,24 @@ function usePortfolioVideoPlayer(item: PortfolioItem | null) {
     }
     return null;
   }, [item]);
-
   const player = useVideoPlayer(source, playerInstance => {
     playerInstance.pause();
     playerInstance.loop = false;
     playerInstance.muted = false;
     playerInstance.volume = 1;
   });
-
   useEffect(() => {
     if (!item || item.type !== 'video') {
       player.pause();
       return;
     }
-
     const subscription = player.addListener('statusChange', ({ status, error }) => {
       if (status === 'error' && error) {
         console.error('[Portfolio] Video playback error:', error);
       }
     });
-
     return () => subscription.remove();
   }, [item, player]);
-
   return { player, hasVideo: !!source };
 }
 
@@ -124,7 +117,6 @@ export function EnhancedProfileSection({
   const { profile: authProfileFromHook } = useAuthProfile();
   const router = useRouter();
 
-  // Resolve the user id for portfolio/follow/rating hooks.
   const resolvedUserId = (() => {
     if (normalizedFromHookOrLocal?.id) return normalizedFromHookOrLocal.id;
     if (userId) return userId;
@@ -132,9 +124,6 @@ export function EnhancedProfileSection({
     return authProfileFromHook?.id ?? 'current-user';
   })();
 
-  // ─── Message button ───────────────────────────────────────────────────────
-  // Simply navigate to the user conversation route — [userid].tsx handles
-  // loading/creating the conversation internally.
   const handleMessagePress = () => {
     if (!resolvedUserId || resolvedUserId === 'current-user') return;
     router.push({
@@ -143,16 +132,13 @@ export function EnhancedProfileSection({
     });
   };
 
-  // Double guard: respect the isOwnProfile prop AND verify the resolved id
-  // doesn't match the authenticated user's id. This ensures the button stays
-  // hidden even if the parent forgets to pass isOwnProfile correctly.
+  const { theme } = useAppThemeContext();
   const currentUserId = authProfileFromHook?.id;
   const showMessageButton =
     !isOwnProfile &&
     !!resolvedUserId &&
     resolvedUserId !== 'current-user' &&
     resolvedUserId !== currentUserId;
-  // ─────────────────────────────────────────────────────────────────────────
 
   const {
     items,
@@ -161,6 +147,7 @@ export function EnhancedProfileSection({
     addItem,
     refresh,
   } = usePortfolio(resolvedUserId);
+
   const {
     pickAndUpload,
     isPicking,
@@ -210,7 +197,6 @@ export function EnhancedProfileSection({
 
   const handleBlockUser = async () => {
     if (!userId || isOwnProfile) return;
-
     setBlockLoading(true);
     try {
       if (isBlocked) {
@@ -269,7 +255,7 @@ export function EnhancedProfileSection({
   if (!effectiveProfile) {
     return (
       <View className="p-4">
-        <Text className="text-center text-emerald-200">Profile not found</Text>
+        <Text className="text-center" style={{ color: theme.textSecondary }}>Profile not found</Text>
       </View>
     );
   }
@@ -294,7 +280,7 @@ export function EnhancedProfileSection({
           ratingCount={ratingStats.ratingCount}
         />
         {ratingStats.ratingCount > 0 && (
-          <Text className="text-xs text-emerald-300 ml-2">
+          <Text className="text-xs ml-2" style={{ color: theme.textSecondary }}>
             ({ratingStats.ratingCount} review{ratingStats.ratingCount !== 1 ? 's' : ''})
           </Text>
         )}
@@ -316,13 +302,13 @@ export function EnhancedProfileSection({
   };
 
   return (
-    <View className="px-4 py-2">
+    <View className="px-4 py-2" style={{ backgroundColor: theme.background }}>
       {/* Enhanced Profile Header + Stats (merged card) */}
-      <View className="bg-black/30 backdrop-blur-sm rounded-xl p-4 mb-4">
+      <View className="rounded-xl p-4 mb-4 shadow-sm" style={{ backgroundColor: theme.background, borderWidth: 1, borderColor: theme.surfaceSecondary }}>
         <View className="flex-row items-start justify-between">
           <View className="flex-row items-center flex-1">
             <View className="relative">
-              <View className="h-16 w-16 rounded-full bg-emerald-700 overflow-hidden items-center justify-center">
+              <View className="h-16 w-16 rounded-full overflow-hidden items-center justify-center" style={{ backgroundColor: theme.surfaceSecondary, borderWidth: 1, borderColor: theme.border }}>
                 {effectiveProfile.avatar ? (
                   <OptimizedImage
                     source={{ uri: effectiveProfile.avatar }}
@@ -335,51 +321,55 @@ export function EnhancedProfileSection({
                     alt="Profile avatar"
                   />
                 ) : (
-                  <MaterialIcons name="person" size={32} color="#d1fae5" />
+                  <MaterialIcons name="person" size={32} color="#059669" />
                 )}
               </View>
               {renderVerificationBadge()}
             </View>
             <View className="ml-4 flex-1">
-              <Text className="text-lg font-bold">
+              <Text className="text-lg font-bold" style={{ color: theme.text }}>
                 {effectiveProfile.display_name ||
                   effectiveProfile.name ||
                   effectiveProfile.username}
               </Text>
-              <Text className="text-xs text-emerald-300">
+              <Text className="text-xs" style={{ color: theme.textSecondary }}>
                 {effectiveProfile.username ? `@${effectiveProfile.username}` : ''}
               </Text>
               {renderReputationScore()}
               {effectiveProfile.title && (
-                <Text className="text-sm text-emerald-200 mt-1">{effectiveProfile.title}</Text>
+                <Text className="text-sm mt-1" style={{ color: theme.textSecondary }}>{effectiveProfile.title}</Text>
               )}
             </View>
           </View>
-
           {!isOwnProfile && (
             <TouchableOpacity
               onPress={toggleFollow}
               disabled={followLoading}
-              className={`px-4 py-2 rounded-lg ${isFollowing ? 'bg-emerald-700' : 'bg-emerald-500'}`}
+              className="px-4 py-2 rounded-lg"
+              style={{ backgroundColor: isFollowing ? theme.surfaceSecondary : theme.primary, borderWidth: isFollowing ? 1 : 0, borderColor: theme.border }}
+              accessibilityRole="button"
+              accessibilityLabel={isFollowing ? 'Following' : 'Follow'}
+              accessibilityHint={isFollowing ? 'Double tap to unfollow this user' : 'Double tap to follow this user'}
+              accessibilityState={{ disabled: followLoading }}
             >
               {followLoading ? (
-                <ActivityIndicator size="small" color="#ffffff" />
+                <ActivityIndicator size="small" color={isFollowing ? '#059669' : '#ffffff'} />
               ) : (
-                <Text className="text-white text-sm font-medium">
+                <Text className="text-sm font-medium" style={{ color: isFollowing ? theme.primary : '#ffffff' }}>
                   {isFollowing ? 'Following' : 'Follow'}
                 </Text>
               )}
             </TouchableOpacity>
           )}
-
           {!isOwnProfile && !hideActions && (
             <TouchableOpacity
               onPress={() => setShowMoreActions(true)}
-              className="ml-2 p-2 rounded-lg bg-emerald-700/50"
+              className="ml-2 p-2 rounded-lg"
+              style={{ backgroundColor: theme.surfaceSecondary }}
               accessibilityLabel="More actions"
               accessibilityHint="Open menu for report and block options"
             >
-              <MaterialIcons name="more-vert" size={20} color="#d1fae5" />
+              <MaterialIcons name="more-vert" size={20} color={theme.textSecondary} />
             </TouchableOpacity>
           )}
         </View>
@@ -393,14 +383,14 @@ export function EnhancedProfileSection({
             onRequestClose={() => setShowMoreActions(false)}
           >
             <Pressable
-              style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}
+              style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}
               onPress={() => setShowMoreActions(false)}
               accessibilityLabel="Close menu"
               accessibilityRole="button"
               accessibilityHint="Double tap to dismiss the action menu"
             >
               <View style={{ padding: 16 }}>
-                <View style={{ backgroundColor: '#065f46', borderRadius: 16, overflow: 'hidden' }}>
+                <View style={{ backgroundColor: theme.surface, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: theme.border }}>
                   <TouchableOpacity
                     style={{
                       flexDirection: 'row',
@@ -411,20 +401,18 @@ export function EnhancedProfileSection({
                     }}
                     onPress={handleReportUser}
                   >
-                    <MaterialIcons name="flag" size={22} color="#fca5a5" />
-                    <Text style={{ fontSize: 16, color: '#fca5a5', fontWeight: '500' }}>
+                    <MaterialIcons name="flag" size={22} color="#dc2626" />
+                    <Text style={{ fontSize: 16, color: '#dc2626', fontWeight: '500' }}>
                       Report User
                     </Text>
                   </TouchableOpacity>
-
                   <View
                     style={{
                       height: 1,
-                      backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                      backgroundColor: theme.border,
                       marginHorizontal: 20,
                     }}
                   />
-
                   <TouchableOpacity
                     style={{
                       flexDirection: 'row',
@@ -437,33 +425,31 @@ export function EnhancedProfileSection({
                     disabled={blockLoading}
                   >
                     {blockLoading ? (
-                      <ActivityIndicator size="small" color="#fca5a5" />
+                      <ActivityIndicator size="small" color="#dc2626" />
                     ) : (
                       <MaterialIcons
                         name={isBlocked ? 'check-circle' : 'block'}
                         size={22}
-                        color={isBlocked ? '#10b981' : '#fca5a5'}
+                        color={isBlocked ? theme.primary : '#dc2626'}
                       />
                     )}
                     <Text
                       style={{
                         fontSize: 16,
-                        color: isBlocked ? '#10b981' : '#fca5a5',
+                        color: isBlocked ? theme.primary : '#dc2626',
                         fontWeight: '500',
                       }}
                     >
                       {isBlocked ? 'Unblock User' : 'Block User'}
                     </Text>
                   </TouchableOpacity>
-
                   <View
                     style={{
                       height: 1,
-                      backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                      backgroundColor: theme.border,
                       marginHorizontal: 20,
                     }}
                   />
-
                   <TouchableOpacity
                     style={{
                       flexDirection: 'row',
@@ -474,8 +460,8 @@ export function EnhancedProfileSection({
                     }}
                     onPress={() => setShowMoreActions(false)}
                   >
-                    <MaterialIcons name="close" size={22} color="#d1fae5" />
-                    <Text style={{ fontSize: 16, color: '#d1fae5', fontWeight: '500' }}>
+                    <MaterialIcons name="close" size={22} color={theme.textSecondary} />
+                    <Text style={{ fontSize: 16, color: theme.textSecondary, fontWeight: '500' }}>
                       Cancel
                     </Text>
                   </TouchableOpacity>
@@ -487,7 +473,7 @@ export function EnhancedProfileSection({
 
         {/* Bio */}
         {effectiveProfile.bio && (
-          <Text className="text-sm text-emerald-200 mt-3">{effectiveProfile.bio}</Text>
+          <Text className="text-sm mt-3" style={{ color: theme.text }}>{effectiveProfile.bio}</Text>
         )}
 
         {/* Location & Portfolio/Website */}
@@ -495,14 +481,14 @@ export function EnhancedProfileSection({
           <View className="mt-3 space-y-2">
             {effectiveProfile.location && (
               <View className="flex-row items-center">
-                <MaterialIcons name="location-on" size={16} color="#6ee7b7" />
-                <Text className="text-sm text-emerald-200 ml-2">{effectiveProfile.location}</Text>
+                <MaterialIcons name="location-on" size={16} color="#059669" />
+                <Text className="text-sm ml-2" style={{ color: theme.textSecondary }}>{effectiveProfile.location}</Text>
               </View>
             )}
             {effectiveProfile.portfolio && (
               <View className="flex-row items-center">
-                <MaterialIcons name="link" size={16} color="#6ee7b7" />
-                <Text className="text-sm text-emerald-200 ml-2" numberOfLines={1}>
+                <MaterialIcons name="link" size={16} color="#059669" />
+                <Text className="text-sm ml-2" style={{ color: theme.textSecondary }} numberOfLines={1}>
                   {effectiveProfile.portfolio}
                 </Text>
               </View>
@@ -511,26 +497,26 @@ export function EnhancedProfileSection({
         )}
 
         {/* Stats Row */}
-        <View className="flex-row justify-around mt-4 pt-3 border-t border-emerald-500/30">
+        <View className="flex-row justify-around mt-4 pt-3 border-t" style={{ borderTopColor: theme.surfaceSecondary }}>
           <View className="items-center">
-            <Text className="text-2xl font-bold">
+            <Text className="text-2xl font-bold" style={{ color: theme.text }}>
               {activityStats?.jobsCompleted ?? activityStats?.jobsAccepted ?? 0}
             </Text>
-            <Text className="text-xs text-emerald-200 mt-1">Jobs Completed</Text>
+            <Text className="text-xs mt-1" style={{ color: theme.textSecondary }}>Jobs Completed</Text>
           </View>
           <View className="items-center">
-            <Text className="text-2xl font-bold">{activityStats?.bountiesPosted ?? 0}</Text>
-            <Text className="text-xs text-emerald-200 mt-1">Bounties Posted</Text>
+            <Text className="text-2xl font-bold" style={{ color: theme.text }}>{activityStats?.bountiesPosted ?? 0}</Text>
+            <Text className="text-xs mt-1" style={{ color: theme.textSecondary }}>Bounties Posted</Text>
           </View>
           <View className="items-center">
-            <Text className="text-2xl font-bold">{followerCount ?? 0}</Text>
-            <Text className="text-xs text-emerald-200 mt-1">Followers</Text>
+            <Text className="text-2xl font-bold" style={{ color: theme.text }}>{followerCount ?? 0}</Text>
+            <Text className="text-xs mt-1" style={{ color: theme.textSecondary }}>Followers</Text>
           </View>
         </View>
 
         {/* Joined Date */}
         <View className="mt-3 items-center">
-          <Text className="text-xs text-emerald-300">
+          <Text className="text-xs" style={{ color: theme.textSecondary }}>
             Joined{' '}
             {new Date(
               (effectiveProfile as any).created_at || effectiveProfile.joinDate || Date.now()
@@ -543,7 +529,8 @@ export function EnhancedProfileSection({
       {showMessageButton && (
         <TouchableOpacity
           onPress={handleMessagePress}
-          className="ml-2 py-2 rounded-lg bg-emerald-500 self-stretch mb-2"
+          className="ml-2 py-2 rounded-lg self-stretch mb-2"
+          style={{ backgroundColor: '#059669' }}
         >
           <Text className="text-white text-sm font-medium text-center">Message</Text>
         </TouchableOpacity>
@@ -554,8 +541,8 @@ export function EnhancedProfileSection({
         <View className="mb-4">
           <View className="flex-row justify-between items-center mb-2">
             <View className="flex-row items-center">
-              <Text className="text-sm font-medium text-white">Portfolio</Text>
-              <Text className="text-xs text-emerald-300 ml-2">
+              <Text className="text-sm font-medium" style={{ color: theme.text }}>Portfolio</Text>
+              <Text className="text-xs ml-2" style={{ color: theme.textSecondary }}>
                 ({items.length}/{MAX_PORTFOLIO_ITEMS})
               </Text>
             </View>
@@ -563,16 +550,25 @@ export function EnhancedProfileSection({
               <View className="flex-row items-center gap-2">
                 {items.length > 1 && (
                   <TouchableOpacity
-                    className={`px-2 py-1 rounded ${isReordering ? 'bg-emerald-600' : 'bg-emerald-700'}`}
+                    className="px-2 py-1 rounded border"
+                    style={isReordering
+                      ? { backgroundColor: theme.surfaceSecondary, borderColor: theme.primary }
+                      : { backgroundColor: theme.surfaceSecondary, borderColor: theme.border }}
                     onPress={() => setIsReordering(!isReordering)}
+                    accessibilityRole="button"
+                    accessibilityLabel={isReordering ? 'Done reordering' : 'Reorder portfolio items'}
                   >
-                    <Text className="text-xs text-white">{isReordering ? 'Done' : 'Reorder'}</Text>
+                    <Text className="text-xs" style={{ color: isReordering ? theme.primary : theme.textSecondary }}>{isReordering ? 'Done' : 'Reorder'}</Text>
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity
-                  className={`px-2 py-1 bg-emerald-500 rounded ${items.length >= MAX_PORTFOLIO_ITEMS ? 'opacity-50' : ''}`}
+                  className={`px-2 py-1 rounded ${items.length >= MAX_PORTFOLIO_ITEMS ? 'opacity-50' : ''}`}
+                  style={{ backgroundColor: theme.primary }}
                   onPress={pickAndUpload}
                   disabled={isPicking || isUploading || items.length >= MAX_PORTFOLIO_ITEMS}
+                  accessibilityRole="button"
+                  accessibilityLabel={isUploading ? `Uploading ${Math.round((progress || 0) * 100)}%` : 'Add portfolio item'}
+                  accessibilityState={{ disabled: isPicking || isUploading || items.length >= MAX_PORTFOLIO_ITEMS }}
                 >
                   <Text className="text-xs text-white">
                     {isUploading ? `${Math.round((progress || 0) * 100)}%` : 'Add Item'}
@@ -581,18 +577,16 @@ export function EnhancedProfileSection({
               </View>
             )}
           </View>
-
           {(isPicking || isUploading) && (
             <UploadProgressBar progress={progress} message={uploadMessage} />
           )}
-
           {portfolioLoading ? (
             <View className="items-center py-4">
-              <ActivityIndicator size="small" color="#ffffff" />
+              <ActivityIndicator size="small" color={theme.primary} />
             </View>
           ) : items.length === 0 && !lastPicked ? (
-            <View className="bg-emerald-700/20 p-4 rounded-lg">
-              <Text className="text-center text-white text-sm">
+            <View className="p-4 rounded-lg" style={{ backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border }}>
+              <Text className="text-center text-sm" style={{ color: theme.textSecondary }}>
                 {isOwnProfile
                   ? 'Showcase your work! Tap "Add Item" to upload images, videos, or files.'
                   : "This user hasn't added portfolio items yet."}
@@ -627,11 +621,15 @@ export function EnhancedProfileSection({
                     onLongPress={() =>
                       isOwnProfile && !isReordering && handleDeletePortfolioItem(item.id)
                     }
+                    accessibilityRole="button"
+                    accessibilityLabel={item.title || item.name || 'Portfolio item'}
+                    accessibilityHint={isReordering ? 'Use the arrow buttons to reorder' : isOwnProfile ? 'Double tap to view, long press to delete' : 'Double tap to view'}
                   >
                     <View
-                      className={`w-32 h-32 bg-emerald-700 rounded-lg overflow-hidden items-center justify-center ${
-                        isReordering ? 'border-2 border-dashed border-emerald-400' : ''
+                      className={`w-32 h-32 rounded-lg overflow-hidden items-center justify-center border ${
+                        isReordering ? 'border-2 border-dashed border-[#059669]' : ''
                       }`}
+                      style={!isReordering ? { backgroundColor: theme.surfaceSecondary, borderColor: theme.border } : { backgroundColor: theme.surfaceSecondary }}
                     >
                       {item.type === 'image' || item.type === 'video' ? (
                         <>
@@ -647,7 +645,7 @@ export function EnhancedProfileSection({
                           />
                           {item.type === 'video' && (
                             <View className="absolute inset-0 items-center justify-center">
-                              <View className="bg-black/50 rounded-full p-2">
+                              <View className="bg-black/40 rounded-full p-2">
                                 <MaterialIcons name="play-arrow" size={24} color="white" />
                               </View>
                             </View>
@@ -655,19 +653,19 @@ export function EnhancedProfileSection({
                         </>
                       ) : (
                         <View className="items-center justify-center p-3">
-                          <MaterialIcons name="insert-drive-file" size={28} color="#ffffff" />
-                          <Text className="text-[10px] text-white mt-1" numberOfLines={2}>
+                          <MaterialIcons name="insert-drive-file" size={28} color={theme.primary} />
+                          <Text className="text-[10px] mt-1" style={{ color: theme.textSecondary }} numberOfLines={2}>
                             {item.name || 'File'}
                           </Text>
                         </View>
                       )}
-
                       {isReordering && isOwnProfile && items.length > 1 && (
-                        <View className="absolute inset-0 bg-black/30 items-center justify-center">
+                        <View className="absolute inset-0 items-center justify-center" style={{ backgroundColor: theme.isDark ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.65)' }}>
                           <View className="flex-row gap-2">
                             {index > 0 && (
                               <TouchableOpacity
-                                className="bg-emerald-500 rounded-full p-2"
+                                className="rounded-full p-2"
+                                style={{ backgroundColor: '#059669' }}
                                 onPress={async () => {
                                   const newOrder = [...items];
                                   [newOrder[index - 1], newOrder[index]] = [
@@ -680,13 +678,17 @@ export function EnhancedProfileSection({
                                   );
                                   await refresh();
                                 }}
+                                accessibilityRole="button"
+                                accessibilityLabel="Move item left"
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                               >
-                                <MaterialIcons name="arrow-back" size={16} color="white" />
+                                <MaterialIcons name="arrow-back" size={16} color="white" accessibilityElementsHidden />
                               </TouchableOpacity>
                             )}
                             {index < items.length - 1 && (
                               <TouchableOpacity
-                                className="bg-emerald-500 rounded-full p-2"
+                                className="rounded-full p-2"
+                                style={{ backgroundColor: '#059669' }}
                                 onPress={async () => {
                                   const newOrder = [...items];
                                   [newOrder[index], newOrder[index + 1]] = [
@@ -699,21 +701,26 @@ export function EnhancedProfileSection({
                                   );
                                   await refresh();
                                 }}
+                                accessibilityRole="button"
+                                accessibilityLabel="Move item right"
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                               >
-                                <MaterialIcons name="arrow-forward" size={16} color="white" />
+                                <MaterialIcons name="arrow-forward" size={16} color="white" accessibilityElementsHidden />
                               </TouchableOpacity>
                             )}
                           </View>
                         </View>
                       )}
                     </View>
-
                     {isOwnProfile && !isReordering && (
                       <TouchableOpacity
                         className="absolute top-1 right-1 bg-red-500 rounded-full p-1"
                         onPress={() => handleDeletePortfolioItem(item.id)}
+                        accessibilityRole="button"
+                        accessibilityLabel="Delete portfolio item"
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       >
-                        <MaterialIcons name="close" size={16} color="white" />
+                        <MaterialIcons name="close" size={16} color="white" accessibilityElementsHidden />
                       </TouchableOpacity>
                     )}
                   </TouchableOpacity>
@@ -736,19 +743,18 @@ export function EnhancedProfileSection({
             flex: 1,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: 'rgba(0,0,0,0.8)',
+            backgroundColor: 'rgba(0,0,0,0.6)',
           }}
           onPress={() => setSelectedPortfolioItem(null)}
         >
           <Pressable onPress={() => {}} style={{ width: '100%', maxWidth: 720 }}>
-            <View className="bg-emerald-800 rounded-xl p-4 m-4 max-w-lg w-full">
+            <View className="rounded-xl p-4 m-4 max-w-lg w-full" style={{ backgroundColor: theme.background, borderWidth: 1, borderColor: theme.surfaceSecondary }}>
               <View className="flex-row justify-between items-center mb-3">
-                <Text className="text-lg font-bold text-white">Portfolio Item</Text>
+                <Text className="text-lg font-bold" style={{ color: theme.text }}>Portfolio Item</Text>
                 <TouchableOpacity onPress={() => setSelectedPortfolioItem(null)}>
-                  <MaterialIcons name="close" size={24} color="white" />
+                  <MaterialIcons name="close" size={24} color={theme.textSecondary} />
                 </TouchableOpacity>
               </View>
-
               {selectedPortfolioItem && (
                 <>
                   {selectedPortfolioItem.type === 'video' ? (
@@ -760,8 +766,8 @@ export function EnhancedProfileSection({
                         style={{ width: '100%', height: 256, borderRadius: 8, marginBottom: 12 }}
                       />
                     ) : (
-                      <View className="bg-black/50 rounded-lg items-center justify-center h-64 mb-3">
-                        <Text className="text-white">Unable to load video preview</Text>
+                      <View className="rounded-lg items-center justify-center h-64 mb-3" style={{ backgroundColor: theme.surfaceSecondary }}>
+                        <Text style={{ color: theme.textSecondary }}>Unable to load video preview</Text>
                       </View>
                     )
                   ) : (
@@ -774,15 +780,13 @@ export function EnhancedProfileSection({
                       alt={selectedPortfolioItem.title || 'Portfolio item detail'}
                     />
                   )}
-
                   {selectedPortfolioItem.title && (
-                    <Text className="text-base font-medium text-white mb-2">
+                    <Text className="text-base font-medium mb-2" style={{ color: theme.text }}>
                       {selectedPortfolioItem.title}
                     </Text>
                   )}
-
                   {selectedPortfolioItem.description && (
-                    <Text className="text-sm text-emerald-200">
+                    <Text className="text-sm" style={{ color: theme.textSecondary }}>
                       {selectedPortfolioItem.description}
                     </Text>
                   )}
@@ -806,6 +810,7 @@ export function PortfolioSection({
 }) {
   const { profile: normalizedFromHookOrLocal } = useNormalizedProfile(userId);
   const { profile: authProfileFromHook } = useAuthProfile();
+  const { theme } = useAppThemeContext();
   const resolvedUserId =
     normalizedFromHookOrLocal?.id || userId || authProfileFromHook?.id || 'current-user';
 
@@ -816,6 +821,7 @@ export function PortfolioSection({
     addItem,
     refresh,
   } = usePortfolio(resolvedUserId);
+
   const {
     pickAndUpload,
     isPicking,
@@ -856,11 +862,11 @@ export function PortfolioSection({
   };
 
   return (
-    <View className="mb-4 px-4">
+    <View className="mb-4 px-4" style={{ backgroundColor: theme.background }}>
       <View className="flex-row justify-between items-center mb-2">
         <View className="flex-row items-center">
-          <Text className="text-sm font-medium text-white">Portfolio</Text>
-          <Text className="text-xs text-emerald-300 ml-2">
+          <Text className="text-lg font-medium" style={{ color: theme.text }}>Portfolio</Text>
+          <Text className="text-xs ml-2" style={{ color: theme.textSecondary }}>
             ({items.length}/{MAX_PORTFOLIO_ITEMS})
           </Text>
         </View>
@@ -868,14 +874,18 @@ export function PortfolioSection({
           <View className="flex-row items-center gap-2">
             {items.length > 1 && (
               <TouchableOpacity
-                className={`px-2 py-1 rounded ${isReordering ? 'bg-emerald-600' : 'bg-emerald-700'}`}
+                className="px-2 py-1 rounded border"
+                style={isReordering
+                  ? { backgroundColor: theme.surfaceSecondary, borderColor: theme.primary }
+                  : { backgroundColor: theme.surfaceSecondary, borderColor: theme.border }}
                 onPress={() => setIsReordering(!isReordering)}
               >
-                <Text className="text-xs text-white">{isReordering ? 'Done' : 'Reorder'}</Text>
+                <Text className="text-xs" style={{ color: isReordering ? theme.primary : theme.textSecondary }}>{isReordering ? 'Done' : 'Reorder'}</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity
-              className={`px-2 py-1 bg-emerald-500 rounded ${items.length >= MAX_PORTFOLIO_ITEMS ? 'opacity-50' : ''}`}
+              className={`px-2 py-1 rounded ${items.length >= MAX_PORTFOLIO_ITEMS ? 'opacity-50' : ''}`}
+              style={{ backgroundColor: theme.primary }}
               onPress={pickAndUpload}
               disabled={isPicking || isUploading || items.length >= MAX_PORTFOLIO_ITEMS}
             >
@@ -886,16 +896,14 @@ export function PortfolioSection({
           </View>
         )}
       </View>
-
       {(isPicking || isUploading) && (
         <UploadProgressBar progress={progress} message={uploadMessage} />
       )}
-
       {portfolioLoading ? (
         <PortfolioSkeleton count={3} />
       ) : items.length === 0 && !lastPickedStandalone ? (
-        <View className="bg-emerald-700/20 p-4 rounded-lg">
-          <Text className="text-center text-white text-sm">
+        <View className="p-4 rounded-lg" style={{ backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.surfaceSecondary }}>
+          <Text className="text-center text-sm" style={{ color: theme.textSecondary }}>
             {isOwnProfile
               ? 'Showcase your work! Tap "Add Item" to upload images, videos, or files.'
               : "This user hasn't added portfolio items yet."}
@@ -933,9 +941,10 @@ export function PortfolioSection({
                 }
               >
                 <View
-                  className={`w-32 h-32 bg-emerald-700 rounded-lg overflow-hidden items-center justify-center ${
-                    isReordering ? 'border-2 border-dashed border-emerald-400' : ''
+                  className={`w-32 h-32 rounded-lg overflow-hidden items-center justify-center border ${
+                    isReordering ? 'border-2 border-dashed border-[#059669]' : ''
                   }`}
+                  style={!isReordering ? { backgroundColor: theme.surfaceSecondary, borderColor: theme.border } : { backgroundColor: theme.surfaceSecondary }}
                 >
                   {item.type === 'image' || item.type === 'video' ? (
                     <>
@@ -951,7 +960,7 @@ export function PortfolioSection({
                       />
                       {item.type === 'video' && (
                         <View className="absolute inset-0 items-center justify-center">
-                          <View className="bg-black/50 rounded-full p-2">
+                          <View className="bg-black/40 rounded-full p-2">
                             <MaterialIcons name="play-arrow" size={24} color="white" />
                           </View>
                         </View>
@@ -959,19 +968,19 @@ export function PortfolioSection({
                     </>
                   ) : (
                     <View className="items-center justify-center p-3">
-                      <MaterialIcons name="insert-drive-file" size={28} color="#ffffff" />
-                      <Text className="text-[10px] text-white mt-1" numberOfLines={2}>
+                      <MaterialIcons name="insert-drive-file" size={28} color={theme.primary} />
+                      <Text className="text-[10px] mt-1" style={{ color: theme.textSecondary }} numberOfLines={2}>
                         {item.name || 'File'}
                       </Text>
                     </View>
                   )}
-
                   {isReordering && isOwnProfile && items.length > 1 && (
-                    <View className="absolute inset-0 bg-black/30 items-center justify-center">
+                    <View className="absolute inset-0 items-center justify-center" style={{ backgroundColor: theme.isDark ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.65)' }}>
                       <View className="flex-row gap-2">
                         {index > 0 && (
                           <TouchableOpacity
-                            className="bg-emerald-500 rounded-full p-2"
+                            className="rounded-full p-2"
+                            style={{ backgroundColor: '#059669' }}
                             onPress={async () => {
                               const newOrder = [...items];
                               [newOrder[index - 1], newOrder[index]] = [
@@ -990,7 +999,8 @@ export function PortfolioSection({
                         )}
                         {index < items.length - 1 && (
                           <TouchableOpacity
-                            className="bg-emerald-500 rounded-full p-2"
+                            className="rounded-full p-2"
+                            style={{ backgroundColor: '#059669' }}
                             onPress={async () => {
                               const newOrder = [...items];
                               [newOrder[index], newOrder[index + 1]] = [
@@ -1011,7 +1021,6 @@ export function PortfolioSection({
                     </View>
                   )}
                 </View>
-
                 {isOwnProfile && !isReordering && (
                   <TouchableOpacity
                     className="absolute top-1 right-1 bg-red-500 rounded-full p-1"
@@ -1025,7 +1034,6 @@ export function PortfolioSection({
           </View>
         </ScrollView>
       )}
-
       <Modal
         visible={!!selectedPortfolioItem}
         transparent
@@ -1037,16 +1045,16 @@ export function PortfolioSection({
             flex: 1,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: 'rgba(0,0,0,0.8)',
+            backgroundColor: 'rgba(0,0,0,0.6)',
           }}
           onPress={() => setSelectedPortfolioItem(null)}
         >
           <Pressable onPress={() => {}} style={{ width: '100%', maxWidth: 720 }}>
-            <View className="bg-emerald-800 rounded-xl p-4 m-4 max-w-lg w-full">
+            <View className="rounded-xl p-4 m-4 max-w-lg w-full" style={{ backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.surfaceSecondary }}>
               <View className="flex-row justify-between items-center mb-3">
-                <Text className="text-lg font-bold text-white">Portfolio Item</Text>
+                <Text className="text-lg font-bold" style={{ color: theme.text }}>Portfolio Item</Text>
                 <TouchableOpacity onPress={() => setSelectedPortfolioItem(null)}>
-                  <MaterialIcons name="close" size={24} color="white" />
+                  <MaterialIcons name="close" size={24} color={theme.textSecondary} />
                 </TouchableOpacity>
               </View>
               {selectedPortfolioItem && (
@@ -1060,8 +1068,8 @@ export function PortfolioSection({
                         style={{ width: '100%', height: 256, borderRadius: 8, marginBottom: 12 }}
                       />
                     ) : (
-                      <View className="bg-black/50 rounded-lg items-center justify-center h-64 mb-3">
-                        <Text className="text-white">Unable to load video preview</Text>
+                      <View className="rounded-lg items-center justify-center h-64 mb-3" style={{ backgroundColor: theme.surfaceSecondary }}>
+                        <Text style={{ color: theme.textSecondary }}>Unable to load video preview</Text>
                       </View>
                     )
                   ) : (
@@ -1075,12 +1083,12 @@ export function PortfolioSection({
                     />
                   )}
                   {selectedPortfolioItem.title && (
-                    <Text className="text-base font-medium text-white mb-2">
+                    <Text className="text-base font-medium mb-2" style={{ color: theme.text }}>
                       {selectedPortfolioItem.title}
                     </Text>
                   )}
                   {selectedPortfolioItem.description && (
-                    <Text className="text-sm text-emerald-200">
+                    <Text className="text-sm" style={{ color: theme.textSecondary }}>
                       {selectedPortfolioItem.description}
                     </Text>
                   )}
