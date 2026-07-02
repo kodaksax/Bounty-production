@@ -25,13 +25,13 @@ import React from 'react';
 // --- Rich react-native mock (the global jest.setup mock lacks Animated.FlatList
 // / RefreshControl / Animated.event that this component relies on). ---
 jest.mock('react-native', () => {
-  const React2 = require('react');
+  const ReactMock = require('react');
   const passthrough = (name: string) =>
-    ({ children, ...props }: any) => React2.createElement(name, props, children);
+    ({ children, ...props }: any) => ReactMock.createElement(name, props, children);
 
   // Minimal FlatList that exercises ListEmptyComponent / renderItem so tests can
   // observe skeleton vs empty vs error states.
-  const FlatList = React2.forwardRef((props: any, _ref: any) => {
+  const FlatList = ReactMock.forwardRef((props: any, _ref: any) => {
     const {
       data = [],
       renderItem,
@@ -41,32 +41,32 @@ jest.mock('react-native', () => {
       keyExtractor,
     } = props;
     const header = ListHeaderComponent
-      ? React2.createElement(
+      ? ReactMock.createElement(
           typeof ListHeaderComponent === 'function' ? ListHeaderComponent : () => ListHeaderComponent,
         )
       : null;
     const footer = ListFooterComponent
-      ? React2.createElement(
+      ? ReactMock.createElement(
           typeof ListFooterComponent === 'function' ? ListFooterComponent : () => ListFooterComponent,
         )
       : null;
     let body: any;
     if (!data || data.length === 0) {
       body = ListEmptyComponent
-        ? React2.createElement(
+        ? ReactMock.createElement(
             typeof ListEmptyComponent === 'function' ? ListEmptyComponent : () => ListEmptyComponent,
           )
         : null;
     } else {
       body = data.map((item: any, index: number) =>
-        React2.createElement(
-          React2.Fragment,
+        ReactMock.createElement(
+          ReactMock.Fragment,
           { key: keyExtractor ? keyExtractor(item, index) : index },
           renderItem ? renderItem({ item, index }) : null,
         ),
       );
     }
-    return React2.createElement('FlatList', {}, header, body, footer);
+    return ReactMock.createElement('FlatList', {}, header, body, footer);
   });
 
   const Animated = {
