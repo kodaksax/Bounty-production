@@ -24,6 +24,11 @@ export interface BrandingLogoProps {
    * Defaults to 'header' to maintain parity with previous implementation
    */
   accessibilityRole?: AccessibilityRole;
+  /**
+   * Always use the white logo regardless of theme.
+   * Use on screens with a colored/dark background in both light and dark modes.
+   */
+  forceWhite?: boolean;
 }
 
 const sizeMap = {
@@ -41,6 +46,7 @@ export function BrandingLogo({
   containerStyle,
   imageStyle,
   accessibilityRole = 'header',
+  forceWhite = false,
 }: BrandingLogoProps) {
   const { isDark } = useAppThemeContext();
   const dimensions = sizeMap[size];
@@ -48,11 +54,11 @@ export function BrandingLogo({
   return (
     <View style={[styles.container, containerStyle]}>
       <Image
-        source={isDark
+        source={(isDark || forceWhite)
           ? require('../../assets/images/bounty-logo.png')
           : require('../../assets/images/bounty-logo2.png')}
         style={[dimensions, imageStyle]}
-        resizeMode="contain"
+        contentFit="contain"
         accessibilityLabel="BOUNTY"
         accessibilityRole={accessibilityRole}
       />

@@ -736,7 +736,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                 <TextInput
                   style={styles.messageInput}
                   placeholder="Add a short message to the poster (optional)…"
-                  placeholderTextColor={theme.isDark ? 'rgba(167,243,208,0.5)' : theme.textDisabled}
+                  placeholderTextColor={theme.textDisabled}
                   value={applicationMessage}
                   onChangeText={setApplicationMessage}
                   multiline
@@ -817,7 +817,7 @@ function makeStyles(theme: AppTheme) {
   },
   card: {
     flex: 1,
-    backgroundColor: theme.isDark ? '#059669' : theme.surface,
+    backgroundColor: theme.surface,
     borderRadius: 24,
     overflow: 'hidden',
   },
@@ -826,10 +826,10 @@ function makeStyles(theme: AppTheme) {
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 16,
-    backgroundColor: theme.isDark ? '#0B0F14' : theme.background,
+    backgroundColor: theme.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    borderBottomWidth: theme.isDark ? 0 : 1,
+    borderBottomWidth: 1,
     borderBottomColor: theme.border,
   },
   headerLeft: {
@@ -856,17 +856,17 @@ function makeStyles(theme: AppTheme) {
   },
   scrollContainer: {
     flex: 1,
-    backgroundColor: theme.isDark ? '#059669' : theme.surface,
+    backgroundColor: theme.surface,
   },
   scrollContent: {
     padding: 16,
   },
   bountyCard: {
-    backgroundColor: theme.isDark ? '#0B0F14cc' : theme.surfaceSecondary,
+    backgroundColor: theme.surfaceSecondary,
     borderRadius: 12,
     overflow: 'hidden',
     marginBottom: 16,
-    borderWidth: theme.isDark ? 0 : 1,
+    borderWidth: 1,
     borderColor: theme.border,
   },
   cardContent: {
@@ -896,10 +896,10 @@ function makeStyles(theme: AppTheme) {
     width: 40,
     height: 40,
     borderWidth: 1,
-    borderColor: theme.isDark ? '#6ee7b780' : theme.border,
+    borderColor: theme.border,
   },
   avatarFallback: {
-    backgroundColor: theme.isDark ? '#064e3b' : theme.surfaceSecondary,
+    backgroundColor: theme.surfaceSecondary,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -987,8 +987,8 @@ function makeStyles(theme: AppTheme) {
   },
   additionalDetailsContainer: {
     marginBottom: 16,
-    backgroundColor: theme.isDark ? '#05543280' : theme.surfaceSecondary,
-    borderWidth: theme.isDark ? 0 : 1,
+    backgroundColor: theme.surfaceSecondary,
+    borderWidth: 1,
     borderColor: theme.border,
     padding: 12,
     borderRadius: 8,
@@ -1035,7 +1035,7 @@ function makeStyles(theme: AppTheme) {
     alignItems: 'center',
     justifyContent: 'center',
     padding: 16,
-    backgroundColor: theme.isDark ? '#05543280' : theme.surfaceSecondary,
+    backgroundColor: theme.surfaceSecondary,
     borderRadius: 8,
     gap: 12,
   },
@@ -1047,7 +1047,7 @@ function makeStyles(theme: AppTheme) {
   attachmentItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.isDark ? '#05543280' : theme.surfaceSecondary,
+    backgroundColor: theme.surfaceSecondary,
     padding: 12,
     borderRadius: 8,
   },
@@ -1055,7 +1055,7 @@ function makeStyles(theme: AppTheme) {
     width: 40,
     height: 40,
     borderRadius: 6,
-    backgroundColor: theme.isDark ? '#064e3b' : theme.border,
+    backgroundColor: theme.border,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -1122,9 +1122,9 @@ function makeStyles(theme: AppTheme) {
   actionContainer: {
     padding: 16,
     paddingTop: 16,
-    backgroundColor: theme.isDark ? '#0B0F14' : theme.background,
+    backgroundColor: theme.background,
     borderTopWidth: 1,
-    borderTopColor: theme.isDark ? '#05966920' : theme.border,
+    borderTopColor: theme.border,
   },
   acceptButton: {
     width: '100%',
@@ -1149,10 +1149,10 @@ function makeStyles(theme: AppTheme) {
     fontSize: 16,
   },
   messageInput: {
-    backgroundColor: theme.isDark ? '#06402a' : theme.surfaceSecondary,
+    backgroundColor: theme.surfaceSecondary,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: theme.isDark ? 'rgba(110, 231, 183, 0.3)' : theme.border,
+    borderColor: theme.border,
     color: theme.text,
     fontSize: 14,
     padding: 12,
