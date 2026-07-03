@@ -191,6 +191,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   const loadUserApplications = useCallback(async () => {
     const uid = validUserId ?? currentUserId
     if (!uid) {
+      setAppliedBountyIds(new Set())
       setApplicationsLoaded(true)
       return
     }
@@ -219,8 +220,10 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       })
     } catch (error) {
       // Non-fatal: applications only drive client-side filtering. On failure we
-      // proceed with an unfiltered feed rather than blocking the UI. The finally
-      // block guarantees `applicationsLoaded` is set so the skeleton clears.
+      // clear any stale applied IDs and proceed with an unfiltered feed rather
+      // than blocking the UI. The finally block guarantees `applicationsLoaded`
+      // is set so the skeleton clears.
+      setAppliedBountyIds(new Set())
       const message = error instanceof Error ? error.message : String(error)
       logger.warning('feed.applications.request_failed', {
         userId: uid,
