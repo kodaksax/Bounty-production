@@ -14,6 +14,8 @@ import type { WalletTransaction } from "lib/types";
 import { bountyService } from "lib/services/bounty-service";
 import { getCurrentUserId } from "lib/utils/data-utils";
 import { useWallet } from "lib/wallet-context";
+import { useAppThemeContext } from '../lib/themes/AppThemeContext';
+import type { AppTheme } from '../lib/themes/types';
 
 interface HistoryScreenProps {
   onBack: () => void;
@@ -24,6 +26,8 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const { transactions } = useWallet();
+  const { theme } = useAppThemeContext();
+  const styles = makeStyles(theme);
   const currentUserId = getCurrentUserId();
 
   const loadHistory = async () => {
@@ -143,7 +147,7 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
-          <MaterialIcons name="arrow-back" size={24} color="#fff" />
+          <MaterialIcons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>History</Text>
         <View style={{ width: 40 }} />
@@ -151,7 +155,7 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#10b981" />
+          <ActivityIndicator size="large" color="#059669" />
         </View>
       ) : (
         <FlatList
@@ -163,7 +167,7 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={handleRefresh}
-              tintColor="#10b981"
+              tintColor="#059669"
             />
           }
           ListEmptyComponent={
@@ -181,146 +185,148 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#059669", // emerald-600
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(16, 185, 129, 0.3)",
-  },
-  backButton: {
-    padding: 4,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#fff",
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  list: {
-    padding: 16,
-  },
-  item: {
-    backgroundColor: "rgba(5, 95, 70, 0.5)",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "rgba(16, 185, 129, 0.2)",
-  },
-  itemHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusText: {
-    color: "#fff",
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-  },
-  date: {
-    fontSize: 12,
-    color: "#a7f3d0",
-  },
-  itemTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#fff",
-    marginBottom: 6,
-  },
-  itemDescription: {
-    fontSize: 14,
-    color: "#d1fae5",
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  itemFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  amount: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#fcd34d",
-  },
-  honorBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#a7f3d0",
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    gap: 4,
-  },
-  honorText: {
-    color: "#052e1b",
-    fontWeight: "800",
-    fontSize: 12,
-  },
-  transactionType: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#d1fae5",
-  },
-  transactionAmount: {
-    fontSize: 18,
-    fontWeight: "800",
-  },
-  positiveAmount: {
-    color: "#10b981",
-  },
-  negativeAmount: {
-    color: "#ef4444",
-  },
-  disputeBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#dc2626",
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    gap: 4,
-  },
-  disputeText: {
-    color: "#fff",
-    fontSize: 10,
-    fontWeight: "800",
-  },
-  emptyContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 64,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#fff",
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: "#a7f3d0",
-    textAlign: "center",
-    paddingHorizontal: 32,
-  },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 16,
+      paddingVertical: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.surfaceSecondary,
+    },
+    backButton: {
+      padding: 4,
+    },
+    headerTitle: {
+      fontSize: 20,
+      fontWeight: "700",
+      color: theme.text,
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    list: {
+      padding: 16,
+    },
+    item: {
+      backgroundColor: theme.surface,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: theme.surfaceSecondary,
+    },
+    itemHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 12,
+    },
+    statusBadge: {
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 12,
+    },
+    statusText: {
+      color: "#fff",
+      fontSize: 10,
+      fontWeight: "800",
+      letterSpacing: 0.5,
+    },
+    date: {
+      fontSize: 12,
+      color: theme.textSecondary,
+    },
+    itemTitle: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: theme.text,
+      marginBottom: 6,
+    },
+    itemDescription: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      lineHeight: 20,
+      marginBottom: 12,
+    },
+    itemFooter: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    amount: {
+      fontSize: 18,
+      fontWeight: "800",
+      color: "#fcd34d",
+    },
+    honorBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: "#9CA3AF",
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      gap: 4,
+    },
+    honorText: {
+      color: "#052e1b",
+      fontWeight: "800",
+      fontSize: 12,
+    },
+    transactionType: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: theme.textSecondary,
+    },
+    transactionAmount: {
+      fontSize: 18,
+      fontWeight: "800",
+    },
+    positiveAmount: {
+      color: "#059669",
+    },
+    negativeAmount: {
+      color: "#ef4444",
+    },
+    disputeBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: "#dc2626",
+      borderRadius: 12,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      gap: 4,
+    },
+    disputeText: {
+      color: "#fff",
+      fontSize: 10,
+      fontWeight: "800",
+    },
+    emptyContainer: {
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 64,
+    },
+    emptyTitle: {
+      fontSize: 20,
+      fontWeight: "700",
+      color: theme.text,
+      marginTop: 16,
+      marginBottom: 8,
+    },
+    emptyText: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      textAlign: "center",
+      paddingHorizontal: 32,
+    },
+  });
+}

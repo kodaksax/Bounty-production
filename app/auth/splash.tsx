@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { API_BASE_URL } from '../../lib/config/api';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 // Centralized helpers: RootLayout (and any other callers) should use these
 // to show/hide the native splash. Keeping them here ensures "use splash.tsx
 // for any splash things" without scattering imports of expo-splash-screen.
@@ -56,6 +57,7 @@ export interface BrandedSplashProps {
 export const BrandedSplash: React.FC<BrandedSplashProps> = ({ onReady }) => {
 	// Ensure safe area/status bar color matches branded splash
 	useScreenBackground('#15803d');
+	const { isDark } = useAppThemeContext();
 
 	const [devHealthOk, setDevHealthOk] = useState<boolean | null>(null)
 	const [devHealthMsg, setDevHealthMsg] = useState<string | null>(null)
@@ -126,7 +128,9 @@ export const BrandedSplash: React.FC<BrandedSplashProps> = ({ onReady }) => {
 			<View style={styles.content}>
 				<View style={styles.logoRow}>
 					<Image
-						source={require('../../assets/images/bounty-logo.png')}
+						source={isDark
+					? require('../../assets/images/bounty-logo.png')
+					: require('../../assets/images/bounty-logo2.png')}
 						style={styles.logoImage}
 						resizeMode="contain"
 						accessibilityLabel="BOUNTY Logo"
@@ -156,7 +160,7 @@ export const BrandedSplash: React.FC<BrandedSplashProps> = ({ onReady }) => {
 const styles = StyleSheet.create({
 	container: {
 		flex: 1,
-		backgroundColor: '#15803d', // emerald-700-ish for richer tone vs in-app 600
+		backgroundColor: '#0B0F14', // page background
 		alignItems: 'center',
 		justifyContent: 'center',
 	},
@@ -211,7 +215,7 @@ const styles = StyleSheet.create({
 		paddingVertical: 8,
 		paddingHorizontal: 14,
 		borderRadius: 6,
-		backgroundColor: '#10b981',
+		backgroundColor: '#059669',
 		marginHorizontal: 6,
 	},
 	devBtnText: {

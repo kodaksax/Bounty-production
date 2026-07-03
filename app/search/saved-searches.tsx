@@ -13,6 +13,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthContext } from '../../hooks/use-auth-context';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 import { searchService } from '../../lib/services/search-service';
 import type { SavedSearch } from '../../lib/types';
 
@@ -21,6 +23,8 @@ export default function SavedSearchesScreen() {
   const insets = useSafeAreaInsets();
   const { session } = useAuthContext();
   const userId = session?.user?.id;
+  const { theme } = useAppThemeContext();
+  const styles = makeStyles(theme);
 
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -33,7 +37,7 @@ export default function SavedSearchesScreen() {
       setIsLoading(false);
       return;
     }
-    
+
     try {
       const searches = await searchService.getSavedSearches(userId);
       setSavedSearches(searches);
@@ -94,7 +98,7 @@ export default function SavedSearchesScreen() {
 
   const handleToggleAlerts = async (searchId: string, currentState: boolean) => {
     if (!userId) return;
-    
+
     await searchService.toggleSearchAlerts(userId, searchId, !currentState);
     await loadSavedSearches();
   };
@@ -116,7 +120,7 @@ export default function SavedSearchesScreen() {
         accessibilityHint="Tap to run this saved search"
       >
         <View style={styles.searchHeader}>
-          <MaterialIcons name="bookmark" size={20} color="#6ee7b7" />
+          <MaterialIcons name="bookmark" size={20} color={theme.primaryLight} />
           <Text style={styles.searchName}>{item.name}</Text>
         </View>
         {item.query && (
@@ -130,7 +134,7 @@ export default function SavedSearchesScreen() {
           Created {new Date(item.createdAt).toLocaleDateString()}
         </Text>
       </TouchableOpacity>
-      
+
       <View style={styles.searchActions}>
         <TouchableOpacity
           style={styles.actionBtn}
@@ -142,7 +146,7 @@ export default function SavedSearchesScreen() {
           <MaterialIcons
             name={item.alertsEnabled ? 'notifications-active' : 'notifications-off'}
             size={20}
-            color={item.alertsEnabled ? '#fcd34d' : '#6b7280'}
+            color={item.alertsEnabled ? '#fcd34d' : theme.textDisabled}
           />
         </TouchableOpacity>
         <TouchableOpacity
@@ -167,8 +171,8 @@ export default function SavedSearchesScreen() {
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Saved Searches</Text>
         </View>
-        <View style={styles.emptyContainer}>
-          <MaterialIcons name="lock-outline" size={48} color="#6b7280" />
+        <View style={[styles.emptyContainer, { backgroundColor: theme.background }]}>
+          <MaterialIcons name="lock-outline" size={48} color={theme.textDisabled} />
           <Text style={styles.emptyText}>Sign in to save searches</Text>
         </View>
       </View>
@@ -186,37 +190,39 @@ export default function SavedSearchesScreen() {
           onPress={() => setShowNewSearchModal(true)}
           style={styles.addBtn}
         >
-          <MaterialIcons name="add" size={24} color="#6ee7b7" />
+          <MaterialIcons name="add" size={24} color={theme.primaryLight} />
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.subtitle}>
-        Save your searches and get notified when new bounties match.
-      </Text>
+      <View style={styles.body}>
+        <Text style={styles.subtitle}>
+          Save your searches and get notified when new bounties match.
+        </Text>
 
-      {isLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator color="#6ee7b7" size="large" />
-        </View>
-      ) : savedSearches.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <MaterialIcons name="bookmark-outline" size={48} color="#6b7280" />
-          <Text style={styles.emptyText}>No saved searches yet</Text>
-          <TouchableOpacity
-            style={styles.createBtn}
-            onPress={() => setShowNewSearchModal(true)}
-          >
-            <Text style={styles.createBtnText}>Create your first saved search</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <FlatList
-          data={savedSearches}
-          keyExtractor={(item) => item.id}
-          renderItem={renderSavedSearch}
-          contentContainerStyle={styles.listContent}
-        />
-      )}
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator color={theme.primaryLight} size="large" />
+          </View>
+        ) : savedSearches.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <MaterialIcons name="bookmark-outline" size={48} color={theme.textDisabled} />
+            <Text style={styles.emptyText}>No saved searches yet</Text>
+            <TouchableOpacity
+              style={styles.createBtn}
+              onPress={() => setShowNewSearchModal(true)}
+            >
+              <Text style={styles.createBtnText}>Create your first saved search</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <FlatList
+            data={savedSearches}
+            keyExtractor={(item) => item.id}
+            renderItem={renderSavedSearch}
+            contentContainerStyle={styles.listContent}
+          />
+        )}
+      </View>
 
       {/* New Search Modal */}
       {showNewSearchModal && (
@@ -225,7 +231,7 @@ export default function SavedSearchesScreen() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>New Saved Search</Text>
               <TouchableOpacity onPress={() => setShowNewSearchModal(false)}>
-                <MaterialIcons name="close" size={24} color="#fff" />
+                <MaterialIcons name="close" size={24} color={theme.text} />
               </TouchableOpacity>
             </View>
 
@@ -234,7 +240,7 @@ export default function SavedSearchesScreen() {
               <TextInput
                 style={styles.textInput}
                 placeholder="e.g., Remote React Jobs"
-                placeholderTextColor="#6b7280"
+                placeholderTextColor={theme.textDisabled}
                 value={newSearchName}
                 onChangeText={setNewSearchName}
               />
@@ -243,7 +249,7 @@ export default function SavedSearchesScreen() {
               <TextInput
                 style={styles.textInput}
                 placeholder="e.g., react, typescript"
-                placeholderTextColor="#6b7280"
+                placeholderTextColor={theme.textDisabled}
                 value={newSearchQuery}
                 onChangeText={setNewSearchQuery}
               />
@@ -277,196 +283,214 @@ export default function SavedSearchesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#059669',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-  },
-  backBtn: {
-    padding: 8,
-    marginRight: 4,
-  },
-  headerTitle: {
-    flex: 1,
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '700',
-    marginLeft: 4,
-  },
-  addBtn: {
-    padding: 8,
-  },
-  subtitle: {
-    color: '#d1fae5',
-    fontSize: 13,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  emptyText: {
-    color: '#a7f3d0',
-    fontSize: 16,
-    marginTop: 12,
-    textAlign: 'center',
-  },
-  createBtn: {
-    marginTop: 16,
-    backgroundColor: '#047857',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 24,
-  },
-  createBtnText: {
-    color: '#6ee7b7',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  listContent: {
-    paddingHorizontal: 12,
-    paddingBottom: 100,
-  },
-  searchCard: {
-    backgroundColor: 'rgba(0,0,0,0.15)',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  searchContent: {
-    flex: 1,
-  },
-  searchHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
-  },
-  searchName: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  searchQuery: {
-    color: '#a7f3d0',
-    fontSize: 13,
-    marginBottom: 4,
-  },
-  searchDate: {
-    color: '#6b7280',
-    fontSize: 11,
-  },
-  searchActions: {
-    flexDirection: 'row',
-    gap: 4,
-  },
-  actionBtn: {
-    padding: 8,
-  },
-  // Modal styles
-  modalOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: '#047857',
-    borderRadius: 16,
-    width: '90%',
-    maxWidth: 400,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
-  },
-  modalTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  modalBody: {
-    padding: 16,
-  },
-  inputLabel: {
-    color: '#d1fae5',
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 6,
-  },
-  textInput: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    color: '#fff',
-    fontSize: 15,
-    marginBottom: 16,
-  },
-  hintText: {
-    color: '#6b7280',
-    fontSize: 12,
-    fontStyle: 'italic',
-  },
-  modalFooter: {
-    flexDirection: 'row',
-    padding: 16,
-    gap: 12,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
-  },
-  cancelBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 8,
-  },
-  cancelBtnText: {
-    color: '#ecfdf5',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  saveBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-    backgroundColor: '#6ee7b7',
-    borderRadius: 8,
-  },
-  saveBtnText: {
-    color: '#065f46',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  saveBtnDisabled: {
-    backgroundColor: 'rgba(110,231,183,0.4)',
-  },
-  saveBtnTextDisabled: {
-    color: 'rgba(6,95,70,0.5)',
-  },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: '#059669',
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+    },
+    backBtn: {
+      padding: 8,
+      marginRight: 4,
+    },
+    headerTitle: {
+      flex: 1,
+      color: '#fff',
+      fontSize: 18,
+      fontWeight: '700',
+      marginLeft: 4,
+    },
+    addBtn: {
+      padding: 8,
+    },
+    body: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    subtitle: {
+      color: theme.textSecondary,
+      fontSize: 13,
+      paddingHorizontal: 20,
+      paddingTop: 16,
+      paddingBottom: 16,
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    emptyContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 24,
+    },
+    emptyText: {
+      color: theme.textSecondary,
+      fontSize: 16,
+      marginTop: 12,
+      textAlign: 'center',
+    },
+    createBtn: {
+      marginTop: 16,
+      backgroundColor: theme.surface,
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+      borderRadius: 24,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    createBtnText: {
+      color: theme.primaryLight,
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    listContent: {
+      paddingHorizontal: 12,
+      paddingTop: 4,
+      paddingBottom: 100,
+    },
+    searchCard: {
+      backgroundColor: theme.surface,
+      borderRadius: 12,
+      padding: 14,
+      marginBottom: 10,
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    searchContent: {
+      flex: 1,
+    },
+    searchHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 4,
+    },
+    searchName: {
+      color: theme.text,
+      fontSize: 15,
+      fontWeight: '600',
+    },
+    searchQuery: {
+      color: theme.textSecondary,
+      fontSize: 13,
+      marginBottom: 4,
+    },
+    searchDate: {
+      color: theme.textDisabled,
+      fontSize: 11,
+    },
+    searchActions: {
+      flexDirection: 'row',
+      gap: 4,
+    },
+    actionBtn: {
+      padding: 8,
+    },
+    // Modal styles
+    modalOverlay: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.6)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    modalContent: {
+      backgroundColor: theme.surface,
+      borderRadius: 16,
+      width: '90%',
+      maxWidth: 400,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    modalTitle: {
+      color: theme.text,
+      fontSize: 18,
+      fontWeight: '700',
+    },
+    modalBody: {
+      padding: 16,
+    },
+    inputLabel: {
+      color: theme.text,
+      fontSize: 13,
+      fontWeight: '600',
+      marginBottom: 6,
+    },
+    textInput: {
+      backgroundColor: theme.surfaceSecondary,
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      color: theme.text,
+      fontSize: 15,
+      marginBottom: 16,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    hintText: {
+      color: theme.textDisabled,
+      fontSize: 12,
+      fontStyle: 'italic',
+    },
+    modalFooter: {
+      flexDirection: 'row',
+      padding: 16,
+      gap: 12,
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
+    },
+    cancelBtn: {
+      flex: 1,
+      paddingVertical: 12,
+      alignItems: 'center',
+      backgroundColor: theme.surfaceSecondary,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    cancelBtnText: {
+      color: theme.text,
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    saveBtn: {
+      flex: 1,
+      paddingVertical: 12,
+      alignItems: 'center',
+      backgroundColor: '#6ee7b7',
+      borderRadius: 8,
+    },
+    saveBtnText: {
+      color: '#111827',
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    saveBtnDisabled: {
+      backgroundColor: 'rgba(110,231,183,0.4)',
+    },
+    saveBtnTextDisabled: {
+      color: theme.textDisabled,
+    },
+  });
+}

@@ -67,15 +67,15 @@ export function ArchivedBountyCard({
         {/* Username and menu */}
         <View className="flex justify-between items-center mb-2">
           <View className="flex items-center gap-2">
-            <View className="h-6 w-6 rounded-full bg-emerald-500 flex items-center justify-center">
+            <View className="h-6 w-6 rounded-full bg-[#059669] flex items-center justify-center">
               <Avatar className="h-5 w-5">
                 <AvatarImage src={avatarSrc || "/placeholder.svg?height=20&width=20"} alt={username} />
-                <AvatarFallback className="bg-emerald-700 text-emerald-200 text-[8px]">
+                <AvatarFallback className="bg-[#111827] text-[#9CA3AF] text-[8px]">
                   {username.substring(1, 3).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
             </View>
-            <Text className="text-xs text-emerald-200">{username}</Text>
+            <Text className="text-xs text-[#9CA3AF]">{username}</Text>
           </View>
           <TouchableOpacity onPress={onMenuClick} className="text-gray-300 hover:text-white transition-colors">
             <MaterialIcons name="more-vert" size={24} color="#000000" />
@@ -98,8 +98,8 @@ export function ArchivedBountyCard({
 
         {/* NFT badge */}
         <View className="absolute top-2 right-2">
-          <View className="text-xs bg-emerald-900/50 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-700/50">
-            <Text className="text-xs text-emerald-300">NFT #{id.substring(0, 6)}</Text>
+          <View className="text-xs bg-[#0B0F14]/50 text-[#6ee7b7] px-2 py-0.5 rounded-full border border-[#374151]">
+            <Text className="text-xs text-[#6ee7b7]">NFT #{id.substring(0, 6)}</Text>
           </View>
         </View>
       </View>

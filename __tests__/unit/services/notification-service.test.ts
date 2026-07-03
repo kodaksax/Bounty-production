@@ -387,15 +387,62 @@ describe('NotificationService', () => {
 
       await expect(notificationService.requestPermissionsAndRegisterToken()).resolves.not.toThrow();
     });
+
+    it('should clear invalid pending token payloads during flush', async () => {
+      Notifications.getPermissionsAsync.mockResolvedValue({ status: 'granted' });
+      Notifications.getExpoPushTokenAsync.mockResolvedValue({ data: 'ExponentPushToken[new]' });
+      (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+        data: { session: MOCK_SESSION },
+      });
+      AsyncStorage.setItem.mockResolvedValue(undefined);
+      AsyncStorage.removeItem.mockResolvedValue(undefined);
+      AsyncStorage.getItem.mockImplementation((key: string) => {
+        if (key === 'notifications:pending_tokens') {
+          return Promise.resolve('{not-json');
+        }
+        return Promise.resolve(null);
+      });
+      (global as any).fetch = jest.fn().mockResolvedValue(makeSuccessResponse());
+
+      await expect(notificationService.requestPermissionsAndRegisterToken()).resolves.not.toThrow();
+      expect(AsyncStorage.removeItem).toHaveBeenCalledWith('notifications:pending_tokens');
+    });
   });
 
   // ─── registerPushToken ─────────────────────────────────────────────────────
 
   describe('registerPushToken', () => {
-    it('should return early when there is no active session', async () => {
+    it('should queue token and set deferred registration when there is no active session', async () => {
+      AsyncStorage.getItem.mockResolvedValue(null);
+      AsyncStorage.setItem.mockResolvedValue(undefined);
+
       await notificationService.registerPushToken('ExponentPushToken[tok]');
 
       expect((global as any).fetch).not.toHaveBeenCalled();
+      expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+        'notifications:pending_tokens',
+        expect.stringContaining('ExponentPushToken[tok]')
+      );
+      expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+        'notifications:register_on_signin',
+        'true'
+      );
+    });
+
+    it('should recover from invalid cached pending tokens when queuing without a session', async () => {
+      AsyncStorage.getItem.mockResolvedValue('{not-json');
+      AsyncStorage.setItem.mockResolvedValue(undefined);
+
+      await expect(notificationService.registerPushToken('ExponentPushToken[tok]')).resolves.not.toThrow();
+
+      expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+        'notifications:pending_tokens',
+        JSON.stringify([{ token: 'ExponentPushToken[tok]' }])
+      );
+      expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+        'notifications:register_on_signin',
+        'true'
+      );
     });
 
     it('should POST the token with correct body and auth header', async () => {
@@ -445,6 +492,50 @@ describe('NotificationService', () => {
 
       // Supabase fallback should have been attempted
       expect(supabase.from).toHaveBeenCalledWith('push_tokens');
+    });
+
+    it('should persist via Supabase using profile_id and onConflict token when the REST route is missing (production)', async () => {
+      // In production the app talks to Supabase Edge Functions where no
+      // `/notifications/register-token` route exists, so the REST call 404s and
+      // the Supabase fallback is the only path that persists the token.
+      (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+        data: { session: MOCK_SESSION },
+      });
+      (global as any).fetch = jest.fn().mockResolvedValue(makeErrorResponse(404));
+      const upsert = jest.fn().mockResolvedValue({ error: null });
+      (supabase.from as jest.Mock).mockImplementation(() => makeFromMock({ upsert }));
+
+      await notificationService.registerPushToken('ExponentPushToken[tok]', 'device-1');
+
+      expect(supabase.from).toHaveBeenCalledWith('push_tokens');
+      expect(upsert).toHaveBeenCalledTimes(1);
+      const [row, options] = upsert.mock.calls[0];
+      expect(row).toMatchObject({
+        profile_id: 'user-123',
+        token: 'ExponentPushToken[tok]',
+        device_id: 'device-1',
+        enabled: true,
+      });
+      expect(row).not.toHaveProperty('user_id');
+      expect(options).toEqual({ onConflict: 'token' });
+    });
+
+    it('should fall back to the legacy user_id column when profile_id is missing', async () => {
+      (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+        data: { session: MOCK_SESSION },
+      });
+      (global as any).fetch = jest.fn().mockResolvedValue(makeErrorResponse(404));
+      const upsert = jest
+        .fn()
+        .mockResolvedValueOnce({ error: { code: '42703', message: "column \"profile_id\" does not exist" } })
+        .mockResolvedValueOnce({ error: null });
+      (supabase.from as jest.Mock).mockImplementation(() => makeFromMock({ upsert }));
+
+      await notificationService.registerPushToken('ExponentPushToken[tok]', 'device-2');
+
+      expect(upsert).toHaveBeenCalledTimes(2);
+      expect(upsert.mock.calls[0][0]).toMatchObject({ profile_id: 'user-123' });
+      expect(upsert.mock.calls[1][0]).toMatchObject({ user_id: 'user-123', enabled: true });
     });
 
     it('should cache the token when both API and Supabase fail', async () => {

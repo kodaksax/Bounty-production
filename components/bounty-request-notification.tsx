@@ -14,11 +14,11 @@ interface BountyRequestNotificationProps {
 
 export function BountyRequestNotification({ username, avatarSrc, onAccept, onReject }: BountyRequestNotificationProps) {
   return (
-    <View className="bg-emerald-700/40 backdrop-blur-sm rounded-lg overflow-hidden mb-3 p-3">
+    <View className="bg-[#111827] backdrop-blur-sm rounded-lg overflow-hidden mb-3 p-3">
       <View className="flex items-center gap-3">
-        <Avatar className="h-10 w-10 border border-emerald-400/30">
+        <Avatar className="h-10 w-10 border border-[#059669]/30">
           <AvatarImage src={avatarSrc || "/placeholder.svg?height=40&width=40"} alt={username} />
-          <AvatarFallback className="bg-emerald-900 text-emerald-200 text-xs">
+          <AvatarFallback className="bg-[#0B0F14] text-[#9CA3AF] text-xs">
             {username.substring(1, 3).toUpperCase()}
           </AvatarFallback>
         </Avatar>
@@ -32,7 +32,7 @@ export function BountyRequestNotification({ username, avatarSrc, onAccept, onRej
         <View className="flex items-center gap-2">
           <TouchableOpacity
             onPress={onAccept}
-            className="h-8 w-8 rounded-full bg-emerald-500 flex items-center justify-center hover:bg-emerald-400 transition-colors"
+            className="h-8 w-8 rounded-full bg-[#059669] flex items-center justify-center hover:bg-[#059669] transition-colors"
           >
             <MaterialIcons name="check" size={20} color="white" />
           </TouchableOpacity>

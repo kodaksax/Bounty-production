@@ -308,15 +308,15 @@ export default function HunterApplyScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0B0F14',
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0B0F14',
   },
   errorContainer: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0B0F14',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
@@ -328,7 +328,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -406,7 +406,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   amount: {
-    color: '#10b981',
+    color: '#059669',
     fontSize: 24,
     fontWeight: '700',
   },
@@ -448,13 +448,13 @@ const styles = StyleSheet.create({
     minWidth: 120,
   },
   stageItemActive: {
-    backgroundColor: 'rgba(16, 185, 129, 0.3)',
-    borderColor: '#10b981',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderColor: '#059669',
     borderWidth: 2,
   },
   stageItemCompleted: {
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    borderColor: '#10b981',
+    backgroundColor: '#374151',
+    borderColor: '#059669',
   },
   stageItemLocked: {
     opacity: 0.5,
@@ -469,7 +469,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   stageIconActive: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
   },
   stageIconCompleted: {
     backgroundColor: '#059669',

@@ -1,6 +1,6 @@
 /**
  * E2E Complete Bounty Flow Tests
- * 
+ *
  * Tests the complete user journey through the bounty lifecycle:
  * 1. Create bounty (poster)
  * 2. Discover & apply (hunter)
@@ -8,11 +8,17 @@
  * 4. Work & communicate (both)
  * 5. Complete & payment (both)
  * 6. Cancellation scenarios
- * 
+ *
  * These tests ensure critical user paths remain functional.
  */
 
-import type { Request, Conversation, Message, WalletTransaction, UserRating } from '../../lib/types';
+import type {
+    Conversation,
+    Message,
+    Request,
+    UserRating,
+    WalletTransaction,
+} from '../../lib/types';
 import type { Bounty } from '../../packages/domain-types/src/bounty';
 
 describe('Complete Bounty Flow E2E Tests', () => {
@@ -128,7 +134,8 @@ describe('Complete Bounty Flow E2E Tests', () => {
       const bountyData = {
         user_id: POSTER_ID,
         title: 'Build a Mobile App',
-        description: 'Need a React Native mobile app for iOS and Android with user authentication and real-time features.',
+        description:
+          'Need a React Native mobile app for iOS and Android with user authentication and real-time features.',
         amount: 50000, // $500.00
         isForHonor: false,
         location: 'San Francisco, CA',
@@ -200,14 +207,12 @@ describe('Complete Bounty Flow E2E Tests', () => {
         amount: 10000,
       };
 
-      mockBountyService.create.mockRejectedValue(
-        new Error('Validation error: title is required')
-      );
+      mockBountyService.create.mockRejectedValue(new Error('Validation error: title is required'));
 
       // Act & Assert
-      await expect(
-        mockBountyService.create(invalidBountyData)
-      ).rejects.toThrow('Validation error: title is required');
+      await expect(mockBountyService.create(invalidBountyData)).rejects.toThrow(
+        'Validation error: title is required'
+      );
     });
 
     it('should prevent creating bounty with negative amount', async () => {
@@ -224,9 +229,9 @@ describe('Complete Bounty Flow E2E Tests', () => {
       );
 
       // Act & Assert
-      await expect(
-        mockBountyService.create(invalidAmountData)
-      ).rejects.toThrow('amount must be positive');
+      await expect(mockBountyService.create(invalidAmountData)).rejects.toThrow(
+        'amount must be positive'
+      );
     });
   });
 
@@ -380,16 +385,16 @@ describe('Complete Bounty Flow E2E Tests', () => {
       // Act - Poster accepts Alice's application
       // In a real E2E flow, accepting would trigger all these operations
       const accepted = await mockRequestService.accept('req_alice');
-      
+
       // Verify acceptance triggers bounty status update
       await mockBountyService.update(bountyId, { status: 'in_progress' });
-      
+
       // Verify competing requests are cleaned up
       await mockRequestService.deleteCompetingRequests(bountyId, 'req_alice');
-      
+
       // Verify escrow is automatically created for paid bounties
       await mockWalletService.createEscrow({ bountyId, amount: 50000 });
-      
+
       // Verify conversation is initialized
       const conversation = await mockConversationService.create({
         bountyId,
@@ -418,10 +423,7 @@ describe('Complete Bounty Flow E2E Tests', () => {
       mockNotificationService.send.mockResolvedValue(true);
 
       // Act
-      const deletedCount = await mockRequestService.deleteCompetingRequests(
-        bountyId,
-        'req_alice'
-      );
+      const deletedCount = await mockRequestService.deleteCompetingRequests(bountyId, 'req_alice');
 
       // Notify competing hunters of rejection
       await mockNotificationService.send({
@@ -667,619 +669,613 @@ describe('Complete Bounty Flow E2E Tests', () => {
       // Assert
       expect(readMessage.status).toBe('read');
       expect(mockConversationService.markAsRead).toHaveBeenCalledWith(sent.id);
-  });
-
-  describe('User Journey 4: Complete & Payment Flow', () => {
-    const bountyId = 'bounty_123';
-
-    beforeEach(() => {
-      // Setup bounty in progress state
-      mockBountyService.getById.mockResolvedValue({
-        id: bountyId,
-        user_id: POSTER_ID,
-        title: 'Build a Mobile App',
-        description: 'Almost done',
-        amount: 50000,
-        status: 'in_progress',
-        createdAt: new Date().toISOString(),
-      });
     });
 
-    it('should allow hunter to mark work as complete', async () => {
-      // Arrange
-      const updatedBounty: Bounty = {
-        id: bountyId,
-        user_id: POSTER_ID,
-        title: 'Build a Mobile App',
-        description: 'Completed by hunter',
-        amount: 50000,
-        status: 'completed',
-        createdAt: new Date().toISOString(),
-      };
+    describe('User Journey 4: Complete & Payment Flow', () => {
+      const bountyId = 'bounty_123';
 
-      mockBountyService.update.mockResolvedValue(updatedBounty);
-      mockNotificationService.send.mockResolvedValue(true);
-
-      // Act - Hunter marks as complete
-      const completed = await mockBountyService.update(bountyId, {
-        status: 'completed',
-      });
-      await mockNotificationService.send({
-        user_id: POSTER_ID,
-        type: 'completion',
-        title: 'Bounty Completed',
-        body: 'Hunter has marked "Build a Mobile App" as complete',
-      });
-
-      // Assert
-      expect(completed.status).toBe('completed');
-      expect(mockNotificationService.send).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'completion',
+      beforeEach(() => {
+        // Setup bounty in progress state
+        mockBountyService.getById.mockResolvedValue({
+          id: bountyId,
           user_id: POSTER_ID,
-        })
-      );
-    });
-
-    it('should release escrow payment on completion', async () => {
-      // Arrange
-      const releaseTransaction: WalletTransaction = {
-        id: 'txn_release_123',
-        type: 'release',
-        amount: 50000, // Credited to hunter
-        bountyId,
-        createdAt: new Date().toISOString(),
-        status: 'completed',
-        disputeStatus: 'none',
-        details: {
-          title: 'Payment released for: Build a Mobile App',
-          counterparty: HUNTER_ID_1,
-        },
-      };
-
-      mockWalletService.releasePayment.mockResolvedValue(releaseTransaction);
-      mockNotificationService.send.mockResolvedValue(true);
-
-      // Act - Poster approves and releases payment
-      const payment = await mockWalletService.releasePayment({
-        bountyId,
-        hunterId: HUNTER_ID_1,
-        amount: 50000,
+          title: 'Build a Mobile App',
+          description: 'Almost done',
+          amount: 50000,
+          status: 'in_progress',
+          createdAt: new Date().toISOString(),
+        });
       });
 
-      // Assert
-      expect(payment.type).toBe('release');
-      expect(payment.amount).toBe(50000);
-      expect(payment.status).toBe('completed');
-      expect(payment.bountyId).toBe(bountyId);
-    });
+      it('should allow hunter to mark work as complete', async () => {
+        // Arrange
+        const updatedBounty: Bounty = {
+          id: bountyId,
+          user_id: POSTER_ID,
+          title: 'Build a Mobile App',
+          description: 'Completed by hunter',
+          amount: 50000,
+          status: 'completed',
+          createdAt: new Date().toISOString(),
+        };
 
-    it('should update wallet balances after payment release', async () => {
-      // Arrange
-      mockWalletService.getBalance.mockResolvedValueOnce(50000); // Poster (after escrow)
-      mockWalletService.releasePayment.mockResolvedValue({
-        type: 'release',
-        amount: 50000,
+        mockBountyService.update.mockResolvedValue(updatedBounty);
+        mockNotificationService.send.mockResolvedValue(true);
+
+        // Act - Hunter marks as complete
+        const completed = await mockBountyService.update(bountyId, {
+          status: 'completed',
+        });
+        await mockNotificationService.send({
+          user_id: POSTER_ID,
+          type: 'completion',
+          title: 'Bounty Completed',
+          body: 'Hunter has marked "Build a Mobile App" as complete',
+        });
+
+        // Assert
+        expect(completed.status).toBe('completed');
+        expect(mockNotificationService.send).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: 'completion',
+            user_id: POSTER_ID,
+          })
+        );
       });
-      mockWalletService.getBalance.mockResolvedValueOnce(50000); // Hunter (after release)
 
-      // Act
-      await mockWalletService.releasePayment({ bountyId, amount: 50000 });
-      const hunterBalance = await mockWalletService.getBalance(HUNTER_ID_1);
-
-      // Assert
-      expect(hunterBalance).toBe(50000); // $500 credited
-    });
-
-    it('should create wallet transaction records', async () => {
-      // Arrange
-      const transactions: WalletTransaction[] = [
-        {
-          id: 'txn_escrow',
-          type: 'escrow',
-          amount: -50000,
+      it('should release escrow payment on completion', async () => {
+        // Arrange
+        const releaseTransaction: WalletTransaction = {
+          id: 'txn_release_123',
+          type: 'release',
+          amount: 50000, // Credited to hunter
           bountyId,
           createdAt: new Date().toISOString(),
           status: 'completed',
-        },
-        {
+          disputeStatus: 'none',
+          details: {
+            title: 'Payment released for: Build a Mobile App',
+            counterparty: HUNTER_ID_1,
+          },
+        };
+
+        mockWalletService.releasePayment.mockResolvedValue(releaseTransaction);
+        mockNotificationService.send.mockResolvedValue(true);
+
+        // Act - Poster approves and releases payment
+        const payment = await mockWalletService.releasePayment({
+          bountyId,
+          hunterId: HUNTER_ID_1,
+          amount: 50000,
+        });
+
+        // Assert
+        expect(payment.type).toBe('release');
+        expect(payment.amount).toBe(50000);
+        expect(payment.status).toBe('completed');
+        expect(payment.bountyId).toBe(bountyId);
+      });
+
+      it('should update wallet balances after payment release', async () => {
+        // Arrange
+        mockWalletService.getBalance.mockResolvedValueOnce(50000); // Poster (after escrow)
+        mockWalletService.releasePayment.mockResolvedValue({
+          type: 'release',
+          amount: 50000,
+        });
+        mockWalletService.getBalance.mockResolvedValueOnce(50000); // Hunter (after release)
+
+        // Act
+        await mockWalletService.releasePayment({ bountyId, amount: 50000 });
+        const hunterBalance = await mockWalletService.getBalance(HUNTER_ID_1);
+
+        // Assert
+        expect(hunterBalance).toBe(50000); // $500 credited
+      });
+
+      it('should create wallet transaction records', async () => {
+        // Arrange
+        const transactions: WalletTransaction[] = [
+          {
+            id: 'txn_escrow',
+            type: 'escrow',
+            amount: -50000,
+            bountyId,
+            createdAt: new Date().toISOString(),
+            status: 'completed',
+          },
+          {
+            id: 'txn_release',
+            type: 'release',
+            amount: 50000,
+            bountyId,
+            createdAt: new Date().toISOString(),
+            status: 'completed',
+          },
+        ];
+
+        mockWalletService.getTransactions.mockResolvedValue(transactions);
+
+        // Act
+        const history = await mockWalletService.getTransactions(bountyId);
+
+        // Assert
+        expect(history).toHaveLength(2);
+        expect(history[0].type).toBe('escrow');
+        expect(history[1].type).toBe('release');
+        expect(history[0].amount).toBe(-50000);
+        expect(history[1].amount).toBe(50000);
+      });
+
+      it('should send payment notification to hunter', async () => {
+        // Arrange
+        mockWalletService.releasePayment.mockResolvedValue({
+          type: 'release',
+          amount: 50000,
+        });
+        mockNotificationService.send.mockResolvedValue(true);
+
+        // Act
+        await mockWalletService.releasePayment({ bountyId, amount: 50000 });
+        await mockNotificationService.send({
+          user_id: HUNTER_ID_1,
+          type: 'payment',
+          title: 'Payment Received',
+          body: 'You received $500 for "Build a Mobile App"',
+          data: { amount: 50000, bountyId },
+        });
+
+        // Assert
+        expect(mockNotificationService.send).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: 'payment',
+            user_id: HUNTER_ID_1,
+            data: expect.objectContaining({ amount: 50000 }),
+          })
+        );
+      });
+
+      it('should only allow poster to release payment', async () => {
+        // Arrange - Test that hunter cannot release payment
+        mockWalletService.releasePayment.mockRejectedValueOnce(
+          new Error('Unauthorized: Only bounty poster can release payment')
+        );
+
+        // Act & Assert - Hunter tries to release payment and is blocked
+        await expect(
+          mockWalletService.releasePayment({
+            bountyId,
+            requesterId: HUNTER_ID_1,
+          })
+        ).rejects.toThrow('Unauthorized');
+
+        // Arrange - Test that poster can release payment
+        mockWalletService.releasePayment.mockResolvedValueOnce({
           id: 'txn_release',
           type: 'release',
           amount: 50000,
           bountyId,
-          createdAt: new Date().toISOString(),
           status: 'completed',
-        },
-      ];
+        });
 
-      mockWalletService.getTransactions.mockResolvedValue(transactions);
-
-      // Act
-      const history = await mockWalletService.getTransactions(bountyId);
-
-      // Assert
-      expect(history).toHaveLength(2);
-      expect(history[0].type).toBe('escrow');
-      expect(history[1].type).toBe('release');
-      expect(history[0].amount).toBe(-50000);
-      expect(history[1].amount).toBe(50000);
-    });
-
-    it('should send payment notification to hunter', async () => {
-      // Arrange
-      mockWalletService.releasePayment.mockResolvedValue({
-        type: 'release',
-        amount: 50000,
-      });
-      mockNotificationService.send.mockResolvedValue(true);
-
-      // Act
-      await mockWalletService.releasePayment({ bountyId, amount: 50000 });
-      await mockNotificationService.send({
-        user_id: HUNTER_ID_1,
-        type: 'payment',
-        title: 'Payment Received',
-        body: 'You received $500 for "Build a Mobile App"',
-        data: { amount: 50000, bountyId },
-      });
-
-      // Assert
-      expect(mockNotificationService.send).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'payment',
-          user_id: HUNTER_ID_1,
-          data: expect.objectContaining({ amount: 50000 }),
-        })
-      );
-    });
-
-    it('should only allow poster to release payment', async () => {
-      // Arrange - Test that hunter cannot release payment
-      mockWalletService.releasePayment.mockRejectedValueOnce(
-        new Error('Unauthorized: Only bounty poster can release payment')
-      );
-
-      // Act & Assert - Hunter tries to release payment and is blocked
-      await expect(
-        mockWalletService.releasePayment({
+        // Act - Poster successfully releases payment
+        const payment = await mockWalletService.releasePayment({
           bountyId,
-          requesterId: HUNTER_ID_1,
-        })
-      ).rejects.toThrow('Unauthorized');
+          requesterId: POSTER_ID,
+          amount: 50000,
+        });
 
-      // Arrange - Test that poster can release payment
-      mockWalletService.releasePayment.mockResolvedValueOnce({
-        id: 'txn_release',
-        type: 'release',
-        amount: 50000,
-        bountyId,
-        status: 'completed',
+        // Assert - Payment released successfully
+        expect(payment.type).toBe('release');
+        expect(payment.status).toBe('completed');
       });
 
-      // Act - Poster successfully releases payment
-      const payment = await mockWalletService.releasePayment({
-        bountyId,
-        requesterId: POSTER_ID,
-        amount: 50000,
-      });
-
-      // Assert - Payment released successfully
-      expect(payment.type).toBe('release');
-      expect(payment.status).toBe('completed');
-    });
-
-    it('should handle honor-based bounty completion (no payment)', async () => {
-      // Arrange
-      const honorBounty: Bounty = {
-        id: 'bounty_honor',
-        user_id: POSTER_ID,
-        title: 'Community Garden Help',
-        description: 'Volunteer work',
-        amount: 0,
-        isForHonor: true,
-        status: 'completed',
-        createdAt: new Date().toISOString(),
-      };
-
-      mockBountyService.update.mockResolvedValue(honorBounty);
-
-      // Act - Complete honor bounty (no payment flow)
-      const completed = await mockBountyService.update('bounty_honor', {
-        status: 'completed',
-      });
-
-      // Assert
-      expect(completed.isForHonor).toBe(true);
-      expect(completed.status).toBe('completed');
-      expect(mockWalletService.releasePayment).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('User Journey 5: Cancellation Flow', () => {
-    const bountyId = 'bounty_123';
-
-    it('should allow poster to cancel bounty before acceptance', async () => {
-      // Arrange
-      const openBounty: Bounty = {
-        id: bountyId,
-        user_id: POSTER_ID,
-        title: 'Build a Mobile App',
-        description: 'Cancelled before work started',
-        amount: 50000,
-        status: 'open',
-        createdAt: new Date().toISOString(),
-      };
-
-      mockBountyService.getById.mockResolvedValue(openBounty);
-      mockBountyService.delete.mockResolvedValue(true);
-      mockRequestService.getByBountyId.mockResolvedValue([
-        { id: 'req_1', status: 'pending' },
-        { id: 'req_2', status: 'pending' },
-      ]);
-
-      // Act - Poster cancels
-      await mockBountyService.delete(bountyId);
-      await mockNotificationService.send({
-        user_id: HUNTER_ID_1,
-        type: 'cancellation_request',
-        title: 'Bounty Cancelled',
-        body: 'The bounty "Build a Mobile App" was cancelled by the poster',
-      });
-
-      // Assert
-      expect(mockBountyService.delete).toHaveBeenCalledWith(bountyId);
-      expect(mockNotificationService.send).toHaveBeenCalled();
-    });
-
-    it('should handle cancellation request during work', async () => {
-      // Arrange
-      const inProgressBounty: Bounty = {
-        id: bountyId,
-        user_id: POSTER_ID,
-        title: 'Build a Mobile App',
-        description: 'Work in progress',
-        amount: 50000,
-        status: 'in_progress',
-        createdAt: new Date().toISOString(),
-      };
-
-      mockBountyService.getById.mockResolvedValue(inProgressBounty);
-
-      // Act - Cannot directly delete in_progress bounty
-      mockBountyService.delete.mockRejectedValue(
-        new Error('Cannot cancel in_progress bounty without negotiation')
-      );
-
-      // Assert
-      await expect(mockBountyService.delete(bountyId)).rejects.toThrow(
-        'Cannot cancel in_progress bounty'
-      );
-    });
-
-    it('should handle cancellation negotiation for in-progress bounty', async () => {
-      // Arrange - Create a cancellation request
-      const cancellationRequest = {
-        id: 'cancel_123',
-        bountyId,
-        requesterId: POSTER_ID,
-        requesterType: 'poster' as const,
-        reason: 'Requirements have changed',
-        status: 'pending' as const,
-        refundPercentage: 50,
-        createdAt: new Date().toISOString(),
-      };
-
-      const mockCancellationService = {
-        createRequest: jest.fn().mockResolvedValue(cancellationRequest),
-        acceptRequest: jest.fn().mockResolvedValue({
-          ...cancellationRequest,
-          status: 'accepted',
-          responderId: HUNTER_ID_1,
-        }),
-      };
-
-      mockNotificationService.send.mockResolvedValue(true);
-
-      // Act - Poster creates cancellation request
-      const request = await mockCancellationService.createRequest({
-        bountyId,
-        requesterId: POSTER_ID,
-        reason: 'Requirements have changed',
-        refundPercentage: 50,
-      });
-
-      // Hunter is notified
-      await mockNotificationService.send({
-        user_id: HUNTER_ID_1,
-        type: 'cancellation_request',
-        title: 'Cancellation Request',
-        body: 'The poster has requested to cancel the bounty',
-        data: { bountyId, cancellationId: request.id },
-      });
-
-      // Hunter accepts the cancellation
-      const accepted = await mockCancellationService.acceptRequest(request.id);
-
-      // Assert
-      expect(request.status).toBe('pending');
-      expect(accepted.status).toBe('accepted');
-      expect(mockNotificationService.send).toHaveBeenCalledWith(
-        expect.objectContaining({
-          user_id: HUNTER_ID_1,
-          type: 'cancellation_request',
-        })
-      );
-    });
-
-    it('should process refund for cancelled paid bounty', async () => {
-      // Arrange
-      const refundTransaction: WalletTransaction = {
-        id: 'txn_refund_123',
-        type: 'refund',
-        amount: 50000, // Refunded to poster
-        bountyId,
-        createdAt: new Date().toISOString(),
-        status: 'completed',
-        disputeStatus: 'none',
-        details: {
-          title: 'Refund for cancelled bounty: Build a Mobile App',
-        },
-      };
-
-      mockWalletService.refund.mockResolvedValue(refundTransaction);
-
-      // Act
-      const refund = await mockWalletService.refund({
-        bountyId,
-        posterId: POSTER_ID,
-        amount: 50000,
-        reason: 'Bounty cancelled by poster',
-      });
-
-      // Assert
-      expect(refund.type).toBe('refund');
-      expect(refund.amount).toBe(50000);
-      expect(refund.status).toBe('completed');
-    });
-
-    it('should notify hunter of cancellation', async () => {
-      // Arrange
-      mockNotificationService.send.mockResolvedValue(true);
-
-      // Act
-      await mockNotificationService.send({
-        user_id: HUNTER_ID_1,
-        type: 'cancellation_accepted',
-        title: 'Bounty Cancelled',
-        body: 'The bounty "Build a Mobile App" has been cancelled',
-        data: { bountyId, refundAmount: 50000 },
-      });
-
-      // Assert
-      expect(mockNotificationService.send).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'cancellation_accepted',
-          user_id: HUNTER_ID_1,
-        })
-      );
-    });
-
-    it('should update conversation with cancellation notice', async () => {
-      // Arrange
-      const cancellationMessage: Message = {
-        id: 'msg_cancel',
-        conversationId: 'conv_123',
-        senderId: 'system',
-        text: 'This bounty has been cancelled. Refund processed.',
-        createdAt: new Date().toISOString(),
-        status: 'sent',
-      };
-
-      mockConversationService.sendMessage.mockResolvedValue(cancellationMessage);
-
-      // Act
-      await mockConversationService.sendMessage('conv_123', {
-        senderId: 'system',
-        text: 'This bounty has been cancelled. Refund processed.',
-      });
-
-      // Assert
-      expect(mockConversationService.sendMessage).toHaveBeenCalledWith(
-        'conv_123',
-        expect.objectContaining({
-          text: expect.stringContaining('cancelled'),
-        })
-      );
-    });
-  });
-
-  describe('Edge Cases & Error Handling', () => {
-    it('should handle payment failure during escrow', async () => {
-      // Arrange
-      mockWalletService.createEscrow.mockRejectedValue(
-        new Error('Payment processing failed: Card declined')
-      );
-
-      // Act & Assert
-      await expect(
-        mockWalletService.createEscrow({ bountyId: 'bounty_123', amount: 50000 })
-      ).rejects.toThrow('Payment processing failed');
-    });
-
-    it('should handle network errors during critical operations', async () => {
-      // Arrange
-      mockBountyService.update.mockRejectedValue(
-        new Error('Network error: Unable to reach server')
-      );
-
-      // Act & Assert
-      await expect(
-        mockBountyService.update('bounty_123', { status: 'completed' })
-      ).rejects.toThrow('Network error');
-    });
-
-    it('should prevent concurrent acceptance of same bounty', async () => {
-      // Arrange - First hunter's acceptance succeeds
-      mockRequestService.accept.mockResolvedValueOnce({
-        id: 'req_alice',
-        status: 'accepted',
-      });
-
-      // Second hunter's acceptance should fail
-      mockRequestService.accept.mockRejectedValueOnce(
-        new Error('Bounty already accepted by another hunter')
-      );
-
-      // Act
-      await mockRequestService.accept('req_alice');
-
-      // Assert - Second attempt fails
-      await expect(mockRequestService.accept('req_bob')).rejects.toThrow(
-        'already accepted'
-      );
-    });
-
-    it('should validate bounty status transitions', async () => {
-      // Arrange - Invalid transition from completed to open
-      mockBountyService.update.mockRejectedValue(
-        new Error('Invalid status transition: completed -> open')
-      );
-
-      // Act & Assert
-      await expect(
-        mockBountyService.update('bounty_123', { status: 'open' })
-      ).rejects.toThrow('Invalid status transition');
-    });
-
-    it('should handle missing required data gracefully', async () => {
-      // Arrange - Missing bounty ID
-      mockBountyService.getById.mockRejectedValue(
-        new Error('Bounty not found')
-      );
-
-      // Act & Assert
-      await expect(mockBountyService.getById('nonexistent')).rejects.toThrow(
-        'not found'
-      );
-    });
-  });
-
-  describe('Integration Points', () => {
-    it('should trigger notifications at key events', async () => {
-      // Arrange
-      const events = [
-        { type: 'application', user_id: POSTER_ID },
-        { type: 'acceptance', user_id: HUNTER_ID_1 },
-        { type: 'message', user_id: POSTER_ID },
-        { type: 'completion', user_id: POSTER_ID },
-        { type: 'payment', user_id: HUNTER_ID_1 },
-      ];
-
-      mockNotificationService.send.mockResolvedValue(true);
-
-      // Act - Simulate full flow notifications
-      for (const event of events) {
-        await mockNotificationService.send(event);
-      }
-
-      // Assert
-      expect(mockNotificationService.send).toHaveBeenCalledTimes(5);
-      expect(mockNotificationService.send).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'application' })
-      );
-      expect(mockNotificationService.send).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'payment' })
-      );
-    });
-
-    it('should update wallet balance correctly through lifecycle', async () => {
-      // Arrange
-      const initialBalance = 100000; // $1000
-
-      mockWalletService.getBalance
-        .mockResolvedValueOnce(initialBalance) // Initial
-        .mockResolvedValueOnce(50000) // After escrow (-$500)
-        .mockResolvedValueOnce(50000); // After completion (poster still at $500)
-
-      // Act - Simulate wallet changes
-      const balanceStart = await mockWalletService.getBalance(POSTER_ID);
-      const balanceAfterEscrow = await mockWalletService.getBalance(POSTER_ID);
-      const balanceAfterCompletion = await mockWalletService.getBalance(POSTER_ID);
-
-      // Assert
-      expect(balanceStart).toBe(100000);
-      expect(balanceAfterEscrow).toBe(50000);
-      expect(balanceAfterCompletion).toBe(50000);
-    });
-
-    it('should track user ratings after completion', async () => {
-      // Arrange
-      const rating: UserRating = {
-        id: 'rating_123',
-        user_id: HUNTER_ID_1,
-        rater_id: POSTER_ID,
-        bountyId: 'bounty_123',
-        score: 5,
-        comment: 'Excellent work!',
-        createdAt: new Date().toISOString(),
-      };
-
-      mockRatingService.create.mockResolvedValue(rating);
-
-      // Act
-      const userRating = await mockRatingService.create({
-        user_id: HUNTER_ID_1,
-        rater_id: POSTER_ID,
-        bountyId: 'bounty_123',
-        score: 5,
-        comment: 'Excellent work!',
-      });
-
-      // Assert
-      expect(userRating.score).toBe(5);
-      expect(userRating.user_id).toBe(HUNTER_ID_1);
-      expect(mockRatingService.create).toHaveBeenCalled();
-    });
-
-    it('should support bounty search and filtering', async () => {
-      // Arrange
-      const bounties: Bounty[] = [
-        {
-          id: 'bounty_1',
+      it('should handle honor-based bounty completion (no payment)', async () => {
+        // Arrange
+        const honorBounty: Bounty = {
+          id: 'bounty_honor',
           user_id: POSTER_ID,
-          title: 'Mobile App',
-          description: 'React Native',
+          title: 'Community Garden Help',
+          description: 'Volunteer work',
+          amount: 0,
+          isForHonor: true,
+          status: 'completed',
+          createdAt: new Date().toISOString(),
+        };
+
+        mockBountyService.update.mockResolvedValue(honorBounty);
+
+        // Act - Complete honor bounty (no payment flow)
+        const completed = await mockBountyService.update('bounty_honor', {
+          status: 'completed',
+        });
+
+        // Assert
+        expect(completed.isForHonor).toBe(true);
+        expect(completed.status).toBe('completed');
+        expect(mockWalletService.releasePayment).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('User Journey 5: Cancellation Flow', () => {
+      const bountyId = 'bounty_123';
+
+      it('should allow poster to cancel bounty before acceptance', async () => {
+        // Arrange
+        const openBounty: Bounty = {
+          id: bountyId,
+          user_id: POSTER_ID,
+          title: 'Build a Mobile App',
+          description: 'Cancelled before work started',
           amount: 50000,
           status: 'open',
-          location: 'San Francisco, CA',
           createdAt: new Date().toISOString(),
-        },
-        {
-          id: 'bounty_2',
-          user_id: POSTER_ID,
-          title: 'Web Design',
-          description: 'UI/UX',
-          amount: 30000,
-          status: 'open',
-          location: 'Oakland, CA',
-          createdAt: new Date().toISOString(),
-        },
-      ];
+        };
 
-      mockBountyService.list.mockResolvedValue(
-        bounties.filter(b => b.location?.includes('San Francisco'))
-      );
+        mockBountyService.getById.mockResolvedValue(openBounty);
+        mockBountyService.delete.mockResolvedValue(true);
+        mockRequestService.getByBountyId.mockResolvedValue([
+          { id: 'req_1', status: 'pending' },
+          { id: 'req_2', status: 'pending' },
+        ]);
 
-      // Act
-      const filteredBounties = await mockBountyService.list({
-        location: 'San Francisco',
-        status: 'open',
+        // Act - Poster cancels
+        await mockBountyService.delete(bountyId);
+        await mockNotificationService.send({
+          user_id: HUNTER_ID_1,
+          type: 'cancellation_request',
+          title: 'Bounty Cancelled',
+          body: 'The bounty "Build a Mobile App" was cancelled by the poster',
+        });
+
+        // Assert
+        expect(mockBountyService.delete).toHaveBeenCalledWith(bountyId);
+        expect(mockNotificationService.send).toHaveBeenCalled();
       });
 
-      // Assert
-      expect(filteredBounties).toHaveLength(1);
-      expect(filteredBounties[0].location).toContain('San Francisco');
+      it('should handle cancellation request during work', async () => {
+        // Arrange
+        const inProgressBounty: Bounty = {
+          id: bountyId,
+          user_id: POSTER_ID,
+          title: 'Build a Mobile App',
+          description: 'Work in progress',
+          amount: 50000,
+          status: 'in_progress',
+          createdAt: new Date().toISOString(),
+        };
+
+        mockBountyService.getById.mockResolvedValue(inProgressBounty);
+
+        // Act - Cannot directly delete in_progress bounty
+        mockBountyService.delete.mockRejectedValue(
+          new Error('Cannot cancel in_progress bounty without negotiation')
+        );
+
+        // Assert
+        await expect(mockBountyService.delete(bountyId)).rejects.toThrow(
+          'Cannot cancel in_progress bounty'
+        );
+      });
+
+      it('should handle cancellation negotiation for in-progress bounty', async () => {
+        // Arrange - Create a cancellation request
+        const cancellationRequest = {
+          id: 'cancel_123',
+          bountyId,
+          requesterId: POSTER_ID,
+          requesterType: 'poster' as const,
+          reason: 'Requirements have changed',
+          status: 'pending' as const,
+          refundPercentage: 50,
+          createdAt: new Date().toISOString(),
+        };
+
+        const mockCancellationService = {
+          createRequest: jest.fn().mockResolvedValue(cancellationRequest),
+          acceptRequest: jest.fn().mockResolvedValue({
+            ...cancellationRequest,
+            status: 'accepted',
+            responderId: HUNTER_ID_1,
+          }),
+        };
+
+        mockNotificationService.send.mockResolvedValue(true);
+
+        // Act - Poster creates cancellation request
+        const request = await mockCancellationService.createRequest({
+          bountyId,
+          requesterId: POSTER_ID,
+          reason: 'Requirements have changed',
+          refundPercentage: 50,
+        });
+
+        // Hunter is notified
+        await mockNotificationService.send({
+          user_id: HUNTER_ID_1,
+          type: 'cancellation_request',
+          title: 'Cancellation Request',
+          body: 'The poster has requested to cancel the bounty',
+          data: { bountyId, cancellationId: request.id },
+        });
+
+        // Hunter accepts the cancellation
+        const accepted = await mockCancellationService.acceptRequest(request.id);
+
+        // Assert
+        expect(request.status).toBe('pending');
+        expect(accepted.status).toBe('accepted');
+        expect(mockNotificationService.send).toHaveBeenCalledWith(
+          expect.objectContaining({
+            user_id: HUNTER_ID_1,
+            type: 'cancellation_request',
+          })
+        );
+      });
+
+      it('should process refund for cancelled paid bounty', async () => {
+        // Arrange
+        const refundTransaction: WalletTransaction = {
+          id: 'txn_refund_123',
+          type: 'refund',
+          amount: 50000, // Refunded to poster
+          bountyId,
+          createdAt: new Date().toISOString(),
+          status: 'completed',
+          disputeStatus: 'none',
+          details: {
+            title: 'Refund for cancelled bounty: Build a Mobile App',
+          },
+        };
+
+        mockWalletService.refund.mockResolvedValue(refundTransaction);
+
+        // Act
+        const refund = await mockWalletService.refund({
+          bountyId,
+          posterId: POSTER_ID,
+          amount: 50000,
+          reason: 'Bounty cancelled by poster',
+        });
+
+        // Assert
+        expect(refund.type).toBe('refund');
+        expect(refund.amount).toBe(50000);
+        expect(refund.status).toBe('completed');
+      });
+
+      it('should notify hunter of cancellation', async () => {
+        // Arrange
+        mockNotificationService.send.mockResolvedValue(true);
+
+        // Act
+        await mockNotificationService.send({
+          user_id: HUNTER_ID_1,
+          type: 'cancellation_accepted',
+          title: 'Bounty Cancelled',
+          body: 'The bounty "Build a Mobile App" has been cancelled',
+          data: { bountyId, refundAmount: 50000 },
+        });
+
+        // Assert
+        expect(mockNotificationService.send).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: 'cancellation_accepted',
+            user_id: HUNTER_ID_1,
+          })
+        );
+      });
+
+      it('should update conversation with cancellation notice', async () => {
+        // Arrange
+        const cancellationMessage: Message = {
+          id: 'msg_cancel',
+          conversationId: 'conv_123',
+          senderId: 'system',
+          text: 'This bounty has been cancelled. Refund processed.',
+          createdAt: new Date().toISOString(),
+          status: 'sent',
+        };
+
+        mockConversationService.sendMessage.mockResolvedValue(cancellationMessage);
+
+        // Act
+        await mockConversationService.sendMessage('conv_123', {
+          senderId: 'system',
+          text: 'This bounty has been cancelled. Refund processed.',
+        });
+
+        // Assert
+        expect(mockConversationService.sendMessage).toHaveBeenCalledWith(
+          'conv_123',
+          expect.objectContaining({
+            text: expect.stringContaining('cancelled'),
+          })
+        );
+      });
+    });
+
+    describe('Edge Cases & Error Handling', () => {
+      it('should handle payment failure during escrow', async () => {
+        // Arrange
+        mockWalletService.createEscrow.mockRejectedValue(
+          new Error('Payment processing failed: Card declined')
+        );
+
+        // Act & Assert
+        await expect(
+          mockWalletService.createEscrow({ bountyId: 'bounty_123', amount: 50000 })
+        ).rejects.toThrow('Payment processing failed');
+      });
+
+      it('should handle network errors during critical operations', async () => {
+        // Arrange
+        mockBountyService.update.mockRejectedValue(
+          new Error('Network error: Unable to reach server')
+        );
+
+        // Act & Assert
+        await expect(
+          mockBountyService.update('bounty_123', { status: 'completed' })
+        ).rejects.toThrow('Network error');
+      });
+
+      it('should prevent concurrent acceptance of same bounty', async () => {
+        // Arrange - First hunter's acceptance succeeds
+        mockRequestService.accept.mockResolvedValueOnce({
+          id: 'req_alice',
+          status: 'accepted',
+        });
+
+        // Second hunter's acceptance should fail
+        mockRequestService.accept.mockRejectedValueOnce(
+          new Error('Bounty already accepted by another hunter')
+        );
+
+        // Act
+        await mockRequestService.accept('req_alice');
+
+        // Assert - Second attempt fails
+        await expect(mockRequestService.accept('req_bob')).rejects.toThrow('already accepted');
+      });
+
+      it('should validate bounty status transitions', async () => {
+        // Arrange - Invalid transition from completed to open
+        mockBountyService.update.mockRejectedValue(
+          new Error('Invalid status transition: completed -> open')
+        );
+
+        // Act & Assert
+        await expect(mockBountyService.update('bounty_123', { status: 'open' })).rejects.toThrow(
+          'Invalid status transition'
+        );
+      });
+
+      it('should handle missing required data gracefully', async () => {
+        // Arrange - Missing bounty ID
+        mockBountyService.getById.mockRejectedValue(new Error('Bounty not found'));
+
+        // Act & Assert
+        await expect(mockBountyService.getById('nonexistent')).rejects.toThrow('not found');
+      });
+    });
+
+    describe('Integration Points', () => {
+      it('should trigger notifications at key events', async () => {
+        // Arrange
+        const events = [
+          { type: 'application', user_id: POSTER_ID },
+          { type: 'acceptance', user_id: HUNTER_ID_1 },
+          { type: 'message', user_id: POSTER_ID },
+          { type: 'completion', user_id: POSTER_ID },
+          { type: 'payment', user_id: HUNTER_ID_1 },
+        ];
+
+        mockNotificationService.send.mockResolvedValue(true);
+
+        // Act - Simulate full flow notifications
+        for (const event of events) {
+          await mockNotificationService.send(event);
+        }
+
+        // Assert
+        expect(mockNotificationService.send).toHaveBeenCalledTimes(5);
+        expect(mockNotificationService.send).toHaveBeenCalledWith(
+          expect.objectContaining({ type: 'application' })
+        );
+        expect(mockNotificationService.send).toHaveBeenCalledWith(
+          expect.objectContaining({ type: 'payment' })
+        );
+      });
+
+      it('should update wallet balance correctly through lifecycle', async () => {
+        // Arrange
+        const initialBalance = 100000; // $1000
+
+        mockWalletService.getBalance
+          .mockResolvedValueOnce(initialBalance) // Initial
+          .mockResolvedValueOnce(50000) // After escrow (-$500)
+          .mockResolvedValueOnce(50000); // After completion (poster still at $500)
+
+        // Act - Simulate wallet changes
+        const balanceStart = await mockWalletService.getBalance(POSTER_ID);
+        const balanceAfterEscrow = await mockWalletService.getBalance(POSTER_ID);
+        const balanceAfterCompletion = await mockWalletService.getBalance(POSTER_ID);
+
+        // Assert
+        expect(balanceStart).toBe(100000);
+        expect(balanceAfterEscrow).toBe(50000);
+        expect(balanceAfterCompletion).toBe(50000);
+      });
+
+      it('should track user ratings after completion', async () => {
+        // Arrange
+        const rating: UserRating = {
+          id: 'rating_123',
+          user_id: HUNTER_ID_1,
+          rater_id: POSTER_ID,
+          bountyId: 'bounty_123',
+          score: 5,
+          comment: 'Excellent work!',
+          createdAt: new Date().toISOString(),
+        };
+
+        mockRatingService.create.mockResolvedValue(rating);
+
+        // Act
+        const userRating = await mockRatingService.create({
+          user_id: HUNTER_ID_1,
+          rater_id: POSTER_ID,
+          bountyId: 'bounty_123',
+          score: 5,
+          comment: 'Excellent work!',
+        });
+
+        // Assert
+        expect(userRating.score).toBe(5);
+        expect(userRating.user_id).toBe(HUNTER_ID_1);
+        expect(mockRatingService.create).toHaveBeenCalled();
+      });
+
+      it('should support bounty search and filtering', async () => {
+        // Arrange
+        const bounties: Bounty[] = [
+          {
+            id: 'bounty_1',
+            user_id: POSTER_ID,
+            title: 'Mobile App',
+            description: 'React Native',
+            amount: 50000,
+            status: 'open',
+            location: 'San Francisco, CA',
+            createdAt: new Date().toISOString(),
+          },
+          {
+            id: 'bounty_2',
+            user_id: POSTER_ID,
+            title: 'Web Design',
+            description: 'UI/UX',
+            amount: 30000,
+            status: 'open',
+            location: 'Oakland, CA',
+            createdAt: new Date().toISOString(),
+          },
+        ];
+
+        mockBountyService.list.mockResolvedValue(
+          bounties.filter(b => b.location?.includes('San Francisco'))
+        );
+
+        // Act
+        const filteredBounties = await mockBountyService.list({
+          location: 'San Francisco',
+          status: 'open',
+        });
+
+        // Assert
+        expect(filteredBounties).toHaveLength(1);
+        expect(filteredBounties[0].location).toContain('San Francisco');
+      });
     });
   });
-});
 });

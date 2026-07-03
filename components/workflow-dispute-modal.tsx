@@ -1,5 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons'
-import React, { useState } from 'react'
+import { useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -16,6 +16,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAttachmentUpload } from '../hooks/use-attachment-upload'
 import { disputeService } from '../lib/services/dispute-service'
+import { useAppThemeContext } from '../lib/themes/AppThemeContext'
+import type { AppTheme } from '../lib/themes/types'
 import type { LocalDisputeEvidence } from '../lib/types'
 
 type Props = {
@@ -53,6 +55,9 @@ export function WorkflowDisputeModal({
   onDisputeCreated,
 }: Props) {
   const insets = useSafeAreaInsets()
+  const { theme } = useAppThemeContext()
+  const styles = makeStyles(theme)
+
   const [currentStep, setCurrentStep] = useState<Step>('info')
   const [selectedReason, setSelectedReason] = useState<string | null>(null)
   const [reasonText, setReasonText] = useState('')
@@ -206,6 +211,7 @@ export function WorkflowDisputeModal({
   }
 
   const stageLabel = stage === 'in_progress' ? 'Work In Progress' : 'Review & Verify'
+  const accentColor = theme.isDark ? '#6ee7b7' : theme.primary
 
   const renderInfoStep = () => (
     <View style={styles.stepContent}>
@@ -222,19 +228,19 @@ export function WorkflowDisputeModal({
 
       <View style={styles.infoBox}>
         <View style={styles.infoRow}>
-          <MaterialIcons name="info" size={20} color="#6ee7b7" />
+          <MaterialIcons name="info" size={20} color={accentColor} />
           <Text style={styles.infoText}>Both parties will be notified immediately</Text>
         </View>
         <View style={styles.infoRow}>
-          <MaterialIcons name="lock" size={20} color="#6ee7b7" />
+          <MaterialIcons name="lock" size={20} color={accentColor} />
           <Text style={styles.infoText}>Escrow funds remain frozen during review</Text>
         </View>
         <View style={styles.infoRow}>
-          <MaterialIcons name="schedule" size={20} color="#6ee7b7" />
+          <MaterialIcons name="schedule" size={20} color={accentColor} />
           <Text style={styles.infoText}>An admin will review the dispute within 24-48 hours</Text>
         </View>
         <View style={styles.infoRow}>
-          <MaterialIcons name="chat" size={20} color="#6ee7b7" />
+          <MaterialIcons name="chat" size={20} color={accentColor} />
           <Text style={styles.infoText}>Both parties can submit evidence and communicate</Text>
         </View>
       </View>
@@ -266,7 +272,7 @@ export function WorkflowDisputeModal({
             <MaterialIcons
               name={selectedReason === reason ? 'radio-button-checked' : 'radio-button-unchecked'}
               size={20}
-              color={selectedReason === reason ? '#10b981' : '#6ee7b7'}
+              color={selectedReason === reason ? '#059669' : accentColor}
             />
             <Text style={styles.reasonOptionText}>{reason}</Text>
           </TouchableOpacity>
@@ -277,7 +283,7 @@ export function WorkflowDisputeModal({
       <TextInput
         style={styles.textArea}
         placeholder="Describe the issue in detail (minimum 20 characters)..."
-        placeholderTextColor="rgba(255,254,245,0.4)"
+        placeholderTextColor={theme.textDisabled}
         value={reasonText}
         onChangeText={setReasonText}
         multiline
@@ -304,7 +310,7 @@ export function WorkflowDisputeModal({
         <TextInput
           style={[styles.textInput, { flex: 1 }]}
           placeholder="Type a statement..."
-          placeholderTextColor="rgba(255,254,245,0.4)"
+          placeholderTextColor={theme.textDisabled}
           value={textEvidence}
           onChangeText={setTextEvidence}
         />
@@ -323,7 +329,7 @@ export function WorkflowDisputeModal({
         <TextInput
           style={[styles.textInput, { flex: 1 }]}
           placeholder="https://..."
-          placeholderTextColor="rgba(255,254,245,0.4)"
+          placeholderTextColor={theme.textDisabled}
           value={linkEvidence}
           onChangeText={setLinkEvidence}
           autoCapitalize="none"
@@ -343,7 +349,7 @@ export function WorkflowDisputeModal({
         style={styles.uploadButton}
         onPress={() => pickAttachment()}
       >
-        <MaterialIcons name="attach-file" size={20} color="#fff" />
+        <MaterialIcons name="attach-file" size={20} color={accentColor} />
         <Text style={styles.uploadButtonText}>Upload Image or Document</Text>
       </TouchableOpacity>
 
@@ -360,7 +366,7 @@ export function WorkflowDisputeModal({
                   item.type === 'image' ? 'image' : 'insert-drive-file'
                 }
                 size={20}
-                color="#6ee7b7"
+                color={accentColor}
               />
               <Text style={styles.evidenceItemText} numberOfLines={1}>
                 {item.type === 'text' ? item.content.substring(0, 60) + '...' :
@@ -432,7 +438,7 @@ export function WorkflowDisputeModal({
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-            <MaterialIcons name="close" size={24} color="#fff" />
+            <MaterialIcons name="close" size={24} color={theme.text} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Raise Dispute</Text>
           <View style={styles.stepIndicator}>
@@ -461,7 +467,7 @@ export function WorkflowDisputeModal({
         <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
           {currentStepIndex > 0 && (
             <TouchableOpacity style={styles.backBtn} onPress={goBack}>
-              <MaterialIcons name="arrow-back" size={20} color="#6ee7b7" />
+              <MaterialIcons name="arrow-back" size={20} color={accentColor} />
               <Text style={styles.backBtnText}>Back</Text>
             </TouchableOpacity>
           )}
@@ -504,306 +510,312 @@ export function WorkflowDisputeModal({
   )
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#1a3d2e',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(110, 231, 183, 0.1)',
-  },
-  closeButton: {
-    padding: 4,
-  },
-  headerTitle: {
-    flex: 1,
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  stepIndicator: {
-    backgroundColor: 'rgba(245, 158, 11, 0.2)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  stepIndicatorText: {
-    color: '#f59e0b',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  progressBar: {
-    height: 3,
-    backgroundColor: 'rgba(110, 231, 183, 0.1)',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#f59e0b',
-    borderRadius: 2,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 20,
-  },
-  stepContent: {
-    gap: 16,
-  },
-  iconContainer: {
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  stepTitle: {
-    color: '#fff',
-    fontSize: 22,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  stepDescription: {
-    color: 'rgba(255,254,245,0.7)',
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  bountyCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.3)',
-  },
-  bountyTitleText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  infoBox: {
-    backgroundColor: 'rgba(5, 150, 105, 0.15)',
-    borderRadius: 12,
-    padding: 16,
-    gap: 12,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  infoText: {
-    flex: 1,
-    color: 'rgba(255,254,245,0.8)',
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  warningBox: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    borderRadius: 12,
-    padding: 14,
-    gap: 12,
-    alignItems: 'flex-start',
-    borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.3)',
-  },
-  warningText: {
-    flex: 1,
-    color: '#fbbf24',
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  reasonsList: {
-    gap: 8,
-  },
-  reasonOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: 'rgba(5, 150, 105, 0.1)',
-    borderRadius: 10,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  reasonOptionSelected: {
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    borderColor: '#10b981',
-  },
-  reasonOptionText: {
-    flex: 1,
-    color: '#fff',
-    fontSize: 14,
-  },
-  inputLabel: {
-    color: '#6ee7b7',
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginTop: 4,
-  },
-  textArea: {
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
-    borderRadius: 12,
-    padding: 14,
-    color: '#fff',
-    fontSize: 14,
-    minHeight: 100,
-    borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.2)',
-  },
-  charCount: {
-    color: 'rgba(255,254,245,0.4)',
-    fontSize: 11,
-    textAlign: 'right',
-  },
-  charCountValid: {
-    color: '#10b981',
-  },
-  evidenceInputRow: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
-  },
-  textInput: {
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
-    borderRadius: 10,
-    padding: 12,
-    color: '#fff',
-    fontSize: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.2)',
-  },
-  addButton: {
-    backgroundColor: '#10b981',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  addButtonDisabled: {
-    backgroundColor: 'rgba(16, 185, 129, 0.3)',
-  },
-  uploadButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(5, 150, 105, 0.3)',
-    borderRadius: 10,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.3)',
-    borderStyle: 'dashed',
-  },
-  uploadButtonText: {
-    color: '#6ee7b7',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  evidenceList: {
-    gap: 8,
-    marginTop: 4,
-  },
-  evidenceCount: {
-    color: '#6ee7b7',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  evidenceItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
-    borderRadius: 8,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.15)',
-  },
-  evidenceItemText: {
-    flex: 1,
-    color: 'rgba(255,254,245,0.8)',
-    fontSize: 13,
-  },
-  summaryCard: {
-    backgroundColor: 'rgba(5, 150, 105, 0.2)',
-    borderRadius: 12,
-    padding: 16,
-    gap: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.3)',
-  },
-  summaryLabel: {
-    color: '#6ee7b7',
-    fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginTop: 4,
-  },
-  summaryValue: {
-    color: '#fff',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(110, 231, 183, 0.1)',
-    backgroundColor: '#1a3d2e',
-  },
-  backBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-  },
-  backBtnText: {
-    color: '#6ee7b7',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  nextBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#10b981',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-  },
-  nextBtnDisabled: {
-    backgroundColor: 'rgba(16, 185, 129, 0.3)',
-  },
-  nextBtnText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  submitBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#f59e0b',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 10,
-  },
-  submitBtnDisabled: {
-    backgroundColor: 'rgba(245, 158, 11, 0.4)',
-  },
-  submitBtnText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-})
+function makeStyles(theme: AppTheme) {
+  const accentColor = theme.isDark ? '#6ee7b7' : theme.primary
+  const inputBg = theme.isDark ? 'rgba(5, 150, 105, 0.2)' : 'rgba(5, 150, 105, 0.08)'
+  const inputBorder = theme.isDark ? 'rgba(110, 231, 183, 0.2)' : theme.primary
+
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 16,
+      gap: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    closeButton: {
+      padding: 4,
+    },
+    headerTitle: {
+      flex: 1,
+      color: theme.text,
+      fontSize: 18,
+      fontWeight: '600',
+    },
+    stepIndicator: {
+      backgroundColor: 'rgba(245, 158, 11, 0.2)',
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 12,
+    },
+    stepIndicatorText: {
+      color: '#f59e0b',
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    progressBar: {
+      height: 3,
+      backgroundColor: theme.border,
+    },
+    progressFill: {
+      height: '100%',
+      backgroundColor: '#f59e0b',
+      borderRadius: 2,
+    },
+    scrollView: {
+      flex: 1,
+    },
+    scrollContent: {
+      padding: 20,
+    },
+    stepContent: {
+      gap: 16,
+    },
+    iconContainer: {
+      alignItems: 'center',
+      paddingVertical: 8,
+    },
+    stepTitle: {
+      color: theme.text,
+      fontSize: 22,
+      fontWeight: '700',
+      textAlign: 'center',
+    },
+    stepDescription: {
+      color: theme.text,
+      fontSize: 14,
+      textAlign: 'center',
+      lineHeight: 20,
+    },
+    bountyCard: {
+      backgroundColor: theme.isDark ? 'rgba(5, 150, 105, 0.2)' : 'rgba(5, 150, 105, 0.08)',
+      borderRadius: 12,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: theme.isDark ? 'rgba(110, 231, 183, 0.3)' : theme.primary,
+    },
+    bountyTitleText: {
+      color: theme.text,
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    infoBox: {
+      backgroundColor: theme.isDark ? 'rgba(5, 150, 105, 0.15)' : 'rgba(5, 150, 105, 0.08)',
+      borderRadius: 12,
+      padding: 16,
+      gap: 12,
+    },
+    infoRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    infoText: {
+      flex: 1,
+      color: theme.text,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    warningBox: {
+      flexDirection: 'row',
+      backgroundColor: 'rgba(245, 158, 11, 0.15)',
+      borderRadius: 12,
+      padding: 14,
+      gap: 12,
+      alignItems: 'flex-start',
+      borderWidth: 1,
+      borderColor: 'rgba(245, 158, 11, 0.3)',
+    },
+    warningText: {
+      flex: 1,
+      color: '#fbbf24',
+      fontSize: 12,
+      lineHeight: 18,
+    },
+    reasonsList: {
+      gap: 8,
+    },
+    reasonOption: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: theme.isDark ? 'rgba(5, 150, 105, 0.1)' : 'rgba(5, 150, 105, 0.06)',
+      borderRadius: 10,
+      padding: 14,
+      borderWidth: 1,
+      borderColor: 'transparent',
+    },
+    reasonOptionSelected: {
+      backgroundColor: theme.surfaceSecondary,
+      borderColor: '#059669',
+    },
+    reasonOptionText: {
+      flex: 1,
+      color: theme.text,
+      fontSize: 14,
+    },
+    inputLabel: {
+      color: accentColor,
+      fontSize: 12,
+      fontWeight: '600',
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+      marginTop: 4,
+    },
+    textArea: {
+      backgroundColor: inputBg,
+      borderRadius: 12,
+      padding: 14,
+      color: theme.text,
+      fontSize: 14,
+      minHeight: 100,
+      borderWidth: 1,
+      borderColor: inputBorder,
+    },
+    charCount: {
+      color: theme.textSecondary,
+      fontSize: 11,
+      textAlign: 'right',
+    },
+    charCountValid: {
+      color: '#059669',
+    },
+    evidenceInputRow: {
+      flexDirection: 'row',
+      gap: 8,
+      alignItems: 'center',
+    },
+    textInput: {
+      backgroundColor: inputBg,
+      borderRadius: 10,
+      padding: 12,
+      color: theme.text,
+      fontSize: 14,
+      borderWidth: 1,
+      borderColor: inputBorder,
+    },
+    addButton: {
+      backgroundColor: '#059669',
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    addButtonDisabled: {
+      backgroundColor: theme.border,
+    },
+    uploadButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      backgroundColor: theme.isDark ? 'rgba(5, 150, 105, 0.3)' : 'rgba(5, 150, 105, 0.1)',
+      borderRadius: 10,
+      padding: 14,
+      borderWidth: 1,
+      borderColor: theme.isDark ? 'rgba(110, 231, 183, 0.3)' : theme.primary,
+      borderStyle: 'dashed',
+    },
+    uploadButtonText: {
+      color: accentColor,
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    evidenceList: {
+      gap: 8,
+      marginTop: 4,
+    },
+    evidenceCount: {
+      color: accentColor,
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    evidenceItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      backgroundColor: theme.isDark ? 'rgba(5, 150, 105, 0.2)' : 'rgba(5, 150, 105, 0.08)',
+      borderRadius: 8,
+      padding: 10,
+      borderWidth: 1,
+      borderColor: theme.isDark ? 'rgba(110, 231, 183, 0.15)' : theme.primary,
+    },
+    evidenceItemText: {
+      flex: 1,
+      color: theme.text,
+      fontSize: 13,
+    },
+    summaryCard: {
+      backgroundColor: theme.isDark ? 'rgba(5, 150, 105, 0.2)' : 'rgba(5, 150, 105, 0.08)',
+      borderRadius: 12,
+      padding: 16,
+      gap: 8,
+      borderWidth: 1,
+      borderColor: theme.isDark ? 'rgba(110, 231, 183, 0.3)' : theme.primary,
+    },
+    summaryLabel: {
+      color: accentColor,
+      fontSize: 11,
+      fontWeight: '600',
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+      marginTop: 4,
+    },
+    summaryValue: {
+      color: theme.text,
+      fontSize: 14,
+      lineHeight: 20,
+    },
+    footer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
+      backgroundColor: theme.background,
+    },
+    backBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+    },
+    backBtnText: {
+      color: accentColor,
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    nextBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: '#059669',
+      paddingVertical: 12,
+      paddingHorizontal: 20,
+      borderRadius: 10,
+    },
+    nextBtnDisabled: {
+      backgroundColor: theme.border,
+    },
+    nextBtnText: {
+      color: '#fff',
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    submitBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: '#f59e0b',
+      paddingVertical: 12,
+      paddingHorizontal: 24,
+      borderRadius: 10,
+    },
+    submitBtnDisabled: {
+      backgroundColor: 'rgba(245, 158, 11, 0.4)',
+    },
+    submitBtnText: {
+      color: '#fff',
+      fontSize: 14,
+      fontWeight: '700',
+    },
+  })
+}

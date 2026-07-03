@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { addressAutocompleteService, type AddressSuggestion } from '../lib/services/address-autocomplete-service';
 import { sanitizeAddressText } from '../lib/utils/address-sanitization';
+import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 
 interface AddressAutocompleteProps extends Omit<TextInputProps, 'onChangeText'> {
   value: string;
@@ -70,6 +71,7 @@ export function AddressAutocomplete({
   countryCode,
   ...inputProps
 }: AddressAutocompleteProps) {
+  const { theme } = useAppThemeContext();
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -206,8 +208,9 @@ export function AddressAutocomplete({
             }
           }}
           placeholder={placeholder}
-          placeholderTextColor="rgba(110, 231, 183, 0.4)"
-          className={`bg-emerald-700/50 text-white px-4 py-3 rounded-lg text-base ${inputClassName || ''}`}
+          placeholderTextColor={theme.textDisabled}
+          className={`px-4 py-3 rounded-lg text-base ${inputClassName || ''}`}
+          style={{ backgroundColor: theme.surfaceSecondary, color: theme.text, borderWidth: 1, borderColor: theme.border }}
           editable={!disabled}
           accessibilityLabel="Address input"
           accessibilityRole="search"
@@ -256,7 +259,8 @@ export function AddressAutocomplete({
       {/* Suggestions List */}
       {(showSuggestions || (showSavedAddresses && filteredSavedAddresses.length > 0)) && (
         <View
-          className={`mt-2 bg-emerald-700/50 rounded-lg border border-emerald-500/50 overflow-hidden ${suggestionsClassName || ''}`}
+          className={`mt-2 rounded-lg overflow-hidden ${suggestionsClassName || ''}`}
+          style={{ backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border }}
           accessibilityLiveRegion="polite"
         >
           {/* Hidden text for screen readers to announce suggestion count */}
@@ -271,8 +275,8 @@ export function AddressAutocomplete({
           {/* Saved Addresses Section */}
           {showSavedAddresses && filteredSavedAddresses.length > 0 && (
             <>
-              <View className="px-3 py-2 bg-emerald-800/30 border-b border-emerald-500/30">
-                <Text className="text-emerald-200/80 text-xs font-semibold">
+              <View className="px-3 py-2" style={{ backgroundColor: theme.surfaceSecondary, borderBottomWidth: 1, borderBottomColor: theme.border }}>
+                <Text className="text-xs font-semibold" style={{ color: theme.textSecondary }}>
                   Saved Addresses
                 </Text>
               </View>
@@ -283,21 +287,22 @@ export function AddressAutocomplete({
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     onPress={() => handleSelectSavedAddress(item)}
-                    className="px-3 py-3 border-b border-emerald-500/20 flex-row items-center"
+                    className="px-3 py-3 flex-row items-center"
+                    style={{ borderBottomWidth: 1, borderBottomColor: theme.border }}
                     accessibilityLabel={`Select saved address: ${item.label}`}
                     accessibilityRole="button"
                   >
                     <MaterialIcons
                       name="bookmark"
                       size={18}
-                      color="rgba(110, 231, 183, 0.7)"
+                      color={theme.primaryLight}
                       style={{ marginRight: 10 }}
                     />
                     <View className="flex-1">
-                      <Text className="text-white font-semibold text-sm mb-1">
+                      <Text className="font-semibold text-sm mb-1" style={{ color: theme.text }}>
                         {item.label}
                       </Text>
-                      <Text className="text-emerald-200/70 text-xs" numberOfLines={1}>
+                      <Text className="text-xs" numberOfLines={1} style={{ color: theme.textSecondary }}>
                         {item.address}
                       </Text>
                     </View>
@@ -311,8 +316,8 @@ export function AddressAutocomplete({
           {isConfigured && suggestions.length > 0 && (
             <>
               {showSavedAddresses && filteredSavedAddresses.length > 0 && (
-                <View className="px-3 py-2 bg-emerald-800/30 border-b border-emerald-500/30">
-                  <Text className="text-emerald-200/80 text-xs font-semibold">
+                <View className="px-3 py-2" style={{ backgroundColor: theme.surfaceSecondary, borderBottomWidth: 1, borderBottomColor: theme.border }}>
+                  <Text className="text-xs font-semibold" style={{ color: theme.textSecondary }}>
                     Suggested Addresses
                   </Text>
                 </View>
@@ -324,22 +329,23 @@ export function AddressAutocomplete({
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     onPress={() => handleSelectSuggestion(item)}
-                    className="px-3 py-3 border-b border-emerald-500/20 flex-row items-center"
+                    className="px-3 py-3 flex-row items-center"
+                    style={{ borderBottomWidth: 1, borderBottomColor: theme.border }}
                     accessibilityLabel={`Select address: ${item.description}`}
                     accessibilityRole="button"
                   >
                     <MaterialIcons
                       name="place"
                       size={18}
-                      color="rgba(110, 231, 183, 0.7)"
+                      color={theme.primaryLight}
                       style={{ marginRight: 10 }}
                     />
                     <View className="flex-1">
-                      <Text className="text-white font-semibold text-sm">
+                      <Text className="font-semibold text-sm" style={{ color: theme.text }}>
                         {item.mainText}
                       </Text>
                       {item.secondaryText && (
-                        <Text className="text-emerald-200/70 text-xs mt-0.5">
+                        <Text className="text-xs mt-0.5" style={{ color: theme.textSecondary }}>
                           {item.secondaryText}
                         </Text>
                       )}

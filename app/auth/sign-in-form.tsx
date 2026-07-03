@@ -1,67 +1,56 @@
-'use client';
-import { MaterialIcons } from '@expo/vector-icons';
-import { ValidationMessage } from 'app/components/ValidationMessage';
-import * as AppleAuthentication from 'expo-apple-authentication';
-import { ResponseType } from 'expo-auth-session';
-import { useIdTokenAuthRequest } from 'expo-auth-session/providers/google';
-import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
-import { useEffect, useRef, useState } from 'react';
-import {
-    ActivityIndicator,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-} from 'react-native';
-import { ErrorBanner } from '../../components/error-banner';
-import { AnimatedScreen } from '../../components/ui/animated-screen';
-import { CaptchaChallenge } from '../../components/ui/captcha-challenge';
-import { Checkbox } from '../../components/ui/checkbox';
-import { useFormSubmission } from '../../hooks/useFormSubmission';
-import { setRememberMePreference } from '../../lib/auth-session-storage';
-import useScreenBackground from '../../lib/hooks/useScreenBackground';
-import { capture as posthogCapture, identify as posthogIdentify } from '../../lib/posthog';
-import { ROUTES } from '../../lib/routes';
-import { storage } from '../../lib/storage';
-import { hasLocalOnboardingFlag } from '../../lib/storage/onboarding';
-import { isSupabaseConfigured, supabase } from '../../lib/supabase';
-import {
-    generateCorrelationId,
-    getAuthErrorMessage,
-    parseAuthError,
-} from '../../lib/utils/auth-errors';
-import { suggestEmailCorrection, validateEmail } from '../../lib/utils/auth-validation';
-import { CAPTCHA_THRESHOLD } from '../../lib/utils/captcha';
-import { getUserFriendlyError } from '../../lib/utils/error-messages';
-import { markInitialNavigationDone } from '../initial-navigation/initialNavigation';
+"use client"
+import { MaterialIcons } from '@expo/vector-icons'
+import { ValidationMessage } from 'app/components/ValidationMessage'
+import * as AppleAuthentication from 'expo-apple-authentication'
+import { ResponseType } from 'expo-auth-session'
+import { useIdTokenAuthRequest } from 'expo-auth-session/providers/google'
+import { Image } from 'expo-image'
+import { useRouter } from 'expo-router'
+import * as WebBrowser from 'expo-web-browser'
+import { useEffect, useRef, useState } from 'react'
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { ErrorBanner } from '../../components/error-banner'
+import { AnimatedScreen } from '../../components/ui/animated-screen'
+import { CaptchaChallenge } from '../../components/ui/captcha-challenge'
+import { Checkbox } from '../../components/ui/checkbox'
+import { useFormSubmission } from '../../hooks/useFormSubmission'
+import { setRememberMePreference } from '../../lib/auth-session-storage'
+import useScreenBackground from '../../lib/hooks/useScreenBackground'
+import { identify, initMixpanel, track } from '../../lib/mixpanel'
+import { ROUTES } from '../../lib/routes'
+import { storage } from '../../lib/storage'
+import { hasLocalOnboardingFlag } from '../../lib/storage/onboarding'
+import { isSupabaseConfigured, supabase } from '../../lib/supabase'
+import { generateCorrelationId, getAuthErrorMessage, parseAuthError } from '../../lib/utils/auth-errors'
+import { suggestEmailCorrection, validateEmail } from '../../lib/utils/auth-validation'
+import { CAPTCHA_THRESHOLD } from '../../lib/utils/captcha'
+import { getUserFriendlyError } from '../../lib/utils/error-messages'
+import { markInitialNavigationDone } from '../initial-navigation/initialNavigation'
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
 
-WebBrowser.maybeCompleteAuthSession();
+WebBrowser.maybeCompleteAuthSession()
 
 export default function SignInRoute() {
   return <SignInForm />;
 }
 
 export function SignInForm() {
-  // set status/safe-area color for this screen
-  useScreenBackground('#097959ff'); // EMERALD_800 / dark
-  const router = useRouter();
-  const [identifier, setIdentifier] = useState(''); // email or username
-  const [password, setPassword] = useState('');
-  const [fieldErrors, setFieldErrors] = useState<{ [key: string]: string }>({});
-  const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
-  const [loginAttempts, setLoginAttempts] = useState(0);
-  const [lockoutUntil, setLockoutUntil] = useState<number | null>(null);
-  const [captchaVerified, setCaptchaVerified] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
-  console.log('[sign-in] Component rendered', { loginAttempts, lockoutUntil, captchaVerified });
-  const passwordRef = useRef<TextInput>(null);
-
+  const { theme, isDark } = useAppThemeContext()
+  // set status/safe-area color to match screen background
+  useScreenBackground(theme.background)
+  const router = useRouter()
+  const [identifier, setIdentifier] = useState('') // email or username
+  const [password, setPassword] = useState('')
+  const [fieldErrors, setFieldErrors] = useState<{ [key: string]: string }>({})
+  const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
+  const [loginAttempts, setLoginAttempts] = useState(0)
+  const [lockoutUntil, setLockoutUntil] = useState<number | null>(null)
+  const [captchaVerified, setCaptchaVerified] = useState(false)
+  const [rememberMe, setRememberMe] = useState(false)
+  console.log('[sign-in] Component rendered', { loginAttempts, lockoutUntil, captchaVerified })
+  const passwordRef = useRef<TextInput>(null)
+  
   // Derive active lockout and CAPTCHA requirement each render so expired
   // lockout timestamps are handled correctly without an extra state update.
   const isLockoutActive = lockoutUntil !== null && Date.now() < lockoutUntil;
@@ -560,10 +549,12 @@ export function SignInForm() {
         style={{ flex: 1 }}
       >
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-          <View className="flex-1 bg-emerald-700/95 px-6 pt-20 pb-8">
+          <View className="flex-1 px-6 pt-20 pb-8" style={{ backgroundColor: theme.background }}>
             <View className="flex-row items-center justify-center mb-10">
               <Image
-                source={require('../../assets/images/bounty-logo.png')}
+                source={isDark
+                  ? require('../../assets/images/bounty-logo.png')
+                  : require('../../assets/images/bounty-logo2.png')}
                 style={{ width: 220, height: 60 }}
                 resizeMode="contain"
               />
@@ -592,7 +583,7 @@ export function SignInForm() {
               )}
 
               <View>
-                <Text className="text-sm text-white/80 mb-1">Email</Text>
+                <Text className="text-sm mb-1" style={{ color: theme.text }}>Email</Text>
                 <TextInput
                   nativeID="identifier"
                   value={identifier}
@@ -608,9 +599,10 @@ export function SignInForm() {
                   autoCapitalize="none"
                   autoComplete="email"
                   editable={!isSubmitting}
-                  className={`w-full bg-white/10 rounded px-3 py-3 text-white ${fieldErrors.identifier ? 'border border-red-400' : ''}`}
+                  className={`w-full rounded px-3 py-3 ${fieldErrors.identifier ? 'border border-red-400' : ''}`}
+                  style={{ backgroundColor: theme.surfaceSecondary, color: theme.text }}
                   textContentType={Platform.OS === 'ios' ? 'emailAddress' : undefined}
-                  placeholderTextColor="rgba(255,255,255,0.4)"
+                  placeholderTextColor={theme.textDisabled}
                   returnKeyType="next"
                   blurOnSubmit={false}
                   onSubmitEditing={() => passwordRef.current?.focus()}
@@ -637,9 +629,14 @@ export function SignInForm() {
 
               <View>
                 <View className="flex-row items-center justify-between mb-1">
-                  <Text className="text-sm text-white/80">Password</Text>
-                  <TouchableOpacity onPress={() => router.push('/auth/reset-password')}>
-                    <Text className="text-[11px] text-emerald-200">Forgot?</Text>
+                  <Text className="text-sm" style={{ color: theme.text }}>Password</Text>
+                  <TouchableOpacity
+                    onPress={() => router.push('/auth/reset-password')}
+                    accessibilityRole="link"
+                    accessibilityLabel="Forgot password"
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Text className="text-[11px]" style={{ color: theme.textSecondary }}>Forgot?</Text>
                   </TouchableOpacity>
                 </View>
                 <View className="relative">
@@ -657,22 +654,21 @@ export function SignInForm() {
                     secureTextEntry={!showPassword}
                     autoComplete="password"
                     editable={!isSubmitting}
-                    className={`w-full bg-white/10 rounded px-3 py-3 text-white pr-12 ${fieldErrors.password ? 'border border-red-400' : ''}`}
+                    className={`w-full rounded px-3 py-3 pr-12 ${fieldErrors.password ? 'border border-red-400' : ''}`}
+                    style={{ backgroundColor: theme.surfaceSecondary, color: theme.text }}
                     textContentType={Platform.OS === 'ios' ? 'password' : undefined}
-                    placeholderTextColor="rgba(255,255,255,0.4)"
+                    placeholderTextColor={theme.textDisabled}
                     returnKeyType="done"
                     onSubmitEditing={handleSubmit}
                   />
                   <TouchableOpacity
                     onPress={() => setShowPassword(s => !s)}
                     className="absolute right-3 top-1/2 -translate-y-1/2"
+                    accessibilityRole="button"
                     accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    <MaterialIcons
-                      name={showPassword ? 'visibility-off' : 'visibility'}
-                      size={20}
-                      color="#fff"
-                    />
+                    <MaterialIcons name={showPassword ? 'visibility-off' : 'visibility'} size={20} color={theme.text} />
                   </TouchableOpacity>
                 </View>
                 {getFieldError('password') ? (
@@ -690,13 +686,13 @@ export function SignInForm() {
                   onPress={() => !isSubmitting && setRememberMe(!rememberMe)}
                   disabled={isSubmitting}
                 >
-                  <Text className="text-white/80 text-sm ml-2">Remember me</Text>
+                  <Text className="text-sm ml-2" style={{ color: theme.text }}>Remember me</Text>
                 </TouchableOpacity>
               </View>
 
               {captchaRequired && (
                 <View className="mt-4">
-                  <Text className="text-xs text-white/80 mb-2">
+                  <Text className="text-xs mb-2" style={{ color: theme.text }}>
                     Please complete the security check below to continue signing in.
                   </Text>
                   <CaptchaChallenge
@@ -706,11 +702,7 @@ export function SignInForm() {
                 </View>
               )}
 
-              <TouchableOpacity
-                onPress={handleSubmit}
-                disabled={isSubmitting}
-                className="w-full bg-emerald-600 rounded py-3 items-center flex-row justify-center"
-              >
+              <TouchableOpacity onPress={handleSubmit} disabled={isSubmitting} className="w-full bg-[#059669] rounded py-3 items-center flex-row justify-center" accessibilityRole="button" accessibilityLabel="Sign in" accessibilityState={{ disabled: isSubmitting }}>
                 {isSubmitting ? (
                   <>
                     <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />
@@ -858,6 +850,9 @@ export function SignInForm() {
                   promptAsync();
                 }}
                 className={`w-full rounded py-3 items-center flex-row justify-center mt-2 ${isGoogleConfigured ? 'bg-white' : 'bg-white/40'}`}
+                accessibilityRole="button"
+                accessibilityLabel={isGoogleConfigured ? 'Continue with Google' : 'Google sign-in unavailable'}
+                accessibilityState={{ disabled: !isGoogleConfigured || isSubmitting || !request || socialAuthLoading }}
               >
                 {socialAuthLoading ? (
                   <ActivityIndicator color="#000" />
@@ -868,25 +863,21 @@ export function SignInForm() {
                 )}
               </TouchableOpacity>
 
-              <TouchableOpacity onPress={() => router.push('/auth/sign-up-form')}>
-                <Text className="text-white/80 text-center mt-6">New here? Create an account</Text>
+              <TouchableOpacity
+                onPress={() => router.push('/auth/sign-up-form')}
+                accessibilityRole="button"
+                accessibilityLabel="Create an account"
+              >
+                <Text className="text-center mt-6" style={{ color: theme.text }}>New here? Create an account</Text>
               </TouchableOpacity>
 
               <View className="flex-row justify-center mt-4 gap-3">
-                <TouchableOpacity
-                  onPress={() => router.push('/legal/terms')}
-                  accessibilityRole="link"
-                  accessibilityLabel="View Terms of Service"
-                >
-                  <Text className="text-white/50 text-xs underline">Terms of Service</Text>
+                <TouchableOpacity onPress={() => router.push('/legal/terms')} accessibilityRole="link" accessibilityLabel="View Terms of Service">
+                  <Text className="text-xs underline" style={{ color: theme.textSecondary }}>Terms of Service</Text>
                 </TouchableOpacity>
-                <Text className="text-white/30 text-xs">·</Text>
-                <TouchableOpacity
-                  onPress={() => router.push('/legal/privacy')}
-                  accessibilityRole="link"
-                  accessibilityLabel="View Privacy Policy"
-                >
-                  <Text className="text-white/50 text-xs underline">Privacy Policy</Text>
+                <Text className="text-xs" style={{ color: theme.textDisabled }}>·</Text>
+                <TouchableOpacity onPress={() => router.push('/legal/privacy')} accessibilityRole="link" accessibilityLabel="View Privacy Policy">
+                  <Text className="text-xs underline" style={{ color: theme.textSecondary }}>Privacy Policy</Text>
                 </TouchableOpacity>
               </View>
             </View>

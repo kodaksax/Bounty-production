@@ -2,6 +2,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import type { ComponentProps } from 'react';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 import {
   type VerificationBadge,
   type VerificationBadgeInput,
@@ -22,7 +24,7 @@ const BADGE_COLORS: Record<string, string> = {
   email_confirmed: '#3b82f6',  // blue-500
   phone_verified: '#8b5cf6',   // violet-500
   id_verified: '#06b6d4',      // cyan-500
-  profile_complete: '#10b981', // emerald-500
+  profile_complete: '#059669', // emerald-500
   trusted: '#f59e0b',          // amber-500
 };
 
@@ -38,12 +40,14 @@ interface VerificationBadgeChipsProps {
  * with a lock icon overlay.
  */
 export function VerificationBadgeChips({ input }: VerificationBadgeChipsProps) {
+  const { theme } = useAppThemeContext();
+  const styles = makeStyles(theme);
   const badges = getVerificationBadges(input);
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <MaterialIcons name="verified-user" size={16} color={HEADER_ICON_COLOR} />
+        <MaterialIcons name="verified-user" size={16} color={theme.primaryLight} />
         <Text style={styles.title}>Verification</Text>
       </View>
       <View style={styles.chips}>
@@ -56,6 +60,8 @@ export function VerificationBadgeChips({ input }: VerificationBadgeChipsProps) {
 }
 
 function BadgeChip({ badge }: { badge: VerificationBadge }) {
+  const { theme } = useAppThemeContext();
+  const styles = makeStyles(theme);
   const color = BADGE_COLORS[badge.id] ?? '#9ca3af';
   const iconName: MaterialIconName = BADGE_ICONS[badge.id] ?? 'help-outline';
 
@@ -80,56 +86,58 @@ function BadgeChip({ badge }: { badge: VerificationBadge }) {
       accessibilityRole="text"
       accessibilityLabel={`${badge.label} not yet earned`}
     >
-      <MaterialIcons name={iconName} size={14} color="#6b7280" />
+      <MaterialIcons name={iconName} size={14} color={theme.textSecondary} />
       <Text style={styles.chipLabelUnearned}>{badge.label}</Text>
-      <MaterialIcons name="lock" size={11} color="#6b7280" style={styles.lockIcon} />
+      <MaterialIcons name="lock" size={11} color={theme.textSecondary} style={styles.lockIcon} />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: 8,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 8,
-  },
-  title: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#ffffff',
-  },
-  chips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 5,
-  },
-  chipUnearned: {
-    backgroundColor: 'rgba(107, 114, 128, 0.1)',
-    borderColor: '#374151',
-  },
-  chipLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  chipLabelUnearned: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#6b7280',
-  },
-  lockIcon: {
-    marginLeft: 1,
-  },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      marginBottom: 8,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 8,
+    },
+    title: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: theme.text,
+    },
+    chips: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    chip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 14,
+      borderWidth: 1,
+      gap: 5,
+    },
+    chipUnearned: {
+      backgroundColor: 'rgba(107, 114, 128, 0.1)',
+      borderColor: theme.border,
+    },
+    chipLabel: {
+      fontSize: 11,
+      fontWeight: '600',
+    },
+    chipLabelUnearned: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: theme.textSecondary,
+    },
+    lockIcon: {
+      marginLeft: 1,
+    },
+  });
+}

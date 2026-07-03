@@ -4,6 +4,7 @@ import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import React, { useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import { validateTitle } from '../../../lib/utils/bounty-validation';
 
 interface StepTitleProps {
@@ -27,6 +28,7 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const insets = useSafeAreaInsets();
   const BOTTOM_NAV_OFFSET = 60;
+  const { theme } = useAppThemeContext();
 
   const handleTitleChange = (value: string) => {
     onUpdate({ title: value });
@@ -68,7 +70,7 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
   }, [])
 
   return (
-    <View className="flex-1 bg-emerald-600">
+    <View className="flex-1" style={{ backgroundColor: theme.background }}>
       <ScrollView
         ref={scrollRef}
         className="flex-1 px-4 pt-2"
@@ -82,7 +84,7 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
       >
         {/* Title Input */}
         <View className="mb-6">
-          <Text className="text-emerald-100 text-base font-semibold mb-2">
+          <Text className="text-base font-semibold mb-2" style={{ color: theme.text }}>
             What do you need help with? *
           </Text>
           <TextInput
@@ -90,12 +92,13 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
             onChangeText={handleTitleChange}
             onBlur={handleTitleBlur}
             placeholder="e.g., Help moving furniture, Logo design, Website fixes..."
-            placeholderTextColor="rgba(110, 231, 183, 0.4)"
-            className="bg-emerald-700/50 text-white px-4 py-3 rounded-lg text-base"
+            placeholderTextColor={theme.textDisabled}
+            className="px-4 py-3 rounded-lg text-base"
+            style={{ backgroundColor: theme.surfaceSecondary, color: theme.text }}
             accessibilityLabel="Bounty title input"
             maxLength={120}
           />
-          <Text className="text-emerald-200/60 text-xs mt-1">
+          <Text className="text-xs mt-1" style={{ color: theme.textSecondary }}>
             {draft.title.length}/120 characters
           </Text>
           {touched.title && errors.title && (
@@ -105,7 +108,7 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
 
         {/* Category Selection */}
         <View className="mb-6">
-          <Text className="text-emerald-100 text-base font-semibold mb-3">
+          <Text className="text-base font-semibold mb-3" style={{ color: theme.text }}>
             Category (optional)
           </Text>
           <View className="flex-row flex-wrap gap-2">
@@ -115,9 +118,8 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
                 <TouchableOpacity
                   key={category.id}
                   onPress={() => handleCategorySelect(category.id)}
-                  className={`flex-row items-center px-4 py-2 rounded-full ${
-                    isSelected ? 'bg-emerald-400' : 'bg-emerald-700/50'
-                  }`}
+                  className="flex-row items-center px-4 py-2 rounded-full"
+                  style={{ backgroundColor: isSelected ? theme.primary : theme.surface }}
                   accessibilityLabel={`Select ${category.label} category`}
                   accessibilityRole="button"
                   accessibilityState={{ selected: isSelected }}
@@ -125,12 +127,11 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
                   <MaterialIcons
                     name={category.icon}
                     size={18}
-                    color={isSelected ? '#065f46' : '#fff'}
+                    color={isSelected ? '#fff' : theme.textDisabled}
                   />
                   <Text
-                    className={`ml-2 font-medium ${
-                      isSelected ? 'text-emerald-900' : 'text-white'
-                    }`}
+                    className="ml-2 font-medium"
+                    style={{ color: isSelected ? '#fff' : theme.textSecondary }}
                   >
                     {category.label}
                   </Text>
@@ -143,42 +144,41 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
 
       {/* Navigation Buttons */}
       <View
-        className="px-4 pb-4 pt-3 bg-emerald-600 border-t border-emerald-700/50"
-        style={{ marginBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 8) }}
+        className="px-4 pb-4 pt-3 border-t"
+        style={{ backgroundColor: theme.background, borderColor: theme.border, marginBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 8) }}
       >
         <View className="flex-row gap-3">
           {onBack && (
             <TouchableOpacity
               onPress={onBack}
-              className="flex-1 bg-emerald-700/50 py-3 rounded-lg flex-row items-center justify-center"
+              className="flex-1 py-3 rounded-lg flex-row items-center justify-center"
+              style={{ backgroundColor: theme.surfaceSecondary }}
               accessibilityLabel="Go back"
               accessibilityRole="button"
             >
-              <MaterialIcons name="arrow-back" size={20} color="#fff" />
-              <Text className="text-white font-semibold ml-2">Back</Text>
+              <MaterialIcons name="arrow-back" size={20} color={theme.text} />
+              <Text className="font-semibold ml-2" style={{ color: theme.text }}>Back</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity
             onPress={handleNext}
             disabled={!isValid}
-            className={`flex-1 py-3 rounded-lg flex-row items-center justify-center ${
-              isValid ? 'bg-emerald-500' : 'bg-emerald-700/30'
-            }`}
+            className="flex-1 py-3 rounded-lg flex-row items-center justify-center"
+            style={{ backgroundColor: isValid ? theme.primary : theme.surface }}
             accessibilityLabel="Continue to next step"
             accessibilityRole="button"
             accessibilityState={{ disabled: !isValid }}
           >
             <Text
-              className={`font-semibold mr-2 ${
-                isValid ? 'text-white' : 'text-emerald-400/40'
-              }`}
+              className="font-semibold mr-2"
+              style={{ color: isValid ? '#fff' : theme.textDisabled }}
             >
               Next
             </Text>
             <MaterialIcons
               name="arrow-forward"
               size={20}
-              color={isValid ? '#fff' : 'rgba(110, 231, 183, 0.4)'}
+              color={isValid ? '#fff' : theme.textDisabled}
             />
           </TouchableOpacity>
         </View>

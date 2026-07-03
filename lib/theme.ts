@@ -17,27 +17,27 @@ export const colors = {
     950: '#000e04',
   },
 
-  // Background colors (darker green theme aligned with branding)
+  // Background colors (dark navy theme)
   background: {
-    primary: '#1a3d2e', // Main background - darker tone of primary
-    secondary: '#2d5240', // Header background - complementary to primary
-    surface: 'rgba(45, 82, 64, 0.75)', // Card surface
-    elevated: 'rgba(45, 82, 64, 0.85)', // Modal/elevated surface
+    primary: '#0B0F14', // Main background - page/screen
+    secondary: '#111827', // Section/card/modal background
+    surface: '#1F2937', // Input/secondary interactive background
+    elevated: '#111827', // Modal/elevated surface
   },
 
   // Text colors
   text: {
-    primary: '#fffef5', // Off-white for readability
-    secondary: 'rgba(255, 254, 245, 0.8)',
-    muted: 'rgba(255, 254, 245, 0.6)',
-    inverse: '#1a3d2e',
+    primary: '#ffffff', // White for readability
+    secondary: '#9CA3AF',
+    muted: '#6B7280',
+    inverse: '#ffffff',
   },
 
   // Border colors
   border: {
-    primary: 'rgba(0, 145, 44, 0.4)', // emerald-500
-    muted: 'rgba(0, 145, 44, 0.2)',
-    strong: 'rgba(0, 145, 44, 0.6)',
+    primary: '#374151',
+    muted: '#374151',
+    strong: '#374151',
   },
 
   // Status colors

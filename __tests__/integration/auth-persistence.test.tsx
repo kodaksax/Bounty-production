@@ -11,6 +11,8 @@ jest.mock('../../lib/supabase', () => ({
     auth: {
       getSession: jest.fn(),
       refreshSession: jest.fn(),
+      startAutoRefresh: jest.fn(),
+      stopAutoRefresh: jest.fn(),
       onAuthStateChange: jest.fn(() => ({
         data: {
           subscription: {
@@ -77,6 +79,13 @@ try {
 }
 
 // Require modules after mocks so imports inside modules pick up jest mocks
+const reactNative = require('react-native');
+if (!reactNative.AppState || typeof reactNative.AppState.addEventListener !== 'function') {
+  reactNative.AppState = {
+    addEventListener: jest.fn(() => ({ remove: jest.fn() })),
+  };
+}
+
 const { supabase } = require('../../lib/supabase');
 const AuthProvider = require('../../providers/auth-provider').default;
 
@@ -195,6 +204,54 @@ describe('Authentication State Persistence', () => {
       await waitFor(() => {
         expect(supabase.auth.getSession).toHaveBeenCalled();
       });
+    });
+  });
+
+  describe('AppState-driven auto-refresh control', () => {
+    it('should start and stop Supabase auto-refresh on app state transitions', async () => {
+      let appStateCallback: ((state: string) => void) | undefined;
+      const removeAppStateListener = jest.fn();
+      const { AppState } = require('react-native');
+
+      (AppState.addEventListener as jest.Mock).mockImplementation((_event: string, callback: (state: string) => void) => {
+        appStateCallback = callback;
+        return {
+          remove: removeAppStateListener,
+        };
+      });
+
+      (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+        data: { session: null },
+        error: null,
+      });
+
+      const TestComponent = () => <></>;
+      const { unmount } = render(
+        <AuthProvider>
+          <TestComponent />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(AppState.addEventListener).toHaveBeenCalledWith('change', expect.any(Function));
+      });
+
+      act(() => {
+        appStateCallback?.('active');
+      });
+      await waitFor(() => {
+        expect(supabase.auth.startAutoRefresh).toHaveBeenCalledTimes(1);
+      });
+
+      act(() => {
+        appStateCallback?.('background');
+      });
+      await waitFor(() => {
+        expect(supabase.auth.stopAutoRefresh).toHaveBeenCalledTimes(1);
+      });
+
+      unmount();
+      expect(removeAppStateListener).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -840,6 +897,79 @@ describe('Authentication State Persistence', () => {
       }
 
       expect(authStateCallback).toBeDefined();
+    });
+
+    // Regression test for the "remember me" cold-start deadlock (issue #624).
+    //
+    // onAuthStateChange runs synchronously inside gotrue's auth lock. If the
+    // handler awaits authProfileService.setSession() (which issues supabase
+    // queries that re-acquire the same lock), it deadlocks — leaving the profile
+    // null, forcing returning users through onboarding and hanging the feed.
+    //
+    // The fix defers profile sync to a macrotask so the lock releases first.
+    // This test asserts setSession is NOT invoked synchronously within the
+    // handler, and only runs once the deferred macrotask fires.
+    it('defers profile sync off the auth lock to avoid deadlock', async () => {
+      let authStateCallback: any;
+
+      (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((callback) => {
+        authStateCallback = callback;
+        return {
+          data: {
+            subscription: {
+              unsubscribe: jest.fn(),
+            },
+          },
+        };
+      });
+
+      (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+        data: { session: null },
+        error: null,
+      });
+
+      const { authProfileService } = require('../../lib/services/auth-profile-service');
+      (authProfileService.setSession as jest.Mock).mockResolvedValue(undefined);
+      (authProfileService.subscribe as jest.Mock).mockImplementation(() => jest.fn());
+
+      const mockSession = {
+        access_token: 'refreshed_token',
+        refresh_token: 'refresh_token',
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+        user: {
+          id: 'user123',
+          email: 'user@example.com',
+        },
+      };
+
+      render(
+        <AuthProvider>
+          <></>
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(supabase.auth.onAuthStateChange).toHaveBeenCalled();
+      });
+
+      // Ignore the initial fetchSession(null) call from mount; we only care about
+      // what the onAuthStateChange handler does.
+      (authProfileService.setSession as jest.Mock).mockClear();
+
+      // Fire the event that runs inside the lock on cold start.
+      await act(async () => {
+        await authStateCallback('TOKEN_REFRESHED', mockSession);
+      });
+
+      // Must NOT have run inline inside the lock — otherwise a real query would deadlock.
+      expect(authProfileService.setSession).not.toHaveBeenCalled();
+
+      // The deferred macrotask now runs safely outside the lock.
+      await act(async () => {
+        jest.advanceTimersByTime(0);
+      });
+
+      expect(authProfileService.setSession).toHaveBeenCalledWith(mockSession);
     });
   });
 

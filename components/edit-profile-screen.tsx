@@ -454,8 +454,8 @@ export function EditProfileScreen({
   // Show loading spinner if profiles are loading
   if (isLoading) {
     return (
-      <View className="flex-1 bg-emerald-600 items-center justify-center">
-        <ActivityIndicator size="large" color="#10b981" />
+      <View className="flex-1 bg-[#059669] items-center justify-center">
+        <ActivityIndicator size="large" color="#059669" />
         <Text className="text-white text-sm mt-4">Loading profile...</Text>
       </View>
     )
@@ -464,8 +464,8 @@ export function EditProfileScreen({
   // Show error state if there's an error loading profiles
   if (localProfileError || normalizedError) {
     return (
-      <View className="flex-1 bg-emerald-600">
-        <View className="flex-row items-center justify-between p-4 pt-8 bg-emerald-700/80 border-b border-emerald-500/30">
+      <View className="flex-1 bg-[#059669]">
+        <View className="flex-row items-center justify-between p-4 pt-8 bg-[#111827]/80 border-b border-[#374151]">
           <View className="flex-row items-center">
             <BrandingLogo size="small" />
           </View>
@@ -476,12 +476,12 @@ export function EditProfileScreen({
         <View className="flex-1 items-center justify-center px-6">
           <MaterialIcons name="error-outline" size={48} color="#ef4444" />
           <Text className="text-white text-lg font-semibold mt-4 text-center">Failed to Load Profile</Text>
-          <Text className="text-emerald-200 text-sm mt-2 text-center">
+          <Text className="text-[#9CA3AF] text-sm mt-2 text-center">
             {localProfileError || normalizedError}
           </Text>
           <TouchableOpacity
             onPress={onBack}
-            className="mt-6 px-6 py-3 bg-emerald-700 rounded-lg"
+            className="mt-6 px-6 py-3 bg-[#111827] rounded-lg"
           >
             <Text className="text-white font-semibold">Go Back</Text>
           </TouchableOpacity>
@@ -491,11 +491,11 @@ export function EditProfileScreen({
   }
 
   return (
-    <View className="flex-1 bg-emerald-600">
+    <View className="flex-1 bg-[#059669]">
       {/* Upload Status Banner */}
       {uploadMessage && (
         <View style={{ position: 'absolute', top: 60, left: 16, right: 16, zIndex: 50 }}>
-          <View className="bg-emerald-800 rounded-lg px-4 py-3 flex-row items-center justify-between shadow-lg">
+          <View className="bg-[#111827] rounded-lg px-4 py-3 flex-row items-center justify-between shadow-lg">
             <Text className="text-white text-sm flex-1">{uploadMessage}</Text>
             <TouchableOpacity onPress={() => setUploadMessage(null)}>
               <MaterialIcons name="close" size={18} color="white" />
@@ -504,7 +504,7 @@ export function EditProfileScreen({
         </View>
       )}
       {/* Header - Twitter-like modal style */}
-      <View className="flex-row items-center justify-between p-4 pt-8 bg-emerald-700/80 border-b border-emerald-500/30">
+      <View className="flex-row items-center justify-between p-4 pt-8 bg-[#111827]/80 border-b border-[#374151]">
         <TouchableOpacity onPress={handleBack} accessibilityLabel="Close" className="p-2" disabled={isSaving}>
           <MaterialIcons name="close" size={22} color="#ffffff" />
         </TouchableOpacity>
@@ -535,12 +535,12 @@ export function EditProfileScreen({
           showsVerticalScrollIndicator={false}
         >
           {/* Banner area (Twitter-like aesthetic placeholder) */}
-          <View className="h-24 bg-emerald-800/40" />
+          <View className="h-24 bg-[#111827]/40" />
 
           {/* Avatar */}
           <View className="px-4 -mt-8 flex flex-col items-start">
             <View className="relative mb-2">
-              <View className="h-20 w-20 rounded-full overflow-hidden border-2 border-emerald-500 bg-emerald-800 items-center justify-center">
+              <View className="h-20 w-20 rounded-full overflow-hidden border-2 border-[#374151] bg-[#111827] items-center justify-center">
                 {avatar ? (
                   <OptimizedImage
                     source={{ uri: avatar }}
@@ -553,13 +553,13 @@ export function EditProfileScreen({
                     alt="Profile"
                   />
                 ) : (
-                  <AvatarFallback className="bg-emerald-800 text-emerald-200">
+                  <AvatarFallback className="bg-[#111827] text-[#9CA3AF]">
                     {initialName.substring(0, 2).toUpperCase()}
                   </AvatarFallback>
                 )}
               </View>
               <TouchableOpacity
-                style={{ position: 'absolute', bottom: 0, right: 0, height: 32, width: 32, borderRadius: 16, backgroundColor: '#10b981', alignItems: 'center', justifyContent: 'center' }}
+                style={{ position: 'absolute', bottom: 0, right: 0, height: 32, width: 32, borderRadius: 16, backgroundColor: '#059669', alignItems: 'center', justifyContent: 'center' }}
                 onPress={handleAvatarClick}
                 disabled={isUploadingAvatar}
               >
@@ -571,74 +571,74 @@ export function EditProfileScreen({
               </TouchableOpacity>
             </View>
             {isUploadingAvatar ? (
-              <Text className="text-xs text-emerald-100/80">Uploading... {Math.round(uploadProgress * 100)}%</Text>
+              <Text className="text-xs text-white/80">Uploading... {Math.round(uploadProgress * 100)}%</Text>
             ) : null}
           </View>
 
           {/* Fields - Twitter style inputs */}
-          <View className="px-4 py-3 bg-emerald-900/30 mt-1">
-            <Text className="text-xs text-emerald-300 mb-1">Name</Text>
+          <View className="px-4 py-3 bg-[#0B0F14]/30 mt-1">
+            <Text className="text-xs text-[#6ee7b7] mb-1">Name</Text>
             <TextInput
               value={name}
               onChangeText={setName}
               placeholder="Your name"
-              className="w-full bg-transparent border-b border-emerald-600 pb-2 text-white"
+              className="w-full bg-transparent border-b border-[#059669] pb-2 text-white"
             />
           </View>
 
-          <View className="px-4 py-3 bg-emerald-900/30 mt-1">
-            <Text className="text-xs text-emerald-300 mb-1">Title</Text>
+          <View className="px-4 py-3 bg-[#0B0F14]/30 mt-1">
+            <Text className="text-xs text-[#6ee7b7] mb-1">Title</Text>
             <TextInput
               value={title}
               onChangeText={setTitle}
               placeholder="e.g., Full Stack Developer"
-              className="w-full bg-transparent border-b border-emerald-600 pb-2 text-white"
+              className="w-full bg-transparent border-b border-[#059669] pb-2 text-white"
             />
           </View>
 
-          <View className="px-4 py-3 bg-emerald-900/30 mt-1">
-            <Text className="text-xs text-emerald-300 mb-1">Location</Text>
+          <View className="px-4 py-3 bg-[#0B0F14]/30 mt-1">
+            <Text className="text-xs text-[#6ee7b7] mb-1">Location</Text>
             <TextInput
               value={location}
               onChangeText={setLocation}
               placeholder="City, Country"
-              className="w-full bg-transparent border-b border-emerald-600 pb-2 text-white"
+              className="w-full bg-transparent border-b border-[#059669] pb-2 text-white"
             />
           </View>
 
-          <View className="px-4 py-3 bg-emerald-900/30 mt-1">
-            <Text className="text-xs text-emerald-300 mb-1">Portfolio</Text>
+          <View className="px-4 py-3 bg-[#0B0F14]/30 mt-1">
+            <Text className="text-xs text-[#6ee7b7] mb-1">Portfolio</Text>
             <TextInput
               value={portfolio}
               onChangeText={setPortfolio}
               placeholder="https://yourportfolio.com"
               keyboardType="url"
               autoCapitalize="none"
-              className="w-full bg-transparent border-b border-emerald-600 pb-2 text-white"
+              className="w-full bg-transparent border-b border-[#059669] pb-2 text-white"
             />
             <View className="flex-row items-center mt-3">
               <TouchableOpacity
                 onPress={pickPortfolioItem}
-                className="bg-emerald-600 rounded-lg px-3 py-2"
+                className="bg-[#059669] rounded-lg px-3 py-2"
                 disabled={isUploadingPortfolio}
               >
                 <Text className="text-white text-sm">
                   {isUploadingPortfolio ? `Uploading ${Math.round((portfolioProgress || 0) * 100)}%` : 'Add Portfolio Item'}
                 </Text>
               </TouchableOpacity>
-              <Text className="text-xs text-emerald-200 ml-3">Upload images, videos, or files</Text>
+              <Text className="text-xs text-[#9CA3AF] ml-3">Upload images, videos, or files</Text>
             </View>
           </View>
 
-          <View className="px-4 py-3 bg-emerald-900/30 mt-1">
-            <Text className="text-xs text-emerald-300 mb-1">Bio</Text>
+          <View className="px-4 py-3 bg-[#0B0F14]/30 mt-1">
+            <Text className="text-xs text-[#6ee7b7] mb-1">Bio</Text>
             <TextInput
               placeholder="Tell us about yourself"
               multiline
               numberOfLines={4}
               value={bio}
               onChangeText={setBio}
-              className="w-full bg-emerald-800/40 rounded-md p-3 text-white"
+              className="w-full bg-[#111827]/40 rounded-md p-3 text-white"
             />
           </View>
           {/* Footer space */}

@@ -1,6 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 
 interface RatingStarsProps {
   rating: number;
@@ -26,6 +27,10 @@ export function RatingStars({
   size = 'medium',
 }: RatingStarsProps) {
   const starSize = size === 'small' ? 16 : size === 'large' ? 32 : 24;
+  const { theme } = useAppThemeContext();
+  const styles = makeStyles(theme);
+
+  const unfilledStarColor = theme.isDark ? 'rgba(251, 191, 36, 0.3)' : 'rgba(180, 120, 0, 0.35)';
 
   const handleStarPress = (value: number) => {
     if (!readonly && onRatingChange) {
@@ -37,7 +42,7 @@ export function RatingStars({
     <View style={styles.container}>
       {label && <Text style={styles.label}>{label}</Text>}
       <View style={styles.starsContainer}>
-        {[1, 2, 3, 4, 5].map((value) => {
+        {[1, 2, 3, 4, 5].map(value => {
           const isFilled = value <= rating;
           const StarComponent = readonly ? View : TouchableOpacity;
 
@@ -53,7 +58,7 @@ export function RatingStars({
               <MaterialIcons
                 name={isFilled ? 'star' : 'star-border'}
                 size={starSize}
-                color={isFilled ? '#fbbf24' : 'rgba(251, 191, 36, 0.3)'}
+                color={isFilled ? '#fbbf24' : unfilledStarColor}
               />
             </StarComponent>
           );
@@ -68,25 +73,27 @@ export function RatingStars({
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    gap: 8,
-  },
-  label: {
-    color: '#6ee7b7',
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  starsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  hint: {
-    color: 'rgba(110,231,183,0.7)',
-    fontSize: 11,
-    marginTop: -4,
-  },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      gap: 8,
+    },
+    label: {
+      color: theme.primaryLight,
+      fontSize: 12,
+      fontWeight: '600',
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    starsContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    hint: {
+      color: theme.textSecondary,
+      fontSize: 11,
+      marginTop: -4,
+    },
+  });
+}

@@ -112,7 +112,7 @@ export function AttachmentViewerTestScreen() {
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <MaterialIcons name="attach-file" size={24} color="#10b981" />
+          <MaterialIcons name="attach-file" size={24} color="#059669" />
           <Text style={styles.headerTitle}>Attachment Viewer Test</Text>
         </View>
 
@@ -139,7 +139,7 @@ export function AttachmentViewerTestScreen() {
                 <MaterialIcons
                   name={getFileIcon(attachment.mimeType || '') as any}
                   size={32}
-                  color="#10b981"
+                  color="#059669"
                 />
               </View>
               <View style={styles.attachmentInfo}>
@@ -185,27 +185,27 @@ export function AttachmentViewerTestScreen() {
           <View style={styles.featuresCard}>
             <Text style={styles.featuresTitle}>Features to Test</Text>
             <View style={styles.featureItem}>
-              <MaterialIcons name="image" size={18} color="#10b981" />
+              <MaterialIcons name="image" size={18} color="#059669" />
               <Text style={styles.featureText}>Image viewing with zoom</Text>
             </View>
             <View style={styles.featureItem}>
-              <MaterialIcons name="videocam" size={18} color="#10b981" />
+              <MaterialIcons name="videocam" size={18} color="#059669" />
               <Text style={styles.featureText}>Video playback</Text>
             </View>
             <View style={styles.featureItem}>
-              <MaterialIcons name="file-download" size={18} color="#10b981" />
+              <MaterialIcons name="file-download" size={18} color="#059669" />
               <Text style={styles.featureText}>Download & save</Text>
             </View>
             <View style={styles.featureItem}>
-              <MaterialIcons name="share" size={18} color="#10b981" />
+              <MaterialIcons name="share" size={18} color="#059669" />
               <Text style={styles.featureText}>Share functionality</Text>
             </View>
             <View style={styles.featureItem}>
-              <MaterialIcons name="security" size={18} color="#10b981" />
+              <MaterialIcons name="security" size={18} color="#059669" />
               <Text style={styles.featureText}>Security validations</Text>
             </View>
             <View style={styles.featureItem}>
-              <MaterialIcons name="accessibility" size={18} color="#10b981" />
+              <MaterialIcons name="accessibility" size={18} color="#059669" />
               <Text style={styles.featureText}>Accessibility support</Text>
             </View>
           </View>
@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 16,
     paddingVertical: 16,
-    backgroundColor: '#047857', // emerald-700
+    backgroundColor: '#0B0F14', // emerald-700
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(110, 231, 183, 0.2)',
   },
@@ -259,7 +259,7 @@ const styles = StyleSheet.create({
   },
   infoText: {
     flex: 1,
-    color: '#d1fae5',
+    color: '#1F2937',
     fontSize: 13,
     lineHeight: 18,
   },
@@ -273,7 +273,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#10b981',
+    color: '#059669',
     marginBottom: 12,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -284,7 +284,7 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 16,
     marginBottom: 8,
-    backgroundColor: '#047857',
+    backgroundColor: '#0B0F14',
     borderRadius: 8,
     borderWidth: 1,
     borderColor: 'rgba(110, 231, 183, 0.2)',
@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 8,
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    backgroundColor: '#374151',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -307,13 +307,13 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   attachmentMeta: {
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     fontSize: 12,
   },
   instructionsCard: {
     marginTop: 24,
     padding: 16,
-    backgroundColor: '#047857',
+    backgroundColor: '#0B0F14',
     borderRadius: 8,
     borderWidth: 1,
     borderColor: 'rgba(110, 231, 183, 0.2)',
@@ -321,14 +321,14 @@ const styles = StyleSheet.create({
   instructionsTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#10b981',
+    color: '#059669',
     marginBottom: 12,
   },
   checklistItem: {
     paddingVertical: 6,
   },
   checklistText: {
-    color: '#d1fae5',
+    color: '#1F2937',
     fontSize: 14,
     lineHeight: 20,
   },
@@ -336,7 +336,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     marginBottom: 24,
     padding: 16,
-    backgroundColor: '#047857',
+    backgroundColor: '#0B0F14',
     borderRadius: 8,
     borderWidth: 1,
     borderColor: 'rgba(110, 231, 183, 0.2)',
@@ -344,7 +344,7 @@ const styles = StyleSheet.create({
   featuresTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#10b981',
+    color: '#059669',
     marginBottom: 12,
   },
   featureItem: {
@@ -354,7 +354,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   featureText: {
-    color: '#d1fae5',
+    color: '#1F2937',
     fontSize: 14,
   },
 });

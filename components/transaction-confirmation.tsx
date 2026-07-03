@@ -69,7 +69,7 @@ export function TransactionConfirmation({
           
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Status:</Text>
-            <Text style={[styles.detailValue, { color: isDeposit ? '#10b981' : '#f59e0b' }]}>
+            <Text style={[styles.detailValue, { color: isDeposit ? '#059669' : '#f59e0b' }]}>
               {isDeposit ? 'Completed' : 'Processing'}
             </Text>
           </View>

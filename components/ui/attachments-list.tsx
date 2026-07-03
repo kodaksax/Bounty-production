@@ -67,7 +67,7 @@ export function AttachmentsList({ attachments, onAttachmentPress }: AttachmentsL
         accessibilityLabel={`Attachment: ${item.name}, ${sizeText}`}
       >
         <View style={styles.iconContainer}>
-          <MaterialIcons name={icon as any} size={24} color="#10b981" />
+          <MaterialIcons name={icon as any} size={24} color="#059669" />
         </View>
         <View style={styles.attachmentInfo}>
           <Text style={styles.attachmentName} numberOfLines={1}>
@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 8,
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    backgroundColor: '#374151',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
   statusContainer: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    backgroundColor: '#374151',
     borderRadius: 4,
   },
   statusText: {

@@ -4,6 +4,7 @@ import { AuthContext } from 'hooks/use-auth-context'
 import { DEFERRED_PUSH_REGISTRATION_KEY } from 'lib/constants'
 import { cachedDataService } from 'lib/services/cached-data-service'
 import { notificationService } from 'lib/services/notification-service'
+import { AppState, AppStateStatus } from 'react-native'
 import { PropsWithChildren, useContext, useEffect, useRef, useState } from 'react'
 import { clearBountyDraftForUser } from '../app/hooks/useBountyDraft'
 import { clearAllSessionData } from '../lib/auth-session-storage'
@@ -71,6 +72,11 @@ export default function AuthProvider({ children }: PropsWithChildren) {
   const lastProfileLogRef = useRef<string | null>(null)
   // Track previous user ID so we can clear their data when they sign out or switch
   const previousUserIdRef = useRef<string | null>(null)
+  // AppState refresh-control refs – declared here (not inside useEffect) so the
+  // values survive across re-renders and are guaranteed to be the same closure
+  // instance used by the listener callback.
+  const appStateOpInFlightRef = useRef<boolean>(false)
+  const pendingAppStateRef = useRef<AppStateStatus | null>(null)
 
   /**
    * Manually refresh the session token with promise-based queueing
@@ -301,10 +307,18 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           sessionIdRef.current = session.user.id
           previousUserIdRef.current = session.user.id
           
-          // Sync session with auth profile service
+          // Sync session with auth profile service.
+          // Race against a timeout so a slow/unavailable network on app restore
+          // never blocks setIsLoading(false) indefinitely. setSession continues
+          // in the background and notifies listeners when the profile arrives.
+          let sessionSyncTimeout: ReturnType<typeof setTimeout> | undefined
           try {
-            await authProfileService.setSession(session)
-            // Mark that profile fetch has completed (successfully or not)
+            await Promise.race([
+              authProfileService.setSession(session),
+              new Promise<void>(resolve => {
+                sessionSyncTimeout = setTimeout(resolve, 8_000)
+              }),
+            ])
             profileFetchCompletedRef.current = true
           } catch (e) {
             // Profile service errors shouldn't block auth flow
@@ -312,9 +326,13 @@ export default function AuthProvider({ children }: PropsWithChildren) {
             reportWarning('[AuthProvider] Profile service unavailable during session sync:', e)
             // Even on error, mark as completed to avoid blocking
             profileFetchCompletedRef.current = true
+          } finally {
+            if (sessionSyncTimeout) {
+              clearTimeout(sessionSyncTimeout)
+            }
           }
 
-          // Explicitly clear loading now that profile fetch is complete.
+          // Explicitly clear loading now that profile fetch is complete (or timed out).
           // The profile subscription fires during setSession() while
           // profileFetchCompletedRef is still false, so it cannot clear loading
           // on its own. Forcing it here ensures we never get stuck in a
@@ -435,27 +453,60 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       // Reset profile fetch flag for events that trigger profile fetch
       profileFetchCompletedRef.current = false
       
-      // Sync session with auth profile service
-        try {
-          await authProfileService.setSession(session)
-          // Mark profile fetch as completed after setSession finishes
-          profileFetchCompletedRef.current = true
-        } catch (e) {
-          // Profile service errors shouldn't block auth flow
-          // These can occur when service is unavailable or during tests
-          reportWarning('[AuthProvider] Profile service unavailable during session sync:', e)
-          // Mark as completed even on error to avoid blocking
-          profileFetchCompletedRef.current = true
-        }
-
-      // Explicitly clear loading now that profile fetch is complete.
-      // The profile subscription fires during setSession() while
-      // profileFetchCompletedRef is still false, so it cannot clear loading
-      // on its own. Forcing it here ensures we never get stuck in a
-      // loading state waiting for a notification that won't come.
-      if (isMountedRef.current) {
-        setIsLoading(false)
-      }
+      // Sync session with auth profile service — DEFERRED off gotrue's auth lock.
+      //
+      // This callback runs *synchronously inside* the Supabase auth storage lock
+      // (gotrue's `_acquireLock`). `authProfileService.setSession()` hydrates the
+      // profile by issuing `supabase.from(...)` queries, and every such query
+      // internally calls `auth.getSession()` which re-acquires that same lock.
+      // Awaiting the query here therefore DEADLOCKS: the query waits for the lock
+      // to release, but the lock cannot release until this callback (and its
+      // awaited work) returns. This is exactly the "dead-lock by using await on a
+      // call to another method of the Supabase library" hazard documented on
+      // onAuthStateChange.
+      //
+      // It surfaced on cold start with "remember me": the restored session is
+      // expired, so getSession() refreshes it and fires TOKEN_REFRESHED *inside*
+      // the lock. The deadlocked profile query left the profile null and every
+      // subsequent data query hung — the bounty feed loaded forever and returning
+      // users were forced back through onboarding.
+      //
+      // Scheduling the sync on a macrotask lets the current lock release first so
+      // the profile queries run unobstructed. State that must stay in lock-step
+      // with the event (session, isLoading re-arm, recovery/analytics below)
+      // remains synchronous.
+      setTimeout(() => {
+        let sessionSyncTimeout: ReturnType<typeof setTimeout> | undefined
+        ;(async () => {
+          try {
+            await Promise.race([
+              authProfileService.setSession(session),
+              new Promise<void>(resolve => {
+                sessionSyncTimeout = setTimeout(resolve, 8_000)
+              }),
+            ])
+            profileFetchCompletedRef.current = true
+          } catch (e) {
+            // Profile service errors shouldn't block auth flow
+            // These can occur when service is unavailable or during tests
+            reportWarning('[AuthProvider] Profile service unavailable during session sync:', e)
+            // Mark as completed even on error to avoid blocking
+            profileFetchCompletedRef.current = true
+          } finally {
+            if (sessionSyncTimeout) {
+              clearTimeout(sessionSyncTimeout)
+            }
+            // Explicitly clear loading now that profile fetch is complete (or timed
+            // out). The profile subscription fires during setSession() while
+            // profileFetchCompletedRef is still false, so it cannot clear loading
+            // on its own. Forcing it here ensures we never get stuck in a loading
+            // state waiting for a notification that won't come.
+            if (isMountedRef.current) {
+              setIsLoading(false)
+            }
+          }
+        })()
+      }, 0)
       
       // Email verification gate: Check if email is verified
       const verified = Boolean(
@@ -571,8 +622,10 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       } else if (_event === 'TOKEN_REFRESHED') {
         devLog('[AuthProvider] Token refreshed by Supabase')
       }
-      // If a deferred push registration was requested during onboarding, run it now.
-      if (_event === 'SIGNED_IN') {
+      // If deferred push registration was requested earlier, run it now.
+      // Also run on INITIAL_SESSION to cover cold starts where the auth session
+      // restores after notification permission/token retrieval already happened.
+      if (_event === 'SIGNED_IN' || _event === 'INITIAL_SESSION') {
         try {
           const deferred = await AsyncStorage.getItem(DEFERRED_PUSH_REGISTRATION_KEY)
           if (deferred && session?.user) {
@@ -594,7 +647,82 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       reportError(e, '[AuthProvider] onAuthStateChange registration failed:')
     }
     devLog('[AuthProvider] mounted')
-    
+
+    // AppState listener: restart Supabase token auto-refresh when the app
+    // returns to the foreground. On React Native, JS timers are paused while
+    // the app is backgrounded, so the built-in auto-refresh loop can miss its
+    // window and leave the user with an expired token. Calling startAutoRefresh()
+    // on foreground re-arms the loop (and immediately refreshes an expired token
+    // if needed). Calling stopAutoRefresh() on background avoids unnecessary
+    // network activity while the app is not visible.
+    //
+    // appStateOpInFlightRef / pendingAppStateRef are component-level refs so the
+    // same instance is shared with the cleanup path and survives any re-renders.
+    // When a state change arrives while an async operation is already in progress,
+    // it is recorded as the pending state and applied immediately after the
+    // in-flight operation completes (loop, not recursion).
+
+    const handleAppStateChange = (nextState: AppStateStatus) => {
+      devLog('[AuthProvider] AppState changed:', nextState)
+
+      // If an operation is already in flight, record the latest desired state so
+      // it is applied once the current operation finishes.
+      if (appStateOpInFlightRef.current) {
+        pendingAppStateRef.current = nextState
+        return
+      }
+
+      // Drain the queue: process `nextState` then any state that arrived while
+      // we were busy. This loop replaces recursion and is straightforward to
+      // follow: each await keeps appStateOpInFlightRef true so arriving events
+      // only update pendingAppStateRef instead of starting a second chain.
+      const drain = async (state: AppStateStatus) => {
+        appStateOpInFlightRef.current = true
+        let current: AppStateStatus = state
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          try {
+            if (current === 'active') {
+              devLog('[AuthProvider] App foregrounded – restarting Supabase auto-refresh')
+              try {
+                await supabase.auth.startAutoRefresh()
+              } catch (e) {
+                reportWarning('[AuthProvider] startAutoRefresh failed on foreground:', e)
+              }
+            } else if (current === 'background' || current === 'inactive') {
+              devLog('[AuthProvider] App backgrounded – stopping Supabase auto-refresh')
+              try {
+                await supabase.auth.stopAutoRefresh()
+              } catch (e) {
+                devLog('[AuthProvider] stopAutoRefresh failed (non-critical):', e)
+              }
+            }
+          } finally {
+            // Check for a state that arrived while we were awaiting.
+            if (pendingAppStateRef.current !== null) {
+              current = pendingAppStateRef.current
+              pendingAppStateRef.current = null
+              // continue the while loop with the new state
+            } else {
+              appStateOpInFlightRef.current = false
+              break
+            }
+          }
+        }
+      }
+
+      drain(nextState)
+    }
+
+    let appStateSubscription: { remove?: () => void } | null = null
+    try {
+      if (AppState?.addEventListener) {
+        appStateSubscription = AppState.addEventListener('change', handleAppStateChange)
+      }
+    } catch (e) {
+      devLog('[AuthProvider] AppState listener unavailable; skipping auto-refresh app-state hooks', e)
+    }
+
     // Cleanup subscription and timer on unmount
     return () => {
       isMountedRef.current = false
@@ -606,6 +734,12 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       if (refreshTimerRef.current) {
         clearTimeout(refreshTimerRef.current)
         refreshTimerRef.current = null
+      }
+      try {
+        appStateSubscription?.remove?.()
+      } catch (e) {
+        // swallow AppState cleanup errors
+        devLog('[AuthProvider] AppState cleanup failed (non-critical):', e)
       }
     }
     

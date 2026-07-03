@@ -1,0 +1,15 @@
+{
+  "_comment": "Single source of truth for Supabase project refs. Keep in sync with eas.json channel names and APP_ENV values. Both app.config.js (build-time) and lib/config/env-guard.ts (runtime) import from here.",
+  "byAppEnv": {
+    "production": "xwlwqzzphmmhghiqvkeu",
+    "staging": "gwumwpoomwvkjyibdmpj",
+    "preview": "gwumwpoomwvkjyibdmpj",
+    "development": "ajsbkocnixpwbrjokvnq"
+  },
+  "byChannel": {
+    "production": "xwlwqzzphmmhghiqvkeu",
+    "beta": "gwumwpoomwvkjyibdmpj",
+    "staging": "gwumwpoomwvkjyibdmpj",
+    "development": "ajsbkocnixpwbrjokvnq"
+  }
+}

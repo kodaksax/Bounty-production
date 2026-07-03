@@ -60,7 +60,7 @@ export function TaskCard({
             <View>
               <Text className="text-xs text-gray-400">Total Bounty</Text>
               {isForHonor ? (
-                <View className="flex-row items-center bg-emerald-400/20 px-2 py-1 rounded-full mt-1">
+                <View className="flex-row items-center bg-[#059669]/20 px-2 py-1 rounded-full mt-1">
                   <MaterialIcons name="favorite" size={12} color="#fcd34d" />
                   <Text className="text-yellow-400 font-bold ml-1 text-xs">For Honor</Text>
                 </View>

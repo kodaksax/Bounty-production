@@ -16,13 +16,6 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: (...args: any[]) => mockGetItem(...args),
 }));
 
-const mockGetProfileById = jest.fn();
-jest.mock('../../../lib/services/auth-profile-service', () => ({
-  authProfileService: {
-    getProfileById: (...args: any[]) => mockGetProfileById(...args),
-  },
-}));
-
 const mockGetOnboardingCompleteKey = jest.fn((id: string) => `@bounty_onboarding_completed:${id}`);
 jest.mock('../../../lib/storage/onboarding', () => ({
   getOnboardingCompleteKey: (id: string) => mockGetOnboardingCompleteKey(id),
@@ -103,9 +96,8 @@ describe('useAppBootstrap', () => {
 
   // ── Authenticated – slow path (AsyncStorage flag present) ─────────────────
 
-  it('resolves onboardingComplete=true when AsyncStorage flag is set and profile row exists', async () => {
+  it('resolves onboardingComplete=true when AsyncStorage flag is set', async () => {
     mockGetItem.mockResolvedValue('true');
-    mockGetProfileById.mockResolvedValue({ id: 'user-2', username: 'alice' });
 
     mockAuthState = {
       session: { user: { id: 'user-2' } },
@@ -121,9 +113,8 @@ describe('useAppBootstrap', () => {
     expect(mockGetItem).toHaveBeenCalledWith('@bounty_onboarding_completed:user-2');
   });
 
-  it('resolves onboardingComplete=false when AsyncStorage flag is set but profile row is missing', async () => {
+  it('resolves onboardingComplete=true when AsyncStorage flag is set and profile is not loaded', async () => {
     mockGetItem.mockResolvedValue('true');
-    mockGetProfileById.mockResolvedValue(null); // profile row missing
 
     mockAuthState = {
       session: { user: { id: 'user-3' } },
@@ -135,7 +126,7 @@ describe('useAppBootstrap', () => {
 
     await waitFor(() => expect(result.current.status).toBe('authenticated'));
 
-    expect(result.current).toEqual({ status: 'authenticated', onboardingComplete: false });
+    expect(result.current).toEqual({ status: 'authenticated', onboardingComplete: true });
   });
 
   // ── Authenticated – slow path (AsyncStorage flag absent) ─────────────────
@@ -154,9 +145,8 @@ describe('useAppBootstrap', () => {
     await waitFor(() => expect(result.current.status).toBe('authenticated'));
 
     expect(result.current).toEqual({ status: 'authenticated', onboardingComplete: false });
-    // Should have checked AsyncStorage but not profile (flag absent).
+    // Should have checked AsyncStorage.
     expect(mockGetItem).toHaveBeenCalled();
-    expect(mockGetProfileById).not.toHaveBeenCalled();
   });
 
   // ── Error resilience ─────────────────────────────────────────────────────
@@ -177,9 +167,8 @@ describe('useAppBootstrap', () => {
     expect(result.current).toEqual({ status: 'authenticated', onboardingComplete: false });
   });
 
-  it('defaults onboardingComplete=false when profile existence check throws', async () => {
+  it('resolves onboardingComplete=true when AsyncStorage flag is set even if profile is null', async () => {
     mockGetItem.mockResolvedValue('true');
-    mockGetProfileById.mockRejectedValue(new Error('network error'));
 
     mockAuthState = {
       session: { user: { id: 'user-6' } },
@@ -191,14 +180,13 @@ describe('useAppBootstrap', () => {
 
     await waitFor(() => expect(result.current.status).toBe('authenticated'));
 
-    expect(result.current).toEqual({ status: 'authenticated', onboardingComplete: false });
+    expect(result.current).toEqual({ status: 'authenticated', onboardingComplete: true });
   });
 
   // ── Idempotency ───────────────────────────────────────────────────────────
 
   it('does not re-run the async check when profile updates after resolution', async () => {
     mockGetItem.mockResolvedValue('true');
-    mockGetProfileById.mockResolvedValue({ id: 'user-7' });
 
     mockAuthState = {
       session: { user: { id: 'user-7' } },
