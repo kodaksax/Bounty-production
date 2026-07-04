@@ -94,7 +94,7 @@ export default function Index() {
     }
     return (
       <View style={indexStyles.loadingContainer}>
-        <ActivityIndicator size="large" color="#10b981" />
+        <ActivityIndicator size="large" color="#059669" />
         <Text style={indexStyles.loadingText}>
           {bootstrap.status === 'authenticated' ? 'Redirecting...' : 'Loading...'}
         </Text>
@@ -114,7 +114,7 @@ const indexStyles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#065f46', // emerald-800
+    backgroundColor: '#0B0F14', // page background
   },
   loadingText: {
     color: '#ffffff',

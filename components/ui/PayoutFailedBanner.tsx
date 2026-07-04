@@ -8,11 +8,13 @@
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { config } from '../../lib/config';
 import { API_BASE_URL } from '../../lib/config/api';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 import { openUrlInBrowser } from '../../lib/utils/browser';
 import { useWallet } from '../../lib/wallet-context';
 
@@ -56,6 +58,8 @@ export function PayoutFailedBanner() {
   const { session } = useAuthContext();
   const [isFixing, setIsFixing] = useState(false);
   const [fixError, setFixError] = useState<string | null>(null);
+  const { theme } = useAppThemeContext();
+  const s = useMemo(() => makeStyles(theme), [theme]);
 
   const handleFixPaymentDetails = useCallback(async () => {
     if (!session?.access_token) return;
@@ -149,19 +153,19 @@ export function PayoutFailedBanner() {
   if (!payoutFailed) return null;
 
   return (
-    <View style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.iconContainer}>
+    <View style={s.container}>
+      <View style={s.content}>
+        <View style={s.iconContainer}>
           <MaterialIcons name="error-outline" size={24} color="#ef4444" />
         </View>
-        <View style={styles.textContainer}>
-          <Text style={styles.title}>Payout Failed</Text>
-          <Text style={styles.subtitle}>{getFailureMessage(payoutFailureCode)}</Text>
-          {fixError ? <Text style={styles.errorText}>{fixError}</Text> : null}
+        <View style={s.textContainer}>
+          <Text style={s.title}>Payout Failed</Text>
+          <Text style={s.subtitle}>{getFailureMessage(payoutFailureCode)}</Text>
+          {fixError ? <Text style={s.errorText}>{fixError}</Text> : null}
           <TouchableOpacity
             onPress={handleFixPaymentDetails}
             disabled={isFixing}
-            style={styles.fixButton}
+            style={s.fixButton}
             accessibilityRole="button"
             accessibilityLabel="Fix payment details"
             accessibilityHint="Opens Stripe to update your bank account details"
@@ -169,7 +173,7 @@ export function PayoutFailedBanner() {
             {isFixing ? (
               <ActivityIndicator size="small" color="#ef4444" />
             ) : (
-              <Text style={styles.fixButtonText}>Fix Payment Details →</Text>
+              <Text style={s.fixButtonText}>Fix Payment Details →</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -178,7 +182,7 @@ export function PayoutFailedBanner() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(t: AppTheme) { return StyleSheet.create({
   container: {
     flexDirection: 'row',
     backgroundColor: 'rgba(239,68,68,0.12)',
@@ -206,12 +210,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#ffffff',
+    color: t.text,
     marginBottom: 4,
   },
   subtitle: {
     fontSize: 13,
-    color: 'rgba(255,255,255,0.8)',
+    color: t.textSecondary,
     lineHeight: 18,
     marginBottom: 8,
   },
@@ -229,4 +233,4 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     fontWeight: '600',
   },
-});
+}); }

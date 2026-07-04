@@ -37,13 +37,13 @@ function getReputationLevel(averageRating: number, ratingCount: number): {
   if (weightedScore >= 4.5) {
     return {
       level: 'Excellent',
-      color: '#10b981', // emerald-500
+      color: '#059669', // emerald-500
       description: 'Top-rated user with consistently excellent feedback from multiple transactions.',
     };
   } else if (weightedScore >= 4.0) {
     return {
       level: 'Great',
-      color: '#34d399', // emerald-400
+      color: '#059669', // emerald-400
       description: 'Highly rated user with very positive feedback from completed transactions.',
     };
   } else if (weightedScore >= 3.5) {
@@ -331,7 +331,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   ratingCount: {
-    color: '#a7f3d0',
+    color: '#9CA3AF',
   },
   levelBadge: {
     flexDirection: 'row',
@@ -356,7 +356,7 @@ const styles = StyleSheet.create({
   },
   statText: {
     fontSize: 12,
-    color: '#a7f3d0',
+    color: '#9CA3AF',
   },
   infoHint: {
     position: 'absolute',
@@ -386,7 +386,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modalContent: {
-    backgroundColor: '#065f46',
+    backgroundColor: '#111827',
     borderRadius: 16,
     padding: 24,
     width: '100%',
@@ -399,7 +399,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     textTransform: 'uppercase',
     letterSpacing: 1,
     marginBottom: 12,
@@ -432,7 +432,7 @@ const styles = StyleSheet.create({
   },
   modalLevelDescription: {
     fontSize: 12,
-    color: '#d1fae5',
+    color: '#1F2937',
     lineHeight: 18,
     flex: 1,
   },
@@ -452,7 +452,7 @@ const styles = StyleSheet.create({
   },
   modalStatLabel: {
     fontSize: 12,
-    color: '#a7f3d0',
+    color: '#9CA3AF',
     marginTop: 2,
   },
   infoBox: {
@@ -469,11 +469,11 @@ const styles = StyleSheet.create({
   },
   infoText: {
     fontSize: 12,
-    color: '#d1fae5',
+    color: '#1F2937',
     lineHeight: 18,
   },
   closeButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',

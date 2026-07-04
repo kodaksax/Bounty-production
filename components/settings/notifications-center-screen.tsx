@@ -173,7 +173,7 @@ export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps>
 
   return (
     <View
-      className="flex-1 bg-emerald-600"
+      className="flex-1 bg-[#059669]"
       style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
       <View className="flex-row justify-between items-center p-4 pt-8">
@@ -195,7 +195,7 @@ export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps>
       ) : (
         <ScrollView className="px-4" contentContainerStyle={{ paddingBottom: 96 }}>
           <Text className="text-xl font-semibold text-white mb-4">Notification Center</Text>
-          <Text className="text-emerald-100 text-xs mb-4">Control which push notifications you receive. Settings are synced across all your devices.</Text>
+          <Text className="text-white text-xs mb-4">Control which push notifications you receive. Settings are synced across all your devices.</Text>
           
           <NotifToggle 
             label="New Applicants" 
@@ -254,13 +254,13 @@ export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps>
             extra={
               prefs.reminders && (
                 <View className="mt-3">
-                  <Text className="text-[10px] text-emerald-100 mb-1">Minutes before due date</Text>
+                  <Text className="text-[10px] text-white mb-1">Minutes before due date</Text>
                   <TextInput 
                     keyboardType="numeric" 
                     value={prefs.reminderLeadMinutes} 
                     onChangeText={v => /^(\d{0,3})$/.test(v) && persist({ reminderLeadMinutes: v })} 
                     placeholder="30" 
-                    placeholderTextColor="#a7f3d0" 
+                    placeholderTextColor="#9CA3AF" 
                     className="bg-black/40 rounded-md px-3 py-2 text-white w-24" 
                   />
                 </View>
@@ -286,10 +286,10 @@ const NotifToggle = ({ label, subtitle, icon, value, onChange, extra }: { label:
     <View className="flex-row items-start justify-between">
       <View className="flex-1 pr-3">
         <View className="flex-row items-center mb-1">
-          <MaterialIcons name={icon} size={18} color="#a7f3d0" />
+          <MaterialIcons name={icon} size={18} color="#9CA3AF" />
           <Text className="ml-2 text-white font-medium text-sm" numberOfLines={1}>{label}</Text>
         </View>
-        <Text className="text-emerald-100 text-[11px] leading-4">{subtitle}</Text>
+        <Text className="text-white text-[11px] leading-4">{subtitle}</Text>
       </View>
       <Switch value={value} onValueChange={onChange} />
     </View>

@@ -312,7 +312,7 @@ export default function HunterPayoutScreen() {
           <>
             {/* Success Panel */}
             <View style={styles.successPanel}>
-              <MaterialIcons name="check-circle" size={48} color="#10b981" />
+              <MaterialIcons name="check-circle" size={48} color="#059669" />
               <Text style={styles.successTitle}>Payout Released!</Text>
               <Text style={styles.successText}>
                 Congratulations! The poster has approved your work and released the payment.
@@ -366,7 +366,7 @@ export default function HunterPayoutScreen() {
                 <View style={styles.receiptRow}>
                   <Text style={styles.receiptLabel}>Status</Text>
                   <View style={styles.statusPill}>
-                    <MaterialIcons name="check-circle" size={16} color="#10b981" />
+                    <MaterialIcons name="check-circle" size={16} color="#059669" />
                     <Text style={styles.statusPillText}>Completed</Text>
                   </View>
                 </View>
@@ -402,15 +402,15 @@ export default function HunterPayoutScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0B0F14',
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0B0F14',
   },
   errorContainer: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: '#0B0F14',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
@@ -422,7 +422,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -477,7 +477,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   bountyAmount: {
-    color: '#10b981',
+    color: '#059669',
     fontSize: 20,
     fontWeight: '700',
   },
@@ -505,13 +505,13 @@ const styles = StyleSheet.create({
     minWidth: 120,
   },
   stageItemActive: {
-    backgroundColor: 'rgba(16, 185, 129, 0.3)',
-    borderColor: '#10b981',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderColor: '#059669',
     borderWidth: 2,
   },
   stageItemCompleted: {
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    borderColor: '#10b981',
+    backgroundColor: '#374151',
+    borderColor: '#059669',
   },
   stageItemLocked: {
     opacity: 0.5,
@@ -526,7 +526,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   stageIconActive: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#059669',
   },
   stageIconCompleted: {
     backgroundColor: '#059669',
@@ -572,13 +572,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   successPanel: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
     borderRadius: 12,
     padding: 24,
     alignItems: 'center',
     gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   successTitle: {
     color: '#fff',
@@ -607,7 +607,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   payoutAmount: {
-    color: '#10b981',
+    color: '#059669',
     fontSize: 32,
     fontWeight: '700',
   },
@@ -648,7 +648,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   balanceAmount: {
-    color: '#10b981',
+    color: '#059669',
     fontSize: 24,
     fontWeight: '700',
   },
@@ -718,13 +718,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    backgroundColor: '#374151',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
   },
   statusPillText: {
-    color: '#10b981',
+    color: '#059669',
     fontSize: 12,
     fontWeight: '600',
   },

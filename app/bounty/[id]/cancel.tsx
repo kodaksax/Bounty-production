@@ -140,7 +140,7 @@ export default function CancellationRequestScreen() {
   
   if (loading) {
     return (
-      <View className="flex-1 bg-white items-center justify-center">
+      <View className="flex-1 bg-[#0B0F14] items-center justify-center">
         <ActivityIndicator size="large" color="#059669" />
       </View>
     );
@@ -148,12 +148,12 @@ export default function CancellationRequestScreen() {
   
   if (!bounty) {
     return (
-      <View className="flex-1 bg-white items-center justify-center p-6">
+      <View className="flex-1 bg-[#0B0F14] items-center justify-center p-6">
         <AlertCircle size={48} color="#dc2626" />
-        <Text className="text-lg font-semibold text-gray-900 mt-4">Bounty not found</Text>
+        <Text className="text-lg font-semibold text-white mt-4">Bounty not found</Text>
         <TouchableOpacity
           onPress={() => router.back()}
-          className="mt-6 bg-emerald-600 px-6 py-3 rounded-lg"
+          className="mt-6 bg-[#059669] px-6 py-3 rounded-lg"
         >
           <Text className="text-white font-semibold">Go Back</Text>
         </TouchableOpacity>
@@ -164,23 +164,23 @@ export default function CancellationRequestScreen() {
   // Edge case: Bounty already completed - cannot cancel
   if (bounty.status === 'completed') {
     return (
-      <View className="flex-1 bg-white items-center justify-center p-6">
+      <View className="flex-1 bg-[#0B0F14] items-center justify-center p-6">
         <AlertCircle size={48} color="#f59e0b" />
-        <Text className="text-lg font-semibold text-gray-900 mt-4">Cannot Cancel</Text>
-        <Text className="text-gray-600 text-center mt-2">
+        <Text className="text-lg font-semibold text-white mt-4">Cannot Cancel</Text>
+        <Text className="text-[#9CA3AF] text-center mt-2">
           This bounty has already been completed. If you have an issue, please contact support for dispute resolution.
         </Text>
         <View className="mt-6 space-y-3 w-full max-w-xs">
           <TouchableOpacity
             onPress={handleContactSupport}
-            className="bg-emerald-600 px-6 py-3 rounded-lg flex-row items-center justify-center"
+            className="bg-[#059669] px-6 py-3 rounded-lg flex-row items-center justify-center"
           >
             <Mail size={18} color="white" />
             <Text className="text-white font-semibold ml-2">Email Support</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={handleCallSupport}
-            className="bg-emerald-500 px-6 py-3 rounded-lg flex-row items-center justify-center"
+            className="bg-[#059669] px-6 py-3 rounded-lg flex-row items-center justify-center"
           >
             <Phone size={18} color="white" />
             <Text className="text-white font-semibold ml-2">Call Support</Text>
@@ -189,7 +189,7 @@ export default function CancellationRequestScreen() {
             onPress={() => router.back()}
             className="px-6 py-3 rounded-lg"
           >
-            <Text className="text-gray-600 font-medium text-center">Go Back</Text>
+            <Text className="text-[#9CA3AF] font-medium text-center">Go Back</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -199,15 +199,15 @@ export default function CancellationRequestScreen() {
   // Edge case: Bounty already cancelled
   if (bounty.status === 'cancelled') {
     return (
-      <View className="flex-1 bg-white items-center justify-center p-6">
+      <View className="flex-1 bg-[#0B0F14] items-center justify-center p-6">
         <AlertCircle size={48} color="#9ca3af" />
-        <Text className="text-lg font-semibold text-gray-900 mt-4">Already Cancelled</Text>
-        <Text className="text-gray-600 text-center mt-2">
+        <Text className="text-lg font-semibold text-white mt-4">Already Cancelled</Text>
+        <Text className="text-[#9CA3AF] text-center mt-2">
           This bounty has already been cancelled.
         </Text>
         <TouchableOpacity
           onPress={() => router.back()}
-          className="mt-6 bg-emerald-600 px-6 py-3 rounded-lg"
+          className="mt-6 bg-[#059669] px-6 py-3 rounded-lg"
         >
           <Text className="text-white font-semibold">Go Back</Text>
         </TouchableOpacity>
@@ -218,16 +218,16 @@ export default function CancellationRequestScreen() {
   // Edge case: Bounty already has pending cancellation request
   if (bounty.status === 'cancellation_requested') {
     return (
-      <View className="flex-1 bg-white items-center justify-center p-6">
+      <View className="flex-1 bg-[#0B0F14] items-center justify-center p-6">
         <AlertCircle size={48} color="#f59e0b" />
-        <Text className="text-lg font-semibold text-gray-900 mt-4">Cancellation Pending</Text>
-        <Text className="text-gray-600 text-center mt-2">
+        <Text className="text-lg font-semibold text-white mt-4">Cancellation Pending</Text>
+        <Text className="text-[#9CA3AF] text-center mt-2">
           A cancellation request is already pending for this bounty. Please wait for the other party to respond.
         </Text>
         <View className="mt-6 space-y-3 w-full max-w-xs">
           <TouchableOpacity
             onPress={handleContactSupport}
-            className="bg-emerald-600 px-6 py-3 rounded-lg flex-row items-center justify-center"
+            className="bg-[#059669] px-6 py-3 rounded-lg flex-row items-center justify-center"
           >
             <HelpCircle size={18} color="white" />
             <Text className="text-white font-semibold ml-2">Contact Support</Text>
@@ -236,7 +236,7 @@ export default function CancellationRequestScreen() {
             onPress={() => router.back()}
             className="px-6 py-3 rounded-lg mt-3"
           >
-            <Text className="text-gray-600 font-medium text-center">Go Back</Text>
+            <Text className="text-[#9CA3AF] font-medium text-center">Go Back</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -250,10 +250,10 @@ export default function CancellationRequestScreen() {
   );
   
   return (
-    <View className="flex-1 bg-white">
+    <View className="flex-1 bg-[#0B0F14]">
       <ScrollView className="flex-1">
         {/* Header */}
-        <View className="bg-emerald-600 px-4 py-6 pt-12">
+        <View className="bg-[#111827] px-4 py-6 pt-12">
           <TouchableOpacity
             onPress={() => router.back()}
             className="mb-4"
@@ -263,7 +263,7 @@ export default function CancellationRequestScreen() {
           <Text className="text-2xl font-bold text-white">
             Request Cancellation
           </Text>
-          <Text className="text-emerald-100 mt-1">
+          <Text className="text-[#9CA3AF] mt-1">
             {bounty.title}
           </Text>
         </View>
@@ -292,20 +292,20 @@ export default function CancellationRequestScreen() {
           </View>
           
           {/* Bounty Details */}
-          <View className="bg-gray-50 rounded-lg p-4 mb-6">
-            <Text className="text-sm text-gray-500 mb-1">Bounty Amount</Text>
-            <Text className="text-2xl font-bold text-gray-900 mb-3">
+          <View className="bg-[#1F2937] rounded-lg p-4 mb-6">
+            <Text className="text-sm text-[#9CA3AF] mb-1">Bounty Amount</Text>
+            <Text className="text-2xl font-bold text-white mb-3">
               ${bounty.amount.toFixed(2)}
             </Text>
-            <Text className="text-sm text-gray-500 mb-1">Status</Text>
-            <Text className="text-base font-medium text-gray-900 capitalize">
+            <Text className="text-sm text-[#9CA3AF] mb-1">Status</Text>
+            <Text className="text-base font-medium text-white capitalize">
               {bounty.status.replace('_', ' ')}
             </Text>
           </View>
           
           {/* Reason Input */}
           <View className="mb-6">
-            <Text className="text-base font-semibold text-gray-900 mb-2">
+            <Text className="text-base font-semibold text-white mb-2">
               Why are you cancelling? *
             </Text>
             <View className="flex-row flex-wrap gap-2 mb-3">
@@ -315,8 +315,8 @@ export default function CancellationRequestScreen() {
                   onPress={() => setReasonCategory(option.value)}
                   className={`px-3 py-2 rounded-full border ${
                     reasonCategory === option.value
-                      ? 'bg-emerald-600 border-emerald-600'
-                      : 'bg-white border-gray-300'
+                      ? 'bg-[#059669] border-[#059669]'
+                      : 'bg-[#1F2937] border-[#374151]'
                   }`}
                 >
                   <Text
@@ -329,7 +329,7 @@ export default function CancellationRequestScreen() {
                 </TouchableOpacity>
               ))}
             </View>
-            <Text className="text-sm text-gray-600 mb-3">
+            <Text className="text-sm text-[#9CA3AF] mb-3">
               Please explain why you want to cancel this bounty. This will be shared with the other party.
             </Text>
             <TextInput
@@ -339,7 +339,7 @@ export default function CancellationRequestScreen() {
               multiline
               numberOfLines={6}
               textAlignVertical="top"
-              className="border border-gray-300 rounded-lg p-3 text-base text-gray-900"
+              className="border border-[#374151] rounded-lg p-3 text-base text-white"
               style={{ minHeight: 120 }}
             />
           </View>
@@ -350,8 +350,8 @@ export default function CancellationRequestScreen() {
             disabled={submitting || !reason.trim()}
             className={`rounded-lg py-4 ${
               submitting || !reason.trim()
-                ? 'bg-gray-300'
-                : 'bg-emerald-600'
+                ? 'bg-[#374151]'
+                : 'bg-[#059669]'
             }`}
           >
             {submitting ? (
@@ -399,7 +399,7 @@ export default function CancellationRequestScreen() {
             disabled={submitting}
             className="mt-4 py-4"
           >
-            <Text className="text-gray-600 text-center font-medium">
+            <Text className="text-[#9CA3AF] text-center font-medium">
               Cancel
             </Text>
           </TouchableOpacity>

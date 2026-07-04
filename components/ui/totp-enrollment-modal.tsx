@@ -148,7 +148,7 @@ export function TotpEnrollmentModal({
             width: '100%',
             maxWidth: 420,
             maxHeight: '90%',
-            backgroundColor: '#065f46',
+            backgroundColor: '#111827',
             borderRadius: 16,
             borderWidth: 1,
             borderColor: 'rgba(167,243,208,0.2)',
@@ -203,7 +203,7 @@ export function TotpEnrollmentModal({
                 <Text
                   selectable
                   style={{
-                    color: '#a7f3d0',
+                    color: '#9CA3AF',
                     fontSize: 14,
                     fontFamily: 'Courier',
                     backgroundColor: 'rgba(0,0,0,0.25)',

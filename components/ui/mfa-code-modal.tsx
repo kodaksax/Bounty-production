@@ -76,7 +76,7 @@ export function MfaCodeModal({
         <View
           style={{
             width: '85%',
-            backgroundColor: '#065f46',
+            backgroundColor: '#111827',
             borderRadius: 16,
             padding: 24,
             borderWidth: 1,

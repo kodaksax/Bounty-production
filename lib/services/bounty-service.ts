@@ -640,13 +640,13 @@ export const bountyService = {
     try {
       // Prefer Supabase when configured
       if (isSupabaseConfigured) {
-        // Join with profiles to get username and avatar
+        // Inner join with profiles — excludes bounties whose poster profile no longer exists
         let query = supabase
           .from('bounties')
           .select(
             `
             *,
-            profiles!bounties_poster_id_fkey (
+            profiles!bounties_poster_id_fkey!inner (
               username,
               avatar
             )

@@ -14,7 +14,7 @@ interface BinaryToggleProps<T extends string> {
 
 export function BinaryToggle<T extends string>({ value, onChange, options, size = 'md', className }: BinaryToggleProps<T>) {
   return (
-    <View className={cn('flex-row rounded-xl overflow-hidden bg-emerald-800/40 border border-emerald-700', className)}>
+    <View className={cn('flex-row rounded-xl overflow-hidden bg-[#111827]/40 border border-emerald-700', className)}>
       {options.map(opt => {
         const selected = value === opt.id
         return (
@@ -23,11 +23,11 @@ export function BinaryToggle<T extends string>({ value, onChange, options, size 
             onPress={() => onChange(opt.id)}
             className={cn('flex-1 items-center justify-center',
               size === 'sm' ? 'py-2' : 'py-3',
-              selected ? 'bg-emerald-500/30' : 'opacity-70'
+              selected ? 'bg-[#059669]/30' : 'opacity-70'
             )}
             activeOpacity={0.85}
           >
-            <Text className={cn('font-medium', selected ? 'text-white' : 'text-emerald-200')}>{opt.label}</Text>
+            <Text className={cn('font-medium', selected ? 'text-white' : 'text-[#9CA3AF]')}>{opt.label}</Text>
           </TouchableOpacity>
         )
       })}

@@ -209,7 +209,7 @@ const buttonStyles = StyleSheet.create({
   },
   // Focus state for keyboard navigation (WCAG 2.4.7)
   focused: {
-    shadowColor: '#10b981', // Emerald color for focus ring
+    shadowColor: '#059669', // Emerald color for focus ring
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.6,
     shadowRadius: 8,

@@ -10,7 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { BottomNav } from 'components/ui/bottom-nav'
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Text, View } from 'react-native'
 import { useAuthContext } from '../../hooks/use-auth-context'
 import { useConversations } from '../../hooks/useConversations'
 import { useAdmin } from '../../lib/admin-context'
@@ -18,9 +18,11 @@ import { API_TIMEOUTS } from '../../lib/config/network'
 import { authProfileService } from '../../lib/services/auth-profile-service'
 import { navigationIntent } from '../../lib/services/navigation-intent'
 import { getOnboardingCompleteKey } from '../../lib/storage/onboarding'
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
 
 function BountyAppInner() {
   const router = useRouter()
+  const { theme } = useAppThemeContext()
   const { screen, initialTab } = useLocalSearchParams<{ screen?: string, initialTab?: string }>()
   const { isAdmin, isAdminTabEnabled } = useAdmin()
   // Get current user ID from auth context (reactive to auth state changes)
@@ -128,6 +130,7 @@ function BountyAppInner() {
   const allowedInitialTabs = new Set(['new', 'inProgress', 'myPostings', 'requests'])
   const paramInitialTab = typeof initialTab === 'string' && initialTab.length > 0 && allowedInitialTabs.has(initialTab) ? initialTab : undefined
   const [activeScreen, setActiveScreen] = useState(paramScreen)
+
   const [showBottomNav, setShowBottomNav] = useState(true)
   const [pendingInitialTab, setPendingInitialTab] = useState<string | undefined>(paramInitialTab)
 
@@ -194,9 +197,9 @@ function BountyAppInner() {
 
   if (isVerificationInProgress) {
     return (
-      <View className="flex-1 items-center justify-center bg-emerald-600">
-        <ActivityIndicator size="large" color="#10b981" />
-        <Text className="text-white mt-4 text-base">Loading...</Text>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.background }}>
+        <ActivityIndicator size="large" color={theme.primary} />
+        <Text style={{ color: theme.text, marginTop: 16, fontSize: 16 }}>Loading...</Text>
       </View>
     )
   }
@@ -230,7 +233,7 @@ function BountyAppInner() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={{ flex: 1, backgroundColor: theme.background, position: 'relative' }}>
       {/* Connection Status Banner - appears at top when offline */}
       <ConnectionStatus showQueueCount={true} />
 
@@ -279,10 +282,7 @@ export function BountyApp() {
   return <BountyAppInner />
 }
 
-// Styles
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#059669', position: 'relative' },
-})
+// Styles — container background is intentionally sourced from BountyAppInner's theme hook
 export default function BountyAppRoute() {
   return <BountyApp />
 }

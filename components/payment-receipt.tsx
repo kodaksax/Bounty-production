@@ -70,7 +70,7 @@ export function PaymentReceipt({
   const getStatusColor = (status: string): string => {
     switch (status) {
       case 'succeeded':
-        return '#10b981'; // emerald-500
+        return '#059669'; // emerald-500
       case 'pending':
         return '#f59e0b'; // amber-500
       case 'failed':
@@ -216,21 +216,21 @@ export function PaymentReceipt({
         <View style={styles.actions}>
           {onDownload && (
             <Pressable style={styles.actionButton} onPress={onDownload}>
-              <Download size={20} color="#047857" />
+              <Download size={20} color="#0B0F14" />
               <Text style={styles.actionText}>Download</Text>
             </Pressable>
           )}
 
           {onShare && (
             <Pressable style={styles.actionButton} onPress={onShare}>
-              <Share2 size={20} color="#047857" />
+              <Share2 size={20} color="#0B0F14" />
               <Text style={styles.actionText}>Share</Text>
             </Pressable>
           )}
 
           {onEmail && (
             <Pressable style={styles.actionButton} onPress={onEmail}>
-              <Mail size={20} color="#047857" />
+              <Mail size={20} color="#0B0F14" />
               <Text style={styles.actionText}>Email</Text>
             </Pressable>
           )}
@@ -311,7 +311,7 @@ const styles = StyleSheet.create({
   amount: {
     fontSize: 36,
     fontWeight: '700',
-    color: '#047857',
+    color: '#0B0F14',
   },
   detailRow: {
     flexDirection: 'row',
@@ -347,7 +347,7 @@ const styles = StyleSheet.create({
   totalValue: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#047857',
+    color: '#0B0F14',
   },
   actions: {
     flexDirection: 'row',
@@ -363,12 +363,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#047857',
+    borderColor: '#0B0F14',
   },
   actionText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#047857',
+    color: '#0B0F14',
   },
   footer: {
     alignItems: 'center',
@@ -384,7 +384,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   closeButton: {
-    backgroundColor: '#047857',
+    backgroundColor: '#0B0F14',
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 8,

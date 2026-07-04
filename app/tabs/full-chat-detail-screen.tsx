@@ -4,7 +4,9 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { Avatar, AvatarFallback, AvatarImage } from 'components/ui/avatar';
 import { useRouter } from 'expo-router';
-import React, { useRef, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 import {
  ActivityIndicator,
  Alert,
@@ -42,6 +44,8 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
  const router = useRouter();
  const insets = useSafeAreaInsets();
  const BOTTOM_NAV_OFFSET = Math.max(96, (insets.bottom || 0) + 12);
+ const { theme } = useAppThemeContext();
+ const s = useMemo(() => makeStyles(theme), [theme]);
 
 
  const currentUserId = useValidUserId();
@@ -76,7 +80,19 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
 
 
  const listRef = useRef<FlatList<Message>>(null);
+ const hasScrolledToBottom = useRef(false);
  const typingUsersRef = useTypingIndicator(conversation.realConversationId);
+
+ // Scroll to bottom once when messages are first available
+ useEffect(() => {
+   if (mergedMessages.length > 0 && !hasScrolledToBottom.current) {
+     const timer = setTimeout(() => {
+       listRef.current?.scrollToEnd({ animated: false })
+       hasScrolledToBottom.current = true
+     }, 80)
+     return () => clearTimeout(timer)
+   }
+ }, [mergedMessages.length])
 
 
  const otherUserId =
@@ -210,12 +226,12 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
 
 
  return (
-   <View style={[styles.container, { paddingBottom: Math.max(insets.bottom || 0, BOTTOM_NAV_OFFSET + 8) }]}>
+   <View style={[s.container, { paddingBottom: Math.max(insets.bottom || 0, BOTTOM_NAV_OFFSET + 8) }]}>
      {/* Header */}
-     <View style={styles.header}>
-       <View style={styles.headerInner}>
-         <TouchableOpacity onPress={onBack} style={styles.backButton}>
-           <MaterialIcons name="arrow-back" size={24} color="#064E3B" />
+     <View style={s.header}>
+       <View style={s.headerInner}>
+         <TouchableOpacity onPress={onBack} style={s.backButton}>
+           <MaterialIcons name="arrow-back" size={24} color={theme.text} />
          </TouchableOpacity>
          <TouchableOpacity
            onPress={() => {
@@ -224,21 +240,21 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
              }
            }}
            disabled={!otherUserId || conversation.isGroup}
-           style={styles.headerProfile}
+           style={s.headerProfile}
          >
-           <Avatar style={styles.headerAvatar}>
+           <Avatar style={s.headerAvatar}>
              <AvatarImage
                src={avatarUrl || '/placeholder.svg?height=40&width=40'}
                alt={displayName}
              />
-             <AvatarFallback style={styles.avatarFallback}>
-               <Text style={styles.avatarFallbackText}>{initials}</Text>
+             <AvatarFallback style={s.avatarFallback}>
+               <Text style={s.avatarFallbackText}>{initials}</Text>
              </AvatarFallback>
            </Avatar>
            <View>
-             <Text style={styles.headerName}>{displayName}</Text>
+             <Text style={s.headerName}>{displayName}</Text>
              {conversation.isGroup && (
-               <Text style={styles.headerSubtext}>
+               <Text style={s.headerSubtext}>
                  {conversation.participantIds?.length || 0} members
                </Text>
              )}
@@ -260,15 +276,15 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
 
      {/* Error banner */}
      {sendError && (
-       <View style={styles.errorBanner}>
-         <Text style={styles.errorText}>{sendError}</Text>
+       <View style={s.errorBanner}>
+         <Text style={s.errorText}>{sendError}</Text>
        </View>
      )}
 
 
      {/* Messages and Input */}
      <KeyboardAvoidingView
-       style={styles.keyboardAvoidingContainer}
+       style={s.keyboardAvoidingContainer}
        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
        keyboardVerticalOffset={BOTTOM_NAV_OFFSET}
      >
@@ -278,12 +294,24 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
            data={mergedMessages}
            renderItem={renderMessage}
            keyExtractor={item => item.id}
-           contentContainerStyle={styles.messageList}
+           contentContainerStyle={s.messageList}
            ListFooterComponent={renderFooter}
            maxToRenderPerBatch={20}
            initialNumToRender={15}
            windowSize={10}
            removeClippedSubviews={true}
+           onLayout={() => {
+             if (!hasScrolledToBottom.current) {
+               listRef.current?.scrollToEnd({ animated: false })
+               hasScrolledToBottom.current = true
+             }
+           }}
+           onContentSizeChange={() => {
+             if (!hasScrolledToBottom.current) {
+               listRef.current?.scrollToEnd({ animated: false })
+               hasScrolledToBottom.current = true
+             }
+           }}
            onScrollToIndexFailed={info => {
              const wait = new Promise(resolve => setTimeout(resolve, 500));
              wait.then(() => {
@@ -294,31 +322,31 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
 
 
          {/* Message Input */}
-         <View style={[styles.inputContainer, { paddingBottom: insets.bottom || 0 }]}>
-           <View style={styles.inputRow}>
+         <View style={[s.inputContainer, { paddingBottom: insets.bottom || 0 }]}>
+           <View style={s.inputRow}>
              <TouchableOpacity
                style={{ marginRight: 8, alignSelf: 'flex-end' }}
                onPress={handlePickAndSendAttachment}
                accessibilityLabel="Add attachment"
              >
                {isPicking || isUploading ? (
-                 <ActivityIndicator size="small" color="#059669" />
+                 <ActivityIndicator size="small" color={theme.primary} />
                ) : (
-                 <MaterialIcons name="attach-file" size={20} color="#6B7280" />
+                 <MaterialIcons name="attach-file" size={20} color={theme.textDisabled} />
                )}
              </TouchableOpacity>
              <TextInput
-               style={styles.inlineTextInput}
+               style={s.inlineTextInput}
                value={inputText}
                onChangeText={setInputText}
                placeholder="Type a message..."
-               placeholderTextColor="#9CA3AF"
+               placeholderTextColor={theme.textSecondary}
                multiline
                accessibilityLabel="Message input field"
                accessibilityHint="Enter your message to send"
              />
              <TouchableOpacity
-               style={[styles.sendButton, !trimmedInputText && styles.sendButtonDisabled]}
+               style={[s.sendButton, !trimmedInputText && s.sendButtonDisabled]}
                onPress={async () => {
                  if (trimmedInputText.length === 0) return;
                  const previousInput = inputText;
@@ -332,7 +360,7 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
                }}
                disabled={!trimmedInputText}
              >
-               <MaterialIcons name="send" size={20} color="#059669" />
+               <MaterialIcons name="send" size={20} color={theme.primary} />
              </TouchableOpacity>
            </View>
          </View>
@@ -370,112 +398,115 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
 export default FullChatDetailScreen;
 
 
-const styles = StyleSheet.create({
- container: {
-   flex: 1,
-   backgroundColor: '#FFFFFF',
- },
- header: {
-   backgroundColor: '#FFFFFF',
-   paddingTop: 48,
-   paddingBottom: 12,
-   paddingHorizontal: 16,
-   borderBottomWidth: 1,
-   borderBottomColor: '#E5E7EB',
- },
- headerInner: {
-   flexDirection: 'row',
-   alignItems: 'center',
- },
- backButton: {
-   marginRight: 12,
- },
- headerProfile: {
-   flexDirection: 'row',
-   alignItems: 'center',
-   flex: 1,
- },
- headerAvatar: {
-   width: 40,
-   height: 40,
-   borderRadius: 20,
-   marginRight: 12,
- },
- avatarFallback: {
-   backgroundColor: '#D1FAE5',
-   width: 40,
-   height: 40,
-   borderRadius: 20,
-   justifyContent: 'center',
-   alignItems: 'center',
- },
- avatarFallbackText: {
-   color: '#064E3B',
-   fontWeight: '600',
-   fontSize: 14,
- },
- headerName: {
-   fontSize: 16,
-   fontWeight: '600',
-   color: '#111827',
- },
- headerSubtext: {
-   fontSize: 12,
-   color: '#6B7280',
-   marginTop: 1,
- },
- errorBanner: {
-   marginHorizontal: 16,
-   marginTop: 8,
-   padding: 12,
-   backgroundColor: '#FEE2E2',
-   borderWidth: 1,
-   borderColor: '#FCA5A5',
-   borderRadius: 8,
- },
- errorText: {
-   fontSize: 13,
-   color: '#991B1B',
- },
- keyboardAvoidingContainer: {
-   flex: 1,
- },
- messageList: {
-   paddingHorizontal: 12,
-   paddingTop: 8,
-   paddingBottom: 16,
- },
- inputContainer: {
-   padding: 12,
-   backgroundColor: '#FFFFFF',
-   borderTopWidth: 1,
-   borderTopColor: '#E5E7EB',
- },
- inputRow: {
-   flexDirection: 'row',
-   alignItems: 'flex-end',
-   backgroundColor: '#F9FAFB',
-   borderRadius: 20,
-   paddingHorizontal: 16,
-   paddingVertical: 8,
-   borderWidth: 1,
-   borderColor: '#E5E7EB',
- },
- inlineTextInput: {
-   flex: 1,
-   color: '#111827',
-   fontSize: 15,
-   maxHeight: 100,
-   paddingTop: 4,
-   paddingBottom: 4,
- },
- sendButton: {
-   marginLeft: 8,
-   padding: 4,
-   alignSelf: 'flex-end',
- },
- sendButtonDisabled: {
-   opacity: 0.4,
- },
-});
+function makeStyles(t: AppTheme) {
+ return StyleSheet.create({
+   container: {
+     flex: 1,
+     backgroundColor: t.background,
+   },
+   header: {
+     backgroundColor: t.background,
+     paddingTop: 48,
+     paddingBottom: 12,
+     paddingHorizontal: 16,
+     borderBottomWidth: 1,
+     borderBottomColor: t.border,
+   },
+   headerInner: {
+     flexDirection: 'row',
+     alignItems: 'center',
+   },
+   backButton: {
+     marginRight: 12,
+   },
+   headerProfile: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     flex: 1,
+   },
+   headerAvatar: {
+     width: 40,
+     height: 40,
+     borderRadius: 20,
+     marginRight: 12,
+   },
+   avatarFallback: {
+     backgroundColor: t.surfaceSecondary,
+     width: 40,
+     height: 40,
+     borderRadius: 20,
+     justifyContent: 'center',
+     alignItems: 'center',
+   },
+   avatarFallbackText: {
+     color: t.primaryLight,
+     fontWeight: '600',
+     fontSize: 14,
+   },
+   headerName: {
+     fontSize: 16,
+     fontWeight: '600',
+     color: t.text,
+   },
+   headerSubtext: {
+     fontSize: 12,
+     color: t.textDisabled,
+     marginTop: 1,
+   },
+   // Semantic red — preserved across themes
+   errorBanner: {
+     marginHorizontal: 16,
+     marginTop: 8,
+     padding: 12,
+     backgroundColor: '#FEE2E2',
+     borderWidth: 1,
+     borderColor: '#FCA5A5',
+     borderRadius: 8,
+   },
+   errorText: {
+     fontSize: 13,
+     color: '#991B1B',
+   },
+   keyboardAvoidingContainer: {
+     flex: 1,
+   },
+   messageList: {
+     paddingHorizontal: 12,
+     paddingTop: 8,
+     paddingBottom: 16,
+   },
+   inputContainer: {
+     padding: 12,
+     backgroundColor: t.background,
+     borderTopWidth: 1,
+     borderTopColor: t.border,
+   },
+   inputRow: {
+     flexDirection: 'row',
+     alignItems: 'flex-end',
+     backgroundColor: t.surfaceSecondary,
+     borderRadius: 20,
+     paddingHorizontal: 16,
+     paddingVertical: 8,
+     borderWidth: 1,
+     borderColor: t.border,
+   },
+   inlineTextInput: {
+     flex: 1,
+     color: t.text,
+     fontSize: 15,
+     maxHeight: 100,
+     paddingTop: 4,
+     paddingBottom: 4,
+   },
+   sendButton: {
+     marginLeft: 8,
+     padding: 4,
+     alignSelf: 'flex-end',
+   },
+   sendButtonDisabled: {
+     opacity: 0.4,
+   },
+ })
+}
 

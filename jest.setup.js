@@ -20,6 +20,40 @@ global.__DEV__ = true;
 // Global test timeout - increased for async operations
 jest.setTimeout(30000);
 
+// Mock AppThemeContext so components using useAppThemeContext() work in tests
+// without requiring an AppThemeProvider wrapper.
+jest.mock('lib/themes/AppThemeContext', () => {
+  const mockTheme = {
+    background: '#0B0F14',
+    surface: '#111827',
+    surfaceSecondary: '#1F2937',
+    border: '#374151',
+    text: '#FFFFFF',
+    textSecondary: '#9CA3AF',
+    textDisabled: '#6B7280',
+    primary: '#059669',
+    primaryLight: '#6ee7b7',
+    overlay: 'rgba(255,255,255,0.1)',
+    success: '#10B981',
+    error: '#EF4444',
+    warning: '#F59E0B',
+    info: '#3B82F6',
+    completed: '#6366F1',
+    cancelled: '#F97316',
+    isDark: true,
+  };
+  return {
+    useAppThemeContext: () => ({
+      theme: mockTheme,
+      mode: 'dark',
+      isDark: true,
+      toggleTheme: jest.fn(),
+      setTheme: jest.fn(),
+    }),
+    AppThemeProvider: ({ children }) => children,
+  };
+});
+
 // Mock expo-constants
 jest.mock('expo-constants', () => ({
   default: {
@@ -388,7 +422,11 @@ global.console = {
       firstArg.includes('[E2EKeyService]') ||
       firstArg.includes('Error verifying Connect onboarding:') ||
       firstArg.includes('Error creating account link:') ||
-      firstArg.includes('Error refunding PaymentIntent')
+      firstArg.includes('Error refunding PaymentIntent') ||
+      firstArg.includes('[SECURITY]') ||
+      firstArg.includes('Error refunding escrow') ||
+      firstArg.includes('[mixpanel] track called') ||
+      firstArg.includes('[StripeSdk]')
     ) {
       return;
     }

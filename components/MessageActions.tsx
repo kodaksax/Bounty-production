@@ -61,7 +61,7 @@ export function MessageActions({
               <MaterialIcons 
                 name={isPinned ? 'push-pin' : 'push-pin'} 
                 size={22} 
-                color={isPinned ? '#fbbf24' : '#d1fae5'} 
+                color={isPinned ? '#fbbf24' : '#9CA3AF'}
                 accessibilityElementsHidden={true}
               />
               <Text style={styles.actionText}>
@@ -78,7 +78,7 @@ export function MessageActions({
               accessibilityLabel="Copy message text"
               accessibilityHint="Copies message text to clipboard"
             >
-              <MaterialIcons name="content-copy" size={22} color="#d1fae5" accessibilityElementsHidden={true} />
+              <MaterialIcons name="content-copy" size={22} color="#9CA3AF" accessibilityElementsHidden={true} />
               <Text style={styles.actionText}>Copy Text</Text>
             </TouchableOpacity>
 
@@ -120,7 +120,7 @@ export function MessageActions({
               accessibilityLabel="Cancel"
               accessibilityHint="Closes message actions menu"
             >
-              <MaterialIcons name="close" size={22} color="#d1fae5" accessibilityElementsHidden={true} />
+              <MaterialIcons name="close" size={22} color="#9CA3AF" accessibilityElementsHidden={true} />
               <Text style={styles.actionText}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   actionSheet: {
-    backgroundColor: '#065f46', // emerald-800
+    backgroundColor: '#111827',
     borderRadius: 16,
     overflow: 'hidden',
   },
@@ -153,15 +153,15 @@ const styles = StyleSheet.create({
   },
   actionText: {
     fontSize: 16,
-    color: '#d1fae5', // emerald-200
+    color: '#9CA3AF',
     fontWeight: '500',
   },
   dangerText: {
-    color: '#fca5a5', // red-300
+    color: '#fca5a5',
   },
   divider: {
     height: 1,
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    backgroundColor: '#374151',
     marginHorizontal: 20,
   },
 });

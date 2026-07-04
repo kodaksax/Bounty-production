@@ -1,34 +1,40 @@
 import { ThemeProvider } from "components/theme-provider";
+import { AppThemeProvider, useAppThemeContext } from '../lib/themes/AppThemeContext';
 import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
-import { Slot } from "expo-router";
-import { StatusBar } from "expo-status-bar";
-import React, { useEffect, useMemo, useState } from "react";
+import { Slot } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { PostHogProvider } from 'posthog-react-native';
+import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import "../global.css";
+import '../global.css';
 import { useAuthContext } from '../hooks/use-auth-context';
 import { useSessionMonitor } from '../hooks/useSessionMonitor';
-import { AdminProvider } from '../lib/admin-context';
+import { AdminProvider } from '../lib/admin-context'
+import { BountyFormatProvider } from '../lib/bounty-format-context';
 import { COLORS } from "../lib/constants/accessibility";
 import { BackgroundColorProvider, useBackgroundColor } from '../lib/context/BackgroundColorContext';
 import { NotificationProvider } from '../lib/context/notification-context';
 import { ErrorBoundary } from '../lib/error-boundary';
-import { initMixpanel, track } from "../lib/mixpanel";
-import { analyticsService } from "../lib/services/analytics-service";
+import { analyticsService } from '../lib/services/analytics-service';
 import { StripeProvider } from '../lib/stripe-context';
 import { WalletProvider } from '../lib/wallet-context';
 import AuthProvider from '../providers/auth-provider';
 import { NetworkProvider } from '../providers/network-provider';
 import { WebSocketProvider } from '../providers/websocket-provider';
 import { hideNativeSplashSafely, showNativeSplash } from './auth/splash';
-import { isInitialNavigationDone, onInitialNavigationDone } from './initial-navigation/initialNavigation';
+import {
+    isInitialNavigationDone,
+    onInitialNavigationDone,
+} from './initial-navigation/initialNavigation';
 
 // Sentry initialization is deferred to RootLayout useEffect to avoid early native module access
 import { getSentry as getSentryFromInit, initializeSentry } from '../lib/services/sentry-init';
 // Initialize our global JS error handlers that log to device console (captured by Xcode/TestFlight)
 import { initGlobalErrorHandlers } from '../lib/error-handling';
+import posthog, { capture as posthogCapture } from '../lib/posthog';
 
 import { registerDeviceSession } from '../lib/services/auth-service';
 
@@ -65,23 +71,40 @@ if (__DEV__) {
 // Leaving it in can be misleading; remove to avoid confusion.
 
 // Simple luminance check to pick light/dark content for the status bar
-const getBarStyleForHex = (hex: string): "light" | "dark" => {
+const getBarStyleForHex = (hex: string): 'light' | 'dark' => {
   // strip #
-  const h = hex.replace("#", "");
+  const h = hex.replace('#', '');
   const r = parseInt(h.substring(0, 2), 16) / 255;
   const g = parseInt(h.substring(2, 4), 16) / 255;
   const b = parseInt(h.substring(4, 6), 16) / 255;
   // relative luminance
   const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  return lum > 0.5 ? "dark" : "light";
+  return lum > 0.5 ? 'dark' : 'light';
+};
+
+// Keeps BackgroundColorContext (used for status-bar tinting) in sync with the
+// active theme so the status-bar color flips instantly when the user toggles.
+const ThemeSyncer = () => {
+  const { theme } = useAppThemeContext();
+  const { setColor } = useBackgroundColor();
+  React.useEffect(() => {
+    setColor(theme.background);
+  }, [theme.background, setColor]);
+  return null;
 };
 
 const RootFrame = ({ children, bgColor = COLORS.EMERALD_500 }: { children: React.ReactNode; bgColor?: string }) => {
   const insets = useSafeAreaInsets();
   const barStyle = getBarStyleForHex(bgColor);
 
-  const topInsetStyle = useMemo(() => ({ height: insets.top, backgroundColor: bgColor }), [insets.top, bgColor]);
-  const bottomInsetStyle = useMemo(() => ({ height: insets.bottom || 0, backgroundColor: bgColor }), [insets.bottom, bgColor]);
+  const topInsetStyle = useMemo(
+    () => ({ height: insets.top, backgroundColor: bgColor }),
+    [insets.top, bgColor]
+  );
+  const bottomInsetStyle = useMemo(
+    () => ({ height: insets.bottom || 0, backgroundColor: bgColor }),
+    [insets.bottom, bgColor]
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: bgColor }]}>
@@ -138,6 +161,7 @@ const LayoutContent = () => {
                     <NotificationProvider>
                       <WebSocketProvider>
                         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+                          <ThemeSyncer />
                           <View style={styles.inner}>
                             <Slot />
                           </View>
@@ -176,7 +200,9 @@ function RootLayout({ children }: { children: React.ReactNode }) {
     const NAV_MAX_WAIT_MS = 3000;
     const safetyTimer = setTimeout(() => {
       if (!cancelled) {
-        try { hideNativeSplashSafely(); } catch {}
+        try {
+          hideNativeSplashSafely();
+        } catch {}
         setPhase('app');
       }
     }, SAFETY_MS);
@@ -204,16 +230,23 @@ function RootLayout({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        await Promise.race([initMixpanel(), new Promise(r => setTimeout(r, 2000))]);
-        try { track('Page View', { screen: 'root' }); } catch { /* ignore */ }
-        // Initialize the unified analytics surface (delegates to the same
-        // Mixpanel singleton) and emit the funnel "install/visit" event so
-        // we can measure acquisition → activation drop-off.
-        try { await analyticsService.initialize(); } catch { /* ignore */ }
-        try { await analyticsService.trackEvent('app_opened', { phase: 'startup' }); } catch { /* ignore */ }
+        posthogCapture('Page View', { screen: 'root' });
+        // Initialize the unified analytics surface (PostHog is the single
+        // source of truth) and emit the funnel "install/visit" event so we can
+        // measure acquisition → activation drop-off.
+        try {
+          await analyticsService.initialize();
+        } catch {
+          /* ignore */
+        }
+        try {
+          await analyticsService.trackEvent('app_opened', { phase: 'startup' });
+        } catch {
+          /* ignore */
+        }
       } catch (e) {
         // eslint-disable-next-line no-console
-        console.error('[Mixpanel] init failed', e);
+        console.error('[Analytics] startup init failed', e);
       }
 
       try {
@@ -230,7 +263,7 @@ function RootLayout({ children }: { children: React.ReactNode }) {
       // Wait for initial navigation (short bounded wait) then mark startup done
       try {
         if (!isInitialNavigationDone()) {
-          await new Promise<void>((resolve) => {
+          await new Promise<void>(resolve => {
             const timer = setTimeout(resolve, NAV_MAX_WAIT_MS);
             const unsub = onInitialNavigationDone(() => {
               clearTimeout(timer);
@@ -247,7 +280,9 @@ function RootLayout({ children }: { children: React.ReactNode }) {
 
       // If fonts already loaded, finalize transition now
       if (fontsLoaded && !cancelled) {
-        try { hideNativeSplashSafely(); } catch {}
+        try {
+          hideNativeSplashSafely();
+        } catch {}
         setPhase('app');
       }
     };
@@ -257,7 +292,9 @@ function RootLayout({ children }: { children: React.ReactNode }) {
     // If startup already finished earlier and fonts just became available,
     // finalize transition here when both conditions are true.
     if (startupDone.value && fontsLoaded && !cancelled) {
-      try { hideNativeSplashSafely(); } catch {}
+      try {
+        hideNativeSplashSafely();
+      } catch {}
       setPhase('app');
     }
 
@@ -268,13 +305,19 @@ function RootLayout({ children }: { children: React.ReactNode }) {
   }, [fontsLoaded]);
 
   return (
-    <SafeAreaProvider>
-      <GestureHandlerRootView style={styles.gestureRoot}>
-        <BackgroundColorProvider>
-          <LayoutContent />
-        </BackgroundColorProvider>
-      </GestureHandlerRootView>
-    </SafeAreaProvider>
+    <PostHogProvider client={posthog() ?? undefined}>
+      <SafeAreaProvider>
+        <GestureHandlerRootView style={styles.gestureRoot}>
+          <AppThemeProvider>
+            <BountyFormatProvider>
+              <BackgroundColorProvider>
+                <LayoutContent />
+              </BackgroundColorProvider>
+            </BountyFormatProvider>
+          </AppThemeProvider>
+        </GestureHandlerRootView>
+      </SafeAreaProvider>
+    </PostHogProvider>
   );
 }
 
@@ -296,7 +339,7 @@ const SessionMonitorGate = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#059669', // emerald-600
+    backgroundColor: '#0B0F14', // page background
   },
   inner: {
     flex: 1,
