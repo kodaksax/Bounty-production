@@ -305,7 +305,7 @@ function RootLayout({ children }: { children: React.ReactNode }) {
   }, [fontsLoaded]);
 
   return (
-    <PostHogProvider client={posthog()}>
+    <PostHogProvider client={posthog() ?? undefined}>
       <SafeAreaProvider>
         <GestureHandlerRootView style={styles.gestureRoot}>
           <AppThemeProvider>
