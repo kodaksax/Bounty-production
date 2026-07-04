@@ -81,7 +81,7 @@
         "@react-native-google-signin/google-signin",
         {
           "androidClientId": "${EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID}",
-          "iosUrlScheme":  "${EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME}"
+          "iosUrlScheme": "${EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME}"
         }
       ],
       [
@@ -109,7 +109,11 @@
         {
           "ios": {
             "useHermesV1": true,
-            "buildReactNativeFromSource": true
+            "buildReactNativeFromSource": true,
+            "extraPods": [
+              { "name": "GoogleUtilities", "modular_headers": true },
+              { "name": "RecaptchaInterop", "modular_headers": true }
+            ]
           },
           "android": {
             "useHermesV1": true,
