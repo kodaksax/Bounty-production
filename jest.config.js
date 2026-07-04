@@ -15,8 +15,7 @@ module.exports = {
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   coverageDirectory: 'coverage',
   collectCoverageFrom: [
-    'lib/services/**/*.{ts,tsx,js,jsx}',
-    'lib/utils/**/*.{ts,tsx,js,jsx}',
+    'lib/**/*.{ts,tsx,js,jsx}',
     'server/**/*.{ts,tsx,js,jsx}',
     'services/**/*.{ts,tsx,js,jsx}',
     '!**/*.d.ts',
