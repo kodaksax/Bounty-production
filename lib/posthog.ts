@@ -92,16 +92,7 @@ export const identify = (distinctId: string, properties?: Record<string, any>): 
 export const setPersonProperties = (properties: Record<string, any>): void => {
   try {
     if (!_posthog) return;
-    // Use the SDK's dedicated setPersonProperties method when available.
-    // posthog-react-native ≥ 3.x exposes setPersonProperties() directly on the
-    // client; falling back to attaching $set as a property on a generic event
-    // ensures compatibility with older SDK versions without using '$set' as the
-    // event name, which would pollute the event stream.
-    if (typeof _posthog.setPersonProperties === 'function') {
-      _posthog.setPersonProperties(properties);
-    } else {
-      _posthog.capture('person_properties_update', { $set: properties });
-    }
+    _posthog.capture('$set', { $set: properties });
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error('[posthog] setPersonProperties failed', e);
