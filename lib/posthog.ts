@@ -92,8 +92,15 @@ export const identify = (distinctId: string, properties?: Record<string, any>): 
 export const setPersonProperties = (properties: Record<string, any>): void => {
   try {
     if (!_posthog) return;
-    // PostHog sets person properties by attaching $set to any event.
-    _posthog.capture('$set', { $set: properties });
+    // Use the SDK's dedicated setPersonProperties method when available.
+    // Falling back to attaching $set on a generic event ensures compatibility
+    // with older SDK versions without using $set as the event name (which
+    // would pollute the event stream).
+    if (typeof _posthog.setPersonProperties === 'function') {
+      _posthog.setPersonProperties(properties);
+    } else {
+      _posthog.capture('person_properties_update', { $set: properties });
+    }
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error('[posthog] setPersonProperties failed', e);

@@ -2,7 +2,7 @@ import { ThemeProvider } from "components/theme-provider";
 import { AppThemeProvider, useAppThemeContext } from '../lib/themes/AppThemeContext';
 import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
-import { Slot, useNavigationContainerRef } from 'expo-router';
+import { Slot } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { PostHogProvider } from 'posthog-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -179,7 +179,6 @@ const LayoutContent = () => {
 };
 
 function RootLayout({ children }: { children: React.ReactNode }) {
-  const navigationRef = useNavigationContainerRef();
   // phases: 'native' (Expo static) -> 'brand' (React BrandedSplash) -> 'app'
   const [phase, setPhase] = useState<'native' | 'brand' | 'app'>('native');
   const BRANDED_MIN_MS = 800; // kept for compatibility but branded splash disabled
@@ -306,17 +305,19 @@ function RootLayout({ children }: { children: React.ReactNode }) {
   }, [fontsLoaded]);
 
   return (
-    <SafeAreaProvider>
-      <GestureHandlerRootView style={styles.gestureRoot}>
-        <AppThemeProvider>
-          <BountyFormatProvider>
-            <BackgroundColorProvider>
-              <LayoutContent />
-            </BackgroundColorProvider>
-          </BountyFormatProvider>
-        </AppThemeProvider>
-      </GestureHandlerRootView>
-    </SafeAreaProvider>
+    <PostHogProvider client={posthog()}>
+      <SafeAreaProvider>
+        <GestureHandlerRootView style={styles.gestureRoot}>
+          <AppThemeProvider>
+            <BountyFormatProvider>
+              <BackgroundColorProvider>
+                <LayoutContent />
+              </BackgroundColorProvider>
+            </BountyFormatProvider>
+          </AppThemeProvider>
+        </GestureHandlerRootView>
+      </SafeAreaProvider>
+    </PostHogProvider>
   );
 }
 
