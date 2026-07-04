@@ -129,7 +129,7 @@
     "expo-status-bar": "~55.0.6",
     "expo-symbols": "~55.0.9",
     "expo-system-ui": "~55.0.19",
-    "expo-updates": "~55.0.25",
+    "expo-updates": "^55.0.25",
     "expo-video": "~55.0.18",
     "expo-video-thumbnails": "~55.0.16",
     "expo-web-browser": "~55.0.17",
