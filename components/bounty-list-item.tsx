@@ -9,6 +9,7 @@ import { SPACING } from '../lib/constants/accessibility';
 import { useHapticFeedback } from '../lib/haptic-feedback';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
+import { getScheduleChip } from '../lib/utils/schedule-utils';
 import { BountyDetailModal } from './bountydetailmodal';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 
@@ -25,6 +26,12 @@ export interface BountyListItemProps {
   user_id?: string | null;
   work_type?: 'online' | 'in_person';
   poster_avatar?: string;
+  // Schedule fields (Phase 1: time as first-class citizen)
+  schedule_type?: 'asap' | 'scheduled' | 'flexible' | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  duration_minutes?: number | null;
+  is_time_sensitive?: boolean;
 }
 
 function BountyListItemComponent({
@@ -38,6 +45,11 @@ function BountyListItemComponent({
   user_id,
   work_type,
   poster_avatar,
+  schedule_type,
+  start_date,
+  end_date,
+  duration_minutes,
+  is_time_sensitive,
 }: BountyListItemProps) {
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -50,6 +62,17 @@ function BountyListItemComponent({
   );
   const [resolvedUsername, setResolvedUsername] = useState<string>(username || 'Loading...');
   const avatarUrl = poster_avatar || posterProfile?.avatar;
+
+  // Derive time chip — prefer structured schedule fields, fall back to is_time_sensitive
+  const scheduleChip = useMemo(() => {
+    if (schedule_type) {
+      return getScheduleChip(schedule_type, start_date, end_date, duration_minutes);
+    }
+    if (is_time_sensitive) {
+      return { label: 'URGENT', icon: '🔴', variant: 'urgent' as const };
+    }
+    return null;
+  }, [schedule_type, start_date, end_date, duration_minutes, is_time_sensitive]);
 
   useEffect(() => {
     if (username) {
@@ -149,6 +172,20 @@ function BountyListItemComponent({
                   ? `${distance} miles away`
                   : 'Location TBD'}
             </Text>
+            {scheduleChip && (
+              <View
+                style={[
+                  s.scheduleChip,
+                  scheduleChip.variant === 'urgent'  && s.scheduleChipUrgent,
+                  scheduleChip.variant === 'warning' && s.scheduleChipWarning,
+                  scheduleChip.variant === 'muted'   && s.scheduleChipMuted,
+                ]}
+              >
+                <Text style={s.scheduleChipText}>
+                  {scheduleChip.icon} {scheduleChip.label}
+                </Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -213,7 +250,11 @@ export const BountyListItem = React.memo(
     prev.isForHonor === next.isForHonor &&
     prev.user_id === next.user_id &&
     prev.work_type === next.work_type &&
-    prev.poster_avatar === next.poster_avatar
+    prev.poster_avatar === next.poster_avatar &&
+    prev.schedule_type === next.schedule_type &&
+    prev.start_date === next.start_date &&
+    prev.end_date === next.end_date &&
+    prev.is_time_sensitive === next.is_time_sensitive
 );
 
 function makeStyles(t: AppTheme) {
@@ -354,6 +395,29 @@ function makeStyles(t: AppTheme) {
       fontSize: 13,
       color: t.textDisabled,
       fontWeight: '500',
+      flex: 1,
+    },
+    scheduleChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 12,
+      backgroundColor: t.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+    },
+    scheduleChipUrgent: {
+      backgroundColor: t.isDark ? 'rgba(220,38,38,0.2)' : 'rgba(220,38,38,0.1)',
+    },
+    scheduleChipWarning: {
+      backgroundColor: t.isDark ? 'rgba(245,158,11,0.2)' : 'rgba(245,158,11,0.1)',
+    },
+    scheduleChipMuted: {
+      backgroundColor: t.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+    },
+    scheduleChipText: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: t.textSecondary,
     },
 
     // Footer

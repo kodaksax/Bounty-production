@@ -193,6 +193,11 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
                   categoryColor={def.color}
                   categoryLabel={def.label}
                   attachments_json={b.attachments_json}
+                  schedule_type={b.schedule_type}
+                  start_date={b.start_date}
+                  end_date={b.end_date}
+                  duration_minutes={b.duration_minutes}
+                  is_time_sensitive={b.is_time_sensitive}
                 />
               </View>
             )

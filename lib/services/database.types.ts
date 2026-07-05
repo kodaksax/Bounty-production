@@ -33,6 +33,13 @@ export type Bounty = {
   stale_detected_at?: string;
   // Stripe payment fields for escrow
   payment_intent_id?: string; // Stripe PaymentIntent ID for escrow
+  // Structured schedule fields (Phase 1: time as first-class citizen)
+  schedule_type?: 'asap' | 'scheduled' | 'flexible';
+  start_date?: string;         // ISO 8601 timestamptz
+  end_date?: string;           // ISO 8601 timestamptz (hard deadline)
+  latest_arrival_time?: string; // ISO 8601 timestamptz
+  duration_minutes?: number;
+  conditional_end_note?: string;
 }
 
 // Lightweight attachment metadata for client state (stored serialized in attachments_json)

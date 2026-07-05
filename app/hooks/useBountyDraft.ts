@@ -31,6 +31,13 @@ export interface BountyDraft {
   timeline?: string;
   skills?: string;
   attachments?: Attachment[];
+  // Structured schedule (Phase 1: time as first-class citizen)
+  scheduleType?: 'asap' | 'scheduled' | 'flexible';
+  startDate?: string;           // ISO 8601
+  endDate?: string;             // ISO 8601
+  latestArrivalTime?: string;   // ISO 8601
+  durationMinutes?: number;
+  conditionalEndNote?: string;
 }
 
 const defaultDraft: BountyDraft = {
@@ -44,6 +51,12 @@ const defaultDraft: BountyDraft = {
   timeline: '',
   skills: '',
   attachments: [],
+  scheduleType: undefined,
+  startDate: undefined,
+  endDate: undefined,
+  latestArrivalTime: undefined,
+  durationMinutes: undefined,
+  conditionalEndNote: undefined,
 };
 
 export function useBountyDraft(userId?: string) {

@@ -2,6 +2,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import { formatCategoryLabel } from 'lib/utils/data-utils';
 import { PLATFORM_FEE_PERCENTAGE } from 'lib/wallet-context';
+import { formatScheduleDescription } from 'lib/utils/schedule-utils';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -89,8 +90,8 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
       <FlatList
         ref={(r) => { listRef.current = r }}
         data={useMemo(() => {
-          const sections: string[] = ['header', 'trust_badges', 'title', 'description', 'compensation', 'location'];
-          if (draft.timeline || draft.skills) sections.push('optional');
+          const sections: string[] = ['header', 'trust_badges', 'title', 'description', 'schedule', 'compensation', 'location'];
+          if (draft.skills) sections.push('optional');
           if (draft.attachments && draft.attachments.length > 0) sections.push('attachments');
           if (!draft.isForHonor) sections.push('escrow');
           return sections;
@@ -136,6 +137,31 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
                   <Text className="text-base" style={{ color: theme.text }}>{draft.description}</Text>
                 </View>
               );
+            case 'schedule': {
+              const scheduleLabel = draft.scheduleType
+                ? formatScheduleDescription({
+                    type: draft.scheduleType,
+                    startDate: draft.startDate,
+                    endDate: draft.endDate,
+                    latestArrivalTime: draft.latestArrivalTime,
+                    durationMinutes: draft.durationMinutes,
+                    conditionalEndNote: draft.conditionalEndNote,
+                  })
+                : 'Not set';
+              const scheduleIcon =
+                draft.scheduleType === 'asap' ? 'bolt'
+                : draft.scheduleType === 'flexible' ? 'tune'
+                : 'schedule';
+              return (
+                <View className="mb-4 rounded-lg p-4" style={{ backgroundColor: theme.surface }}>
+                  <Text className="text-xs uppercase tracking-wide mb-2" style={{ color: theme.textSecondary }}>Schedule</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <MaterialIcons name={scheduleIcon} size={20} color={theme.primary} />
+                    <Text className="text-base ml-2 flex-1" style={{ color: theme.text }}>{scheduleLabel}</Text>
+                  </View>
+                </View>
+              );
+            }
             case 'compensation':
               return (
                 <View className="mb-4 rounded-lg p-4" style={{ backgroundColor: theme.surface }}>
@@ -162,7 +188,6 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
               return (
                 <View className="mb-4 rounded-lg p-4" style={{ backgroundColor: theme.surface }}>
                   <Text className="text-xs uppercase tracking-wide mb-2" style={{ color: theme.textSecondary }}>Additional Details</Text>
-                  {draft.timeline && <View className="mb-2"><Text className="text-sm" style={{ color: theme.primaryLight }}>Timeline:</Text><Text className="text-base" style={{ color: theme.text }}>{draft.timeline}</Text></View>}
                   {draft.skills && <View><Text className="text-sm" style={{ color: theme.primaryLight }}>Skills:</Text><Text className="text-base" style={{ color: theme.text }}>{draft.skills}</Text></View>}
                 </View>
               );

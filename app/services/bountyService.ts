@@ -68,6 +68,9 @@ function computeDraftFingerprint(posterId: string, draft: BountyDraft): string {
     normalize(draft.timeline),
     normalize(draft.skills),
     normalize(draft.category),
+    normalize(draft.scheduleType),
+    normalize(draft.startDate),
+    normalize(draft.endDate),
   ];
   return parts.join('|');
 }
@@ -159,6 +162,15 @@ export const bountyService = {
         poster_id: posterId,
         user_id: posterId,
         status: 'open',
+        // Structured schedule fields (Phase 1)
+        schedule_type: draft.scheduleType,
+        start_date: draft.startDate,
+        end_date: draft.endDate,
+        latest_arrival_time: draft.latestArrivalTime,
+        duration_minutes: draft.durationMinutes,
+        conditional_end_note: draft.conditionalEndNote,
+        // Mark as time-sensitive when schedule is ASAP
+        is_time_sensitive: draft.scheduleType === 'asap' ? true : undefined,
         // Include attachments from draft so they get persisted to attachments_json
         attachments: draft.attachments || [],
       };

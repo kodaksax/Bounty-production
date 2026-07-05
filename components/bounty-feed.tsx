@@ -307,6 +307,12 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       user_id: item.user_id,
       work_type: item.work_type,
       poster_avatar: item.poster_avatar,
+      // Schedule fields (Phase 1)
+      schedule_type: item.schedule_type,
+      start_date: item.start_date,
+      end_date: item.end_date,
+      duration_minutes: item.duration_minutes,
+      is_time_sensitive: item.is_time_sensitive,
     }
     if (isCompact) {
       return <BountyCompactItem {...props} />

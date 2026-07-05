@@ -9,6 +9,7 @@ import { useHapticFeedback } from '../lib/haptic-feedback'
 import type { AttachmentMeta } from '../lib/services/database.types'
 import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 import type { AppTheme } from '../lib/themes/types'
+import { getScheduleChip } from '../lib/utils/schedule-utils'
 import { BountyDetailModal } from "./bountydetailmodal"
 
 const COVER_HEIGHT = 165
@@ -27,12 +28,19 @@ export interface BountyFeaturedItemProps {
   categoryColor: string
   categoryLabel: string
   attachments_json?: string
+  // Schedule fields (Phase 1: time as first-class citizen)
+  schedule_type?: 'asap' | 'scheduled' | 'flexible' | null
+  start_date?: string | null
+  end_date?: string | null
+  duration_minutes?: number | null
+  is_time_sensitive?: boolean
 }
 
 function BountyFeaturedItemComponent({
   id, title, username, price, distance, description,
   isForHonor, user_id, work_type, poster_avatar,
   categoryColor, categoryLabel, attachments_json,
+  schedule_type, start_date, end_date, duration_minutes, is_time_sensitive,
 }: BountyFeaturedItemProps) {
   const { theme } = useAppThemeContext()
   const s = useMemo(() => makeStyles(theme), [theme])
@@ -41,6 +49,17 @@ function BountyFeaturedItemComponent({
   const { triggerHaptic } = useHapticFeedback()
   const { profile: posterProfile, loading: profileLoading } = useNormalizedProfile(user_id ?? undefined)
   const [resolvedUsername, setResolvedUsername] = useState<string>(username || 'Loading...')
+
+  // Derive time chip
+  const scheduleChip = useMemo(() => {
+    if (schedule_type) {
+      return getScheduleChip(schedule_type, start_date, end_date, duration_minutes)
+    }
+    if (is_time_sensitive) {
+      return { label: 'URGENT', icon: '🔴', variant: 'urgent' as const }
+    }
+    return null
+  }, [schedule_type, start_date, end_date, duration_minutes, is_time_sensitive])
 
   useEffect(() => {
     if (username) { setResolvedUsername(username); return }
@@ -106,6 +125,17 @@ function BountyFeaturedItemComponent({
             <Text style={s.coverChipText}>{categoryLabel}</Text>
           </View>
 
+          {/* Schedule chip overlaid on image top-right */}
+          {scheduleChip && (
+            <View style={[
+              s.scheduleChip,
+              scheduleChip.variant === 'urgent'  && s.scheduleChipUrgent,
+              scheduleChip.variant === 'warning' && s.scheduleChipWarning,
+            ]}>
+              <Text style={s.scheduleChipText}>{scheduleChip.icon} {scheduleChip.label}</Text>
+            </View>
+          )}
+
           {/* Info below cover — banner green */}
           <LinearGradient
             colors={['#064e3b', '#059669']}
@@ -151,7 +181,11 @@ export const BountyFeaturedItem = React.memo(BountyFeaturedItemComponent, (prev,
   prev.price === next.price &&
   prev.user_id === next.user_id &&
   prev.categoryColor === next.categoryColor &&
-  prev.attachments_json === next.attachments_json
+  prev.attachments_json === next.attachments_json &&
+  prev.schedule_type === next.schedule_type &&
+  prev.start_date === next.start_date &&
+  prev.end_date === next.end_date &&
+  prev.is_time_sensitive === next.is_time_sensitive
 )
 
 function makeStyles(t: AppTheme) {
@@ -184,6 +218,26 @@ function makeStyles(t: AppTheme) {
       borderRadius: 20,
     },
     coverChipText: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: '#fff',
+    },
+    scheduleChip: {
+      position: 'absolute',
+      top: 10,
+      right: 10,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+    },
+    scheduleChipUrgent: {
+      backgroundColor: 'rgba(220,38,38,0.85)',
+    },
+    scheduleChipWarning: {
+      backgroundColor: 'rgba(180,100,0,0.85)',
+    },
+    scheduleChipText: {
       fontSize: 11,
       fontWeight: '700',
       color: '#fff',
