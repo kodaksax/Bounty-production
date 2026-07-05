@@ -395,7 +395,7 @@ function makeStyles(t: AppTheme) {
       fontSize: 13,
       color: t.textDisabled,
       fontWeight: '500',
-      flex: 1,
+      flexShrink: 1,
     },
     scheduleChip: {
       flexDirection: 'row',

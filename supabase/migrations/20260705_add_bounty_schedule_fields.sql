@@ -27,7 +27,7 @@ CREATE INDEX IF NOT EXISTS idx_bounties_schedule_type
 
 COMMENT ON COLUMN bounties.schedule_type        IS 'High-level schedule category: asap, scheduled, or flexible.';
 COMMENT ON COLUMN bounties.start_date           IS 'Earliest/preferred start time (UTC).';
-COMMENT ON COLUMN bounties.end_date             IS 'Hard deadline or latest finish time (UTC). Always set alongside conditional_end_note as a safety-net.';
+COMMENT ON COLUMN bounties.end_date             IS 'Hard deadline or latest finish time (UTC). When conditional_end_note is also set, this acts as the safety-net deadline — the job ends at whichever comes first.';
 COMMENT ON COLUMN bounties.latest_arrival_time  IS 'Latest time the hunter may begin the job (distinct from end_date when a conditional end condition is also set).';
 COMMENT ON COLUMN bounties.duration_minutes     IS 'Estimated task duration in minutes.';
-COMMENT ON COLUMN bounties.conditional_end_note IS 'Human-readable conditional end condition, e.g. "until the first Associate arrives".';
+COMMENT ON COLUMN bounties.conditional_end_note IS 'Human-readable conditional end condition, e.g. "until the first Associate arrives". When present, always pair with end_date as a hard safety-net deadline.';

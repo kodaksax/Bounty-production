@@ -148,10 +148,12 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
                     conditionalEndNote: draft.conditionalEndNote,
                   })
                 : 'Not set';
-              const scheduleIcon =
-                draft.scheduleType === 'asap' ? 'bolt'
-                : draft.scheduleType === 'flexible' ? 'tune'
-                : 'schedule';
+              const scheduleIconMap: Record<string, string> = {
+                asap: 'bolt',
+                scheduled: 'schedule',
+                flexible: 'tune',
+              };
+              const scheduleIcon = (draft.scheduleType && scheduleIconMap[draft.scheduleType]) ?? 'schedule';
               return (
                 <View className="mb-4 rounded-lg p-4" style={{ backgroundColor: theme.surface }}>
                   <Text className="text-xs uppercase tracking-wide mb-2" style={{ color: theme.textSecondary }}>Schedule</Text>

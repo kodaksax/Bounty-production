@@ -51,6 +51,11 @@ function isTomorrow(date: Date): boolean {
   );
 }
 
+/**
+ * Returns true when `date` falls within the next 7 days from now (inclusive).
+ * This is an approximate "this week" check using the device's local time.
+ * It does not align to calendar week boundaries (Sun–Sat or Mon–Sun).
+ */
 function isThisWeek(date: Date): boolean {
   const now = new Date();
   const diffDays = (date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
@@ -240,6 +245,11 @@ export function formatScheduleDescription(schedule: BountySchedule): string {
 /**
  * Converts a `BountyDraft`-level schedule preset key into an ISO start/end pair.
  * Used when the poster selects "Today", "Tomorrow", or "This Week".
+ *
+ * NOTE: Dates are computed in the device's local timezone (consistent with the
+ * poster's intent — "Today" should mean today in their location). The resulting
+ * ISO strings include the local timezone offset so downstream consumers can
+ * convert to UTC as needed.
  */
 export function schedulePresetToDates(preset: 'today' | 'tomorrow' | 'this_week'): {
   startDate: string;
@@ -261,10 +271,10 @@ export function schedulePresetToDates(preset: 'today' | 'tomorrow' | 'this_week'
     return { startDate: start.toISOString(), endDate: end.toISOString() };
   }
 
-  // this_week
-  const start = new Date(now);
+  // this_week: normalize start to 9 AM today for consistency with other presets
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 9, 0, 0);
   const end = new Date(now);
   end.setDate(end.getDate() + 7);
-  end.setHours(23, 59, 59);
+  end.setHours(23, 59, 59, 0);
   return { startDate: start.toISOString(), endDate: end.toISOString() };
 }

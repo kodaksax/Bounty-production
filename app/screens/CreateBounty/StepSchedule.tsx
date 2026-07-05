@@ -134,7 +134,9 @@ export function StepSchedule({ draft, onUpdate, onNext, onBack }: StepSchedulePr
     if (!selectedDate) return;
 
     if (pickerMode === 'date' && Platform.OS === 'android') {
-      // Android: after date selection, immediately open time picker
+      // Android date picker closes automatically after selection. We need a
+      // short delay before re-opening the time picker so the OS dismiss
+      // animation completes and the new picker doesn't get swallowed.
       onUpdate({ [pickerTarget]: selectedDate.toISOString() });
       setTimeout(() => {
         setPickerMode('time');
@@ -241,7 +243,7 @@ export function StepSchedule({ draft, onUpdate, onNext, onBack }: StepSchedulePr
         {showCustomDates && (
           <View style={{ marginBottom: 24 }}>
             <Text style={{ fontSize: 14, fontWeight: '600', color: theme.textSecondary, marginBottom: 10 }}>
-              Set date &amp; time
+              Set date & time
             </Text>
 
             {/* Start date */}
