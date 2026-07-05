@@ -102,10 +102,27 @@ jest.mock('expo-linear-gradient', () => ({
 }));
 jest.mock('@expo/vector-icons', () => ({ MaterialIcons: () => null }));
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn() }) }));
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
+}));
 
 jest.mock('../../components/notifications-bell', () => ({ NotificationsBell: () => null }));
 jest.mock('../../components/ui/branding-logo', () => ({ BrandingLogo: () => null }));
 jest.mock('../../components/ui/wallet-balance-button', () => ({ WalletBalanceButton: () => null }));
+jest.mock('../../components/bounty-compact-item', () => ({
+  BountyCompactItem: ({ bounty }: any) =>
+    require('react').createElement('Text', { testID: 'bounty-item' }, bounty?.title),
+}));
+jest.mock('../../components/bounty-grid-feed', () => ({
+  BountyGridFeed: ({ bounties = [] }: any) =>
+    require('react').createElement(
+      'View',
+      {},
+      bounties.map((b: any) =>
+        require('react').createElement('Text', { key: b.id, testID: 'bounty-item' }, b.title),
+      ),
+    ),
+}));
 jest.mock('../../components/bounty-list-item', () => ({
   BountyListItem: ({ title }: any) =>
     require('react').createElement('Text', { testID: 'bounty-item' }, title),

@@ -23,6 +23,7 @@ import { storage } from '../lib/storage'
 import type { TrendingBounty } from '../lib/types'
 import { logger } from '../lib/utils/error-logger'
 import { withTimeout } from '../lib/utils/withTimeout'
+import { API_TIMEOUTS } from '../lib/config/network'
 
 export type BountyFeedHandle = {
   refresh: () => void
@@ -239,7 +240,11 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     logger.info('feed.bounties.request_started', { reset, offset: pageOffset, pageSize: PAGE_SIZE })
     try {
       const pageOffset = reset ? 0 : offsetRef.current
-      const fetchedBounties = await bountyService.getAll({ status: 'open', limit: PAGE_SIZE, offset: pageOffset })
+      const fetchedBounties = await withTimeout(
+        bountyService.getAll({ status: 'open', limit: PAGE_SIZE, offset: pageOffset }),
+        API_TIMEOUTS.DEFAULT
+      )
+      const safeBounties = Array.isArray(fetchedBounties) ? fetchedBounties : []
       const mergeUniqueById = (existing: Bounty[], incoming: Bounty[]) => {
         const map = new Map<string, Bounty>()
         existing.concat(incoming).forEach(b => { map.set(String(b.id), b) })
