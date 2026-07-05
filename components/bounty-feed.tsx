@@ -239,7 +239,6 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     const startedAt = Date.now()
     logger.info('feed.bounties.request_started', { reset, offset: pageOffset, pageSize: PAGE_SIZE })
     try {
-      const pageOffset = reset ? 0 : offsetRef.current
       const fetchedBounties = await withTimeout(
         bountyService.getAll({ status: 'open', limit: PAGE_SIZE, offset: pageOffset }),
         API_TIMEOUTS.DEFAULT
