@@ -43,7 +43,7 @@ export function StepSchedule({ draft, onUpdate, onNext, onBack }: StepSchedulePr
   const scrollRef = useRef<any>(null);
 
   // Derive the active quick-preset from current draft state
-  const [activePreset, setActivePreset] = useState<QuickPreset>(() => {
+  const [activePreset, setActivePreset] = useState<QuickPreset | null>(() => {
     if (draft.scheduleType === 'asap')     return 'asap';
     if (draft.scheduleType === 'flexible') return 'flexible';
     if (draft.scheduleType === 'scheduled') {
@@ -62,7 +62,7 @@ export function StepSchedule({ draft, onUpdate, onNext, onBack }: StepSchedulePr
       }
       return 'custom';
     }
-    return 'asap'; // default
+    return null; // no preset selected yet
   });
 
   // Date picker state (Android shows a dialog; iOS shows inline in a modal)
@@ -164,7 +164,10 @@ export function StepSchedule({ draft, onUpdate, onNext, onBack }: StepSchedulePr
 
   // ── Validation ──────────────────────────────────────────────────────────────
 
-  const isValid = !!draft.scheduleType;
+  // conditionalEndNote requires a hard endDate as its safety net
+  const isValid =
+    !!draft.scheduleType &&
+    !(draft.conditionalEndNote && !draft.endDate);
 
   // ── Helpers to format date/time for display ─────────────────────────────────
 
