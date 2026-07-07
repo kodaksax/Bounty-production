@@ -76,8 +76,7 @@ describe('getScheduleChip', () => {
 
     it('returns a duration chip when durationMinutes is provided', () => {
       const chip = getScheduleChip('flexible', null, null, 60);
-      // label is `~${formatDuration(60)}` → "~~1 hr" because formatDuration(60) returns "~1 hr"
-      expect(chip?.label).toBe('~~1 hr');
+      expect(chip?.label).toBe('~1 hr');
       expect(chip?.variant).toBe('muted');
     });
   });
@@ -161,9 +160,8 @@ describe('getScheduleChip', () => {
 
   describe('scheduled — duration fallback', () => {
     it('returns a duration chip when no dates are provided', () => {
-      // label is `~${formatDuration(120)}` → "~~2 hrs" because formatDuration(120) returns "~2 hrs"
       const chip = getScheduleChip('scheduled', null, null, 120);
-      expect(chip?.label).toBe('~~2 hrs');
+      expect(chip?.label).toBe('~2 hrs');
       expect(chip?.variant).toBe('muted');
     });
   });

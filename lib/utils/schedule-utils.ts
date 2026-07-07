@@ -120,7 +120,7 @@ export function getScheduleChip(
   // Flexible — lowest urgency
   if (scheduleType === 'flexible') {
     if (durationMinutes) {
-      return { label: `~${formatDuration(durationMinutes)}`, icon: '⏱', variant: 'muted' };
+      return { label: formatDuration(durationMinutes), icon: '⏱', variant: 'muted' };
     }
     return { label: 'Flexible', icon: '📅', variant: 'muted' };
   }
@@ -177,7 +177,7 @@ export function getScheduleChip(
 
     // Only have schedule_type=scheduled but no dates — show duration if available
     if (durationMinutes) {
-      return { label: `~${formatDuration(durationMinutes)}`, icon: '⌛', variant: 'muted' };
+      return { label: formatDuration(durationMinutes), icon: '⌛', variant: 'muted' };
     }
   }
 
