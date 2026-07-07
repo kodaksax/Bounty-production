@@ -71,6 +71,9 @@ function computeDraftFingerprint(posterId: string, draft: BountyDraft): string {
     normalize(draft.scheduleType),
     normalize(draft.startDate),
     normalize(draft.endDate),
+    normalize(draft.latestArrivalTime),
+    String(draft.durationMinutes ?? ''),
+    normalize(draft.conditionalEndNote),
   ];
   return parts.join('|');
 }

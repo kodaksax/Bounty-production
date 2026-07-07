@@ -254,6 +254,7 @@ export const BountyListItem = React.memo(
     prev.schedule_type === next.schedule_type &&
     prev.start_date === next.start_date &&
     prev.end_date === next.end_date &&
+    prev.duration_minutes === next.duration_minutes &&
     prev.is_time_sensitive === next.is_time_sensitive
 );
 

@@ -120,7 +120,7 @@ export function getScheduleChip(
   // Flexible — lowest urgency
   if (scheduleType === 'flexible') {
     if (durationMinutes) {
-      return { label: `~${formatDuration(durationMinutes)}`, icon: '⏱', variant: 'muted' };
+      return { label: formatDuration(durationMinutes), icon: '⏱', variant: 'muted' };
     }
     return { label: 'Flexible', icon: '📅', variant: 'muted' };
   }
@@ -177,7 +177,7 @@ export function getScheduleChip(
 
     // Only have schedule_type=scheduled but no dates — show duration if available
     if (durationMinutes) {
-      return { label: `~${formatDuration(durationMinutes)}`, icon: '⌛', variant: 'muted' };
+      return { label: formatDuration(durationMinutes), icon: '⌛', variant: 'muted' };
     }
   }
 
@@ -248,8 +248,8 @@ export function formatScheduleDescription(schedule: BountySchedule): string {
  *
  * NOTE: Dates are computed in the device's local timezone (consistent with the
  * poster's intent — "Today" should mean today in their location). The resulting
- * ISO strings include the local timezone offset so downstream consumers can
- * convert to UTC as needed.
+ * ISO strings are serialized as UTC (via Date#toISOString) and do not include a
+ * local timezone offset; downstream consumers should treat them as UTC.
  */
 export function schedulePresetToDates(preset: 'today' | 'tomorrow' | 'this_week'): {
   startDate: string;
