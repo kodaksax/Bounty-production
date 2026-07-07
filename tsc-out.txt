@@ -1,0 +1,1 @@
+app/screens/CreateBounty/StepReview.tsx(161,36): error TS2322: Type 'string' is not assignable to type '"android" | "web" | "pending" | "verified" | "image" | "message" | "link" | "payment" | "error" | "title" | "category" | "description" | "timeline" | "analytics" | "info" | "navigation" | ... 2218 more ... | undefined'.

@@ -5,18 +5,18 @@
  * chips suitable for bounty cards, detail views, and notifications.
  */
 
-import type { BountySchedule, BountyScheduleType } from '../types';
+import type { BountySchedule } from '../types';
 
 // ─── Duration helpers ────────────────────────────────────────────────────────
 
 /** Standard duration presets (minutes → label). */
 export const DURATION_PRESETS: { minutes: number; label: string }[] = [
-  { minutes: 30,   label: '< 1 hr' },
-  { minutes: 60,   label: '1 hr' },
-  { minutes: 120,  label: '2 hrs' },
-  { minutes: 240,  label: '4 hrs' },
-  { minutes: 480,  label: 'Half day' },
-  { minutes: 960,  label: 'Full day' },
+  { minutes: 30, label: '< 1 hr' },
+  { minutes: 60, label: '1 hr' },
+  { minutes: 120, label: '2 hrs' },
+  { minutes: 240, label: '4 hrs' },
+  { minutes: 480, label: 'Half day' },
+  { minutes: 960, label: 'Full day' },
   { minutes: 1440, label: 'Multi-day' },
 ];
 
@@ -65,15 +65,30 @@ function isThisWeek(date: Date): boolean {
 /** Format a date as "Jul 4" or "Jul 4, 9 PM" depending on whether time matters. */
 function formatDateShort(iso: string, includeTime = false): string {
   const d = new Date(iso);
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const monthNames = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
   const base = `${monthNames[d.getMonth()]} ${d.getDate()}`;
   if (!includeTime) return base;
   const hours = d.getHours();
   const ampm = hours >= 12 ? 'PM' : 'AM';
   const displayHour = hours % 12 === 0 ? 12 : hours % 12;
   const minutes = d.getMinutes();
-  const timeStr = minutes === 0 ? `${displayHour} ${ampm}` : `${displayHour}:${String(minutes).padStart(2, '0')} ${ampm}`;
+  const timeStr =
+    minutes === 0
+      ? `${displayHour} ${ampm}`
+      : `${displayHour}:${String(minutes).padStart(2, '0')} ${ampm}`;
   return `${base}, ${timeStr}`;
 }
 
@@ -110,7 +125,7 @@ export function getScheduleChip(
   scheduleType?: 'asap' | 'scheduled' | 'flexible' | null,
   startDate?: string | null,
   endDate?: string | null,
-  durationMinutes?: number | null,
+  durationMinutes?: number | null
 ): ScheduleChip | null {
   // ASAP — highest urgency
   if (scheduleType === 'asap') {
@@ -120,7 +135,7 @@ export function getScheduleChip(
   // Flexible — lowest urgency
   if (scheduleType === 'flexible') {
     if (durationMinutes) {
-      return { label: formatDuration(durationMinutes), icon: '⏱', variant: 'muted' };
+      return { label: `~${formatDuration(durationMinutes)}`, icon: '⏱', variant: 'muted' };
     }
     return { label: 'Flexible', icon: '📅', variant: 'muted' };
   }
@@ -177,7 +192,7 @@ export function getScheduleChip(
 
     // Only have schedule_type=scheduled but no dates — show duration if available
     if (durationMinutes) {
-      return { label: formatDuration(durationMinutes), icon: '⌛', variant: 'muted' };
+      return { label: `~${formatDuration(durationMinutes)}`, icon: '⌛', variant: 'muted' };
     }
   }
 
@@ -259,7 +274,7 @@ export function schedulePresetToDates(preset: 'today' | 'tomorrow' | 'this_week'
 
   if (preset === 'today') {
     const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 9, 0, 0);
-    const end   = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
     return { startDate: start.toISOString(), endDate: end.toISOString() };
   }
 
@@ -267,7 +282,7 @@ export function schedulePresetToDates(preset: 'today' | 'tomorrow' | 'this_week'
     const day = new Date(now);
     day.setDate(day.getDate() + 1);
     const start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 9, 0, 0);
-    const end   = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59);
+    const end = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59);
     return { startDate: start.toISOString(), endDate: end.toISOString() };
   }
 

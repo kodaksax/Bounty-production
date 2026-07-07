@@ -1,16 +1,25 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import { formatCategoryLabel } from 'lib/utils/data-utils';
-import { PLATFORM_FEE_PERCENTAGE } from 'lib/wallet-context';
 import { formatScheduleDescription } from 'lib/utils/schedule-utils';
+import { PLATFORM_FEE_PERCENTAGE } from 'lib/wallet-context';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import {
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Modal,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import { AttachmentViewerModal } from '../../../components/attachment-viewer-modal';
 import { EscrowExplainer } from '../../../components/ui/escrow-explainer';
 import { TrustBadgesCompact } from '../../../components/ui/trust-badges';
 import { useAuthContext } from '../../../hooks/use-auth-context';
+import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import type { Attachment } from '../../../lib/types';
 
 /**
@@ -55,48 +64,54 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
       Alert.alert(
         'Email verification required',
         "Please verify your email to post bounties. We've sent a verification link to your inbox.",
-        [
-          { text: 'OK', style: 'default' }
-        ]
+        [{ text: 'OK', style: 'default' }]
       );
       return;
     }
-    
+
     setShowEscrowModal(false);
     await onSubmit();
   };
 
-  const listRef = useRef<FlatList<any> | null>(null)
-
-  
+  const listRef = useRef<FlatList<any> | null>(null);
 
   // When this screen mounts, ensure list is scrolled to top so the header is visible
   useEffect(() => {
     try {
       // Slight delay lets layout settle in nested contexts
       const t = setTimeout(() => {
-        listRef.current?.scrollToOffset({ offset: 0, animated: false })
-      }, 50)
-      return () => clearTimeout(t)
+        listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      }, 50);
+      return () => clearTimeout(t);
     } catch {
       // ignore
     }
-  }, [])
+  }, []);
 
   return (
     <View className="flex-1" style={{ backgroundColor: theme.background }}>
       {/* Use FlatList to ensure reliable scrolling inside available area */}
       {/** build sections dynamically so list can scroll properly **/}
       <FlatList
-        ref={(r) => { listRef.current = r }}
+        ref={r => {
+          listRef.current = r;
+        }}
         data={useMemo(() => {
-          const sections: string[] = ['header', 'trust_badges', 'title', 'description', 'schedule', 'compensation', 'location'];
+          const sections: string[] = [
+            'header',
+            'trust_badges',
+            'title',
+            'description',
+            'schedule',
+            'compensation',
+            'location',
+          ];
           if (draft.skills) sections.push('optional');
           if (draft.attachments && draft.attachments.length > 0) sections.push('attachments');
           if (!draft.isForHonor) sections.push('escrow');
           return sections;
         }, [draft])}
-        keyExtractor={(item) => item}
+        keyExtractor={item => item}
         showsVerticalScrollIndicator={true}
         keyboardShouldPersistTaps="handled"
         nestedScrollEnabled={true}
@@ -104,14 +119,22 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
         bounces={true}
         // Ensure contentContainer expands so the bottom action bar doesn't overlap small content
         removeClippedSubviews={false}
-        contentContainerStyle={{ paddingTop: 8, paddingHorizontal: 16, paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 100 }}
+        contentContainerStyle={{
+          paddingTop: 8,
+          paddingHorizontal: 16,
+          paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 100,
+        }}
         renderItem={({ item }) => {
           switch (item) {
             case 'header':
               return (
                 <View className="mb-6">
-                  <Text className="text-xl font-bold mb-2" style={{ color: theme.text }}>Review Your Bounty</Text>
-                  <Text className="text-sm" style={{ color: theme.textSecondary }}>Double-check everything before posting</Text>
+                  <Text className="text-xl font-bold mb-2" style={{ color: theme.text }}>
+                    Review Your Bounty
+                  </Text>
+                  <Text className="text-sm" style={{ color: theme.textSecondary }}>
+                    Double-check everything before posting
+                  </Text>
                 </View>
               );
             case 'trust_badges':
@@ -124,17 +147,35 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
               return (
                 <View className="mb-4 rounded-lg p-4" style={{ backgroundColor: theme.surface }}>
                   <View className="flex-row items-center justify-between mb-2">
-                    <Text className="text-xs uppercase tracking-wide" style={{ color: theme.textSecondary }}>Title & Category</Text>
+                    <Text
+                      className="text-xs uppercase tracking-wide"
+                      style={{ color: theme.textSecondary }}
+                    >
+                      Title & Category
+                    </Text>
                   </View>
-                  <Text className="text-lg font-semibold mb-1" style={{ color: theme.text }}>{draft.title}</Text>
-                  {draft.category && <Text className="text-sm" style={{ color: theme.primaryLight }}>{formatCategoryLabel(draft.category)}</Text>}
+                  <Text className="text-lg font-semibold mb-1" style={{ color: theme.text }}>
+                    {draft.title}
+                  </Text>
+                  {draft.category && (
+                    <Text className="text-sm" style={{ color: theme.primaryLight }}>
+                      {formatCategoryLabel(draft.category)}
+                    </Text>
+                  )}
                 </View>
               );
             case 'description':
               return (
                 <View className="mb-4 rounded-lg p-4" style={{ backgroundColor: theme.surface }}>
-                  <Text className="text-xs uppercase tracking-wide mb-2" style={{ color: theme.textSecondary }}>Description</Text>
-                  <Text className="text-base" style={{ color: theme.text }}>{draft.description}</Text>
+                  <Text
+                    className="text-xs uppercase tracking-wide mb-2"
+                    style={{ color: theme.textSecondary }}
+                  >
+                    Description
+                  </Text>
+                  <Text className="text-base" style={{ color: theme.text }}>
+                    {draft.description}
+                  </Text>
                 </View>
               );
             case 'schedule': {
@@ -153,13 +194,21 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
                 scheduled: 'schedule',
                 flexible: 'tune',
               };
-              const scheduleIcon = (draft.scheduleType && scheduleIconMap[draft.scheduleType]) ?? 'schedule';
+              const scheduleIcon =
+                (draft.scheduleType && scheduleIconMap[draft.scheduleType]) ?? 'schedule';
               return (
                 <View className="mb-4 rounded-lg p-4" style={{ backgroundColor: theme.surface }}>
-                  <Text className="text-xs uppercase tracking-wide mb-2" style={{ color: theme.textSecondary }}>Schedule</Text>
+                  <Text
+                    className="text-xs uppercase tracking-wide mb-2"
+                    style={{ color: theme.textSecondary }}
+                  >
+                    Schedule
+                  </Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <MaterialIcons name={scheduleIcon} size={20} color={theme.primary} />
-                    <Text className="text-base ml-2 flex-1" style={{ color: theme.text }}>{scheduleLabel}</Text>
+                    <MaterialIcons name={scheduleIcon as any} size={20} color={theme.primary} />
+                    <Text className="text-base ml-2 flex-1" style={{ color: theme.text }}>
+                      {scheduleLabel}
+                    </Text>
                   </View>
                 </View>
               );
@@ -167,38 +216,84 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
             case 'compensation':
               return (
                 <View className="mb-4 rounded-lg p-4" style={{ backgroundColor: theme.surface }}>
-                  <Text className="text-xs uppercase tracking-wide mb-2" style={{ color: theme.textSecondary }}>Compensation</Text>
+                  <Text
+                    className="text-xs uppercase tracking-wide mb-2"
+                    style={{ color: theme.textSecondary }}
+                  >
+                    Compensation
+                  </Text>
                   <View className="flex-row items-center">
-                    <View className="px-4 py-2 rounded-lg" style={{ backgroundColor: theme.primary }}>
-                      <Text className="text-white text-lg font-bold">{draft.isForHonor ? 'For Honor' : `$${draft.amount}`}</Text>
+                    <View
+                      className="px-4 py-2 rounded-lg"
+                      style={{ backgroundColor: theme.primary }}
+                    >
+                      <Text className="text-white text-lg font-bold">
+                        {draft.isForHonor ? 'For Honor' : `$${draft.amount}`}
+                      </Text>
                     </View>
-                    {!draft.isForHonor && <View className="ml-3 flex-1"><Text className="text-sm" style={{ color: theme.textSecondary }}>Funds held in escrow until completion</Text></View>}
+                    {!draft.isForHonor && (
+                      <View className="ml-3 flex-1">
+                        <Text className="text-sm" style={{ color: theme.textSecondary }}>
+                          Funds held in escrow until completion
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 </View>
               );
             case 'location':
               return (
                 <View className="mb-4 rounded-lg p-4" style={{ backgroundColor: theme.surface }}>
-                  <Text className="text-xs uppercase tracking-wide mb-2" style={{ color: theme.textSecondary }}>Work Type & Location</Text>
+                  <Text
+                    className="text-xs uppercase tracking-wide mb-2"
+                    style={{ color: theme.textSecondary }}
+                  >
+                    Work Type & Location
+                  </Text>
                   <View className="flex-row items-center">
-                    <MaterialIcons name={draft.workType === 'online' ? 'language' : 'place'} size={20} color={theme.text} />
-                    <Text className="text-base ml-2" style={{ color: theme.text }}>{draft.workType === 'online' ? 'Online / Remote' : draft.location}</Text>
+                    <MaterialIcons
+                      name={draft.workType === 'online' ? 'language' : 'place'}
+                      size={20}
+                      color={theme.text}
+                    />
+                    <Text className="text-base ml-2" style={{ color: theme.text }}>
+                      {draft.workType === 'online' ? 'Online / Remote' : draft.location}
+                    </Text>
                   </View>
                 </View>
               );
             case 'optional':
               return (
                 <View className="mb-4 rounded-lg p-4" style={{ backgroundColor: theme.surface }}>
-                  <Text className="text-xs uppercase tracking-wide mb-2" style={{ color: theme.textSecondary }}>Additional Details</Text>
-                  {draft.skills && <View><Text className="text-sm" style={{ color: theme.primaryLight }}>Skills:</Text><Text className="text-base" style={{ color: theme.text }}>{draft.skills}</Text></View>}
+                  <Text
+                    className="text-xs uppercase tracking-wide mb-2"
+                    style={{ color: theme.textSecondary }}
+                  >
+                    Additional Details
+                  </Text>
+                  {draft.skills && (
+                    <View>
+                      <Text className="text-sm" style={{ color: theme.primaryLight }}>
+                        Skills:
+                      </Text>
+                      <Text className="text-base" style={{ color: theme.text }}>
+                        {draft.skills}
+                      </Text>
+                    </View>
+                  )}
                 </View>
               );
             case 'attachments':
               return (
                 <View className="mb-4 rounded-lg p-4" style={{ backgroundColor: theme.surface }}>
-                  <Text className="text-xs uppercase tracking-wide mb-2" style={{ color: theme.textSecondary }}>Attachments</Text>
+                  <Text
+                    className="text-xs uppercase tracking-wide mb-2"
+                    style={{ color: theme.textSecondary }}
+                  >
+                    Attachments
+                  </Text>
                   <View style={{ gap: 12 }}>
-                    {draft.attachments?.map((attachment) => (
+                    {draft.attachments?.map(attachment => (
                       <TouchableOpacity
                         key={attachment.id}
                         onPress={() => handleViewAttachment(attachment)}
@@ -213,10 +308,10 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
                             attachment.mimeType?.startsWith('image/')
                               ? 'image'
                               : attachment.mimeType?.startsWith('video/')
-                              ? 'videocam'
-                              : attachment.mimeType?.includes('pdf')
-                              ? 'picture-as-pdf'
-                              : 'insert-drive-file'
+                                ? 'videocam'
+                                : attachment.mimeType?.includes('pdf')
+                                  ? 'picture-as-pdf'
+                                  : 'insert-drive-file'
                           }
                           size={24}
                           color={theme.primaryLight}
@@ -238,11 +333,7 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
             case 'escrow':
               return (
                 <View className="mb-6">
-                  <EscrowExplainer 
-                    amount={draft.amount} 
-                    variant="card" 
-                    showLearnMore={true}
-                  />
+                  <EscrowExplainer amount={draft.amount} variant="card" showLearnMore={true} />
                 </View>
               );
             default:
@@ -254,7 +345,11 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
       {/* Navigation Buttons */}
       <View
         className="px-4 pb-4 pt-3 border-t"
-        style={{ backgroundColor: theme.background, borderColor: theme.border, marginBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 8) }}
+        style={{
+          backgroundColor: theme.background,
+          borderColor: theme.border,
+          marginBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 8),
+        }}
       >
         <View className="flex-row gap-3">
           <TouchableOpacity
@@ -267,7 +362,9 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
             accessibilityState={{ disabled: isSubmitting }}
           >
             <MaterialIcons name="arrow-back" size={20} color={theme.text} />
-            <Text className="font-semibold ml-2" style={{ color: theme.text }}>Back</Text>
+            <Text className="font-semibold ml-2" style={{ color: theme.text }}>
+              Back
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setShowEscrowModal(true)}
@@ -301,9 +398,15 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
         onRequestClose={() => setShowEscrowModal(false)}
       >
         <View className="flex-1 bg-black/50 justify-center items-center px-4">
-          <View className="rounded-2xl w-full max-w-md overflow-hidden" style={{ backgroundColor: theme.surface }}>
+          <View
+            className="rounded-2xl w-full max-w-md overflow-hidden"
+            style={{ backgroundColor: theme.surface }}
+          >
             {/* Modal Header */}
-            <View className="p-4 flex-row items-center justify-between" style={{ backgroundColor: theme.background }}>
+            <View
+              className="p-4 flex-row items-center justify-between"
+              style={{ backgroundColor: theme.background }}
+            >
               <View className="flex-row items-center">
                 <MaterialIcons name="security" size={24} color={theme.text} />
                 <Text className="text-lg font-bold ml-2" style={{ color: theme.text }}>
@@ -332,19 +435,44 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
                 </Text>
 
                 {[
-                  { n: '1', title: 'Funds Secured', desc: `$${draft.amount} is held securely when someone accepts your bounty` },
-                  { n: '2', title: 'Work Completed', desc: 'The hunter completes the task and marks it as done' },
-                  { n: '3', title: 'You Approve', desc: 'Review the work and approve payment release' },
-                  { n: '4', title: 'Payment Released', desc: "Funds are transferred to the hunter's wallet" },
+                  {
+                    n: '1',
+                    title: 'Funds Secured',
+                    desc: `$${draft.amount} is held securely when someone accepts your bounty`,
+                  },
+                  {
+                    n: '2',
+                    title: 'Work Completed',
+                    desc: 'The hunter completes the task and marks it as done',
+                  },
+                  {
+                    n: '3',
+                    title: 'You Approve',
+                    desc: 'Review the work and approve payment release',
+                  },
+                  {
+                    n: '4',
+                    title: 'Payment Released',
+                    desc: "Funds are transferred to the hunter's wallet",
+                  },
                 ].map(({ n, title, desc }, i, arr) => (
                   <View key={n} className={i < arr.length - 1 ? 'mb-3' : ''}>
                     <View className="flex-row items-start">
-                      <View className="w-6 h-6 rounded-full items-center justify-center mr-3" style={{ backgroundColor: theme.primary }}>
-                        <Text className="font-bold text-sm" style={{ color: '#fff' }}>{n}</Text>
+                      <View
+                        className="w-6 h-6 rounded-full items-center justify-center mr-3"
+                        style={{ backgroundColor: theme.primary }}
+                      >
+                        <Text className="font-bold text-sm" style={{ color: '#fff' }}>
+                          {n}
+                        </Text>
                       </View>
                       <View className="flex-1">
-                        <Text className="font-semibold mb-1" style={{ color: theme.text }}>{title}</Text>
-                        <Text className="text-sm" style={{ color: theme.textSecondary }}>{desc}</Text>
+                        <Text className="font-semibold mb-1" style={{ color: theme.text }}>
+                          {title}
+                        </Text>
+                        <Text className="text-sm" style={{ color: theme.textSecondary }}>
+                          {desc}
+                        </Text>
                       </View>
                     </View>
                   </View>
@@ -352,25 +480,30 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
               </View>
 
               {/* Fees */}
-              <View className="rounded-lg p-4 mb-4" style={{ backgroundColor: theme.surfaceSecondary }}>
+              <View
+                className="rounded-lg p-4 mb-4"
+                style={{ backgroundColor: theme.surfaceSecondary }}
+              >
                 <Text className="font-semibold mb-2" style={{ color: theme.text }}>
                   Platform Fee: {PLATFORM_FEE_DISPLAY} on completion
                 </Text>
                 <Text className="text-sm mb-2" style={{ color: theme.textSecondary }}>
-                  A {PLATFORM_FEE_DISPLAY} service fee is deducted from the bounty
-                  amount when work is completed and funds are released to the
-                  hunter. You pay only the bounty amount up front; the fee comes
-                  out of the hunter payout, not in addition to your escrow.
+                  A {PLATFORM_FEE_DISPLAY} service fee is deducted from the bounty amount when work
+                  is completed and funds are released to the hunter. You pay only the bounty amount
+                  up front; the fee comes out of the hunter payout, not in addition to your escrow.
                 </Text>
                 <Text className="text-sm" style={{ color: theme.textSecondary }}>
-                  Standard payment-processor fees from Stripe (typically 2.9% +
-                  $0.30 on card transactions) may also apply when funding your
-                  wallet. The exact total is shown before you confirm.
+                  Standard payment-processor fees from Stripe (typically 2.9% + $0.30 on card
+                  transactions) may also apply when funding your wallet. The exact total is shown
+                  before you confirm.
                 </Text>
               </View>
 
               {/* Safety Info */}
-              <View className="rounded-lg p-4 border" style={{ backgroundColor: theme.surfaceSecondary, borderColor: theme.border }}>
+              <View
+                className="rounded-lg p-4 border"
+                style={{ backgroundColor: theme.surfaceSecondary, borderColor: theme.border }}
+              >
                 <View className="flex-row items-start">
                   <MaterialIcons
                     name="verified-user"
@@ -381,8 +514,7 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
                   <View className="flex-1">
                     <Text className="text-sm" style={{ color: theme.textSecondary }}>
                       Your funds are never released without your approval. If there
-                      {"'"}
-                      s an issue, our support team can help resolve disputes.
+                      {"'"}s an issue, our support team can help resolve disputes.
                     </Text>
                   </View>
                 </View>
@@ -403,11 +535,15 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
                 {isSubmitting ? (
                   <>
                     <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />
-                    <Text className="font-semibold" style={{ color: '#fff' }}>Posting...</Text>
+                    <Text className="font-semibold" style={{ color: '#fff' }}>
+                      Posting...
+                    </Text>
                   </>
                 ) : (
                   <>
-                    <Text className="font-semibold mr-2" style={{ color: '#fff' }}>I Understand, Post Bounty</Text>
+                    <Text className="font-semibold mr-2" style={{ color: '#fff' }}>
+                      I Understand, Post Bounty
+                    </Text>
                     <MaterialIcons name="check-circle" size={20} color="#fff" />
                   </>
                 )}
@@ -421,7 +557,9 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
                 accessibilityRole="button"
                 accessibilityState={{ disabled: isSubmitting }}
               >
-                <Text className="font-semibold text-center" style={{ color: theme.text }}>Cancel</Text>
+                <Text className="font-semibold text-center" style={{ color: theme.text }}>
+                  Cancel
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
