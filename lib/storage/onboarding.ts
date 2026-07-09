@@ -42,7 +42,13 @@ export type OnboardingRole = 'poster' | 'hunter';
 /** AsyncStorage key for the device-local onboarding role intent. */
 export const ONBOARDING_ROLE_KEY = '@bounty_onboarding_role';
 
-/** Returns the stored onboarding role intent, or null if unset/unreadable. */
+/**
+ * Returns the stored onboarding role intent.
+ *
+ * @returns 'poster' or 'hunter' when a valid role was stored; null when the
+ * key is unset, contains an unexpected value, or the AsyncStorage read fails
+ * (errors are caught internally so callers can treat null as "no intent").
+ */
 export async function getOnboardingRole(): Promise<OnboardingRole | null> {
   try {
     const val = await AsyncStorage.getItem(ONBOARDING_ROLE_KEY);

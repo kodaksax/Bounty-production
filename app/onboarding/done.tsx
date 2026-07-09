@@ -111,7 +111,9 @@ export default function DoneScreen() {
     // Load the role the user picked on the carousel so the final CTA points
     // at a meaningful first action ("post" vs "earn"). Best-effort only —
     // falls back to the generic CTA when unset or unreadable.
-    getOnboardingRole().then(setRoleIntent);
+    getOnboardingRole()
+      .then(setRoleIntent)
+      .catch(() => setRoleIntent(null));
   }, []);
 
   useEffect(() => {
