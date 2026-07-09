@@ -20,6 +20,7 @@ import { bountyService } from '../lib/services/bounty-service'
 import type { Bounty } from '../lib/services/database.types'
 import { locationService } from '../lib/services/location-service'
 import { storage } from '../lib/storage'
+import { isBountyDeadlinePassed } from '../lib/utils/schedule-utils'
 
 export type BountyFeedHandle = {
   refresh: () => void
@@ -108,6 +109,9 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
 
   const filteredBounties = useMemo(() => {
     let list = [...bounties]
+    // Hide bounties whose deadline has passed — they're still visible to the
+    // poster (as "Deadline Passed") in My Postings, just not to hunters here.
+    list = list.filter((b) => !isBountyDeadlinePassed(b))
     if (appliedBountyIds.size > 0) {
       list = list.filter((b) => !appliedBountyIds.has(String(b.id)))
     }

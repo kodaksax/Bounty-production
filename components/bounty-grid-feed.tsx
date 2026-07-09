@@ -219,6 +219,7 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
             user_id={left.user_id}
             work_type={left.work_type}
             poster_avatar={left.poster_avatar}
+            end_date={left.end_date ?? left.deadline}
           />
           {right ? (
             <BountyGridItem
@@ -232,6 +233,7 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
               user_id={right.user_id}
               work_type={right.work_type}
               poster_avatar={right.poster_avatar}
+              end_date={right.end_date ?? right.deadline}
             />
           ) : (
             <View style={{ width: GRID_CARD_WIDTH }} />

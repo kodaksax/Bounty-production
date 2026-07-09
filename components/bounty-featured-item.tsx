@@ -9,8 +9,10 @@ import { useHapticFeedback } from '../lib/haptic-feedback'
 import type { AttachmentMeta } from '../lib/services/database.types'
 import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 import type { AppTheme } from '../lib/themes/types'
+import { useCountdown } from '../hooks/useCountdown'
 import { getScheduleChip } from '../lib/utils/schedule-utils'
 import { BountyDetailModal } from "./bountydetailmodal"
+import { CountdownBadge } from "./ui/countdown-badge"
 
 const COVER_HEIGHT = 165
 
@@ -60,6 +62,10 @@ function BountyFeaturedItemComponent({
     }
     return null
   }, [schedule_type, start_date, end_date, duration_minutes, is_time_sensitive])
+
+  // Once the deadline is under 24h away, a live ticking countdown replaces
+  // the static schedule chip so the urgency is visible at a glance.
+  const { isWithin24h: showCountdown } = useCountdown(end_date)
 
   useEffect(() => {
     if (username) { setResolvedUsername(username); return }
@@ -125,15 +131,24 @@ function BountyFeaturedItemComponent({
             <Text style={s.coverChipText}>{categoryLabel}</Text>
           </View>
 
-          {/* Schedule chip overlaid on image top-right */}
-          {scheduleChip && (
-            <View style={[
-              s.scheduleChip,
-              scheduleChip.variant === 'urgent'  && s.scheduleChipUrgent,
-              scheduleChip.variant === 'warning' && s.scheduleChipWarning,
-            ]}>
-              <Text style={s.scheduleChipText}>{scheduleChip.icon} {scheduleChip.label}</Text>
-            </View>
+          {/* Schedule chip overlaid on image top-right — a live countdown
+              takes over once the deadline is under 24h away. */}
+          {showCountdown ? (
+            <CountdownBadge
+              endDate={end_date}
+              size="md"
+              style={[s.scheduleChip, s.scheduleChipUrgent]}
+            />
+          ) : (
+            scheduleChip && (
+              <View style={[
+                s.scheduleChip,
+                scheduleChip.variant === 'urgent'  && s.scheduleChipUrgent,
+                scheduleChip.variant === 'warning' && s.scheduleChipWarning,
+              ]}>
+                <Text style={s.scheduleChipText}>{scheduleChip.icon} {scheduleChip.label}</Text>
+              </View>
+            )
           )}
 
           {/* Info below cover — banner green */}

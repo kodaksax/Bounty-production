@@ -10,6 +10,7 @@ import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
 import { BountyDetailModal } from './bountydetailmodal';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+import { CountdownBadge } from './ui/countdown-badge';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const H_PAD = 16;
@@ -27,6 +28,7 @@ export interface BountyGridItemProps {
   user_id?: string | null;
   work_type?: 'online' | 'in_person';
   poster_avatar?: string;
+  end_date?: string | null;
 }
 
 function BountyGridItemComponent({
@@ -40,6 +42,7 @@ function BountyGridItemComponent({
   user_id,
   work_type,
   poster_avatar,
+  end_date,
 }: BountyGridItemProps) {
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -147,6 +150,9 @@ function BountyGridItemComponent({
             </View>
           </View>
 
+          {/* ── Countdown: only shown when the deadline is <24h away ── */}
+          <CountdownBadge endDate={end_date} style={s.countdownBadge} />
+
           {/* ── Title ──────────────────────────────────────── */}
           <Text style={s.title} numberOfLines={3}>
             {title}
@@ -206,7 +212,8 @@ export const BountyGridItem = React.memo(
     prev.distance === next.distance &&
     prev.user_id === next.user_id &&
     prev.work_type === next.work_type &&
-    prev.poster_avatar === next.poster_avatar
+    prev.poster_avatar === next.poster_avatar &&
+    prev.end_date === next.end_date
 );
 
 function makeStyles(t: AppTheme) {
@@ -275,6 +282,9 @@ function makeStyles(t: AppTheme) {
     distanceText: {
       fontSize: 10,
       color: t.textSecondary,
+    },
+    countdownBadge: {
+      marginBottom: 8,
     },
 
     // Body
