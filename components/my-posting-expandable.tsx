@@ -657,14 +657,6 @@ export function MyPostingExpandable({
     };
   }, [bounty.id, isOwner]);
 
-  const currentStage: 'apply_work' | 'working_progress' | 'review_verify' | 'payout' =
-    useMemo(() => {
-      if (bounty.status === 'in_progress') return 'working_progress';
-      if (bounty.status === 'completed') return 'payout';
-      // We don't track 'review_verify' in status—user reaches it via flow; keep default as 'apply_work'
-      return 'apply_work';
-    }, [bounty.status]);
-
   // Local override to move the UI to a specific stage when user advances via buttons
 
   const animate = () => LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -945,9 +937,40 @@ export function MyPostingExpandable({
   };
 
   const currentStageIndex = useMemo(() => {
-    const stageToUse = localStageOverride || currentStage;
-    return STAGES.findIndex(s => s.id === stageToUse);
-  }, [currentStage, localStageOverride]);
+    if (bounty.status === 'completed') return STAGES.findIndex(s => s.id === 'payout');
+    if (bounty.status !== 'in_progress') return STAGES.findIndex(s => s.id === 'apply_work');
+
+    // A revision request always sends the hunter back to Working Progress,
+    // regardless of a stale "ready" record from a prior submission attempt.
+    if (!isOwner && hasRevisionRequested) {
+      return STAGES.findIndex(s => s.id === 'working_progress');
+    }
+
+    // Derive "reached review" from persisted server state (readyRecord /
+    // hasSubmission / submissionPending are re-fetched on every mount), not
+    // from localStageOverride alone — that flag lives only in this component's
+    // in-memory UI state and is lost whenever the card unmounts (e.g. switching
+    // tabs), which previously made the stepper regress to Working Progress.
+    const reachedReview = isOwner
+      ? hasSubmission
+      : readyToSubmitPressed || !!readyRecord || hasSubmission || submissionPending;
+
+    if (reachedReview) return STAGES.findIndex(s => s.id === 'review_verify');
+
+    // Fall back to any explicit override set this session (e.g. realtime events).
+    if (localStageOverride) return STAGES.findIndex(s => s.id === localStageOverride);
+
+    return STAGES.findIndex(s => s.id === 'working_progress');
+  }, [
+    bounty.status,
+    isOwner,
+    hasSubmission,
+    hasRevisionRequested,
+    readyToSubmitPressed,
+    readyRecord,
+    submissionPending,
+    localStageOverride,
+  ]);
 
   const awaitingPosterAction =
     !isOwner && bounty.status === 'in_progress' && (submissionPending || hasSubmission);
