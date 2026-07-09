@@ -133,6 +133,7 @@ The table below shows the intended sequence:
 | `20260320_*` | Evidence staging, geospatial column, indexes, pg_stat_statements, full-text search |
 | `20260322_serverless_notification_triggers.sql` | DB triggers for async notifications |
 | `20260323_add_fn_accept_bounty_request.sql` | RPC for accepting bounty requests |
+| `20260709_add_completion_submissions_rls.sql` | Completion submissions RLS (hunter insert/select, poster select/update) |
 
 ---
 
@@ -201,11 +202,24 @@ This migration adds support for the in-progress bounty management flow:
 
 ## Security Considerations
 
-The migration includes commented-out Row Level Security (RLS) policy examples. **You should enable and customize these policies** based on your security requirements:
+Row Level Security (RLS) policies for these tables are applied by dedicated
+migrations (do **not** rely on the commented-out examples in
+`20251022_inprogress_flow.sql`):
 
-- Hunters should only access their own submissions
-- Posters should only access submissions for their bounties
+- `completion_ready` — `20260309_add_completion_ready_rls.sql`
+- `completion_submissions` — `20260709_add_completion_submissions_rls.sql`
+
+These enforce that:
+
+- Hunters can only insert/access their own submissions
+- Posters can only access and update submissions for their bounties
 - Enforce proper authorization for status updates
+
+> Note: enabling RLS on a table **without** a matching policy denies all
+> access to authenticated clients (default-deny). This previously caused
+> bounty submissions to silently fail to persist, since
+> `completion_submissions` had no policies while its sibling
+> `completion_ready` did.
 
 ## Testing the Migration
 
