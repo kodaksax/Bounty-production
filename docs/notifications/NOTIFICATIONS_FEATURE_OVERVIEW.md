@@ -61,9 +61,11 @@ the bell feed but **do not** generate a device push notification:
 
 Client push-token registration POSTs to `${API_BASE_URL}/notifications/register-token`,
 but in production `API_BASE_URL` resolves to Supabase Edge Functions (which has
-no such route), so it 404s. The real persistence path is the Supabase direct
-fallback in `lib/services/notification-service.ts`. The `push_tokens` owner
-column is `profile_id` (not `user_id`).
+no such route), so it 404s. This is a known quirk handled by graceful
+degradation: the client falls back to a Supabase direct write in
+`lib/services/notification-service.ts`, which is the real persistence path, so
+the 404 has no user-facing impact (tokens still register). The `push_tokens`
+owner column is `profile_id` (not `user_id`).
 
 ---
 
