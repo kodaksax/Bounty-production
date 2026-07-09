@@ -1,8 +1,11 @@
 /**
  * Onboarding Carousel
- * Shows 7 screens explaining app features on first launch
- * Includes welcome, step-by-step workflow tutorial, hunter perspective, and trust messaging
- * Features skip confirmation modal and visual step indicators
+ * Shows 5 screens explaining app features on first launch
+ * Includes a trust + intent welcome, condensed poster workflow, hunter perspective,
+ * and a final trust/safety slide with role-aware CTAs
+ * ("Get something done" vs "Start earning nearby").
+ * Features skip confirmation modal and visual step indicators.
+ * See docs/onboarding/ONBOARDING_FINAL_SPEC.md for the full spec.
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
@@ -19,6 +22,7 @@ import { Animated,
   View, } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
+import { ONBOARDING_ROLE_KEY, type OnboardingRole } from '../../lib/storage/onboarding';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 
@@ -28,7 +32,7 @@ const ONBOARDING_KEY = '@bounty_onboarding_complete';
 
 // Workflow step configuration
 const WORKFLOW_STEP_START = 1; // Slide index for first workflow step (slide 2)
-const WORKFLOW_STEP_END = 4;   // Slide index for last workflow step (slide 5)
+const WORKFLOW_STEP_END = 2;   // Slide index for last workflow step (slide 3)
 
 type SlideData = {
   id: string;
@@ -43,49 +47,35 @@ const slides: SlideData[] = [
     id: '1',
     icon: 'gps-fixed',
     title: 'Welcome to Bounty',
-    description: 'The trusted marketplace for getting things done. Post a task, find local help, and pay safely — all in one place.',
+    description: 'Post tasks and trusted locals get them done — or earn money completing tasks nearby. Your money stays protected until the job is done.',
     color: '#9CA3AF',
   },
   {
     id: '2',
     icon: 'add-circle-outline',
-    title: 'Step 1: Post Your Task',
-    description: 'Create a bounty with details about what you need done. Set your budget, location, and timeline. Your task goes live instantly for hunters to see.',
+    title: 'Post What You Need Done',
+    description: 'Describe the task, set your budget and location. Nearby hunters apply — review their profiles and ratings, then accept the best match.',
     color: '#6ee7b7',
   },
   {
     id: '3',
-    icon: 'people',
-    title: 'Step 2: Review & Accept',
-    description: 'Receive applications from qualified hunters. Review their profiles and ratings, then accept the best match. Funds are held safely in escrow.',
+    icon: 'chat-bubble',
+    title: 'Chat, Complete & Pay',
+    description: 'Coordinate in the app while your payment is held safely in escrow. Confirm completion to release it, then rate each other to build trust.',
     color: '#059669',
   },
   {
     id: '4',
-    icon: 'chat-bubble',
-    title: 'Step 3: Chat & Coordinate',
-    description: 'Message your hunter directly in the app. Share details, coordinate timing, and track progress. Everything stays organized in one place.',
-    color: '#059669',
-  },
-  {
-    id: '5',
-    icon: 'verified-user',
-    title: 'Step 4: Complete & Pay',
-    description: 'Once the work is done, confirm completion. Payment is released from escrow to the hunter. Rate your experience to help others.',
-    color: '#059669',
-  },
-  {
-    id: '6',
     icon: 'attach-money',
     title: 'Or Browse & Earn',
-    description: 'Flip the script! Browse bounties in your area, apply to the ones you like, and get paid for completing them. Work on your schedule.',
+    description: 'Browse bounties near you, apply to the ones that fit your skills, and get paid when the work is done. You work on your schedule.',
     color: '#6ee7b7',
   },
   {
-    id: '7',
+    id: '5',
     icon: 'security',
-    title: 'Safe & Secure',
-    description: 'Payments protected by escrow. Verified profiles and ratings. Phone verification adds extra security. Your money is always safe.',
+    title: "You're Protected",
+    description: 'Escrow-backed payments, verified profiles, and ratings on every job. How do you want to start?',
     color: '#9CA3AF',
   },
 ];
@@ -105,8 +95,6 @@ export default function OnboardingCarousel() {
       const nextIndex = currentIndex + 1;
       flatListRef.current?.scrollToIndex({ index: nextIndex, animated: true });
       setCurrentIndex(nextIndex);
-    } else {
-      handleGetStarted();
     }
   };
 
@@ -124,8 +112,15 @@ export default function OnboardingCarousel() {
     setShowSkipModal(false);
   };
 
-  const handleGetStarted = async () => {
-    await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
+  const handleGetStarted = async (role?: OnboardingRole) => {
+    try {
+      await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
+      if (role) {
+        await AsyncStorage.setItem(ONBOARDING_ROLE_KEY, role);
+      }
+    } catch (error) {
+      console.error('Error saving onboarding state:', error);
+    }
     router.replace('/onboarding/username');
   };
 
@@ -257,19 +252,40 @@ export default function OnboardingCarousel() {
 
       {/* Action buttons */}
       <View style={styles.actionContainer}>
-        <TouchableOpacity
-          style={styles.nextButton}
-          onPress={handleNext}
-        >
-          <Text style={styles.nextButtonText}>
-            {currentIndex === slides.length - 1 ? "Get Started" : "Next"}
-          </Text>
-          <MaterialIcons
-            name={currentIndex === slides.length - 1 ? "check" : "arrow-forward"}
-            size={20}
-            color="#052e1b"
-          />
-        </TouchableOpacity>
+        {currentIndex === slides.length - 1 ? (
+          <>
+            <TouchableOpacity
+              style={styles.nextButton}
+              onPress={() => handleGetStarted('hunter')}
+              accessibilityRole="button"
+              accessibilityLabel="Start earning nearby"
+            >
+              <Text style={styles.nextButtonText}>Start earning nearby</Text>
+              <MaterialIcons name="attach-money" size={20} color="#052e1b" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => handleGetStarted('poster')}
+              accessibilityRole="button"
+              accessibilityLabel="Get something done"
+            >
+              <Text style={styles.secondaryButtonText}>Get something done</Text>
+              <MaterialIcons name="add-circle-outline" size={20} color={theme.text} />
+            </TouchableOpacity>
+          </>
+        ) : (
+          <TouchableOpacity
+            style={styles.nextButton}
+            onPress={handleNext}
+          >
+            <Text style={styles.nextButtonText}>Next</Text>
+            <MaterialIcons
+              name="arrow-forward"
+              size={20}
+              color="#052e1b"
+            />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Skip Confirmation Modal */}
@@ -418,6 +434,23 @@ function makeStyles(theme: AppTheme) {
     },
     nextButtonText: {
       color: '#052e1b',
+      fontSize: 18,
+      fontWeight: 'bold',
+    },
+    secondaryButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.surface,
+      paddingVertical: 16,
+      borderRadius: 999,
+      gap: 8,
+      marginTop: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    secondaryButtonText: {
+      color: theme.text,
       fontSize: 18,
       fontWeight: 'bold',
     },

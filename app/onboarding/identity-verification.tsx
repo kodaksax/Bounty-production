@@ -391,7 +391,8 @@ export default function IdentityVerificationScreen() {
           <Text style={styles.subtitle}>
             Verifying your identity builds trust with other users and unlocks
             faster payouts. Your documents are encrypted and only used for
-            verification — never shared publicly.
+            verification — never shared publicly. You can skip for now and
+            verify later from your profile.
           </Text>
         </View>
 

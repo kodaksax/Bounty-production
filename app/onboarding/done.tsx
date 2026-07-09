@@ -27,7 +27,7 @@ import { useOnboarding } from '../../lib/context/onboarding-context';
 import { authProfileService } from '../../lib/services/auth-profile-service';
 import { Profile } from '../../lib/services/database.types';
 import { notificationService } from '../../lib/services/notification-service';
-import { getOnboardingCompleteKey } from '../../lib/storage/onboarding';
+import { getOnboardingCompleteKey, getOnboardingRole, type OnboardingRole } from '../../lib/storage/onboarding';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 /**
@@ -104,7 +104,15 @@ export default function DoneScreen() {
   const [scaleAnim] = useState(new Animated.Value(0));
   const [fadeAnim] = useState(new Animated.Value(0));
   const [isLoading, setIsLoading] = useState(false);
+  const [roleIntent, setRoleIntent] = useState<OnboardingRole | null>(null);
   const hasNavigatedRef = useRef(false);
+
+  useEffect(() => {
+    // Load the role the user picked on the carousel so the final CTA points
+    // at a meaningful first action ("post" vs "earn"). Best-effort only —
+    // falls back to the generic CTA when unset or unreadable.
+    getOnboardingRole().then(setRoleIntent);
+  }, []);
 
   useEffect(() => {
     // Animation only — no Supabase writes here.
@@ -421,7 +429,13 @@ export default function DoneScreen() {
               <ActivityIndicator size="small" color="#052e1b" />
             ) : (
               <>
-                <Text style={styles.continueButtonText}>Start Exploring</Text>
+                <Text style={styles.continueButtonText}>
+                  {roleIntent === 'poster'
+                    ? 'Post your first bounty'
+                    : roleIntent === 'hunter'
+                      ? 'Find bounties nearby'
+                      : 'Start Exploring'}
+                </Text>
                 <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
               </>
             )}

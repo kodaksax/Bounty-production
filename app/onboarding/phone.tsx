@@ -176,7 +176,7 @@ export default function PhoneScreen() {
           </View>
           <Text style={styles.title}>Verify Your Phone</Text>
           <Text style={styles.subtitle}>
-            Verified users get more bounty matches and build trust faster. Your number stays private. You can also skip this step and verify later.
+            A verified phone helps keep every job on Bounty trustworthy — verified users get more matches and responses. Your number stays private, and you can skip this and verify later.
           </Text>
         </View>
 

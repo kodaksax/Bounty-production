@@ -30,3 +30,24 @@ export async function hasLocalOnboardingFlag(userId: string): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Role intent captured on the onboarding carousel's final slide
+ * ("Get something done" → poster, "Start earning nearby" → hunter).
+ * Device-local hint only — used to tailor onboarding copy/CTAs; it never
+ * gates features and both roles see the full app.
+ */
+export type OnboardingRole = 'poster' | 'hunter';
+
+/** AsyncStorage key for the device-local onboarding role intent. */
+export const ONBOARDING_ROLE_KEY = '@bounty_onboarding_role';
+
+/** Returns the stored onboarding role intent, or null if unset/unreadable. */
+export async function getOnboardingRole(): Promise<OnboardingRole | null> {
+  try {
+    const val = await AsyncStorage.getItem(ONBOARDING_ROLE_KEY);
+    return val === 'poster' || val === 'hunter' ? val : null;
+  } catch {
+    return null;
+  }
+}

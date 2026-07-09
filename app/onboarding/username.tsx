@@ -282,7 +282,7 @@ export default function UsernameScreen() {
           <MaterialIcons name="person-outline" size={56} color="#9CA3AF" />
           <Text style={styles.title}>Choose Your Username</Text>
           <Text style={styles.subtitle}>
-            This is how others will find you. Pick something unique and memorable.
+            This is how posters and hunters will find you on Bounty. Pick something unique — you can add your name and photo next.
           </Text>
         </View>
 
