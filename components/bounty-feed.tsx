@@ -327,11 +327,15 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   // realtime/websocket connections die while suspended, so without this the
   // feed can come back stale or empty until a manual pull-to-refresh.
   useForegroundRefresh(() => {
-    logger.info('feed.foreground.refresh')
+    logger.info('feed.foreground.refresh_started', { targets: ['bounties', 'applications'] })
     offsetRef.current = 0
     setHasMore(true)
     loadBounties({ reset: true })
-    loadUserApplications().catch(err => console.error('Failed to refresh user applications on foreground:', err))
+    loadUserApplications().catch(err => {
+      logger.warning('feed.foreground.applications_refresh_failed', {
+        error: err instanceof Error ? err.message : String(err),
+      })
+    })
   })
 
   useEffect(() => {

@@ -48,8 +48,9 @@ export function useForegroundRefresh(
         if (elapsed >= minBackgroundMsRef.current) {
           try {
             callbackRef.current()
-          } catch {
+          } catch (e) {
             // Refresh callbacks are best-effort; never crash on foreground.
+            console.warn('[useForegroundRefresh] onForeground callback threw:', e)
           }
         }
       }
