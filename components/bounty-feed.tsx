@@ -10,6 +10,7 @@ import { useRouter } from 'expo-router'
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { Alert, Animated, Dimensions, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useForegroundRefresh } from '../hooks/useForegroundRefresh'
 import { useValidUserId } from '../hooks/useValidUserId'
 import { SIZING, SPACING, TYPOGRAPHY } from '../lib/constants/accessibility'
 import { useBountyFormat } from '../lib/bounty-format-context'
@@ -320,6 +321,18 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       loadUserApplications()
     }
   }, [activeScreen, loadBounties, loadUserApplications])
+
+  // Silently reload feed data when the app returns from the background.
+  // Requests started before backgrounding can be dropped by the OS and
+  // realtime/websocket connections die while suspended, so without this the
+  // feed can come back stale or empty until a manual pull-to-refresh.
+  useForegroundRefresh(() => {
+    logger.info('feed.foreground.refresh')
+    offsetRef.current = 0
+    setHasMore(true)
+    loadBounties({ reset: true })
+    loadUserApplications().catch(err => console.error('Failed to refresh user applications on foreground:', err))
+  })
 
   useEffect(() => {
     ;(async () => {
