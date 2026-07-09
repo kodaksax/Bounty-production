@@ -699,6 +699,46 @@ export const completionService = {
       // Note: bounty IDs may be UUID strings; do NOT coerce to Number() (causes NaN)
       await bountyService.update(bountyId, { status: 'completed' });
 
+      // Notify the hunter that their work was approved.
+      // On the Supabase-direct path this update does NOT hit the server.js
+      // /api/bounties/:id/complete endpoint (which is the only other place that
+      // sends the "Work Approved!" push), and the DB status trigger intentionally
+      // no longer fires on the 'completed' transition. Without this enqueue the
+      // hunter would receive no approval notification at all. Best-effort: a
+      // failure here must not roll back the successful approval.
+      try {
+        if (isSupabaseConfigured && submission.hunter_id) {
+          const { data: bountyRow, error: bountyErr } = await supabase
+            .from('bounties')
+            .select('title')
+            .eq('id', bountyId)
+            .maybeSingle();
+
+          if (bountyErr) {
+            logger.warning('Failed to fetch bounty for work-approved notification', {
+              error: bountyErr,
+            });
+          }
+
+          const bountyTitle = String(bountyRow?.title ?? '').slice(0, 80);
+          const { error: outboxErr } = await supabase.from('notifications_outbox').insert({
+            recipients: [submission.hunter_id],
+            title: 'Work Approved! 🎉',
+            body: bountyTitle
+              ? `Your work on "${bountyTitle}" was approved. Payment is on its way.`
+              : 'Your work was approved. Payment is on its way.',
+            data: { bountyId: String(bountyId), type: 'completion' },
+            bounty_id: String(bountyId),
+          });
+          if (outboxErr) {
+            logger.warning('Failed to enqueue work-approved notification', { error: outboxErr });
+          }
+        }
+      } catch (notifErr) {
+        // Non-fatal: approval succeeded, notification is best-effort
+        logger.warning('Failed to send work-approved notification', { error: notifErr });
+      }
+
       return true;
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error');
