@@ -29,6 +29,159 @@ function jsonResponse(data: unknown, status = 200) {
   });
 }
 
+// ─── Inlined from ./withdrawal-validation.ts ────────────────────────────────
+// (local imports are not supported by the Supabase bundler — keep both copies
+// in sync; the sibling module is the unit-tested source of truth)
+
+/** Minimum withdrawal in USD — keep in sync with lib/constants.ts MIN_WITHDRAWAL_AMOUNT. */
+const MIN_WITHDRAWAL_USD = 10;
+
+/** Maximum single withdrawal in USD (fraud/typo guard). */
+const MAX_WITHDRAWAL_USD = 10000;
+
+type WithdrawalValidationResult =
+  | { ok: true; amount: number; amountCents: number }
+  | { ok: false; error: string; code: string };
+
+function validateWithdrawalRequest(body: {
+  amount?: unknown;
+  currency?: unknown;
+}): WithdrawalValidationResult {
+  const rawAmount = Number(body?.amount);
+
+  if (!Number.isFinite(rawAmount) || rawAmount <= 0) {
+    return {
+      ok: false,
+      error: 'Please enter a valid withdrawal amount.',
+      code: 'invalid_amount',
+    };
+  }
+
+  const amountCents = Math.round(rawAmount * 100);
+  const amount = amountCents / 100;
+
+  // Reject sub-cent precision (e.g. 10.001) instead of silently rounding.
+  if (Math.abs(rawAmount * 100 - amountCents) > 1e-6) {
+    return {
+      ok: false,
+      error: 'Withdrawal amount cannot include fractions of a cent.',
+      code: 'invalid_amount_precision',
+    };
+  }
+
+  if (amount < MIN_WITHDRAWAL_USD) {
+    return {
+      ok: false,
+      error: `The minimum withdrawal amount is $${MIN_WITHDRAWAL_USD.toFixed(2)}.`,
+      code: 'below_minimum',
+    };
+  }
+
+  if (amount > MAX_WITHDRAWAL_USD) {
+    return {
+      ok: false,
+      error: `The maximum withdrawal amount is $${MAX_WITHDRAWAL_USD.toLocaleString('en-US')} per transfer. Please contact support for larger withdrawals.`,
+      code: 'above_maximum',
+    };
+  }
+
+  const currency = body?.currency ?? 'usd';
+  if (currency !== 'usd') {
+    return {
+      ok: false,
+      error: 'Only USD withdrawals are supported.',
+      code: 'unsupported_currency',
+    };
+  }
+
+  return { ok: true, amount, amountCents };
+}
+
+function mapStripeTransferError(err: {
+  code?: string;
+  type?: string;
+  message?: string;
+}): { error: string; code: string; status: number } {
+  const code = err?.code ?? '';
+  const type = err?.type ?? '';
+
+  if (code === 'balance_insufficient') {
+    return {
+      error:
+        'Withdrawals are temporarily unavailable. Your balance has not been charged — please try again later.',
+      code: 'platform_balance_insufficient',
+      status: 503,
+    };
+  }
+
+  if (code === 'account_invalid' || code === 'transfers_not_allowed') {
+    return {
+      error:
+        'Your linked bank account cannot receive transfers right now. Please review your payout details in your account settings.',
+      code: 'destination_account_invalid',
+      status: 400,
+    };
+  }
+
+  if (type === 'StripeConnectionError' || type === 'api_connection_error') {
+    return {
+      error:
+        'We could not reach our payment provider. Your balance has not been charged — please try again.',
+      code: 'stripe_unreachable',
+      status: 503,
+    };
+  }
+
+  if (type === 'idempotency_error' || type === 'StripeIdempotencyError') {
+    return {
+      error:
+        'This withdrawal request conflicts with a previous attempt. Please start a new withdrawal.',
+      code: 'idempotency_conflict',
+      status: 409,
+    };
+  }
+
+  return {
+    error:
+      'The transfer could not be completed. Your balance has not been charged — please try again or contact support.',
+    code: 'transfer_failed',
+    status: 502,
+  };
+}
+
+function mapWithdrawBalanceError(message: string | undefined): {
+  error: string;
+  code: string;
+  status: number;
+} {
+  const msg = message ?? '';
+
+  if (/frozen/i.test(msg)) {
+    return {
+      error:
+        'Your balance is temporarily frozen due to an open payment dispute. Withdrawals will be available once the dispute is resolved.',
+      code: 'balance_frozen',
+      status: 403,
+    };
+  }
+
+  if (/insufficient/i.test(msg)) {
+    return {
+      error:
+        'Insufficient available balance. Part of your balance may be on hold or already reserved.',
+      code: 'insufficient_balance',
+      status: 400,
+    };
+  }
+
+  return {
+    error: 'Failed to reserve your balance for withdrawal. Please try again.',
+    code: 'balance_reservation_failed',
+    status: 500,
+  };
+}
+// ─── End inlined withdrawal-validation helpers ──────────────────────────────
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -335,11 +488,60 @@ Deno.serve(async (req: Request) => {
     // POST /connect/transfer
     if (subPath === '/transfer') {
       const body = await req.json();
-      const { currency = 'usd' } = body;
-      const amount = Number(body.amount);
 
-      if (!Number.isFinite(amount) || amount <= 0) {
-        return jsonResponse({ error: 'Invalid amount' }, 400);
+      // Server-side validation: finite, whole-cent, min/max, USD only.
+      const validation = validateWithdrawalRequest(body);
+      if (!validation.ok) {
+        console.warn('[connect/transfer] validation failed', {
+          userId,
+          code: validation.code,
+        });
+        return jsonResponse({ error: validation.error, code: validation.code }, 400);
+      }
+      const amount = validation.amount;
+      const currency = 'usd';
+
+      const idempotencyKey =
+        typeof body.idempotencyKey === 'string' && body.idempotencyKey.trim()
+          ? body.idempotencyKey.trim().slice(0, 200)
+          : undefined;
+
+      console.log('[connect/transfer] withdrawal requested', {
+        userId,
+        amount,
+        hasIdempotencyKey: !!idempotencyKey,
+      });
+
+      // Idempotency replay: if this key was already processed, return the
+      // recorded withdrawal instead of creating a duplicate payout.
+      if (idempotencyKey) {
+        const { data: existing } = await supabase
+          .from('wallet_transactions')
+          .select('id, stripe_transfer_id, stripe_connect_account_id, amount, status')
+          .eq('user_id', userId)
+          .eq('type', 'withdrawal')
+          .eq('idempotency_key', idempotencyKey)
+          .maybeSingle();
+
+        if (existing) {
+          const e = existing as WalletTransaction & { stripe_connect_account_id?: string };
+          console.log('[connect/transfer] idempotent replay', {
+            userId,
+            transactionId: e.id,
+            transferId: e.stripe_transfer_id,
+          });
+          return jsonResponse({
+            transferId: e.stripe_transfer_id,
+            status: e.status ?? 'pending',
+            amount: Math.abs(e.amount),
+            currency,
+            accountId: e.stripe_connect_account_id,
+            transactionId: e.id,
+            duplicate: true,
+            estimatedArrival: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+            message: 'This withdrawal was already submitted and is being processed.',
+          });
+        }
       }
 
       const { data: profile } = await supabase
@@ -354,44 +556,139 @@ Deno.serve(async (req: Request) => {
 
       const p = profile as Profile;
       if (!p.stripe_connect_account_id || !p.stripe_connect_onboarded_at) {
-        return jsonResponse({ error: 'Stripe Connect account not set up' }, 400);
+        return jsonResponse(
+          {
+            error:
+              'Your payout account is not set up yet. Please complete Stripe Connect onboarding before withdrawing.',
+            code: 'connect_not_onboarded',
+          },
+          400
+        );
       }
 
-      // Enforce hold: available = balance - balance_on_hold.
+      // Live payout eligibility check: onboarding may have been completed in
+      // the past but the account can become restricted (missing requirements,
+      // disabled payouts, disconnected bank). Verify with Stripe before
+      // touching the user's balance.
+      try {
+        const account = await stripe.accounts.retrieve(p.stripe_connect_account_id);
+        if (!account.payouts_enabled) {
+          console.warn('[connect/transfer] payouts disabled on connected account', {
+            userId,
+            accountId: p.stripe_connect_account_id,
+            disabledReason: account.requirements?.disabled_reason ?? null,
+          });
+          return jsonResponse(
+            {
+              error:
+                'Payouts are currently disabled on your account. Please review and update your payout details, then try again.',
+              code: 'payouts_disabled',
+            },
+            400
+          );
+        }
+      } catch (accountError) {
+        console.error('[connect/transfer] failed to verify connected account', {
+          userId,
+          accountId: p.stripe_connect_account_id,
+          error: (accountError as { message?: string })?.message,
+        });
+        return jsonResponse(
+          {
+            error:
+              'We could not verify your payout account. Your balance has not been charged — please try again.',
+            code: 'account_verification_failed',
+          },
+          503
+        );
+      }
+
+      // Enforce hold: available = balance - balance_on_hold (pre-check; the
+      // withdraw_balance RPC re-enforces this atomically under a row lock).
       const available = (p.balance ?? 0) - (p.balance_on_hold ?? 0);
       if (available < amount) {
-        return jsonResponse({ error: 'Insufficient balance' }, 400);
+        console.warn('[connect/transfer] insufficient available balance', { userId, amount });
+        return jsonResponse(
+          {
+            error:
+              'Insufficient available balance. Part of your balance may be on hold or already reserved.',
+            code: 'insufficient_balance',
+          },
+          400
+        );
       }
 
-      // Deduct balance atomically via withdraw_balance which enforces the hold check.
-      const { error: balanceError } = await supabase.rpc('withdraw_balance', {
-        p_user_id: userId,
-        p_amount: amount,
-      });
+      // Deduct balance atomically via withdraw_balance which enforces the
+      // hold check and dispute freeze, and returns the new balance.
+      const { data: newBalanceData, error: balanceError } = await supabase.rpc(
+        'withdraw_balance',
+        {
+          p_user_id: userId,
+          p_amount: amount,
+        }
+      );
 
       if (balanceError) {
-        console.error('[connect] Error deducting balance before transfer:', balanceError);
-        return jsonResponse({ error: 'Failed to reserve balance' }, 500);
+        console.error('[connect/transfer] Error deducting balance before transfer:', {
+          userId,
+          amount,
+          error: balanceError.message,
+        });
+        const mapped = mapWithdrawBalanceError(balanceError.message);
+        return jsonResponse({ error: mapped.error, code: mapped.code }, mapped.status);
       }
+
+      const newBalance = typeof newBalanceData === 'number' ? newBalanceData : null;
 
       let transfer: Stripe.Transfer;
       try {
-        transfer = await stripe.transfers.create({
-          amount: Math.round(amount * 100),
-          currency,
-          destination: p.stripe_connect_account_id,
-          metadata: { user_id: userId },
+        console.log('[connect/transfer] creating Stripe transfer', {
+          userId,
+          amountCents: validation.amountCents,
+          accountId: p.stripe_connect_account_id,
         });
+        transfer = await stripe.transfers.create(
+          {
+            amount: validation.amountCents,
+            currency,
+            destination: p.stripe_connect_account_id,
+            metadata: { user_id: userId, ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}) },
+          },
+          // Stripe-side idempotency: retries of the same client key with the
+          // same amount cannot create a second transfer even if two requests
+          // race past the DB replay check above.
+          idempotencyKey
+            ? { idempotencyKey: `transfer_${userId}_${idempotencyKey}_${validation.amountCents}` }
+            : undefined
+        );
       } catch (stripeError) {
         // Refund the deducted balance if Stripe transfer creation fails
-        console.error('[connect] Transfer creation failed, refunding balance:', stripeError);
-        await supabase
-          .rpc('update_balance', { p_user_id: userId, p_amount: amount })
-          .catch((rpcErr: unknown) =>
-            console.error('[connect] Balance refund after failed transfer also failed:', rpcErr)
+        const errInfo = stripeError as { code?: string; type?: string; message?: string };
+        console.error('[connect/transfer] Transfer creation failed, refunding balance:', {
+          userId,
+          amount,
+          stripeCode: errInfo?.code,
+          stripeType: errInfo?.type,
+          message: errInfo?.message,
+        });
+        const { error: refundError } = await supabase.rpc('update_balance', {
+          p_user_id: userId,
+          p_amount: amount,
+        });
+        if (refundError) {
+          console.error(
+            '[connect/transfer] CRITICAL: balance refund after failed transfer also failed — manual reconciliation required',
+            { userId, amount, error: refundError }
           );
-        throw stripeError;
+        }
+        const mapped = mapStripeTransferError(errInfo);
+        return jsonResponse({ error: mapped.error, code: mapped.code }, mapped.status);
       }
+
+      console.log('[connect/transfer] Stripe transfer created', {
+        userId,
+        transferId: transfer.id,
+      });
 
       const { data: transaction, error: txError } = await supabase
         .from('wallet_transactions')
@@ -403,15 +700,80 @@ Deno.serve(async (req: Request) => {
           status: 'pending',
           stripe_transfer_id: transfer.id,
           stripe_connect_account_id: p.stripe_connect_account_id,
-          metadata: { transfer },
+          idempotency_key: idempotencyKey ?? null,
+          metadata: { transfer_id: transfer.id, idempotency_key: idempotencyKey ?? null },
         })
         .select()
         .single();
 
       if (txError) {
-        console.error('[connect] Error creating transaction:', txError);
-        throw txError;
+        // Unique violation on (user_id, idempotency_key): a concurrent
+        // duplicate request won the insert race. Stripe idempotency ensured
+        // both requests share ONE transfer, but the balance was deducted
+        // twice — refund this request's deduction and replay the winner.
+        if ((txError as { code?: string }).code === '23505' && idempotencyKey) {
+          console.warn('[connect/transfer] concurrent duplicate detected, refunding extra deduction', {
+            userId,
+            transferId: transfer.id,
+          });
+          const { error: dupRefundError } = await supabase.rpc('update_balance', {
+            p_user_id: userId,
+            p_amount: amount,
+          });
+          if (dupRefundError) {
+            console.error(
+              '[connect/transfer] CRITICAL: refund of duplicate deduction failed — manual reconciliation required',
+              { userId, amount, error: dupRefundError }
+            );
+          }
+
+          const { data: winner } = await supabase
+            .from('wallet_transactions')
+            .select('id, stripe_transfer_id, status')
+            .eq('user_id', userId)
+            .eq('type', 'withdrawal')
+            .eq('idempotency_key', idempotencyKey)
+            .maybeSingle();
+
+          const w = winner as WalletTransaction | null;
+          return jsonResponse({
+            transferId: w?.stripe_transfer_id ?? transfer.id,
+            status: w?.status ?? 'pending',
+            amount,
+            currency,
+            accountId: p.stripe_connect_account_id,
+            transactionId: w?.id,
+            duplicate: true,
+            estimatedArrival: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+            message: 'This withdrawal was already submitted and is being processed.',
+          });
+        }
+
+        // The transfer already succeeded and the balance is correctly
+        // deducted — only the history row failed. Do NOT surface an error
+        // (the user's money IS on the way); log loudly for reconciliation.
+        console.error(
+          '[connect/transfer] CRITICAL: transfer succeeded but transaction record failed — manual reconciliation required',
+          { userId, transferId: transfer.id, amount, error: txError }
+        );
+        return jsonResponse({
+          transferId: transfer.id,
+          status: 'pending',
+          amount,
+          currency,
+          accountId: p.stripe_connect_account_id,
+          newBalance,
+          estimatedArrival: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+          message: 'Transfer initiated. Funds typically arrive in 1-2 business days.',
+          warning: 'Transaction history may take a moment to update.',
+        });
       }
+
+      console.log('[connect/transfer] withdrawal completed', {
+        userId,
+        transferId: transfer.id,
+        transactionId: (transaction as WalletTransaction).id,
+      });
 
       return jsonResponse({
         transferId: transfer.id,
@@ -420,6 +782,7 @@ Deno.serve(async (req: Request) => {
         currency,
         accountId: p.stripe_connect_account_id,
         transactionId: (transaction as WalletTransaction).id,
+        newBalance,
         estimatedArrival: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
         message: 'Transfer initiated. Funds typically arrive in 1-2 business days.',
       });
@@ -490,23 +853,33 @@ Deno.serve(async (req: Request) => {
 
       let transfer: Stripe.Transfer;
       try {
-        transfer = await stripe.transfers.create({
-          amount: Math.round(amount * 100),
-          currency: 'usd',
-          destination: p.stripe_connect_account_id,
-          metadata: { user_id: userId, retry_of_transaction: transactionId },
-        });
+        transfer = await stripe.transfers.create(
+          {
+            amount: Math.round(amount * 100),
+            currency: 'usd',
+            destination: p.stripe_connect_account_id,
+            metadata: { user_id: userId, retry_of_transaction: transactionId },
+          },
+          // Stripe-side idempotency: a repeated retry of the same attempt
+          // number for the same transaction cannot create a second transfer.
+          { idempotencyKey: `retry_${transactionId}_${retryCount + 1}` }
+        );
       } catch (stripeError) {
         console.error('[connect] Transfer creation failed, refunding balance:', stripeError);
-        await supabase
-          .rpc('update_balance', { p_user_id: userId, p_amount: amount })
-          .catch((rpcErr: unknown) =>
-            console.error(
-              '[connect] Balance refund after failed retry transfer also failed:',
-              rpcErr
-            )
+        const { error: retryRefundError } = await supabase.rpc('update_balance', {
+          p_user_id: userId,
+          p_amount: amount,
+        });
+        if (retryRefundError) {
+          console.error(
+            '[connect] CRITICAL: balance refund after failed retry transfer also failed — manual reconciliation required',
+            { userId, amount, error: retryRefundError }
           );
-        throw stripeError;
+        }
+        const mapped = mapStripeTransferError(
+          stripeError as { code?: string; type?: string; message?: string }
+        );
+        return jsonResponse({ error: mapped.error, code: mapped.code }, mapped.status);
       }
 
       await supabase
