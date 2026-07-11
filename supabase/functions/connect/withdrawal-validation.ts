@@ -55,6 +55,9 @@ export function validateWithdrawalRequest(body: {
   const amount = amountCents / 100;
 
   // Reject sub-cent precision (e.g. 10.001) instead of silently rounding.
+  // The 1e-6 tolerance absorbs binary floating-point representation noise
+  // (e.g. 10.10 * 100 === 1009.9999999999999) while still catching any real
+  // sub-cent fraction, whose smallest distance from a whole cent is 0.1.
   if (Math.abs(rawAmount * 100 - amountCents) > 1e-6) {
     return {
       ok: false,

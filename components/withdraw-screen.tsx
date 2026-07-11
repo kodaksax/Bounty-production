@@ -61,9 +61,10 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
   const idempotencyKeyRef = useRef(`withdraw_${session?.user?.id ?? 'u'}_${Date.now()}`);
 
   const rotateIdempotencyKey = () => {
-    idempotencyKeyRef.current = `withdraw_${session?.user?.id ?? 'u'}_${Date.now()}_${Math.random()
-      .toString(36)
-      .slice(2, 10)}`;
+    // Base-36 keeps the random suffix compact and URL/log-safe; 8 characters
+    // (~41 bits) is plenty to avoid collisions within a single user's keys.
+    const randomSuffix = Math.random().toString(36).slice(2, 10);
+    idempotencyKeyRef.current = `withdraw_${session?.user?.id ?? 'u'}_${Date.now()}_${randomSuffix}`;
   };
 
   // Only refresh Connect status when returning from the embedded onboarding
