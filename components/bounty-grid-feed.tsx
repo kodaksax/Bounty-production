@@ -206,6 +206,8 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
       )
     } else {
       const { left, right } = item
+      const leftDef = CATEGORY_DEFS[getBountyCategory(left)]
+      const rightDef = right ? CATEGORY_DEFS[getBountyCategory(right)] : null
       content = (
         <View style={s.pairRow}>
           <BountyGridItem
@@ -220,6 +222,8 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
             work_type={left.work_type}
             poster_avatar={left.poster_avatar}
             end_date={left.end_date ?? left.deadline}
+            categoryColor={leftDef.color}
+            categoryLabel={leftDef.label}
           />
           {right ? (
             <BountyGridItem
@@ -234,6 +238,8 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
               work_type={right.work_type}
               poster_avatar={right.poster_avatar}
               end_date={right.end_date ?? right.deadline}
+              categoryColor={rightDef?.color}
+              categoryLabel={rightDef?.label}
             />
           ) : (
             <View style={{ width: GRID_CARD_WIDTH }} />
