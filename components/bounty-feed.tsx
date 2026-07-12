@@ -329,18 +329,20 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   // Only run when the bounty tab is active – BountyFeed is always mounted
   // (hidden via display:none on other tabs), so skipping the refresh on
   // inactive tabs avoids unnecessary network/battery churn.
-  useForegroundRefresh(() => {
-    if (activeScreen !== 'bounty') return
-    logger.info('feed.foreground.refresh_started', { targets: ['bounties', 'applications'] })
-    offsetRef.current = 0
-    setHasMore(true)
-    loadBounties({ reset: true })
-    loadUserApplications().catch(err => {
-      logger.warning('feed.foreground.applications_refresh_failed', {
-        error: err instanceof Error ? err.message : String(err),
+  useForegroundRefresh(
+    useCallback(() => {
+      if (activeScreen !== 'bounty') return
+      logger.info('feed.foreground.refresh_started', { targets: ['bounties', 'applications'] })
+      offsetRef.current = 0
+      setHasMore(true)
+      loadBounties({ reset: true })
+      loadUserApplications().catch(err => {
+        logger.warning('feed.foreground.applications_refresh_failed', {
+          error: err instanceof Error ? err.message : String(err),
+        })
       })
-    })
-  })
+    }, [activeScreen, loadBounties, loadUserApplications])
+  )
 
   useEffect(() => {
     ;(async () => {
