@@ -21,9 +21,11 @@ CREATE OR REPLACE FUNCTION public.handle_bounty_status_notification()
 RETURNS TRIGGER AS $$
 BEGIN
   -- Scenario B: General Status Update (Notify Hunter via accepted_by)
-  -- Fires on every status change except to 'completed' (handled by
-  -- completion-service.ts at submission time).
-  IF (OLD.status != NEW.status AND NEW.accepted_by IS NOT NULL) THEN
+  -- Fires on every status change except to 'completed' (which is handled by
+  -- completion-service.ts → approveSubmission via notifications_outbox as the
+  -- dedicated "Work Approved!" notification). Excluding 'completed' here prevents
+  -- hunters receiving a generic "Bounty Update" on top of the dedicated message.
+  IF (OLD.status != NEW.status AND NEW.status != 'completed' AND NEW.accepted_by IS NOT NULL) THEN
     INSERT INTO public.notifications_outbox (recipients, title, body, data, bounty_id)
     VALUES (
       jsonb_build_array(NEW.accepted_by),

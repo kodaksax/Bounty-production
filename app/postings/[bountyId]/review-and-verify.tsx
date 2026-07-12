@@ -272,7 +272,7 @@ export default function ReviewAndVerifyScreen() {
               recipients: [userId],
               title: 'Please rate the poster',
               body: `Please rate your experience for "${bounty.title || `Bounty ${bounty.id}`}".`,
-              data: { bountyId: String(bounty.id), type: 'rating_prompt' },
+              data: { bountyId: String(bounty.id), type: 'completion', subtype: 'rating_prompt' },
               bounty_id: String(bounty.id),
             });
           } catch (e) {

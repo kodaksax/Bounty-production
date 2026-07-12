@@ -702,10 +702,11 @@ export const completionService = {
       // Notify the hunter that their work was approved.
       // On the Supabase-direct path this update does NOT hit the server.js
       // /api/bounties/:id/complete endpoint (which is the only other place that
-      // sends the "Work Approved!" push), and the DB status trigger intentionally
-      // no longer fires on the 'completed' transition. Without this enqueue the
-      // hunter would receive no approval notification at all. Best-effort: a
-      // failure here must not roll back the successful approval.
+      // sends the "Work Approved!" push), and the DB status trigger is guarded
+      // to not fire on the 'completed' transition (so it won't send a generic
+      // "Bounty Update" here). Without this enqueue the hunter would receive no
+      // approval notification at all. Best-effort: a failure here must not roll
+      // back the successful approval.
       try {
         if (isSupabaseConfigured && submission.hunter_id) {
           const { data: bountyRow, error: bountyErr } = await supabase

@@ -48,11 +48,9 @@ Sources that use the outbox path:
 ### B. Direct path (in-app **only**)
 
 Some client flows insert directly into `public.notifications`. These show up in
-the bell feed but **do not** generate a device push notification:
-
-- Revision requested (`completion-service.ts` → `requestRevision`).
-- Rating prompt after approval (`poster-review-modal.tsx`,
-  `app/postings/[bountyId]/review-and-verify.tsx`).
+the bell feed but **do not** generate a device push notification. This path is
+used only for in-app-only alerts that do not need to reach a user while the app
+is closed.
 
 > Rule of thumb: if a message must reach the user while the app is closed, it
 > must go through `notifications_outbox` (path A), not `notifications` (path B).
@@ -82,7 +80,7 @@ owner column is `profile_id` (not `user_id`).
 | 7 | Bounty completed via REST endpoint | `api/server.js` → `POST /api/bounties/:id/complete` | Hunter (`accepted_by`) | `Work Approved!` | `Your work on '{title}' has been approved.` | `completion` | in-app + push |
 | 8 | Bounty accepted via REST endpoint | `api/server.js` → `notifyBountyParticipants('accept')` | Poster + all requesting hunters | `Bounty accepted` | `Bounty '{title}' moved to in-progress` | `acceptance` | in-app + push |
 | 9 | Poster requests a revision | `completion-service.ts` → `requestRevision` | Hunter | `Revision Requested` | `The poster requested changes to "{title}". Check the feedback and resubmit.` | `completion` | in-app + push |
-| 10 | Poster approves work (asks hunter to rate) | `poster-review-modal.tsx` / `review-and-verify.tsx` `notifyFn` | Hunter | `Please rate the poster` | `Please rate your experience for "{title}".` | `rating_prompt` | in-app + push |
+| 10 | Poster approves work (asks hunter to rate) | `poster-review-modal.tsx` / `review-and-verify.tsx` `notifyFn` | Hunter | `Please rate the poster` | `Please rate your experience for "{title}".` | `completion` | in-app + push |
 
 Notes:
 
@@ -132,13 +130,17 @@ notifications don't always fire when they should." The audit found the following
 
 Because Scenario A was removed from the status trigger and the production
 approval flow uses `bountyService.update` (Supabase-direct) rather than the REST
-`/complete` endpoint, approving work no longer produced **any** hunter-facing
+`/complete` endpoint, approving work produced no **dedicated** hunter-facing
 notification on the production path — the "Work Approved!" push in `server.js`
-(row 7) is only reached in API-mode.
+(row 7) is only reached in API-mode. (The status trigger still fired a generic
+"Bounty Update" on the `completed` transition, but hunters received no
+celebratory or payment-confirmation message.)
 
 **Fix:** `approveSubmission` now enqueues a `Work Approved! 🎉` notification to
-the hunter via `notifications_outbox` (row 6). This is best-effort: a failure to
-enqueue never rolls back the approval or payout.
+the hunter via `notifications_outbox` (row 6). The trigger is additionally guarded
+to skip the `completed` transition, so hunters receive exactly one dedicated
+notification (not a generic update on top of the specific one). This is
+best-effort: a failure to enqueue never rolls back the approval or payout.
 
 ### 4.2 Revision-requested and rating-prompt push (FIXED)
 

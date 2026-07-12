@@ -284,7 +284,7 @@ export function PosterReviewModal({
               recipients: [userId],
               title: 'Please rate the poster',
               body: notificationBody,
-              data: { bountyId: String(bountyId), type: 'rating_prompt', ...payload },
+              data: { bountyId: String(bountyId), type: 'completion', subtype: 'rating_prompt', ...payload },
               bounty_id: String(bountyId),
             });
           } catch (e) {
