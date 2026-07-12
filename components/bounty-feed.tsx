@@ -326,7 +326,11 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   // Requests started before backgrounding can be dropped by the OS and
   // realtime/websocket connections die while suspended, so without this the
   // feed can come back stale or empty until a manual pull-to-refresh.
+  // Only run when the bounty tab is active – BountyFeed is always mounted
+  // (hidden via display:none on other tabs), so skipping the refresh on
+  // inactive tabs avoids unnecessary network/battery churn.
   useForegroundRefresh(() => {
+    if (activeScreen !== 'bounty') return
     logger.info('feed.foreground.refresh_started', { targets: ['bounties', 'applications'] })
     offsetRef.current = 0
     setHasMore(true)

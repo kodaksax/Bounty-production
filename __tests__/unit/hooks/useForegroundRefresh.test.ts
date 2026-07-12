@@ -12,15 +12,17 @@ import { act, renderHook } from '@testing-library/react-native';
 let appStateCallback: ((state: string) => void) | undefined;
 const removeListener = jest.fn();
 
-jest.mock('react-native', () => ({
-  AppState: {
-    currentState: 'active',
-    addEventListener: jest.fn((_event: string, cb: (state: string) => void) => {
-      appStateCallback = cb;
-      return { remove: removeListener };
-    }),
-  },
-}));
+// Patch AppState onto the existing react-native mock from jest.setup.js rather
+// than replacing the entire module. A full replacement drops View, Text,
+// Platform, StyleSheet, etc. that @testing-library/react-native internals rely on.
+const _rn = require('react-native') as any;
+_rn.AppState = {
+  currentState: 'active',
+  addEventListener: jest.fn((_event: string, cb: (state: string) => void) => {
+    appStateCallback = cb;
+    return { remove: removeListener };
+  }),
+};
 
 import { useForegroundRefresh, DEFAULT_MIN_BACKGROUND_MS } from '../../../hooks/useForegroundRefresh';
 
@@ -32,8 +34,15 @@ const changeAppState = (state: string) => {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  jest.useFakeTimers();
+  // Pin the fake-timer clock to a fixed epoch so tests are fully deterministic
+  // regardless of wall-clock drift or timer state left by prior suites.
+  jest.useFakeTimers({ now: 0 });
   appStateCallback = undefined;
+  // Restore addEventListener implementation after clearAllMocks wipes it.
+  _rn.AppState.addEventListener.mockImplementation((_event: string, cb: (state: string) => void) => {
+    appStateCallback = cb;
+    return { remove: removeListener };
+  });
 });
 
 afterEach(() => {
