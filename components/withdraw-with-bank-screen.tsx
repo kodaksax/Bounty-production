@@ -11,6 +11,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthContext } from '../hooks/use-auth-context';
 import { useEmailVerification } from '../hooks/use-email-verification';
 import { API_BASE_URL } from '../lib/config/api';
@@ -37,6 +38,11 @@ interface WithdrawWithBankScreenProps {
   balance?: number;
 }
 
+// Height of the bottom tab bar + gap, so the sticky Withdraw button sits
+// fully above it (same convention as postings-screen.tsx and the
+// CreateBounty Step*.tsx screens).
+const BOTTOM_NAV_OFFSET = 60;
+
 export function WithdrawWithBankScreen({
   onBack,
   balance: propBalance,
@@ -55,6 +61,7 @@ export function WithdrawWithBankScreen({
   const { isEmailVerified, canWithdrawFunds, userEmail } = useEmailVerification();
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
+  const insets = useSafeAreaInsets();
 
   const balance = propBalance ?? walletBalance;
 
@@ -370,7 +377,7 @@ export function WithdrawWithBankScreen({
       {!isEmailVerified && <EmailVerificationBanner email={userEmail} />}
 
       {/* Header */}
-      <View style={s.header}>
+      <View style={[s.header, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity
           onPress={onBack}
           style={s.backButton}
@@ -390,57 +397,32 @@ export function WithdrawWithBankScreen({
           <Text style={s.balanceAmount}>${balance.toFixed(2)}</Text>
         </View>
 
-        {/* Amount Input */}
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>Withdrawal Amount</Text>
-          <View style={s.amountInputContainer}>
-            <Text style={s.currencySymbol}>$</Text>
-            <TextInput
-              style={s.amountInput}
-              value={withdrawalAmount}
-              onChangeText={setWithdrawalAmount}
-              placeholder="0.00"
-              placeholderTextColor={theme.textDisabled}
-              keyboardType="decimal-pad"
-              accessibilityLabel="Withdrawal amount"
-              accessibilityHint="Enter the amount you want to withdraw"
-            />
+        {/* Connect Status — surfaced first since it blocks withdrawal entirely */}
+        {!hasConnectedAccount && (
+          <View style={s.warningCard}>
+            <MaterialIcons name="warning" size={24} color="#fbbf24" />
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={s.warningTitle}>Stripe Connect Required</Text>
+              <Text style={s.warningText}>
+                Complete Stripe Connect onboarding to withdraw funds to your bank account.
+              </Text>
+              <TouchableOpacity
+                onPress={handleConnectOnboarding}
+                style={s.warningButton}
+                disabled={isOnboarding}
+                accessibilityLabel="Complete Stripe Connect onboarding"
+                accessibilityRole="button"
+                accessibilityState={{ disabled: isOnboarding }}
+              >
+                {isOnboarding ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={s.warningButtonText}>Complete Onboarding</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
-          <View style={s.quickAmounts}>
-            <TouchableOpacity
-              style={s.quickAmountButton}
-              onPress={() => setWithdrawalAmount((balance * 0.25).toFixed(2))}
-              accessibilityLabel="Withdraw 25% of balance"
-              accessibilityRole="button"
-            >
-              <Text style={s.quickAmountText}>25%</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={s.quickAmountButton}
-              onPress={() => setWithdrawalAmount((balance * 0.5).toFixed(2))}
-              accessibilityLabel="Withdraw 50% of balance"
-              accessibilityRole="button"
-            >
-              <Text style={s.quickAmountText}>50%</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={s.quickAmountButton}
-              onPress={() => setWithdrawalAmount((balance * 0.75).toFixed(2))}
-              accessibilityLabel="Withdraw 75% of balance"
-              accessibilityRole="button"
-            >
-              <Text style={s.quickAmountText}>75%</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={s.quickAmountButton}
-              onPress={() => setWithdrawalAmount(balance.toFixed(2))}
-              accessibilityLabel="Withdraw maximum balance"
-              accessibilityRole="button"
-            >
-              <Text style={s.quickAmountText}>Max</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        )}
 
         {/* Bank Accounts Section */}
         <View style={s.section}>
@@ -458,20 +440,17 @@ export function WithdrawWithBankScreen({
           </View>
 
           {isLoadingAccounts ? (
-            <ActivityIndicator size="small" color="#059669" style={{ marginVertical: 20 }} />
+            <ActivityIndicator size="small" color="#059669" style={{ marginVertical: 8 }} />
           ) : bankAccounts.length === 0 ? (
-            <View style={s.emptyState}>
-              <MaterialIcons name="account-balance" size={48} color={theme.textDisabled} />
-              <Text style={s.emptyStateText}>No bank accounts added</Text>
-              <TouchableOpacity
-                onPress={handleAddBankAccount}
-                style={s.emptyStateButton}
-                accessibilityLabel="Add your first bank account"
-                accessibilityRole="button"
-              >
-                <Text style={s.emptyStateButtonText}>Add Bank Account</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={s.emptyState}
+              onPress={handleAddBankAccount}
+              accessibilityLabel="Add your first bank account"
+              accessibilityRole="button"
+            >
+              <MaterialIcons name="account-balance" size={20} color={theme.textDisabled} />
+              <Text style={s.emptyStateText}>No bank accounts added — tap Add to get started</Text>
+            </TouchableOpacity>
           ) : (
             bankAccounts.map(account => (
               <TouchableOpacity
@@ -526,32 +505,57 @@ export function WithdrawWithBankScreen({
           )}
         </View>
 
-        {/* Connect Status */}
-        {!hasConnectedAccount && (
-          <View style={s.warningCard}>
-            <MaterialIcons name="warning" size={24} color="#fbbf24" />
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={s.warningTitle}>Stripe Connect Required</Text>
-              <Text style={s.warningText}>
-                Complete Stripe Connect onboarding to withdraw funds to your bank account.
-              </Text>
-              <TouchableOpacity
-                onPress={handleConnectOnboarding}
-                style={s.warningButton}
-                disabled={isOnboarding}
-                accessibilityLabel="Complete Stripe Connect onboarding"
-                accessibilityRole="button"
-                accessibilityState={{ disabled: isOnboarding }}
-              >
-                {isOnboarding ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={s.warningButtonText}>Complete Onboarding</Text>
-                )}
-              </TouchableOpacity>
-            </View>
+        {/* Amount Input */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Withdrawal Amount</Text>
+          <View style={s.amountInputContainer}>
+            <Text style={s.currencySymbol}>$</Text>
+            <TextInput
+              style={s.amountInput}
+              value={withdrawalAmount}
+              onChangeText={setWithdrawalAmount}
+              placeholder="0.00"
+              placeholderTextColor={theme.textDisabled}
+              keyboardType="decimal-pad"
+              accessibilityLabel="Withdrawal amount"
+              accessibilityHint="Enter the amount you want to withdraw"
+            />
           </View>
-        )}
+          <View style={s.quickAmounts}>
+            <TouchableOpacity
+              style={s.quickAmountButton}
+              onPress={() => setWithdrawalAmount((balance * 0.25).toFixed(2))}
+              accessibilityLabel="Withdraw 25% of balance"
+              accessibilityRole="button"
+            >
+              <Text style={s.quickAmountText}>25%</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={s.quickAmountButton}
+              onPress={() => setWithdrawalAmount((balance * 0.5).toFixed(2))}
+              accessibilityLabel="Withdraw 50% of balance"
+              accessibilityRole="button"
+            >
+              <Text style={s.quickAmountText}>50%</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={s.quickAmountButton}
+              onPress={() => setWithdrawalAmount((balance * 0.75).toFixed(2))}
+              accessibilityLabel="Withdraw 75% of balance"
+              accessibilityRole="button"
+            >
+              <Text style={s.quickAmountText}>75%</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={s.quickAmountButton}
+              onPress={() => setWithdrawalAmount(balance.toFixed(2))}
+              accessibilityLabel="Withdraw maximum balance"
+              accessibilityRole="button"
+            >
+              <Text style={s.quickAmountText}>Max</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
 
         {/* Info Card */}
         <View style={s.infoCard}>
@@ -564,7 +568,7 @@ export function WithdrawWithBankScreen({
       </ScrollView>
 
       {/* Withdraw Button */}
-      <View style={s.footer}>
+      <View style={[s.footer, { paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 16) }]}>
         <TouchableOpacity
           onPress={handleWithdraw}
           disabled={
@@ -627,14 +631,13 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    paddingTop: 50,
+    paddingVertical: 8,
   },
   backButton: {
     padding: 8,
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '600',
     color: t.text,
   },
@@ -644,34 +647,33 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
   balanceCard: {
     backgroundColor: t.surface,
     borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
+    padding: 14,
+    marginBottom: 12,
     alignItems: 'center',
   },
   balanceLabel: {
-    fontSize: 14,
+    fontSize: 13,
     color: t.textSecondary,
-    marginBottom: 8,
+    marginBottom: 2,
   },
   balanceAmount: {
-    fontSize: 36,
+    fontSize: 28,
     fontWeight: 'bold',
     color: t.text,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: 12,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: t.text,
-    marginBottom: 12,
   },
   addButton: {
     flexDirection: 'row',
@@ -693,18 +695,18 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     backgroundColor: t.surfaceSecondary,
     borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginBottom: 12,
+    paddingVertical: 10,
+    marginBottom: 8,
   },
   currencySymbol: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '600',
     color: t.text,
     marginRight: 8,
   },
   amountInput: {
     flex: 1,
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '600',
     color: t.text,
   },
@@ -715,7 +717,7 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
   quickAmountButton: {
     flex: 1,
     backgroundColor: t.surfaceSecondary,
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderRadius: 8,
     alignItems: 'center',
   },
@@ -779,48 +781,40 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     padding: 8,
   },
   emptyState: {
+    flexDirection: 'row',
     alignItems: 'center',
-    padding: 32,
+    gap: 8,
+    backgroundColor: t.surfaceSecondary,
+    borderRadius: 10,
+    padding: 12,
   },
   emptyStateText: {
-    fontSize: 16,
+    flex: 1,
+    fontSize: 13,
     color: t.textSecondary,
-    marginTop: 12,
-    marginBottom: 16,
-  },
-  emptyStateButton: {
-    backgroundColor: '#059669',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  emptyStateButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#fff',
   },
   warningCard: {
     flexDirection: 'row',
     backgroundColor: 'rgba(251,191,36,0.2)',
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
+    padding: 12,
+    marginBottom: 12,
   },
   warningTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: '#fbbf24',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   warningText: {
-    fontSize: 14,
+    fontSize: 13,
     color: t.textSecondary,
-    marginBottom: 12,
+    marginBottom: 8,
   },
   warningButton: {
     backgroundColor: '#fbbf24',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
     borderRadius: 8,
     alignSelf: 'flex-start',
   },
@@ -845,7 +839,6 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
   },
   footer: {
     padding: 16,
-    paddingBottom: 32,
   },
   withdrawButton: {
     flexDirection: 'row',
