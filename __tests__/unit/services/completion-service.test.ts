@@ -693,8 +693,13 @@ describe('CompletionService', () => {
         expect.objectContaining({
           recipients: ['hunter123'],
           title: 'Revision Requested',
+          body: 'The poster requested changes to "Test Bounty". Check the feedback and resubmit.',
           bounty_id: 'bounty123',
-          data: expect.objectContaining({ type: 'completion', isRevision: true }),
+          data: expect.objectContaining({
+            type: 'completion',
+            isRevision: true,
+            feedback: 'Please update the color scheme',
+          }),
         })
       );
     });
