@@ -10,6 +10,7 @@ import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
 import { BountyDetailModal } from './bountydetailmodal';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+import { CountdownBadge } from './ui/countdown-badge';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const H_PAD = 16;
@@ -27,6 +28,10 @@ export interface BountyGridItemProps {
   user_id?: string | null;
   work_type?: 'online' | 'in_person';
   poster_avatar?: string;
+  end_date?: string | null;
+  /** Category accent (same palette as the featured carousel cards). */
+  categoryColor?: string;
+  categoryLabel?: string;
 }
 
 function BountyGridItemComponent({
@@ -40,6 +45,9 @@ function BountyGridItemComponent({
   user_id,
   work_type,
   poster_avatar,
+  end_date,
+  categoryColor,
+  categoryLabel,
 }: BountyGridItemProps) {
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -112,54 +120,69 @@ function BountyGridItemComponent({
           accessibilityLabel={`${title} by ${resolvedUsername}${isForHonor ? ', for honor' : `, $${price}`}`}
           accessibilityHint="Tap to view bounty details"
         >
-          {/* ── Header: avatar + username ───────────────────── */}
-          <View style={s.header}>
-            <TouchableOpacity
-              onPress={handleAvatarPress}
-              disabled={!user_id}
-              accessibilityRole="button"
-              accessibilityLabel={`View ${resolvedUsername}'s profile`}
-            >
-              <Avatar style={s.avatar}>
-                <AvatarImage
-                  src={avatarUrl || '/placeholder.svg?height=32&width=32'}
-                  alt={resolvedUsername}
-                />
-                <AvatarFallback style={s.avatarFallback}>
-                  <Text style={s.avatarText}>{resolvedUsername.substring(0, 2).toUpperCase()}</Text>
-                </AvatarFallback>
-              </Avatar>
-            </TouchableOpacity>
-            <View style={s.headerMeta}>
-              <Text style={s.username} numberOfLines={1}>
-                {resolvedUsername}
-              </Text>
-              {work_type === 'online' ? (
-                <View style={s.workChip}>
-                  <MaterialIcons name="wifi" size={10} color={theme.primaryLight} />
-                  <Text style={s.workChipText}>Remote</Text>
+          {/* ── Top content: fills the square, clipped so it never pushes
+                the footer out of the fixed-height card ───────────────── */}
+          <View style={s.content}>
+            {/* Header: avatar + username */}
+            <View style={s.header}>
+              <TouchableOpacity
+                onPress={handleAvatarPress}
+                disabled={!user_id}
+                accessibilityRole="button"
+                accessibilityLabel={`View ${resolvedUsername}'s profile`}
+              >
+                <Avatar style={s.avatar}>
+                  <AvatarImage
+                    src={avatarUrl || '/placeholder.svg?height=32&width=32'}
+                    alt={resolvedUsername}
+                  />
+                  <AvatarFallback style={s.avatarFallback}>
+                    <Text style={s.avatarText}>{resolvedUsername.substring(0, 2).toUpperCase()}</Text>
+                  </AvatarFallback>
+                </Avatar>
+              </TouchableOpacity>
+              <View style={s.headerMeta}>
+                <Text style={s.username} numberOfLines={1}>
+                  {resolvedUsername}
+                </Text>
+                <View style={s.metaLine}>
+                  {categoryColor && (
+                    <View
+                      style={[s.categoryDot, { backgroundColor: categoryColor }]}
+                      accessibilityLabel={categoryLabel ? `Category: ${categoryLabel}` : undefined}
+                    />
+                  )}
+                  {work_type === 'online' ? (
+                    <View style={s.workChip}>
+                      <MaterialIcons name="wifi" size={10} color={theme.primaryLight} />
+                      <Text style={s.workChipText}>Remote</Text>
+                    </View>
+                  ) : distance !== null ? (
+                    <Text style={s.distanceText}>{distance} mi</Text>
+                  ) : (
+                    <Text style={s.distanceText}>In Person</Text>
+                  )}
                 </View>
-              ) : distance !== null ? (
-                <Text style={s.distanceText}>{distance} mi</Text>
-              ) : (
-                <Text style={s.distanceText}>In Person</Text>
-              )}
+              </View>
             </View>
+
+            {/* Countdown: only shown when the deadline is <24h away */}
+            <CountdownBadge endDate={end_date} style={s.countdownBadge} />
+
+            {/* Title */}
+            <Text style={s.title} numberOfLines={2}>
+              {title}
+            </Text>
+
+            {/* Description */}
+            {description ? (
+              <Text style={s.description} numberOfLines={1}>
+                {description}
+              </Text>
+            ) : null}
           </View>
 
-          {/* ── Title ──────────────────────────────────────── */}
-          <Text style={s.title} numberOfLines={3}>
-            {title}
-          </Text>
-
-          {/* ── Description ────────────────────────────────── */}
-          {description ? (
-            <Text style={s.description} numberOfLines={2}>
-              {description}
-            </Text>
-          ) : null}
-
-          {/* ── Footer: price / honor + green CTA ──────────── */}
+          {/* ── Footer: price / honor + View button ─────────── */}
           <View style={s.footer}>
             {isForHonor ? (
               <View style={s.honorBadge}>
@@ -170,7 +193,7 @@ function BountyGridItemComponent({
               <Text style={s.amount}>${price}</Text>
             )}
             <View style={s.viewBtn}>
-              <MaterialIcons name="arrow-forward" size={14} color="#fff" />
+              <Text style={s.viewBtnText}>View</Text>
             </View>
           </View>
         </TouchableOpacity>
@@ -206,25 +229,31 @@ export const BountyGridItem = React.memo(
     prev.distance === next.distance &&
     prev.user_id === next.user_id &&
     prev.work_type === next.work_type &&
-    prev.poster_avatar === next.poster_avatar
+    prev.poster_avatar === next.poster_avatar &&
+    prev.end_date === next.end_date &&
+    prev.categoryColor === next.categoryColor
 );
 
 function makeStyles(t: AppTheme) {
   return StyleSheet.create({
     card: {
       width: GRID_CARD_WIDTH,
+      aspectRatio: 1,
+      justifyContent: 'space-between',
+      overflow: 'hidden',
       backgroundColor: t.surface,
       borderRadius: 16,
       padding: 14,
       borderWidth: 1,
       borderColor: t.border,
-      borderTopWidth: 3,
-      borderTopColor: '#059669',
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.15,
       shadowRadius: 8,
       elevation: 5,
+    },
+    content: {
+      flexShrink: 1,
     },
 
     // Header
@@ -263,6 +292,16 @@ function makeStyles(t: AppTheme) {
       fontWeight: '600',
       color: t.text,
     },
+    metaLine: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+    },
+    categoryDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+    },
     workChip: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -275,6 +314,9 @@ function makeStyles(t: AppTheme) {
     distanceText: {
       fontSize: 10,
       color: t.textSecondary,
+    },
+    countdownBadge: {
+      marginBottom: 8,
     },
 
     // Body
@@ -324,12 +366,18 @@ function makeStyles(t: AppTheme) {
       fontSize: 11,
     },
     viewBtn: {
-      width: 28,
-      height: 28,
-      borderRadius: 14,
-      backgroundColor: '#059669',
+      paddingHorizontal: 14,
+      paddingVertical: 7,
+      borderRadius: 10,
+      backgroundColor: t.text,
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    viewBtnText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: t.background,
+      letterSpacing: 0.2,
     },
   });
 }

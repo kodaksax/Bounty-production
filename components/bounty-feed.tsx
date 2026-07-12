@@ -20,6 +20,7 @@ import { bountyService } from '../lib/services/bounty-service'
 import type { Bounty } from '../lib/services/database.types'
 import { locationService } from '../lib/services/location-service'
 import { storage } from '../lib/storage'
+import { isBountyDeadlinePassed } from '../lib/utils/schedule-utils'
 import type { TrendingBounty } from '../lib/types'
 import { logger } from '../lib/utils/error-logger'
 import { withTimeout } from '../lib/utils/withTimeout'
@@ -112,6 +113,9 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
 
   const filteredBounties = useMemo(() => {
     let list = [...bounties]
+    // Hide bounties whose deadline has passed — they're still visible to the
+    // poster (as "Deadline Passed") in My Postings, just not to hunters here.
+    list = list.filter((b) => !isBountyDeadlinePassed(b))
     if (appliedBountyIds.size > 0) {
       list = list.filter((b) => !appliedBountyIds.has(String(b.id)))
     }
@@ -358,6 +362,12 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       user_id: item.user_id,
       work_type: item.work_type,
       poster_avatar: item.poster_avatar,
+      // Schedule fields (Phase 1)
+      schedule_type: item.schedule_type,
+      start_date: item.start_date,
+      end_date: item.end_date,
+      duration_minutes: item.duration_minutes,
+      is_time_sensitive: item.is_time_sensitive,
     }
     if (isCompact) {
       return <BountyCompactItem {...props} />

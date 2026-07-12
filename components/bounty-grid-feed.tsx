@@ -193,6 +193,11 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
                   categoryColor={def.color}
                   categoryLabel={def.label}
                   attachments_json={b.attachments_json}
+                  schedule_type={b.schedule_type}
+                  start_date={b.start_date}
+                  end_date={b.end_date}
+                  duration_minutes={b.duration_minutes}
+                  is_time_sensitive={b.is_time_sensitive}
                 />
               </View>
             )
@@ -201,6 +206,8 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
       )
     } else {
       const { left, right } = item
+      const leftDef = CATEGORY_DEFS[getBountyCategory(left)]
+      const rightDef = right ? CATEGORY_DEFS[getBountyCategory(right)] : null
       content = (
         <View style={s.pairRow}>
           <BountyGridItem
@@ -214,6 +221,9 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
             user_id={left.user_id}
             work_type={left.work_type}
             poster_avatar={left.poster_avatar}
+            end_date={left.end_date ?? left.deadline}
+            categoryColor={leftDef.color}
+            categoryLabel={leftDef.label}
           />
           {right ? (
             <BountyGridItem
@@ -227,6 +237,9 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
               user_id={right.user_id}
               work_type={right.work_type}
               poster_avatar={right.poster_avatar}
+              end_date={right.end_date ?? right.deadline}
+              categoryColor={rightDef?.color}
+              categoryLabel={rightDef?.label}
             />
           ) : (
             <View style={{ width: GRID_CARD_WIDTH }} />

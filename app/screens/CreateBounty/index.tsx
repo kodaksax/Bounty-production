@@ -4,6 +4,7 @@ import { StepCompensation } from 'app/screens/CreateBounty/StepCompensation';
 import { StepDetails } from 'app/screens/CreateBounty/StepDetails';
 import { StepLocation } from 'app/screens/CreateBounty/StepLocation';
 import { StepReview } from 'app/screens/CreateBounty/StepReview';
+import { StepSchedule } from 'app/screens/CreateBounty/StepSchedule';
 import { StepTitle } from 'app/screens/CreateBounty/StepTitle';
 import { bountyService } from 'app/services/bountyService';
 import { ErrorBanner } from 'components/error-banner';
@@ -27,10 +28,11 @@ interface CreateBountyFlowProps {
   onStepChange?: (step: number) => void;
 }
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 6;
 const STEP_TITLES = [
   'Title & Category',
   'Details & Requirements',
+  'Schedule',
   'Compensation',
   'Location & Visibility',
   'Review & Confirm',
@@ -238,7 +240,7 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
             />
           )}
           {currentStep === 3 && (
-            <StepCompensation
+            <StepSchedule
               draft={draft}
               onUpdate={saveDraft}
               onNext={handleNext}
@@ -246,7 +248,7 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
             />
           )}
           {currentStep === 4 && (
-            <StepLocation
+            <StepCompensation
               draft={draft}
               onUpdate={saveDraft}
               onNext={handleNext}
@@ -254,6 +256,14 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
             />
           )}
           {currentStep === 5 && (
+            <StepLocation
+              draft={draft}
+              onUpdate={saveDraft}
+              onNext={handleNext}
+              onBack={handleBack}
+            />
+          )}
+          {currentStep === 6 && (
             <StepReview
               draft={draft}
               onSubmit={submit}
