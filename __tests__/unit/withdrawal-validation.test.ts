@@ -81,6 +81,11 @@ describe('validateWithdrawalRequest', () => {
     if (!result.ok) expect(result.code).toBe('unsupported_currency');
   });
 
+  test('accepts uppercase USD currency', () => {
+    const result = validateWithdrawalRequest({ amount: 50, currency: 'USD' });
+    expect(result.ok).toBe(true);
+  });
+
   test('defaults currency to usd when omitted', () => {
     expect(validateWithdrawalRequest({ amount: 50 }).ok).toBe(true);
   });
