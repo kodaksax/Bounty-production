@@ -671,9 +671,10 @@ describe('CompletionService', () => {
         }),
       });
 
-      // Mock notification insert
+      // Mock notification outbox insert (push + in-app)
+      const outboxInsert = jest.fn().mockResolvedValue({ error: null });
       mockSupabase.from.mockReturnValueOnce({
-        insert: jest.fn().mockResolvedValue({ error: null }),
+        insert: outboxInsert,
       });
 
       const result = await completionService.requestRevision(
@@ -682,6 +683,20 @@ describe('CompletionService', () => {
       );
 
       expect(result).toBe(true);
+
+      // The revision alert must be delivered via the outbox (push + in-app),
+      // not a direct in-app-only `notifications` insert.
+      const calls = mockSupabase.from.mock.calls.map((c: any[]) => c[0]);
+      expect(calls).toContain('notifications_outbox');
+      expect(calls).not.toContain('notifications');
+      expect(outboxInsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recipients: ['hunter123'],
+          title: 'Revision Requested',
+          bounty_id: 'bounty123',
+          data: expect.objectContaining({ type: 'completion', isRevision: true }),
+        })
+      );
     });
 
     it('should handle revision request errors', async () => {

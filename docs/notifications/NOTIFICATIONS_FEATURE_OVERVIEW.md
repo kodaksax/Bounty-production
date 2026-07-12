@@ -81,8 +81,8 @@ owner column is `profile_id` (not `user_id`).
 | 6 | **Poster approves work / payout released** (Supabase-direct path) | `completion-service.ts` → `approveSubmission` | Hunter | `Work Approved! 🎉` | `Your work on "{title}" was approved. Payment is on its way.` | `completion` | in-app + push |
 | 7 | Bounty completed via REST endpoint | `api/server.js` → `POST /api/bounties/:id/complete` | Hunter (`accepted_by`) | `Work Approved!` | `Your work on '{title}' has been approved.` | `completion` | in-app + push |
 | 8 | Bounty accepted via REST endpoint | `api/server.js` → `notifyBountyParticipants('accept')` | Poster + all requesting hunters | `Bounty accepted` | `Bounty '{title}' moved to in-progress` | `acceptance` | in-app + push |
-| 9 | Poster requests a revision | `completion-service.ts` → `requestRevision` | Hunter | `Revision Requested` | `The poster requested changes to "{title}". Check the feedback and resubmit.` | `completion` | **in-app only** |
-| 10 | Poster approves work (asks hunter to rate) | `poster-review-modal.tsx` / `review-and-verify.tsx` `notifyFn` | Hunter | `Please rate the poster` | `Please rate your experience for "{title}".` | `rating_prompt` | **in-app only** |
+| 9 | Poster requests a revision | `completion-service.ts` → `requestRevision` | Hunter | `Revision Requested` | `The poster requested changes to "{title}". Check the feedback and resubmit.` | `completion` | in-app + push |
+| 10 | Poster approves work (asks hunter to rate) | `poster-review-modal.tsx` / `review-and-verify.tsx` `notifyFn` | Hunter | `Please rate the poster` | `Please rate your experience for "{title}".` | `rating_prompt` | in-app + push |
 
 Notes:
 
@@ -91,8 +91,9 @@ Notes:
   the Supabase-direct path (row 6) because `bountyService.update` writes to
   Supabase directly; the REST `/complete` endpoint (row 7) is only used in
   API-mode deployments. See §4.
-- Rows **9** and **10** are in-app only. If push delivery is required for these,
-  migrate them to the outbox path.
+- Rows **9** and **10** are enqueued via `notifications_outbox`, so they deliver
+  both an in-app bell entry and a device push (subject to the recipient's
+  notification preferences).
 
 ---
 
@@ -139,12 +140,14 @@ notification on the production path — the "Work Approved!" push in `server.js`
 the hunter via `notifications_outbox` (row 6). This is best-effort: a failure to
 enqueue never rolls back the approval or payout.
 
-### 4.2 In-app-only notifications (open, low risk)
+### 4.2 Revision-requested and rating-prompt push (FIXED)
 
-Rows 9 (revision requested) and 10 (rating prompt) insert directly into
-`notifications` and therefore never push to a device. If a user has the app
-closed when a revision is requested, they will not be alerted until they reopen
-the app. Consider moving these to the outbox path if push delivery is desired.
+Rows 9 (revision requested) and 10 (rating prompt) previously inserted directly
+into `notifications`, so they only appeared in the bell feed and never pushed to
+a device — a hunter with the app closed was not alerted when a revision was
+requested or when they were asked to rate. Both now enqueue via
+`notifications_outbox`, so `process-notification` delivers an in-app bell entry
+**and** a push (honoring the recipient's notification preferences).
 
 ### 4.3 Events that intentionally have no notification
 

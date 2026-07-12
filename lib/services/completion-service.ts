@@ -821,16 +821,18 @@ export const completionService = {
           }
         }
 
-        // Send notification to hunter and force realtime visibility (insert triggers subscription)
+        // Notify the hunter that a revision was requested. Enqueue via
+        // notifications_outbox (not a direct `notifications` insert) so
+        // process-notification delivers BOTH an in-app bell entry and a push
+        // notification. Best-effort: a failed enqueue never fails the revision.
         if (submission?.hunter_id && submission?.bounty_id) {
           try {
-            await supabase.from('notifications').insert({
-              user_id: submission.hunter_id,
-              type: 'completion',
+            await supabase.from('notifications_outbox').insert({
+              recipients: [submission.hunter_id],
               title: 'Revision Requested',
               body: `The poster requested changes to "${bountyTitle}". Check the feedback and resubmit.`,
-              data: { bountyId: submission.bounty_id, feedback, isRevision: true },
-              read: false,
+              data: { bountyId: submission.bounty_id, feedback, isRevision: true, type: 'completion' },
+              bounty_id: String(submission.bounty_id),
             });
           } catch (notifErr) {
             logger.warning('Failed to send revision notification', { error: notifErr });
