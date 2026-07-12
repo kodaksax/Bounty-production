@@ -728,7 +728,7 @@ export const completionService = {
             body: bountyTitle
               ? `Your work on "${bountyTitle}" was approved. Payment is on its way.`
               : 'Your work was approved. Payment is on its way.',
-            data: { bountyId: String(bountyId), type: 'completion' },
+            data: { bountyId: String(bountyId), type: 'completion', subtype: 'approval' },
             bounty_id: String(bountyId),
           });
           if (outboxErr) {
@@ -832,7 +832,7 @@ export const completionService = {
               recipients: [submission.hunter_id],
               title: 'Revision Requested',
               body: `The poster requested changes to "${bountyTitle}". Check the feedback and resubmit.`,
-              data: { bountyId: submission.bounty_id, feedback, isRevision: true, type: 'completion' },
+              data: { bountyId: submission.bounty_id, feedback, isRevision: true, type: 'completion', subtype: 'revision_requested' },
               bounty_id: String(submission.bounty_id),
             });
           } catch (notifErr) {

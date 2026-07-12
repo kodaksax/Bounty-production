@@ -76,11 +76,11 @@ owner column is `profile_id` (not `user_id`).
 | 3 | Poster accepts an application | Trigger `handle_bounty_request_notification` (UPDATE pending→accepted) | Hunter | `Bounty Accepted!` | `Your application for "{title}" was accepted` | `acceptance` | in-app + push |
 | 4 | Bounty status changes (any status **except** `completed`) | Trigger `handle_bounty_status_notification` (Scenario B) on `bounties` | Accepted hunter (`accepted_by`) | `Bounty Update` | `Bounty "{title}" status is now: {status}` | `update` | in-app + push |
 | 5 | **Hunter submits work for review** | `completion-service.ts` → `submitCompletion` | Poster | `Review Needed` | `A hunter has submitted their work on "{title}" for your review.` | `review_needed` | in-app + push |
-| 6 | **Poster approves work / payout released** (Supabase-direct path) | `completion-service.ts` → `approveSubmission` | Hunter | `Work Approved! 🎉` | `Your work on "{title}" was approved. Payment is on its way.` | `completion` | in-app + push |
+| 6 | **Poster approves work / payout released** (Supabase-direct path) | `completion-service.ts` → `approveSubmission` | Hunter | `Work Approved! 🎉` | `Your work on "{title}" was approved. Payment is on its way.` | `completion` (`subtype: approval`) | in-app + push |
 | 7 | Bounty completed via REST endpoint | `api/server.js` → `POST /api/bounties/:id/complete` | Hunter (`accepted_by`) | `Work Approved!` | `Your work on '{title}' has been approved.` | `completion` | in-app + push |
 | 8 | Bounty accepted via REST endpoint | `api/server.js` → `notifyBountyParticipants('accept')` | Poster + all requesting hunters | `Bounty accepted` | `Bounty '{title}' moved to in-progress` | `acceptance` | in-app + push |
-| 9 | Poster requests a revision | `completion-service.ts` → `requestRevision` | Hunter | `Revision Requested` | `The poster requested changes to "{title}". Check the feedback and resubmit.` | `completion` | in-app + push |
-| 10 | Poster approves work (asks hunter to rate) | `poster-review-modal.tsx` / `review-and-verify.tsx` `notifyFn` | Hunter | `Please rate the poster` | `Please rate your experience for "{title}".` | `completion` | in-app + push |
+| 9 | Poster requests a revision | `completion-service.ts` → `requestRevision` | Hunter | `Revision Requested` | `The poster requested changes to "{title}". Check the feedback and resubmit.` | `completion` (`subtype: revision_requested`) | in-app + push |
+| 10 | Poster approves work (asks hunter to rate) | `poster-review-modal.tsx` / `review-and-verify.tsx` `notifyFn` | Hunter | `Please rate the poster` | `Please rate your experience for "{title}".` | `completion` (`subtype: rating_prompt`) | in-app + push |
 
 Notes:
 
