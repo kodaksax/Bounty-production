@@ -103,6 +103,6 @@ Deno.serve(async (req: Request) => {
     });
   } catch (err) {
     console.error('[expire-bounties] unexpected error', err);
-    return jsonResponse({ error: String(err) }, 500);
+    return jsonResponse({ error: 'Internal server error' }, 500);
   }
 });
