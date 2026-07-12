@@ -82,7 +82,7 @@ export function validateWithdrawalRequest(body: {
     };
   }
 
-  const currency = body?.currency ?? 'usd';
+  const currency = typeof body?.currency === 'string' ? body.currency.toLowerCase() : 'usd';
   if (currency !== 'usd') {
     return {
       ok: false,

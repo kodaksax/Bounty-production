@@ -88,7 +88,7 @@ function validateWithdrawalRequest(body: {
     };
   }
 
-  const currency = body?.currency ?? 'usd';
+  const currency = typeof body?.currency === 'string' ? body.currency.toLowerCase() : 'usd';
   if (currency !== 'usd') {
     return {
       ok: false,
@@ -533,6 +533,15 @@ Deno.serve(async (req: Request) => {
             transactionId: e.id,
             transferId: e.stripe_transfer_id,
           });
+          const { data: replayProfile } = await supabase
+            .from('profiles')
+            .select('balance')
+            .eq('id', userId)
+            .single();
+          const replayBalance =
+            typeof (replayProfile as { balance?: number } | null)?.balance === 'number'
+              ? (replayProfile as { balance: number }).balance
+              : null;
           return jsonResponse({
             transferId: e.stripe_transfer_id,
             status: e.status ?? 'pending',
@@ -540,6 +549,7 @@ Deno.serve(async (req: Request) => {
             currency,
             accountId: e.stripe_connect_account_id,
             transactionId: e.id,
+            newBalance: replayBalance,
             duplicate: true,
             estimatedArrival: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
             message: 'This withdrawal was already submitted and is being processed.',
@@ -682,6 +692,14 @@ Deno.serve(async (req: Request) => {
           console.error(
             '[connect/transfer] CRITICAL: balance refund after failed transfer also failed — manual reconciliation required',
             { userId, amount, error: refundError }
+          );
+          return jsonResponse(
+            {
+              error:
+                'Transfer failed and your balance may have been affected. Please contact support for assistance.',
+              code: 'transfer_failed_refund_failed',
+            },
+            500
           );
         }
         const mapped = mapStripeTransferError(errInfo);
@@ -877,6 +895,14 @@ Deno.serve(async (req: Request) => {
           console.error(
             '[connect] CRITICAL: balance refund after failed retry transfer also failed — manual reconciliation required',
             { userId, amount, error: retryRefundError }
+          );
+          return jsonResponse(
+            {
+              error:
+                'Transfer failed and your balance may have been affected. Please contact support for assistance.',
+              code: 'transfer_failed_refund_failed',
+            },
+            500
           );
         }
         const mapped = mapStripeTransferError(
