@@ -329,6 +329,11 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   // Only run when the bounty tab is active – BountyFeed is always mounted
   // (hidden via display:none on other tabs), so skipping the refresh on
   // inactive tabs avoids unnecessary network/battery churn.
+  // The activeScreen guard is a runtime check inside the callback (rather than
+  // a conditional hook call) because React's Rules of Hooks prohibit calling
+  // hooks conditionally. useForegroundRefresh stores the callback in a ref and
+  // always invokes the latest version, so activeScreen here reflects the current
+  // tab at the moment the foreground resume fires.
   useForegroundRefresh(
     useCallback(() => {
       if (activeScreen !== 'bounty') return
