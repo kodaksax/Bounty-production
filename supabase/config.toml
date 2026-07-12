@@ -136,3 +136,9 @@ verify_jwt = false
 # from loading the verification queue.
 [functions.admin-verifications-list]
 verify_jwt = false
+
+# expire-bounties: invoked by a Supabase scheduled cron trigger (or manual
+# service-role call). No user JWT is in scope; the function authenticates
+# using the service role key injected by the Supabase runtime.
+[functions.expire-bounties]
+verify_jwt = false
