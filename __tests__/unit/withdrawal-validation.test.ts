@@ -168,9 +168,14 @@ describe('connect edge function contract (inlined helpers stay in sync)', () => 
     expect(indexSource).toContain('function mapStripeTransferError');
     expect(indexSource).toContain('function mapWithdrawBalanceError');
     // Verify the env-configurable initialiser uses the correct default values
-    // (matching the exported constants from the sibling module).
-    expect(indexSource).toContain(`WITHDRAW_MIN_USD') ?? '${MIN_WITHDRAWAL_USD}'`);
-    expect(indexSource).toContain(`WITHDRAW_MAX_USD') ?? '${MAX_WITHDRAWAL_USD}'`);
+    // (matching the exported constants from the sibling module) via the
+    // NaN-safe readEnvNumber helper — a misconfigured (non-numeric) env value
+    // must fall back to the default rather than silently disabling the limit
+    // (Number(badValue) is NaN, and `amount < NaN` / `amount > NaN` are both
+    // always false).
+    expect(indexSource).toContain('function readEnvNumber');
+    expect(indexSource).toContain(`readEnvNumber('WITHDRAW_MIN_USD', ${MIN_WITHDRAWAL_USD})`);
+    expect(indexSource).toContain(`readEnvNumber('WITHDRAW_MAX_USD', ${MAX_WITHDRAWAL_USD})`);
   });
 
   test('replays duplicate withdrawals via the idempotency_key column', () => {

@@ -7,11 +7,26 @@
 //
 // KEEP IN SYNC with the inlined copy in supabase/functions/connect/index.ts.
 
-/** Minimum withdrawal in USD — keep in sync with lib/constants.ts MIN_WITHDRAWAL_AMOUNT. */
-export const MIN_WITHDRAWAL_USD = 10;
+// `Deno` only exists in the Edge Function runtime — this module is also
+// imported directly by Jest (Node) unit tests, where the global is absent.
+// `typeof` is safe to use on an undeclared identifier; a direct reference
+// would throw a ReferenceError under Jest.
+function readEnvNumber(key: string, fallback: number): number {
+  const raw = typeof Deno !== 'undefined' ? Deno.env.get(key) : undefined;
+  if (raw === undefined) return fallback;
+  const parsed = Number(raw);
+  // Guard against a misconfigured (non-numeric) env value silently disabling
+  // the limit entirely: `amount < NaN` and `amount > NaN` are both always
+  // `false`, so an invalid override would remove the min/max check rather
+  // than falling back to a safe default.
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
 
-/** Maximum single withdrawal in USD (fraud/typo guard). */
-export const MAX_WITHDRAWAL_USD = 10000;
+/** Minimum withdrawal in USD — env-configurable via WITHDRAW_MIN_USD; defaults to 10. */
+export const MIN_WITHDRAWAL_USD = readEnvNumber('WITHDRAW_MIN_USD', 10);
+
+/** Maximum single withdrawal in USD (fraud/typo guard) — env-configurable via WITHDRAW_MAX_USD; defaults to 10000. */
+export const MAX_WITHDRAWAL_USD = readEnvNumber('WITHDRAW_MAX_USD', 10000);
 
 export interface WithdrawalValidationSuccess {
   ok: true;

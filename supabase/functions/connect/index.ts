@@ -33,11 +33,22 @@ function jsonResponse(data: unknown, status = 200) {
 // (local imports are not supported by the Supabase bundler — keep both copies
 // in sync; the sibling module is the unit-tested source of truth)
 
+// Guard against a misconfigured (non-numeric) env value silently disabling
+// the limit entirely: `amount < NaN` and `amount > NaN` are both always
+// `false`, so an invalid override would remove the min/max check rather
+// than falling back to a safe default.
+function readEnvNumber(key: string, fallback: number): number {
+  const raw = Deno.env.get(key);
+  if (raw === undefined) return fallback;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 /** Minimum withdrawal in USD — env-configurable via WITHDRAW_MIN_USD; defaults to 10. */
-const MIN_WITHDRAWAL_USD = Number(Deno.env.get('WITHDRAW_MIN_USD') ?? '10');
+const MIN_WITHDRAWAL_USD = readEnvNumber('WITHDRAW_MIN_USD', 10);
 
 /** Maximum single withdrawal in USD (fraud/typo guard) — env-configurable via WITHDRAW_MAX_USD; defaults to 10000. */
-const MAX_WITHDRAWAL_USD = Number(Deno.env.get('WITHDRAW_MAX_USD') ?? '10000');
+const MAX_WITHDRAWAL_USD = readEnvNumber('WITHDRAW_MAX_USD', 10000);
 
 type WithdrawalValidationResult =
   | { ok: true; amount: number; amountCents: number }
