@@ -214,9 +214,10 @@ export function SignInForm() {
                 (data.session.user.user_metadata as any)?.name,
             });
             try {
+              // email/name live on the person profile via identify() above —
+              // omit PII from the event payload itself.
               posthogCapture('Sign In', {
                 user_id: data.session.user.id,
-                email: data.session.user.email,
                 correlation_id: correlationId,
               });
             } catch {}

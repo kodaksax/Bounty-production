@@ -16,6 +16,11 @@
 const POSTHOG_KEY = process.env.EXPO_PUBLIC_POSTHOG_KEY;
 const POSTHOG_HOST = process.env.EXPO_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com';
 
+// dev / staging / preview / production all report into the same PostHog
+// project (see EXPO_PUBLIC_ENVIRONMENT in .env.*). Tag every event and person
+// with this so Insights/dashboards can filter non-production traffic out.
+const APP_ENVIRONMENT = process.env.EXPO_PUBLIC_ENVIRONMENT || 'development';
+
 let _posthog: any | null = null;
 
 // Construct the client eagerly (synchronously) so it is available to the
@@ -27,7 +32,34 @@ try {
     const mod = require('posthog-react-native');
     const PostHog = mod.PostHog ?? mod.default;
     if (PostHog) {
-      _posthog = new PostHog(POSTHOG_KEY, { host: POSTHOG_HOST });
+      _posthog = new PostHog(POSTHOG_KEY, {
+        host: POSTHOG_HOST,
+        // Explicit even though it matches the SDK default: only create a
+        // Person profile once a user is identified (post sign-up/sign-in).
+        // Anonymous pre-auth events (e.g. app_opened) still record fine for
+        // acquisition funnels — they just don't cost a person profile.
+        personProfiles: 'identified_only',
+        // Application Installed/Opened/Updated/Backgrounded — needed for the
+        // acquisition -> activation funnel referenced in app/_layout.tsx.
+        captureAppLifecycleEvents: true,
+        // Sentry (@sentry/react-native) is already wired as the crash/error
+        // reporter throughout this app (see analytics-service.ts). Disable
+        // PostHog's own global exception/rejection/console handlers so the
+        // two don't both install competing global handlers.
+        errorTracking: {
+          autocapture: {
+            uncaughtExceptions: false,
+            unhandledRejections: false,
+            console: false,
+          },
+        },
+        // Session Replay stays off — this app has Stripe/ACH/password
+        // screens and no current product need for it. Flip this on (plus
+        // "Record user sessions" in PostHog project settings) if that changes.
+        enableSessionReplay: false,
+        debug: __DEV__,
+      });
+      _posthog.register({ app_env: APP_ENVIRONMENT });
     }
   } else if (__DEV__) {
     // eslint-disable-next-line no-console

@@ -305,7 +305,22 @@ function RootLayout({ children }: { children: React.ReactNode }) {
   }, [fontsLoaded]);
 
   return (
-    <PostHogProvider client={posthog() ?? undefined}>
+    <PostHogProvider
+      client={posthog() ?? undefined}
+      autocapture={{
+        // expo-router doesn't expose a NavigationContainer ref, so the SDK's
+        // built-in screen autocapture can't track it reliably (see the SDK's
+        // own PostHogAutocaptureOptions.captureScreens doc). Screens here are
+        // already captured manually via analyticsService.trackScreenView /
+        // posthogScreen, so leave this off rather than have it silently no-op.
+        captureScreens: false,
+        // Off by default: the app already emits a well-defined event
+        // taxonomy (bounty_created, payment_failed, payout_success, etc.)
+        // via analyticsService. Generic tap autocapture would add volume
+        // without adding signal on top of that.
+        captureTouches: false,
+      }}
+    >
       <SafeAreaProvider>
         <GestureHandlerRootView style={styles.gestureRoot}>
           <AppThemeProvider>
