@@ -56,8 +56,16 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
   const balance = propBalance ?? walletBalance;
 
   // Stable idempotency key — fixed for the lifetime of this withdrawal attempt
-  // so retries reuse the same key.  Rotated after a successful withdrawal.
+  // so retries reuse the same key.  Rotated after a successful withdrawal and
+  // whenever the amount changes (a different amount is a different attempt).
   const idempotencyKeyRef = useRef(`withdraw_${session?.user?.id ?? 'u'}_${Date.now()}`);
+
+  const rotateIdempotencyKey = () => {
+    // Base-36 keeps the random suffix compact and URL/log-safe; 8 characters
+    // (~41 bits) is plenty to avoid collisions within a single user's keys.
+    const randomSuffix = Math.random().toString(36).slice(2, 10);
+    idempotencyKeyRef.current = `withdraw_${session?.user?.id ?? 'u'}_${Date.now()}_${randomSuffix}`;
+  };
 
   // Only refresh Connect status when returning from the embedded onboarding
   // screen. Without this guard, useFocusEffect fires on every focus event
@@ -268,7 +276,7 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
         await refresh();
 
         // Rotate key so the next withdrawal gets a fresh idempotency key.
-        idempotencyKeyRef.current = `withdraw_${session?.user?.id ?? 'u'}_${Date.now()}`;
+        rotateIdempotencyKey();
 
         // Funnel: Stripe accepted the transfer request. Final settlement to
         // the user's bank is async (1-2 business days) and reported by webhook.
@@ -397,7 +405,14 @@ export function WithdrawScreen({ onBack, balance: propBalance }: WithdrawScreenP
           value={withdrawalAmount ? withdrawalAmount.toString() : ''}
           onChangeText={text => {
             const val = parseFloat(text);
-            setWithdrawalAmount(Math.min(balance, Math.max(0, isNaN(val) ? 0 : val)));
+            const next = Math.min(balance, Math.max(0, isNaN(val) ? 0 : val));
+            if (next !== withdrawalAmount) {
+              // A different amount is a new withdrawal attempt — rotate the
+              // idempotency key so a prior attempt's key is never reused
+              // with different parameters.
+              rotateIdempotencyKey();
+            }
+            setWithdrawalAmount(next);
           }}
           placeholder="Enter amount to withdraw"
           placeholderTextColor="#6ee7b7"

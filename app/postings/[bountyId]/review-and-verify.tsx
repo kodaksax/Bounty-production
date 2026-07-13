@@ -266,16 +266,17 @@ export default function ReviewAndVerifyScreen() {
         },
         notifyFn: async (userId: string) => {
           try {
-            await supabase.from('notifications').insert({
-              user_id: userId,
-              type: 'rating_prompt',
+            // Enqueue via notifications_outbox so process-notification delivers
+            // BOTH an in-app bell entry and a push notification.
+            await supabase.from('notifications_outbox').insert({
+              recipients: [userId],
               title: 'Please rate the poster',
               body: `Please rate your experience for "${bounty.title || `Bounty ${bounty.id}`}".`,
-              data: { bountyId: String(bounty.id) },
-              read: false,
+              data: { bountyId: String(bounty.id), type: 'completion', subtype: 'rating_prompt' },
+              bounty_id: String(bounty.id),
             });
           } catch (e) {
-            console.warn('Failed to insert rating prompt notification', e);
+            console.warn('Failed to enqueue rating prompt notification', e);
           }
         },
       });

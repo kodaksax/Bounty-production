@@ -699,6 +699,47 @@ export const completionService = {
       // Note: bounty IDs may be UUID strings; do NOT coerce to Number() (causes NaN)
       await bountyService.update(bountyId, { status: 'completed' });
 
+      // Notify the hunter that their work was approved.
+      // On the Supabase-direct path this update does NOT hit the server.js
+      // /api/bounties/:id/complete endpoint (which is the only other place that
+      // sends the "Work Approved!" push), and the DB status trigger is guarded
+      // to not fire on the 'completed' transition (so it won't send a generic
+      // "Bounty Update" here). Without this enqueue the hunter would receive no
+      // approval notification at all. Best-effort: a failure here must not roll
+      // back the successful approval.
+      try {
+        if (isSupabaseConfigured && submission.hunter_id) {
+          const { data: bountyRow, error: bountyErr } = await supabase
+            .from('bounties')
+            .select('title')
+            .eq('id', bountyId)
+            .maybeSingle();
+
+          if (bountyErr) {
+            logger.warning('Failed to fetch bounty for work-approved notification', {
+              error: bountyErr,
+            });
+          }
+
+          const bountyTitle = String(bountyRow?.title ?? '').slice(0, 80);
+          const { error: outboxErr } = await supabase.from('notifications_outbox').insert({
+            recipients: [submission.hunter_id],
+            title: 'Work Approved! 🎉',
+            body: bountyTitle
+              ? `Your work on "${bountyTitle}" was approved. Payment is on its way.`
+              : 'Your work was approved. Payment is on its way.',
+            data: { bountyId: String(bountyId), type: 'completion', subtype: 'approval' },
+            bounty_id: String(bountyId),
+          });
+          if (outboxErr) {
+            logger.warning('Failed to enqueue work-approved notification', { error: outboxErr });
+          }
+        }
+      } catch (notifErr) {
+        // Non-fatal: approval succeeded, notification is best-effort
+        logger.warning('Failed to send work-approved notification', { error: notifErr });
+      }
+
       return true;
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error');
@@ -781,16 +822,18 @@ export const completionService = {
           }
         }
 
-        // Send notification to hunter and force realtime visibility (insert triggers subscription)
+        // Notify the hunter that a revision was requested. Enqueue via
+        // notifications_outbox (not a direct `notifications` insert) so
+        // process-notification delivers BOTH an in-app bell entry and a push
+        // notification. Best-effort: a failed enqueue never fails the revision.
         if (submission?.hunter_id && submission?.bounty_id) {
           try {
-            await supabase.from('notifications').insert({
-              user_id: submission.hunter_id,
-              type: 'completion',
+            await supabase.from('notifications_outbox').insert({
+              recipients: [submission.hunter_id],
               title: 'Revision Requested',
               body: `The poster requested changes to "${bountyTitle}". Check the feedback and resubmit.`,
-              data: { bountyId: submission.bounty_id, feedback, isRevision: true },
-              read: false,
+              data: { bountyId: submission.bounty_id, feedback, isRevision: true, type: 'completion', subtype: 'revision_requested' },
+              bounty_id: String(submission.bounty_id),
             });
           } catch (notifErr) {
             logger.warning('Failed to send revision notification', { error: notifErr });

@@ -278,16 +278,17 @@ export function PosterReviewModal({
             const notificationBody = payload?.bountyTitle
               ? `Please rate your experience for "${String(payload.bountyTitle)}".`
               : 'Please rate your experience for this bounty.';
-            await supabase.from('notifications').insert({
-              user_id: userId,
-              type: 'rating_prompt',
+            // Enqueue via notifications_outbox so process-notification delivers
+            // BOTH an in-app bell entry and a push notification.
+            await supabase.from('notifications_outbox').insert({
+              recipients: [userId],
               title: 'Please rate the poster',
               body: notificationBody,
-              data: { bountyId: String(bountyId), ...payload },
-              read: false,
+              data: { bountyId: String(bountyId), type: 'completion', subtype: 'rating_prompt', ...payload },
+              bounty_id: String(bountyId),
             });
           } catch (e) {
-            console.warn('Failed to insert rating prompt notification', e);
+            console.warn('Failed to enqueue rating prompt notification', e);
           }
         },
       });
