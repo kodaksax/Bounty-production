@@ -494,22 +494,45 @@ POST {API_BASE_URL}/connect/verify-onboarding
 ```
 POST {API_BASE_URL}/connect/transfer
         │
-        ├── Validate hunter is onboarded (payoutsEnabled = true)
+        ├── Validate request (server-side, hardened Jul 2026):
+        │       amount is finite, whole-cent, >= $10 (MIN) and <= $10,000 (MAX), currency = 'usd'
         │
-        ├── Deduct balance BEFORE creating Stripe transfer (atomic via update_balance RPC)
+        ├── Idempotency replay: if a withdrawal with the same
+        │       (user_id, idempotency_key) already exists, return it (duplicate: true)
+        │       — duplicate requests can never create a second payout
+        │
+        ├── Validate hunter is onboarded AND live-check payout eligibility
+        │       stripe.accounts.retrieve() → payouts_enabled must be true
+        │       (catches restricted/disabled accounts before touching balance)
+        │
+        ├── Deduct balance BEFORE creating Stripe transfer (atomic via withdraw_balance RPC,
+        │       enforces balance_on_hold and dispute freeze; returns new balance)
         │       Reason: prevents double-spend if transfer creation fails after balance deduction
         │
         ├── stripe.transfers.create({
         │       amount: amountCents,
         │       currency: 'usd',
         │       destination: hunterConnectAccountId,
-        │       metadata: { user_id }
-        │   })
+        │       metadata: { user_id, idempotency_key }
+        │   }, { idempotencyKey: `transfer_${userId}_${clientKey}_${amountCents}` })
+        │       — Stripe-side idempotency guards against races past the DB replay check
         │
-        ├── On Stripe failure: refund balance via update_balance RPC
+        ├── On Stripe failure: refund balance via update_balance RPC and return a
+        │       human-readable, code-tagged error (e.g. payouts_disabled, stripe_unreachable)
         │
-        └── INSERT wallet_transactions { type: 'withdrawal', amount: -amount, stripe_transfer_id }
+        └── INSERT wallet_transactions { type: 'withdrawal', amount: -amount,
+                stripe_transfer_id, idempotency_key }
+                ├── Unique index (user_id, idempotency_key) WHERE type='withdrawal'
+                │       rejects concurrent duplicates; the loser refunds its extra
+                │       deduction and replays the winner's transaction
+                └── If the history insert fails after a successful transfer, the
+                        endpoint still returns success (funds are in flight) and logs a
+                        CRITICAL reconciliation message
 ```
+
+The client (`components/withdraw-screen.tsx`) sends a stable `idempotencyKey`
+that is reused across retries of the same attempt and rotated after a
+successful withdrawal or whenever the amount changes.
 
 ### 6.4 Retry Failed Transfers
 

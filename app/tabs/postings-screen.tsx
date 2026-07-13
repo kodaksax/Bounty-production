@@ -10,6 +10,7 @@ import { bountyRequestService } from "lib/services/bounty-request-service"
 import { bountyService } from "lib/services/bounty-service"
 import type { Bounty } from "lib/services/database.types"
 import { cn } from "lib/utils"
+import { isBountyDeadlinePassed } from "lib/utils/schedule-utils"
 import * as React from "react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { ActivityIndicator, Alert, Animated, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
@@ -647,8 +648,8 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
         currentUserId={currentUserId}
         expanded={!!expandedMap[String(bounty.id)]}
         onToggle={() => handleToggleAndScroll('myPostings', bounty.id)}
-        onEdit={bounty.status === 'open' && !bountiesWithPendingRequestsSet.has(String(bounty.id)) ? () => handleEditBounty(bounty) : undefined}
-        onDelete={bounty.status === 'open' ? () => handleDeleteBounty(bounty) : undefined}
+        onEdit={bounty.status === 'open' && !bounty.accepted_by && !isBountyDeadlinePassed(bounty) && !bountiesWithPendingRequestsSet.has(String(bounty.id)) ? () => handleEditBounty(bounty) : undefined}
+        onDelete={bounty.status === 'open' && !bounty.accepted_by ? () => handleDeleteBounty(bounty) : undefined}
         onDiscard={bounty.status === 'cancelled' ? () => handleDiscardCancelledBounty(bounty) : undefined}
         onGoToReview={(id: string) => { /* legacy route removed - modal only */ }}
         onGoToPayout={(id: string) => router.push({ pathname: '/postings/[bountyId]/payout', params: { bountyId: id } })}

@@ -17,6 +17,43 @@
 export type Money = number;
 
 /**
+ * Schedule type for a bounty — how the poster wants to express timing.
+ *
+ * - `asap`: Hunter is needed immediately / as soon as possible.
+ * - `scheduled`: A specific date/time window is specified.
+ * - `flexible`: No fixed window; poster is flexible on timing.
+ */
+export type BountyScheduleType = 'asap' | 'scheduled' | 'flexible';
+
+/**
+ * Structured scheduling information for a bounty.
+ *
+ * Time is a first-class concept: every bounty should carry enough temporal
+ * context for a hunter to immediately determine whether they are available,
+ * and for the platform to rank / notify / filter intelligently.
+ *
+ * @interface BountySchedule
+ * @property {BountyScheduleType} type - High-level schedule category.
+ * @property {string} [startDate] - ISO 8601 earliest/preferred start time.
+ * @property {string} [endDate] - ISO 8601 hard deadline or latest finish time.
+ * @property {string} [latestArrivalTime] - ISO 8601 latest acceptable time for
+ *   the hunter to arrive / begin; distinct from endDate when a conditional end
+ *   condition exists.
+ * @property {number} [durationMinutes] - Estimated task duration in minutes.
+ * @property {string} [conditionalEndNote] - Human-readable conditional end
+ *   condition (e.g. "until the first Associate arrives"). Should always be
+ *   paired with endDate as the hard safety-net deadline.
+ */
+export interface BountySchedule {
+  type: BountyScheduleType;
+  startDate?: string;
+  endDate?: string;
+  latestArrivalTime?: string;
+  durationMinutes?: number;
+  conditionalEndNote?: string;
+}
+
+/**
  * Form values for creating or editing a bounty
  *
  * @interface BountyFormValues
@@ -25,9 +62,10 @@ export type Money = number;
  * @property {number} amount - Payment amount in cents
  * @property {boolean} is_for_honor - Whether this is an honor-based bounty (no payment)
  * @property {string} location - Location where work should be performed
- * @property {string} timeline - Expected completion timeline
+ * @property {string} timeline - Legacy free-form timeline text (kept for backwards compat)
  * @property {string} skills_required - Comma-separated list of required skills
  * @property {string} status - Current bounty status
+ * @property {BountySchedule} [schedule] - Structured scheduling information
  */
 export interface BountyFormValues {
   title: string;
@@ -38,6 +76,7 @@ export interface BountyFormValues {
   timeline: string;
   skills_required: string;
   status: string;
+  schedule?: BountySchedule;
 }
 
 /**

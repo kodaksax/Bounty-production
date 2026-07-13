@@ -538,12 +538,92 @@ describe('CompletionService', () => {
         }),
       });
 
+      // Mock bounty title fetch for the work-approved notification
+      mockSupabase.from.mockReturnValueOnce({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            maybeSingle: jest.fn().mockResolvedValue({
+              data: { title: 'Test Bounty' },
+              error: null,
+            }),
+          }),
+        }),
+      });
+
+      // Mock notifications_outbox insert
+      const outboxInsert = jest.fn().mockResolvedValue({ data: null, error: null });
+      mockSupabase.from.mockReturnValueOnce({ insert: outboxInsert });
+
       const result = await completionService.approveSubmission('bounty123');
 
       expect(result).toBe(true);
-      
+
       const { bountyService } = require('../../../lib/services/bounty-service');
       expect(bountyService.update).toHaveBeenCalledWith('bounty123', { status: 'completed' });
+
+      // The hunter must be notified that their work was approved.
+      const calls = mockSupabase.from.mock.calls.map((c: any[]) => c[0]);
+      expect(calls).toContain('notifications_outbox');
+      expect(outboxInsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recipients: ['hunter123'],
+          title: 'Work Approved! 🎉',
+          bounty_id: 'bounty123',
+          data: expect.objectContaining({ type: 'completion', bountyId: 'bounty123' }),
+        })
+      );
+    });
+
+    it('should still approve when the work-approved notification enqueue fails', async () => {
+      const mockSubmission = {
+        id: 'submission123',
+        bounty_id: 'bounty123',
+        hunter_id: 'hunter123',
+        message: 'Work done',
+        proof_items: [],
+        status: 'pending' as const,
+      };
+
+      // Mock getSubmission
+      mockSupabase.from.mockReturnValueOnce({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            order: jest.fn().mockReturnValue({
+              limit: jest.fn().mockReturnValue({
+                single: jest.fn().mockResolvedValue({
+                  data: { ...mockSubmission, proof_items: '[]' },
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        }),
+      });
+
+      // Mock approveCompletion
+      mockSupabase.from.mockReturnValueOnce({
+        update: jest.fn().mockReturnValue({
+          eq: jest.fn().mockResolvedValue({ error: null }),
+        }),
+      });
+
+      // Mock bounty title fetch
+      mockSupabase.from.mockReturnValueOnce({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            maybeSingle: jest.fn().mockResolvedValue({ data: { title: 'Test Bounty' }, error: null }),
+          }),
+        }),
+      });
+
+      // Mock notifications_outbox insert failing
+      mockSupabase.from.mockReturnValueOnce({
+        insert: jest.fn().mockResolvedValue({ data: null, error: { message: 'outbox down' } }),
+      });
+
+      // Approval must still succeed even though the notification enqueue failed.
+      const result = await completionService.approveSubmission('bounty123');
+      expect(result).toBe(true);
     });
 
     it('should throw error if no submission exists', async () => {
@@ -591,9 +671,10 @@ describe('CompletionService', () => {
         }),
       });
 
-      // Mock notification insert
+      // Mock notification outbox insert (push + in-app)
+      const outboxInsert = jest.fn().mockResolvedValue({ error: null });
       mockSupabase.from.mockReturnValueOnce({
-        insert: jest.fn().mockResolvedValue({ error: null }),
+        insert: outboxInsert,
       });
 
       const result = await completionService.requestRevision(
@@ -602,6 +683,25 @@ describe('CompletionService', () => {
       );
 
       expect(result).toBe(true);
+
+      // The revision alert must be delivered via the outbox (push + in-app),
+      // not a direct in-app-only `notifications` insert.
+      const calls = mockSupabase.from.mock.calls.map((c: any[]) => c[0]);
+      expect(calls).toContain('notifications_outbox');
+      expect(calls).not.toContain('notifications');
+      expect(outboxInsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recipients: ['hunter123'],
+          title: 'Revision Requested',
+          body: 'The poster requested changes to "Test Bounty". Check the feedback and resubmit.',
+          bounty_id: 'bounty123',
+          data: expect.objectContaining({
+            type: 'completion',
+            isRevision: true,
+            feedback: 'Please update the color scheme',
+          }),
+        })
+      );
     });
 
     it('should handle revision request errors', async () => {

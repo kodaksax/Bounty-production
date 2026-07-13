@@ -136,22 +136,6 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
           )}
         </View>
 
-        {/* Timeline Input (Optional) */}
-        <View className="mb-6">
-          <Text className="text-base font-semibold mb-2" style={{ color: theme.text }}>
-            Timeline (optional)
-          </Text>
-          <TextInput
-            value={draft.timeline || ''}
-            onChangeText={(value) => onUpdate({ timeline: value })}
-            placeholder="e.g., Within 2 days, This weekend, ASAP..."
-            placeholderTextColor={theme.textDisabled}
-            className="px-4 py-3 rounded-lg text-base"
-            style={{ backgroundColor: theme.surfaceSecondary, color: theme.text }}
-            accessibilityLabel="Timeline input"
-          />
-        </View>
-
         {/* Skills Input (Optional) */}
         <View className="mb-6">
           <Text className="text-base font-semibold mb-2" style={{ color: theme.text }}>

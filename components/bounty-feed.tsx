@@ -10,6 +10,7 @@ import { useRouter } from 'expo-router'
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { Alert, Animated, Dimensions, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useForegroundRefresh } from '../hooks/useForegroundRefresh'
 import { useValidUserId } from '../hooks/useValidUserId'
 import { SIZING, SPACING, TYPOGRAPHY } from '../lib/constants/accessibility'
 import { useBountyFormat } from '../lib/bounty-format-context'
@@ -20,6 +21,11 @@ import { bountyService } from '../lib/services/bounty-service'
 import type { Bounty } from '../lib/services/database.types'
 import { locationService } from '../lib/services/location-service'
 import { storage } from '../lib/storage'
+import { isBountyDeadlinePassed } from '../lib/utils/schedule-utils'
+import type { TrendingBounty } from '../lib/types'
+import { logger } from '../lib/utils/error-logger'
+import { withTimeout } from '../lib/utils/withTimeout'
+import { API_TIMEOUTS } from '../lib/config/network'
 
 export type BountyFeedHandle = {
   refresh: () => void
@@ -108,6 +114,9 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
 
   const filteredBounties = useMemo(() => {
     let list = [...bounties]
+    // Hide bounties whose deadline has passed — they're still visible to the
+    // poster (as "Deadline Passed") in My Postings, just not to hunters here.
+    list = list.filter((b) => !isBountyDeadlinePassed(b))
     if (appliedBountyIds.size > 0) {
       list = list.filter((b) => !appliedBountyIds.has(String(b.id)))
     }
@@ -160,23 +169,50 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   const loadUserApplications = useCallback(async () => {
     const uid = validUserId ?? currentUserId
     if (!uid) {
+      setAppliedBountyIds(new Set())
       setApplicationsLoaded(true)
       return
     }
+    const startedAt = Date.now()
+    logger.info('feed.applications.request_started', { userId: uid })
     try {
-      const requests = await bountyRequestService.getAll({ userId: uid })
+      // Timeout-protect this fetch: it gates the skeleton loader via
+      // `applicationsLoaded`, so an un-timed hang here (stalled network, auth
+      // lock deadlock, unresolved Supabase deferred proxy) would otherwise keep
+      // the feed on the skeleton screen forever.
+      const requests = await withTimeout(
+        bountyRequestService.getAll({ userId: uid }),
+        API_TIMEOUTS.DEFAULT
+      )
       const ids = new Set<string>(
         requests
           .filter(r => r.bounty_id != null)
           .map(r => String(r.bounty_id))
       )
       setAppliedBountyIds(ids)
+      logger.info('feed.applications.request_completed', {
+        userId: uid,
+        durationMs: Date.now() - startedAt,
+        count: ids.size,
+        success: true,
+      })
     } catch (error) {
-      console.error('Error loading user applications:', error)
+      // Non-fatal: applications only drive client-side filtering. On failure we
+      // clear any stale applied IDs and proceed with an unfiltered feed rather
+      // than blocking the UI. The finally block guarantees `applicationsLoaded`
+      // is set so the skeleton clears.
+      setAppliedBountyIds(new Set())
+      const message = error instanceof Error ? error.message : String(error)
+      logger.warning('feed.applications.request_failed', {
+        userId: uid,
+        durationMs: Date.now() - startedAt,
+        timedOut: message.includes('timed out'),
+        error: message,
+      })
     } finally {
       setApplicationsLoaded(true)
     }
-  }, [currentUserId])
+  }, [validUserId, currentUserId])
 
   const activeCategoryTimerRef = useRef<number | null>(null)
   const handleSetActiveCategory = useCallback((val: string | 'all') => {
@@ -204,30 +240,50 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     } else {
       setLoadingMore(true)
     }
+    const pageOffset = reset ? 0 : offsetRef.current
+    const startedAt = Date.now()
+    logger.info('feed.bounties.request_started', { reset, offset: pageOffset, pageSize: PAGE_SIZE })
     try {
-      const pageOffset = reset ? 0 : offsetRef.current
-      const fetchedBounties = await bountyService.getAll({ status: 'open', limit: PAGE_SIZE, offset: pageOffset })
+      const fetchedBounties = await withTimeout(
+        bountyService.getAll({ status: 'open', limit: PAGE_SIZE, offset: pageOffset }),
+        API_TIMEOUTS.DEFAULT
+      )
+      const safeBounties = Array.isArray(fetchedBounties) ? fetchedBounties : []
       const mergeUniqueById = (existing: Bounty[], incoming: Bounty[]) => {
         const map = new Map<string, Bounty>()
         existing.concat(incoming).forEach(b => { map.set(String(b.id), b) })
         return Array.from(map.values())
       }
       if (reset) {
-        setBounties(mergeUniqueById([], fetchedBounties))
+        setBounties(mergeUniqueById([], safeBounties))
       } else {
-        setBounties(prev => mergeUniqueById(prev, fetchedBounties))
+        setBounties(prev => mergeUniqueById(prev, safeBounties))
       }
-      offsetRef.current = pageOffset + fetchedBounties.length
-      setHasMore(fetchedBounties.length === PAGE_SIZE)
+      offsetRef.current = pageOffset + safeBounties.length
+      setHasMore(safeBounties.length === PAGE_SIZE)
       setLoadError(null)
+      logger.info('feed.bounties.request_completed', {
+        reset,
+        durationMs: Date.now() - startedAt,
+        count: safeBounties.length,
+        success: true,
+      })
     } catch (error) {
-      console.error('Error loading bounties:', error)
+      const message = error instanceof Error ? error.message : String(error)
+      logger.error('feed.bounties.request_failed', {
+        reset,
+        durationMs: Date.now() - startedAt,
+        timedOut: message.includes('timed out'),
+        error: message,
+      })
       if (reset) {
-        setLoadError(error as Error)
+        setLoadError(error instanceof Error ? error : new Error(message))
         setBounties(prev => prev.length === 0 ? [] : prev)
         setHasMore(false)
       }
     } finally {
+      // Guaranteed exit: both loading flags are always cleared so the skeleton
+      // can never persist because of this request.
       setIsLoadingBounties(false)
       setLoadingMore(false)
     }
@@ -270,6 +326,33 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     }
   }, [activeScreen, loadBounties, loadUserApplications])
 
+  // Silently reload feed data when the app returns from the background.
+  // Requests started before backgrounding can be dropped by the OS and
+  // realtime/websocket connections die while suspended, so without this the
+  // feed can come back stale or empty until a manual pull-to-refresh.
+  // Only run when the bounty tab is active – BountyFeed is always mounted
+  // (hidden via display:none on other tabs), so skipping the refresh on
+  // inactive tabs avoids unnecessary network/battery churn.
+  // The activeScreen guard is a runtime check inside the callback (rather than
+  // a conditional hook call) because React's Rules of Hooks prohibit calling
+  // hooks conditionally. useForegroundRefresh stores the callback in a ref and
+  // always invokes the latest version, so activeScreen here reflects the current
+  // tab at the moment the foreground resume fires.
+  useForegroundRefresh(
+    useCallback(() => {
+      if (activeScreen !== 'bounty') return
+      logger.info('feed.foreground.refresh_started', { targets: ['bounties', 'applications'] })
+      offsetRef.current = 0
+      setHasMore(true)
+      loadBounties({ reset: true })
+      loadUserApplications().catch(err => {
+        logger.warning('feed.foreground.applications_refresh_failed', {
+          error: err instanceof Error ? err.message : String(err),
+        })
+      })
+    }, [activeScreen, loadBounties, loadUserApplications])
+  )
+
   useEffect(() => {
     ;(async () => {
       try {
@@ -307,6 +390,12 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       user_id: item.user_id,
       work_type: item.work_type,
       poster_avatar: item.poster_avatar,
+      // Schedule fields (Phase 1)
+      schedule_type: item.schedule_type,
+      start_date: item.start_date,
+      end_date: item.end_date,
+      duration_minutes: item.duration_minutes,
+      is_time_sensitive: item.is_time_sensitive,
     }
     if (isCompact) {
       return <BountyCompactItem {...props} />

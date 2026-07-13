@@ -58,6 +58,7 @@ function mapTypeToPreferenceKey(type: unknown): string | null {
     case 'payment': return 'payments'
     case 'follow': return 'follows'
     case 'dispute': return 'disputes'
+    case 'bounty_expiry': return 'updates'
     default: return null
   }
 }
