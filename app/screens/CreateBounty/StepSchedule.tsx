@@ -71,6 +71,11 @@ export function StepSchedule({ draft, onUpdate, onNext, onBack }: StepSchedulePr
   const [pickerMode, setPickerMode] = useState<'date' | 'time'>('date');
 
   useEffect(() => {
+    // Keep UI selection and draft state consistent on first render.
+    if (!draft.scheduleType) {
+      onUpdate({ scheduleType: 'asap' });
+    }
+
     scrollRef.current?.scrollTo?.({ y: 0, animated: false });
   }, []);
 

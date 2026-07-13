@@ -104,6 +104,24 @@ export function formatTimeOnly(iso: string): string {
     : `${displayHour}:${String(minutes).padStart(2, '0')} ${ampm}`;
 }
 
+// ─── Deadline helpers ────────────────────────────────────────────────────────
+
+/**
+ * True when a bounty's hard deadline (`end_date`) has passed while it's still
+ * in an active status (open/in_progress) — i.e. it expired without being
+ * completed or cancelled.
+ */
+export function isBountyDeadlinePassed(bounty: {
+  status?: string | null;
+  end_date?: string | null;
+}): boolean {
+  return (
+    (bounty.status === 'open' || bounty.status === 'in_progress') &&
+    !!bounty.end_date &&
+    new Date(bounty.end_date).getTime() <= Date.now()
+  );
+}
+
 // ─── Chip / badge helpers ────────────────────────────────────────────────────
 
 export type ScheduleChipVariant = 'urgent' | 'warning' | 'normal' | 'muted';

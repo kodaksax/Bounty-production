@@ -4,6 +4,7 @@ import type { Bounty } from 'lib/services/database.types';
 import { theme as legacyTheme } from 'lib/theme';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import type { AppTheme } from 'lib/themes/types';
+import { isBountyDeadlinePassed } from 'lib/utils/schedule-utils';
 import { shareBounty } from 'lib/utils/share-utils';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
@@ -67,6 +68,11 @@ export function BountyCard({
   const { theme } = useAppThemeContext();
   const styles = makeStyles(theme);
 
+  // A bounty whose deadline has passed without being completed/cancelled is
+  // shown as "Deadline Passed" instead of its underlying open/in_progress
+  // status, and becomes eligible for the poster to delete it.
+  const isDeadlinePassed = isBountyDeadlinePassed(bounty);
+
   const handleShare = async () => {
     await shareBounty({
       title: bounty.title,
@@ -79,6 +85,7 @@ export function BountyCard({
   const getStatusColor = () => {
     if (reviewNeeded) return '#fbbf24';
     if (submittedForReview) return '#38bdf8';
+    if (isDeadlinePassed) return '#6b7280'; // gray-500, same treatment as archived
     // If the bounty is open but the current user has applied, show 'applied' color
     if (bounty.status === 'open' && requestStatus === 'pending') return '#3b82f6'; // blue for applied
     if (requestStatus === 'rejected') return '#ef4444'; // red for rejected
@@ -103,6 +110,7 @@ export function BountyCard({
   const getStatusLabel = () => {
     if (reviewNeeded) return 'REVIEW NEEDED';
     if (submittedForReview) return 'SUBMITTED FOR REVIEW';
+    if (isDeadlinePassed) return 'DEADLINE PASSED';
     if (bounty.status === 'open' && requestStatus === 'pending') return 'APPLIED';
     if (requestStatus === 'rejected') return 'REJECTED';
     switch (bounty.status) {
@@ -261,8 +269,11 @@ export function BountyCard({
                     <Text style={styles.actionButtonText}>Edit</Text>
                   </TouchableOpacity>
                 )}
-              {/* Show Delete only for open bounties without an accepted hunter (defensive check for race conditions) */}
-              {onDelete && bounty.status === 'open' && !bounty.accepted_by && (
+              {/* Show Delete for bounties without an accepted hunter — either still open,
+                  or open-with-expired-deadline. Bounties with an accepted hunter (in_progress)
+                  are excluded even if their deadline passed, since escrow/refund handling for
+                  an active hunter relationship isn't covered by plain deletion. */}
+              {onDelete && !bounty.accepted_by && (isDeadlinePassed || bounty.status === 'open') && (
                 <TouchableOpacity
                   style={styles.actionButton}
                   onPress={e => {
