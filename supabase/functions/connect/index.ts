@@ -33,11 +33,11 @@ function jsonResponse(data: unknown, status = 200) {
 // (local imports are not supported by the Supabase bundler — keep both copies
 // in sync; the sibling module is the unit-tested source of truth)
 
-/** Minimum withdrawal in USD — keep in sync with lib/constants.ts MIN_WITHDRAWAL_AMOUNT. */
-const MIN_WITHDRAWAL_USD = 10;
+/** Minimum withdrawal in USD — env-configurable via WITHDRAW_MIN_USD; defaults to 10. */
+const MIN_WITHDRAWAL_USD = Number(Deno.env.get('WITHDRAW_MIN_USD') ?? '10');
 
-/** Maximum single withdrawal in USD (fraud/typo guard). */
-const MAX_WITHDRAWAL_USD = 10000;
+/** Maximum single withdrawal in USD (fraud/typo guard) — env-configurable via WITHDRAW_MAX_USD; defaults to 10000. */
+const MAX_WITHDRAWAL_USD = Number(Deno.env.get('WITHDRAW_MAX_USD') ?? '10000');
 
 type WithdrawalValidationResult =
   | { ok: true; amount: number; amountCents: number }

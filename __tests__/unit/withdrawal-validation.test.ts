@@ -163,12 +163,14 @@ describe('connect edge function contract (inlined helpers stay in sync)', () => 
     'utf8'
   );
 
-  test('inlines the withdrawal validation helpers', () => {
+  test('inlines the withdrawal validation helpers with env-configurable default limits', () => {
     expect(indexSource).toContain('function validateWithdrawalRequest');
     expect(indexSource).toContain('function mapStripeTransferError');
     expect(indexSource).toContain('function mapWithdrawBalanceError');
-    expect(indexSource).toContain(`MIN_WITHDRAWAL_USD = ${MIN_WITHDRAWAL_USD}`);
-    expect(indexSource).toContain(`MAX_WITHDRAWAL_USD = ${MAX_WITHDRAWAL_USD}`);
+    // Verify the env-configurable initialiser uses the correct default values
+    // (matching the exported constants from the sibling module).
+    expect(indexSource).toContain(`WITHDRAW_MIN_USD') ?? '${MIN_WITHDRAWAL_USD}'`);
+    expect(indexSource).toContain(`WITHDRAW_MAX_USD') ?? '${MAX_WITHDRAWAL_USD}'`);
   });
 
   test('replays duplicate withdrawals via the idempotency_key column', () => {
