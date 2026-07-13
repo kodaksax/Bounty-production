@@ -38,7 +38,6 @@ interface WithdrawWithBankScreenProps {
   balance?: number;
 }
 
-<<<<<<< HEAD
 // Client-side copy for server-classified withdrawal error codes (see
 // supabase/functions/connect/index.ts). The server's `error` string is still
 // shown as the alert body; this only picks a more specific title.
@@ -55,12 +54,11 @@ const ERROR_TITLES: Record<string, string> = {
 function isNetworkError(error: unknown): boolean {
   return error instanceof TypeError || (error instanceof Error && /network/i.test(error.message));
 }
-=======
+
 // Height of the bottom tab bar + gap, so the sticky Withdraw button sits
 // fully above it (same convention as postings-screen.tsx and the
 // CreateBounty Step*.tsx screens).
 const BOTTOM_NAV_OFFSET = 60;
->>>>>>> origin/main
 
 export function WithdrawWithBankScreen({
   onBack,
@@ -492,53 +490,7 @@ export function WithdrawWithBankScreen({
               </TouchableOpacity>
             </View>
           </View>
-<<<<<<< HEAD
-          <Text style={s.limitsHint}>
-            Min ${minWithdrawal.toFixed(2)}
-            {maxWithdrawal != null ? ` · Max $${maxWithdrawal.toFixed(2)}` : ''}
-          </Text>
-          <View style={s.quickAmounts}>
-            <TouchableOpacity
-              style={s.quickAmountButton}
-              onPress={() => setWithdrawalAmount((balance * 0.25).toFixed(2))}
-              accessibilityLabel="Withdraw 25% of balance"
-              accessibilityRole="button"
-            >
-              <Text style={s.quickAmountText}>25%</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={s.quickAmountButton}
-              onPress={() => setWithdrawalAmount((balance * 0.5).toFixed(2))}
-              accessibilityLabel="Withdraw 50% of balance"
-              accessibilityRole="button"
-            >
-              <Text style={s.quickAmountText}>50%</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={s.quickAmountButton}
-              onPress={() => setWithdrawalAmount((balance * 0.75).toFixed(2))}
-              accessibilityLabel="Withdraw 75% of balance"
-              accessibilityRole="button"
-            >
-              <Text style={s.quickAmountText}>75%</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={s.quickAmountButton}
-              onPress={() =>
-                setWithdrawalAmount(
-                  (maxWithdrawal != null ? Math.min(balance, maxWithdrawal) : balance).toFixed(2)
-                )
-              }
-              accessibilityLabel="Withdraw maximum balance"
-              accessibilityRole="button"
-            >
-              <Text style={s.quickAmountText}>Max</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-=======
         )}
->>>>>>> origin/main
 
         {/* Bank Accounts Section */}
         <View style={s.section}>
@@ -637,6 +589,10 @@ export function WithdrawWithBankScreen({
               accessibilityHint="Enter the amount you want to withdraw"
             />
           </View>
+          <Text style={s.limitsHint}>
+            Min ${minWithdrawal.toFixed(2)}
+            {maxWithdrawal != null ? ` · Max $${maxWithdrawal.toFixed(2)}` : ''}
+          </Text>
           <View style={s.quickAmounts}>
             <TouchableOpacity
               style={s.quickAmountButton}
@@ -664,7 +620,9 @@ export function WithdrawWithBankScreen({
             </TouchableOpacity>
             <TouchableOpacity
               style={s.quickAmountButton}
-              onPress={() => setWithdrawalAmount(balance.toFixed(2))}
+              onPress={() => setWithdrawalAmount(
+                  (maxWithdrawal != null ? Math.min(balance, maxWithdrawal) : balance).toFixed(2)
+                )}
               accessibilityLabel="Withdraw maximum balance"
               accessibilityRole="button"
             >
