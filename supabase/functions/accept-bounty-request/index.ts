@@ -27,13 +27,64 @@ serve(async (req: Request) => {
     if (req.method !== 'POST')
       return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
 
+    // Authenticate the caller. This function calls the DB RPC with the
+    // service-role key (which carries no auth.uid() context), so without this
+    // check ANY authenticated user could accept ANY pending bounty request for
+    // ANY bounty by supplying an arbitrary request_id — the RPC itself only
+    // validates request/bounty state, not caller identity.
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return new Response(JSON.stringify({ error: 'Missing or invalid authorization header' }), {
+        status: 401,
+      });
+    }
+    const callerToken = authHeader.substring(7);
+    const baseUrl = SUPABASE_URL.replace(/\/$/, '');
+    const userResp = await fetch(`${baseUrl}/auth/v1/user`, {
+      headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${callerToken}` },
+    }).catch(() => null);
+    if (!userResp || !userResp.ok) {
+      return new Response(JSON.stringify({ error: 'Invalid or expired token' }), { status: 401 });
+    }
+    const callerUser: any = await userResp.json().catch(() => null);
+    const callerId = callerUser?.id;
+    if (!callerId) {
+      return new Response(JSON.stringify({ error: 'Invalid or expired token' }), { status: 401 });
+    }
+
     const body: any = await (req.json?.() ?? Promise.resolve(null)).catch(() => null);
     const requestId = body?.request_id || body?.id;
     if (!requestId)
       return new Response(JSON.stringify({ error: 'Missing request_id' }), { status: 400 });
 
+    // Verify the caller is the poster who owns the bounty this request targets
+    // before mutating anything. bounty_requests.poster_id is denormalized onto
+    // the row specifically for checks like this.
+    const lookupUrl = `${baseUrl}/rest/v1/bounty_requests?id=eq.${encodeURIComponent(
+      String(requestId)
+    )}&select=poster_id,status`;
+    const lookupResp = await fetch(lookupUrl, {
+      headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` },
+    }).catch(() => null);
+    if (!lookupResp || !lookupResp.ok) {
+      return new Response(JSON.stringify({ error: 'Failed to verify bounty request' }), {
+        status: 502,
+      });
+    }
+    const lookupRows: any = await lookupResp.json().catch(() => null);
+    const requestRow = Array.isArray(lookupRows) ? lookupRows[0] : null;
+    if (!requestRow) {
+      return new Response(JSON.stringify({ error: 'Not Found' }), { status: 404 });
+    }
+    if (requestRow.poster_id !== callerId) {
+      return new Response(
+        JSON.stringify({ error: 'Forbidden: only the bounty poster can accept requests' }),
+        { status: 403 }
+      );
+    }
+
     // Call the DB-stored PL/pgSQL function via Supabase REST RPC endpoint
-    const rpcUrl = `${SUPABASE_URL.replace(/\/$/, '')}/rest/v1/rpc/fn_accept_bounty_request`;
+    const rpcUrl = `${baseUrl}/rest/v1/rpc/fn_accept_bounty_request`;
 
     const rpcResp = await fetch(rpcUrl, {
       method: 'POST',

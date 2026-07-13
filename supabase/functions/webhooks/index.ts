@@ -672,23 +672,53 @@ Deno.serve(async (req: Request) => {
         // delivery of the same event is a no-op — the row already has
         // stripe_transfer_id set and the `.is('stripe_transfer_id', null)` filter
         // will match zero rows, leaving the database unchanged.
+        //
+        // NOTE: PostgREST does not support `order`/`limit` as a way to restrict
+        // *which* rows an UPDATE affects (only `select()` honors them; mutations
+        // only support the separate `maxAffected()` cap). Chaining `.order().limit(1)`
+        // directly onto `.update()` does not scope the write to a single row — if more
+        // than one matching candidate ever existed, ALL of them would be updated. We
+        // therefore SELECT the single best candidate first (order/limit are valid
+        // there), then UPDATE that specific row by id with an optimistic-lock guard.
         const transfer = event.data.object as Stripe.Transfer;
         console.log(`[webhooks] Transfer created: ${transfer.id}`);
         const transferUserId = transfer.metadata?.user_id;
         const transferAmountDollars = transfer.amount / 100;
         if (transferUserId) {
-          await supabase
+          const { data: candidateTx, error: candidateErr } = await supabase
             .from('wallet_transactions')
-            .update({
-              stripe_transfer_id: transfer.id,
-              metadata: { transfer_status: 'created' },
-            })
+            .select('id')
             .eq('user_id', transferUserId)
             .eq('type', 'withdrawal')
             .eq('amount', -transferAmountDollars)
             .is('stripe_transfer_id', null)
             .order('created_at', { ascending: false })
-            .limit(1);
+            .limit(1)
+            .maybeSingle();
+
+          if (candidateErr) {
+            console.error('[webhooks] Failed to look up candidate transaction for transfer.created', {
+              transferId: transfer.id,
+              userId: transferUserId,
+              error: candidateErr,
+            });
+          } else if (candidateTx) {
+            const { error: backfillErr } = await supabase
+              .from('wallet_transactions')
+              .update({
+                stripe_transfer_id: transfer.id,
+                metadata: { transfer_status: 'created' },
+              })
+              .eq('id', (candidateTx as { id: string }).id)
+              .is('stripe_transfer_id', null); // optimistic-lock guard against a concurrent backfill
+            if (backfillErr) {
+              console.error('[webhooks] Failed to backfill stripe_transfer_id for transfer.created', {
+                transferId: transfer.id,
+                transactionId: (candidateTx as { id: string }).id,
+                error: backfillErr,
+              });
+            }
+          }
         }
         break;
       }

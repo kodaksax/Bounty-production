@@ -89,6 +89,15 @@ Deno.serve(async (req: Request) => {
           user_id: user.id,
           bounty_id: sanitizedBountyId,
           payment_method: 'apple_pay',
+          // The mobile client only calls this endpoint from the "Add Money to
+          // Wallet" flow (lib/services/apple-pay-service.ts), then persists the
+          // deposit client-side via POST /wallet/deposit. Without this tag, the
+          // webhooks function's payment_intent.succeeded handler skips crediting
+          // the wallet for Apple Pay intents (it only acts on purpose ===
+          // 'wallet_deposit'), so a client crash between the Apple Pay charge
+          // succeeding and the client-side persist call would charge the user
+          // without ever crediting their balance, with no server-side backstop.
+          purpose: 'wallet_deposit',
         },
         description: sanitizedDescription,
       })

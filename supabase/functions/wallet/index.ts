@@ -396,17 +396,71 @@ Deno.serve(async (req: Request) => {
         // Prevent double-refund / double-release.
         // Also block on 'pending' records: if a prior attempt credited the user's balance
         // but failed to promote the transaction to 'completed', the pending row must be
-        // treated as a completed settlement to prevent a retry from double-crediting.
+        // treated as a completed settlement to prevent a retry from double-crediting —
+        // UNLESS it's our own pending 'refund' row, in which case we finalize it below
+        // via the same atomic recovery path used by /wallet/release (apply_refund_tx).
         const { data: existingSettlement } = await supabase
           .from('wallet_transactions')
-          .select('id, type, status')
+          .select('id, user_id, type, status, amount')
           .eq('bounty_id', bountyId)
           .in('type', ['release', 'refund'])
           .in('status', ['completed', 'pending'])
           .maybeSingle();
         if (existingSettlement) {
-          const verb = (existingSettlement as any).type === 'release' ? 'released' : 'refunded';
-          const isPending = (existingSettlement as any).status === 'pending';
+          const settlement = existingSettlement as WalletTransaction;
+          const isPending = settlement.status === 'pending';
+          if (isPending && settlement.type === 'refund' && settlement.user_id === userId) {
+            // Recovery path: a prior attempt inserted the pending transaction but the
+            // process crashed before the balance credit and status promotion could both
+            // commit. apply_refund_tx atomically promotes the status AND credits the
+            // balance in a single PG transaction, so a pending row reliably means
+            // "not yet credited" — no double-credit is possible.
+            const recoveryAmount = Math.abs(Number(settlement.amount) || 0);
+
+            const { data: recoveryResult, error: recoveryErr } = await supabase.rpc(
+              'apply_refund_tx',
+              {
+                p_tx_id: settlement.id,
+                p_user_id: userId,
+                p_amount: recoveryAmount,
+              }
+            );
+            if (recoveryErr) {
+              console.error('[wallet] recovery: apply_refund_tx RPC error:', recoveryErr);
+              return jsonResponse(
+                { error: 'Failed to finalize pending refund during recovery' },
+                500
+              );
+            }
+
+            const recoveryApplied = Array.isArray(recoveryResult)
+              ? (recoveryResult[0] as any)?.applied
+              : (recoveryResult as any)?.applied;
+            if (recoveryApplied) {
+              console.log('[wallet] recovery: apply_refund_tx applied balance credit:', {
+                txId: settlement.id,
+              });
+            } else {
+              // applied=false means the UPDATE WHERE status='pending' matched no rows —
+              // a concurrent request already completed this transaction (idempotent success).
+              console.warn(
+                '[wallet] recovery: apply_refund_tx returned applied=false — ' +
+                  'transaction was likely already completed by a concurrent request:',
+                settlement.id
+              );
+            }
+
+            return jsonResponse({
+              success: true,
+              transactionId: settlement.id,
+              amount: recoveryAmount,
+              message: recoveryApplied
+                ? 'Existing pending refund finalized.'
+                : 'Refund already completed (concurrent finalization).',
+            });
+          }
+
+          const verb = settlement.type === 'release' ? 'released' : 'refunded';
           return jsonResponse(
             {
               error: isPending
@@ -464,63 +518,37 @@ Deno.serve(async (req: Request) => {
           return jsonResponse({ error: 'Failed to create refund transaction' }, 500);
         }
 
-        // Credit balance
-        const { data: profileData2, error: profileFetchErr2 } = await supabase
-          .from('profiles')
-          .select('balance')
-          .eq('id', userId)
-          .single();
-        if (profileFetchErr2 || !profileData2) {
-          console.error('[wallet] fetch balance error before refund credit:', profileFetchErr2);
-          const { error: rollbackErr1 } = await supabase
+        // Atomically credit the poster's balance and promote the transaction to
+        // 'completed' in a single PG transaction via apply_refund_tx. This eliminates
+        // the lost-update race of a separate read-balance/write-balance round trip, and
+        // the window where a process crash between separate calls would leave a pending
+        // transaction with an already-credited balance (which would double-credit on retry).
+        const { data: refundResult, error: refundRpcErr } = await supabase.rpc(
+          'apply_refund_tx',
+          {
+            p_tx_id: (refundTxRow as WalletTransaction).id,
+            p_user_id: userId,
+            p_amount: refundAmount,
+          }
+        );
+        if (refundRpcErr) {
+          console.error('[wallet] apply_refund_tx RPC error:', refundRpcErr);
+          // Roll back the pending transaction so the caller can retry cleanly.
+          await supabase
             .from('wallet_transactions')
             .delete()
             .eq('id', (refundTxRow as WalletTransaction).id);
-          if (rollbackErr1) {
-            console.error(
-              '[wallet] CRITICAL: failed to roll back pending refund tx after balance fetch error; tx id:',
-              (refundTxRow as WalletTransaction).id,
-              rollbackErr1
-            );
-          }
-          return jsonResponse({ error: 'Failed to fetch balance for refund' }, 500);
-        }
-        const currentBalance2: number = (profileData2 as Profile | null)?.balance ?? 0;
-        const { error: balanceErr2 } = await supabase
-          .from('profiles')
-          .update({ balance: currentBalance2 + refundAmount })
-          .eq('id', userId);
-        if (balanceErr2) {
-          console.error(
-            '[wallet] balance credit error after refund, rolling back tx:',
-            balanceErr2
-          );
-          const { error: rollbackErr2 } = await supabase
-            .from('wallet_transactions')
-            .delete()
-            .eq('id', (refundTxRow as WalletTransaction).id);
-          if (rollbackErr2) {
-            console.error(
-              '[wallet] CRITICAL: failed to roll back pending refund tx after balance update error; tx id:',
-              (refundTxRow as WalletTransaction).id,
-              rollbackErr2
-            );
-          }
-          return jsonResponse({ error: 'Failed to update balance' }, 500);
+          return jsonResponse({ error: 'Failed to finalize refund transaction' }, 500);
         }
 
-        // Balance updated — promote the transaction to 'completed' atomically
-        const { error: confirmErr } = await supabase
-          .from('wallet_transactions')
-          .update({ status: 'completed' })
-          .eq('id', (refundTxRow as WalletTransaction).id);
-        if (confirmErr) {
-          // Balance was credited but the status promotion failed. Log for manual reconciliation;
-          // do not return an error to the caller since the funds have already moved.
-          console.error(
-            '[wallet] CRITICAL: balance credited but failed to mark refund tx completed; tx id:',
-            (refundTxRow as WalletTransaction).id,
-            confirmErr
+        const refundApplied = Array.isArray(refundResult)
+          ? (refundResult[0] as any)?.applied
+          : (refundResult as any)?.applied;
+        if (!refundApplied) {
+          // Should not happen for a freshly-inserted pending row; log for investigation.
+          console.warn(
+            '[wallet] apply_refund_tx returned applied=false for new pending tx:',
+            (refundTxRow as WalletTransaction).id
           );
         }
 

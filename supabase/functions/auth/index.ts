@@ -268,12 +268,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
       try {
         const { error: adminError } = await supabase.auth.admin.deleteUser(userId);
         if (adminError) {
-          console.warn('[auth] admin.deleteUser failed, will fallback:', adminError.message);
+          console.error('[auth] admin.deleteUser failed, will fallback to profile-only deletion:', adminError.message);
         } else {
           adminDeleted = true;
         }
       } catch (e: unknown) {
-        console.warn('[auth] admin.deleteUser threw, will fallback:', (e as Error).message);
+        console.error('[auth] admin.deleteUser threw, will fallback to profile-only deletion:', (e as Error).message);
       }
 
       // Step 3: Fallback manual profile deletion if admin delete failed
@@ -286,6 +286,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
             500
           );
         }
+        // NOTE: the auth.users record still exists at this point — only the app
+        // profile was removed. The account can still authenticate. Logged at
+        // error level above so this partial state is diagnosable/alertable
+        // instead of silently reporting as a full deletion.
+        console.error(`[auth] PARTIAL DELETION for user ${userId}: profile removed but auth identity was NOT deleted. Manual cleanup required.`);
+        return jsonResponse({
+          success: true,
+          message: 'Account deletion completed successfully.',
+          warning: 'partial_deletion_auth_identity_retained',
+        });
       }
 
       console.log(`[auth] Deletion flow complete for user ${userId}`);

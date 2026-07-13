@@ -35,6 +35,8 @@ export function mapTypeToPreferenceKey(type: unknown): string | null {
       return 'follows';
     case 'dispute':
       return 'disputes';
+    case 'bounty_expiry':
+      return 'updates';
     default:
       return null;
   }

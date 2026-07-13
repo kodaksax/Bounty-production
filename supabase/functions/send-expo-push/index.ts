@@ -9,8 +9,28 @@
 // Use an explicit Deno std URL to ensure the Supabase bundler can resolve it
 import { serve } from 'https://deno.land/std@0.203.0/http/server.ts'
 
+// This function accepts an arbitrary array of { to, title, body, data } and
+// forwards it verbatim to Expo — there is no per-recipient ownership check,
+// so it must only ever be callable by trusted, server-side callers (this
+// project's `services/api` bridge). The Supabase gateway's JWT check alone is
+// not enough here: any signed-up app user has a valid JWT and could otherwise
+// use this as an open push-notification relay to spam arbitrary titles/bodies
+// to arbitrary Expo tokens. Require the caller to present the service role
+// key specifically.
+const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+
 serve(async (req) => {
   if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 })
+
+  if (!SERVICE_ROLE_KEY) {
+    console.error('[send-expo-push] SUPABASE_SERVICE_ROLE_KEY not configured')
+    return new Response('Server misconfigured', { status: 500 })
+  }
+  const authHeader = req.headers.get('Authorization')
+  const presentedToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : ''
+  if (presentedToken !== SERVICE_ROLE_KEY) {
+    return new Response('Unauthorized', { status: 401 })
+  }
 
   try {
     const messages = await req.json()
