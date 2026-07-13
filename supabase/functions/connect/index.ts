@@ -8,7 +8,7 @@
 //   POST /connect/transfer
 //   POST /connect/retry-transfer
 //   GET  /connect/bank-accounts            (list external bank accounts on Connect account)
-//   POST /connect/bank-accounts            (add a bank account to Connect account)
+//   POST /connect/bank-accounts            (deprecated — 410, use Financial Connections)
 //   DELETE /connect/bank-accounts/:id      (remove a bank account)
 //   POST /connect/bank-accounts/:id/default (set a bank account as default for currency)
 
@@ -22,11 +22,40 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
 };
 
-function jsonResponse(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), {
+// Server-side withdrawal guardrails (env-configurable; Stripe's own transfer
+// floor is ~$1, so WITHDRAW_MIN should never be set below that).
+const WITHDRAW_MIN = Number(Deno.env.get('WITHDRAW_MIN_USD') ?? '1');
+const WITHDRAW_MAX = Number(Deno.env.get('WITHDRAW_MAX_USD') ?? '2000');
+
+function jsonResponse(data: unknown, status = 200, correlationId?: string) {
+  const body = correlationId ? { ...(data as Record<string, unknown>), correlationId } : data;
+  return new Response(JSON.stringify(body), {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
+}
+
+// withdraw_balance() raises 23514 for "not enough available balance" (which
+// includes balance held by an open dispute) and P0001+HINT specifically for
+// a frozen balance (chargeback in progress). Map both to actionable 400s
+// instead of the generic 500 a raw RPC failure would otherwise produce.
+function classifyWithdrawError(err: { code?: string; message?: string; hint?: string } | null) {
+  if (err?.code === '23514') {
+    return {
+      status: 400,
+      body: { error: "You don't have enough available balance for this withdrawal.", code: 'insufficient_balance' },
+    };
+  }
+  if (err?.code === 'P0001' && err.hint) {
+    return {
+      status: 400,
+      body: { error: 'Your balance is temporarily on hold due to an open dispute.', code: 'frozen' },
+    };
+  }
+  return {
+    status: 500,
+    body: { error: 'Could not reserve your balance. Please try again.' },
+  };
 }
 
 Deno.serve(async (req: Request) => {
@@ -34,6 +63,7 @@ Deno.serve(async (req: Request) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  const correlationId = crypto.randomUUID();
   const url = new URL(req.url);
   const pathParts = url.pathname.split('/connect');
   const subPath = pathParts.length > 1 ? pathParts[1] : '/';
@@ -67,12 +97,12 @@ Deno.serve(async (req: Request) => {
     !(req.method === 'GET' && isBankAccountsPath) &&
     !(req.method === 'DELETE' && isBankAccountsPath)
   ) {
-    return jsonResponse({ error: 'Method not allowed' }, 405);
+    return jsonResponse({ error: 'Method not allowed' }, 405, correlationId);
   }
 
   const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
   if (!stripeKey) {
-    return jsonResponse({ error: 'Stripe not configured' }, 500);
+    return jsonResponse({ error: 'Stripe not configured' }, 500, correlationId);
   }
   const stripe = new Stripe(stripeKey, {
     apiVersion: '2023-10-16',
@@ -88,7 +118,7 @@ Deno.serve(async (req: Request) => {
   // Authenticate user
   const authHeader = req.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) {
-    return jsonResponse({ error: 'Missing or invalid authorization header' }, 401);
+    return jsonResponse({ error: 'Missing or invalid authorization header' }, 401, correlationId);
   }
   const token = authHeader.substring(7);
   const {
@@ -96,9 +126,11 @@ Deno.serve(async (req: Request) => {
     error: authError,
   } = await supabase.auth.getUser(token);
   if (authError || !user) {
-    return jsonResponse({ error: 'Invalid or expired token' }, 401);
+    return jsonResponse({ error: 'Invalid or expired token' }, 401, correlationId);
   }
   const userId = user.id;
+  const log = (msg: string, extra: Record<string, unknown> = {}) =>
+    console.log(`[connect] ${msg}`, JSON.stringify({ correlationId, userId, ...extra }));
 
   try {
     const appUrl = Deno.env.get('APP_URL') ?? 'http://localhost:8081';
@@ -128,7 +160,8 @@ Deno.serve(async (req: Request) => {
             {
               error: 'No Stripe Connect account found to update. Please complete onboarding first.',
             },
-            400
+            400,
+            correlationId
           );
         }
         const account = await stripe.accounts.create({
@@ -146,7 +179,7 @@ Deno.serve(async (req: Request) => {
           .from('profiles')
           .update({ stripe_connect_account_id: accountId })
           .eq('id', userId);
-        console.log(`[connect] Created new account: ${accountId} for user ${userId}`);
+        log('created new connect account', { accountId });
       }
 
       const accountLink = await stripe.accountLinks.create({
@@ -156,11 +189,15 @@ Deno.serve(async (req: Request) => {
         type: accountLinkType,
       });
 
-      return jsonResponse({
-        url: accountLink.url,
-        accountId,
-        expiresAt: accountLink.expires_at * 1000,
-      });
+      return jsonResponse(
+        {
+          url: accountLink.url,
+          accountId,
+          expiresAt: accountLink.expires_at * 1000,
+        },
+        200,
+        correlationId
+      );
     }
 
     // POST /connect/create-account-session
@@ -171,7 +208,7 @@ Deno.serve(async (req: Request) => {
       const publishableKey = Deno.env.get('STRIPE_PUBLISHABLE_KEY');
       if (!publishableKey) {
         console.error('[connect] STRIPE_PUBLISHABLE_KEY not configured');
-        return jsonResponse({ error: 'Stripe publishable key not configured' }, 500);
+        return jsonResponse({ error: 'Stripe publishable key not configured' }, 500, correlationId);
       }
 
       const body = await req.json().catch(() => ({}));
@@ -216,9 +253,9 @@ Deno.serve(async (req: Request) => {
             error: updateError,
           });
           // We created an orphan Stripe account; surface the error so the client retries.
-          return jsonResponse({ error: 'Failed to save account. Please try again.' }, 500);
+          return jsonResponse({ error: 'Failed to save account. Please try again.' }, 500, correlationId);
         }
-        console.log(`[connect] Created new Express account ${accountId} for user ${userId}`);
+        log('created new express account', { accountId });
       }
 
       // Build the components payload. Accept either:
@@ -270,12 +307,16 @@ Deno.serve(async (req: Request) => {
         components: componentsPayload as Stripe.AccountSessionCreateParams.Components,
       });
 
-      return jsonResponse({
-        clientSecret: accountSession.client_secret,
-        publishableKey,
-        accountId,
-        expiresAt: accountSession.expires_at * 1000,
-      });
+      return jsonResponse(
+        {
+          clientSecret: accountSession.client_secret,
+          publishableKey,
+          accountId,
+          expiresAt: accountSession.expires_at * 1000,
+        },
+        200,
+        correlationId
+      );
     }
 
     // POST /connect/verify-onboarding
@@ -288,7 +329,7 @@ Deno.serve(async (req: Request) => {
 
       const profileRow = profile as (Profile & { payout_failed_at?: string | null }) | null;
       if (!profileRow?.stripe_connect_account_id) {
-        return jsonResponse({ onboarded: false });
+        return jsonResponse({ onboarded: false }, 200, correlationId);
       }
 
       const account = await stripe.accounts.retrieve(profileRow.stripe_connect_account_id);
@@ -304,7 +345,7 @@ Deno.serve(async (req: Request) => {
       if (account.payouts_enabled && profileRow.payout_failed_at) {
         profileUpdates.payout_failed_at = null;
         profileUpdates.payout_failure_code = null;
-        console.log(`[connect] Cleared payout_failed_at for user ${userId} — payouts re-enabled`);
+        log('cleared payout_failed_at — payouts re-enabled');
       }
 
       if (Object.keys(profileUpdates).length > 0) {
@@ -318,28 +359,80 @@ Deno.serve(async (req: Request) => {
             userId,
             error: updateError,
           });
-          return jsonResponse({ error: 'Failed to update account status. Please try again.' }, 500);
+          return jsonResponse({ error: 'Failed to update account status. Please try again.' }, 500, correlationId);
         }
       }
 
-      return jsonResponse({
-        onboarded,
-        accountId: account.id,
-        chargesEnabled: account.charges_enabled,
-        payoutsEnabled: account.payouts_enabled,
-        detailsSubmitted: account.details_submitted,
-        payoutFailedCleared: account.payouts_enabled && !!profileRow.payout_failed_at,
-      });
+      return jsonResponse(
+        {
+          onboarded,
+          accountId: account.id,
+          chargesEnabled: account.charges_enabled,
+          payoutsEnabled: account.payouts_enabled,
+          detailsSubmitted: account.details_submitted,
+          payoutFailedCleared: account.payouts_enabled && !!profileRow.payout_failed_at,
+        },
+        200,
+        correlationId
+      );
     }
 
     // POST /connect/transfer
     if (subPath === '/transfer') {
       const body = await req.json();
-      const { currency = 'usd' } = body;
+      const currency = String(body.currency ?? 'usd').toLowerCase();
       const amount = Number(body.amount);
+      const clientIdempotencyKey =
+        typeof body.idempotencyKey === 'string' ? body.idempotencyKey.trim() : '';
 
       if (!Number.isFinite(amount) || amount <= 0) {
-        return jsonResponse({ error: 'Invalid amount' }, 400);
+        return jsonResponse({ error: 'Enter a valid amount to withdraw.' }, 400, correlationId);
+      }
+      if (amount < WITHDRAW_MIN) {
+        return jsonResponse(
+          { error: `Minimum withdrawal is $${WITHDRAW_MIN.toFixed(2)}.`, code: 'below_minimum' },
+          400,
+          correlationId
+        );
+      }
+      if (amount > WITHDRAW_MAX) {
+        return jsonResponse(
+          {
+            error: `Maximum withdrawal is $${WITHDRAW_MAX.toFixed(2)} per transaction.`,
+            code: 'above_maximum',
+          },
+          400,
+          correlationId
+        );
+      }
+
+      // Idempotent replay: if the client already submitted this exact request (e.g. a
+      // retried tap after a dropped response), return the existing ledger row instead
+      // of debiting the balance a second time.
+      if (clientIdempotencyKey) {
+        const { data: existingTx } = await supabase
+          .from('wallet_transactions')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('type', 'withdrawal')
+          .contains('metadata', { idempotencyKey: clientIdempotencyKey })
+          .maybeSingle();
+        if (existingTx) {
+          const t = existingTx as WalletTransaction;
+          return jsonResponse(
+            {
+              transferId: t.stripe_transfer_id,
+              status: t.status,
+              amount: Math.abs(t.amount),
+              currency,
+              transactionId: t.id,
+              idempotent: true,
+              message: 'This withdrawal was already submitted.',
+            },
+            200,
+            correlationId
+          );
+        }
       }
 
       const { data: profile } = await supabase
@@ -349,18 +442,26 @@ Deno.serve(async (req: Request) => {
         .single();
 
       if (!profile) {
-        return jsonResponse({ error: 'Profile not found' }, 404);
+        return jsonResponse({ error: 'Profile not found.' }, 404, correlationId);
       }
 
       const p = profile as Profile;
       if (!p.stripe_connect_account_id || !p.stripe_connect_onboarded_at) {
-        return jsonResponse({ error: 'Stripe Connect account not set up' }, 400);
+        return jsonResponse(
+          { error: 'Link and verify a bank account before withdrawing.', code: 'not_onboarded' },
+          400,
+          correlationId
+        );
       }
 
       // Enforce hold: available = balance - balance_on_hold.
       const available = (p.balance ?? 0) - (p.balance_on_hold ?? 0);
       if (available < amount) {
-        return jsonResponse({ error: 'Insufficient balance' }, 400);
+        return jsonResponse(
+          { error: "You don't have enough available balance for this withdrawal.", code: 'insufficient_balance' },
+          400,
+          correlationId
+        );
       }
 
       // Deduct balance atomically via withdraw_balance which enforces the hold check.
@@ -370,30 +471,15 @@ Deno.serve(async (req: Request) => {
       });
 
       if (balanceError) {
-        console.error('[connect] Error deducting balance before transfer:', balanceError);
-        return jsonResponse({ error: 'Failed to reserve balance' }, 500);
+        log('withdraw_balance rpc failed', { error: balanceError.message, code: balanceError.code });
+        const { status, body } = classifyWithdrawError(balanceError);
+        return jsonResponse(body, status, correlationId);
       }
 
-      let transfer: Stripe.Transfer;
-      try {
-        transfer = await stripe.transfers.create({
-          amount: Math.round(amount * 100),
-          currency,
-          destination: p.stripe_connect_account_id,
-          metadata: { user_id: userId },
-        });
-      } catch (stripeError) {
-        // Refund the deducted balance if Stripe transfer creation fails
-        console.error('[connect] Transfer creation failed, refunding balance:', stripeError);
-        await supabase
-          .rpc('update_balance', { p_user_id: userId, p_amount: amount })
-          .catch((rpcErr: unknown) =>
-            console.error('[connect] Balance refund after failed transfer also failed:', rpcErr)
-          );
-        throw stripeError;
-      }
-
-      const { data: transaction, error: txError } = await supabase
+      // Reserve the ledger row before calling Stripe so a crash between the debit and
+      // the transfer call still leaves an auditable pending record, and so the Stripe
+      // idempotency key below is stable across retries of this same request.
+      const { data: pendingTx, error: insertError } = await supabase
         .from('wallet_transactions')
         .insert({
           user_id: userId,
@@ -401,28 +487,100 @@ Deno.serve(async (req: Request) => {
           amount: -amount,
           description: 'Withdrawal to bank account',
           status: 'pending',
-          stripe_transfer_id: transfer.id,
           stripe_connect_account_id: p.stripe_connect_account_id,
-          metadata: { transfer },
+          metadata: { correlationId, ...(clientIdempotencyKey ? { idempotencyKey: clientIdempotencyKey } : {}) },
         })
         .select()
         .single();
 
-      if (txError) {
-        console.error('[connect] Error creating transaction:', txError);
-        throw txError;
+      if (insertError || !pendingTx) {
+        log('failed to reserve ledger row, refunding', { error: insertError?.message });
+        await supabase
+          .rpc('update_balance', { p_user_id: userId, p_amount: amount })
+          .catch((rpcErr: unknown) =>
+            log('balance refund after ledger insert failure also failed', { error: String(rpcErr) })
+          );
+        return jsonResponse({ error: 'Could not start your withdrawal. Please try again.' }, 500, correlationId);
+      }
+      const transactionId = (pendingTx as WalletTransaction).id;
+
+      let transfer: Stripe.Transfer;
+      try {
+        transfer = await stripe.transfers.create(
+          {
+            amount: Math.round(amount * 100),
+            currency,
+            destination: p.stripe_connect_account_id,
+            metadata: { user_id: userId, transaction_id: transactionId, correlation_id: correlationId },
+          },
+          { idempotencyKey: `transfer_${transactionId}` }
+        );
+      } catch (stripeError) {
+        const se = stripeError as { code?: string; message?: string };
+        log('transfer creation failed, refunding balance', { code: se.code, message: se.message });
+
+        await supabase
+          .from('wallet_transactions')
+          .update({
+            status: 'failed',
+            metadata: {
+              correlationId,
+              ...(clientIdempotencyKey ? { idempotencyKey: clientIdempotencyKey } : {}),
+              failure_code: se.code,
+              failure_message: se.message,
+            },
+          })
+          .eq('id', transactionId);
+
+        await supabase
+          .rpc('update_balance', { p_user_id: userId, p_amount: amount })
+          .catch((rpcErr: unknown) =>
+            log('balance refund after failed transfer also failed', { error: String(rpcErr) })
+          );
+
+        // Distinguish the "platform is out of money" case from generic Stripe
+        // declines so support/logs make the root cause obvious.
+        if (se.code === 'balance_insufficient') {
+          return jsonResponse(
+            { error: 'Withdrawals are temporarily unavailable. Our team has been notified.', code: 'platform_funds' },
+            503,
+            correlationId
+          );
+        }
+        return jsonResponse(
+          { error: 'Your withdrawal could not be processed. Please try again shortly.', code: 'transfer_failed' },
+          502,
+          correlationId
+        );
       }
 
-      return jsonResponse({
-        transferId: transfer.id,
-        status: 'pending',
-        amount,
-        currency,
-        accountId: p.stripe_connect_account_id,
-        transactionId: (transaction as WalletTransaction).id,
-        estimatedArrival: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
-        message: 'Transfer initiated. Funds typically arrive in 1-2 business days.',
-      });
+      const { error: attachError } = await supabase
+        .from('wallet_transactions')
+        .update({ stripe_transfer_id: transfer.id })
+        .eq('id', transactionId);
+      if (attachError) {
+        log('failed to attach transfer id to ledger row', {
+          error: attachError.message,
+          transactionId,
+          transferId: transfer.id,
+        });
+      }
+
+      log('transfer created', { transferId: transfer.id, transactionId, amount });
+      return jsonResponse(
+        {
+          transferId: transfer.id,
+          status: 'pending',
+          amount,
+          currency,
+          accountId: p.stripe_connect_account_id,
+          transactionId,
+          estimatedArrival: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+          message: 'Transfer initiated. Funds typically arrive in 1-2 business days.',
+        },
+        200,
+        correlationId
+      );
     }
 
     // POST /connect/retry-transfer
@@ -431,7 +589,7 @@ Deno.serve(async (req: Request) => {
       const { transactionId } = body;
 
       if (!transactionId) {
-        return jsonResponse({ error: 'Transaction ID is required' }, 400);
+        return jsonResponse({ error: 'Transaction ID is required' }, 400, correlationId);
       }
 
       const { data: tx, error: txError } = await supabase
@@ -443,7 +601,7 @@ Deno.serve(async (req: Request) => {
         .single();
 
       if (txError || !tx) {
-        return jsonResponse({ error: 'Failed transaction not found' }, 404);
+        return jsonResponse({ error: 'Failed transaction not found' }, 404, correlationId);
       }
 
       const t = tx as WalletTransaction;
@@ -455,7 +613,8 @@ Deno.serve(async (req: Request) => {
             error: 'Maximum retry attempts reached. Please contact support.',
             maxRetriesReached: true,
           },
-          400
+          400,
+          correlationId
         );
       }
 
@@ -467,7 +626,7 @@ Deno.serve(async (req: Request) => {
 
       const p = profile as Profile | null;
       if (!p?.stripe_connect_account_id) {
-        return jsonResponse({ error: 'Stripe Connect account not found' }, 400);
+        return jsonResponse({ error: 'Stripe Connect account not found' }, 400, correlationId);
       }
 
       const amount = Math.abs(t.amount);
@@ -475,7 +634,11 @@ Deno.serve(async (req: Request) => {
       // Enforce hold: available = balance - balance_on_hold.
       const available = (p.balance ?? 0) - (p.balance_on_hold ?? 0);
       if (available < amount) {
-        return jsonResponse({ error: 'Insufficient balance for retry' }, 400);
+        return jsonResponse(
+          { error: "You don't have enough available balance to retry this withdrawal.", code: 'insufficient_balance' },
+          400,
+          correlationId
+        );
       }
 
       const { error: rpcError } = await supabase.rpc('withdraw_balance', {
@@ -484,29 +647,45 @@ Deno.serve(async (req: Request) => {
       });
 
       if (rpcError) {
-        console.error('[connect] withdraw_balance RPC failed during transfer retry:', rpcError);
-        return jsonResponse({ error: 'Failed to reserve balance for retry' }, 500);
+        log('withdraw_balance rpc failed during retry', { error: rpcError.message, code: rpcError.code, transactionId });
+        const { status, body } = classifyWithdrawError(rpcError);
+        return jsonResponse(body, status, correlationId);
       }
 
       let transfer: Stripe.Transfer;
       try {
-        transfer = await stripe.transfers.create({
-          amount: Math.round(amount * 100),
-          currency: 'usd',
-          destination: p.stripe_connect_account_id,
-          metadata: { user_id: userId, retry_of_transaction: transactionId },
-        });
+        transfer = await stripe.transfers.create(
+          {
+            amount: Math.round(amount * 100),
+            currency: 'usd',
+            destination: p.stripe_connect_account_id,
+            metadata: { user_id: userId, retry_of_transaction: transactionId, correlation_id: correlationId },
+          },
+          // Deterministic per retry attempt so a duplicated client request never
+          // creates two transfers for the same retry.
+          { idempotencyKey: `retry_${transactionId}_${retryCount + 1}` }
+        );
       } catch (stripeError) {
-        console.error('[connect] Transfer creation failed, refunding balance:', stripeError);
+        const se = stripeError as { code?: string; message?: string };
+        log('retry transfer creation failed, refunding balance', { code: se.code, message: se.message, transactionId });
         await supabase
           .rpc('update_balance', { p_user_id: userId, p_amount: amount })
           .catch((rpcErr: unknown) =>
-            console.error(
-              '[connect] Balance refund after failed retry transfer also failed:',
-              rpcErr
-            )
+            log('balance refund after failed retry transfer also failed', { error: String(rpcErr) })
           );
-        throw stripeError;
+
+        if (se.code === 'balance_insufficient') {
+          return jsonResponse(
+            { error: 'Withdrawals are temporarily unavailable. Our team has been notified.', code: 'platform_funds' },
+            503,
+            correlationId
+          );
+        }
+        return jsonResponse(
+          { error: 'Your withdrawal could not be processed. Please try again shortly.', code: 'transfer_failed' },
+          502,
+          correlationId
+        );
       }
 
       await supabase
@@ -516,36 +695,53 @@ Deno.serve(async (req: Request) => {
           status: 'pending',
           metadata: {
             ...t.metadata,
+            correlationId,
             retry_count: retryCount + 1,
             retried_at: new Date().toISOString(),
           },
         })
         .eq('id', transactionId);
 
-      console.log(
-        `[connect] Transfer retry successful: ${transfer.id} for transaction ${transactionId}`
-      );
+      log('transfer retry successful', { transferId: transfer.id, transactionId });
 
-      return jsonResponse({
-        success: true,
-        transferId: transfer.id,
-        transactionId,
-        message: 'Transfer retry initiated successfully.',
-      });
+      return jsonResponse(
+        {
+          success: true,
+          transferId: transfer.id,
+          transactionId,
+          message: 'Transfer retry initiated successfully.',
+        },
+        200,
+        correlationId
+      );
     }
 
-    // GET /connect/bank-accounts — list external bank accounts on the Connect account
+    // GET /connect/bank-accounts — bank accounts + onboarding/balance/limit
+    // state the withdrawal screen needs to render in a single round trip.
     if (req.method === 'GET' && subPath === '/bank-accounts') {
       const { data: profile } = await supabase
         .from('profiles')
-        .select('stripe_connect_account_id')
+        .select('stripe_connect_account_id, stripe_connect_onboarded_at, balance, balance_on_hold')
         .eq('id', userId)
         .single();
 
-      const accountId = (profile as { stripe_connect_account_id?: string } | null)
-        ?.stripe_connect_account_id;
+      const p = profile as Profile | null;
+      const available = Math.max(0, (p?.balance ?? 0) - (p?.balance_on_hold ?? 0));
+      const limits = { minWithdrawal: WITHDRAW_MIN, maxWithdrawal: WITHDRAW_MAX, currency: 'usd' };
+
+      const accountId = p?.stripe_connect_account_id;
       if (!accountId) {
-        return jsonResponse({ bankAccounts: [] });
+        return jsonResponse(
+          {
+            onboarded: false,
+            payoutsEnabled: false,
+            bankAccounts: [],
+            availableBalance: Math.round(available * 100) / 100,
+            ...limits,
+          },
+          200,
+          correlationId
+        );
       }
 
       const accounts = await stripe.accounts.listExternalAccounts(accountId, {
@@ -563,7 +759,21 @@ Deno.serve(async (req: Request) => {
         default: ba.default_for_currency,
         status: ba.status,
       }));
-      return jsonResponse({ bankAccounts });
+
+      return jsonResponse(
+        {
+          // stripe_connect_onboarded_at is only ever set once charges_enabled &&
+          // payouts_enabled were both true (see verify-onboarding / webhooks sync),
+          // so its presence alone is a reliable, Stripe-call-free onboarded flag.
+          onboarded: !!p?.stripe_connect_onboarded_at,
+          payoutsEnabled: !!p?.stripe_connect_onboarded_at,
+          bankAccounts,
+          availableBalance: Math.round(available * 100) / 100,
+          ...limits,
+        },
+        200,
+        correlationId
+      );
     }
 
     // POST /connect/bank-accounts — DEPRECATED.
@@ -581,6 +791,7 @@ Deno.serve(async (req: Request) => {
           migrate_to: '/functions/v1/payments/create-financial-connections-session',
         },
         410,
+        correlationId
       );
     }
 
@@ -588,7 +799,7 @@ Deno.serve(async (req: Request) => {
     if (req.method === 'DELETE' && subPath.startsWith('/bank-accounts/')) {
       const bankAccountId = subPath.slice('/bank-accounts/'.length).split('/')[0];
       if (!bankAccountId) {
-        return jsonResponse({ error: 'bankAccountId is required' }, 400);
+        return jsonResponse({ error: 'bankAccountId is required' }, 400, correlationId);
       }
 
       const { data: profile } = await supabase
@@ -600,11 +811,11 @@ Deno.serve(async (req: Request) => {
       const accountId = (profile as { stripe_connect_account_id?: string } | null)
         ?.stripe_connect_account_id;
       if (!accountId) {
-        return jsonResponse({ error: 'Stripe Connect account not found' }, 404);
+        return jsonResponse({ error: 'Stripe Connect account not found' }, 404, correlationId);
       }
 
       await stripe.accounts.deleteExternalAccount(accountId, bankAccountId);
-      return jsonResponse({ success: true });
+      return jsonResponse({ success: true }, 200, correlationId);
     }
 
     // POST /connect/bank-accounts/:bankAccountId/default — set as default payout account
@@ -615,7 +826,7 @@ Deno.serve(async (req: Request) => {
     ) {
       const bankAccountId = subPath.slice('/bank-accounts/'.length).replace('/default', '');
       if (!bankAccountId) {
-        return jsonResponse({ error: 'bankAccountId is required' }, 400);
+        return jsonResponse({ error: 'bankAccountId is required' }, 400, correlationId);
       }
 
       const { data: profile } = await supabase
@@ -627,28 +838,32 @@ Deno.serve(async (req: Request) => {
       const accountId = (profile as { stripe_connect_account_id?: string } | null)
         ?.stripe_connect_account_id;
       if (!accountId) {
-        return jsonResponse({ error: 'Stripe Connect account not found' }, 404);
+        return jsonResponse({ error: 'Stripe Connect account not found' }, 404, correlationId);
       }
 
       const updated = (await stripe.accounts.updateExternalAccount(accountId, bankAccountId, {
         default_for_currency: true,
       } as Stripe.ExternalAccountUpdateParams)) as Stripe.BankAccount;
 
-      return jsonResponse({
-        success: true,
-        bankAccount: {
-          id: updated.id,
-          last4: updated.last4,
-          isDefault: updated.default_for_currency,
+      return jsonResponse(
+        {
+          success: true,
+          bankAccount: {
+            id: updated.id,
+            last4: updated.last4,
+            isDefault: updated.default_for_currency,
+          },
         },
-      });
+        200,
+        correlationId
+      );
     }
 
-    return jsonResponse({ error: 'Not found' }, 404);
+    return jsonResponse({ error: 'Not found' }, 404, correlationId);
   } catch (error: unknown) {
     const err = error as { message?: string };
-    console.error('[connect edge fn] Error:', err);
-    return jsonResponse({ error: err.message ?? 'Internal server error' }, 500);
+    console.error('[connect edge fn] Error:', JSON.stringify({ correlationId, message: err.message }));
+    return jsonResponse({ error: err.message ?? 'Internal server error' }, 500, correlationId);
   }
 });
 

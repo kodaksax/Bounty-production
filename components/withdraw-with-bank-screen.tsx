@@ -37,6 +37,23 @@ interface WithdrawWithBankScreenProps {
   balance?: number;
 }
 
+// Client-side copy for server-classified withdrawal error codes (see
+// supabase/functions/connect/index.ts). The server's `error` string is still
+// shown as the alert body; this only picks a more specific title.
+const ERROR_TITLES: Record<string, string> = {
+  not_onboarded: 'Setup Required',
+  insufficient_balance: 'Insufficient Balance',
+  below_minimum: 'Minimum Withdrawal',
+  above_maximum: 'Maximum Withdrawal',
+  frozen: 'Balance On Hold',
+  platform_funds: 'Withdrawals Unavailable',
+  transfer_failed: 'Withdrawal Failed',
+};
+
+function isNetworkError(error: unknown): boolean {
+  return error instanceof TypeError || (error instanceof Error && /network/i.test(error.message));
+}
+
 export function WithdrawWithBankScreen({
   onBack,
   balance: propBalance,
@@ -49,6 +66,11 @@ export function WithdrawWithBankScreen({
   const [selectedBankAccount, setSelectedBankAccount] = useState<string>('');
   const [isLoadingAccounts, setIsLoadingAccounts] = useState(false);
   const [showAddBankAccount, setShowAddBankAccount] = useState(false);
+  // Server-driven limits from GET /connect/bank-accounts. Fall back to the
+  // local MIN_WITHDRAWAL_AMOUNT constant / no cap until that call resolves.
+  const [minWithdrawal, setMinWithdrawal] = useState<number>(MIN_WITHDRAWAL_AMOUNT);
+  const [maxWithdrawal, setMaxWithdrawal] = useState<number | null>(null);
+  const [serverAvailableBalance, setServerAvailableBalance] = useState<number | null>(null);
 
   const { balance: walletBalance, refresh } = useWallet();
   const { session } = useAuthContext();
@@ -68,6 +90,17 @@ export function WithdrawWithBankScreen({
   // duplicate transfer.  Regenerated to a fresh value after a successful
   // withdrawal so the next withdrawal gets its own unique key.
   const idempotencyKeyRef = useRef(`withdraw_${session?.user?.id ?? 'u'}_${Date.now()}`);
+
+  const parsedAmount = parseFloat(withdrawalAmount);
+  const isWithdrawDisabled =
+    isProcessing ||
+    !hasConnectedAccount ||
+    !withdrawalAmount ||
+    isNaN(parsedAmount) ||
+    parsedAmount <= 0 ||
+    (maxWithdrawal != null && parsedAmount > maxWithdrawal) ||
+    bankAccounts.length === 0 ||
+    !selectedBankAccount;
 
   const loadConnectStatus = useCallback(async () => {
     if (!session?.access_token) return;
@@ -105,6 +138,13 @@ export function WithdrawWithBankScreen({
       if (response.ok) {
         const data = await response.json();
         setBankAccounts(data.bankAccounts || []);
+
+        if (typeof data.minWithdrawal === 'number') setMinWithdrawal(data.minWithdrawal);
+        if (typeof data.maxWithdrawal === 'number') setMaxWithdrawal(data.maxWithdrawal);
+        if (typeof data.availableBalance === 'number') setServerAvailableBalance(data.availableBalance);
+        // Only ever flip this on — verify-onboarding remains the source of
+        // truth for turning it off / triggering the DB write.
+        if (data.onboarded && data.payoutsEnabled) setHasConnectedAccount(true);
 
         // Auto-select default bank account or first one
         const defaultAccount = data.bankAccounts?.find((acc: BankAccount) => acc.default);
@@ -189,16 +229,19 @@ export function WithdrawWithBankScreen({
       return;
     }
 
-    if (amount < MIN_WITHDRAWAL_AMOUNT) {
-      Alert.alert(
-        'Minimum Withdrawal',
-        `The minimum withdrawal amount is $${MIN_WITHDRAWAL_AMOUNT.toFixed(2)}.`
-      );
+    if (amount < minWithdrawal) {
+      Alert.alert('Minimum Withdrawal', `The minimum withdrawal amount is $${minWithdrawal.toFixed(2)}.`);
       return;
     }
 
-    if (amount > balance) {
-      Alert.alert('Insufficient Balance', 'You cannot withdraw more than your current balance.');
+    if (maxWithdrawal != null && amount > maxWithdrawal) {
+      Alert.alert('Maximum Withdrawal', `The maximum withdrawal amount is $${maxWithdrawal.toFixed(2)} per transaction.`);
+      return;
+    }
+
+    const availableForWithdrawal = serverAvailableBalance ?? balance;
+    if (amount > availableForWithdrawal) {
+      Alert.alert('Insufficient Balance', 'You cannot withdraw more than your available balance.');
       return;
     }
 
@@ -250,22 +293,34 @@ export function WithdrawWithBankScreen({
         /* analytics is best-effort */
       }
 
-      const response = await fetch(`${API_BASE_URL}/connect/transfer`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          amount,
-          currency: 'usd',
-          idempotencyKey,
-        }),
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
+      let response: Response;
+      try {
+        response = await fetch(`${API_BASE_URL}/connect/transfer`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            amount,
+            currency: 'usd',
+            idempotencyKey,
+          }),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to initiate transfer');
+        const requestError = new Error(errorData.error || 'Failed to initiate transfer') as Error & {
+          code?: string;
+        };
+        requestError.code = errorData.code;
+        throw requestError;
       }
 
       const { transferId } = await response.json();
@@ -306,11 +361,24 @@ export function WithdrawWithBankScreen({
       } catch {
         /* analytics is best-effort */
       }
-      Alert.alert(
-        'Withdrawal Failed',
-        error.message || 'Failed to process withdrawal. Please try again.',
-        [{ text: 'OK' }]
-      );
+      if (error?.name === 'AbortError') {
+        Alert.alert(
+          'Request Timed Out',
+          'The request took too long to complete. Please check your connection and try again.',
+          [{ text: 'OK' }]
+        );
+      } else if (isNetworkError(error)) {
+        Alert.alert(
+          'Connection Error',
+          'Could not reach the server. Please check your connection and try again.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        const title = (error?.code && ERROR_TITLES[error.code]) || 'Withdrawal Failed';
+        Alert.alert(title, error.message || 'Failed to process withdrawal. Please try again.', [
+          { text: 'OK' },
+        ]);
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -406,6 +474,10 @@ export function WithdrawWithBankScreen({
               accessibilityHint="Enter the amount you want to withdraw"
             />
           </View>
+          <Text style={s.limitsHint}>
+            Min ${minWithdrawal.toFixed(2)}
+            {maxWithdrawal != null ? ` · Max $${maxWithdrawal.toFixed(2)}` : ''}
+          </Text>
           <View style={s.quickAmounts}>
             <TouchableOpacity
               style={s.quickAmountButton}
@@ -433,7 +505,11 @@ export function WithdrawWithBankScreen({
             </TouchableOpacity>
             <TouchableOpacity
               style={s.quickAmountButton}
-              onPress={() => setWithdrawalAmount(balance.toFixed(2))}
+              onPress={() =>
+                setWithdrawalAmount(
+                  (maxWithdrawal != null ? Math.min(balance, maxWithdrawal) : balance).toFixed(2)
+                )
+              }
               accessibilityLabel="Withdraw maximum balance"
               accessibilityRole="button"
             >
@@ -567,39 +643,15 @@ export function WithdrawWithBankScreen({
       <View style={s.footer}>
         <TouchableOpacity
           onPress={handleWithdraw}
-          disabled={
-            isProcessing ||
-            !hasConnectedAccount ||
-            !withdrawalAmount ||
-            parseFloat(withdrawalAmount) <= 0 ||
-            bankAccounts.length === 0 ||
-            !selectedBankAccount
-          }
-          style={[
-            s.withdrawButton,
-            (isProcessing ||
-              !hasConnectedAccount ||
-              !withdrawalAmount ||
-              parseFloat(withdrawalAmount) <= 0 ||
-              bankAccounts.length === 0 ||
-              !selectedBankAccount) &&
-              s.withdrawButtonDisabled,
-          ]}
+          disabled={isWithdrawDisabled}
+          style={[s.withdrawButton, isWithdrawDisabled && s.withdrawButtonDisabled]}
           accessibilityLabel={
             withdrawalAmount
               ? `Withdraw $${parseFloat(withdrawalAmount).toFixed(2)}`
               : 'Withdraw funds'
           }
           accessibilityRole="button"
-          accessibilityState={{
-            disabled:
-              isProcessing ||
-              !hasConnectedAccount ||
-              !withdrawalAmount ||
-              parseFloat(withdrawalAmount) <= 0 ||
-              bankAccounts.length === 0 ||
-              !selectedBankAccount,
-          }}
+          accessibilityState={{ disabled: isWithdrawDisabled }}
         >
           {isProcessing ? (
             <>
@@ -707,6 +759,11 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     fontSize: 24,
     fontWeight: '600',
     color: t.text,
+  },
+  limitsHint: {
+    fontSize: 12,
+    color: t.textSecondary,
+    marginBottom: 12,
   },
   quickAmounts: {
     flexDirection: 'row',
