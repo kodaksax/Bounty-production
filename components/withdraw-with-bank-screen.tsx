@@ -218,6 +218,12 @@ export function WithdrawWithBankScreen({
     }
   };
 
+  const handleMaxWithdrawal = () => {
+    setWithdrawalAmount(
+      (maxWithdrawal != null ? Math.min(balance, maxWithdrawal) : balance).toFixed(2)
+    );
+  };
+
   const handleWithdraw = async () => {
     // Email verification gate
     if (!canWithdrawFunds) {
@@ -620,9 +626,7 @@ export function WithdrawWithBankScreen({
             </TouchableOpacity>
             <TouchableOpacity
               style={s.quickAmountButton}
-              onPress={() => setWithdrawalAmount(
-                  (maxWithdrawal != null ? Math.min(balance, maxWithdrawal) : balance).toFixed(2)
-                )}
+              onPress={handleMaxWithdrawal}
               accessibilityLabel="Withdraw maximum balance"
               accessibilityRole="button"
             >
