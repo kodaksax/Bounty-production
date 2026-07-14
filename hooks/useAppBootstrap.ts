@@ -27,7 +27,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useEffect, useRef, useState } from 'react'
-import { getOnboardingCompleteKey } from '../lib/storage/onboarding'
+import { getOnboardingCompleteKey, markDeviceHasSignedIn } from '../lib/storage/onboarding'
 import { useAuthContext } from './use-auth-context'
 
 export type AppBootstrapState =
@@ -72,6 +72,11 @@ export function useAppBootstrap(): AppBootstrapState {
     }
 
     // ── Authenticated ─────────────────────────────────────────────────────
+
+    // Any resolved session means this device has completed a sign-in/sign-up
+    // at least once — mark it so a future logout shows the log-in form
+    // instead of the first-time onboarding welcome screen.
+    markDeviceHasSignedIn()
 
     // Fast path: profile already says onboarding is complete.
     // Avoid the async round-trip to AsyncStorage entirely.

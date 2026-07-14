@@ -9,6 +9,10 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 const ONBOARDING_STATE_KEY = '@bounty_onboarding_state';
 
 export interface OnboardingData {
+  // Welcome screen — which of the two entry CTAs the user picked.
+  // 'poster' = "Get something done", 'hunter' = "Start earning nearby"
+  intent: 'poster' | 'hunter' | null;
+
   // Username screen
   username: string;
   accepted: boolean;
@@ -23,9 +27,15 @@ export interface OnboardingData {
   
   // Phone screen
   phone: string;
+
+  // Poster task-prompt screen (details, when intent === 'poster')
+  taskDescription: string;
+  price: string;
+  schedule: 'saturday' | 'flexible' | null;
 }
 
 const defaultOnboardingData: OnboardingData = {
+  intent: null,
   username: '',
   accepted: false,
   displayName: '',
@@ -35,6 +45,9 @@ const defaultOnboardingData: OnboardingData = {
   skills: [],
   avatarUri: '',
   phone: '',
+  taskDescription: '',
+  price: '',
+  schedule: null,
 };
 
 interface OnboardingContextType {

@@ -1,11 +1,12 @@
 import type { Href } from "expo-router";
 import { useRouter } from "expo-router";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import 'react-native-get-random-values'; // must run before using tweetnacl
 import { useAuthContext } from "../hooks/use-auth-context";
 import { useAppBootstrap } from "../hooks/useAppBootstrap";
 import { ROUTES } from "../lib/routes";
+import { hasDeviceSignedInBefore } from "../lib/storage/onboarding";
 import { SignInForm } from "./auth/sign-in-form";
 import { markInitialNavigationDone } from './initial-navigation/initialNavigation';
 
@@ -31,6 +32,11 @@ export default function Index() {
   const { isPasswordRecovery } = useAuthContext()
   const router = useRouter()
   const hasNavigatedRef = useRef(false)
+  // Tracks whether we've confirmed this is a *returning* user (device has
+  // signed in before) — until this is true, an unauthenticated visitor might
+  // still be a first-timer who should see onboarding instead of the log-in
+  // form, so we hold on the loading spinner rather than flashing sign-in.
+  const [confirmedReturningUser, setConfirmedReturningUser] = useState(false)
 
   // Debug logging on mount (development only)
   useEffect(() => {
@@ -64,8 +70,33 @@ export default function Index() {
       return
     }
 
-    // Unauthenticated — nothing to navigate; render sign-in form below.
-    if (bootstrap.status === 'unauthenticated') return
+    // Unauthenticated — determine whether this is a genuine first-time
+    // visitor (never signed in on this device) or a returning user who is
+    // simply logged out right now.
+    if (bootstrap.status === 'unauthenticated') {
+      if (confirmedReturningUser) return
+
+      let cancelled = false
+      ;(async () => {
+        const returning = await hasDeviceSignedInBefore()
+        if (cancelled || hasNavigatedRef.current) return
+
+        if (!returning) {
+          hasNavigatedRef.current = true
+          if (__DEV__) {
+            console.log('[index] First-time device — routing to onboarding welcome')
+          }
+          router.replace('/onboarding/welcome' as Href)
+          try { markInitialNavigationDone() } catch {}
+        } else {
+          setConfirmedReturningUser(true)
+        }
+      })()
+
+      return () => {
+        cancelled = true
+      }
+    }
 
     // Authenticated — onboardingComplete is already known (resolved by the
     // hook), so this navigation is synchronous with no further async work.
@@ -83,12 +114,18 @@ export default function Index() {
 
     router.replace(dest as Href)
     try { markInitialNavigationDone() } catch {}
-  }, [bootstrap, isPasswordRecovery, router])
+  }, [bootstrap, isPasswordRecovery, router, confirmedReturningUser])
 
-  // Loading or authenticated (redirecting) — show spinner, never wrong screen.
+  // Loading, authenticated (redirecting), or an unauthenticated visitor whose
+  // first-time-device check hasn't resolved yet — show spinner, never the
+  // wrong screen.
   // Use inline StyleSheet styles (not NativeWind className) so the screen is
   // visible even when the CSS-interop runtime fails to process global.css.
-  if (bootstrap.status === 'loading' || bootstrap.status === 'authenticated') {
+  if (
+    bootstrap.status === 'loading' ||
+    bootstrap.status === 'authenticated' ||
+    (bootstrap.status === 'unauthenticated' && !confirmedReturningUser)
+  ) {
     if (__DEV__) {
       console.log('[index] Rendering loading/redirecting state:', bootstrap.status)
     }
@@ -102,7 +139,7 @@ export default function Index() {
     )
   }
 
-  // Unauthenticated — show sign-in form.
+  // Unauthenticated returning user — show sign-in form.
   if (__DEV__) {
     console.log('[index] Rendering sign-in form')
   }

@@ -22,6 +22,7 @@ import { ErrorBanner } from '../../components/error-banner';
 import { AnimatedScreen } from '../../components/ui/animated-screen';
 import { CaptchaChallenge } from '../../components/ui/captcha-challenge';
 import { Checkbox } from '../../components/ui/checkbox';
+import { GoogleLogo } from '../../components/ui/google-logo';
 import { useFormSubmission } from '../../hooks/useFormSubmission';
 import { setRememberMePreference } from '../../lib/auth-session-storage';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
@@ -896,9 +897,16 @@ export function SignInForm() {
                 {socialAuthLoading ? (
                   <ActivityIndicator color="#000" />
                 ) : (
-                  <Text className="text-black font-medium">
-                    {isGoogleConfigured ? 'Continue with Google' : 'Google setup required'}
-                  </Text>
+                  <>
+                    {isGoogleConfigured && (
+                      <View style={{ marginRight: 8 }}>
+                        <GoogleLogo size={18} />
+                      </View>
+                    )}
+                    <Text className="text-black font-medium">
+                      {isGoogleConfigured ? 'Continue with Google' : 'Google setup required'}
+                    </Text>
+                  </>
                 )}
               </TouchableOpacity>
 

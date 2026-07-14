@@ -107,7 +107,7 @@ export default function VerifyPhoneScreen() {
         [
           {
             text: 'Continue',
-            onPress: () => router.push('/onboarding/identity-verification'),
+            onPress: () => router.push('/onboarding/done'),
           },
         ]
       );
@@ -140,7 +140,7 @@ export default function VerifyPhoneScreen() {
     router.back();
   };
 
-  const handleSkip = () => router.push('/onboarding/identity-verification');
+  const handleSkip = () => router.push('/onboarding/done');
 
   const formatPhoneDisplay = (phone: string) => {
     if (!phone) return 'Invalid number';

@@ -581,7 +581,7 @@ export function SignUpForm() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={() => router.back()}
+                onPress={() => router.replace('/auth/sign-in-form' as Href)}
                 accessibilityRole="button"
                 accessibilityLabel="Back to sign in"
               >

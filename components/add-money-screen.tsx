@@ -18,6 +18,8 @@ import { PaymentMethodsModal } from './payment-methods-modal'
 interface AddMoneyScreenProps {
   onBack?: () => void
   onAddMoney?: (amount: number) => void
+  /** Pre-fills the amount field (e.g. to match a bounty price the caller wants funded). */
+  initialAmount?: string
 }
 
 // Helper to persist a deposit to the server. Extracted to avoid duplicated logic.
@@ -71,8 +73,8 @@ async function persistDeposit(paymentIntentId: string | undefined, amount: numbe
   return false
 }
 
-export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
-  const [amount, setAmount] = useState<string>("0")
+export function AddMoneyScreen({ onBack, onAddMoney, initialAmount }: AddMoneyScreenProps) {
+  const [amount, setAmount] = useState<string>(initialAmount || "0")
   const [isProcessing, setIsProcessing] = useState(false)
   const [showPaymentMethodsModal, setShowPaymentMethodsModal] = useState(false)
   const [isApplePayAvailable, setIsApplePayAvailable] = useState(false)
