@@ -1,14 +1,17 @@
 /**
  * Onboarding Welcome
- * First screen of onboarding: logo + core trust points
+ * First screen of onboarding: logo + core trust points + role/intent pick
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
+import { hapticFeedback } from '../../lib/haptic-feedback';
 import { useOnboarding } from '../../lib/context/onboarding-context';
+import { analyticsService } from '../../lib/services/analytics-service';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 
@@ -18,19 +21,29 @@ export default function OnboardingWelcome() {
   const { theme } = useAppThemeContext();
   const { updateData } = useOnboarding();
   const styles = makeStyles(theme);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    analyticsService.trackEvent('onboarding_welcome_viewed');
+    Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+  }, [fadeAnim]);
 
   const handleSelectIntent = (intent: 'poster' | 'hunter') => {
+    hapticFeedback.light();
+    analyticsService.trackEvent('onboarding_role_selected', { role: intent });
     updateData({ intent });
     router.replace('/onboarding/username');
   };
 
-  const handleSkip = () => {
-    router.replace('/onboarding/username');
+  const handleLogIn = () => {
+    hapticFeedback.light();
+    analyticsService.trackEvent('onboarding_login_tapped');
+    router.push('/auth/sign-in-form');
   };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top * 0.3, paddingBottom: insets.bottom }]}>
-      <View style={styles.content}>
+      <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
         <BrandingLogo size="large" containerStyle={styles.logo} />
 
         <View style={styles.point}>
@@ -44,14 +57,16 @@ export default function OnboardingWelcome() {
           <View style={[styles.pointIcon, { backgroundColor: theme.surface }]}>
             <MaterialIcons name="lock" size={32} color="#9CA3AF" />
           </View>
-          <Text style={styles.pointText}>Your money stays protected until the job is done</Text>
+          <Text style={styles.pointText}>Your money stays protected until the job&rsquo;s done</Text>
         </View>
-      </View>
+      </Animated.View>
 
       <View style={styles.actionContainer}>
         <TouchableOpacity
           style={styles.posterButton}
           onPress={() => handleSelectIntent('poster')}
+          accessibilityRole="button"
+          accessibilityLabel="Get something done — post a task and hire someone nearby"
         >
           <Text style={styles.posterButtonText}>Get something done</Text>
         </TouchableOpacity>
@@ -59,12 +74,19 @@ export default function OnboardingWelcome() {
         <TouchableOpacity
           style={[styles.hunterButton, { backgroundColor: theme.primary }]}
           onPress={() => handleSelectIntent('hunter')}
+          accessibilityRole="button"
+          accessibilityLabel="Start earning nearby — browse and accept paid tasks"
         >
           <Text style={styles.hunterButtonText}>Start earning nearby</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.skipLink} onPress={handleSkip}>
-          <Text style={styles.skipLinkText}>Skip for now</Text>
+        <TouchableOpacity
+          style={styles.loginButton}
+          onPress={handleLogIn}
+          accessibilityRole="button"
+          accessibilityLabel="Log in to an existing account"
+        >
+          <Text style={styles.loginButtonText}>Log In</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -82,7 +104,6 @@ function makeStyles(theme: AppTheme) {
       alignItems: 'center',
       justifyContent: 'flex-start',
       paddingHorizontal: 40,
-      
     },
     logo: {
       marginBottom: 64,
@@ -139,14 +160,18 @@ function makeStyles(theme: AppTheme) {
       fontSize: 18,
       fontWeight: 'bold',
     },
-    skipLink: {
+    loginButton: {
       alignItems: 'center',
-      paddingVertical: 12,
+      justifyContent: 'center',
+      paddingVertical: 14,
+      borderRadius: 999,
+      borderWidth: 1.5,
+      borderColor: theme.border,
     },
-    skipLinkText: {
-      fontSize: 15,
-      color: theme.textDisabled,
-      textDecorationLine: 'underline',
+    loginButtonText: {
+      color: theme.text,
+      fontSize: 16,
+      fontWeight: '600',
     },
   });
 }

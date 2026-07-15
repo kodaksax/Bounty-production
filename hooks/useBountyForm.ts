@@ -4,6 +4,8 @@ import { bountyService } from 'lib/services/bounty-service'
 import type { Bounty } from 'lib/services/database.types'
 import { logger } from 'lib/utils/error-logger'
 import type { WalletTransactionRecord } from 'lib/wallet-context'
+import { momentsService } from 'lib/moments/momentsService'
+import { analyticsService } from 'lib/services/analytics-service'
 
 export interface BountyFormData {
   title: string
@@ -127,6 +129,17 @@ export function useBountyForm({
       // Validate balance BEFORE posting bounty for paid bounties
       if (!formData.isForHonor && formData.amount > 0) {
         if (balance < formData.amount) {
+          // Real signal that the user needs funds right now — surface the
+          // Moments Queue's fund_wallet prompt next time it's evaluated,
+          // rather than only showing this one-off blocking alert.
+          momentsService.enqueue(currentUserId, 'fund_wallet', {
+            amountNeeded: formData.amount - balance,
+            bountyTitle: formData.title,
+          })
+          analyticsService.trackEvent('moment_event_enqueued', {
+            momentType: 'fund_wallet',
+            source: 'post_bounty_insufficient_balance',
+          })
           Alert.alert(
             'Insufficient Balance',
             'You do not have enough balance to post this bounty. Please add funds to your wallet.',

@@ -17,19 +17,29 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { OnboardingProgressDots } from '../../components/onboarding/OnboardingProgressDots';
 import { BrandingLogo } from '../../components/ui/branding-logo';
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
 import { DEFERRED_PUSH_REGISTRATION_KEY } from '../../lib/constants';
-import { useOnboarding } from '../../lib/context/onboarding-context';
+import { CURRENT_ONBOARDING_VERSION, useOnboarding } from '../../lib/context/onboarding-context';
+import { hapticFeedback } from '../../lib/haptic-feedback';
+import { momentsService } from '../../lib/moments/momentsService';
+import { analyticsService } from '../../lib/services/analytics-service';
 import { authProfileService } from '../../lib/services/auth-profile-service';
 import { Profile } from '../../lib/services/database.types';
 import { notificationService } from '../../lib/services/notification-service';
 import { getOnboardingCompleteKey } from '../../lib/storage/onboarding';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
+
+// Generic (no intent) is a 3-step flow; poster/hunter branches are 4 steps.
+// See app/onboarding/username.tsx's totalStepsFor for the matching logic.
+function totalStepsFor(intent: 'poster' | 'hunter' | null) {
+  return intent ? 4 : 3;
+}
 /**
  * Maximum time to wait for pre-navigation work (e.g. profile sync, push registration)
  * before proceeding to the main app. 8s is a compromise: long enough for slow mobile
@@ -89,7 +99,7 @@ export default function DoneScreen() {
   const { session } = useAuthContext();
   const { data: onboardingData, clearData: clearOnboardingData } = useOnboarding();
 
-  const displayUsername = onboardingData.username || normalized?.username || (localProfile as any)?.username;
+  const displayUsername = normalized?.username || (localProfile as any)?.username;
   const displayName = onboardingData.displayName || normalized?.name || (localProfile as any)?.displayName;
   const displayTitle = onboardingData.title || normalized?.title || (localProfile as any)?.title;
   const displayBio = onboardingData.bio || normalized?.bio || (localProfile as any)?.bio;
@@ -110,6 +120,7 @@ export default function DoneScreen() {
     // Animation only — no Supabase writes here.
     // All profile persistence happens in handleContinue so we can guarantee
     // the database write completes before navigation (reviewer comment #1).
+    hapticFeedback.success();
     Animated.sequence([
       Animated.spring(scaleAnim, { toValue: 1, tension: 50, friction: 7, useNativeDriver: true }),
       Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
@@ -147,8 +158,18 @@ export default function DoneScreen() {
     // its very first render and never redirects back. Doing this here (not on mount)
     // guarantees the DB write is complete before we navigate. (reviewer comment #1)
     try {
-      const profileUpdate: Partial<Profile> = { onboarding_completed: true };
-      if (onboardingData.username) profileUpdate.username = onboardingData.username;
+      const profileUpdate: Partial<Profile> = {
+        onboarding_completed: true,
+        onboarding_version: CURRENT_ONBOARDING_VERSION,
+      };
+      // Persist the marketplace persona picked on welcome.tsx — previously
+      // this was held only in local AsyncStorage and discarded here, so the
+      // backend never learned whether someone onboarded as a poster or a
+      // hunter. `role` is a distinct column (platform authorization), so
+      // this writes `primary_role` instead.
+      if (onboardingData.intent === 'poster' || onboardingData.intent === 'hunter') {
+        profileUpdate.primary_role = onboardingData.intent;
+      }
       if (onboardingData.displayName) profileUpdate.display_name = onboardingData.displayName;
       if (onboardingData.title) profileUpdate.title = onboardingData.title;
       if (onboardingData.bio) profileUpdate.about = onboardingData.bio;
@@ -265,6 +286,28 @@ export default function DoneScreen() {
       }
     } catch (e) {
       console.error('[Onboarding] refreshProfile failed (continuing to app):', e);
+    }
+
+    analyticsService.trackEvent('onboarding_completed', {
+      intent: onboardingData.intent ?? 'none',
+      hasAvatar: !!onboardingData.avatarUri,
+      hasBio: !!onboardingData.bio,
+      skillCount: onboardingData.skills?.length ?? 0,
+    });
+
+    // Prime the marketplace-activation moments (post_first_bounty /
+    // accept_first_bounty) right as the user's role becomes known — see
+    // lib/moments/registry.ts doc comments. These self-retire (server-side
+    // trigger, see supabase/migrations/20260714f) the moment the user
+    // actually posts/accepts a bounty, so it's safe to enqueue eagerly here.
+    if (resolvedUserId) {
+      if (onboardingData.intent === 'poster') {
+        momentsService.enqueue(resolvedUserId, 'post_first_bounty', {});
+        analyticsService.trackEvent('moment_event_enqueued', { momentType: 'post_first_bounty', source: 'onboarding_done' });
+      } else if (onboardingData.intent === 'hunter') {
+        momentsService.enqueue(resolvedUserId, 'accept_first_bounty', {});
+        analyticsService.trackEvent('moment_event_enqueued', { momentType: 'accept_first_bounty', source: 'onboarding_done' });
+      }
     }
 
     try {
@@ -414,8 +457,14 @@ export default function DoneScreen() {
         <Animated.View style={{ opacity: fadeAnim, width: '100%' }}>
           <TouchableOpacity
             style={[styles.continueButton, isLoading ? { opacity: 0.8 } : {}]}
-            onPress={handleContinue}
+            onPress={() => {
+              hapticFeedback.light();
+              handleContinue();
+            }}
             disabled={isLoading}
+            accessibilityRole="button"
+            accessibilityLabel="Start exploring"
+            accessibilityState={{ disabled: isLoading, busy: isLoading }}
           >
             {isLoading ? (
               <ActivityIndicator size="small" color="#052e1b" />
@@ -428,14 +477,11 @@ export default function DoneScreen() {
           </TouchableOpacity>
         </Animated.View>
 
-        {/* Progress indicator — step 5 of 5 */}
-        <View style={styles.progressContainer}>
-          <View style={styles.progressDot} />
-          <View style={styles.progressDot} />
-          <View style={styles.progressDot} />
-          <View style={styles.progressDot} />
-          <View style={[styles.progressDot, styles.progressDotActive]} />
-        </View>
+        <OnboardingProgressDots
+          total={totalStepsFor(onboardingData.intent)}
+          activeIndex={totalStepsFor(onboardingData.intent) - 1}
+          style={styles.progressContainer}
+        />
       </View>
     </View>
   );
@@ -587,19 +633,7 @@ function makeStyles(theme: AppTheme) {
       fontWeight: 'bold',
     },
     progressContainer: {
-      flexDirection: 'row',
-      justifyContent: 'center',
-      gap: 8,
       paddingBottom: 4,
-    },
-    progressDot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-      backgroundColor: theme.border,
-    },
-    progressDotActive: {
-      backgroundColor: theme.primary,
     },
   });
 }

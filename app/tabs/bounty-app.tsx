@@ -5,6 +5,8 @@ import { WalletScreen } from "app/tabs/wallet-screen"
 import type { BountyFeedHandle } from 'components/bounty-feed'
 import { BountyFeed } from 'components/bounty-feed'
 import { ConnectionStatus } from 'components/connection-status'
+import { MomentSheet } from '../../components/moments/MomentSheet'
+import { MomentsProvider } from '../../providers/moments-provider'
 // Search moved to its own route (app/tabs/search.tsx) so we no longer render it inline.
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { BottomNav } from 'components/ui/bottom-nav'
@@ -233,48 +235,55 @@ function BountyAppInner() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.background, position: 'relative' }}>
-      {/* Connection Status Banner - appears at top when offline */}
-      <ConnectionStatus showQueueCount={true} />
+    <MomentsProvider>
+      <View style={{ flex: 1, backgroundColor: theme.background, position: 'relative' }}>
+        {/* Connection Status Banner - appears at top when offline */}
+        <ConnectionStatus showQueueCount={true} />
 
-      {/* BountyFeed is always mounted to preserve scroll position/cached data.
-          display:none hides it visually while other tabs are active. */}
-      <View style={{ display: activeScreen === 'bounty' ? 'flex' : 'none', flex: 1 }}>
-        <BountyFeed
-          ref={bountyFeedRef}
-          activeScreen={activeScreen}
-          setActiveScreen={setActiveScreen}
-          currentUserId={currentUserId}
-        />
+        {/* BountyFeed is always mounted to preserve scroll position/cached data.
+            display:none hides it visually while other tabs are active. */}
+        <View style={{ display: activeScreen === 'bounty' ? 'flex' : 'none', flex: 1 }}>
+          <BountyFeed
+            ref={bountyFeedRef}
+            activeScreen={activeScreen}
+            setActiveScreen={setActiveScreen}
+            currentUserId={currentUserId}
+          />
+        </View>
+
+        {activeScreen === "wallet" && (
+          <WalletScreen onBack={() => setActiveScreen("bounty")} />
+        )}
+        {activeScreen === "postings" && (
+          <PostingsScreen
+            initialTab={pendingInitialTab ?? paramInitialTab}
+            onBack={() => setActiveScreen("bounty")}
+            activeScreen={activeScreen}
+            setActiveScreen={setActiveScreen}
+            onBountyPosted={() => bountyFeedRef.current?.refresh()} // Refresh feed when a new bounty is posted
+            onBountyAccepted={() => bountyFeedRef.current?.refresh()} // Refresh feed when a bounty is accepted
+            setShowBottomNav={setShowBottomNav}
+          />
+        )}
+        {activeScreen === "profile" && (
+          <ProfileScreen onBack={() => setActiveScreen("bounty")} />
+        )}
+        {activeScreen === "messages" && (
+          <MessengerScreen
+            activeScreen={activeScreen}
+            onNavigate={setActiveScreen}
+            onConversationModeChange={() => setShowBottomNav(true)}
+          />
+        )}
+
+        {showBottomNav && <BottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} showAdmin={showAdminTab} onBountyTabRepress={handleBountyTabRepress} unreadMessageCount={unreadMessageCount} />}
+
+        {/* Moments Queue host — global, so a contextual activation prompt
+            (verify identity, set up payouts, enable notifications, etc.)
+            can surface over any tab, not just right after onboarding. */}
+        <MomentSheet />
       </View>
-
-      {activeScreen === "wallet" && (
-        <WalletScreen onBack={() => setActiveScreen("bounty")} />
-      )}
-      {activeScreen === "postings" && (
-        <PostingsScreen
-          initialTab={pendingInitialTab ?? paramInitialTab}
-          onBack={() => setActiveScreen("bounty")}
-          activeScreen={activeScreen}
-          setActiveScreen={setActiveScreen}
-          onBountyPosted={() => bountyFeedRef.current?.refresh()} // Refresh feed when a new bounty is posted
-          onBountyAccepted={() => bountyFeedRef.current?.refresh()} // Refresh feed when a bounty is accepted
-          setShowBottomNav={setShowBottomNav}
-        />
-      )}
-      {activeScreen === "profile" && (
-        <ProfileScreen onBack={() => setActiveScreen("bounty")} />
-      )}
-      {activeScreen === "messages" && (
-        <MessengerScreen
-          activeScreen={activeScreen}
-          onNavigate={setActiveScreen}
-          onConversationModeChange={() => setShowBottomNav(true)}
-        />
-      )}
-
-      {showBottomNav && <BottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} showAdmin={showAdminTab} onBountyTabRepress={handleBountyTabRepress} unreadMessageCount={unreadMessageCount} />}
-    </View>
+    </MomentsProvider>
   )
 }
 

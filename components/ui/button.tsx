@@ -1,6 +1,7 @@
 import { cva, type VariantProps } from "class-variance-authority"
 import { useHapticFeedback } from "lib/haptic-feedback"
-import { theme } from "lib/theme"
+import { useAppThemeContext } from "lib/themes/AppThemeContext"
+import type { AppTheme } from "lib/themes/types"
 import { cn } from "lib/utils"
 import * as React from "react"
 import { StyleSheet, Text, TouchableOpacity, TouchableOpacityProps } from "react-native"
@@ -43,11 +44,75 @@ export interface ButtonProps
   accessibilityHint?: string;
 }
 
+// Text color placed on top of the bright brand-green primary fill. Matches
+// the dark-on-green convention used across onboarding/wallet (see e.g.
+// lib/onboarding/onboarding-details-styles.ts nextButtonText) so a button
+// rendered through this shared component looks identical to the hand-rolled
+// primary CTAs elsewhere in the app.
+const ON_PRIMARY_TEXT = '#052e1b';
+const ON_DESTRUCTIVE_TEXT = '#ffffff';
+
+type Variant = NonNullable<VariantProps<typeof buttonVariants>["variant"]>;
+type Size = NonNullable<VariantProps<typeof buttonVariants>["size"]>;
+
+interface VariantColors {
+  background: string;
+  border: string;
+  text: string;
+  shadowColor: string;
+}
+
+function makeVariantColors(appTheme: AppTheme): Record<Variant, VariantColors> {
+  return {
+    default: {
+      background: appTheme.primary,
+      border: appTheme.primary,
+      text: ON_PRIMARY_TEXT,
+      shadowColor: appTheme.primary,
+    },
+    destructive: {
+      background: appTheme.error,
+      border: appTheme.error,
+      text: ON_DESTRUCTIVE_TEXT,
+      shadowColor: appTheme.error,
+    },
+    outline: {
+      background: 'transparent',
+      border: appTheme.primary,
+      text: appTheme.primary,
+      shadowColor: 'transparent',
+    },
+    secondary: {
+      background: appTheme.surfaceSecondary,
+      border: appTheme.border,
+      text: appTheme.text,
+      shadowColor: 'transparent',
+    },
+    ghost: {
+      background: 'transparent',
+      border: 'transparent',
+      text: appTheme.primary,
+      shadowColor: 'transparent',
+    },
+    link: {
+      background: 'transparent',
+      border: 'transparent',
+      text: appTheme.primary,
+      shadowColor: 'transparent',
+    },
+  };
+}
+
 const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, ButtonProps>(
-  ({ className, variant, size, disabled, onPress, children, accessibilityLabel, accessibilityHint, ...props }, ref) => {
+  ({ className, variant, size, disabled, onPress, children, accessibilityLabel, accessibilityHint, style, ...props }, ref) => {
     const { triggerHaptic } = useHapticFeedback();
+    const { theme: appTheme } = useAppThemeContext();
     const scaleAnim = React.useRef(new (require('react-native').Animated.Value)(1)).current;
     const [isFocused, setIsFocused] = React.useState(false);
+
+    const resolvedVariant: Variant = variant ?? "default";
+    const resolvedSize: Size = size ?? "default";
+    const colors = React.useMemo(() => makeVariantColors(appTheme)[resolvedVariant], [appTheme, resolvedVariant]);
 
     const handlePress = React.useCallback((event: any) => {
       if (disabled) return;
@@ -97,19 +162,37 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
 
     const AnimatedTouchable = require('react-native').Animated.createAnimatedComponent(TouchableOpacity);
 
+    const hasGlow = resolvedVariant === 'default' || resolvedVariant === 'destructive';
+    const borderWidth = resolvedVariant === 'outline' ? 1.5 : resolvedVariant === 'ghost' || resolvedVariant === 'link' ? 0 : 1;
+
     return (
       <AnimatedTouchable
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
         style={[
-          buttonStyles.base,
-          buttonStyles[variant ?? "default"],
-          buttonStyles[size ?? "default"],
-          disabled && buttonStyles.disabled,
-          isFocused && buttonStyles.focused,
+          layoutStyles.base,
+          layoutStyles[resolvedSize],
+          {
+            backgroundColor: colors.background,
+            borderWidth,
+            borderColor: colors.border,
+          },
+          hasGlow && {
+            shadowColor: colors.shadowColor,
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 0.3,
+            shadowRadius: 12,
+            elevation: 6,
+          },
+          disabled && layoutStyles.disabled,
+          // Visible keyboard-focus ring (WCAG 2.4.7). Shape lives in the
+          // static `focused` style below; color comes from the live theme
+          // so the ring stays visible in both light and dark mode.
+          isFocused && [layoutStyles.focused, { borderColor: appTheme.primaryLight, shadowColor: appTheme.primary }],
           {
             transform: [{ scale: scaleAnim }],
           },
+          style,
         ]}
         disabled={disabled}
         onPress={handlePress}
@@ -128,9 +211,10 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
           <Text
             className="text-inherit font-inherit"
             style={[
-              buttonStyles.text,
-              buttonStyles[`${variant ?? "default"}Text` as keyof typeof buttonStyles],
-              disabled && buttonStyles.disabledText,
+              layoutStyles.text,
+              { color: colors.text },
+              resolvedVariant === 'link' && layoutStyles.linkText,
+              disabled && layoutStyles.disabledText,
             ]}
           >
             {children}
@@ -144,59 +228,28 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
 );
 Button.displayName = "Button"
 
-const buttonStyles = StyleSheet.create({
+// Pill-shaped, theme-agnostic layout (padding/sizing/shape only — colors come
+// from makeVariantColors(theme) above so the button adapts to light/dark).
+const layoutStyles = StyleSheet.create({
   base: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
+    borderRadius: 999,
     paddingHorizontal: 20,
     paddingVertical: 12,
     minHeight: 48,
-    // Add subtle transition feel (even though we can't animate in StyleSheet)
-    transform: [{ scale: 1 }],
   },
-  default: {
-    backgroundColor: '#00912C', // Company specified primary green base
-    // Enhanced inner glow effect for premium feel
-    borderWidth: 1,
-    borderColor: 'rgba(0, 145, 44, 0.6)',
-    ...theme.shadows.emerald,
-  },
-  destructive: {
-    backgroundColor: '#ef4444', // destructive red
-    borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.6)',
-    ...theme.shadows.sm,
-  },
-  outline: {
-    backgroundColor: 'transparent',
-    borderWidth: 1.5,
-    borderColor: 'rgba(0, 145, 44, 0.5)', // emerald outline
-  },
-  secondary: {
-    backgroundColor: '#2d5240', // secondary emerald tone
-    borderWidth: 1,
-    borderColor: 'rgba(0, 145, 44, 0.3)',
-    ...theme.shadows.sm,
-  },
-  ghost: {
-    backgroundColor: 'transparent',
-    borderWidth: 0,
-  },
-  link: {
-    backgroundColor: 'transparent',
-    borderWidth: 0,
-  },
+  default: {},
   sm: {
     minHeight: 40,
     paddingHorizontal: 16,
-    borderRadius: 10,
+    borderRadius: 999,
   },
   lg: {
     minHeight: 56,
     paddingHorizontal: 28,
-    borderRadius: 14,
+    borderRadius: 999,
   },
   icon: {
     width: 48,
@@ -207,38 +260,21 @@ const buttonStyles = StyleSheet.create({
   disabled: {
     opacity: 0.5,
   },
-  // Focus state for keyboard navigation (WCAG 2.4.7)
+  // Focus state shape for keyboard navigation (WCAG 2.4.7); color is applied
+  // at render time from the live theme (see the `isFocused &&` override above).
   focused: {
-    shadowColor: '#059669', // Emerald color for focus ring
+    borderWidth: 3,
+    borderColor: 'transparent',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.6,
     shadowRadius: 8,
     elevation: 10,
-    // Add visible border for high contrast
-    borderWidth: 3,
-    borderColor: '#6ee7b7', // Light emerald for visibility
   },
   text: {
     fontSize: 15,
     fontWeight: '600',
   },
-  defaultText: {
-    color: '#fffef5', // off-white
-  },
-  destructiveText: {
-    color: '#fffef5',
-  },
-  outlineText: {
-    color: '#00912C', // emerald text
-  },
-  secondaryText: {
-    color: '#fffef5',
-  },
-  ghostText: {
-    color: '#00912C', // emerald text
-  },
   linkText: {
-    color: '#00912C',
     textDecorationLine: 'underline',
   },
   disabledText: {

@@ -60,7 +60,7 @@ async function syncConnectAccountToProfile(
       string,
       unknown
     > | null,
-    onboarding_complete: fullyOnboarded,
+    stripe_connect_onboarding_complete: fullyOnboarded,
   };
 
   // Only set the onboarded timestamp on the first transition; never clear it.

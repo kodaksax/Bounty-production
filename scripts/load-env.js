@@ -3,6 +3,19 @@ const path = require('path');
 const dotenv = require('dotenv');
 
 function loadEnv(serviceRoot) {
+  // NODE_ENV/APP_ENV unset means we're about to fall back to the bare `.env`
+  // file, not a specific environment. That file is intentionally scoped to
+  // development-safe values (see the header comment in .env), but a script
+  // running this way is NOT explicitly targeting any environment — surface
+  // that loudly so nobody mistakes it for "the environment I meant to hit".
+  if (!process.env.NODE_ENV && !process.env.APP_ENV) {
+    console.warn(
+      '[env] NODE_ENV/APP_ENV not set — falling back to the bare `.env` file ' +
+      '(development-scoped by convention). Set NODE_ENV or APP_ENV explicitly ' +
+      '(development/staging/production) to target a specific environment.'
+    );
+  }
+
   const envName = process.env.NODE_ENV ? `.env.${String(process.env.NODE_ENV).toLowerCase()}` : '.env';
 
   // Try service-local env file first when provided

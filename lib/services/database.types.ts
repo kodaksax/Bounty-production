@@ -40,6 +40,8 @@ export type Bounty = {
   latest_arrival_time?: string; // ISO 8601 timestamptz
   duration_minutes?: number;
   conditional_end_note?: string;
+  // Optional ZIP code entered by the poster (powers future ZIP-matched bounty notifications)
+  zip_code?: string;
 }
 
 // Lightweight attachment metadata for client state (stored serialized in attachments_json)
@@ -70,12 +72,31 @@ export type Profile = {
   title?: string
   skills?: string[] // Array of skill names
   onboarding_completed?: boolean
+  // Marketplace persona picked during onboarding ('poster' | 'hunter' | 'both').
+  // Distinct from any platform authorization role.
+  primary_role?: 'poster' | 'hunter' | 'both' | null
+  // Which onboarding flow version this user completed — see
+  // lib/context/onboarding-context.tsx CURRENT_ONBOARDING_VERSION.
+  onboarding_version?: number | null
+  // Progressive profile-completion tracking, e.g. { avatar: true, bio: false }.
+  profile_completeness?: Record<string, boolean>
   // Withdrawal and cancellation tracking
   withdrawal_count?: number
   cancellation_count?: number
   // Aggregated rating stats (optional; populated by joined queries)
   averageRating?: number
   ratingCount?: number
+  // Identity verification (Stripe Identity KYC)
+  id_verification_status?: 'unverified' | 'pending' | 'verified' | 'rejected'
+  selfie_submitted_at?: string
+  // Stripe Connect payout account status. Distinct from `onboarding_completed`
+  // (app onboarding) — see supabase/migrations/20260714c_rename_onboarding_complete_to_stripe_connect.sql.
+  stripe_connect_onboarding_complete?: boolean
+  stripe_connect_charges_enabled?: boolean
+  stripe_connect_payouts_enabled?: boolean
+  // Last time the user was observed active in-app (throttled). Drives
+  // lib/moments/registry.ts's inactive_user_return moment.
+  last_session_at?: string | null
 }
 
 export type Skill = {
