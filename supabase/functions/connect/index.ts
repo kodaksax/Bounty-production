@@ -722,6 +722,15 @@ Deno.serve(async (req: Request) => {
         transferId: transfer.id,
       });
 
+      // Stripe transfers to a connected account's balance are synchronous —
+      // by the time stripe.transfers.create() above returned without throwing,
+      // the funds have already moved. There is no `transfer.paid` webhook for
+      // this flow (that event, along with `transfer.failed`, belongs to a
+      // legacy recipient-transfer API and is never delivered here), so
+      // recording this as 'pending' and waiting on a webhook to promote it
+      // would leave the row stuck forever. Record it as 'completed' now;
+      // `payout.failed` already expects a 'completed' row to roll back if the
+      // later bank-level payout fails.
       const { data: transaction, error: txError } = await supabase
         .from('wallet_transactions')
         .insert({
@@ -729,7 +738,7 @@ Deno.serve(async (req: Request) => {
           type: 'withdrawal',
           amount: -amount,
           description: 'Withdrawal to bank account',
-          status: 'pending',
+          status: 'completed',
           stripe_transfer_id: transfer.id,
           stripe_connect_account_id: p.stripe_connect_account_id,
           idempotency_key: idempotencyKey ?? null,
@@ -790,7 +799,7 @@ Deno.serve(async (req: Request) => {
         );
         return jsonResponse({
           transferId: transfer.id,
-          status: 'pending',
+          status: 'completed',
           amount,
           currency,
           accountId: p.stripe_connect_account_id,
@@ -809,7 +818,7 @@ Deno.serve(async (req: Request) => {
 
       return jsonResponse({
         transferId: transfer.id,
-        status: 'pending',
+        status: 'completed',
         amount,
         currency,
         accountId: p.stripe_connect_account_id,
@@ -922,11 +931,15 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ error: mapped.error, code: mapped.code }, mapped.status);
       }
 
+      // Same reasoning as the primary /transfer path: the retry's transfer
+      // creation above already succeeded synchronously, so this is 'completed'
+      // immediately rather than waiting on a `transfer.paid` webhook that
+      // Stripe never sends for connected-account balance transfers.
       await supabase
         .from('wallet_transactions')
         .update({
           stripe_transfer_id: transfer.id,
-          status: 'pending',
+          status: 'completed',
           metadata: {
             ...t.metadata,
             retry_count: retryCount + 1,
