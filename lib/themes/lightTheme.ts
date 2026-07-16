@@ -1,4 +1,5 @@
 import { palette } from './colors';
+import { radius, shadows, spacing, typography } from './tokens';
 import type { AppTheme } from './types';
 
 // Light theme — same Bounty brand identity, inverted surfaces.
@@ -31,5 +32,9 @@ export const lightTheme: AppTheme = {
   cancelled:         palette.cancelled,
   target:            palette.black,
   isDark: false,
-   
+
+  spacing,
+  radius,
+  typography,
+  shadows,
 };

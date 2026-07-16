@@ -307,7 +307,7 @@ const styles = StyleSheet.create({
   },
   stepText: {
     flex: 1,
-    color: "#1F2937",
+    color: "#D1D5DB",
     fontSize: 14,
     lineHeight: 20,
   },
@@ -357,7 +357,7 @@ const styles = StyleSheet.create({
   },
   confirmText: {
     fontSize: 14,
-    color: "#1F2937",
+    color: "#D1D5DB",
     textAlign: "center",
     lineHeight: 20,
   },

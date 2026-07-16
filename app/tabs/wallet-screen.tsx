@@ -114,6 +114,10 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
         keyExtractor={(tx: WalletTransactionRecord) => tx.id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 18 }}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={5}
+        windowSize={5}
+        initialNumToRender={3}
         ListHeaderComponent={() => (
           <>
             {/* Header */}

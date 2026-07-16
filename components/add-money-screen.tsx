@@ -2,7 +2,7 @@
 
 import { MaterialIcons } from "@expo/vector-icons"
 import { BrandingLogo } from "components/ui/branding-logo"
-import { cn } from "lib/utils"
+import { cn, formatCurrency } from "lib/utils"
 import { useEffect, useState } from "react"
 import { ActivityIndicator, Alert, Platform, Text, TouchableOpacity, View } from "react-native"
 import { useAuthContext } from '../hooks/use-auth-context'
@@ -173,8 +173,8 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
 
           // Show success message (warn if server persistence failed)
           const successMsg = persisted
-            ? `$${numAmount.toFixed(2)} has been added to your wallet.`
-            : `$${numAmount.toFixed(2)} has been added to your wallet.\n\nNote: There was a temporary issue syncing with the server. Your balance will update automatically shortly.`
+            ? `${formatCurrency(numAmount)} has been added to your wallet.`
+            : `${formatCurrency(numAmount)} has been added to your wallet.\n\nNote: There was a temporary issue syncing with the server. Your balance will update automatically shortly.`
           Alert.alert(
             'Success!',
             successMsg,
@@ -280,8 +280,8 @@ export function AddMoneyScreen({ onBack, onAddMoney }: AddMoneyScreenProps) {
         }
 
         const applePayMsg = persisted
-          ? `$${numAmount.toFixed(2)} has been added to your wallet via Apple Pay.`
-          : `$${numAmount.toFixed(2)} has been added to your wallet via Apple Pay.\n\nNote: There was a temporary issue syncing with the server. Your balance will update automatically shortly.`
+          ? `${formatCurrency(numAmount)} has been added to your wallet via Apple Pay.`
+          : `${formatCurrency(numAmount)} has been added to your wallet via Apple Pay.\n\nNote: There was a temporary issue syncing with the server. Your balance will update automatically shortly.`
         Alert.alert(
           'Success!',
           applePayMsg,

@@ -17,6 +17,7 @@ import { useEmailVerification } from '../hooks/use-email-verification';
 import { API_BASE_URL } from '../lib/config/api';
 import { MIN_WITHDRAWAL_AMOUNT } from '../lib/constants';
 import { analyticsService } from '../lib/services/analytics-service';
+import { formatCurrency } from '../lib/utils';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
 import { useWallet } from '../lib/wallet-context';
@@ -243,12 +244,12 @@ export function WithdrawWithBankScreen({
     }
 
     if (amount < minWithdrawal) {
-      Alert.alert('Minimum Withdrawal', `The minimum withdrawal amount is $${minWithdrawal.toFixed(2)}.`);
+      Alert.alert('Minimum Withdrawal', `The minimum withdrawal amount is ${formatCurrency(minWithdrawal)}.`);
       return;
     }
 
     if (maxWithdrawal != null && amount > maxWithdrawal) {
-      Alert.alert('Maximum Withdrawal', `The maximum withdrawal amount is $${maxWithdrawal.toFixed(2)} per transaction.`);
+      Alert.alert('Maximum Withdrawal', `The maximum withdrawal amount is ${formatCurrency(maxWithdrawal)} per transaction.`);
       return;
     }
 
@@ -285,6 +286,22 @@ export function WithdrawWithBankScreen({
       return;
     }
 
+    const selectedAccount = bankAccounts.find((account) => account.id === selectedBankAccount);
+    const destination = selectedAccount?.bankName
+      ? `${selectedAccount.bankName} account ending in ${selectedAccount.last4}`
+      : `account ending in ${selectedAccount?.last4 ?? '****'}`;
+
+    Alert.alert(
+      'Confirm Withdrawal',
+      `Withdraw ${formatCurrency(amount)} to your ${destination}?\n\nThis typically arrives in 1-2 business days and can't be canceled once started.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Withdraw', style: 'destructive', onPress: () => performWithdraw(amount) },
+      ]
+    );
+  };
+
+  const performWithdraw = async (amount: number) => {
     setIsProcessing(true);
 
     try {
@@ -359,7 +376,7 @@ export function WithdrawWithBankScreen({
       // Show success
       Alert.alert(
         'Withdrawal Initiated',
-        `Transfer of $${amount.toFixed(2)} has been initiated to your bank account.\n\nEstimated arrival: 1-2 business days\n\nTransfer ID: ${transferId}`,
+        `Transfer of ${formatCurrency(amount)} has been initiated to your bank account.\n\nEstimated arrival: 1-2 business days\n\nTransfer ID: ${transferId}`,
         [{ text: 'OK', onPress: onBack }]
       );
     } catch (error: any) {
@@ -468,7 +485,7 @@ export function WithdrawWithBankScreen({
         {/* Balance Display */}
         <View style={s.balanceCard}>
           <Text style={s.balanceLabel}>Available Balance</Text>
-          <Text style={s.balanceAmount}>${balance.toFixed(2)}</Text>
+          <Text style={s.balanceAmount}>{formatCurrency(balance)}</Text>
         </View>
 
         {/* Connect Status — surfaced first since it blocks withdrawal entirely */}
@@ -596,8 +613,8 @@ export function WithdrawWithBankScreen({
             />
           </View>
           <Text style={s.limitsHint}>
-            Min ${minWithdrawal.toFixed(2)}
-            {maxWithdrawal != null ? ` · Max $${maxWithdrawal.toFixed(2)}` : ''}
+            Min {formatCurrency(minWithdrawal)}
+            {maxWithdrawal != null ? ` · Max ${formatCurrency(maxWithdrawal)}` : ''}
           </Text>
           <View style={s.quickAmounts}>
             <TouchableOpacity
@@ -653,7 +670,7 @@ export function WithdrawWithBankScreen({
           style={[s.withdrawButton, isWithdrawDisabled && s.withdrawButtonDisabled]}
           accessibilityLabel={
             withdrawalAmount
-              ? `Withdraw $${parseFloat(withdrawalAmount).toFixed(2)}`
+              ? `Withdraw ${formatCurrency(parseFloat(withdrawalAmount))}`
               : 'Withdraw funds'
           }
           accessibilityRole="button"
@@ -666,7 +683,7 @@ export function WithdrawWithBankScreen({
             </>
           ) : (
             <Text style={s.withdrawButtonText}>
-              Withdraw {withdrawalAmount ? `$${parseFloat(withdrawalAmount).toFixed(2)}` : ''}
+              Withdraw {withdrawalAmount ? formatCurrency(parseFloat(withdrawalAmount)) : ''}
             </Text>
           )}
         </TouchableOpacity>

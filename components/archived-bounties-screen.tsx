@@ -109,6 +109,10 @@ export function ArchivedBountiesScreen({ onBack }: ArchivedBountiesScreenProps) 
           data={archivedBounties}
           renderItem={renderBountyItem}
           keyExtractor={(item) => String(item.id)}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={5}
+          windowSize={5}
+          initialNumToRender={3}
           contentContainerStyle={[
             s.listContent,
             { paddingBottom: bottomNavOffset + Math.max(insets.bottom, 12) + 16 },

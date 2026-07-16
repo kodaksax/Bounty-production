@@ -210,7 +210,7 @@ export default function CreateDisputeScreen() {
                 style={styles.addButton}
                 disabled={isSubmitting}
               >
-                <MaterialIcons name="add" size={20} color="#00912C" />
+                <MaterialIcons name="add" size={20} color="#059669" />
                 <Text style={styles.addButtonText}>Add</Text>
               </TouchableOpacity>
             )}
@@ -410,7 +410,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 16,
     paddingTop: 48,
-    backgroundColor: '#00912C',
+    backgroundColor: '#059669',
   },
   backButton: {
     padding: 4,
@@ -469,7 +469,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   reasonInput: {
-    backgroundColor: 'rgba(0,145,44,0.15)',
+    backgroundColor: 'rgba(5,150,105,0.15)',
     borderRadius: 8,
     padding: 12,
     color: '#fffef5',
@@ -485,14 +485,14 @@ const styles = StyleSheet.create({
   addButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#00912C',
+    color: '#059669',
   },
   evidenceList: {
     gap: 12,
     marginTop: 12,
   },
   evidenceItem: {
-    backgroundColor: 'rgba(0,145,44,0.1)',
+    backgroundColor: 'rgba(5,150,105,0.1)',
     borderRadius: 8,
     padding: 12,
   },
@@ -522,7 +522,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255,254,245,0.8)',
   },
   addEvidenceForm: {
-    backgroundColor: 'rgba(0,145,44,0.1)',
+    backgroundColor: 'rgba(5,150,105,0.1)',
     borderRadius: 8,
     padding: 16,
     marginTop: 12,
@@ -543,11 +543,11 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 6,
-    backgroundColor: 'rgba(0,145,44,0.15)',
+    backgroundColor: 'rgba(5,150,105,0.15)',
     alignItems: 'center',
   },
   typeButtonActive: {
-    backgroundColor: '#00912C',
+    backgroundColor: '#059669',
   },
   typeButtonText: {
     fontSize: 12,
@@ -559,7 +559,7 @@ const styles = StyleSheet.create({
     color: '#fffef5',
   },
   evidenceInput: {
-    backgroundColor: 'rgba(0,145,44,0.2)',
+    backgroundColor: 'rgba(5,150,105,0.2)',
     borderRadius: 6,
     padding: 10,
     color: '#fffef5',
@@ -575,7 +575,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#00912C',
+    backgroundColor: '#059669',
     padding: 10,
     borderRadius: 6,
     gap: 6,

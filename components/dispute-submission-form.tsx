@@ -131,7 +131,7 @@ export function DisputeSubmissionForm({
       {/* Bounty Info */}
       <View className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-6">
         <Text className="text-sm text-emerald-600 font-medium mb-1">Bounty</Text>
-        <Text className="text-base text-white font-semibold" numberOfLines={2}>
+        <Text className="text-base text-gray-900 font-semibold" numberOfLines={2}>
           {bountyTitle}
         </Text>
       </View>

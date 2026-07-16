@@ -6,6 +6,7 @@
 import { Check, Download, Mail, Share2 } from 'lucide-react-native';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { theme } from '../lib/theme';
+import { formatCurrency } from '../lib/utils';
 
 
 // Support email - configurable via environment variable
@@ -50,13 +51,6 @@ export function PaymentReceipt({
   onShare,
   onEmail,
 }: PaymentReceiptProps) {
-  const formatCurrency = (amount: number, currency: string = 'USD'): string => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency.toUpperCase(),
-    }).format(amount);
-  };
-
   const formatDate = (date: Date): string => {
     return new Intl.DateTimeFormat('en-US', {
       year: 'numeric',

@@ -17,6 +17,8 @@ export function ThemedCard({ variant = 'default', style, ...props }: ThemedCardP
         {
           backgroundColor: variant === 'elevated' ? theme.surfaceSecondary : theme.surface,
           borderColor: theme.border,
+          borderRadius: theme.radius.lg,
+          padding: theme.spacing.lg,
         },
         style,
       ]}
@@ -27,8 +29,6 @@ export function ThemedCard({ variant = 'default', style, ...props }: ThemedCardP
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: 12,
     borderWidth: 1,
-    padding: 16,
   },
 });

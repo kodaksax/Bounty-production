@@ -239,7 +239,7 @@ function makeStyles(theme: AppTheme) {
       borderTopRightRadius: 28,
       ...legacyTheme.shadows.lg,
       borderWidth: 1,
-      borderColor: "rgba(0, 145, 44, 0.25)",
+      borderColor: "rgba(5, 150, 105, 0.25)",
     },
     sideSection: {
       flex: 1,
@@ -297,9 +297,9 @@ function makeStyles(theme: AppTheme) {
     centerButton: {
       height: 68,
       width: 68,
-      backgroundColor: "rgba(0, 145, 44, 0.15)",
+      backgroundColor: "rgba(5, 150, 105, 0.15)",
       borderWidth: 2.5,
-      borderColor: "#00912C",
+      borderColor: "#059669",
       borderRadius: 34,
       alignItems: "center",
       justifyContent: "center",

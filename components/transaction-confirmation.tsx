@@ -3,6 +3,7 @@ import React, { useEffect } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { BrandingLogo } from 'components/ui/branding-logo';
 import { useHapticFeedback } from "../lib/haptic-feedback";
+import { formatCurrency } from "../lib/utils";
 
 interface TransactionConfirmationProps {
   type: 'deposit' | 'withdrawal';
@@ -50,16 +51,16 @@ export function TransactionConfirmation({
         </Text>
         
         <Text style={styles.subtitle}>
-          {isDeposit 
-            ? `$${amount.toFixed(2)} has been added to your wallet`
-            : `$${amount.toFixed(2)} withdrawal is being processed`
+          {isDeposit
+            ? `${formatCurrency(amount)} has been added to your wallet`
+            : `${formatCurrency(amount)} withdrawal is being processed`
           }
         </Text>
 
         <View style={styles.detailsCard}>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Amount:</Text>
-            <Text style={styles.detailValue}>${amount.toFixed(2)}</Text>
+            <Text style={styles.detailValue}>{formatCurrency(amount)}</Text>
           </View>
           
           <View style={styles.detailRow}>

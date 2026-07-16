@@ -1,9 +1,10 @@
 import { cva, type VariantProps } from "class-variance-authority"
+import { useAccessibleAnimation } from "hooks/use-accessible-animation"
 import { useHapticFeedback } from "lib/haptic-feedback"
 import { theme } from "lib/theme"
 import { cn } from "lib/utils"
 import * as React from "react"
-import { StyleSheet, Text, TouchableOpacity, TouchableOpacityProps } from "react-native"
+import { Animated, StyleSheet, Text, TouchableOpacity, TouchableOpacityProps } from "react-native"
 
 export const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
@@ -43,10 +44,16 @@ export interface ButtonProps
   accessibilityHint?: string;
 }
 
+// Hoisted to module scope — recreating this on every render would remount
+// the underlying native view on every press (state update -> new component
+// type -> full unmount/mount), breaking the press animation.
+const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
+
 const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, ButtonProps>(
   ({ className, variant, size, disabled, onPress, children, accessibilityLabel, accessibilityHint, ...props }, ref) => {
     const { triggerHaptic } = useHapticFeedback();
-    const scaleAnim = React.useRef(new (require('react-native').Animated.Value)(1)).current;
+    const { createSpring } = useAccessibleAnimation();
+    const scaleAnim = React.useRef(new Animated.Value(1)).current;
     const [isFocused, setIsFocused] = React.useState(false);
 
     const handlePress = React.useCallback((event: any) => {
@@ -65,24 +72,14 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
     const handlePressIn = React.useCallback(() => {
       if (disabled) return;
       setIsFocused(true);
-      require('react-native').Animated.spring(scaleAnim, {
-        toValue: 0.95,
-        useNativeDriver: true,
-        tension: 300,
-        friction: 10,
-      }).start();
-    }, [disabled, scaleAnim]);
+      createSpring(scaleAnim, 0.95).start();
+    }, [disabled, scaleAnim, createSpring]);
 
     const handlePressOut = React.useCallback(() => {
       if (disabled) return;
       setIsFocused(false);
-      require('react-native').Animated.spring(scaleAnim, {
-        toValue: 1,
-        useNativeDriver: true,
-        tension: 300,
-        friction: 10,
-      }).start();
-    }, [disabled, scaleAnim]);
+      createSpring(scaleAnim, 1).start();
+    }, [disabled, scaleAnim, createSpring]);
 
     // Handle keyboard focus events for web/keyboard navigation
     const handleFocus = React.useCallback(() => {
@@ -94,8 +91,6 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
       if (disabled) return;
       setIsFocused(false);
     }, [disabled]);
-
-    const AnimatedTouchable = require('react-native').Animated.createAnimatedComponent(TouchableOpacity);
 
     return (
       <AnimatedTouchable
@@ -157,10 +152,10 @@ const buttonStyles = StyleSheet.create({
     transform: [{ scale: 1 }],
   },
   default: {
-    backgroundColor: '#00912C', // Company specified primary green base
+    backgroundColor: '#059669', // brand primary green base
     // Enhanced inner glow effect for premium feel
     borderWidth: 1,
-    borderColor: 'rgba(0, 145, 44, 0.6)',
+    borderColor: 'rgba(5, 150, 105, 0.6)',
     ...theme.shadows.emerald,
   },
   destructive: {
@@ -172,12 +167,12 @@ const buttonStyles = StyleSheet.create({
   outline: {
     backgroundColor: 'transparent',
     borderWidth: 1.5,
-    borderColor: 'rgba(0, 145, 44, 0.5)', // emerald outline
+    borderColor: 'rgba(5, 150, 105, 0.5)', // emerald outline
   },
   secondary: {
     backgroundColor: '#2d5240', // secondary emerald tone
     borderWidth: 1,
-    borderColor: 'rgba(0, 145, 44, 0.3)',
+    borderColor: 'rgba(5, 150, 105, 0.3)',
     ...theme.shadows.sm,
   },
   ghost: {
@@ -229,16 +224,16 @@ const buttonStyles = StyleSheet.create({
     color: '#fffef5',
   },
   outlineText: {
-    color: '#00912C', // emerald text
+    color: '#059669', // emerald text
   },
   secondaryText: {
     color: '#fffef5',
   },
   ghostText: {
-    color: '#00912C', // emerald text
+    color: '#059669', // emerald text
   },
   linkText: {
-    color: '#00912C',
+    color: '#059669',
     textDecorationLine: 'underline',
   },
   disabledText: {

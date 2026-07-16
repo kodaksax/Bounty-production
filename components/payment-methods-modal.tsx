@@ -405,7 +405,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
                 </Text>
               </View>
             ) : selectedMethodType === 'bank_account' ? (
-              // Bank accounts - UI for listing will be added in future iteration
+              // Bank accounts are managed via Stripe Connect onboarding, not listed here.
               <View style={{ alignItems: 'center', padding: 40 }}>
                 <MaterialIcons name="account-balance" size={56} color="rgba(255,255,255,0.4)" />
                 <Text style={{
@@ -422,6 +422,10 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
               <FlatList
                 data={paymentMethods}
                 keyExtractor={(item) => item.id}
+                removeClippedSubviews={true}
+                maxToRenderPerBatch={5}
+                windowSize={5}
+                initialNumToRender={3}
                 renderItem={({ item }) => (
                   <View style={{
                     flexDirection: 'row',

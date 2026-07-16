@@ -1,4 +1,5 @@
 import { palette } from './colors';
+import { radius, shadows, spacing, typography } from './tokens';
 import type { AppTheme } from './types';
 
 export const darkTheme: AppTheme = {
@@ -29,4 +30,9 @@ export const darkTheme: AppTheme = {
   cancelled:         palette.cancelled,
   target:            palette.white,
   isDark: true,
+
+  spacing,
+  radius,
+  typography,
+  shadows,
 };

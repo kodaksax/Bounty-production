@@ -9,7 +9,7 @@ export const colors = {
     200: '#99deb4',
     300: '#66ce8f',
     400: '#33bd69',
-    500: '#00912C', // Main brand color - company specified
+    500: '#059669', // Main brand color - matches live lib/themes green
     600: '#007423',
     700: '#00571a',
     800: '#003a12',
@@ -125,7 +125,7 @@ export const shadows = {
     elevation: 8,
   },
   emerald: {
-    shadowColor: '#00912C', // emerald-500
+    shadowColor: '#059669', // matches live lib/themes green
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.3,
     shadowRadius: 12,

@@ -1,7 +1,6 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   RefreshControl,
   StyleSheet,
@@ -16,6 +15,7 @@ import { getCurrentUserId } from "lib/utils/data-utils";
 import { useWallet } from "lib/wallet-context";
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
+import { PostingsListSkeleton } from './ui/skeleton-loaders';
 
 interface HistoryScreenProps {
   onBack: () => void;
@@ -154,14 +154,18 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
       </View>
 
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#059669" />
+        <View style={styles.list}>
+          <PostingsListSkeleton count={4} />
         </View>
       ) : (
         <FlatList
           data={bounties}
           renderItem={renderBountyItem}
           keyExtractor={(item) => `bounty-${item.id}`}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={5}
+          windowSize={5}
+          initialNumToRender={3}
           contentContainerStyle={styles.list}
           refreshControl={
             <RefreshControl
@@ -207,11 +211,6 @@ function makeStyles(theme: AppTheme) {
       fontSize: 20,
       fontWeight: "700",
       color: theme.text,
-    },
-    loadingContainer: {
-      flex: 1,
-      justifyContent: "center",
-      alignItems: "center",
     },
     list: {
       padding: 16,

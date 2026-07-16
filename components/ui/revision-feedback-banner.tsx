@@ -106,7 +106,7 @@ const styles = StyleSheet.create({
   },
   actionHintText: {
     flex: 1,
-    color: '#1F2937',
+    color: '#D1D5DB',
     fontSize: 12,
     lineHeight: 18,
   },

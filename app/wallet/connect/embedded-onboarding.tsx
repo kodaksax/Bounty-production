@@ -253,7 +253,7 @@ export default function ConnectOnboardingScreen() {
             <MaterialIcons name="error-outline" size={40} color="#7f1d1d" />
           </View>
         ) : (
-          <ActivityIndicator size="large" color={colors.primary[500]} />
+          <ActivityIndicator size="large" color="#059669" />
         )}
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.message}>{message}</Text>
@@ -261,7 +261,7 @@ export default function ConnectOnboardingScreen() {
         {phase === 'error' ? (
           <>
             <TouchableOpacity style={styles.primaryBtn} onPress={handleRetry}>
-              <MaterialIcons name="refresh" size={20} color="#052e1b" />
+              <MaterialIcons name="refresh" size={20} color="#ffffff" />
               <Text style={styles.primaryBtnText}>Try again</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.secondaryBtn} onPress={handleClose}>
@@ -322,12 +322,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#9CA3AF',
+    backgroundColor: '#059669',
     paddingVertical: 12,
     paddingHorizontal: 28,
     borderRadius: 999,
   },
-  primaryBtnText: { color: '#052e1b', fontSize: 16, fontWeight: '700' },
+  primaryBtnText: { color: '#ffffff', fontSize: 16, fontWeight: '700' },
   secondaryBtn: {
     marginTop: 12,
     paddingVertical: 10,

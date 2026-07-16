@@ -13,6 +13,7 @@ import {
     View,
 } from 'react-native';
 import { SPACING } from '../../lib/constants/accessibility';
+import { EmptyState } from '../../components/ui/empty-state';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 import { bountyService } from '../../lib/services/bounty-service';
@@ -641,13 +642,12 @@ export default function EnhancedSearchScreen() {
           keyboardDismissMode="on-drag"
           ListEmptyComponent={
             query && !isSearching && !error ? (
-              <View style={s.emptyCenter}>
-                <Text style={s.emptyText}>
-                  No bounties found for {"\""}
-                  {query}
-                  {"\""}
-                </Text>
-              </View>
+              <EmptyState
+                icon="search-off"
+                title="No bounties found"
+                description={`No bounties matched "${query}". Try a different keyword or check your spelling.`}
+                size="sm"
+              />
             ) : null
           }
           removeClippedSubviews={true}
@@ -664,13 +664,12 @@ export default function EnhancedSearchScreen() {
           keyboardDismissMode="on-drag"
           ListEmptyComponent={
             query && !isSearching && !error ? (
-              <View style={s.emptyCenter}>
-                <Text style={s.emptyText}>
-                  No users found for {"\""}
-                  {query}
-                  {"\""}
-                </Text>
-              </View>
+              <EmptyState
+                icon="person-search"
+                title="No users found"
+                description={`No users matched "${query}". Try a different name or username.`}
+                size="sm"
+              />
             ) : null
           }
           removeClippedSubviews={true}
@@ -936,13 +935,6 @@ function makeStyles(t: AppTheme) {
     resultsContainer: {
       padding: 12,
       paddingBottom: 100,
-    },
-    emptyCenter: {
-      padding: 24,
-      alignItems: 'center',
-    },
-    emptyText: {
-      color: t.textSecondary,
     },
     filterBtn: {
       padding: SPACING.COMPACT_GAP,
