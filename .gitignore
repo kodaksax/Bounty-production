@@ -66,6 +66,12 @@ postgres-data/
 coverage/
 *.test.results.json
 .nyc_output/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/e2e/.auth/
 # k6 load test results
 tests/load/results/
 *.summary.json

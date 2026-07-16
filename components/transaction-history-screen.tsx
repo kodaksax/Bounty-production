@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAppThemeContext } from "../lib/themes/AppThemeContext"
 import type { AppTheme } from "../lib/themes/types"
 import { TransactionDetailModal } from "./transaction-detail-modal"
+import { BrandingLogo } from "./ui/branding-logo"
 import { TransactionsListSkeleton } from "./ui/skeleton-loaders"
 
 // Constants for transaction display
@@ -243,8 +244,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
       {/* Header - improved spacing for iPhone */}
       <View className="flex flex-row items-center justify-between p-5 pt-safe">
         <View className="flex flex-row items-center">
-          <MaterialIcons name="gps-fixed" size={24} color="#ffffff" />
-          <Text className="text-xl font-bold tracking-wider ml-2" style={{ color: theme.text }}>BOUNTY</Text>
+          <BrandingLogo size="small" />
         </View>
         <TouchableOpacity
           onPress={onBack}
@@ -255,8 +255,10 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
             justifyContent: 'center',
             alignItems: 'center'
           }}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
         >
-          <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
+          <MaterialIcons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
       </View>
 

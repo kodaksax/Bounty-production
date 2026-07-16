@@ -15,6 +15,7 @@ import { markIntentionalSignOut } from '../lib/utils/session-handler';
 import { SettingsRow } from './ui/settings-row';
 import { SettingsScreenHeader } from './ui/settings-screen-header';
 import { SettingsSection } from './ui/settings-section';
+import { CommunityGuidelinesScreen } from './settings/community-guidelines-screen';
 import { ContactSupportScreen } from './settings/contact-support-screen';
 import { FAQScreen } from './settings/faq-screen';
 import { FeedbackSupportScreen } from './settings/feedback-support-screen';
@@ -39,7 +40,8 @@ type Panel =
   | 'contact'
   | 'terms'
   | 'faq'
-  | 'feedback';
+  | 'feedback'
+  | 'guidelines';
 
 const THEME_OPTIONS: [ThemeMode, keyof typeof MaterialIcons.glyphMap, string][] = [
   ['light', 'light-mode', 'Light'],
@@ -174,6 +176,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
   if (panel === 'terms') return <TermsPrivacyScreen onBack={() => setPanel('help')} />;
   if (panel === 'faq') return <FAQScreen onBack={() => setPanel('help')} />;
   if (panel === 'feedback') return <FeedbackSupportScreen onBack={() => setPanel('root')} />;
+  if (panel === 'guidelines') return <CommunityGuidelinesScreen onBack={() => setPanel('root')} />;
 
   return (
     <View style={s.screen}>
@@ -291,7 +294,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
             icon="security"
             label="Community Guidelines"
             description="Our standards for safety, trust, and respect."
-            onPress={() => router.push('/legal/community-guidelines')}
+            onPress={() => setPanel('guidelines')}
           />
         </SettingsSection>
 
