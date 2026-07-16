@@ -60,7 +60,7 @@ async function syncConnectAccountToProfile(
       string,
       unknown
     > | null,
-    onboarding_complete: fullyOnboarded,
+    stripe_connect_onboarding_complete: fullyOnboarded,
   };
 
   // Only set the onboarded timestamp on the first transition; never clear it.
@@ -1060,6 +1060,115 @@ Deno.serve(async (req: Request) => {
           }
 
           if (failedProfile) {
+            // Restore the balance for the withdrawal this payout was covering.
+            // By the time a bank-level payout fails, `transfer.paid` has already
+            // marked the wallet_transactions row 'completed' (the Transfer from
+            // platform -> connected account already succeeded). The money never
+            // reached the hunter's bank, so it must be credited back — otherwise
+            // the hunter's app balance is permanently short by the withdrawal
+            // amount with no automated recovery.
+            //
+            // LIMITATION: Stripe's automatic Connect payouts sweep the connected
+            // account's *entire* available balance on a schedule — a payout is
+            // not necessarily 1:1 with a single Transfer. We match by
+            // (user, amount) against the most recent unresolved completed
+            // withdrawal, mirroring the candidate-matching already used for
+            // `transfer.created` above. If two completed, unresolved withdrawals
+            // of the exact same amount exist for one user, only the most recent
+            // is matched; this is logged for manual review, not silently wrong.
+            const payoutAmountDollars = payout.amount / 100;
+            const { data: candidateTx, error: candidateTxError } = await supabase
+              .from('wallet_transactions')
+              .select('id, amount, metadata')
+              .eq('user_id', failedProfile.id)
+              .eq('type', 'withdrawal')
+              .eq('status', 'completed')
+              .eq('amount', -payoutAmountDollars)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (candidateTxError) {
+              console.error(
+                '[webhooks] Failed to look up candidate transaction for payout.failed',
+                { payoutId: payout.id, userId: failedProfile.id, error: candidateTxError }
+              );
+              throw candidateTxError;
+            }
+
+            if (!candidateTx) {
+              console.warn(
+                `[webhooks] No matching completed withdrawal found for payout ${payout.id} ` +
+                  `(user ${failedProfile.id}, amount $${payoutAmountDollars}) — nothing to refund. ` +
+                  'Manual review recommended if this is unexpected.'
+              );
+            } else {
+              const candidateTxRow = candidateTx as unknown as WalletTransaction;
+              const candidateMetadata =
+                (candidateTxRow.metadata as Record<string, unknown> | null) ?? {};
+              const refundAlreadyIssued = candidateMetadata.payout_status === 'failed';
+
+              if (refundAlreadyIssued) {
+                console.log(
+                  `[webhooks] Skipping duplicate refund for payout ${payout.id} — balance already restored in a prior invocation`
+                );
+              } else {
+                const { data: updatedTx, error: txUpdateError } = await supabase
+                  .from('wallet_transactions')
+                  .update({
+                    status: 'failed',
+                    metadata: {
+                      ...candidateMetadata,
+                      payout_status: 'failed',
+                      payout_failure_code: payout.failure_code ?? null,
+                      payout_failure_message: payout.failure_message ?? null,
+                      payout_id: payout.id,
+                    },
+                  })
+                  .eq('id', candidateTxRow.id)
+                  .eq('status', 'completed') // optimistic-lock guard against a concurrent redelivery
+                  .select()
+                  .maybeSingle();
+
+                if (txUpdateError) {
+                  console.error('[webhooks] Failed to update transaction for payout.failed', {
+                    transactionId: candidateTxRow.id,
+                    payoutId: payout.id,
+                    error: txUpdateError,
+                  });
+                  throw txUpdateError;
+                }
+
+                if (!updatedTx) {
+                  console.log(
+                    `[webhooks] Skipping duplicate refund for payout ${payout.id} — a concurrent delivery already resolved this transaction`
+                  );
+                } else {
+                  const refundAmount = Math.abs(candidateTxRow.amount);
+                  const { error: rpcError } = await supabase.rpc('update_balance', {
+                    p_user_id: failedProfile.id,
+                    p_amount: refundAmount,
+                  });
+                  if (rpcError) {
+                    const { error: retryError } = await supabase.rpc('update_balance', {
+                      p_user_id: failedProfile.id,
+                      p_amount: refundAmount,
+                    });
+                    if (retryError) {
+                      console.error(
+                        '[webhooks] CRITICAL: balance refund for failed payout could not be applied — letting Stripe retry',
+                        { payoutId: payout.id, userId: failedProfile.id, error: retryError }
+                      );
+                      throw retryError;
+                    }
+                  }
+                  console.log(
+                    `[webhooks] Refunded $${refundAmount} to user ${failedProfile.id} for failed payout ${payout.id}`
+                  );
+                }
+              }
+            }
+
             // Insert notification, falling back to an update when the insert
             // conflicts. Avoid `.upsert()` because the DB uses a partial unique
             // index on (user_id,type,stripe_payout_id) WHERE stripe_payout_id IS NOT NULL.
