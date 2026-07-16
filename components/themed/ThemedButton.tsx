@@ -37,7 +37,7 @@ export function ThemedButton({
     'transparent';
 
   const textColor =
-    variant === 'ghost' ? theme.text : '#ffffff';
+    variant === 'ghost' || variant === 'secondary' ? theme.text : '#ffffff';
 
   const borderStyle =
     variant === 'ghost'

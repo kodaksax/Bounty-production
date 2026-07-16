@@ -1,28 +1,35 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import React, { useState, useCallback } from 'react';
+import { ThemedButton } from 'components/themed/ThemedButton';
+import { ThemedInput } from 'components/themed/ThemedInput';
+import { SettingsRow } from 'components/ui/settings-row';
+import { SettingsScreenHeader } from 'components/ui/settings-screen-header';
+import { SettingsSection } from 'components/ui/settings-section';
+import { useAppThemeContext } from 'lib/themes/AppThemeContext';
+import type { AppTheme } from 'lib/themes/types';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  FlatList,
-  Alert,
   ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocation } from '../../app/hooks/useLocation';
 import { useAddressLibrary } from '../../app/hooks/useAddressLibrary';
+import { useLocation } from '../../app/hooks/useLocation';
 import type { SavedAddress } from '../../lib/types';
-
-const BOTTOM_NAV_OFFSET = 70;
 
 interface LocationSettingsScreenProps {
   onBack?: () => void;
 }
 
 export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) {
+  const { theme } = useAppThemeContext();
   const insets = useSafeAreaInsets();
+  const s = useMemo(() => makeStyles(theme), [theme]);
+
   const {
     location,
     permission,
@@ -103,247 +110,352 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
     setFormAddress('');
   }, []);
 
-  const renderAddressItem = useCallback(
-    ({ item }: { item: SavedAddress }) => (
-      <View className="bg-[#111827] rounded-lg p-4 mb-2">
-        <View className="flex-row items-start justify-between">
-          <View className="flex-1 mr-3">
-            <Text className="text-white font-semibold text-base mb-1">{item.label}</Text>
-            <Text className="text-[#9CA3AF] text-sm" numberOfLines={2}>
-              {item.address}
-            </Text>
-            {item.latitude && item.longitude && (
-              <Text className="text-[#6ee7b7]/60 text-xs mt-1">
-                Coordinates available
-              </Text>
-            )}
-          </View>
-          <View className="flex-row gap-2">
-            <TouchableOpacity
-              onPress={() => handleEdit(item)}
-              className="bg-[#059669] p-2 rounded"
-              accessibilityLabel={`Edit ${item.label}`}
-              accessibilityRole="button"
-            >
-              <MaterialIcons name="edit" size={20} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => handleDelete(item)}
-              className="bg-red-600 p-2 rounded"
-              accessibilityLabel={`Delete ${item.label}`}
-              accessibilityRole="button"
-            >
-              <MaterialIcons name="delete" size={20} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    ),
-    [handleEdit, handleDelete]
-  );
-
-  const renderEmptyAddresses = useCallback(
-    () => (
-      <View className="items-center justify-center py-12">
-        <MaterialIcons name="place" size={64} color="rgba(110, 231, 183, 0.3)" />
-        <Text className="text-[#9CA3AF]/60 text-base mt-4 text-center">
-          No addresses saved yet
-        </Text>
-        <Text className="text-[#9CA3AF]/40 text-sm mt-2 text-center px-8">
-          Add addresses to quickly fill in location fields when creating bounties
-        </Text>
-      </View>
-    ),
-    []
-  );
+  const grantLabel = permission?.canAskAgain
+    ? 'Grant Permission'
+    : 'Permission denied - Enable in Settings';
 
   return (
-    <View className="flex-1 bg-[#059669]">
-      {/* Header with Back Button */}
-      <View className="flex-row justify-between items-center p-4 pt-8">
-        <View className="flex-row items-center">
-          <MaterialIcons name="place" size={24} color="#fff" />
-          <Text className="text-lg font-bold tracking-wider ml-2 text-white">Location & Visibility</Text>
-        </View>
-        {onBack && (
-          <TouchableOpacity onPress={onBack} accessibilityRole="button" accessibilityLabel="Back">
-            <MaterialIcons name="arrow-back" size={24} color="#fff" />
-          </TouchableOpacity>
-        )}
-      </View>
-      
+    <View style={s.screen}>
+      <SettingsScreenHeader icon="place" title="Location & Visibility" onBack={onBack} />
+
       <ScrollView
-        className="flex-1"
-        contentContainerStyle={{
-          paddingTop: 12,
-          paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 16),
-        }}
+        contentContainerStyle={[
+          s.scrollContent,
+          { paddingBottom: Math.max(insets.bottom, 24) + 24 },
+        ]}
       >
-        {/* Description */}
-        <View className="px-4 mb-6">
-          <Text className="text-[#9CA3AF]/80 text-sm">
-            Manage your location settings and saved addresses
-          </Text>
-        </View>
+        <Text style={s.intro}>Manage your location settings and saved addresses</Text>
 
-        {/* Location Permissions Section */}
-        <View className="px-4 mb-6">
-          <View className="bg-[#111827] rounded-lg p-4 border border-[#374151]">
-            <View className="flex-row items-center mb-3">
-              <MaterialIcons name="my-location" size={24} color="#6ee7b7" />
-              <Text className="text-white text-lg font-semibold ml-2">
-                Location Permissions
-              </Text>
-            </View>
-
+        <SettingsSection title="Location Permissions">
+          <View style={s.permissionBlock}>
             {locationError && (
-              <View className="bg-red-500/20 border border-red-400 rounded-lg p-3 mb-3">
-                <Text className="text-red-200 text-sm">{locationError}</Text>
+              <View style={s.errorBanner}>
+                <Text style={s.errorBannerText}>{locationError}</Text>
               </View>
             )}
 
             {permission ? (
-              <View>
-                <View className="flex-row items-center mb-2">
+              <>
+                <View style={s.statusRow}>
                   <MaterialIcons
                     name={permission.granted ? 'check-circle' : 'cancel'}
                     size={20}
-                    color={permission.granted ? '#6ee7b7' : '#f87171'}
+                    color={permission.granted ? theme.success : theme.error}
                   />
-                  <Text className="text-[#9CA3AF] ml-2">
+                  <Text style={s.statusLabel}>
                     Status:{' '}
-                    <Text className="font-semibold">
+                    <Text style={[s.statusValue, { color: permission.granted ? theme.success : theme.error }]}>
                       {permission.granted ? 'Granted' : 'Denied'}
                     </Text>
                   </Text>
                 </View>
 
                 {location && (
-                  <Text className="text-[#6ee7b7]/80 text-sm mb-3">
+                  <Text style={s.coordsText}>
                     Current location: {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
                   </Text>
                 )}
 
                 {!permission.granted && (
-                  <TouchableOpacity
+                  <ThemedButton
+                    variant="primary"
+                    label={grantLabel}
+                    loading={locationLoading}
                     onPress={handleRequestPermission}
-                    disabled={locationLoading}
-                    className="bg-[#059669] py-3 rounded-lg mt-2"
+                    style={s.grantButton}
                     accessibilityLabel="Request location permission"
-                    accessibilityRole="button"
-                  >
-                    {locationLoading ? (
-                      <ActivityIndicator color="#fff" />
-                    ) : (
-                      <Text className="text-white text-center font-semibold">
-                        {permission.canAskAgain
-                          ? 'Grant Permission'
-                          : 'Permission denied - Enable in Settings'}
-                      </Text>
-                    )}
-                  </TouchableOpacity>
+                  />
                 )}
-              </View>
+              </>
             ) : (
-              <ActivityIndicator color="#6ee7b7" />
+              <ActivityIndicator color={theme.primary} />
             )}
 
-            <Text className="text-[#9CA3AF]/60 text-xs mt-3">
+            <Text style={s.permissionFootnote}>
               Location is used to calculate distances to in-person bounties and help you find
               opportunities nearby.
             </Text>
           </View>
-        </View>
+        </SettingsSection>
 
-        {/* Saved Addresses Section */}
-        <View className="px-4">
-          <View className="flex-row items-center justify-between mb-3">
-            <Text className="text-white text-xl font-semibold">Saved Addresses</Text>
-            {!showAddForm && (
+        <SettingsSection
+          title="Saved Addresses"
+          headerRight={
+            !showAddForm ? (
               <TouchableOpacity
                 onPress={() => setShowAddForm(true)}
-                className="bg-[#059669] px-4 py-2 rounded-lg flex-row items-center"
+                style={s.addChip}
                 accessibilityLabel="Add new address"
                 accessibilityRole="button"
               >
-                <MaterialIcons name="add" size={20} color="#fff" />
-                <Text className="text-white font-semibold ml-1">Add</Text>
+                <MaterialIcons name="add" size={18} color="#ffffff" />
+                <Text style={s.addChipText}>Add</Text>
               </TouchableOpacity>
-            )}
-          </View>
-
+            ) : undefined
+          }
+        >
           {addressesError && (
-            <View className="bg-red-500/20 border border-red-400 rounded-lg p-3 mb-3">
-              <Text className="text-red-200 text-sm">{addressesError}</Text>
+            <View style={s.errorBannerInline}>
+              <Text style={s.errorBannerText}>{addressesError}</Text>
             </View>
           )}
 
-          {/* Add/Edit Form */}
           {showAddForm && (
-            <View className="bg-[#111827] rounded-lg p-4 mb-4 border border-[#374151]">
-              <Text className="text-white text-lg font-semibold mb-3">
-                {editingAddress ? 'Edit Address' : 'Add New Address'}
-              </Text>
+            <View style={s.formBlock}>
+              <Text style={s.formTitle}>{editingAddress ? 'Edit Address' : 'Add New Address'}</Text>
 
-              <Text className="text-[#9CA3AF] text-sm mb-1">Label</Text>
-              <TextInput
+              <Text style={s.fieldLabel}>Label</Text>
+              <ThemedInput
                 value={formLabel}
                 onChangeText={setFormLabel}
                 placeholder="e.g., Home, Office, Studio"
-                placeholderTextColor="rgba(110, 231, 183, 0.4)"
-                className="bg-[#111827]/50 text-white px-4 py-3 rounded-lg mb-3"
+                accessibilityLabel="Address label"
+                containerStyle={s.fieldSpacing}
               />
 
-              <Text className="text-[#9CA3AF] text-sm mb-1">Address</Text>
-              <TextInput
+              <Text style={s.fieldLabel}>Address</Text>
+              <ThemedInput
                 value={formAddress}
                 onChangeText={setFormAddress}
                 placeholder="Full address (e.g., 123 Main St, City, State)"
-                placeholderTextColor="rgba(110, 231, 183, 0.4)"
-                className="bg-[#111827]/50 text-white px-4 py-3 rounded-lg mb-3"
                 multiline
                 numberOfLines={2}
+                textAlignVertical="top"
+                accessibilityLabel="Full address"
+                containerStyle={s.fieldSpacing}
               />
 
-              <View className="flex-row gap-2">
-                <TouchableOpacity
+              <View style={s.formActions}>
+                <ThemedButton
+                  variant="secondary"
+                  label="Cancel"
                   onPress={handleCancelForm}
-                  className="flex-1 bg-[#111827] py-3 rounded-lg"
+                  style={s.formActionButton}
                   accessibilityLabel="Cancel"
-                  accessibilityRole="button"
-                >
-                  <Text className="text-white text-center font-semibold">Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
+                />
+                <ThemedButton
+                  variant="primary"
+                  label={editingAddress ? 'Update' : 'Save'}
                   onPress={handleAddressSubmit}
-                  className="flex-1 bg-[#059669] py-3 rounded-lg"
+                  style={s.formActionButton}
                   accessibilityLabel={editingAddress ? 'Update address' : 'Save address'}
-                  accessibilityRole="button"
-                >
-                  <Text className="text-white text-center font-semibold">
-                    {editingAddress ? 'Update' : 'Save'}
-                  </Text>
-                </TouchableOpacity>
+                />
               </View>
             </View>
           )}
 
-          {/* Address List */}
           {addressesLoading ? (
-            <View className="py-8">
-              <ActivityIndicator size="large" color="#6ee7b7" />
+            <View style={s.addressesLoading}>
+              <ActivityIndicator size="large" color={theme.primary} />
+            </View>
+          ) : addresses.length === 0 ? (
+            <View style={s.emptyState}>
+              <View style={s.emptyIconBadge}>
+                <MaterialIcons name="place" size={32} color={theme.primary} />
+              </View>
+              <Text style={s.emptyTitle}>No addresses saved yet</Text>
+              <Text style={s.emptyDescription}>
+                Add addresses to quickly fill in location fields when creating bounties
+              </Text>
             </View>
           ) : (
-            <FlatList
-              data={addresses}
-              renderItem={renderAddressItem}
-              keyExtractor={(item) => item.id}
-              scrollEnabled={false}
-              ListEmptyComponent={renderEmptyAddresses}
-            />
+            addresses.map((item) => (
+              <SettingsRow
+                key={item.id}
+                icon="place"
+                label={item.label}
+                description={
+                  item.latitude && item.longitude ? `${item.address} · Coordinates available` : item.address
+                }
+                right={
+                  <View style={s.rowActions}>
+                    <TouchableOpacity
+                      onPress={() => handleEdit(item)}
+                      style={s.rowActionButton}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      accessibilityLabel={`Edit ${item.label}`}
+                      accessibilityRole="button"
+                    >
+                      <MaterialIcons name="edit" size={18} color={theme.textSecondary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => handleDelete(item)}
+                      style={s.rowActionButton}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      accessibilityLabel={`Delete ${item.label}`}
+                      accessibilityRole="button"
+                    >
+                      <MaterialIcons name="delete" size={18} color={theme.error} />
+                    </TouchableOpacity>
+                  </View>
+                }
+              />
+            ))
           )}
-        </View>
+        </SettingsSection>
       </ScrollView>
     </View>
   );
+}
+
+function makeStyles(t: AppTheme) {
+  const errorTint = t.isDark ? 'rgba(239,68,68,0.14)' : 'rgba(239,68,68,0.08)';
+  const errorBorder = t.isDark ? 'rgba(239,68,68,0.4)' : 'rgba(239,68,68,0.3)';
+  const primaryTint = t.isDark ? 'rgba(5,150,105,0.16)' : 'rgba(5,150,105,0.1)';
+  const primaryBorder = t.isDark ? 'rgba(5,150,105,0.35)' : 'rgba(5,150,105,0.25)';
+
+  return StyleSheet.create({
+    screen: {
+      flex: 1,
+      backgroundColor: t.background,
+    },
+    scrollContent: {
+      paddingHorizontal: 16,
+      paddingTop: 20,
+    },
+    intro: {
+      fontSize: 14,
+      color: t.textSecondary,
+      marginBottom: 20,
+    },
+    permissionBlock: {
+      padding: 16,
+    },
+    errorBanner: {
+      backgroundColor: errorTint,
+      borderWidth: 1,
+      borderColor: errorBorder,
+      borderRadius: 10,
+      padding: 12,
+      marginBottom: 12,
+    },
+    errorBannerInline: {
+      backgroundColor: errorTint,
+      borderWidth: 1,
+      borderColor: errorBorder,
+      borderRadius: 10,
+      padding: 12,
+      margin: 12,
+      marginBottom: 0,
+    },
+    errorBannerText: {
+      color: t.error,
+      fontSize: 13,
+    },
+    statusRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 8,
+    },
+    statusLabel: {
+      color: t.textSecondary,
+      marginLeft: 8,
+      fontSize: 14,
+    },
+    statusValue: {
+      fontWeight: '700',
+    },
+    coordsText: {
+      color: t.textSecondary,
+      fontSize: 13,
+      marginBottom: 12,
+    },
+    grantButton: {
+      marginTop: 4,
+      marginBottom: 4,
+    },
+    permissionFootnote: {
+      color: t.textDisabled,
+      fontSize: 12,
+      lineHeight: 16,
+      marginTop: 12,
+    },
+    addChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: t.primary,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 8,
+      minHeight: 32,
+    },
+    addChipText: {
+      color: '#ffffff',
+      fontWeight: '600',
+      fontSize: 13,
+    },
+    formBlock: {
+      padding: 16,
+    },
+    formTitle: {
+      color: t.text,
+      fontSize: 16,
+      fontWeight: '700',
+      marginBottom: 12,
+    },
+    fieldLabel: {
+      color: t.textSecondary,
+      fontSize: 13,
+      marginBottom: 6,
+    },
+    fieldSpacing: {
+      marginBottom: 14,
+    },
+    formActions: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    formActionButton: {
+      flex: 1,
+    },
+    addressesLoading: {
+      paddingVertical: 32,
+      alignItems: 'center',
+    },
+    emptyState: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 40,
+      paddingHorizontal: 32,
+    },
+    emptyIconBadge: {
+      width: 72,
+      height: 72,
+      borderRadius: 36,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: primaryTint,
+      borderWidth: 1,
+      borderColor: primaryBorder,
+      marginBottom: 16,
+    },
+    emptyTitle: {
+      color: t.text,
+      fontSize: 16,
+      fontWeight: '700',
+      marginBottom: 6,
+      textAlign: 'center',
+    },
+    emptyDescription: {
+      color: t.textSecondary,
+      fontSize: 13,
+      lineHeight: 18,
+      textAlign: 'center',
+      maxWidth: 260,
+    },
+    rowActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    rowActionButton: {
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: t.surfaceSecondary,
+    },
+  });
 }

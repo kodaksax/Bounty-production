@@ -2,8 +2,10 @@
 
 import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
-import { LinearGradient } from 'expo-linear-gradient'
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { useAppThemeContext } from "../lib/themes/AppThemeContext"
+import type { AppTheme } from "../lib/themes/types"
+import { getValidAvatarUrl } from "../lib/utils/avatar-utils"
 
 interface ArchivedBountyCardProps {
   id: string
@@ -12,6 +14,8 @@ interface ArchivedBountyCardProps {
   amount: number
   distance: number
   avatarSrc?: string
+  isForHonor?: boolean
+  workType?: 'online' | 'in_person'
   onMenuClick?: () => void
 }
 
@@ -22,87 +26,195 @@ export function ArchivedBountyCard({
   amount,
   distance,
   avatarSrc,
+  isForHonor,
+  workType,
   onMenuClick,
 }: ArchivedBountyCardProps) {
-  // Generate two RGBA colors for a gradient based on the bounty ID
-  const getGradientColors = (id: string): [string, string] => {
-    const hash = id.split("").reduce((acc, char) => {
-      return char.charCodeAt(0) + ((acc << 5) - acc)
-    }, 0)
-
-    const hue1 = Math.abs(hash) % 360
-    const hue2 = (hue1 + 40) % 360
-
-    // Return two semi-transparent HSL colors compatible with RN gradients
-    const c1 = `hsla(${hue1}, 80%, 40%, 0.12)`
-    const c2 = `hsla(${hue2}, 90%, 30%, 0.18)`
-
-    return [c1, c2]
-  }
-
-  const styles = StyleSheet.create({
-    container: {
-      borderRadius: 12,
-      marginBottom: 16,
-    },
-  })
+  const { theme } = useAppThemeContext()
+  const s = makeStyles(theme)
+  const validAvatarUrl = getValidAvatarUrl(avatarSrc)
 
   return (
-    <LinearGradient
-      colors={["rgba(75,85,99,0.9)", "rgba(55,65,81,0.95)"]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 1 }}
-      style={[styles.container, { overflow: 'hidden' }]}
-    >
-      {/* Gradient overlay based on id - using another LinearGradient for layered effect */}
-      <LinearGradient
-        colors={getGradientColors(id)}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[StyleSheet.absoluteFill, { opacity: 0.6 }]}
-      />
-
-      {/* Content */}
-  <View className="relative p-4">
-        {/* Username and menu */}
-        <View className="flex justify-between items-center mb-2">
-          <View className="flex items-center gap-2">
-            <View className="h-6 w-6 rounded-full bg-[#059669] flex items-center justify-center">
-              <Avatar className="h-5 w-5">
-                <AvatarImage src={avatarSrc || "/placeholder.svg?height=20&width=20"} alt={username} />
-                <AvatarFallback className="bg-[#111827] text-[#9CA3AF] text-[8px]">
-                  {username.substring(1, 3).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-            </View>
-            <Text className="text-xs text-[#9CA3AF]">{username}</Text>
-          </View>
-          <TouchableOpacity onPress={onMenuClick} className="text-gray-300 hover:text-white transition-colors">
-            <MaterialIcons name="more-vert" size={24} color="#000000" />
-          </TouchableOpacity>
+    <View style={s.card}>
+      <View style={s.topRow}>
+        <View style={s.userRow}>
+          <Avatar style={s.avatar}>
+            <AvatarImage src={validAvatarUrl} alt={username} />
+            <AvatarFallback style={s.avatarFallback}>
+              <Text style={s.avatarFallbackText}>{username.substring(1, 3).toUpperCase()}</Text>
+            </AvatarFallback>
+          </Avatar>
+          <Text style={s.username} numberOfLines={1}>{username}</Text>
         </View>
 
-        {/* Title */}
-        <Text className="text-white font-medium mb-6">{title}</Text>
-
-        {/* Watermark */}
-        <View className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
-          <Text className="text-4xl font-bold tracking-widest text-white rotate-12">BOUNTY</Text>
-        </View>
-
-        {/* NFT details */}
-        <View className="flex justify-between items-center mt-2">
-          <Text className="text-yellow-500 font-bold text-lg">${amount.toLocaleString()}</Text>
-          <Text className="text-sm text-gray-300">{distance} mi</Text>
-        </View>
-
-        {/* NFT badge */}
-        <View className="absolute top-2 right-2">
-          <View className="text-xs bg-[#0B0F14]/50 text-[#6ee7b7] px-2 py-0.5 rounded-full border border-[#374151]">
-            <Text className="text-xs text-[#6ee7b7]">NFT #{id.substring(0, 6)}</Text>
-          </View>
+        <View style={s.archivedPill}>
+          <MaterialIcons name="archive" size={11} color={theme.textSecondary} />
+          <Text style={s.archivedPillText}>Archived</Text>
         </View>
       </View>
-    </LinearGradient>
+
+      <Text style={s.title} numberOfLines={2}>{title}</Text>
+
+      <View style={s.badgeRow}>
+        {isForHonor ? (
+          <View style={s.honorBadge}>
+            <Text style={s.honorBadgeText}>For Honor</Text>
+          </View>
+        ) : (
+          <View style={s.amountBadge}>
+            <Text style={s.amountBadgeText}>${amount.toLocaleString()}</Text>
+          </View>
+        )}
+        {workType && (
+          <View style={s.workTypeBadge}>
+            <Text style={s.workTypeBadgeText}>{workType === 'online' ? 'Online' : 'In Person'}</Text>
+          </View>
+        )}
+      </View>
+
+      <View style={s.bottomRow}>
+        <View style={s.distanceRow}>
+          <MaterialIcons name="place" size={14} color={theme.textDisabled} />
+          <Text style={s.distanceText}>{distance} mi</Text>
+        </View>
+        <TouchableOpacity
+          onPress={onMenuClick}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel="More options"
+        >
+          <MaterialIcons name="more-vert" size={20} color={theme.textSecondary} />
+        </TouchableOpacity>
+      </View>
+    </View>
   )
+}
+
+function makeStyles(t: AppTheme) {
+  return StyleSheet.create({
+    card: {
+      backgroundColor: t.surface,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: t.border,
+      padding: 14,
+      marginBottom: 12,
+    },
+    topRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 10,
+    },
+    userRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexShrink: 1,
+      marginRight: 8,
+    },
+    avatar: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      marginRight: 8,
+    },
+    avatarFallback: {
+      backgroundColor: t.surfaceSecondary,
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    avatarFallbackText: {
+      color: t.textSecondary,
+      fontSize: 9,
+      fontWeight: '600',
+    },
+    username: {
+      fontSize: 12,
+      color: t.textSecondary,
+      flexShrink: 1,
+    },
+    archivedPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: t.surfaceSecondary,
+      borderRadius: 10,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      gap: 4,
+    },
+    archivedPillText: {
+      fontSize: 10,
+      fontWeight: '600',
+      color: t.textSecondary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.4,
+    },
+    title: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: t.text,
+      marginBottom: 10,
+    },
+    badgeRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 10,
+    },
+    amountBadge: {
+      backgroundColor: t.isDark ? 'rgba(5,150,105,0.18)' : 'rgba(5,150,105,0.1)',
+      borderRadius: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+    },
+    amountBadgeText: {
+      color: t.primary,
+      fontWeight: '700',
+      fontSize: 13,
+    },
+    honorBadge: {
+      backgroundColor: 'rgba(219,39,119,0.14)',
+      borderRadius: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+    },
+    honorBadgeText: {
+      color: '#db2777',
+      fontWeight: '700',
+      fontSize: 12,
+    },
+    workTypeBadge: {
+      backgroundColor: t.surfaceSecondary,
+      borderRadius: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+    },
+    workTypeBadgeText: {
+      color: t.textSecondary,
+      fontSize: 10,
+      fontWeight: '600',
+      textTransform: 'uppercase',
+      letterSpacing: 0.4,
+    },
+    bottomRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      borderTopWidth: 1,
+      borderTopColor: t.border,
+      paddingTop: 10,
+    },
+    distanceRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    distanceText: {
+      fontSize: 12,
+      color: t.textDisabled,
+    },
+  })
 }

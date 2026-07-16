@@ -1,12 +1,17 @@
-import { MaterialIcons } from '@expo/vector-icons';
-import React, { useState } from 'react';
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { SettingsScreenHeader } from 'components/ui/settings-screen-header';
+import { ThemedButton } from 'components/themed/ThemedButton';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
+import React, { useMemo, useState } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { PRIVACY_TEXT } from '../../assets/legal/privacy';
 import { TERMS_TEXT } from '../../assets/legal/terms';
 
 interface TermsPrivacyScreenProps { onBack: () => void }
 
 export const TermsPrivacyScreen: React.FC<TermsPrivacyScreenProps> = ({ onBack }) => {
+  const { theme } = useAppThemeContext();
+  const s = useMemo(() => makeStyles(theme), [theme]);
   const [tab, setTab] = useState<'terms' | 'privacy'>('terms');
   const content = tab === 'terms' ? TERMS_TEXT : PRIVACY_TEXT;
 
@@ -14,38 +19,84 @@ export const TermsPrivacyScreen: React.FC<TermsPrivacyScreenProps> = ({ onBack }
     // Very simple renderer: split by double newlines into paragraphs
     const parts = text.split(/\n\n+/);
     return parts.map((p, idx) => (
-      <Text key={idx} className="text-white text-sm leading-6 mb-3">{p}</Text>
+      <Text key={idx} style={s.paragraph}>{p}</Text>
     ));
   };
 
   return (
-    <View className="flex-1 bg-[#059669]">
-      <View className="flex-row justify-between items-center p-4 pt-8">
-        <View className="flex-row items-center">
-          <MaterialIcons name="gavel" size={24} color="#fff" />
-          <Text className="text-lg font-bold tracking-wider ml-2 text-white">Legal</Text>
-        </View>
-        <TouchableOpacity onPress={onBack} className="p-2" accessibilityRole="button" accessibilityLabel="Back to Settings">
-          <MaterialIcons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-      </View>
+    <View style={s.container}>
+      <SettingsScreenHeader icon="gavel" title="Legal" onBack={onBack} />
 
-      {/* Tabs */}
-      <View className="flex-row mx-4 mb-2 rounded-lg overflow-hidden border border-[#374151]/40">
-        <TouchableOpacity onPress={() => setTab('terms')} className={`flex-1 items-center py-3 ${tab==='terms' ? 'bg-[#111827]' : 'bg-black/20'}`} accessibilityRole="tab" accessibilityState={{ selected: tab==='terms' }}>
-          <Text className="text-white font-medium">Terms of Service</Text>
+      <View style={s.tabBar}>
+        <TouchableOpacity
+          onPress={() => setTab('terms')}
+          style={[s.tabButton, tab === 'terms' && s.tabButtonActive]}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: tab === 'terms' }}
+        >
+          <Text style={[s.tabButtonText, tab === 'terms' && s.tabButtonTextActive]}>Terms of Service</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => setTab('privacy')} className={`flex-1 items-center py-3 ${tab==='privacy' ? 'bg-[#111827]' : 'bg-black/20'}`} accessibilityRole="tab" accessibilityState={{ selected: tab==='privacy' }}>
-          <Text className="text-white font-medium">Privacy Policy</Text>
+        <TouchableOpacity
+          onPress={() => setTab('privacy')}
+          style={[s.tabButton, tab === 'privacy' && s.tabButtonActive]}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: tab === 'privacy' }}
+        >
+          <Text style={[s.tabButtonText, tab === 'privacy' && s.tabButtonTextActive]}>Privacy Policy</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView className="px-4" contentContainerStyle={{ paddingBottom: 96 }}>
         {renderMarkdownLike(content)}
-        <TouchableOpacity onPress={onBack} className="mt-4 self-start px-4 py-2 rounded-md bg-[#111827]">
-          <Text className="text-white text-sm font-medium">Back to Settings</Text>
-        </TouchableOpacity>
+        <ThemedButton variant="secondary" label="Back to Settings" onPress={onBack} style={s.backButton} />
       </ScrollView>
     </View>
   );
 };
+
+function makeStyles(t: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: t.background,
+    },
+    tabBar: {
+      flexDirection: 'row',
+      marginHorizontal: 16,
+      marginBottom: 12,
+      backgroundColor: t.surfaceSecondary,
+      borderRadius: 12,
+      padding: 4,
+      gap: 4,
+    },
+    tabButton: {
+      flex: 1,
+      alignItems: 'center',
+      paddingVertical: 10,
+      borderRadius: 9,
+    },
+    tabButtonActive: {
+      backgroundColor: t.surface,
+      borderWidth: 1,
+      borderColor: t.border,
+    },
+    tabButtonText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: t.textSecondary,
+    },
+    tabButtonTextActive: {
+      color: t.text,
+    },
+    paragraph: {
+      fontSize: 14,
+      lineHeight: 21,
+      color: t.text,
+      marginBottom: 12,
+    },
+    backButton: {
+      marginTop: 4,
+      alignSelf: 'flex-start',
+    },
+  });
+}

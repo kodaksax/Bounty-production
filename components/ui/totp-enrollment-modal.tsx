@@ -11,17 +11,19 @@
  * present we fall back to displaying the manual setup secret only.
  */
 
+import { useAppThemeContext } from 'lib/themes/AppThemeContext';
+import type { AppTheme } from 'lib/themes/types';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Modal,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { SvgXml } from 'react-native-svg';
+import { ThemedButton } from '../themed/ThemedButton';
 
 interface TotpEnrollmentModalProps {
   visible: boolean;
@@ -88,6 +90,8 @@ export function TotpEnrollmentModal({
   onVerify,
   onCancel,
 }: TotpEnrollmentModalProps) {
+  const { theme } = useAppThemeContext();
+  const s = useMemo(() => makeStyles(theme), [theme]);
   const [code, setCode] = useState('');
   const inputRef = useRef<TextInput>(null);
   const focusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -134,60 +138,27 @@ export function TotpEnrollmentModal({
       onRequestClose={handleRequestClose}
       accessibilityViewIsModal
     >
-      <View
-        style={{
-          flex: 1,
-          justifyContent: 'center',
-          alignItems: 'center',
-          backgroundColor: 'rgba(0,0,0,0.7)',
-          padding: 16,
-        }}
-      >
-        <View
-          style={{
-            width: '100%',
-            maxWidth: 420,
-            maxHeight: '90%',
-            backgroundColor: '#111827',
-            borderRadius: 16,
-            borderWidth: 1,
-            borderColor: 'rgba(167,243,208,0.2)',
-          }}
-        >
+      <View style={s.scrim}>
+        <View style={s.card}>
           <ScrollView
-            contentContainerStyle={{ padding: 24 }}
+            contentContainerStyle={s.cardContent}
             keyboardShouldPersistTaps="handled"
           >
-            <Text style={{ fontSize: 18, fontWeight: '600', color: '#fff', marginBottom: 6 }}>
-              Set Up Two-Factor Authentication
-            </Text>
-            <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', lineHeight: 18, marginBottom: 16 }}>
+            <Text style={s.title}>Set Up Two-Factor Authentication</Text>
+            <Text style={s.subtitle}>
               Scan the QR code with Google Authenticator, Authy, or any TOTP app.
               Then enter the 6-digit code shown in the app to finish enrolling.
             </Text>
 
-            {/* QR code */}
-            <View
-              style={{
-                backgroundColor: '#fff',
-                padding: 12,
-                borderRadius: 12,
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginBottom: 16,
-                minHeight: 220,
-              }}
-              accessible
-              accessibilityLabel="Two-factor authentication QR code"
-            >
+            {/* QR code — kept on a fixed white plate regardless of theme, since the
+                SVG's own modules assume a white background to stay scannable. */}
+            <View style={s.qrPlate} accessible accessibilityLabel="Two-factor authentication QR code">
               {svgXml ? (
                 <SvgXml xml={svgXml} width={200} height={200} />
               ) : (
-                <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 32 }}>
-                  <Text style={{ color: '#374151', fontSize: 13, textAlign: 'center', marginBottom: 8 }}>
-                    QR code unavailable.
-                  </Text>
-                  <Text style={{ color: '#6b7280', fontSize: 12, textAlign: 'center' }}>
+                <View style={s.qrUnavailable}>
+                  <Text style={s.qrUnavailableTitle}>QR code unavailable.</Text>
+                  <Text style={s.qrUnavailableSubtitle}>
                     Use the manual setup key below to add the account by hand.
                   </Text>
                 </View>
@@ -196,110 +167,172 @@ export function TotpEnrollmentModal({
 
             {/* Manual setup secret */}
             {totp?.secret ? (
-              <View style={{ marginBottom: 16 }}>
-                <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', marginBottom: 4 }}>
-                  Can&apos;t scan? Enter this key manually:
-                </Text>
-                <Text
-                  selectable
-                  style={{
-                    color: '#9CA3AF',
-                    fontSize: 14,
-                    fontFamily: 'Courier',
-                    backgroundColor: 'rgba(0,0,0,0.25)',
-                    padding: 10,
-                    borderRadius: 8,
-                    letterSpacing: 1,
-                  }}
-                  accessibilityLabel="Manual setup key"
-                >
+              <View style={s.secretBlock}>
+                <Text style={s.secretLabel}>Can&apos;t scan? Enter this key manually:</Text>
+                <Text selectable style={s.secretValue} accessibilityLabel="Manual setup key">
                   {totp.secret}
                 </Text>
               </View>
             ) : null}
 
             {/* Verification code input */}
-            <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', marginBottom: 6 }}>
-              Enter the 6-digit code from your authenticator app:
-            </Text>
+            <Text style={s.codeLabel}>Enter the 6-digit code from your authenticator app:</Text>
             <TextInput
               ref={inputRef}
               value={code}
               onChangeText={text => setCode(text.replace(/\D/g, '').slice(0, 6))}
               placeholder="000000"
-              placeholderTextColor="rgba(255,255,255,0.3)"
+              placeholderTextColor={theme.textDisabled}
               keyboardType="number-pad"
               maxLength={6}
               editable={!isVerifying}
               onSubmitEditing={handleVerify}
-              style={{
-                backgroundColor: 'rgba(255,255,255,0.1)',
-                borderRadius: 10,
-                paddingHorizontal: 16,
-                paddingVertical: 14,
-                color: '#fff',
-                fontSize: 24,
-                textAlign: 'center',
-                letterSpacing: 8,
-                fontVariant: ['tabular-nums'],
-                borderWidth: error ? 1 : 0,
-                borderColor: error ? '#f87171' : undefined,
-                marginBottom: 8,
-              }}
+              style={[s.codeInput, error ? s.codeInputError : null]}
               accessibilityLabel="Enter your 2FA verification code"
               accessibilityHint="6-digit code from your authenticator app"
             />
 
             {error ? (
-              <Text style={{ fontSize: 12, color: '#f87171', marginBottom: 12, textAlign: 'center' }}>
-                {error}
-              </Text>
+              <Text style={s.errorText}>{error}</Text>
             ) : (
               <View style={{ height: 12 }} />
             )}
 
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <TouchableOpacity
+            <View style={s.actionsRow}>
+              <ThemedButton
+                variant="secondary"
+                label="Cancel"
                 onPress={onCancel}
                 disabled={isVerifying}
-                style={{
-                  flex: 1,
-                  paddingVertical: 12,
-                  borderRadius: 8,
-                  backgroundColor: 'rgba(255,255,255,0.1)',
-                  alignItems: 'center',
-                }}
-                accessibilityRole="button"
+                style={s.actionButton}
                 accessibilityLabel="Cancel two-factor setup"
-              >
-                <Text style={{ color: 'rgba(255,255,255,0.85)', fontWeight: '500' }}>Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
+              />
+              <ThemedButton
+                variant="primary"
+                label="Verify & Enable"
                 onPress={handleVerify}
                 disabled={isVerifying || code.length !== 6}
-                style={{
-                  flex: 1,
-                  paddingVertical: 12,
-                  borderRadius: 8,
-                  backgroundColor: code.length === 6 && !isVerifying ? '#059669' : 'rgba(5,150,105,0.4)',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-                accessibilityRole="button"
+                loading={isVerifying}
+                style={s.actionButton}
                 accessibilityLabel="Verify and enable two-factor authentication"
-                accessibilityState={{ disabled: isVerifying || code.length !== 6 }}
-              >
-                {isVerifying ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={{ color: '#fff', fontWeight: '600' }}>Verify & Enable</Text>
-                )}
-              </TouchableOpacity>
+              />
             </View>
           </ScrollView>
         </View>
       </View>
     </Modal>
   );
+}
+
+function makeStyles(t: AppTheme) {
+  return StyleSheet.create({
+    scrim: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: 'rgba(0,0,0,0.7)',
+      padding: 16,
+    },
+    card: {
+      width: '100%',
+      maxWidth: 420,
+      maxHeight: '90%',
+      backgroundColor: t.surface,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: t.border,
+    },
+    cardContent: {
+      padding: 24,
+    },
+    title: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: t.text,
+      marginBottom: 6,
+    },
+    subtitle: {
+      fontSize: 13,
+      color: t.textSecondary,
+      lineHeight: 18,
+      marginBottom: 16,
+    },
+    qrPlate: {
+      backgroundColor: '#ffffff',
+      padding: 12,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 16,
+      minHeight: 220,
+    },
+    qrUnavailable: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 32,
+    },
+    qrUnavailableTitle: {
+      color: '#374151',
+      fontSize: 13,
+      textAlign: 'center',
+      marginBottom: 8,
+    },
+    qrUnavailableSubtitle: {
+      color: '#6b7280',
+      fontSize: 12,
+      textAlign: 'center',
+    },
+    secretBlock: {
+      marginBottom: 16,
+    },
+    secretLabel: {
+      fontSize: 12,
+      color: t.textSecondary,
+      marginBottom: 4,
+    },
+    secretValue: {
+      color: t.text,
+      fontSize: 14,
+      fontFamily: 'Courier',
+      backgroundColor: t.surfaceSecondary,
+      padding: 10,
+      borderRadius: 8,
+      letterSpacing: 1,
+    },
+    codeLabel: {
+      fontSize: 13,
+      color: t.textSecondary,
+      marginBottom: 6,
+    },
+    codeInput: {
+      backgroundColor: t.surfaceSecondary,
+      borderRadius: 10,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      color: t.text,
+      fontSize: 24,
+      textAlign: 'center',
+      letterSpacing: 8,
+      fontVariant: ['tabular-nums'],
+      borderWidth: 1,
+      borderColor: t.border,
+      marginBottom: 8,
+    },
+    codeInputError: {
+      borderColor: t.error,
+    },
+    errorText: {
+      fontSize: 12,
+      color: t.error,
+      marginBottom: 12,
+      textAlign: 'center',
+    },
+    actionsRow: {
+      flexDirection: 'row',
+      gap: 12,
+    },
+    actionButton: {
+      flex: 1,
+    },
+  });
 }

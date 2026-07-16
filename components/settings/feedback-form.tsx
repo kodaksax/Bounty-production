@@ -1,16 +1,19 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import { ThemedButton } from 'components/themed/ThemedButton';
+import React, { useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Image,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 
 export interface FeedbackFormValues {
   subject: string;
@@ -51,6 +54,8 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
   onCancel,
   onSuccess,
 }) => {
+  const { theme } = useAppThemeContext();
+  const s = useMemo(() => makeStyles(theme), [theme]);
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
   const [screenshotUri, setScreenshotUri] = useState<string | null>(null);
@@ -58,8 +63,6 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   const canSubmit = subject.trim().length > 0 && description.trim().length > 0 && !submitting;
-
-  const inputClassName = 'bg-black/30 rounded-md px-3 py-2 text-white mb-4';
 
   const handlePickScreenshot = async () => {
     try {
@@ -112,40 +115,40 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
   };
 
   return (
-    <ScrollView className="px-4" contentContainerStyle={{ paddingBottom: 96 }}>
-      <Text className="text-xs text-emerald-100 mb-1">{subjectLabel}</Text>
+    <ScrollView className="px-4" contentContainerStyle={{ paddingTop: 16, paddingBottom: 96 }}>
+      <Text style={s.label}>{subjectLabel}</Text>
       <TextInput
         value={subject}
         onChangeText={setSubject}
         editable={!submitting}
         placeholder={subjectPlaceholder || subjectLabel}
-        placeholderTextColor="#a7f3d0"
+        placeholderTextColor={theme.textDisabled}
         accessibilityLabel={subjectLabel}
-        className={inputClassName}
+        style={s.input}
       />
 
-      <Text className="text-xs text-emerald-100 mb-1">Description</Text>
+      <Text style={s.label}>Description</Text>
       <TextInput
         value={description}
         onChangeText={setDescription}
         editable={!submitting}
         placeholder={descriptionPlaceholder || 'Tell us more...'}
-        placeholderTextColor="#a7f3d0"
+        placeholderTextColor={theme.textDisabled}
         multiline
         numberOfLines={6}
         textAlignVertical="top"
         accessibilityLabel="Description"
-        className={inputClassName}
+        style={[s.input, s.textArea]}
       />
 
       {allowScreenshot && (
-        <View className="mb-4">
-          <Text className="text-xs text-emerald-100 mb-1">Screenshot (optional)</Text>
+        <View style={s.screenshotBlock}>
+          <Text style={s.label}>Screenshot (optional)</Text>
           {screenshotUri ? (
-            <View className="bg-black/30 rounded-md p-3">
+            <View style={s.screenshotPreviewCard}>
               <Image
                 source={{ uri: screenshotUri }}
-                style={{ width: '100%', height: 160, borderRadius: 8 }}
+                style={s.screenshotImage}
                 resizeMode="cover"
               />
               <TouchableOpacity
@@ -153,68 +156,143 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
                 disabled={submitting}
                 accessibilityRole="button"
                 accessibilityLabel="Remove screenshot"
-                className="self-start mt-2 px-3 py-1 rounded-md bg-black/40"
+                style={s.removeButton}
               >
-                <Text className="text-white text-xs font-medium">Remove</Text>
+                <Text style={s.removeButtonText}>Remove</Text>
               </TouchableOpacity>
             </View>
           ) : (
-            <TouchableOpacity
+            <ThemedButton
+              variant="secondary"
+              label="Attach Screenshot"
               onPress={handlePickScreenshot}
               disabled={submitting}
-              accessibilityRole="button"
+              leftIcon={<MaterialIcons name="image" size={18} color={theme.text} />}
+              style={s.attachButton}
               accessibilityLabel="Attach screenshot"
-              className="flex-row items-center self-start px-3 py-2 rounded-md bg-emerald-700"
-            >
-              <MaterialIcons name="image" size={18} color="#fff" />
-              <Text className="text-white text-sm font-medium ml-2">Attach Screenshot</Text>
-            </TouchableOpacity>
+            />
           )}
         </View>
       )}
 
       {error && (
-        <View className="bg-red-900/50 border border-red-500 rounded-md p-3 mb-4 flex-row items-center justify-between">
-          <Text className="text-red-100 text-xs flex-1 mr-2">{error}</Text>
+        <View style={s.errorCard}>
+          <Text style={s.errorText}>{error}</Text>
           <TouchableOpacity
             onPress={handleSubmit}
             accessibilityRole="button"
             accessibilityLabel="Retry submission"
-            className="px-3 py-1 rounded-md bg-red-700"
+            style={s.retryButton}
           >
-            <Text className="text-white text-xs font-medium">Retry</Text>
+            <Text style={s.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
       )}
 
       <View className="flex-row gap-3">
-        <TouchableOpacity
+        <ThemedButton
+          variant="primary"
+          label={submitLabel}
+          loading={submitting}
           onPress={handleSubmit}
           disabled={!canSubmit}
-          accessibilityRole="button"
           accessibilityLabel={submitLabel}
-          accessibilityState={{ disabled: !canSubmit }}
-          className={`flex-row items-center px-4 py-2 rounded-md ${
-            canSubmit ? 'bg-emerald-700' : 'bg-emerald-900 opacity-60'
-          }`}
-        >
-          {submitting && <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />}
-          <Text className="text-white text-sm font-medium">
-            {submitting ? 'Submitting...' : submitLabel}
-          </Text>
-        </TouchableOpacity>
+        />
         {onCancel && (
-          <TouchableOpacity
+          <ThemedButton
+            variant="secondary"
+            label="Cancel"
             onPress={onCancel}
             disabled={submitting}
-            accessibilityRole="button"
             accessibilityLabel="Cancel"
-            className="px-4 py-2 rounded-md bg-black/30"
-          >
-            <Text className="text-white text-sm font-medium">Cancel</Text>
-          </TouchableOpacity>
+          />
         )}
       </View>
     </ScrollView>
   );
 };
+
+function makeStyles(t: AppTheme) {
+  return StyleSheet.create({
+    label: {
+      fontSize: 12,
+      color: t.textSecondary,
+      marginBottom: 6,
+    },
+    input: {
+      backgroundColor: t.surfaceSecondary,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: t.border,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      color: t.text,
+      fontSize: 14,
+      marginBottom: 16,
+    },
+    textArea: {
+      minHeight: 120,
+    },
+    screenshotBlock: {
+      marginBottom: 16,
+    },
+    screenshotPreviewCard: {
+      backgroundColor: t.surfaceSecondary,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: t.border,
+      padding: 12,
+    },
+    screenshotImage: {
+      width: '100%',
+      height: 160,
+      borderRadius: 8,
+    },
+    removeButton: {
+      alignSelf: 'flex-start',
+      marginTop: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 8,
+      backgroundColor: t.surface,
+      borderWidth: 1,
+      borderColor: t.border,
+    },
+    removeButtonText: {
+      color: t.text,
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    attachButton: {
+      alignSelf: 'flex-start',
+    },
+    errorCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: t.isDark ? 'rgba(239,68,68,0.16)' : 'rgba(239,68,68,0.1)',
+      borderWidth: 1,
+      borderColor: t.error,
+      borderRadius: 10,
+      padding: 12,
+      marginBottom: 16,
+    },
+    errorText: {
+      color: t.error,
+      fontSize: 12,
+      flex: 1,
+      marginRight: 12,
+    },
+    retryButton: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 8,
+      backgroundColor: t.error,
+    },
+    retryButtonText: {
+      color: '#ffffff',
+      fontSize: 12,
+      fontWeight: '600',
+    },
+  });
+}

@@ -20,6 +20,7 @@ import { useTypingIndicator } from "../../hooks/useSocketStub"
 import { useValidUserId } from '../../hooks/useValidUserId'
 import { generateInitials } from "../../lib/services/supabase-messaging"
 import type { Conversation, Message } from "../../lib/types"
+import { getValidAvatarUrl } from "../../lib/utils/avatar-utils"
  
 interface ChatDetailScreenProps {
   conversation: Conversation
@@ -58,8 +59,12 @@ export function ChatDetailScreen({
   // Use a slightly larger offset to guarantee composer is above BottomNav
   const BOTTOM_NAV_OFFSET = Math.max(96, (insets.bottom || 0) + 12)
 
-  // Get the other participant's ID (not the current user) for 1:1 chats
-  const otherUserId = !conversation.isGroup && conversation.participantIds
+  // Get the other participant's ID (not the current user) for 1:1 chats.
+  // Wait for currentUserId to resolve before picking a participant — while
+  // auth is still loading, currentUserId is null and `!== null` matches every
+  // id, which could resolve to the current user's own id and briefly show
+  // their profile instead of the recipient's.
+  const otherUserId = !conversation.isGroup && conversation.participantIds && currentUserId
     ? conversation.participantIds.find(id => id !== currentUserId)
     : null
 
@@ -67,12 +72,13 @@ export function ChatDetailScreen({
   const { profile: otherUserProfile } = useNormalizedProfile(otherUserId || undefined)
 
   // Use profile data if available for 1:1 chats
-  const displayName = !conversation.isGroup && otherUserProfile?.username 
-    ? otherUserProfile.username 
+  const displayName = !conversation.isGroup && otherUserProfile?.username
+    ? otherUserProfile.username
     : conversation.name
-  const avatarUrl = !conversation.isGroup && otherUserProfile?.avatar 
-    ? otherUserProfile.avatar 
+  const avatarUrl = !conversation.isGroup && otherUserProfile?.avatar
+    ? otherUserProfile.avatar
     : conversation.avatar
+  const validAvatarUrl = getValidAvatarUrl(avatarUrl)
 
   // Generate initials for fallback
   const initials = generateInitials(
@@ -184,7 +190,13 @@ export function ChatDetailScreen({
       {/* Header */}
       <View style={s.header}>
         <View style={s.headerInner}>
-          <TouchableOpacity onPress={onBack} style={s.backButton}>
+          <TouchableOpacity
+            onPress={onBack}
+            style={s.backButton}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel="Back to conversations"
+          >
             <MaterialIcons name="arrow-back" size={24} color={theme.text} />
           </TouchableOpacity>
           <TouchableOpacity
@@ -195,15 +207,17 @@ export function ChatDetailScreen({
             }}
             disabled={!otherUserId || conversation.isGroup}
             style={s.headerProfile}
+            accessibilityRole={!otherUserId || conversation.isGroup ? undefined : "button"}
+            accessibilityLabel={!otherUserId || conversation.isGroup ? undefined : `View ${displayName}'s profile`}
           >
             <Avatar style={s.headerAvatar}>
-              <AvatarImage src={avatarUrl || "/placeholder.svg?height=40&width=40"} alt={displayName} />
+              <AvatarImage src={validAvatarUrl} alt={displayName} />
               <AvatarFallback style={s.avatarFallback}>
                 <Text style={s.avatarFallbackText}>{initials}</Text>
               </AvatarFallback>
             </Avatar>
             <View>
-              <Text style={s.headerName}>{displayName}</Text>
+              <Text style={s.headerName} numberOfLines={1}>{displayName}</Text>
               {conversation.isGroup && (
                 <Text style={s.headerSubtext}>
                   {conversation.participantIds?.length || 0} members
@@ -275,11 +289,13 @@ export function ChatDetailScreen({
               }}
             />
             {/* Message Input */}
-            <View style={[s.inputContainer, { paddingBottom: Math.max(insets.bottom || 0, BOTTOM_NAV_OFFSET + 8) }]}>
+            <View style={[s.inputContainer, { paddingBottom: Math.max(insets.bottom || 0, 12) }]}>
               <View style={s.inputRow}>
                 <TouchableOpacity
-                  style={{ marginRight: 8, alignSelf: 'flex-end' }}
+                  style={s.attachButton}
                   onPress={handlePickAndSendAttachment}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
                   accessibilityLabel="Add attachment"
                 >
                   {isPicking || isUploading ? (
@@ -295,6 +311,7 @@ export function ChatDetailScreen({
                   placeholder="Type a message..."
                   placeholderTextColor={theme.textSecondary}
                   multiline
+                  textAlignVertical="center"
                   accessibilityLabel="Message input field"
                   accessibilityHint="Enter your message to send"
                 />
@@ -312,6 +329,10 @@ export function ChatDetailScreen({
                     }
                   }}
                   disabled={!trimmedInputText}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Send message"
+                  accessibilityState={{ disabled: !trimmedInputText }}
                 >
                   <MaterialIcons name="send" size={20} color={theme.primary} />
                 </TouchableOpacity>
@@ -431,7 +452,8 @@ function makeStyles(t: AppTheme) {
       paddingBottom: 16,
     },
     inputContainer: {
-      padding: 12,
+      paddingHorizontal: 12,
+      paddingTop: 10,
       backgroundColor: t.background,
       borderTopWidth: 1,
       borderTopColor: t.border,
@@ -440,23 +462,32 @@ function makeStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'flex-end',
       backgroundColor: t.surfaceSecondary,
-      borderRadius: 20,
+      borderRadius: 22,
       paddingHorizontal: 16,
-      paddingVertical: 8,
+      paddingVertical: 10,
       borderWidth: 1,
       borderColor: t.border,
+      minHeight: 48,
+    },
+    attachButton: {
+      marginRight: 8,
+      marginBottom: 2,
+      alignSelf: 'flex-end',
     },
     inlineTextInput: {
       flex: 1,
       color: t.text,
       fontSize: 15,
-      maxHeight: 100,
+      lineHeight: 20,
+      minHeight: 28,
+      maxHeight: 120,
       paddingTop: 4,
       paddingBottom: 4,
     },
     sendButton: {
       marginLeft: 8,
-      padding: 4,
+      marginBottom: 2,
+      padding: 6,
       alignSelf: 'flex-end',
     },
     sendButtonDisabled: {

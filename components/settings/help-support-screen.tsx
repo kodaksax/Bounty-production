@@ -1,40 +1,69 @@
-import { MaterialIcons } from '@expo/vector-icons';
-import React from 'react';
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
-import { BrandingLogo } from 'components/ui/branding-logo';
+import { SettingsRow } from 'components/ui/settings-row';
+import { SettingsScreenHeader } from 'components/ui/settings-screen-header';
+import { SettingsSection } from 'components/ui/settings-section';
+import { useAppThemeContext } from 'lib/themes/AppThemeContext';
+import type { AppTheme } from 'lib/themes/types';
+import React, { useMemo } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-interface HelpSupportScreenProps { onBack: () => void; onNavigateContact: () => void; onNavigateTerms: () => void; onNavigateFAQ: () => void; }
+interface HelpSupportScreenProps {
+  onBack: () => void;
+  onNavigateContact: () => void;
+  onNavigateTerms: () => void;
+  onNavigateFAQ: () => void;
+}
 
-export const HelpSupportScreen: React.FC<HelpSupportScreenProps> = ({ onBack, onNavigateContact, onNavigateTerms, onNavigateFAQ }) => {
+export const HelpSupportScreen: React.FC<HelpSupportScreenProps> = ({
+  onBack,
+  onNavigateContact,
+  onNavigateTerms,
+  onNavigateFAQ,
+}) => {
+  const { theme } = useAppThemeContext();
+  const insets = useSafeAreaInsets();
+  const s = useMemo(() => makeStyles(theme), [theme]);
+
   return (
-    <View className="flex-1 bg-[#059669]">
-      <View className="flex-row justify-between items-center p-4 pt-8">
-        <View className="flex-row items-center">
-          <BrandingLogo size="small" />
-        </View>
-        <TouchableOpacity onPress={onBack} className="p-2">
-          <MaterialIcons name="arrow-back" size={24} color="#000" />
-        </TouchableOpacity>
-      </View>
-      <ScrollView className="px-4" contentContainerStyle={{ paddingBottom: 64 }}>
-        <Text className="text-xl font-semibold text-white mb-4">Help & Support</Text>
-        <SupportBlock title="Contact Support" description="Submit issues, disputes, or detailed questions directly." icon="support-agent" actionLabel="Open" onPress={onNavigateContact} />
-        <SupportBlock title="Terms & Privacy Policy" description="Read our platform's terms of use and privacy handling." icon="gavel" actionLabel="View" onPress={onNavigateTerms} />
-        <SupportBlock title="FAQ" description="Browse common questions and quick answers." icon="help-center" actionLabel="Browse" onPress={onNavigateFAQ} />
+    <View style={s.screen}>
+      <SettingsScreenHeader icon="help-center" title="Help & Support" onBack={onBack} />
+      <ScrollView
+        contentContainerStyle={[s.scrollContent, { paddingBottom: Math.max(insets.bottom, 24) + 24 }]}
+      >
+        <SettingsSection>
+          <SettingsRow
+            icon="support-agent"
+            label="Contact Support"
+            description="Submit issues, disputes, or detailed questions directly."
+            onPress={onNavigateContact}
+          />
+          <SettingsRow
+            icon="gavel"
+            label="Terms & Privacy Policy"
+            description="Read our platform's terms of use and privacy handling."
+            onPress={onNavigateTerms}
+          />
+          <SettingsRow
+            icon="help-outline"
+            label="FAQ"
+            description="Browse common questions and quick answers."
+            onPress={onNavigateFAQ}
+          />
+        </SettingsSection>
       </ScrollView>
     </View>
   );
 };
 
-const SupportBlock = ({ title, description, icon, actionLabel, onPress }: { title: string; description: string; icon: any; actionLabel: string; onPress: () => void }) => (
-  <View className="bg-black/30 rounded-xl p-4 mb-4">
-    <View className="flex-row items-center mb-2">
-      <MaterialIcons name={icon} size={20} color="#059669" />
-      <Text className="ml-2 text-white font-medium">{title}</Text>
-    </View>
-    <Text className="text-[#9CA3AF] text-xs leading-4 mb-3">{description}</Text>
-    <TouchableOpacity onPress={onPress} className="self-start px-3 py-1 rounded-md bg-[#111827]">
-      <Text className="text-xs text-white font-medium">{actionLabel}</Text>
-    </TouchableOpacity>
-  </View>
-);
+function makeStyles(t: AppTheme) {
+  return StyleSheet.create({
+    screen: {
+      flex: 1,
+      backgroundColor: t.background,
+    },
+    scrollContent: {
+      paddingHorizontal: 16,
+      paddingTop: 20,
+    },
+  });
+}

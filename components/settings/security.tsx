@@ -4,7 +4,7 @@
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Alert,
   ScrollView,
@@ -15,14 +15,21 @@ import {
   View,
   ActivityIndicator,
 } from 'react-native';
+import { SettingsRow } from '../ui/settings-row';
+import { SettingsScreenHeader } from '../ui/settings-screen-header';
+import { SettingsSection } from '../ui/settings-section';
 import { MfaCodeModal } from '../ui/mfa-code-modal';
 import { supabase } from '../../lib/supabase';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
 
 interface SecuritySettingsProps {
   onBack: () => void;
 }
 
 export function SecuritySettings({ onBack }: SecuritySettingsProps) {
+  const { theme } = useAppThemeContext();
+  const s = useMemo(() => makeStyles(theme), [theme]);
   const [loading, setLoading] = useState(true);
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [isEnabling2FA, setIsEnabling2FA] = useState(false);
@@ -41,12 +48,12 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
   const loadSecuritySettings = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       if (session?.user) {
         // Check verification status
         setEmailVerified(Boolean(session.user.email_confirmed_at));
         setPhoneVerified(Boolean(session.user.user_metadata?.phone_verified));
-        
+
         // Check if 2FA is enabled via Supabase MFA
         const { data: factors } = await supabase.auth.mfa.listFactors();
         setTwoFactorEnabled((factors?.totp?.length ?? 0) > 0);
@@ -178,13 +185,13 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
           onPress: async () => {
             try {
               const { data: factors } = await supabase.auth.mfa.listFactors();
-              
+
               if (factors && factors.totp && factors.totp.length > 0) {
                 const factorId = factors.totp[0].id;
                 const { error } = await supabase.auth.mfa.unenroll({ factorId });
-                
+
                 if (error) throw error;
-                
+
                 setTwoFactorEnabled(false);
                 Alert.alert('Success', '2FA has been disabled');
               }
@@ -226,14 +233,16 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#059669" />
+      <View style={s.loadingContainer}>
+        <ActivityIndicator size="large" color={theme.primary} />
       </View>
     );
   }
 
+  const handleToggle2FA = twoFactorEnabled ? handleDisable2FA : handleEnable2FA;
+
   return (
-    <View style={styles.container}>
+    <View style={s.container}>
       <MfaCodeModal
         visible={mfaModalVisible}
         isLoading={mfaVerifying}
@@ -241,121 +250,105 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
         onVerify={handleMfaModalVerify}
         onCancel={handleMfaModalCancel}
       />
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onBack} style={styles.backButton}>
-            <MaterialIcons name="arrow-back" size={24} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Security</Text>
-          <View style={{ width: 40 }} />
-        </View>
-
+      <SettingsScreenHeader icon="security" title="Security" onBack={onBack} />
+      <ScrollView className="px-4" contentContainerStyle={{ paddingTop: 16, paddingBottom: 40 }}>
         {/* Verification Status */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account Verification</Text>
-          <View style={styles.card}>
-            <View style={styles.statusRow}>
-              <View style={styles.statusInfo}>
-                <Text style={styles.statusLabel}>Email Verification</Text>
-                <Text style={styles.statusDescription}>
-                  {emailVerified ? 'Verified' : 'Not verified'}
-                </Text>
-              </View>
+        <SettingsSection title="Account Verification">
+          <SettingsRow
+            icon="mail"
+            label="Email Verification"
+            description={emailVerified ? 'Verified' : 'Not verified'}
+            right={
               <MaterialIcons
                 name={emailVerified ? 'check-circle' : 'cancel'}
-                size={24}
-                color={emailVerified ? '#059669' : '#ef4444'}
+                size={22}
+                color={emailVerified ? theme.success : theme.error}
               />
-            </View>
-            <View style={styles.divider} />
-            <View style={styles.statusRow}>
-              <View style={styles.statusInfo}>
-                <Text style={styles.statusLabel}>Phone Verification</Text>
-                <Text style={styles.statusDescription}>
-                  {phoneVerified ? 'Verified' : 'Not verified'}
-                </Text>
-              </View>
+            }
+          />
+          <SettingsRow
+            icon="phone-iphone"
+            label="Phone Verification"
+            description={phoneVerified ? 'Verified' : 'Not verified'}
+            right={
               <MaterialIcons
                 name={phoneVerified ? 'check-circle' : 'cancel'}
-                size={24}
-                color={phoneVerified ? '#059669' : '#ef4444'}
+                size={22}
+                color={phoneVerified ? theme.success : theme.error}
               />
-            </View>
-          </View>
-        </View>
+            }
+          />
+        </SettingsSection>
 
         {/* Two-Factor Authentication */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Two-Factor Authentication</Text>
-          <View style={styles.card}>
-            <TouchableOpacity
-              style={styles.settingRow}
-              onPress={twoFactorEnabled ? handleDisable2FA : handleEnable2FA}
-              disabled={isEnabling2FA}
-            >
-              <View style={styles.settingInfo}>
-                <View style={styles.labelWithBadge}>
-                  <Text style={styles.settingLabel}>Authenticator App (TOTP)</Text>
-                  {twoFactorEnabled ? (
-                    <View style={styles.enabledBadge}>
-                      <Text style={styles.enabledBadgeText}>Enabled</Text>
-                    </View>
-                  ) : (
-                    <View style={styles.recommendedBadge}>
-                      <Text style={styles.recommendedBadgeText}>Recommended</Text>
-                    </View>
-                  )}
-                </View>
-                <Text style={styles.settingDescription}>
-                  {twoFactorEnabled
-                    ? 'Extra security when signing in'
-                    : 'Add an extra layer of protection to your account'}
+        <SettingsSection title="Two-Factor Authentication">
+          <TouchableOpacity
+            style={s.twoFactorRow}
+            onPress={handleToggle2FA}
+            disabled={isEnabling2FA}
+            accessibilityRole="button"
+            accessibilityLabel="Authenticator App (TOTP)"
+            accessibilityState={{ disabled: isEnabling2FA }}
+            activeOpacity={0.6}
+          >
+            <View style={s.iconBadge}>
+              <MaterialIcons name="verified-user" size={20} color={theme.primaryLight} />
+            </View>
+            <View style={s.textBlock}>
+              <View style={s.labelWithBadge}>
+                <Text style={s.label} numberOfLines={1}>
+                  Authenticator App (TOTP)
                 </Text>
+                {twoFactorEnabled ? (
+                  <View style={s.enabledBadge}>
+                    <Text style={s.enabledBadgeText}>Enabled</Text>
+                  </View>
+                ) : (
+                  <View style={s.recommendedBadge}>
+                    <Text style={s.recommendedBadgeText}>Recommended</Text>
+                  </View>
+                )}
               </View>
-              {isEnabling2FA ? (
-                <ActivityIndicator size="small" color="#059669" />
-              ) : (
-                <Switch
-                  value={twoFactorEnabled}
-                  onValueChange={twoFactorEnabled ? handleDisable2FA : handleEnable2FA}
-                  trackColor={{ false: '#374151', true: '#059669' }}
-                  thumbColor={twoFactorEnabled ? '#059669' : '#9ca3af'}
-                />
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Password */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Password</Text>
-          <View style={styles.card}>
-            <TouchableOpacity style={styles.settingRow} onPress={handleChangePassword}>
-              <View style={styles.settingInfo}>
-                <Text style={styles.settingLabel}>Change Password</Text>
-                <Text style={styles.settingDescription}>
-                  Update your password via email
-                </Text>
-              </View>
-              <MaterialIcons name="chevron-right" size={24} color="rgba(255,255,255,0.4)" />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Security Tips */}
-        <View style={styles.section}>
-          <View style={styles.tipsCard}>
-            <MaterialIcons name="lightbulb-outline" size={24} color="#f59e0b" />
-            <View style={styles.tipsContent}>
-              <Text style={styles.tipsTitle}>Security Tips</Text>
-              <Text style={styles.tipsText}>
-                • Enable 2FA for maximum account protection{'\n'}
-                • Use a strong, unique password{'\n'}
-                • Never share your password or 2FA codes{'\n'}
-                • Verify your email and phone number
+              <Text style={s.description} numberOfLines={2}>
+                {twoFactorEnabled
+                  ? 'Extra security when signing in'
+                  : 'Add an extra layer of protection to your account'}
               </Text>
             </View>
+            {isEnabling2FA ? (
+              <ActivityIndicator size="small" color={theme.textSecondary} />
+            ) : (
+              <Switch
+                value={twoFactorEnabled}
+                onValueChange={handleToggle2FA}
+                trackColor={{ false: theme.border, true: theme.primary }}
+                thumbColor={twoFactorEnabled ? theme.primary : theme.textDisabled}
+              />
+            )}
+          </TouchableOpacity>
+        </SettingsSection>
+
+        {/* Password */}
+        <SettingsSection title="Password">
+          <SettingsRow
+            icon="lock-reset"
+            label="Change Password"
+            description="Update your password via email"
+            onPress={handleChangePassword}
+          />
+        </SettingsSection>
+
+        {/* Security Tips */}
+        <View style={s.tipsCard}>
+          <MaterialIcons name="lightbulb-outline" size={24} color={theme.warning} />
+          <View style={s.tipsContent}>
+            <Text style={s.tipsTitle}>Security Tips</Text>
+            <Text style={s.tipsText}>
+              • Enable 2FA for maximum account protection{'\n'}
+              • Use a strong, unique password{'\n'}
+              • Never share your password or 2FA codes{'\n'}
+              • Verify your email and phone number
+            </Text>
           </View>
         </View>
       </ScrollView>
@@ -363,149 +356,102 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#111827',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#111827',
-  },
-  scrollContent: {
-    paddingBottom: 40,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  section: {
-    paddingHorizontal: 16,
-    marginTop: 24,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.6)',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 12,
-  },
-  card: {
-    backgroundColor: 'rgba(5,46,27,0.5)',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(167,243,208,0.2)',
-  },
-  statusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-  },
-  statusInfo: {
-    flex: 1,
-  },
-  statusLabel: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: '#fff',
-    marginBottom: 2,
-  },
-  statusDescription: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.6)',
-  },
-  divider: {
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    marginVertical: 12,
-  },
-  settingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 4,
-  },
-  settingInfo: {
-    flex: 1,
-    marginRight: 16,
-  },
-  labelWithBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
-  },
-  settingLabel: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: '#fff',
-  },
-  settingDescription: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.6)',
-    lineHeight: 18,
-  },
-  enabledBadge: {
-    backgroundColor: '#374151',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  enabledBadgeText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#059669',
-  },
-  recommendedBadge: {
-    backgroundColor: 'rgba(245,158,11,0.2)',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  recommendedBadgeText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#f59e0b',
-  },
-  tipsCard: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(5,46,27,0.5)',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(245,158,11,0.3)',
-  },
-  tipsContent: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  tipsTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#f59e0b',
-    marginBottom: 8,
-  },
-  tipsText: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.8)',
-    lineHeight: 20,
-  },
-});
+function makeStyles(t: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: t.background,
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: t.background,
+    },
+    // ── Two-factor row (mirrors SettingsRow's layout, extended with a badge) ──
+    twoFactorRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      minHeight: 56,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+    },
+    iconBadge: {
+      width: 32,
+      height: 32,
+      borderRadius: 9,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: t.surfaceSecondary,
+      marginRight: 12,
+    },
+    textBlock: {
+      flex: 1,
+      marginRight: 8,
+    },
+    labelWithBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    label: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: t.text,
+      flexShrink: 1,
+    },
+    description: {
+      fontSize: 13,
+      lineHeight: 17,
+      color: t.textSecondary,
+      marginTop: 2,
+    },
+    enabledBadge: {
+      backgroundColor: t.surfaceSecondary,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 4,
+    },
+    enabledBadgeText: {
+      fontSize: 10,
+      fontWeight: '600',
+      color: t.primary,
+    },
+    recommendedBadge: {
+      backgroundColor: t.isDark ? 'rgba(251,191,36,0.18)' : 'rgba(251,191,36,0.16)',
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 4,
+    },
+    recommendedBadgeText: {
+      fontSize: 10,
+      fontWeight: '600',
+      color: t.warning,
+    },
+    // ── Security tips card ─────────────────────────────────────────────────
+    tipsCard: {
+      flexDirection: 'row',
+      backgroundColor: t.surface,
+      borderRadius: 16,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: t.isDark ? 'rgba(251,191,36,0.35)' : 'rgba(251,191,36,0.4)',
+      marginBottom: 24,
+    },
+    tipsContent: {
+      flex: 1,
+      marginLeft: 12,
+    },
+    tipsTitle: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: t.warning,
+      marginBottom: 8,
+    },
+    tipsText: {
+      fontSize: 13,
+      color: t.textSecondary,
+      lineHeight: 20,
+    },
+  });
+}

@@ -1,8 +1,15 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { BrandingLogo } from 'components/ui/branding-logo';
+import { ThemedButton } from 'components/themed/ThemedButton';
+import { ThemedInput } from 'components/themed/ThemedInput';
+import { SettingsRow } from 'components/ui/settings-row';
+import { SettingsScreenHeader } from 'components/ui/settings-screen-header';
+import { SettingsSection } from 'components/ui/settings-section';
 import { TotpEnrollmentModal } from 'components/ui/totp-enrollment-modal';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useAppThemeContext } from 'lib/themes/AppThemeContext';
+import type { AppTheme } from 'lib/themes/types';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { exportAndShareUserData } from '../../lib/services/data-export-service';
 import { deviceService, UserDevice } from '../../lib/services/device-service';
 import { supabase } from '../../lib/supabase';
@@ -23,6 +30,10 @@ interface PrivacyState {
 
 // Use SecureStore for privacy settings as they contain sensitive security preferences
 export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ onBack }) => {
+  const { theme } = useAppThemeContext();
+  const insets = useSafeAreaInsets();
+  const s = useMemo(() => makeStyles(theme), [theme]);
+
   const [state, setState] = useState<PrivacyState>({
     showProfilePublic: true,
     showCompletedBounties: true,
@@ -321,8 +332,24 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
     );
   };
 
+  const twoFactorDescription = !emailVerified && !twoFactorEnabled
+    ? 'Email verification required to enable 2FA.'
+    : twoFactorEnabled
+      ? 'Enabled — required when signing in on a new device.'
+      : 'Require a second factor when signing in on a new device.';
+
+  const switchProps = (value: boolean, onChange: (v: boolean) => void, label: string, disabled = false) => ({
+    value,
+    onValueChange: onChange,
+    disabled,
+    trackColor: { false: theme.border, true: theme.primary },
+    thumbColor: theme.surface,
+    ios_backgroundColor: theme.border,
+    accessibilityLabel: label,
+  });
+
   return (
-    <View className="flex-1 bg-[#059669]">
+    <View style={s.screen}>
       <TotpEnrollmentModal
         visible={enrollModalVisible}
         totp={enrollTotp}
@@ -331,119 +358,164 @@ export const PrivacySecurityScreen: React.FC<PrivacySecurityScreenProps> = ({ on
         onVerify={handleEnrollVerify}
         onCancel={handleEnrollCancel}
       />
-      <View className="flex-row justify-between items-center p-4 pt-8">
-        <View className="flex-row items-center">
-          <BrandingLogo size="small" />
-        </View>
-        <TouchableOpacity onPress={onBack} className="p-2" accessibilityRole="button" accessibilityLabel="Back">
-          <MaterialIcons name="arrow-back" size={24} color="#000" />
-        </TouchableOpacity>
-      </View>
-      <ScrollView className="px-4" contentContainerStyle={{ paddingBottom: 96 }}>
-        <Text className="text-xl font-semibold text-white mb-4">Privacy & Security Settings</Text>
+      <SettingsScreenHeader icon="lock" title="Privacy & Security" onBack={onBack} />
 
-        {/* Password */}
-        <View className="bg-black/30 rounded-xl p-4 mb-5">
-          <SectionHeader icon="lock" title="Password" subtitle="Change your password to keep account secure." />
-          <Text className="text-xs text-[#9CA3AF] mb-1">Current Password</Text>
-          <TextInput value={state.passwordCurrent} onChangeText={v => persist({ passwordCurrent: v })} secureTextEntry placeholder="••••••" placeholderTextColor="#9CA3AF" className="bg-black/40 rounded-md px-3 py-2 text-white mb-3" />
-          <Text className="text-xs text-[#9CA3AF] mb-1">New Password</Text>
-          <TextInput value={state.passwordNew} onChangeText={v => persist({ passwordNew: v })} secureTextEntry placeholder="At least 8 characters" placeholderTextColor="#9CA3AF" className="bg-black/40 rounded-md px-3 py-2 text-white mb-3" />
-          <Text className="text-xs text-[#9CA3AF] mb-1">Confirm New Password</Text>
-          <TextInput value={state.passwordConfirm} onChangeText={v => persist({ passwordConfirm: v })} secureTextEntry placeholder="Repeat new password" placeholderTextColor="#9CA3AF" className="bg-black/40 rounded-md px-3 py-2 text-white mb-4" />
-          <TouchableOpacity onPress={changePassword} className="self-start px-4 py-2 rounded-md bg-[#111827]">
-            <Text className="text-white text-xs font-medium">Update Password</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* 2FA */}
-        <View className="bg-black/30 rounded-xl p-4 mb-5">
-          <SectionHeader icon="security" title="Two-Factor Authentication" subtitle="Add an extra layer of protection." />
-          <View className="flex-row items-center justify-between mt-1">
-            <View className="flex-1 mr-4">
-              <Text className="text-white text-xs mb-1">Require a second factor when signing in on a new device.</Text>
-              {twoFactorEnabled && (
-                <View className="flex-row items-center mt-1">
-                  <MaterialIcons name="check-circle" size={14} color="#059669" />
-                  <Text className="text-[#6ee7b7] text-[10px] ml-1">Enabled</Text>
-                </View>
-              )}
-              {!emailVerified && !twoFactorEnabled && (
-                <Text className="text-yellow-500 text-[10px] mt-1">Email verification required</Text>
-              )}
-            </View>
-            {isEnabling2FA ? (
-              <ActivityIndicator size="small" color="#059669" />
-            ) : (
-              <Switch
-                value={twoFactorEnabled}
-                onValueChange={twoFactorEnabled ? handleDisable2FA : handleEnable2FA}
-                disabled={isEnabling2FA}
-              />
-            )}
+      <ScrollView
+        contentContainerStyle={[s.scrollContent, { paddingBottom: Math.max(insets.bottom, 24) + 24 }]}
+      >
+        <SettingsSection title="Password" description="Change your password to keep your account secure.">
+          <View style={s.formBlock}>
+            <Text style={s.fieldLabel}>Current Password</Text>
+            <ThemedInput
+              value={state.passwordCurrent}
+              onChangeText={v => persist({ passwordCurrent: v })}
+              secureTextEntry
+              placeholder="••••••"
+              accessibilityLabel="Current password"
+              containerStyle={s.fieldSpacing}
+            />
+            <Text style={s.fieldLabel}>New Password</Text>
+            <ThemedInput
+              value={state.passwordNew}
+              onChangeText={v => persist({ passwordNew: v })}
+              secureTextEntry
+              placeholder="At least 8 characters"
+              accessibilityLabel="New password"
+              containerStyle={s.fieldSpacing}
+            />
+            <Text style={s.fieldLabel}>Confirm New Password</Text>
+            <ThemedInput
+              value={state.passwordConfirm}
+              onChangeText={v => persist({ passwordConfirm: v })}
+              secureTextEntry
+              placeholder="Repeat new password"
+              accessibilityLabel="Confirm new password"
+              containerStyle={s.fieldSpacing}
+            />
+            <ThemedButton
+              variant="primary"
+              label="Update Password"
+              loading={loading}
+              disabled={loading}
+              onPress={changePassword}
+            />
           </View>
-        </View>
+        </SettingsSection>
 
-        {/* Visibility */}
-        <View className="bg-black/30 rounded-xl p-4 mb-5">
-          <SectionHeader icon="visibility" title="Visibility" subtitle="Control what other users can see." />
-          <ToggleRow label="Public profile visible" value={state.showProfilePublic} onChange={v => persist({ showProfilePublic: v })} />
-          <ToggleRow label="Show completed bounties" value={state.showCompletedBounties} onChange={v => persist({ showCompletedBounties: v })} />
-        </View>
-
-        {/* Sessions */}
-        <View className="bg-black/30 rounded-xl p-4 mb-5">
-          <SectionHeader icon="devices" title="Session Management" subtitle="Active devices using your account." />
-          {state.sessions.map(s => (
-            <View key={s.id} className="flex-row items-center justify-between py-2 border-b border-emerald-700/40 last:border-b-0">
-              <View className="flex-1 mr-3">
-                <View className="flex-row items-center gap-2">
-                  <Text className="text-white text-xs font-medium">{s.device_name}</Text>
-                  {s.is_current && <View className="bg-[#059669]/20 px-1.5 py-0.5 rounded"><Text className="text-[#6ee7b7] text-[10px]">Current</Text></View>}
-                </View>
-                <Text className="text-[#6ee7b7] text-[10px]">{s.device_type} • {new Date(s.last_active).toLocaleDateString()}</Text>
-              </View>
-              {s.is_active ? (
-                <TouchableOpacity onPress={() => revokeSession(s.id)} className="px-3 py-1 rounded-md bg-[#111827]">
-                  <Text className="text-white text-[10px] font-medium">Revoke</Text>
-                </TouchableOpacity>
+        <SettingsSection title="Two-Factor Authentication">
+          <SettingsRow
+            icon="security"
+            label="Authenticator App"
+            description={twoFactorDescription}
+            right={
+              isEnabling2FA ? (
+                <ActivityIndicator size="small" color={theme.primary} />
               ) : (
-                <Text className="text-[10px] text-[#6ee7b7]">Revoked</Text>
-              )}
-            </View>
-          ))}
-        </View>
-
-        {/* Data Export - GDPR Compliance */}
-        <View className="bg-black/30 rounded-xl p-4 mb-5">
-          <SectionHeader
-            icon="file-download"
-            title="Data Export (GDPR)"
-            subtitle="Download a copy of all your personal data in JSON format. Includes profile, bounties, messages, transactions, and more."
+                <Switch {...switchProps(twoFactorEnabled, twoFactorEnabled ? handleDisable2FA : handleEnable2FA, 'Two-factor authentication', isEnabling2FA)} />
+              )
+            }
           />
-          <TouchableOpacity disabled={state.exporting} onPress={exportData} className={`self-start px-4 py-2 rounded-md ${state.exporting ? 'bg-[#0B0F14] opacity-60' : 'bg-[#111827]'}`}>
-            <Text className="text-white text-xs font-medium">{state.exporting ? 'Preparing Export…' : 'Export My Data'}</Text>
-          </TouchableOpacity>
-        </View>
+        </SettingsSection>
+
+        <SettingsSection title="Profile Visibility">
+          <SettingsRow
+            icon="visibility"
+            label="Public profile"
+            description="Let other users view your profile."
+            right={<Switch {...switchProps(state.showProfilePublic, v => persist({ showProfilePublic: v }), 'Public profile visible')} />}
+          />
+          <SettingsRow
+            icon="task-alt"
+            label="Show completed bounties"
+            description="Display your completed bounty history."
+            right={<Switch {...switchProps(state.showCompletedBounties, v => persist({ showCompletedBounties: v }), 'Show completed bounties')} />}
+          />
+        </SettingsSection>
+
+        <SettingsSection title="Session Management" description="Active devices signed in to your account.">
+          {state.sessions.map(session => (
+            <SettingsRow
+              key={session.id}
+              icon="devices"
+              label={session.is_current ? `${session.device_name} · Current` : session.device_name}
+              description={`${session.device_type} • ${new Date(session.last_active).toLocaleDateString()}`}
+              right={
+                session.is_active ? (
+                  <TouchableOpacity
+                    onPress={() => revokeSession(session.id)}
+                    style={s.revokeButton}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Revoke ${session.device_name}`}
+                  >
+                    <Text style={s.revokeButtonText}>Revoke</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <Text style={s.revokedText}>Revoked</Text>
+                )
+              }
+            />
+          ))}
+        </SettingsSection>
+
+        <SettingsSection
+          title="Data Export"
+          description="Download a copy of all your personal data in JSON format. Includes profile, bounties, messages, transactions, and more."
+        >
+          <View style={s.formBlock}>
+            <ThemedButton
+              variant="primary"
+              label="Export My Data"
+              loading={state.exporting}
+              disabled={state.exporting}
+              onPress={exportData}
+              leftIcon={<MaterialIcons name="file-download" size={16} color="#ffffff" />}
+            />
+          </View>
+        </SettingsSection>
       </ScrollView>
     </View>
   );
 };
 
-
-const SectionHeader = ({ icon, title, subtitle }: { icon: any; title: string; subtitle: string }) => (
-  <View className="mb-3">
-    <View className="flex-row items-center mb-1">
-      <MaterialIcons name={icon} size={18} color="#059669" />
-      <Text className="ml-2 text-white font-medium text-sm">{title}</Text>
-    </View>
-    <Text className="text-[#6ee7b7] text-[11px] leading-4">{subtitle}</Text>
-  </View>
-);
-
-const ToggleRow = ({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) => (
-  <View className="flex-row items-center justify-between py-2">
-    <Text className="text-white text-xs flex-1 mr-4">{label}</Text>
-    <Switch value={value} onValueChange={onChange} />
-  </View>
-);
+function makeStyles(t: AppTheme) {
+  return StyleSheet.create({
+    screen: {
+      flex: 1,
+      backgroundColor: t.background,
+    },
+    scrollContent: {
+      paddingHorizontal: 16,
+      paddingTop: 20,
+    },
+    formBlock: {
+      padding: 16,
+    },
+    fieldLabel: {
+      fontSize: 13,
+      color: t.textSecondary,
+      marginBottom: 6,
+    },
+    fieldSpacing: {
+      marginBottom: 14,
+    },
+    revokeButton: {
+      backgroundColor: t.surfaceSecondary,
+      borderWidth: 1,
+      borderColor: t.border,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+      minHeight: 32,
+      justifyContent: 'center',
+    },
+    revokeButtonText: {
+      color: t.error,
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    revokedText: {
+      color: t.textDisabled,
+      fontSize: 12,
+    },
+  });
+}

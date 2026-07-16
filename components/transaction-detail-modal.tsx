@@ -3,20 +3,41 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import { format } from "date-fns"
 import { receiptService } from "lib/services/receipt-service"
-import { theme } from "lib/theme"
-import { useEffect, useRef, useState } from "react"
-import { Alert, Animated, Easing, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { Alert, Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from "react-native"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
+import { useAppThemeContext } from "../lib/themes/AppThemeContext"
+import type { AppTheme } from "../lib/themes/types"
 import type { Transaction } from "./transaction-history-screen"
+
+const DEFAULT_TITLE = 'Transaction'
 
 interface TransactionDetailModalProps {
   transaction: Transaction
   onClose: () => void
 }
 
+function getStatusColor(t: AppTheme, status?: string): string {
+  switch ((status ?? '').toLowerCase()) {
+    case 'completed':
+      return t.success
+    case 'failed':
+      return t.error
+    case 'pending':
+      return t.warning
+    default:
+      return t.textSecondary
+  }
+}
+
 export function TransactionDetailModal({ transaction, onClose }: TransactionDetailModalProps) {
   const [isGeneratingReceipt, setIsGeneratingReceipt] = useState(false)
   const opacityAnim = useRef(new Animated.Value(0)).current
   const sheetAnim = useRef(new Animated.Value(40)).current
+  const { theme } = useAppThemeContext()
+  const insets = useSafeAreaInsets()
+  const { height: windowHeight } = useWindowDimensions()
+  const s = useMemo(() => makeStyles(theme), [theme])
 
   useEffect(() => {
     Animated.parallel([
@@ -52,149 +73,211 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
   const getTransactionIcon = () => {
     switch (transaction.type) {
       case "deposit":
-        return <MaterialIcons name="keyboard-arrow-down" size={24} color="#000000" />
+        return <MaterialIcons name="keyboard-arrow-down" size={24} color={theme.text} />
       case "withdrawal":
-        return <MaterialIcons name="keyboard-arrow-up" size={24} color="#000000" />
+        return <MaterialIcons name="keyboard-arrow-up" size={24} color={theme.text} />
       case "bounty_posted":
-        return <MaterialIcons name="gps-fixed" size={24} color="#000000" />
+        return <MaterialIcons name="gps-fixed" size={24} color={theme.text} />
       case "bounty_completed":
-        return <MaterialIcons name="check-circle" size={24} color="#60a5fa" />
+        return <MaterialIcons name="check-circle" size={24} color={theme.info} />
       case "bounty_received":
         return <MaterialIcons name="credit-card" size={24} color="#a78bfa" />
+      case "escrow":
+        return <MaterialIcons name="lock" size={24} color={theme.warning} />
+      case "release":
+        return <MaterialIcons name="lock-open" size={24} color={theme.primary} />
+      case "refund":
+        return <MaterialIcons name="refresh" size={24} color={theme.completed} />
+      default:
+        return <MaterialIcons name="receipt-long" size={24} color={theme.textSecondary} />
     }
   }
 
-  // Get transaction title based on type
+  // Get transaction title based on type — always falls back to a sensible
+  // default instead of rendering "undefined" when details.title is missing.
   const getTransactionTitle = () => {
+    const title = transaction.details.title || DEFAULT_TITLE
     switch (transaction.type) {
       case "deposit":
-        return `Deposit via ${transaction.details.method}`
+        return `Deposit via ${transaction.details.method || 'Card'}`
       case "withdrawal":
-        return `Withdrawal to ${transaction.details.method}`
+        return `Withdrawal to ${transaction.details.method || 'Bank Account'}`
       case "bounty_posted":
-        return `Posted Bounty: ${transaction.details.title}`
+        return `Posted Bounty: ${title}`
       case "bounty_completed":
-        return `Completed Bounty: ${transaction.details.title}`
+        return `Completed Bounty: ${title}`
       case "bounty_received":
-        return `Received Bounty Payment: ${transaction.details.title}`
+        return `Received Bounty Payment: ${title}`
+      case "escrow":
+        return `Escrow Hold: ${title}`
+      case "release":
+        return `Escrow Released: ${title}`
+      case "refund":
+        return `Refund: ${title}`
+      default:
+        return title
     }
   }
 
-  // Get transaction description based on type
+  // Get transaction description based on type. `counterparty` is only ever
+  // populated for the same session that just performed the release/refund
+  // (see lib/wallet-context.tsx) — GET /wallet/transactions does not return
+  // it on reload, so this must degrade gracefully rather than print "undefined".
   const getTransactionDescription = () => {
+    const title = transaction.details.title || DEFAULT_TITLE
+    const counterparty = transaction.details.counterparty
     switch (transaction.type) {
       case "deposit":
-        return `You added funds to your account using ${transaction.details.method}.`
+        return `You added funds to your account${transaction.details.method ? ` using ${transaction.details.method}` : ''}.`
       case "withdrawal":
-        return `You withdrew funds from your account to ${transaction.details.method}.`
+        return `You withdrew funds from your account${transaction.details.method ? ` to ${transaction.details.method}` : ''}.`
       case "bounty_posted":
-        return `You posted a bounty titled "${transaction.details.title}" and the funds were reserved from your account.`
+        return `You posted a bounty titled "${title}" and the funds were reserved from your account.`
       case "bounty_completed":
-        return `You completed the bounty "${transaction.details.title}" posted by ${transaction.details.counterparty}.`
+        return `You completed the bounty "${title}"${counterparty ? ` posted by ${counterparty}` : ''}.`
       case "bounty_received":
-        return `You received payment for the bounty "${transaction.details.title}" from ${transaction.details.counterparty}.`
+        return `You received payment for the bounty "${title}"${counterparty ? ` from ${counterparty}` : ''}.`
+      case "escrow":
+        return `Funds for "${title}" are held in escrow until the bounty is completed.`
+      case "release":
+        return `Escrowed funds for "${title}" were released${counterparty ? ` to ${counterparty}` : ''}.`
+      case "refund":
+        return `Escrowed funds for "${title}" were refunded to your account.`
+      default:
+        return ''
     }
   }
+
+  const description = getTransactionDescription()
+
+  const escrowStatusText: Record<string, string> = {
+    funded: 'Funds are held in escrow until bounty completion.',
+    released: 'Funds have been released to the hunter.',
+    pending: 'Escrow is pending verification.',
+  }
+
+  // Build the details list as data so rows (and dividers between them) stay
+  // in sync with whichever fields are actually present, instead of five
+  // near-identical JSX blocks that can drift out of sync.
+  type DetailRow = {
+    icon: keyof typeof MaterialIcons.glyphMap
+    label: string
+    value: string
+    valueColor?: string
+  }
+
+  const detailRows = [
+    { icon: 'info', label: 'Transaction ID', value: transaction.id, valueColor: undefined },
+    { icon: 'calendar-today', label: 'Date', value: format(transaction.date, 'MMMM d, yyyy'), valueColor: undefined },
+    { icon: 'schedule', label: 'Time', value: format(transaction.date, 'h:mm:ss a'), valueColor: undefined },
+    transaction.details.status
+      ? {
+          icon: 'check-circle',
+          label: 'Status',
+          value: transaction.details.status,
+          valueColor: getStatusColor(theme, transaction.details.status),
+        }
+      : null,
+    transaction.details.method
+      ? { icon: 'credit-card', label: 'Method', value: transaction.details.method, valueColor: undefined }
+      : null,
+    transaction.details.counterparty
+      ? {
+          icon: 'gps-fixed',
+          label: transaction.type === 'bounty_completed' ? 'Paid to' : 'From',
+          value: transaction.details.counterparty,
+          valueColor: undefined,
+        }
+      : null,
+  ].filter((row): row is DetailRow => row !== null)
 
   return (
-    <Animated.View style={[styles.backdrop, { opacity: opacityAnim }]}>
+    <Animated.View style={[s.backdrop, { opacity: opacityAnim }]}>
       <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} accessibilityRole="button" accessibilityLabel="Close transaction details" />
-      <Animated.View style={[styles.sheet, { transform: [{ translateY: sheetAnim }] }]}>
-        <View style={styles.header}>
+      <Animated.View
+        style={[
+          s.sheet,
+          {
+            maxHeight: windowHeight * 0.88,
+            paddingBottom: insets.bottom + (Platform.OS === 'ios' ? 16 : 20),
+            transform: [{ translateY: sheetAnim }],
+          },
+        ]}
+      >
+        <View style={s.header}>
           <TouchableOpacity
             accessibilityRole="button"
             accessibilityLabel="Close transaction details"
             onPress={handleClose}
-            style={styles.headerButton}
+            style={s.headerButton}
           >
-            <MaterialIcons name="close" size={24} color="#fff" />
+            <MaterialIcons name="close" size={24} color={theme.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Transaction Details</Text>
-          <View style={styles.headerButtonPlaceholder} />
+          <Text style={s.headerTitle}>Transaction Details</Text>
+          <View style={s.headerButtonPlaceholder} />
         </View>
 
-        <View style={styles.summarySection}>
-          <View style={styles.summaryHeaderRow}>
-            <View style={styles.summaryIcon}>{getTransactionIcon()}</View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.summaryTitle}>{getTransactionTitle()}</Text>
-              <Text style={styles.summaryMeta}>{format(transaction.date, 'MMMM d, yyyy')} at {format(transaction.date, 'h:mm a')}</Text>
-            </View>
-          </View>
-          <View style={styles.amountPill}>
-            <Text style={[styles.amountText, transaction.amount > 0 ? styles.amountPositive : styles.amountNegative]}>{transaction.amount > 0 ? '+' : ''}${Math.abs(transaction.amount).toFixed(2)}</Text>
-          </View>
-          <Text style={styles.descriptionText}>{getTransactionDescription()}</Text>
-        </View>
-
-        <View style={styles.detailSection}>
-          <Text style={styles.detailHeading}>Details</Text>
-          <View style={styles.detailList}>
-            <View style={styles.detailRow}>
-              <View style={styles.detailIcon}><MaterialIcons name="info" size={16} color="#6ee7b7" /></View>
-              <View style={styles.detailContent}><Text style={styles.detailLabel}>Transaction ID</Text><Text style={styles.detailValue}>{transaction.id}</Text></View>
-            </View>
-            <View style={styles.detailRow}>
-              <View style={styles.detailIcon}><MaterialIcons name="calendar-today" size={16} color="#6ee7b7" /></View>
-              <View style={styles.detailContent}><Text style={styles.detailLabel}>Date</Text><Text style={styles.detailValue}>{format(transaction.date, 'MMMM d, yyyy')}</Text></View>
-            </View>
-            <View style={styles.detailRow}>
-              <View style={styles.detailIcon}><MaterialIcons name="schedule" size={16} color="#6ee7b7" /></View>
-              <View style={styles.detailContent}><Text style={styles.detailLabel}>Time</Text><Text style={styles.detailValue}>{format(transaction.date, 'h:mm:ss a')}</Text></View>
-            </View>
-            {transaction.details.status && (
-              <View style={styles.detailRow}>
-                <View style={styles.detailIcon}><MaterialIcons name="check-circle" size={16} color="#6ee7b7" /></View>
-                <View style={styles.detailContent}><Text style={styles.detailLabel}>Status</Text><Text style={styles.detailValue}>{transaction.details.status}</Text></View>
+        <ScrollView
+          contentContainerStyle={s.scrollContent}
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+        >
+          <View style={s.summarySection}>
+            <View style={s.summaryHeaderRow}>
+              <View style={s.summaryIcon}>{getTransactionIcon()}</View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.summaryTitle}>{getTransactionTitle()}</Text>
+                <Text style={s.summaryMeta}>{format(transaction.date, 'MMMM d, yyyy')} at {format(transaction.date, 'h:mm a')}</Text>
               </View>
-            )}
-            {transaction.details.method && (
-              <View style={styles.detailRow}>
-                <View style={styles.detailIcon}><MaterialIcons name="credit-card" size={16} color="#6ee7b7" /></View>
-                <View style={styles.detailContent}><Text style={styles.detailLabel}>Method</Text><Text style={styles.detailValue}>{transaction.details.method}</Text></View>
-              </View>
-            )}
-            {transaction.details.counterparty && (
-              <View style={styles.detailRow}>
-                <View style={styles.detailIcon}><MaterialIcons name="gps-fixed" size={16} color="#6ee7b7" /></View>
-                <View style={styles.detailContent}><Text style={styles.detailLabel}>{transaction.type === 'bounty_completed' ? 'Paid to' : 'From'}</Text><Text style={styles.detailValue}>{transaction.details.counterparty}</Text></View>
-              </View>
-            )}
-          </View>
-        </View>
-
-        {(transaction as any).escrowStatus && (
-          <View style={styles.escrowBlock}>
-            <View style={styles.escrowHeaderRow}>
-              <MaterialIcons name="lock" size={18} color="#059669" />
-              <Text style={styles.escrowTitle}>Escrow Information</Text>
             </View>
-            <Text style={styles.escrowText}>
-              {(transaction as any).escrowStatus === 'funded' && 'Funds are held in escrow until bounty completion.'}
-              {(transaction as any).escrowStatus === 'released' && 'Funds have been released to the hunter.'}
-              {(transaction as any).escrowStatus === 'pending' && 'Escrow is pending verification.'}
-            </Text>
+            <View style={s.amountPill}>
+              <Text style={[s.amountText, { color: transaction.amount > 0 ? theme.success : theme.error }]}>
+                {transaction.amount > 0 ? '+' : ''}${Math.abs(transaction.amount).toFixed(2)}
+              </Text>
+            </View>
+            {!!description && <Text style={s.descriptionText}>{description}</Text>}
           </View>
-        )}
 
-        <View style={styles.actionsSection}>
+          <View style={s.detailSection}>
+            <Text style={s.detailHeading}>Details</Text>
+            <View style={s.detailList}>
+              {detailRows.map((row, index) => (
+                <View key={row.label} style={[s.detailRow, index > 0 && s.detailRowDivider]}>
+                  <View style={s.detailIcon}><MaterialIcons name={row.icon} size={16} color={theme.primary} /></View>
+                  <View style={s.detailContent}>
+                    <Text style={s.detailLabel}>{row.label}</Text>
+                    <Text style={[s.detailValue, row.valueColor ? { color: row.valueColor } : null]}>
+                      {row.value}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {!!transaction.escrowStatus && (
+            <View style={s.escrowBlock}>
+              <View style={s.escrowHeaderRow}>
+                <MaterialIcons name="lock" size={18} color={theme.primary} />
+                <Text style={s.escrowTitle}>Escrow Information</Text>
+              </View>
+              <Text style={s.escrowText}>
+                {escrowStatusText[transaction.escrowStatus] ?? 'Escrow status unavailable.'}
+              </Text>
+            </View>
+          )}
+        </ScrollView>
+
+        <View style={s.actionsSection}>
           <TouchableOpacity
             onPress={handleGenerateReceipt}
             disabled={isGeneratingReceipt}
-            style={[styles.actionPrimary, isGeneratingReceipt && styles.actionPrimaryDisabled]}
+            style={[s.actionPrimary, isGeneratingReceipt && s.actionPrimaryDisabled]}
             accessibilityRole="button"
             accessibilityLabel="Generate receipt for this transaction"
           >
             <MaterialIcons name="receipt" size={20} color="#ffffff" />
-            <Text style={styles.actionPrimaryText}>{isGeneratingReceipt ? 'Generating…' : 'Generate Receipt'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={handleClose}
-            style={styles.actionSecondary}
-            accessibilityRole="button"
-            accessibilityLabel="Close transaction details"
-          >
-            <Text style={styles.actionSecondaryText}>Close</Text>
+            <Text style={s.actionPrimaryText}>{isGeneratingReceipt ? 'Generating…' : 'Generate Receipt'}</Text>
           </TouchableOpacity>
         </View>
       </Animated.View>
@@ -202,58 +285,63 @@ export function TransactionDetailModal({ transaction, onClose }: TransactionDeta
   )
 }
 
-const styles = StyleSheet.create({
-  backdrop: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    justifyContent: 'flex-end',
-    zIndex: 999,
-  },
-  sheet: {
-    backgroundColor: '#059669',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    paddingBottom: Platform.OS === 'ios' ? 28 : 20,
-    ...theme.shadows.lg,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'ios' ? 18 : 12,
-    paddingBottom: 12,
-  },
-  headerButton: { padding: 8, minWidth: 44, minHeight: 44, justifyContent: 'center', alignItems: 'center' },
-  headerButtonPlaceholder: { width: 44, height: 44 },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '600', letterSpacing: 0.5 },
-  summarySection: { paddingHorizontal: 24, paddingBottom: 20 },
-  summaryHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  summaryIcon: { height: 48, width: 48, borderRadius: 24, backgroundColor: 'rgba(4,120,87,0.4)', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
-  summaryTitle: { color: '#fff', fontSize: 16, fontWeight: '600', marginBottom: 4 },
-  summaryMeta: { color: '#1F2937', fontSize: 13 },
-  amountPill: { backgroundColor: 'rgba(4,120,87,0.55)', borderRadius: 16, paddingVertical: 14, paddingHorizontal: 18, marginBottom: 14 },
-  amountText: { fontSize: 24, fontWeight: '700', textAlign: 'center', letterSpacing: 0.5 },
-  amountPositive: { color: '#6ee7b7' },
-  amountNegative: { color: '#fca5a5' },
-  descriptionText: { color: '#ecfdf5', fontSize: 13, lineHeight: 18 },
-  detailSection: { paddingHorizontal: 24, paddingBottom: 8 },
-  detailHeading: { color: '#6ee7b7', fontSize: 13, fontWeight: '600', marginBottom: 12 },
-  detailList: { gap: 14 },
-  detailRow: { flexDirection: 'row', alignItems: 'center' },
-  detailIcon: { height: 32, width: 32, borderRadius: 16, backgroundColor: 'rgba(4,120,87,0.5)', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  detailContent: { flex: 1 },
-  detailLabel: { color: '#6ee7b7', fontSize: 11, marginBottom: 2 },
-  detailValue: { color: '#fff', fontSize: 14, fontWeight: '500' },
-  escrowBlock: { marginHorizontal: 24, marginTop: 12, marginBottom: 8, backgroundColor: 'rgba(4,120,87,0.5)', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: '#0B0F14' },
-  escrowHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 6 },
-  escrowTitle: { color: '#fff', fontSize: 14, fontWeight: '600', marginLeft: 6 },
-  escrowText: { color: '#1F2937', fontSize: 12, lineHeight: 18 },
-  actionsSection: { paddingHorizontal: 24, paddingTop: 10, gap: 12 },
-  actionPrimary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#111827', paddingVertical: 14, borderRadius: 24, ...theme.shadows.emerald },
-  actionPrimaryDisabled: { opacity: 0.6 },
-  actionPrimaryText: { color: '#fff', fontSize: 15, fontWeight: '600', marginLeft: 8 },
-  actionSecondary: { backgroundColor: '#0B0F14', paddingVertical: 14, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
-  actionSecondaryText: { color: '#fff', fontSize: 15, fontWeight: '600' },
-});
+function makeStyles(t: AppTheme) {
+  return StyleSheet.create({
+    backdrop: {
+      position: 'absolute',
+      top: 0, left: 0, right: 0, bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      justifyContent: 'flex-end',
+      zIndex: 999,
+    },
+    sheet: {
+      backgroundColor: t.surface,
+      borderTopLeftRadius: 32,
+      borderTopRightRadius: 32,
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: -4 },
+      shadowOpacity: t.isDark ? 0.4 : 0.15,
+      shadowRadius: 16,
+      elevation: 8,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 24,
+      paddingTop: Platform.OS === 'ios' ? 18 : 12,
+      paddingBottom: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: t.border,
+    },
+    headerButton: { padding: 8, minWidth: 44, minHeight: 44, justifyContent: 'center', alignItems: 'center' },
+    headerButtonPlaceholder: { width: 44, height: 44 },
+    headerTitle: { color: t.text, fontSize: 18, fontWeight: '600', letterSpacing: 0.5 },
+    scrollContent: { paddingBottom: 8 },
+    summarySection: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 20 },
+    summaryHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+    summaryIcon: { height: 48, width: 48, borderRadius: 24, backgroundColor: t.surfaceSecondary, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
+    summaryTitle: { color: t.text, fontSize: 16, fontWeight: '600', marginBottom: 4 },
+    summaryMeta: { color: t.textSecondary, fontSize: 13 },
+    amountPill: { backgroundColor: t.surfaceSecondary, borderRadius: 16, paddingVertical: 14, paddingHorizontal: 18, marginBottom: 14 },
+    amountText: { fontSize: 24, fontWeight: '700', textAlign: 'center', letterSpacing: 0.5 },
+    descriptionText: { color: t.textSecondary, fontSize: 13, lineHeight: 18 },
+    detailSection: { paddingHorizontal: 24, paddingBottom: 8 },
+    detailHeading: { color: t.primaryLight, fontSize: 13, fontWeight: '600', marginBottom: 12 },
+    detailList: {},
+    detailRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
+    detailRowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border },
+    detailIcon: { height: 32, width: 32, borderRadius: 16, backgroundColor: t.surfaceSecondary, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+    detailContent: { flex: 1 },
+    detailLabel: { color: t.textSecondary, fontSize: 11, marginBottom: 2 },
+    detailValue: { color: t.text, fontSize: 14, fontWeight: '500' },
+    escrowBlock: { marginHorizontal: 24, marginTop: 4, marginBottom: 8, backgroundColor: t.surfaceSecondary, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: t.border },
+    escrowHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 6 },
+    escrowTitle: { color: t.text, fontSize: 14, fontWeight: '600', marginLeft: 6 },
+    escrowText: { color: t.textSecondary, fontSize: 12, lineHeight: 18 },
+    actionsSection: { paddingHorizontal: 24, paddingTop: 14 },
+    actionPrimary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: t.primary, paddingVertical: 14, borderRadius: 24, shadowColor: t.primary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
+    actionPrimaryDisabled: { opacity: 0.6 },
+    actionPrimaryText: { color: '#ffffff', fontSize: 15, fontWeight: '600', marginLeft: 8 },
+  });
+}
