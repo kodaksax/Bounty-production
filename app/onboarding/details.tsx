@@ -53,7 +53,7 @@ export default function DetailsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile: localProfile, updateProfile } = useUserProfile();
-  const { userId } = useAuthProfile();
+  const { userId, updateProfile: updateAuthProfile } = useAuthProfile();
   const { session } = useAuthContext();
   const { profile: normalized } = useNormalizedProfile();
   const { data: onboardingData, updateData: updateOnboardingData } = useOnboarding();
@@ -454,7 +454,17 @@ export default function DetailsScreen() {
     setHunterStep('sample');
   };
 
-  const handleBrowseZip = () => {
+  const handleSubmitZip = async (zip: string) => {
+    if (zip.trim()) {
+      setLocation(zip.trim());
+      // Save as user metadata (only if they actually chose to enter one) so
+      // they can be matched to bounties posted in the same ZIP later.
+      try {
+        await updateAuthProfile({ zip_code: zip.trim() });
+      } catch (err) {
+        console.error('[Onboarding] Failed to save zip code to profile:', err);
+      }
+    }
     setHunterStep('sample');
   };
 
@@ -633,7 +643,7 @@ export default function DetailsScreen() {
           displayName={displayName || (normalized as any)?.name || 'there'}
           recentBounties={recentBounties}
           onUseLocation={handleUseLocation}
-          onBrowseZip={handleBrowseZip}
+          onSubmitZip={handleSubmitZip}
           onSkip={() => setHunterStep('sample')}
         />
       );
@@ -1352,6 +1362,34 @@ function makeStyles(theme: AppTheme) {
       fontSize: 18,
       fontWeight: 'bold',
     },
+    zipInputRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    zipInput: {
+      flex: 1,
+      backgroundColor: theme.surface,
+      borderWidth: 2,
+      borderColor: theme.text,
+      borderRadius: 999,
+      paddingVertical: 16,
+      paddingHorizontal: 20,
+      fontSize: 18,
+      color: theme.text,
+    },
+    zipInputButton: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 16,
+      paddingHorizontal: 20,
+      borderRadius: 999,
+    },
+    zipInputButtonText: {
+      color: '#ffffff',
+      fontSize: 18,
+      fontWeight: 'bold',
+    },
     hunterFootnote: {
       fontSize: 13,
       color: theme.textSecondary,
@@ -1618,7 +1656,7 @@ type HunterLocationPromptProps = {
   displayName: string;
   recentBounties: Bounty[] | null;
   onUseLocation: () => void;
-  onBrowseZip: () => void;
+  onSubmitZip: (zipCode: string) => void;
   onSkip: () => void;
 };
 
@@ -1649,10 +1687,12 @@ function HunterLocationPrompt({
   displayName,
   recentBounties,
   onUseLocation,
-  onBrowseZip,
+  onSubmitZip,
   onSkip,
 }: HunterLocationPromptProps) {
   const previewCards = getPreviewCards(recentBounties);
+  const [showZipInput, setShowZipInput] = useState(false);
+  const [zipInput, setZipInput] = useState('');
 
   return (
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
@@ -1695,9 +1735,31 @@ function HunterLocationPrompt({
             <Text style={styles.locationButtonText}>Use my location</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.zipButton} onPress={onBrowseZip}>
-            <Text style={styles.zipButtonText}>Browse by ZIP instead</Text>
-          </TouchableOpacity>
+          {showZipInput ? (
+            <View style={styles.zipInputRow}>
+              <TextInput
+                style={styles.zipInput}
+                value={zipInput}
+                onChangeText={(text) => setZipInput(text.replace(/[^0-9]/g, '').slice(0, 5))}
+                placeholder="ZIP code"
+                placeholderTextColor={theme.textDisabled}
+                keyboardType="number-pad"
+                maxLength={5}
+                autoFocus
+              />
+              <TouchableOpacity
+                style={[styles.zipInputButton, { backgroundColor: theme.primary, opacity: zipInput.length === 5 ? 1 : 0.5 }]}
+                onPress={() => onSubmitZip(zipInput)}
+                disabled={zipInput.length !== 5}
+              >
+                <Text style={styles.zipInputButtonText}>Go</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.zipButton} onPress={() => setShowZipInput(true)}>
+              <Text style={styles.zipButtonText}>Browse by ZIP instead</Text>
+            </TouchableOpacity>
+          )}
 
           <Text style={styles.hunterFootnote}>
             Only your area is stored — never your exact address.

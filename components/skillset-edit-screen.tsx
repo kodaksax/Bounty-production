@@ -8,6 +8,7 @@ import { useEffect, useState } from "react"
 import { ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native"
 import { useAuthProfile } from '../hooks/useAuthProfile'
 import { useUserProfile } from '../hooks/useUserProfile'
+import { BOUNTY_CATEGORIES } from '../lib/constants/bounty-categories'
 import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 
 interface SkillsetEditScreenProps {
@@ -31,7 +32,7 @@ const ICON_LIBRARY = [
 export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: SkillsetEditScreenProps) {
   const { theme } = useAppThemeContext();
   const { profile: localProfile, updateProfile } = useUserProfile();
-  const { userId: authUserId } = useAuthProfile();
+  const { userId: authUserId, profile: authProfile, updateProfile: updateAuthProfile } = useAuthProfile();
 
   const resolvedUserId = userId || authUserId;
 
@@ -40,6 +41,25 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
     { id: "2", icon: "gps-fixed", text: "Private Investigator Certification" },
     { id: "3", icon: "favorite", text: "Joined December 28th 2024" },
   ])
+
+  // Preset skill-category tags (Tech/Design/Writing/Labor/Delivery/Other),
+  // saved as profile metadata for a future recommended-bounty notification
+  // feature. Distinct from the free-text skills below.
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(
+    () => authProfile?.skill_categories ?? []
+  )
+
+  useEffect(() => {
+    if (authProfile?.skill_categories) {
+      setSelectedCategories(authProfile.skill_categories)
+    }
+  }, [authProfile?.skill_categories])
+
+  const toggleCategory = (categoryId: string) => {
+    setSelectedCategories((prev) =>
+      prev.includes(categoryId) ? prev.filter((c) => c !== categoryId) : [...prev, categoryId]
+    )
+  }
 
   const [selectedSkill, setSelectedSkill] = useState<string>("1")
   const alias: Record<string,string> = { heart: 'favorite', target: 'gps-fixed', globe: 'public' }
@@ -109,6 +129,10 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
         setBanner('Skills saved')
         setTimeout(()=>setBanner(null), 1500)
       }
+      // Preset skill-category tags persist to the remote profile (unlike the
+      // free-text skills above, which are local-only via useUserProfile) so
+      // they're available server-side for the future recommendation feature.
+      await updateAuthProfile({ skill_categories: selectedCategories })
     } catch {
       setBanner('Error saving skills')
     }
@@ -188,6 +212,42 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
         </View>
       )}
       <ScrollView className="flex-1" contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}>
+        {/* Preset skill categories */}
+        <View className="mb-5">
+          <Text className="text-sm font-semibold mb-1" style={{ color: theme.text }}>Skill Categories</Text>
+          <Text className="text-xs mb-3" style={{ color: theme.textSecondary }}>
+            Select the kinds of work you're good at. This helps us recommend bounties for you.
+          </Text>
+          <View className="flex-row flex-wrap -m-1">
+            {BOUNTY_CATEGORIES.map((category) => {
+              const isSelected = selectedCategories.includes(category.id)
+              return (
+                <TouchableOpacity
+                  key={category.id}
+                  onPress={() => toggleCategory(category.id)}
+                  className="m-1 flex-row items-center px-4 py-2 rounded-full"
+                  style={{ backgroundColor: isSelected ? theme.primary : theme.surfaceSecondary }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${isSelected ? 'Remove' : 'Add'} ${category.label} skill category`}
+                  accessibilityState={{ selected: isSelected }}
+                >
+                  <MaterialIcons
+                    name={category.icon as any}
+                    size={16}
+                    color={isSelected ? '#fff' : theme.textSecondary}
+                  />
+                  <Text
+                    className="ml-2 text-sm font-medium"
+                    style={{ color: isSelected ? '#fff' : theme.text }}
+                  >
+                    {category.label}
+                  </Text>
+                </TouchableOpacity>
+              )
+            })}
+          </View>
+        </View>
+
         {skills.map(skill => {
           const isActive = selectedSkill === skill.id
           return (

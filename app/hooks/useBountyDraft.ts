@@ -27,6 +27,9 @@ export interface BountyDraft {
   amount: number;
   isForHonor: boolean;
   location: string;
+  // Optional ZIP code, saved as metadata so users in the same ZIP can be
+  // matched to this bounty later (e.g. for a future notification feature).
+  zipCode?: string;
   workType: 'online' | 'in_person';
   timeline?: string;
   skills?: string;
@@ -47,6 +50,7 @@ const defaultDraft: BountyDraft = {
   amount: 0,
   isForHonor: false,
   location: '',
+  zipCode: '',
   workType: 'in_person',
   timeline: '',
   skills: '',

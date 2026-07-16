@@ -4,6 +4,7 @@ import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import React, { useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BOUNTY_CATEGORIES } from '../../../lib/constants/bounty-categories';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import { validateTitle } from '../../../lib/utils/bounty-validation';
 
@@ -13,15 +14,6 @@ interface StepTitleProps {
   onNext: () => void;
   onBack?: () => void;
 }
-
-const CATEGORIES = [
-  { id: 'tech', label: 'Tech', icon: 'computer' as const },
-  { id: 'design', label: 'Design', icon: 'palette' as const },
-  { id: 'writing', label: 'Writing', icon: 'edit' as const },
-  { id: 'labor', label: 'Labor', icon: 'build' as const },
-  { id: 'delivery', label: 'Delivery', icon: 'local-shipping' as const },
-  { id: 'other', label: 'Other', icon: 'more-horiz' as const },
-];
 
 export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -112,7 +104,7 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
             Category (optional)
           </Text>
           <View className="flex-row flex-wrap gap-2">
-            {CATEGORIES.map((category) => {
+            {BOUNTY_CATEGORIES.map((category) => {
               const isSelected = draft.category === category.id;
               return (
                 <TouchableOpacity
@@ -125,7 +117,7 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
                   accessibilityState={{ selected: isSelected }}
                 >
                   <MaterialIcons
-                    name={category.icon}
+                    name={category.icon as any}
                     size={18}
                     color={isSelected ? '#fff' : theme.textDisabled}
                   />

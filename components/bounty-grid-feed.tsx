@@ -8,10 +8,13 @@ const FEATURED_CARD_WIDTH = Dimensions.get('window').width * 0.78
 import type { Bounty } from '../lib/services/database.types'
 import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 import type { AppTheme } from '../lib/themes/types'
+import { BOUNTY_CATEGORIES, getBountyCategoryDef } from '../lib/constants/bounty-categories'
 import { BountyFeaturedItem } from './bounty-featured-item'
 import { BountyGridItem, GRID_CARD_WIDTH } from './bounty-grid-item'
 
 // ── Category definitions ───────────────────────────────────────────────────
+// Keyed by label to match the categoryKey values produced by getBountyCategory
+// below. Source of truth for id/label/icon/color is lib/constants/bounty-categories.ts.
 
 interface CategoryDef {
   label: string
@@ -19,63 +22,15 @@ interface CategoryDef {
   color: string
 }
 
-const CATEGORY_DEFS: Record<string, CategoryDef> = {
-  Tech:     { label: 'Tech',     icon: 'computer',       color: '#3b82f6' },
-  Design:   { label: 'Design',   icon: 'palette',        color: '#a855f7' },
-  Writing:  { label: 'Writing',  icon: 'edit',           color: '#f59e0b' },
-  Labor:    { label: 'Labor',    icon: 'build',          color: '#f97316' },
-  Delivery: { label: 'Delivery', icon: 'local-shipping', color: '#06b6d4' },
-  Other:    { label: 'Other',    icon: 'work',           color: '#8b5cf6' },
-}
+const CATEGORY_DEFS: Record<string, CategoryDef> = Object.fromEntries(
+  BOUNTY_CATEGORIES.map((c) => [c.label, { label: c.label, icon: c.icon, color: c.color }])
+)
 
-const CATEGORY_ORDER = ['Tech', 'Design', 'Writing', 'Labor', 'Delivery', 'Other']
-
-// ── Keyword-based classification ───────────────────────────────────────────
-
-const CATEGORY_KEYWORDS: Record<string, string[]> = {
-  Tech: [
-    'javascript', 'typescript', 'react', 'python', 'code', 'coding', 'programming',
-    'web', 'app', 'software', 'developer', 'database', 'api', 'ios', 'android',
-    'mobile', 'tech', 'ai ', 'machine learning', 'data science', 'computer', 'excel',
-    ' it ', 'network', 'cloud', 'devops', 'backend', 'frontend', 'fullstack',
-    'html', 'css', 'sql', 'java', 'node', 'server', 'bug', 'debug', 'wordpress',
-    'shopify', 'automation', 'script', 'bot', 'plugin',
-  ],
-  Design: [
-    'design', 'figma', 'photoshop', 'illustrator', 'logo', 'ui', 'ux', 'graphic',
-    'visual', 'brand', 'creative', 'art', 'illustration', 'sketch', 'layout',
-    'typography', 'wireframe', 'mockup', 'canva', 'animation', '3d', 'video edit',
-    'photo edit', 'thumbnail', 'banner', 'poster', 'infographic', 'icon',
-  ],
-  Writing: [
-    'writ', 'content', 'article', 'blog', 'copy', 'seo', 'edit', 'essay',
-    'proofread', 'translat', 'caption', 'script', 'story', 'review', 'resume',
-    'cover letter', 'description', 'newsletter', 'email campaign', 'ghostwrit',
-    'social media post',
-  ],
-  Labor: [
-    'mow', 'lawn', 'clean', 'mov', 'lift', 'repair', 'fix', 'install', 'build',
-    'paint', 'yard', 'handyman', 'plumb', 'electric', 'carpent', 'haul',
-    'assembl', 'furniture', 'snow', 'garden', 'shovel', 'pressure wash',
-    'gutter', 'drywall', 'flooring', 'roof', 'fence', 'demolit', 'junk remov',
-  ],
-  Delivery: [
-    'deliver', 'pickup', 'pick up', 'driver', 'transport', 'courier', 'ship',
-    'errand', 'drive', 'drop off', 'grocery', 'package', 'luggage', 'move stuff',
-    'bring', 'fetch', 'run to', 'go to store',
-  ],
-}
-
+// Category is the metadata the poster explicitly chose when creating the
+// bounty (see StepTitle.tsx) — never inferred from title/description text.
 function getBountyCategory(bounty: Bounty): string {
-  const haystack = [bounty.title, bounty.description, bounty.skills_required]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase()
-
-  for (const cat of CATEGORY_ORDER.slice(0, -1)) {
-    if (CATEGORY_KEYWORDS[cat].some(kw => haystack.includes(kw))) return cat
-  }
-  return 'Other'
+  const def = getBountyCategoryDef(bounty.category)
+  return def ? def.label : 'Other'
 }
 
 // ── Data shaping ───────────────────────────────────────────────────────────

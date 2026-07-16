@@ -158,6 +158,7 @@ export const bountyService = {
         amount: draft.isForHonor ? 0 : draft.amount,
         is_for_honor: draft.isForHonor,
         location: draft.workType === 'in_person' ? draft.location : '',
+        zip_code: draft.zipCode || undefined,
         work_type: draft.workType,
         category: draft.category || undefined,
         timeline: draft.timeline || '',

@@ -8,11 +8,12 @@ import { PostingsListSkeleton } from 'components/ui/skeleton-loaders'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useRouter } from 'expo-router'
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
-import { Alert, Animated, Dimensions, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { Animated, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useForegroundRefresh } from '../hooks/useForegroundRefresh'
 import { useValidUserId } from '../hooks/useValidUserId'
 import { SIZING, SPACING, TYPOGRAPHY } from '../lib/constants/accessibility'
+import { BOUNTY_CATEGORIES } from '../lib/constants/bounty-categories'
 import { useBountyFormat } from '../lib/bounty-format-context'
 import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 import type { AppTheme } from '../lib/themes/types'
@@ -39,7 +40,6 @@ interface BountyFeedProps {
 }
 
 const PAGE_SIZE = 10
-const DISTANCE_OPTIONS = [5, 10, 25, 50]
 
 export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function BountyFeed(
   { activeScreen, setActiveScreen, currentUserId },
@@ -56,9 +56,6 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   const [loadError, setLoadError] = useState<Error | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [activeCategory, setActiveCategory] = useState<string | 'all'>('all')
-  const [distanceFilter, setDistanceFilter] = useState<number | null>(null)
-  const [distanceDropdownOpen, setDistanceDropdownOpen] = useState(false)
-  const [distanceChipLayout, setDistanceChipLayout] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
 
   const { theme } = useAppThemeContext()
   const { bountyFormat } = useBountyFormat()
@@ -69,18 +66,14 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   const scrollY = useRef(new Animated.Value(0)).current
   const bountyListRef = useRef<FlatList>(null)
   const offsetRef = useRef(0)
-  const distanceChipRef = useRef<any>(null)
 
   const { location: userLocation, permission } = useLocation()
   const validUserId = useValidUserId()
 
   const categories = useMemo(() => [
     { id: 'all', label: 'For You', icon: 'auto-awesome' as const },
-    { id: 'crypto', label: 'Crypto', icon: 'attach-money' as const },
-    { id: 'remote', label: 'Remote', icon: 'inventory' as const },
-    { id: 'highpaying', label: 'High Paying', icon: 'payments' as const },
-    { id: 'distance', label: 'Distance', icon: 'near-me' as const, special: true },
-    { id: 'forkids', label: 'For Honor', icon: 'favorite' as const },
+    
+    ...BOUNTY_CATEGORIES.map((c) => ({ id: c.id, label: c.label, icon: c.icon as any })),
   ], [])
 
   const calculateDistance = useCallback((bountyLocation: string) => {
@@ -120,51 +113,26 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     if (appliedBountyIds.size > 0) {
       list = list.filter((b) => !appliedBountyIds.has(String(b.id)))
     }
-    if (activeCategory !== 'all') {
-      if (activeCategory === 'forkids') {
-        // For Honor: unpaid bounties done for goodwill
-        list = list.filter((b) => Boolean(b.is_for_honor))
-      } else if (activeCategory === 'remote') {
-        // Remote: online/digital work only
-        list = list.filter((b) => b.work_type === 'online')
-      } else if (activeCategory === 'highpaying') {
-        // High Paying: paid bounties only, sorted highest first
-        list = list.filter((b) => !b.is_for_honor && Number(b.amount) > 0)
-      } else if (activeCategory === 'crypto') {
-        // Crypto: bounties related to blockchain, web3, or crypto work
-        const cryptoKeywords = [
-          'crypto', 'bitcoin', 'btc', 'ethereum', 'eth', 'blockchain', 'web3',
-          'nft', 'defi', 'solana', 'sol', 'token', 'wallet', 'smart contract',
-          'dao', 'dapp', 'metaverse', 'polygon', 'matic', 'binance', 'bnb',
-        ]
-        list = list.filter((b) => {
-          const text = (b.title + ' ' + (b.description || '')).toLowerCase()
-          return cryptoKeywords.some(kw => text.includes(kw))
-        })
-      }
+    if (activeCategory !== 'all' && activeCategory !== 'everything') {
+      // Category filters use only the metadata the poster selected when
+      // creating the bounty (see app/screens/CreateBounty/StepTitle.tsx) —
+      // never inferred from the bounty's title/description text.
+      list = list.filter((b) => (b.category || '').toLowerCase() === activeCategory)
     }
-    if (distanceFilter !== null && userLocation && permission?.granted) {
-      list = list.filter((b) => {
-        if (b.work_type === 'online') return true
-        const distance = bountyDistances.get(String(b.id))
-        if (distance == null) return true
-        return distance <= distanceFilter
-      })
-    }
-    if (activeCategory === 'highpaying') {
-      list.sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0))
-    } else {
-      list.sort((a, b) => {
-        const distA = bountyDistances.get(String(a.id))
-        const distB = bountyDistances.get(String(b.id))
-        if (distA == null && distB == null) return 0
-        if (distA == null) return 1
-        if (distB == null) return -1
-        return (distA ?? Infinity) - (distB ?? Infinity)
-      })
-    }
+    // "Everything" and "For You" both show the full (category-unfiltered) set;
+    // BountyGridFeed always features the highest-priced bounties within
+    // whatever list it's given, so featured stays highest-priced even when a
+    // specific category chip is active.
+    list.sort((a, b) => {
+      const distA = bountyDistances.get(String(a.id))
+      const distB = bountyDistances.get(String(b.id))
+      if (distA == null && distB == null) return 0
+      if (distA == null) return 1
+      if (distB == null) return -1
+      return (distA ?? Infinity) - (distB ?? Infinity)
+    })
     return list
-  }, [bounties, activeCategory, distanceFilter, userLocation, permission, bountyDistances, appliedBountyIds])
+  }, [bounties, activeCategory, bountyDistances, appliedBountyIds])
 
   const loadUserApplications = useCallback(async () => {
     const uid = validUserId ?? currentUserId
@@ -477,64 +445,10 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ paddingHorizontal: 16 }}
         renderItem={({ item }) => {
-          const isDistance = item.id === 'distance'
-          const isActive = isDistance ? Boolean(distanceFilter) : activeCategory === item.id
+          const isActive = activeCategory === item.id
           const iconColor = isActive ? theme.primary : theme.textSecondary
-          const chipStyle = [s.chip, isActive && s.chipActive, !permission?.granted && isDistance ? s.disabledChip : undefined]
+          const chipStyle = [s.chip, isActive && s.chipActive]
           const labelStyle = [s.chipLabel, isActive && s.chipLabelActive]
-
-          if (isDistance) {
-            return (
-              <TouchableOpacity
-                ref={(r) => { distanceChipRef.current = r }}
-                onLayout={(e) => {
-                  const { x, y, width, height } = e.nativeEvent.layout
-                  setDistanceChipLayout({ x, y, width, height })
-                }}
-                onPress={() => {
-                  if (!permission?.granted || !userLocation) {
-                    Alert.alert('Location required', 'Enable location permission to filter by distance.')
-                    return
-                  }
-                  if (distanceFilter) {
-                    setDistanceFilter(null)
-                    setDistanceDropdownOpen(false)
-                    return
-                  }
-                  if (distanceDropdownOpen && !distanceFilter) {
-                    setDistanceDropdownOpen(false)
-                    return
-                  }
-                  try {
-                    if (distanceChipRef.current && typeof distanceChipRef.current.measureInWindow === 'function') {
-                      distanceChipRef.current.measureInWindow((x: number, y: number, width: number, height: number) => {
-                        setDistanceChipLayout({ x, y, width, height })
-                        setDistanceDropdownOpen(true)
-                      })
-                      return
-                    }
-                  } catch {
-                    // fallthrough to toggle without measured position
-                  }
-                  setDistanceDropdownOpen((prev) => !prev)
-                }}
-                style={chipStyle}
-                accessibilityRole="button"
-                accessibilityLabel={distanceFilter ? `Filter by ${distanceFilter} miles, currently active` : 'Filter by distance'}
-                accessibilityHint={distanceFilter ? 'Tap to clear distance filter' : 'Tap to select distance radius'}
-                accessibilityState={{ selected: isActive, disabled: !permission?.granted }}
-              >
-                <MaterialIcons
-                  name={item.icon}
-                  size={SIZING.ICON_SMALL}
-                  color={iconColor}
-                  style={{ marginRight: SPACING.COMPACT_GAP }}
-                  accessibilityElementsHidden={true}
-                />
-                <Text style={labelStyle}>{distanceFilter ? `${distanceFilter}mi` : item.label}</Text>
-              </TouchableOpacity>
-            )
-          }
 
           return (
             <TouchableOpacity
@@ -560,34 +474,6 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     </View>
   )
 
-  // Distance dropdown — rendered at dashboardArea level so it floats above all content.
-  const renderDistanceDropdown = () => {
-    const windowWidth = Dimensions.get('window').width
-    const dropdownWidth = Math.max(160, distanceChipLayout?.width ?? 160)
-    let left = distanceChipLayout?.x ?? 16
-    if (left + dropdownWidth > windowWidth - 8) {
-      left = Math.max(8, windowWidth - dropdownWidth - 8)
-    }
-    const top = distanceChipLayout ? distanceChipLayout.y + distanceChipLayout.height + 2 : 120
-    const dropdownContent = permission?.granted && userLocation
-      ? DISTANCE_OPTIONS.map((m) => (
-          <TouchableOpacity
-            key={m}
-            onPress={() => { setDistanceFilter(distanceFilter === m ? null : m); setDistanceDropdownOpen(false) }}
-            style={s.distanceOption}
-          >
-            <Text style={{ color: theme.text, fontWeight: '700' }}>{m} mi</Text>
-          </TouchableOpacity>
-        ))
-      : <Text style={s.dropdownNotice}>Location permission required to use distance filter.</Text>
-
-    return (
-      <View style={[s.distanceDropdown, { position: 'absolute', left, top, width: dropdownWidth }]}>
-        {dropdownContent}
-      </View>
-    )
-  }
-
   return (
     <View style={s.dashboardArea}>
       {/* Search bar — non-grid only (grid has it inside the banner block below) */}
@@ -607,9 +493,6 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
 
       {/* Filter chips — outside FlatList for non-grid; grid gets them inside listHeader */}
       {bountyFormat !== 'grid' && renderChips()}
-
-      {/* Distance dropdown — absolutely positioned over all content */}
-      {distanceDropdownOpen && renderDistanceDropdown()}
 
       {/* List area */}
       {bountyFormat === 'grid' ? (
@@ -655,38 +538,10 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                     keyboardShouldPersistTaps="handled"
                   >
                     {categories.map((item) => {
-                      const isDistance = item.id === 'distance'
-                      const isActive = isDistance ? Boolean(distanceFilter) : activeCategory === item.id
+                      const isActive = activeCategory === item.id
                       const iconColor = isActive ? theme.primary : theme.textSecondary
-                      const chipStyle = [s.chip, isActive && s.chipActive, !permission?.granted && isDistance ? s.disabledChip : undefined]
+                      const chipStyle = [s.chip, isActive && s.chipActive]
                       const labelStyle = [s.chipLabel, isActive && s.chipLabelActive]
-                      if (isDistance) {
-                        return (
-                          <TouchableOpacity
-                            key={item.id}
-                            ref={(r) => { distanceChipRef.current = r }}
-                            onLayout={(e) => { const { x, y, width, height } = e.nativeEvent.layout; setDistanceChipLayout({ x, y, width, height }) }}
-                            onPress={() => {
-                              if (!permission?.granted || !userLocation) { Alert.alert('Location required', 'Enable location permission to filter by distance.'); return }
-                              if (distanceFilter) { setDistanceFilter(null); setDistanceDropdownOpen(false); return }
-                              if (distanceDropdownOpen && !distanceFilter) { setDistanceDropdownOpen(false); return }
-                              try {
-                                if (distanceChipRef.current?.measureInWindow) {
-                                  distanceChipRef.current.measureInWindow((x: number, y: number, width: number, height: number) => { setDistanceChipLayout({ x, y, width, height }); setDistanceDropdownOpen(true) })
-                                  return
-                                }
-                              } catch {}
-                              setDistanceDropdownOpen(prev => !prev)
-                            }}
-                            style={chipStyle}
-                            accessibilityRole="button"
-                            accessibilityState={{ selected: isActive, disabled: !permission?.granted }}
-                          >
-                            <MaterialIcons name={item.icon} size={SIZING.ICON_SMALL} color={iconColor} style={{ marginRight: SPACING.COMPACT_GAP }} accessibilityElementsHidden />
-                            <Text style={labelStyle}>{distanceFilter ? `${distanceFilter}mi` : item.label}</Text>
-                          </TouchableOpacity>
-                        )
-                      }
                       return (
                         <TouchableOpacity
                           key={item.id}
@@ -817,32 +672,6 @@ function makeStyles(t: AppTheme) {
     },
     chipLabelActive: {
       color: t.primaryLight,
-    },
-    disabledChip: { opacity: 0.4 },
-
-    // ── Distance dropdown ─────────────────────────────────────────────────────
-    distanceDropdown: {
-      position: 'absolute',
-      backgroundColor: t.surface,
-      borderWidth: 1,
-      borderColor: t.border,
-      borderRadius: 12,
-      padding: SPACING.COMPACT_GAP,
-      zIndex: 60,
-      shadowColor: '#000',
-      shadowOpacity: 0.08,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: 2 },
-      elevation: 4,
-    },
-    distanceOption: {
-      paddingVertical: SPACING.COMPACT_GAP,
-      paddingHorizontal: SPACING.ELEMENT_GAP,
-    },
-    dropdownNotice: {
-      color: t.textSecondary,
-      padding: SPACING.COMPACT_GAP,
-      fontSize: TYPOGRAPHY.SIZE_XSMALL,
     },
 
     // ── Bottom fade ───────────────────────────────────────────────────────────

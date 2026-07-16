@@ -3,7 +3,7 @@ import { ValidationMessage } from 'app/components/ValidationMessage';
 import { useAddressLibrary } from 'app/hooks/useAddressLibrary';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import { AddressAutocomplete } from '../../../components/AddressAutocomplete';
@@ -67,6 +67,27 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
     const error = validateLocation(draft.location, draft.workType);
     setErrors({ ...errors, location: error || '' });
   };
+
+  const validateZipCode = (zip: string): string | null => {
+    if (!zip) return null; // optional field
+    if (!/^\d{5}$/.test(zip)) return 'Enter a valid 5-digit ZIP code';
+    return null;
+  };
+
+  const handleZipCodeChange = (value: string) => {
+    const digitsOnly = value.replace(/[^0-9]/g, '').slice(0, 5);
+    onUpdate({ zipCode: digitsOnly });
+    if (touched.zipCode) {
+      const error = validateZipCode(digitsOnly);
+      setErrors({ ...errors, zipCode: error || '' });
+    }
+  };
+
+  const handleZipCodeBlur = () => {
+    setTouched({ ...touched, zipCode: true });
+    const error = validateZipCode(draft.zipCode || '');
+    setErrors({ ...errors, zipCode: error || '' });
+  };
   
   // Handle selecting an address from autocomplete
   const handleSelectAddress = async (suggestion: any) => {
@@ -109,17 +130,20 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
 
   const handleNext = () => {
     const locationError = validateLocation(draft.location, draft.workType);
-    
-    if (locationError) {
-      setErrors({ location: locationError });
-      setTouched({ location: true });
+    const zipCodeError = validateZipCode(draft.zipCode || '');
+
+    if (locationError || zipCodeError) {
+      setErrors({ location: locationError || '', zipCode: zipCodeError || '' });
+      setTouched({ ...touched, location: true, zipCode: true });
       return;
     }
 
     onNext();
   };
 
-  const isValid = draft.workType === 'online' || !validateLocation(draft.location, draft.workType);
+  const isValid =
+    (draft.workType === 'online' || !validateLocation(draft.location, draft.workType)) &&
+    !validateZipCode(draft.zipCode || '');
 
   const scrollRef = useRef<any>(null)
   useEffect(() => {
@@ -286,6 +310,31 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
               Future updates will add options for private bounties and targeted visibility.
             </Text>
           </View>
+        </View>
+
+        {/* ZIP Code (optional) */}
+        <View className="mb-6">
+          <Text className="text-base font-semibold mb-2" style={{ color: theme.text }}>
+            ZIP Code (optional)
+          </Text>
+          <TextInput
+            value={draft.zipCode || ''}
+            onChangeText={handleZipCodeChange}
+            onBlur={handleZipCodeBlur}
+            placeholder="e.g., 94103"
+            placeholderTextColor={theme.textDisabled}
+            keyboardType="number-pad"
+            maxLength={5}
+            className="px-4 py-3 rounded-lg text-base"
+            style={{ backgroundColor: theme.surfaceSecondary, color: theme.text }}
+            accessibilityLabel="ZIP code input"
+          />
+          {touched.zipCode && errors.zipCode && (
+            <ValidationMessage message={errors.zipCode} />
+          )}
+          <Text className="text-xs mt-1" style={{ color: theme.textSecondary }}>
+            Helps us match this bounty to nearby users who list the same ZIP on their profile.
+          </Text>
         </View>
       </ScrollView>
 

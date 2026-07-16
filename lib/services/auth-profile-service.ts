@@ -25,6 +25,14 @@ export interface AuthProfile {
   title?: string; // Professional title/role
   location?: string; // Geographic location
   skills?: string[]; // Array of skills/expertise
+  // Preset skill category tags selected on the profile (subset of
+  // lib/constants/bounty-categories.ts ids). Used to power future
+  // recommended-bounty notifications — not consumed anywhere yet.
+  skill_categories?: string[];
+  // ZIP code entered by the user (e.g. on the hunter onboarding "Browse by
+  // ZIP" step). Used to match users to bounties posted in the same ZIP for a
+  // future notification feature — not consumed anywhere yet.
+  zip_code?: string;
   age_verified?: boolean;
   age_verified_at?: string; // ISO timestamp for audit purposes
   balance: number;
@@ -195,6 +203,8 @@ export class AuthProfileService {
         title: data.title || undefined,
         location: data.location || undefined,
         skills: Array.isArray(data.skills) ? data.skills : undefined,
+        skill_categories: Array.isArray(data.skill_categories) ? data.skill_categories : undefined,
+        zip_code: data.zip_code || undefined,
         age_verified: typeof data.age_verified === 'boolean' ? data.age_verified : undefined,
         age_verified_at: data.age_verified_at || undefined,
         balance: data.balance || 0,
@@ -384,6 +394,8 @@ export class AuthProfileService {
           title: data.title || undefined,
           location: data.location || undefined,
           skills: Array.isArray(data.skills) ? data.skills : undefined,
+        skill_categories: Array.isArray(data.skill_categories) ? data.skill_categories : undefined,
+        zip_code: data.zip_code || undefined,
           age_verified: typeof data.age_verified === 'boolean' ? data.age_verified : undefined,
           age_verified_at: data.age_verified_at || undefined,
           balance: data.balance || 0,
@@ -519,6 +531,8 @@ export class AuthProfileService {
           title: data.title || undefined,
           location: data.location || undefined,
           skills: Array.isArray(data.skills) ? data.skills : undefined,
+        skill_categories: Array.isArray(data.skill_categories) ? data.skill_categories : undefined,
+        zip_code: data.zip_code || undefined,
           age_verified: typeof data.age_verified === 'boolean' ? data.age_verified : undefined,
           age_verified_at: data.age_verified_at || undefined,
           balance: data.balance || 0,
@@ -654,6 +668,8 @@ export class AuthProfileService {
           title: data.title || undefined,
           location: data.location || undefined,
           skills: Array.isArray(data.skills) ? data.skills : undefined,
+        skill_categories: Array.isArray(data.skill_categories) ? data.skill_categories : undefined,
+        zip_code: data.zip_code || undefined,
           age_verified: typeof data.age_verified === 'boolean' ? data.age_verified : undefined,
           age_verified_at: data.age_verified_at || undefined,
           balance: data.balance || 0,
@@ -750,6 +766,8 @@ export class AuthProfileService {
           title: data.title || undefined,
           location: data.location || undefined,
           skills: Array.isArray(data.skills) ? data.skills : undefined,
+        skill_categories: Array.isArray(data.skill_categories) ? data.skill_categories : undefined,
+        zip_code: data.zip_code || undefined,
           age_verified: typeof data.age_verified === 'boolean' ? data.age_verified : undefined,
           age_verified_at: data.age_verified_at || undefined,
           balance: data.balance || 0,

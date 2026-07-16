@@ -7,6 +7,9 @@ export type Bounty = {
   amount: number;
   is_for_honor: boolean;
   location: string;
+  // Optional ZIP code, saved as metadata so users with a matching profile
+  // ZIP can eventually be matched/notified about this bounty.
+  zip_code?: string;
   timeline: string;
   skills_required: string;
   poster_id: string;
@@ -16,6 +19,10 @@ export type Bounty = {
   distance?: number;
   // New optional fields for enhanced posting metadata
   work_type?: 'online' | 'in_person';
+  // Optional category selected by the poster at posting time (e.g. 'tech',
+  // 'design', 'writing', 'labor', 'delivery', 'other'). See
+  // lib/constants/bounty-categories.ts for the canonical list.
+  category?: string;
   is_time_sensitive?: boolean;
   deadline?: string; // ISO date string when is_time_sensitive === true
   attachments_json?: string; // JSON serialized AttachmentMeta[] (storage format)
