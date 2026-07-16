@@ -25,14 +25,14 @@ ALTER TABLE bounties
     REFERENCES profiles(id) 
     ON DELETE SET NULL;
 
--- For bounty_requests table: Keep CASCADE on bounty_id but SET NULL on user_id
--- This preserves request history but anonymizes the hunter
-ALTER TABLE bounty_requests 
-  DROP CONSTRAINT IF EXISTS bounty_requests_user_id_fkey,
-  ADD CONSTRAINT bounty_requests_user_id_fkey 
-    FOREIGN KEY (user_id) 
-    REFERENCES profiles(id) 
-    ON DELETE SET NULL;
+-- NOTE: bounty_requests never had a user_id column (it uses poster_id/hunter_id,
+-- which already carry ON DELETE SET NULL from the migration that created the
+-- table) — an ALTER TABLE bounty_requests ... FOREIGN KEY (user_id) statement
+-- used to sit here, referencing a table+column that never existed. It broke
+-- every fresh full migration replay (new branches, disaster recovery) since
+-- this file runs before 20251119_add_bounty_requests_table.sql creates the
+-- table at all. Removed rather than relocated — it was dead code once the
+-- table was verified to already have correct FK behavior on poster_id/hunter_id.
 
 -- For completion_submissions: SET NULL on hunter_id to preserve submission records
 ALTER TABLE completion_submissions 

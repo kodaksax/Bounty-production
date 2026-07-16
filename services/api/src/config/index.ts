@@ -10,6 +10,19 @@ import path from 'path';
 
 // Load environment variables with fallback strategy
 function loadEnvironment() {
+  // NODE_ENV unset means we're about to fall back to the bare `.env` file,
+  // not a specific environment. That file is intentionally scoped to
+  // development-safe values (see the header comment in .env), but running
+  // this way is NOT explicitly targeting any environment — surface that
+  // loudly so nobody mistakes it for "the environment I meant to hit".
+  if (!process.env.NODE_ENV) {
+    console.warn(
+      '[Config] NODE_ENV not set — falling back to the bare `.env` file ' +
+      '(development-scoped by convention). Set NODE_ENV explicitly ' +
+      '(development/staging/production) to target a specific environment.'
+    );
+  }
+
   // Prefer environment-specific .env files, e.g. .env.development, .env.preview, .env.production
   const envName = process.env.NODE_ENV ? `.env.${String(process.env.NODE_ENV).toLowerCase()}` : '.env';
 

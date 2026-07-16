@@ -142,3 +142,23 @@ verify_jwt = false
 # using the service role key injected by the Supabase runtime.
 [functions.expire-bounties]
 verify_jwt = false
+
+# auth: handles its own auth via supabase.auth.getUser(token). Found missing
+# from this file during an environment audit — the old deploy script passed
+# --no-verify-jwt by hand instead, which only took effect for whoever ran
+# that exact script. Documenting it here makes every deploy path consistent.
+[functions.auth]
+verify_jwt = false
+
+# apple-pay: handles its own auth via supabase.auth.getUser(token).
+[functions.apple-pay]
+verify_jwt = false
+
+# review-id: handles its own auth via supabaseAdmin.auth.getUser(token).
+[functions.review-id]
+verify_jwt = false
+
+# admin-review-id: handles its own auth via supabaseAdmin.auth.getUser(token)
+# and gates on the admin role claim.
+[functions.admin-review-id]
+verify_jwt = false

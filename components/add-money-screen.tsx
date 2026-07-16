@@ -2,17 +2,17 @@
 
 import { MaterialIcons } from "@expo/vector-icons"
 import { BrandingLogo } from "components/ui/branding-logo"
-import { cn } from "lib/utils"
-import { useEffect, useState } from "react"
-import { ActivityIndicator, Alert, Platform, Text, TouchableOpacity, View } from "react-native"
-import { useAuthContext } from '../hooks/use-auth-context'
-import { config } from '../lib/config'
-import { API_BASE_URL } from '../lib/config/api'
-import { applePayService } from '../lib/services/apple-pay-service'
-import { useStripe } from '../lib/stripe-context'
-import { getPaymentErrorMessage, getUserFriendlyError } from '../lib/utils/error-messages'
-import { useWallet } from '../lib/wallet-context'
+import { useMemo, useState } from "react"
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
+import { buildDepositSuccessMessage, useWalletDeposit } from '../hooks/use-wallet-deposit'
+import { SIZING, SPACING, TYPOGRAPHY } from '../lib/constants/accessibility'
+import { hapticFeedback } from '../lib/haptic-feedback'
+import { useAppThemeContext } from '../lib/themes/AppThemeContext'
+import type { AppTheme } from '../lib/themes/types'
+import { getUserFriendlyError } from '../lib/utils/error-messages'
 import { ErrorBanner } from './error-banner'
+import { FeedbackModal } from './ui/feedback-modal'
 import { PaymentMethodsModal } from './payment-methods-modal'
 
 interface AddMoneyScreenProps {
@@ -22,68 +22,30 @@ interface AddMoneyScreenProps {
   initialAmount?: string
 }
 
-// Helper to persist a deposit to the server. Extracted to avoid duplicated logic.
-// Retries up to 3 times with exponential back-off so transient network blips
-// don't silently drop the server-side balance update.
-async function persistDeposit(paymentIntentId: string | undefined, amount: number, accessToken?: string, source?: string): Promise<boolean> {
-  if (!paymentIntentId || !accessToken) return false
-  const MAX_RETRIES = 3
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const res = await fetch(`${API_BASE_URL}/wallet/deposit`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-          ...(config.supabase.anonKey ? { apikey: config.supabase.anonKey } : {}),
-        },
-        body: JSON.stringify({ amount, paymentIntentId }),
-      })
+// Text color used on top of the bright brand-green primary CTA, matching the
+// dark-on-green convention used across onboarding/wallet (see e.g.
+// lib/onboarding/onboarding-details-styles.ts nextButtonText).
+const ON_PRIMARY_TEXT = '#052e1b'
 
-      if (res.ok) {
-        return true
-      }
-
-      let bodyText = ''
-      try {
-        const contentType = res.headers.get('content-type') || ''
-        if (contentType.includes('application/json')) {
-          const data = await res.json()
-          bodyText = JSON.stringify(data)
-        } else {
-          bodyText = await res.text()
-        }
-      } catch (e) {
-        bodyText = '<unable to read response body>'
-      }
-      console.warn(`[AddMoney] Persist ${source ? `${source} ` : ''}deposit attempt ${attempt}/${MAX_RETRIES} responded with ${res.status} ${res.statusText}:`, bodyText)
-
-      // Don't retry on 4xx client errors (except 408/429) — they won't succeed
-      if (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429) {
-        return false
-      }
-    } catch (e) {
-      console.warn(`[AddMoney] Persist ${source ? `${source} ` : ''}deposit attempt ${attempt}/${MAX_RETRIES} failed:`, e)
-    }
-    // Exponential back-off: 1s, 2s, 4s
-    if (attempt < MAX_RETRIES) {
-      await new Promise(r => setTimeout(r, 1000 * 2 ** (attempt - 1)))
-    }
-  }
-  return false
-}
+const KEYPAD_ROWS: number[][] = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
 
 export function AddMoneyScreen({ onBack, onAddMoney, initialAmount }: AddMoneyScreenProps) {
   const [amount, setAmount] = useState<string>(initialAmount || "0")
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [showPaymentMethodsModal, setShowPaymentMethodsModal] = useState(false)
-  const [isApplePayAvailable, setIsApplePayAvailable] = useState(false)
-  const [error, setError] = useState<any>(null)
-  const { deposit, refreshFromApi } = useWallet()
-  const { processPaymentSecure, paymentMethods, isLoading: stripeLoading, error: stripeError, loadPaymentMethods } = useStripe()
-  const { session } = useAuthContext()
+  const {
+    isProcessing,
+    isApplePayAvailable,
+    error, setError,
+    successInfo, setSuccessInfo,
+    showPaymentMethodsModal, setShowPaymentMethodsModal,
+    paymentMethods, stripeLoading, stripeError, loadPaymentMethods,
+    payWithCard, payWithApplePay,
+  } = useWalletDeposit()
+  const { theme } = useAppThemeContext()
+  const insets = useSafeAreaInsets()
+  const styles = useMemo(() => makeStyles(theme), [theme])
 
   const handleNumberPress = (num: number) => {
+    hapticFeedback.selection()
     if (amount === "0") {
       setAmount(num.toString())
     } else {
@@ -100,12 +62,14 @@ export function AddMoneyScreen({ onBack, onAddMoney, initialAmount }: AddMoneySc
   }
 
   const handleDecimalPress = () => {
+    hapticFeedback.selection()
     if (!amount.includes(".")) {
       setAmount(amount + ".")
     }
   }
 
   const handleDeletePress = () => {
+    hapticFeedback.selection()
     if (amount.length > 1) {
       setAmount(amount.slice(0, -1))
     } else {
@@ -113,356 +77,197 @@ export function AddMoneyScreen({ onBack, onAddMoney, initialAmount }: AddMoneySc
     }
   }
 
-  const handleAddMoney = async () => {
-    const numAmount = Number.parseFloat(amount)
-    if (!isNaN(numAmount) && numAmount > 0) {
-
-      // Check if we have payment methods
-      if (paymentMethods.length === 0) {
-        Alert.alert(
-          'No Payment Method',
-          'You need to add a payment method before you can add money to your wallet. Choose from cards or bank accounts.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Add Payment Method',
-              onPress: () => setShowPaymentMethodsModal(true)
-            }
-          ]
-        )
-        return
-      }
-
-      setIsProcessing(true)
-      setError(null)
-
-      try {
-        // Verify auth before proceeding
-        if (!session?.access_token) {
-          throw new Error('Not authenticated. Please sign in again.')
-        }
-
-        // processPaymentSecure handles idempotent payment intent creation and confirmation
-        const result = await processPaymentSecure(numAmount, {
-          userId: session?.user?.id,
-          purpose: 'wallet_deposit',
-          paymentMethodId: paymentMethods[0]?.id,
-        })
-
-        if (result.success) {
-          // Optimistically update local wallet balance
-          await deposit(numAmount, {
-            method: 'Credit Card',
-            title: 'Added Money via Stripe',
-            status: 'completed'
-          })
-
-          // Persist the deposit to the DB immediately (don't wait for the webhook).
-          // apply_deposit is idempotent on paymentIntentId, so a later webhook
-          // delivery is a safe no-op. This ensures profiles.balance is durable
-          // and survives sign-out / cold restart.
-          const persisted = await persistDeposit(result.paymentIntentId, numAmount, session?.access_token, 'Stripe')
-
-          // Sync balance from server so Supabase is the source of truth
-          try {
-            if (session?.access_token) {
-              await refreshFromApi(session.access_token)
-            }
-          } catch (syncErr) {
-            // Non-critical: local state already updated above
-            console.warn('[AddMoney] Failed to sync balance from server after deposit:', syncErr)
-          }
-
-          // Show success message (warn if server persistence failed)
-          const successMsg = persisted
-            ? `$${numAmount.toFixed(2)} has been added to your wallet.`
-            : `$${numAmount.toFixed(2)} has been added to your wallet.\n\nNote: There was a temporary issue syncing with the server. Your balance will update automatically shortly.`
-          Alert.alert(
-            'Success!',
-            successMsg,
-            [{
-              text: 'OK',
-              onPress: () => {
-                onAddMoney?.(numAmount)
-                onBack?.()
-              }
-            }]
-          )
-        } else {
-          // Get user-friendly payment error message
-          const errorMsg = getPaymentErrorMessage(result.error)
-          setError({ message: errorMsg, type: 'payment' })
-        }
-      } catch (err: any) {
-        console.error('Payment error:', err)
-        setError(err)
-      } finally {
-        setIsProcessing(false)
-      }
-    } else {
-      Alert.alert(
-        'Invalid Amount',
-        'Please enter a valid amount greater than $0.',
-        [{ text: 'OK' }]
-      )
-    }
-  }
-
-  // Check Apple Pay availability on mount
-  useEffect(() => {
-    let mounted = true
-      ; (async () => {
-        try {
-          const available = await applePayService.isAvailable()
-          if (mounted) setIsApplePayAvailable(available)
-        } catch (e) {
-          // ignore
-        }
-      })()
-    return () => { mounted = false }
-  }, [])
-
-  const handleApplePayPress = async () => {
-    const numAmount = Number.parseFloat(amount)
-    if (isNaN(numAmount) || numAmount <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid amount')
-      return
-    }
-
-    if (numAmount < 0.5) {
-      Alert.alert('Minimum Amount', 'Amount must be at least $0.50')
-      return
-    }
-
-    // Apple Pay may not be set up on this device (no card provisioned in the
-    // Wallet app). Re-check availability on tap so the button stays discoverable
-    // — this is also what App Review needs to locate the integration — and guide
-    // the user to set it up instead of silently failing.
-    let available = isApplePayAvailable
-    if (!available) {
-      available = await applePayService.isAvailable()
-      setIsApplePayAvailable(available)
-    }
-    if (!available) {
-      Alert.alert(
-        'Apple Pay Not Set Up',
-        'Apple Pay isn\u2019t set up on this device. Open the Wallet app and add a card to pay with Apple Pay, or use a linked card or bank account below.',
-        [{ text: 'OK' }]
-      )
-      return
-    }
-
-    setIsProcessing(true)
-    setError(null)
-
-    try {
-      const result = await applePayService.processPayment({
-        amount: numAmount,
-        description: 'Add Money to Wallet',
-      }, session?.access_token)
-
-      if (result.success) {
-        await deposit(numAmount, {
-          method: 'Apple Pay',
-          title: 'Added Money via Apple Pay',
-          status: 'completed',
-        })
-
-        // Persist the deposit to the DB immediately (don't wait for the webhook).
-        const persisted = await persistDeposit(result.paymentIntentId, numAmount, session?.access_token, 'Apple Pay')
-
-        // Sync balance from server so Supabase is the source of truth
-        try {
-          if (session?.access_token) {
-            await refreshFromApi(session.access_token)
-          }
-        } catch (syncErr) {
-          // Non-critical: local state already updated above
-          console.warn('[AddMoney] Failed to sync balance from server after Apple Pay deposit:', syncErr)
-        }
-
-        const applePayMsg = persisted
-          ? `$${numAmount.toFixed(2)} has been added to your wallet via Apple Pay.`
-          : `$${numAmount.toFixed(2)} has been added to your wallet via Apple Pay.\n\nNote: There was a temporary issue syncing with the server. Your balance will update automatically shortly.`
-        Alert.alert(
-          'Success!',
-          applePayMsg,
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                onAddMoney?.(numAmount)
-                onBack?.()
-              },
-            },
-          ]
-        )
-      } else if (result.errorCode === 'cancelled') {
-        // user cancelled - no alert
-      } else {
-        // Show error banner instead of alert
-        setError({ message: result.error || 'Unable to process Apple Pay payment.', type: 'payment' })
-      }
-    } catch (err) {
-      console.error('Apple Pay error:', err)
-      setError(err)
-    } finally {
-      setIsProcessing(false)
-    }
-  }
+  const numericAmount = Number.parseFloat(amount)
 
   const handleCardPayment = async () => {
-    // Reuse existing card flow
-    await handleAddMoney()
+    hapticFeedback.light()
+    await payWithCard(numericAmount)
   }
 
+  const handleApplePayPress = async () => {
+    hapticFeedback.light()
+    await payWithApplePay(numericAmount)
+  }
+
+  const hasPaymentMethod = paymentMethods.length > 0
+  // "Visually enabled" mirrors the tap-disabled condition below so the CTA's
+  // color communicates whether tapping it will do something right now.
+  const primaryVisuallyEnabled = (numericAmount > 0 || !hasPaymentMethod) && !isProcessing && !stripeLoading
+  const primaryDisabled = (numericAmount <= 0 && hasPaymentMethod) || isProcessing || stripeLoading
+
+  // Apple's HIG calls for a black Apple Pay button on light backgrounds and a
+  // white one on dark backgrounds, so the mark stays crisp in both themes.
+  const applePayBg = theme.isDark ? '#ffffff' : '#000000'
+  const applePayFg = theme.isDark ? '#000000' : '#ffffff'
+
   return (
-    <View className="flex-1 bg-[#059669]">
+    <View style={styles.container}>
       {/* Header */}
-      <View className="sticky top-0 z-10 bg-[#059669] px-4 pt-safe pb-2">
-        <View className="flex-row items-center justify-between">
-          <TouchableOpacity onPress={onBack} className="p-2 touch-target-min">
-            <MaterialIcons name="close" size={24} color="#ffffff" />
-          </TouchableOpacity>
-          <View className="flex-row items-center gap-2">
-            <BrandingLogo size="small" forceWhite />
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <TouchableOpacity
+          onPress={onBack}
+          style={styles.headerButton}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+        >
+          <MaterialIcons name="close" size={24} color={theme.text} />
+        </TouchableOpacity>
+        <BrandingLogo size="small" />
+        <View style={styles.headerButton} />
+      </View>
+
+      {/* Amount + keypad. Scrolls instead of overlapping/clipping on short
+          screens or with larger accessibility text sizes — the content
+          below is fixed-size (64pt keys) and can't shrink to fit, so it must
+          never be forced into a box smaller than its natural height. */}
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Amount Display */}
+        <View style={styles.amountSection}>
+          <Text style={styles.amountLabel}>ADD CASH</Text>
+          <Text
+            style={styles.amountText}
+            accessibilityRole="text"
+            accessibilityLabel={`Amount, $${amount}`}
+          >
+            ${amount}
+          </Text>
+        </View>
+
+        {/* Error Display */}
+        {(error || stripeError) && (
+          <View style={styles.errorWrapper}>
+            <ErrorBanner
+              error={getUserFriendlyError(error || stripeError)}
+              onDismiss={() => {
+                setError(null)
+                if (stripeError) loadPaymentMethods().catch(() => { })
+              }}
+              onAction={error?.type === 'payment' ? () => payWithCard(numericAmount) : (stripeError ? () => loadPaymentMethods() : undefined)}
+            />
           </View>
-          <View style={{ width: 40 }} />
-        </View>
-        <Text className="text-white text-base text-center mt-1">Add Cash</Text>
-      </View>
+        )}
 
-      {/* Amount Display */}
-      <View className="items-center justify-center py-6">
-        <Text className="text-white" style={{ fontSize: 56, fontWeight: '800' }}>${amount}</Text>
-      </View>
-
-      {/* Error Display */}
-      {(error || stripeError) && (
-        <View className="px-4 mb-4">
-          <ErrorBanner
-            error={getUserFriendlyError(error || stripeError)}
-            onDismiss={() => {
-              setError(null)
-              if (stripeError) loadPaymentMethods().catch(() => { })
-            }}
-            onAction={error?.type === 'payment' ? () => handleAddMoney() : (stripeError ? () => loadPaymentMethods() : undefined)}
-          />
-        </View>
-      )}
-
-      {/* Keypad */}
-      <View className="flex-1 px-8 pb-40">
-        {[[1, 2, 3], [4, 5, 6], [7, 8, 9]].map((row, idx) => (
-          <View key={idx} className="flex-row justify-between mb-4">
-            {row.map((num) => (
-              <TouchableOpacity
-                key={num}
-                className="rounded-full items-center justify-center"
-                style={{ width: 64, height: 64, backgroundColor: 'transparent' }}
-                onPress={() => handleNumberPress(num)}
-                activeOpacity={0.7}
-              >
-                <Text className="text-white" style={{ fontSize: 24, fontWeight: '600' }}>{num}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        ))}
-        <View className="flex-row justify-between">
-          <TouchableOpacity
-            className="rounded-full items-center justify-center"
-            style={{ width: 64, height: 64 }}
-            onPress={handleDecimalPress}
-            activeOpacity={0.7}
-          >
-            <Text className="text-white" style={{ fontSize: 24, fontWeight: '600' }}>.</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            className="rounded-full items-center justify-center"
-            style={{ width: 64, height: 64 }}
-            onPress={() => handleNumberPress(0)}
-            activeOpacity={0.7}
-          >
-            <Text className="text-white" style={{ fontSize: 24, fontWeight: '600' }}>0</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            className="rounded-full items-center justify-center"
-            style={{ width: 64, height: 64 }}
-            onPress={handleDeletePress}
-            activeOpacity={0.7}
-          >
-            <MaterialIcons name="backspace" size={26} color="#ffffff" />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Add Button - fixed above home indicator */}
-      <View className="fixed left-0 right-0 bg-[#059669] pb-safe" style={{ position: 'absolute', bottom: 66 }}>
-        <View className="px-4">
-          {/* Apple Pay button (iOS only).
-              Always rendered on iOS — even when no card is provisioned in the
-              Wallet app — so the Apple Pay integration is discoverable (the tap
-              handler re-checks availability and guides the user to set it up).
-              This keeps the integration locatable for App Store review per
-              Guideline 2.1. */}
-          {Platform.OS === 'ios' && (
+        {/* Keypad */}
+        <View style={styles.keypadSection}>
+          {KEYPAD_ROWS.map((row, idx) => (
+            <View key={idx} style={styles.keypadRow}>
+              {row.map((num) => (
+                <TouchableOpacity
+                  key={num}
+                  style={styles.keypadKey}
+                  onPress={() => handleNumberPress(num)}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Enter ${num}`}
+                >
+                  <Text style={styles.keypadKeyText}>{num}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ))}
+          <View style={styles.keypadRow}>
             <TouchableOpacity
-              className="w-full py-4 rounded-full flex-row items-center justify-center mb-3"
-              style={{ backgroundColor: '#000000' }}
-              onPress={handleApplePayPress}
-              disabled={Number.parseFloat(amount) <= 0 || isProcessing}
-              activeOpacity={0.8}
+              style={styles.keypadKey}
+              onPress={handleDecimalPress}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Enter decimal point"
             >
-              {isProcessing ? (
-                <>
-                  <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 8 }} />
-                  <Text className="text-center text-base font-medium text-white">Processing...</Text>
-                </>
-              ) : (
-                <>
-                  <MaterialIcons name="apple" size={22} color="#ffffff" />
-                  <Text className="text-white text-base font-medium ml-2">Pay</Text>
-                </>
-              )}
+              <Text style={styles.keypadKeyText}>.</Text>
             </TouchableOpacity>
-          )}
+            <TouchableOpacity
+              style={styles.keypadKey}
+              onPress={() => handleNumberPress(0)}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Enter 0"
+            >
+              <Text style={styles.keypadKeyText}>0</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.keypadKey}
+              onPress={handleDeletePress}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Delete last digit"
+            >
+              <MaterialIcons name="backspace" size={24} color={theme.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </ScrollView>
 
-          {/* Pay with Card removed per request */}
-
-          {/* Original Add Money / Link Method button */}
+      {/* Actions */}
+      <View style={[styles.actions, { paddingBottom: insets.bottom + 16 }]}>
+        {/* Apple Pay button (iOS only).
+            Always rendered on iOS — even when no card is provisioned in the
+            Wallet app — so the Apple Pay integration is discoverable (the tap
+            handler re-checks availability and guides the user to set it up).
+            This keeps the integration locatable for App Store review per
+            Guideline 2.1. */}
+        {Platform.OS === 'ios' && (
           <TouchableOpacity
-            className={cn(
-              "w-full py-4 rounded-full flex-row items-center justify-center",
-              (Number.parseFloat(amount) > 0 || paymentMethods.length === 0) && !isProcessing && !stripeLoading ? "bg-gray-700" : "bg-gray-700/50"
-            )}
-            disabled={(Number.parseFloat(amount) <= 0 && paymentMethods.length > 0) || isProcessing || stripeLoading}
-            onPress={paymentMethods.length === 0 ? () => setShowPaymentMethodsModal(true) : handleAddMoney}
-            activeOpacity={0.8}
+            style={[styles.applePayButton, { backgroundColor: applePayBg }]}
+            onPress={handleApplePayPress}
+            disabled={numericAmount <= 0 || isProcessing}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Pay with Apple Pay"
+            accessibilityState={{ disabled: numericAmount <= 0 || isProcessing, busy: isProcessing }}
           >
-            {isProcessing || stripeLoading ? (
+            {isProcessing ? (
               <>
-                <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 8 }} />
-                <Text className="text-center text-base font-medium text-white">
-                  {stripeLoading ? "Checking Methods..." : "Processing..."}
-                </Text>
+                <ActivityIndicator size="small" color={applePayFg} style={styles.buttonSpinner} />
+                <Text style={[styles.applePayButtonText, { color: applePayFg }]}>Processing...</Text>
               </>
             ) : (
-              <Text className={cn(
-                "text-center text-base font-medium",
-                (Number.parseFloat(amount) > 0 || paymentMethods.length === 0) ? "text-white" : "text-gray-300"
-              )}>
-                {paymentMethods.length === 0 ? "Link Payment Method" : "Add Money"}
-              </Text>
+              <>
+                <MaterialIcons name="apple" size={22} color={applePayFg} />
+                <Text style={[styles.applePayButtonText, { color: applePayFg, marginLeft: 6 }]}>Pay</Text>
+              </>
             )}
           </TouchableOpacity>
+        )}
 
-          {/* Hint for new users */}
-          {paymentMethods.length === 0 && !stripeLoading && !stripeError && (
-            <Text className="text-white/70 text-xs text-center mt-3 px-6">
-              Link a credit card or bank account to add funds to your wallet.
+        {/* Primary CTA: "Add Money" once a payment method exists, or
+            "Link Payment Method" to set one up first. */}
+        <TouchableOpacity
+          style={[
+            styles.primaryButton,
+            !primaryVisuallyEnabled && styles.primaryButtonMuted,
+          ]}
+          disabled={primaryDisabled}
+          onPress={!hasPaymentMethod ? () => setShowPaymentMethodsModal(true) : handleCardPayment}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel={!hasPaymentMethod ? 'Link a payment method' : 'Add money to wallet'}
+          accessibilityState={{ disabled: primaryDisabled, busy: isProcessing || stripeLoading }}
+        >
+          {isProcessing || stripeLoading ? (
+            <>
+              <ActivityIndicator size="small" color={ON_PRIMARY_TEXT} style={styles.buttonSpinner} />
+              <Text style={styles.primaryButtonText}>
+                {stripeLoading ? "Checking Methods..." : "Processing..."}
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.primaryButtonText}>
+              {!hasPaymentMethod ? "Link Payment Method" : "Add Money"}
             </Text>
           )}
-        </View>
+        </TouchableOpacity>
+
+        {/* Hint for new users */}
+        {!hasPaymentMethod && !stripeLoading && !stripeError && (
+          <Text style={styles.hintText}>
+            Link a credit card or bank account to add funds to your wallet.
+          </Text>
+        )}
       </View>
 
       {/* Payment Methods Modal */}
@@ -482,6 +287,146 @@ export function AddMoneyScreen({ onBack, onAddMoney, initialAmount }: AddMoneySc
           }}
         />
       )}
+
+      {/* Success confirmation — blocks like the Alert.alert it replaced;
+          onAddMoney/onBack only fire once the user acknowledges. */}
+      <FeedbackModal
+        visible={!!successInfo}
+        variant="success"
+        title="Success!"
+        message={successInfo ? buildDepositSuccessMessage(successInfo) : ''}
+        actionLabel="OK"
+        onDismiss={() => {
+          const info = successInfo
+          setSuccessInfo(null)
+          if (info) {
+            onAddMoney?.(info.amount)
+            onBack?.()
+          }
+        }}
+      />
     </View>
   )
+}
+
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
+      paddingBottom: SPACING.COMPACT_GAP,
+    },
+    headerButton: {
+      width: SIZING.MIN_TOUCH_TARGET,
+      height: SIZING.MIN_TOUCH_TARGET,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    scroll: {
+      flex: 1,
+    },
+    scrollContent: {
+      flexGrow: 1,
+      justifyContent: 'center',
+      paddingBottom: SPACING.COMPACT_GAP,
+    },
+    amountSection: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: SPACING.ELEMENT_GAP,
+      gap: SPACING.COMPACT_GAP,
+    },
+    amountLabel: {
+      color: theme.primaryLight,
+      fontSize: TYPOGRAPHY.SIZE_SMALL,
+      fontWeight: 'bold',
+      letterSpacing: TYPOGRAPHY.LETTER_SPACING_WIDER,
+      textTransform: 'uppercase',
+    },
+    amountText: {
+      color: theme.text,
+      fontSize: 56,
+      fontWeight: '800',
+    },
+    errorWrapper: {
+      paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
+      marginBottom: SPACING.ELEMENT_GAP,
+    },
+    // Note: no flex:1 / justifyContent:'center' here — this section's content
+    // (four rows of fixed 64pt keys) can't shrink to fit a squeezed box, and a
+    // shrunk flex box with overflow:'visible' (RN's default) lets fixed-size
+    // children spill into neighboring sections instead of resizing. Centering
+    // is handled by the parent ScrollView's contentContainerStyle instead,
+    // which centers when there's extra room and scrolls when there isn't.
+    keypadSection: {
+      paddingHorizontal: 32,
+      paddingVertical: SPACING.SECTION_GAP,
+      gap: 12,
+    },
+    keypadRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+    },
+    keypadKey: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.surfaceSecondary,
+    },
+    keypadKeyText: {
+      color: theme.text,
+      fontSize: 24,
+      fontWeight: '600',
+    },
+    actions: {
+      paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
+      paddingTop: SPACING.COMPACT_GAP,
+    },
+    applePayButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: SIZING.BUTTON_HEIGHT_LARGE,
+      borderRadius: 999,
+      marginBottom: SPACING.ELEMENT_GAP,
+    },
+    applePayButtonText: {
+      fontSize: TYPOGRAPHY.SIZE_BODY,
+      fontWeight: '600',
+    },
+    primaryButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: SIZING.BUTTON_HEIGHT_LARGE,
+      borderRadius: 999,
+      backgroundColor: theme.primary,
+    },
+    primaryButtonMuted: {
+      opacity: 0.45,
+    },
+    primaryButtonText: {
+      color: ON_PRIMARY_TEXT,
+      fontSize: TYPOGRAPHY.SIZE_BODY,
+      fontWeight: 'bold',
+    },
+    buttonSpinner: {
+      marginRight: 8,
+    },
+    hintText: {
+      color: theme.textSecondary,
+      fontSize: TYPOGRAPHY.SIZE_XSMALL,
+      textAlign: 'center',
+      marginTop: SPACING.ELEMENT_GAP,
+      paddingHorizontal: SPACING.SECTION_GAP,
+    },
+  })
 }

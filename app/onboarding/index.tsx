@@ -27,11 +27,12 @@ export default function OnboardingIndex() {
   }, [loading, onboardingLoading, profile, onboardingData.intent]);
 
   const checkOnboardingStatus = async () => {
-    // Only skip straight to details if the profile has a username AND has
-    // actually completed onboarding before — a fresh signup may already have
-    // an auto-generated username but still needs to go through welcome/username/etc.
+    // Fully onboarded already — this route should be unreachable in practice
+    // (app/index.tsx sends onboarded users straight to /tabs/bounty-app), but
+    // guard it directly in case this screen is ever reached via a stale deep
+    // link or race between profile/bootstrap state.
     if (profile && profile.username && profile.onboarding_completed === true) {
-      router.replace('/onboarding/details');
+      router.replace('/tabs/bounty-app');
       return;
     }
 

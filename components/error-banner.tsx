@@ -4,6 +4,7 @@ import { AccessibilityInfo, Animated, StyleSheet, Text, TouchableOpacity, View }
 import { SIZING, SPACING, TYPOGRAPHY } from '../lib/constants/accessibility';
 import { useHapticFeedback } from '../lib/haptic-feedback';
 import { theme } from '../lib/theme';
+import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { UserFriendlyError } from '../lib/utils/error-messages';
 
 
@@ -29,6 +30,7 @@ export function ErrorBanner({
   autoDismissMs = 0,
 }: ErrorBannerProps) {
   const { triggerHaptic } = useHapticFeedback();
+  const { theme: appTheme } = useAppThemeContext();
   const slideAnim = React.useRef(new Animated.Value(-100)).current;
   const opacityAnim = React.useRef(new Animated.Value(0)).current;
   const [prefersReducedMotion, setPrefersReducedMotion] = React.useState(false);
@@ -101,7 +103,7 @@ export function ErrorBanner({
     onAction?.();
   }, [triggerHaptic, onAction]);
 
-  const backgroundColor = error.type === 'validation' ? '#f59e0b' : '#dc2626';
+  const backgroundColor = error.type === 'validation' ? appTheme.warning : appTheme.error;
   const iconName = getIconForErrorType(error.type);
 
   return (

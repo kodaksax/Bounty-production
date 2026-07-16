@@ -1,7 +1,7 @@
 /**
  * Onboarding Sign In Screen
  * Second step: real Apple / Google sign-in (via useSocialAuth), plus a
- * "Continue with phone number" path to the real create-account screen.
+ * "Continue with email" path to the real create-account screen.
  * First-time visitors reach this screen unauthenticated, so these need to
  * be real auth actions, not decorative ones.
  */
@@ -11,17 +11,31 @@ import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { OnboardingProgressDots } from '../../components/onboarding/OnboardingProgressDots';
 import { GoogleLogo } from '../../components/ui/google-logo';
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { useSocialAuth } from '../../hooks/useSocialAuth';
+import { useOnboarding } from '../../lib/context/onboarding-context';
+import { hapticFeedback } from '../../lib/haptic-feedback';
+import { analyticsService } from '../../lib/services/analytics-service';
 import { hasLocalOnboardingFlag } from '../../lib/storage/onboarding';
 import { supabase } from '../../lib/supabase';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 
+// Generic (no intent picked) is a 3-step flow: sign in -> about you -> done.
+// Poster/hunter branches are 4 steps: sign in -> details -> confirm -> done.
+function totalStepsFor(intent: 'poster' | 'hunter' | null) {
+  return intent ? 4 : 3;
+}
+
 // After a real sign-in, decide whether this is an existing, fully-onboarded
 // account (go straight to the app) or a new/incomplete one (continue onboarding).
-async function routeAfterSocialSignIn(userId: string, router: ReturnType<typeof useRouter>) {
+async function routeAfterSocialSignIn(
+  userId: string,
+  router: ReturnType<typeof useRouter>,
+  method: 'apple' | 'google'
+) {
   try {
     const { data: profile, error } = await supabase
       .from('profiles')
@@ -31,6 +45,7 @@ async function routeAfterSocialSignIn(userId: string, router: ReturnType<typeof 
 
     if (error) {
       // No profile row (brand new account) or lookup failed — continue onboarding.
+      analyticsService.trackEvent('onboarding_auth_completed', { method, outcome: 'new_account' });
       router.push('/onboarding/details');
       return;
     }
@@ -40,8 +55,10 @@ async function routeAfterSocialSignIn(userId: string, router: ReturnType<typeof 
       (profile.onboarding_completed === true || (await hasLocalOnboardingFlag(userId)));
 
     if (onboarded) {
+      analyticsService.trackEvent('onboarding_auth_completed', { method, outcome: 'existing_onboarded' });
       router.replace('/tabs/bounty-app');
     } else {
+      analyticsService.trackEvent('onboarding_auth_completed', { method, outcome: 'existing_incomplete' });
       router.push('/onboarding/details');
     }
   } catch {
@@ -55,6 +72,7 @@ export default function UsernameScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useAppThemeContext();
   const { isLoggedIn } = useAuthContext();
+  const { data: onboardingData } = useOnboarding();
   const styles = makeStyles(theme);
   const {
     isGoogleConfigured,
@@ -67,13 +85,15 @@ export default function UsernameScreen() {
     clearError,
   } = useSocialAuth();
 
+  const totalSteps = totalStepsFor(onboardingData.intent);
+
   useEffect(() => {
     if (!googleSessionReady) return;
     (async () => {
       const { data } = await supabase.auth.getSession();
       const userId = data.session?.user?.id;
       if (userId) {
-        await routeAfterSocialSignIn(userId, router);
+        await routeAfterSocialSignIn(userId, router, 'google');
       } else {
         router.push('/onboarding/details');
       }
@@ -87,19 +107,34 @@ export default function UsernameScreen() {
   }, [error, clearError]);
 
   const handleAppleContinue = async () => {
+    hapticFeedback.light();
+    analyticsService.trackEvent('onboarding_auth_started', { method: 'apple' });
     const success = await signInWithApple();
     if (!success) return;
 
     const { data } = await supabase.auth.getSession();
     const userId = data.session?.user?.id;
     if (userId) {
-      await routeAfterSocialSignIn(userId, router);
+      await routeAfterSocialSignIn(userId, router, 'apple');
     } else {
       router.push('/onboarding/details');
     }
   };
 
+  const handleGooglePress = () => {
+    hapticFeedback.light();
+    analyticsService.trackEvent('onboarding_auth_started', { method: 'google' });
+    promptGoogleSignIn();
+  };
+
+  const handleContinueWithEmail = () => {
+    hapticFeedback.light();
+    analyticsService.trackEvent('onboarding_auth_started', { method: 'email' });
+    router.push('/auth/sign-up-form');
+  };
+
   const handleSkip = () => {
+    analyticsService.trackEvent('onboarding_step_skipped', { step: 'sign_in' });
     // Already signed in (e.g. reached this screen mid-onboarding) — safe to
     // continue straight through. If not, there's no session yet for the
     // next screen to save data against, so send them to create an account.
@@ -108,19 +143,22 @@ export default function UsernameScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-      {/* ProgreFss dots — step 1 of 3 */}
-      <View style={styles.dotsContainer}>
-        <View style={[styles.dot, styles.dotActive]} />
-        <View style={styles.dot} />
-        <View style={styles.dot} />
-      </View>
+      <OnboardingProgressDots total={totalSteps} activeIndex={0} style={styles.dotsContainer} />
 
-      <Text style={styles.heading}>Sign in - one tap, no password</Text>
+      <Text style={styles.heading}>Sign in — one tap, no password</Text>
+      <Text style={styles.subheading}>We never post or share anything without asking.</Text>
 
       <View style={styles.content} />
 
       <View style={styles.actionContainer}>
-        <TouchableOpacity style={styles.appleButton} onPress={handleAppleContinue} disabled={loading}>
+        <TouchableOpacity
+          style={styles.appleButton}
+          onPress={handleAppleContinue}
+          disabled={loading}
+          accessibilityRole="button"
+          accessibilityLabel="Continue with Apple"
+          accessibilityState={{ disabled: loading, busy: loading }}
+        >
           {loading ? (
             <ActivityIndicator color="#ffffff" style={styles.buttonIcon} />
           ) : (
@@ -131,8 +169,11 @@ export default function UsernameScreen() {
 
         <TouchableOpacity
           style={styles.googleButton}
-          onPress={promptGoogleSignIn}
+          onPress={handleGooglePress}
           disabled={!isGoogleConfigured || !googleRequest || loading}
+          accessibilityRole="button"
+          accessibilityLabel={isGoogleConfigured ? 'Continue with Google' : 'Google sign-in unavailable'}
+          accessibilityState={{ disabled: !isGoogleConfigured || !googleRequest || loading, busy: loading }}
         >
           {loading ? (
             <ActivityIndicator color="#000000" style={styles.buttonIcon} />
@@ -146,12 +187,22 @@ export default function UsernameScreen() {
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.phoneButton} onPress={() => router.push('/auth/sign-up-form')}>
-          <MaterialIcons name="phone-iphone" size={20} color={theme.text} style={styles.buttonIcon} />
-          <Text style={styles.phoneButtonText}>Continue with phone number</Text>
+        <TouchableOpacity
+          style={styles.emailButton}
+          onPress={handleContinueWithEmail}
+          accessibilityRole="button"
+          accessibilityLabel="Continue with email"
+        >
+          <MaterialIcons name="alternate-email" size={20} color={theme.text} style={styles.buttonIcon} />
+          <Text style={styles.emailButtonText}>Continue with email</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.skipLink} onPress={handleSkip}>
+        <TouchableOpacity
+          style={styles.skipLink}
+          onPress={handleSkip}
+          accessibilityRole="button"
+          accessibilityLabel="Skip for now"
+        >
           <Text style={styles.skipLinkText}>Skip for now</Text>
         </TouchableOpacity>
       </View>
@@ -167,19 +218,7 @@ function makeStyles(theme: AppTheme) {
       paddingHorizontal: 24,
     },
     dotsContainer: {
-      flexDirection: 'row',
-      justifyContent: 'center',
-      gap: 8,
       paddingTop: 16,
-    },
-    dot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-      backgroundColor: theme.border,
-    },
-    dotActive: {
-      backgroundColor: theme.primary,
     },
     heading: {
       fontSize: 30,
@@ -187,6 +226,12 @@ function makeStyles(theme: AppTheme) {
       color: theme.text,
       textAlign: 'center',
       marginTop: 24,
+    },
+    subheading: {
+      fontSize: 15,
+      color: theme.textSecondary,
+      textAlign: 'center',
+      marginTop: 8,
     },
     content: {
       flex: 1,
@@ -223,7 +268,7 @@ function makeStyles(theme: AppTheme) {
       fontSize: 18,
       fontWeight: 'bold',
     },
-    phoneButton: {
+    emailButton: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
@@ -233,7 +278,7 @@ function makeStyles(theme: AppTheme) {
       paddingVertical: 16,
       borderRadius: 999,
     },
-    phoneButtonText: {
+    emailButtonText: {
       color: theme.text,
       fontSize: 18,
       fontWeight: 'bold',

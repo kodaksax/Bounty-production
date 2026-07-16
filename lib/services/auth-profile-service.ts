@@ -46,6 +46,13 @@ export interface AuthProfile {
   id_verification_status?: 'unverified' | 'pending' | 'verified' | 'rejected';
   selfie_submitted_at?: string;
   display_name?: string;
+  // Activation-related fields, natively exposed here so callers (e.g.
+  // providers/moments-provider.tsx) don't need a separate ad-hoc query
+  // against `profiles` just to evaluate activation-moment eligibility.
+  primary_role?: 'poster' | 'hunter' | 'both';
+  stripe_connect_charges_enabled?: boolean;
+  stripe_connect_payouts_enabled?: boolean;
+  last_session_at?: string;
 }
 
 interface CachedProfile {
@@ -217,6 +224,10 @@ export class AuthProfileService {
         id_verification_status: data.id_verification_status || undefined,
         selfie_submitted_at: data.selfie_submitted_at || undefined,
         display_name: data.display_name || undefined,
+        primary_role: data.primary_role || undefined,
+        stripe_connect_charges_enabled: typeof data.stripe_connect_charges_enabled === 'boolean' ? data.stripe_connect_charges_enabled : undefined,
+        stripe_connect_payouts_enabled: typeof data.stripe_connect_payouts_enabled === 'boolean' ? data.stripe_connect_payouts_enabled : undefined,
+        last_session_at: data.last_session_at || undefined,
       };
 
       console.log('[authProfileService] Successfully fetched profile', { username: profile.username, id: profile.id });
@@ -408,6 +419,10 @@ export class AuthProfileService {
           id_verification_status: data.id_verification_status || undefined,
           selfie_submitted_at: data.selfie_submitted_at || undefined,
           display_name: data.display_name || undefined,
+          primary_role: data.primary_role || undefined,
+          stripe_connect_charges_enabled: typeof data.stripe_connect_charges_enabled === 'boolean' ? data.stripe_connect_charges_enabled : undefined,
+          stripe_connect_payouts_enabled: typeof data.stripe_connect_payouts_enabled === 'boolean' ? data.stripe_connect_payouts_enabled : undefined,
+          last_session_at: data.last_session_at || undefined,
         };
 
         console.log('[authProfileService] Profile data mapped', { username: profile.username, id: profile.id });
@@ -545,6 +560,10 @@ export class AuthProfileService {
           id_verification_status: data.id_verification_status || undefined,
           selfie_submitted_at: data.selfie_submitted_at || undefined,
           display_name: data.display_name || undefined,
+          primary_role: data.primary_role || undefined,
+          stripe_connect_charges_enabled: typeof data.stripe_connect_charges_enabled === 'boolean' ? data.stripe_connect_charges_enabled : undefined,
+          stripe_connect_payouts_enabled: typeof data.stripe_connect_payouts_enabled === 'boolean' ? data.stripe_connect_payouts_enabled : undefined,
+          last_session_at: data.last_session_at || undefined,
         };
 
         console.log('[authProfileService] Fresh profile fetched, updating cache and notifying listeners');

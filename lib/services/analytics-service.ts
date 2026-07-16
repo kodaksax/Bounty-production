@@ -25,6 +25,51 @@ export type AnalyticsEvent =
   | 'user_logged_in'
   | 'user_logged_out'
   | 'email_verified'
+  // Onboarding funnel — see app/onboarding/*. Fired in order for a fresh
+  // signup: welcome_viewed -> role_selected -> auth_started -> auth_completed
+  // -> profile_step_viewed -> (profile_submitted | step_skipped)* -> completed
+  | 'onboarding_welcome_viewed'
+  | 'onboarding_role_selected'
+  | 'onboarding_intent_switched'
+  | 'onboarding_login_tapped'
+  | 'onboarding_auth_started'
+  | 'onboarding_auth_completed'
+  | 'onboarding_profile_step_viewed'
+  | 'onboarding_profile_submitted'
+  | 'onboarding_step_skipped'
+  | 'onboarding_bounty_posted'
+  | 'onboarding_bounty_accepted'
+  | 'onboarding_completed'
+  // Hunter discovery step (part of onboarding_profile_step_viewed with
+  // intent=hunter) — see HunterLocationPrompt.tsx / HunterSampleBountyScreen.tsx.
+  // One of granted/denied fires per "Use my location" tap; zip_searched fires
+  // per ZIP submission; exactly one of nearby_bounties_shown/no_nearby_bounties
+  // fires once a search resolves; online_bounties_viewed fires whenever the
+  // online/remote fallback is shown (skip, denial, or the "Browse Online
+  // Bounties" CTA).
+  | 'onboarding_location_permission_granted'
+  | 'onboarding_location_permission_denied'
+  | 'onboarding_zip_searched'
+  | 'onboarding_nearby_bounties_shown'
+  | 'onboarding_no_nearby_bounties'
+  | 'onboarding_online_bounties_viewed'
+  | 'onboarding_notify_me_requested'
+  // Moments Queue — post-onboarding contextual activation prompts, see lib/moments/*
+  // Funnel order for one moment instance: moment_event_enqueued (the real
+  // business event that made it eligible) -> moment_queued (became the
+  // single next-in-line moment) -> moment_shown (presented) -> exactly one
+  // of moment_accepted/moment_dismissed/moment_snoozed/moment_skipped ->
+  // (accepted only) moment_completed, or moment_expired if it was shown
+  // maxShownCount times without ever being resolved.
+  | 'moment_event_enqueued'
+  | 'moment_queued'
+  | 'moment_shown'
+  | 'moment_dismissed'
+  | 'moment_snoozed'
+  | 'moment_accepted'
+  | 'moment_completed'
+  | 'moment_skipped'
+  | 'moment_expired'
   // Identity verification (Stripe Connect KYC)
   | 'identity_submitted'
   | 'identity_verified'

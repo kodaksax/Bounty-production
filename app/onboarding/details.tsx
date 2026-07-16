@@ -1,53 +1,46 @@
 /**
  * Details Onboarding Screen
- * Second step: collect optional display name, avatar, location, title, bio, skills
- * Features: State persistence, profile picture prominence, branding
+ * Third step: branches on the intent picked at welcome.tsx into one of four
+ * UIs (generic profile form / poster composer+funding / hunter
+ * location+sample-bounty). This file owns state + handlers only; the actual
+ * screen UIs live in components/onboarding/*.
  */
 
-import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-    ActionSheetIOS,
-    ActivityIndicator,
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-} from 'react-native';
+import { Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AddMoneyScreen } from '../../components/add-money-screen';
-import { BrandingLogo } from '../../components/ui/branding-logo';
+import { HunterLocationPrompt } from '../../components/onboarding/HunterLocationPrompt';
+import { HunterSampleBountyScreen } from '../../components/onboarding/HunterSampleBountyScreen';
+import { PosterFundingScreen } from '../../components/onboarding/PosterFundingScreen';
+import { PosterTaskPrompt } from '../../components/onboarding/PosterTaskPrompt';
+import { ProfileDetailsForm } from '../../components/onboarding/ProfileDetailsForm';
+import { useAttachmentUpload } from '../../hooks/use-attachment-upload';
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
 import { useOnboarding } from '../../lib/context/onboarding-context';
-import { attachmentService } from '../../lib/services/attachment-service';
 import { authProfileService } from '../../lib/services/auth-profile-service';
-import { bountyService } from '../../lib/services/bounty-service';
+import { analyticsService } from '../../lib/services/analytics-service';
 import { bountyRequestService } from '../../lib/services/bounty-request-service';
+import { bountyService } from '../../lib/services/bounty-service';
 import { Bounty, Profile } from '../../lib/services/database.types';
 import { locationService } from '../../lib/services/location-service';
+import { notificationService } from '../../lib/services/notification-service';
 import { getOnboardingCompleteKey } from '../../lib/storage/onboarding';
 import { supabase } from '../../lib/supabase';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
-import type { AppTheme } from '../../lib/themes/types';
+import { makeOnboardingDetailsStyles } from '../../lib/onboarding/onboarding-details-styles';
+import { isLocalBounty, rankNearbyBounties } from '../../lib/onboarding/hunter-discovery';
+import { isValidUsZip } from '../../lib/utils/geo';
+import { getUserFriendlyError, type UserFriendlyError } from '../../lib/utils/error-messages';
+import type { LocationCoordinates } from '../../lib/types';
 import { bountyService as bountyCreationService } from '../services/bountyService';
 import { validateAmount, validateDescription, validateTitle } from '../../lib/utils/bounty-validation';
 
-const COMMON_SKILLS = [
-  'Handyman', 'Cleaning', 'Moving', 'Delivery', 'Pet Care',
-  'Gardening', 'Photography', 'Tutoring', 'Tech Support', 'Design',
-];
+const HUNTER_DISCOVERY_FETCH_LIMIT = 20;
 
 export default function DetailsScreen() {
   const router = useRouter();
@@ -58,7 +51,7 @@ export default function DetailsScreen() {
   const { profile: normalized } = useNormalizedProfile();
   const { data: onboardingData, updateData: updateOnboardingData } = useOnboarding();
   const { theme } = useAppThemeContext();
-  const styles = useMemo(() => makeStyles(theme), [theme]);
+  const styles = useMemo(() => makeOnboardingDetailsStyles(theme), [theme]);
 
   // Initialize from context, then fallback to profile data
   const [displayName, setDisplayName] = useState<string>(
@@ -83,12 +76,35 @@ export default function DetailsScreen() {
   const [avatarUri, setAvatarUri] = useState<string | undefined>(
     onboardingData.avatarUri || undefined
   );
-  const [uploading, setUploading] = useState(false);
+
+  // Uploads profile photos to the same bucket/folder the live profile-edit
+  // screen uses (bucket 'profiles', folder 'avatars') so RLS + downstream
+  // reads (e.g. messaging avatars) resolve correctly — onboarding previously
+  // used a different bucket ('attachments') than every other avatar upload
+  // path in the app.
+  const avatarUpload = useAttachmentUpload({
+    bucket: 'profiles',
+    folder: 'avatars',
+    allowedTypes: 'images',
+    maxSizeMB: 5,
+  });
 
   // Hunter-flow-only state
   const [hunterStep, setHunterStep] = useState<'location' | 'sample'>('location');
   const [recentBounties, setRecentBounties] = useState<Bounty[] | null>(null);
   const [applying, setApplying] = useState(false);
+  // Which bucket `recentBounties` currently holds — drives the empty-state
+  // copy/CTA and the subtle "enable location" link on the sample screen.
+  const [bountySource, setBountySource] = useState<'nearby' | 'online' | null>(null);
+  // True while GPS/ZIP resolution or a browse-online/retry fetch is in flight.
+  const [isResolvingLocation, setIsResolvingLocation] = useState(false);
+  // Geocode-level ZIP failure (distinct from the inline format validation
+  // HunterLocationPrompt already does before ever calling us).
+  const [zipSubmitError, setZipSubmitError] = useState<string | null>(null);
+  // Network/service failure from the last resolution attempt, with retry.
+  const [discoveryError, setDiscoveryError] = useState<UserFriendlyError | null>(null);
+  // Re-invokes whichever discovery method last failed, for the ErrorBanner's retry action.
+  const retryDiscoveryRef = useRef<(() => void) | null>(null);
 
   // Poster-flow-only state
   const [posting, setPosting] = useState(false);
@@ -100,15 +116,32 @@ export default function DetailsScreen() {
   const postingRef = useRef(false);
 
   useEffect(() => {
+    analyticsService.trackEvent('onboarding_profile_step_viewed', {
+      intent: onboardingData.intent ?? 'none',
+    });
+    // Only fire once per mount of this branch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Initial (pre-location) preview: recent local bounties, recency-sorted —
+  // matches what the location prompt shows before we know where the hunter
+  // is. Once location/ZIP resolves, resolveNearby() re-ranks a fresh fetch by
+  // real distance instead.
+  useEffect(() => {
     if (onboardingData.intent !== 'hunter') return;
     let cancelled = false;
     bountyService
-      .getAll({ status: 'open', limit: 2 })
+      .getAll({ status: 'open', limit: HUNTER_DISCOVERY_FETCH_LIMIT })
       .then((bounties) => {
-        if (!cancelled) setRecentBounties(bounties);
+        if (cancelled) return;
+        setRecentBounties(bounties.filter(isLocalBounty).slice(0, 2));
+        setBountySource('nearby');
       })
       .catch(() => {
-        if (!cancelled) setRecentBounties([]);
+        if (!cancelled) {
+          setRecentBounties([]);
+          setBountySource('nearby');
+        }
       });
     return () => {
       cancelled = true;
@@ -143,93 +176,10 @@ export default function DetailsScreen() {
   }, [avatarUri]);
 
   const pickAvatar = async () => {
-    const showPicker = async () => {
-      return new Promise<'camera' | 'library' | null>((resolve) => {
-        const options = ['Take Photo', 'Choose from Library', 'Cancel'];
-        if (Platform.OS === 'ios') {
-          ActionSheetIOS.showActionSheetWithOptions(
-            {
-              options,
-              cancelButtonIndex: 2,
-            },
-            (buttonIndex: number) => {
-              if (buttonIndex === 0) resolve('camera');
-              else if (buttonIndex === 1) resolve('library');
-              else resolve(null);
-            }
-          );
-        } else {
-          Alert.alert(
-            'Select Photo',
-            'Choose a source',
-            [
-              { text: 'Take Photo', onPress: () => resolve('camera') },
-              { text: 'Choose from Library', onPress: () => resolve('library') },
-              { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
-            ],
-            { cancelable: true, onDismiss: () => resolve(null) }
-          );
-        }
-      });
-    };
-
-    const source = await showPicker();
-    if (!source) return;
-
-    let result: ImagePicker.ImagePickerResult;
-
-    if (source === 'camera') {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission required', 'Please allow camera access to take a profile picture.');
-        return;
-      }
-      result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.9,
-      });
-    } else {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission required', 'Please allow photo access to select a profile picture.');
-        return;
-      }
-      result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.9,
-      });
-    }
-
-    if (result.canceled) return;
-    const asset = result.assets?.[0];
-    if (!asset) return;
-    // Optional size guard
-    const MAX_FILE_SIZE = 5 * 1024 * 1024;
-    if ((asset as any).fileSize && (asset as any).fileSize > MAX_FILE_SIZE) {
-      Alert.alert('Image too large', 'Please select an image under 5MB.');
-      return;
-    }
-    // Upload via attachment service to get a stable URL
-    try {
-      setUploading(true);
-      const uploaded = await attachmentService.upload({
-        id: `onboarding-avatar-${Date.now()}`,
-        name: (asset as any).fileName || 'avatar.jpg',
-        uri: asset.uri,
-        mimeType: asset.mimeType || 'image/jpeg',
-        size: (asset as any).fileSize,
-        status: 'uploading',
-        progress: 0,
-      } as any);
-      setAvatarUri(uploaded.remoteUri || asset.uri);
-    } catch {
-      setAvatarUri(asset.uri);
-    } finally {
-      setUploading(false);
+    const results = await avatarUpload.pickAttachment();
+    const uploaded = results?.[0];
+    if (uploaded) {
+      setAvatarUri(uploaded.remoteUri || uploaded.uri);
     }
   };
 
@@ -401,10 +351,12 @@ export default function DetailsScreen() {
     }
 
     setSaving(false);
+    analyticsService.trackEvent('onboarding_profile_submitted', { intent: 'none' });
     router.push('/onboarding/done');
   };
 
   const handleSkip = () => {
+    analyticsService.trackEvent('onboarding_step_skipped', { step: 'details', intent: 'none' });
     router.push('/onboarding/done');
   };
 
@@ -417,6 +369,12 @@ export default function DetailsScreen() {
   // they aren't routed back here on next launch.
   const handleSkipToApp = async () => {
     const resolvedUserId = userId || session?.user?.id;
+
+    analyticsService.trackEvent('onboarding_step_skipped', {
+      step: 'details',
+      intent: onboardingData.intent ?? 'none',
+      terminal: true,
+    });
 
     if (resolvedUserId) {
       try {
@@ -435,37 +393,148 @@ export default function DetailsScreen() {
     router.replace('/tabs/bounty-app');
   };
 
-  const handleUseLocation = async () => {
-    const permission = await locationService.requestPermission();
-    if (!permission.granted) {
-      Alert.alert(
-        'Location permission needed',
-        'Enable location access so we can show you bounties near you, or browse by ZIP instead.'
-      );
-      return;
-    }
-
-    const coords = await locationService.getCurrentLocation();
-    if (coords) {
-      const address = await locationService.reverseGeocode(coords);
-      setLocation(address || `${coords.latitude.toFixed(3)}, ${coords.longitude.toFixed(3)}`);
-    }
-
+  // Fetches a fresh batch of local bounties and ranks them by real distance
+  // from `userCoords` (falling back to recency for bounties we can't measure
+  // — see lib/onboarding/hunter-discovery.ts). Always advances to the sample
+  // step: an empty ranked list is a valid "no nearby bounties" outcome that
+  // HunterSampleBountyScreen renders its own empty state for. Only a thrown
+  // fetch error keeps the hunter fon the location screen (with a retry banner).
+  const resolveNearbyBounties = async (userCoords: LocationCoordinates) => {
+    const all = await bountyService.getAll({ status: 'open', limit: HUNTER_DISCOVERY_FETCH_LIMIT });
+    const ranked = rankNearbyBounties(all, userCoords);
+    setRecentBounties(ranked);
+    setBountySource('nearby');
+    analyticsService.trackEvent(
+      ranked.length === 0 ? 'onboarding_no_nearby_bounties' : 'onboarding_nearby_bounties_shown',
+      { intent: 'hunter', count: ranked.length }
+    );
     setHunterStep('sample');
   };
 
+  // Backs three entry points: the "Browse Online Bounties" empty-state CTA,
+  // the location-permission-denied fallback, and "Skip for now" — all three
+  // should immediately show online/remote bounties rather than a dead end.
+  const handleBrowseOnline = async () => {
+    setDiscoveryError(null);
+    setIsResolvingLocation(true);
+    retryDiscoveryRef.current = handleBrowseOnline;
+    try {
+      const online = await bountyService.getAll({
+        status: 'open',
+        workType: 'online',
+        limit: HUNTER_DISCOVERY_FETCH_LIMIT,
+      });
+      setRecentBounties(online);
+      setBountySource('online');
+      analyticsService.trackEvent('onboarding_online_bounties_viewed', { intent: 'hunter', count: online.length });
+      setHunterStep('sample');
+    } catch (err) {
+      console.error('[Onboarding] Failed to load online bounties:', err);
+      setDiscoveryError(getUserFriendlyError(err));
+    } finally {
+      setIsResolvingLocation(false);
+    }
+  };
+
+  const handleUseLocation = async () => {
+    setZipSubmitError(null);
+    setDiscoveryError(null);
+    setIsResolvingLocation(true);
+    retryDiscoveryRef.current = handleUseLocation;
+    try {
+      const permission = await locationService.requestPermission();
+      if (!permission.granted) {
+        analyticsService.trackEvent('onboarding_location_permission_denied', { intent: 'hunter' });
+        await handleBrowseOnline();
+        return;
+      }
+      analyticsService.trackEvent('onboarding_location_permission_granted', { intent: 'hunter' });
+
+      const coords = await locationService.getCurrentLocation();
+      if (!coords) {
+        throw new Error('Could not determine your current location.');
+      }
+
+      // Best-effort display text; distance ranking below doesn't depend on it.
+      locationService
+        .reverseGeocode(coords)
+        .then((address) => {
+          if (address) setLocation(address);
+        })
+        .catch(() => {});
+
+      await resolveNearbyBounties(coords);
+    } catch (err) {
+      console.error('[Onboarding] handleUseLocation failed:', err);
+      setDiscoveryError(getUserFriendlyError(err));
+    } finally {
+      setIsResolvingLocation(false);
+    }
+  };
+
   const handleSubmitZip = async (zip: string) => {
-    if (zip.trim()) {
-      setLocation(zip.trim());
-      // Save as user metadata (only if they actually chose to enter one) so
+    if (!isValidUsZip(zip)) {
+      setZipSubmitError('Enter a valid 5-digit ZIP code.');
+      return;
+    }
+    setZipSubmitError(null);
+    setDiscoveryError(null);
+    setIsResolvingLocation(true);
+    retryDiscoveryRef.current = () => handleSubmitZip(zip);
+    try {
+      const coords = await locationService.geocodeAddress(zip);
+      if (!coords) {
+        setZipSubmitError("We couldn't find that ZIP code. Try another, or use your location instead.");
+        return;
+      }
+      analyticsService.trackEvent('onboarding_zip_searched', { intent: 'hunter' });
+
+      setLocation(zip);
+      // Save as user metadata (only now that it's confirmed a real ZIP) so
       // they can be matched to bounties posted in the same ZIP later.
       try {
-        await updateAuthProfile({ zip_code: zip.trim() });
+        await updateAuthProfile({ zip_code: zip });
       } catch (err) {
         console.error('[Onboarding] Failed to save zip code to profile:', err);
       }
+
+      await resolveNearbyBounties(coords);
+    } catch (err) {
+      console.error('[Onboarding] handleSubmitZip failed:', err);
+      setDiscoveryError(getUserFriendlyError(err));
+    } finally {
+      setIsResolvingLocation(false);
     }
-    setHunterStep('sample');
+  };
+
+  const handleSkipLocation = () => {
+    analyticsService.trackEvent('onboarding_step_skipped', { step: 'hunter_location', intent: 'hunter' });
+    handleBrowseOnline();
+  };
+
+  // Re-invokes whichever discovery method last failed (GPS, ZIP, or browse
+  // online) — wired to retryDiscoveryRef, which each of those setters above.
+  const handleRetryDiscovery = () => {
+    retryDiscoveryRef.current?.();
+  };
+
+  // Requests push permission/registers a token so a hunter with no nearby
+  // bounties can be notified when one appears in their area later. Resolves
+  // true if permission was granted.
+  const handleNotifyMe = async (): Promise<boolean> => {
+    analyticsService.trackEvent('onboarding_notify_me_requested', { intent: 'hunter' });
+    const token = await notificationService.requestPermissionsAndRegisterToken();
+    return Boolean(token);
+  };
+
+  // Lets a poster/hunter change their mind mid-flow (e.g. tapped the wrong
+  // one on welcome.tsx) without restarting onboarding from scratch. Resets
+  // both flows' internal step state so they land at the start of the other.
+  const handleSwitchIntent = (intent: 'poster' | 'hunter') => {
+    analyticsService.trackEvent('onboarding_intent_switched', { to: intent });
+    updateOnboardingData({ intent });
+    setPosterStep('task');
+    setHunterStep('location');
   };
 
   // Derives a valid bounty title (5-120 chars) from the free-form "what +
@@ -539,6 +608,7 @@ export default function DetailsScreen() {
               ? 'Flexible'
               : undefined,
       });
+      analyticsService.trackEvent('onboarding_bounty_posted', { isForHonor, amount });
       router.push('/onboarding/done');
       return true;
     } catch (err) {
@@ -590,6 +660,8 @@ export default function DetailsScreen() {
       } as any);
       if (!result.success) {
         console.warn('[Onboarding] Bounty application failed:', result.error);
+      } else {
+        analyticsService.trackEvent('onboarding_bounty_accepted', { bountyId: String(sampleBounty.id) });
       }
     } catch (err) {
       console.error('[Onboarding] Failed to apply to sample bounty:', err);
@@ -629,6 +701,7 @@ export default function DetailsScreen() {
         onNext={handlePostBounty}
         posting={posting}
         onSkip={handleSkipToApp}
+        onSwitchToHunter={() => handleSwitchIntent('hunter')}
       />
     );
   }
@@ -644,7 +717,12 @@ export default function DetailsScreen() {
           recentBounties={recentBounties}
           onUseLocation={handleUseLocation}
           onSubmitZip={handleSubmitZip}
-          onSkip={() => setHunterStep('sample')}
+          onSkip={handleSkipLocation}
+          onSwitchToPoster={() => handleSwitchIntent('poster')}
+          isResolvingLocation={isResolvingLocation}
+          zipSubmitError={zipSubmitError}
+          discoveryError={discoveryError}
+          onRetryDiscovery={handleRetryDiscovery}
         />
       );
     }
@@ -657,1217 +735,45 @@ export default function DetailsScreen() {
         onNext={handleApplyToSample}
         applying={applying}
         onSkip={handleSkipToApp}
+        onNotifyMe={handleNotifyMe}
+        onSwitchToPoster={() => handleSwitchIntent('poster')}
+        bountySource={bountySource}
+        onBrowseOnline={handleBrowseOnline}
+        onUseLocation={handleUseLocation}
+        isResolvingLocation={isResolvingLocation}
+        discoveryError={discoveryError}
+        onRetryDiscovery={handleRetryDiscovery}
       />
     );
   }
 
-  return (
-    <KeyboardAvoidingView
-      style={[styles.container, { paddingTop: insets.top }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Header with Back Button and Branding */}
-        <View style={styles.headerRow}>
-          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <MaterialIcons name="arrow-back" size={24} color={theme.textSecondary} />
-          </TouchableOpacity>
-          <View style={styles.brandingHeader}>
-            <BrandingLogo size="small" />
-          </View>
-          <View style={{ width: 40 }} />
-        </View>
-
-        {/* Avatar picker - Prominent placement at top */}
-        <View style={styles.avatarSection}>
-          <TouchableOpacity style={styles.avatarContainer} onPress={pickAvatar} disabled={uploading}>
-            {avatarUri ? (
-              <View style={styles.avatarImageWrapper}>
-                <Image source={{ uri: avatarUri }} style={styles.avatarImage} resizeMode="cover" />
-              </View>
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <MaterialIcons name="account-circle" size={80} color={theme.textDisabled} />
-              </View>
-            )}
-            <View style={styles.avatarEditBadge}>
-              <MaterialIcons name="camera-alt" size={18} color="#052e1b" />
-            </View>
-          </TouchableOpacity>
-          <Text style={styles.avatarHint}>
-            {uploading ? 'Uploading…' : 'Tap to add a profile photo'}
-          </Text>
-          <Text style={styles.avatarSubhint}>
-            A profile photo helps others recognize you
-          </Text>
-        </View>
-
-        {/* Title */}
-        <View style={styles.header}>
-          <Text style={styles.title}>Tell Us About Yourself</Text>
-          <Text style={styles.subtitle}>
-            These details help others learn more about you. All fields are optional.
-          </Text>
-        </View>
-
-        {/* Inputs */}
-        <View style={styles.inputSection}>
-          {/* Display Name */}
-          <View style={styles.field}>
-            <Text style={styles.label}>Display Name</Text>
-            <TextInput
-              style={styles.input}
-              value={displayName}
-              onChangeText={setDisplayName}
-              placeholder="e.g., John Doe"
-              placeholderTextColor={theme.textDisabled}
-              autoCapitalize="words"
-            />
-            <Text style={styles.hint}>
-              How you
-              {"'"}
-              d like to be called
-            </Text>
-          </View>
-
-          {/* Title/Profession */}
-          <View style={styles.field}>
-            <Text style={styles.label}>Title/Profession</Text>
-            <TextInput
-              style={styles.input}
-              value={title}
-              onChangeText={setTitle}
-              placeholder="e.g., Full Stack Developer"
-              placeholderTextColor={theme.textDisabled}
-              autoCapitalize="words"
-            />
-            <Text style={styles.hint}>Your professional title or role</Text>
-          </View>
-
-          {/* Bio */}
-          <View style={styles.field}>
-            <Text style={styles.label}>Bio</Text>
-            <TextInput
-              style={[styles.input, styles.bioInput]}
-              value={bio}
-              onChangeText={setBio}
-              placeholder="Tell others about yourself..."
-              placeholderTextColor={theme.textDisabled}
-              multiline
-              numberOfLines={3}
-              maxLength={200}
-            />
-            <Text style={styles.hint}>{bio.length}/200 characters</Text>
-          </View>
-
-          {/* Location */}
-          <View style={styles.field}>
-            <Text style={styles.label}>Location</Text>
-            <TextInput
-              style={styles.input}
-              value={location}
-              onChangeText={setLocation}
-              placeholder="e.g., San Francisco, CA"
-              placeholderTextColor={theme.textDisabled}
-              autoCapitalize="words"
-            />
-            <Text style={styles.hint}>City and state/country</Text>
-          </View>
-
-          {/* Skills */}
-          <View style={styles.field}>
-            <Text style={styles.label}>Skills</Text>
-            <Text style={styles.hintWithMargin}>
-              What can you help with?
-            </Text>
-
-            {/* Common skills as chips */}
-            <View style={styles.skillsContainer}>
-              {COMMON_SKILLS.map((skill) => (
-                <TouchableOpacity
-                  key={skill}
-                  style={[
-                    styles.skillChip,
-                    skills.includes(skill) && styles.skillChipSelected,
-                  ]}
-                  onPress={() => toggleSkill(skill)}
-                >
-                  <Text
-                    style={[
-                      styles.skillChipText,
-                      skills.includes(skill) && styles.skillChipTextSelected,
-                    ]}
-                  >
-                    {skill}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* Custom skills */}
-            {skills.filter(s => !COMMON_SKILLS.includes(s)).length > 0 && (
-              <View style={styles.customSkillsContainer}>
-                {skills.filter(s => !COMMON_SKILLS.includes(s)).map((skill) => (
-                  <View key={skill} style={styles.customSkillChip}>
-                    <Text style={styles.customSkillText}>{skill}</Text>
-                    <TouchableOpacity onPress={() => removeSkill(skill)}>
-                      <MaterialIcons name="close" size={16} color={theme.textSecondary} />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {/* Add custom skill */}
-            <View style={styles.customSkillInput}>
-              <TextInput
-                style={styles.input}
-                value={customSkill}
-                onChangeText={setCustomSkill}
-                placeholder="Add another skill..."
-                placeholderTextColor={theme.textDisabled}
-                onSubmitEditing={addCustomSkill}
-                returnKeyType="done"
-              />
-              {customSkill.trim() && (
-                <TouchableOpacity
-                  style={styles.addSkillButton}
-                  onPress={addCustomSkill}
-                >
-                  <MaterialIcons name="add" size={20} color="#052e1b" />
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-        </View>
-
-        {/* Action Buttons */}
-        <View style={styles.actions}>
-          <TouchableOpacity
-            style={styles.nextButton}
-            onPress={handleNext}
-            disabled={saving}
-          >
-            <Text style={styles.nextButtonText}>
-              {saving ? 'Saving...' : 'Next'}
-            </Text>
-            <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={handleSkip} style={styles.skipButton}>
-            <Text style={styles.skipButtonText}>Skip for now</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Progress indicator — step 2 of 5 */}
-        <View style={styles.progressContainer}>
-          <View style={styles.progressDot} />
-          <View style={[styles.progressDot, styles.progressDotActive]} />
-          <View style={styles.progressDot} />
-          <View style={styles.progressDot} />
-          <View style={styles.progressDot} />
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
-  );
-}
-
-function makeStyles(theme: AppTheme) {
-  return StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: theme.background,
-    },
-    scrollContent: {
-      flexGrow: 1,
-      paddingHorizontal: 24,
-    },
-    headerRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginTop: 8,
-      marginBottom: 16,
-    },
-    backButton: {
-      padding: 8,
-    },
-    brandingHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-    },
-    brandingText: {
-      fontSize: 18,
-      fontWeight: 'bold',
-      color: theme.text,
-      letterSpacing: 2,
-      marginLeft: 6,
-    },
-    avatarSection: {
-      alignItems: 'center',
-      marginBottom: 20,
-    },
-    avatarContainer: {
-      position: 'relative',
-    },
-    avatarImageWrapper: {
-      width: 100,
-      height: 100,
-      borderRadius: 50,
-      overflow: 'hidden',
-      borderWidth: 3,
-      borderColor: theme.border,
-    },
-    avatarImage: {
-      width: '100%',
-      height: '100%',
-    },
-    avatarPlaceholder: {
-      width: 100,
-      height: 100,
-      borderRadius: 50,
-      backgroundColor: theme.surface,
-      borderWidth: 3,
-      borderColor: theme.border,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    avatarEditBadge: {
-      position: 'absolute',
-      bottom: 0,
-      right: 0,
-      width: 32,
-      height: 32,
-      borderRadius: 16,
-      backgroundColor: theme.primary,
-      justifyContent: 'center',
-      alignItems: 'center',
-      borderWidth: 2,
-      borderColor: theme.background,
-    },
-    avatarHint: {
-      color: theme.textSecondary,
-      fontSize: 14,
-      fontWeight: '600',
-      marginTop: 8,
-    },
-    avatarSubhint: {
-      color: theme.textSecondary,
-      fontSize: 12,
-      marginTop: 4,
-    },
-    header: {
-      alignItems: 'center',
-      marginBottom: 24,
-    },
-    title: {
-      fontSize: 24,
-      fontWeight: 'bold',
-      color: theme.text,
-      marginBottom: 8,
-      textAlign: 'center',
-    },
-    subtitle: {
-      fontSize: 14,
-      color: theme.textSecondary,
-      textAlign: 'center',
-      lineHeight: 20,
-      paddingHorizontal: 16,
-    },
-    inputSection: {
-      marginBottom: 24,
-    },
-    field: {
-      marginBottom: 20,
-    },
-    label: {
-      color: theme.textSecondary,
-      fontSize: 14,
-      fontWeight: '600',
-      marginBottom: 8,
-    },
-    input: {
-      backgroundColor: theme.surfaceSecondary,
-      borderRadius: 12,
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      fontSize: 16,
-      color: theme.text,
-      borderWidth: 1,
-      borderColor: theme.border,
-    },
-    bioInput: {
-      minHeight: 80,
-      textAlignVertical: 'top',
-      paddingTop: 12,
-    },
-    hint: {
-      color: theme.textSecondary,
-      fontSize: 12,
-      marginTop: 6,
-      paddingHorizontal: 4,
-    },
-    hintWithMargin: {
-      color: theme.textSecondary,
-      fontSize: 12,
-      marginTop: 6,
-      marginBottom: 8,
-      paddingHorizontal: 4,
-    },
-    skillsContainer: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 8,
-      marginBottom: 12,
-    },
-    skillChip: {
-      paddingHorizontal: 14,
-      paddingVertical: 8,
-      borderRadius: 20,
-      backgroundColor: theme.surface,
-      borderWidth: 2,
-      borderColor: theme.border,
-    },
-    skillChipSelected: {
-      backgroundColor: theme.primary,
-      borderColor: theme.primary,
-    },
-    skillChipText: {
-      color: theme.textSecondary,
-      fontSize: 14,
-      fontWeight: '500',
-    },
-    skillChipTextSelected: {
-      color: '#052e1b',
-      fontWeight: '600',
-    },
-    customSkillsContainer: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 8,
-      marginBottom: 12,
-    },
-    customSkillChip: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 20,
-      backgroundColor: theme.surfaceSecondary,
-      borderWidth: 1,
-      borderColor: theme.border,
-    },
-    customSkillText: {
-      color: theme.textSecondary,
-      fontSize: 14,
-      fontWeight: '500',
-    },
-    customSkillInput: {
-      position: 'relative',
-    },
-    addSkillButton: {
-      position: 'absolute',
-      right: 8,
-      top: 8,
-      backgroundColor: theme.primary,
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    actions: {
-      marginBottom: 24,
-    },
-    nextButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.primary,
-      paddingVertical: 16,
-      borderRadius: 999,
-      marginBottom: 12,
-      gap: 8,
-    },
-    nextButtonText: {
-      color: '#052e1b',
-      fontSize: 18,
-      fontWeight: 'bold',
-    },
-    skipButton: {
-      alignItems: 'center',
-      paddingVertical: 12,
-    },
-    skipButtonText: {
-      color: theme.textSecondary,
-      fontSize: 16,
-    },
-    progressContainer: {
-      flexDirection: 'row',
-      justifyContent: 'center',
-      gap: 8,
-      paddingTop: 16,
-    },
-    progressDot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-      backgroundColor: theme.border,
-    },
-    progressDotActive: {
-      backgroundColor: theme.primary,
-    },
-    posterContent: {
-      flex: 1,
-      paddingHorizontal: 24,
-    },
-    posterHeading: {
-      fontSize: 30,
-      fontWeight: '600',
-      color: theme.text,
-      textAlign: 'center',
-      marginTop: 24,
-      marginBottom: 32,
-    },
-    dottedBox: {
-      borderWidth: 2,
-      borderStyle: 'dashed',
-      borderColor: theme.isDark ? 'rgba(255,255,255,0.35)' : theme.textSecondary,
-      backgroundColor: theme.isDark ? 'rgba(255,255,255,0.06)' : 'transparent',
-      borderRadius: 12,
-      padding: 16,
-      marginBottom: 24,
-    },
-    dottedBoxLabel: {
-      color: theme.isDark ? 'rgba(255,255,255,0.75)' : theme.textSecondary,
-      fontSize: 14,
-      fontWeight: '600',
-      marginBottom: 8,
-    },
-    dottedBoxExample: {
-      color: theme.isDark ? 'rgba(255,255,255,0.75)' : theme.textSecondary,
-      fontSize: 15,
-      lineHeight: 22,
-      fontStyle: 'italic',
-    },
-    dottedBoxInput: {
-      color: theme.text,
-      fontSize: 15,
-      lineHeight: 22,
-      minHeight: 44,
-      padding: 0,
-      textAlignVertical: 'top',
-    },
-    priceBox: {
-      borderWidth: 2,
-      borderColor: theme.primary,
-      backgroundColor: theme.surface,
-      borderRadius: 16,
-      padding: 16,
-    },
-    priceBoxHint: {
-      color: theme.textSecondary,
-      fontSize: 13,
-      marginBottom: 12,
-    },
-    priceInputRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 16,
-    },
-    priceInputPill: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: '#ffffff',
-      borderWidth: 1,
-      borderColor: theme.border,
-      borderRadius: 10,
-      paddingHorizontal: 14,
-      paddingVertical: 10,
-      gap: 6,
-    },
-    priceCurrency: {
-      fontSize: 20,
-      fontWeight: '700',
-      color: '#111827',
-    },
-    priceInput: {
-      fontSize: 20,
-      fontWeight: '700',
-      color: '#111827',
-      minWidth: 40,
-      padding: 0,
-    },
-    priceSimilarText: {
-      color: theme.textSecondary,
-      fontSize: 13,
-      marginLeft: 12,
-    },
-    priceChipsRow: {
-      flexDirection: 'row',
-      gap: 8,
-    },
-    priceChip: {
-      borderWidth: 1.5,
-      borderColor: theme.text,
-      borderRadius: 999,
-      paddingHorizontal: 18,
-      paddingVertical: 8,
-    },
-    priceChipSelected: {
-      backgroundColor: theme.primary,
-      borderColor: theme.primary,
-    },
-    priceChipText: {
-      color: theme.text,
-      fontSize: 14,
-      fontWeight: '600',
-    },
-    priceChipTextSelected: {
-      color: '#052e1b',
-    },
-    posterActions: {
-      paddingHorizontal: 24,
-      paddingBottom: 40,
-    },
-    posterDotsContainer: {
-      flexDirection: 'row',
-      justifyContent: 'center',
-      gap: 8,
-      paddingTop: 16,
-    },
-    posterDot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-      backgroundColor: theme.border,
-    },
-    posterDotActive: {
-      backgroundColor: theme.primary,
-    },
-    hunterContent: {
-      flex: 1,
-      paddingHorizontal: 24,
-    },
-    hunterStatusRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingTop: 16,
-      marginBottom: 32,
-      gap: 8,
-    },
-    hunterStatusDots: {
-      flexDirection: 'row',
-      gap: 4,
-    },
-    hunterStatusDot: {
-      width: 7,
-      height: 7,
-      borderRadius: 3.5,
-      backgroundColor: theme.text,
-    },
-    hunterStatusDotHollow: {
-      backgroundColor: 'transparent',
-      borderWidth: 1.5,
-      borderColor: theme.text,
-    },
-    hunterStatusSeparator: {
-      color: theme.textSecondary,
-      fontSize: 14,
-    },
-    hunterStatusText: {
-      color: theme.textSecondary,
-      fontSize: 14,
-    },
-    hunterStatusName: {
-      color: theme.text,
-      fontWeight: '700',
-    },
-    bountyCard: {
-      backgroundColor: theme.surface,
-      borderWidth: 1,
-      borderColor: theme.border,
-      borderRadius: 16,
-      padding: 16,
-      marginBottom: 16,
-    },
-    bountyCardTopRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 8,
-    },
-    bountyCardTitle: {
-      fontSize: 18,
-      fontWeight: '700',
-      color: theme.textSecondary,
-    },
-    bountyCardPrice: {
-      fontSize: 18,
-      fontWeight: '700',
-      color: theme.textSecondary,
-    },
-    bountyCardMetaRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-    },
-    bountyCardMetaText: {
-      fontSize: 14,
-      color: theme.textDisabled,
-    },
-    hunterHeading: {
-      fontSize: 28,
-      fontWeight: '700',
-      color: theme.text,
-      textAlign: 'center',
-      marginTop: 8,
-      marginBottom: 40,
-    },
-    hunterSpacer: {
-      flex: 1,
-    },
-    hunterActions: {
-      paddingBottom: 16,
-      gap: 12,
-    },
-    locationButton: {
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: 18,
-      borderRadius: 999,
-    },
-    locationButtonText: {
-      color: '#ffffff',
-      fontSize: 18,
-      fontWeight: 'bold',
-    },
-    zipButton: {
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.surface,
-      borderWidth: 2,
-      borderColor: theme.text,
-      paddingVertical: 18,
-      borderRadius: 999,
-    },
-    zipButtonText: {
-      color: theme.text,
-      fontSize: 18,
-      fontWeight: 'bold',
-    },
-    zipInputRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-    },
-    zipInput: {
-      flex: 1,
-      backgroundColor: theme.surface,
-      borderWidth: 2,
-      borderColor: theme.text,
-      borderRadius: 999,
-      paddingVertical: 16,
-      paddingHorizontal: 20,
-      fontSize: 18,
-      color: theme.text,
-    },
-    zipInputButton: {
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: 16,
-      paddingHorizontal: 20,
-      borderRadius: 999,
-    },
-    zipInputButtonText: {
-      color: '#ffffff',
-      fontSize: 18,
-      fontWeight: 'bold',
-    },
-    hunterFootnote: {
-      fontSize: 13,
-      color: theme.textSecondary,
-      textAlign: 'center',
-      marginTop: 16,
-      marginBottom: 24,
-      paddingHorizontal: 16,
-    },
-    earnBanner: {
-      borderWidth: 2,
-      borderColor: theme.primary,
-      backgroundColor: theme.surface,
-      borderRadius: 16,
-      paddingVertical: 18,
-      alignItems: 'center',
-      marginTop: 16,
-      marginBottom: 20,
-    },
-    earnBannerText: {
-      fontSize: 18,
-      fontWeight: '600',
-      color: theme.primary,
-    },
-    earnBannerAmount: {
-      fontWeight: '800',
-    },
-    sampleCardTitle: {
-      fontSize: 18,
-      fontWeight: '700',
-      color: theme.text,
-    },
-    sampleCardPrice: {
-      fontSize: 18,
-      fontWeight: '700',
-      color: theme.text,
-    },
-    viewAcceptButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: 14,
-      borderRadius: 999,
-      marginTop: 14,
-    },
-    viewAcceptButtonText: {
-      color: '#ffffff',
-      fontSize: 16,
-      fontWeight: 'bold',
-    },
-    detailSheet: {
-      borderWidth: 2,
-      borderColor: theme.text,
-      borderRadius: 16,
-      padding: 16,
-      marginTop: 16,
-    },
-    detailSheetLabel: {
-      fontSize: 12,
-      fontWeight: '700',
-      letterSpacing: 1,
-      color: theme.textSecondary,
-      marginBottom: 8,
-    },
-    detailSheetText: {
-      fontSize: 17,
-      fontWeight: '700',
-      color: theme.text,
-    },
-    skipLink: {
-      alignItems: 'center',
-      paddingVertical: 12,
-    },
-    skipLinkText: {
-      fontSize: 15,
-      color: theme.textDisabled,
-      textDecorationLine: 'underline',
-    },
-    fundingContainer: {
-      flex: 1,
-      backgroundColor: '#059669',
-    },
-    fundingBanner: {
-      paddingHorizontal: 24,
-      paddingTop: 16,
-      paddingBottom: 8,
-      alignItems: 'center',
-    },
-    fundingBannerText: {
-      color: '#ffffff',
-      fontSize: 16,
-      fontWeight: '700',
-      textAlign: 'center',
-    },
-    fundingAddMoneyWrapper: {
-      flex: 1,
-    },
-    fundingSkipLinkText: {
-      fontSize: 15,
-      color: 'rgba(255,255,255,0.8)',
-      textDecorationLine: 'underline',
-    },
-  });
-}
-
-type PosterTaskPromptProps = {
-  theme: AppTheme;
-  styles: ReturnType<typeof makeStyles>;
-  insets: { top: number; bottom: number };
-  taskDescription: string;
-  onChangeTaskDescription: (taskDescription: string) => void;
-  price: string;
-  onChangePrice: (price: string) => void;
-  schedule: 'saturday' | 'flexible' | null;
-  onChangeSchedule: (schedule: 'saturday' | 'flexible' | null) => void;
-  onNext: () => void;
-  posting: boolean;
-  onSkip: () => void;
-};
-
-function PosterTaskPrompt({
-  theme,
-  styles,
-  insets,
-  taskDescription,
-  onChangeTaskDescription,
-  price,
-  onChangePrice,
-  schedule,
-  onChangeSchedule,
-  onNext,
-  posting,
-  onSkip,
-}: PosterTaskPromptProps) {
-  return (
-    <KeyboardAvoidingView
-      style={[styles.container, { paddingTop: insets.top }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <View style={styles.posterDotsContainer}>
-        <View style={[styles.posterDot, styles.posterDotActive]} />
-        <View style={[styles.posterDot, styles.posterDotActive]} />
-        <View style={styles.posterDot} />
-      </View>
-
-      <View style={[styles.posterContent, { paddingBottom: insets.bottom }]}>
-        <Text style={styles.posterHeading}>What do you need done?</Text>
-
-        <View style={styles.dottedBox}>
-          <Text style={styles.dottedBoxLabel}>What + when + where</Text>
-          <TextInput
-            style={styles.dottedBoxInput}
-            value={taskDescription}
-            onChangeText={onChangeTaskDescription}
-            placeholder="Help me move a couch, Saturday morning, Mission District"
-            placeholderTextColor={theme.isDark ? 'rgba(255,255,255,0.75)' : theme.textSecondary}
-            multiline
-            editable={!posting}
-          />
-        </View>
-
-        <View style={styles.priceBox}>
-          <Text style={styles.priceBoxHint}>↓ drafted after you type · tap to change</Text>
-
-          <View style={styles.priceInputRow}>
-            <View style={styles.priceInputPill}>
-              <Text style={styles.priceCurrency}>$</Text>
-              <TextInput
-                style={styles.priceInput}
-                value={price}
-                onChangeText={onChangePrice}
-                placeholder="50"
-                placeholderTextColor={theme.textDisabled}
-                keyboardType="numeric"
-              />
-              <MaterialIcons name="edit" size={16} color={theme.textSecondary} />
-            </View>
-            <Text style={styles.priceSimilarText}>similar: $40–60</Text>
-          </View>
-
-          <View style={styles.priceChipsRow}>
-            <TouchableOpacity
-              style={[styles.priceChip, schedule === 'saturday' && styles.priceChipSelected]}
-              onPress={() => onChangeSchedule(schedule === 'saturday' ? null : 'saturday')}
-            >
-              <Text
-                style={[styles.priceChipText, schedule === 'saturday' && styles.priceChipTextSelected]}
-              >
-                Saturday
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.priceChip, schedule === 'flexible' && styles.priceChipSelected]}
-              onPress={() => onChangeSchedule(schedule === 'flexible' ? null : 'flexible')}
-            >
-              <Text
-                style={[styles.priceChipText, schedule === 'flexible' && styles.priceChipTextSelected]}
-              >
-                Flexible
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.posterActions}>
-        <TouchableOpacity
-          style={[styles.nextButton, { backgroundColor: theme.primary }]}
-          onPress={onNext}
-          disabled={posting}
-        >
-          {posting ? (
-            <ActivityIndicator color="#052e1b" style={{ marginRight: 8 }} />
-          ) : null}
-          <Text style={styles.nextButtonText}>
-            {posting ? 'Posting…' : 'Post Bounty - free to post'}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.skipLink} onPress={onSkip} disabled={posting}>
-          <Text style={styles.skipLinkText}>Skip for now</Text>
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
-  );
-}
-
-type PosterFundingScreenProps = {
-  styles: ReturnType<typeof makeStyles>;
-  price: string;
-  posting: boolean;
-  onBack: () => void;
-  onFunded: () => void;
-  onSkip: () => void;
-};
-
-// Lets the poster add a card / deposit funds (reusing the same flow as the
-// main app's wallet) so their bounty can post as a real, paid bounty. This
-// is a distinct step from the task screen because a DB trigger
-// (fn_reserve_bounty_escrow) requires the wallet balance to already cover
-// the bounty amount at the moment the bounty row is inserted.
-function PosterFundingScreen({ styles, price, posting, onBack, onFunded, onSkip }: PosterFundingScreenProps) {
-  return (
-    <View style={styles.fundingContainer}>
-      <View style={styles.fundingBanner}>
-        <Text style={styles.fundingBannerText}>Add ${price || '0'} to post this as a paid bounty</Text>
-      </View>
-
-      <View style={styles.fundingAddMoneyWrapper}>
-        <AddMoneyScreen initialAmount={price || '0'} onBack={onBack} onAddMoney={onFunded} />
-      </View>
-
-      <TouchableOpacity style={styles.skipLink} onPress={onSkip} disabled={posting}>
-        <Text style={styles.fundingSkipLinkText}>
-          {posting ? 'Posting…' : 'Skip for now — post for free instead'}
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-type HunterLocationPromptProps = {
-  theme: AppTheme;
-  styles: ReturnType<typeof makeStyles>;
-  insets: { top: number; bottom: number };
-  displayName: string;
-  recentBounties: Bounty[] | null;
-  onUseLocation: () => void;
-  onSubmitZip: (zipCode: string) => void;
-  onSkip: () => void;
-};
-
-// Fallback preview cards shown only if there are no live open bounties yet
-// (e.g. a brand new environment with no postings).
-const MOCK_PREVIEW_BOUNTIES: { title: string; priceLabel: string; metaLabel: string; amount: number }[] = [
-  { title: 'Help move …', priceLabel: '💰 $45', metaLabel: '📍 ~1 mi · ⏰ Today', amount: 45 },
-  { title: 'Dog w…', priceLabel: '💰 $20', metaLabel: '📍 ~1 mi · ⏰ Tonight', amount: 20 },
-];
-
-function getPreviewCards(recentBounties: Bounty[] | null) {
-  return recentBounties && recentBounties.length > 0
-    ? recentBounties.slice(0, 2).map((bounty) => ({
-        title: bounty.title,
-        priceLabel: bounty.is_for_honor ? '🏅 For Honor' : `💰 $${bounty.amount}`,
-        metaLabel: `📍 ${
-          typeof bounty.distance === 'number' ? `~${Math.round(bounty.distance)} mi` : bounty.location
-        } · ⏰ ${bounty.timeline || 'Flexible'}`,
-        amount: bounty.amount,
-      }))
-    : MOCK_PREVIEW_BOUNTIES;
-}
-
-function HunterLocationPrompt({
-  theme,
-  styles,
-  insets,
-  displayName,
-  recentBounties,
-  onUseLocation,
-  onSubmitZip,
-  onSkip,
-}: HunterLocationPromptProps) {
-  const previewCards = getPreviewCards(recentBounties);
-  const [showZipInput, setShowZipInput] = useState(false);
-  const [zipInput, setZipInput] = useState('');
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-      <View style={styles.hunterStatusRow}>
-        <View style={styles.hunterStatusDots}>
-          <View style={styles.hunterStatusDot} />
-          <View style={styles.hunterStatusDot} />
-          <View style={styles.hunterStatusDot} />
-          <View style={[styles.hunterStatusDot, styles.hunterStatusDotHollow]} />
-        </View>
-        <Text style={styles.hunterStatusSeparator}>·</Text>
-        <Text style={styles.hunterStatusText}>
-          Hunting as <Text style={styles.hunterStatusName}>{displayName}</Text>
-        </Text>
-        <MaterialIcons name="edit" size={16} color={theme.textSecondary} />
-      </View>
-
-      <View style={styles.hunterContent}>
-        {previewCards.map((card, index) => (
-          <View style={styles.bountyCard} key={index}>
-            <View style={styles.bountyCardTopRow}>
-              <Text style={styles.bountyCardTitle} numberOfLines={1}>{card.title}</Text>
-              <Text style={styles.bountyCardPrice}>{card.priceLabel}</Text>
-            </View>
-            <View style={styles.bountyCardMetaRow}>
-              <Text style={styles.bountyCardMetaText}>{card.metaLabel}</Text>
-            </View>
-          </View>
-        ))}
-
-        <Text style={styles.hunterHeading}>See exactly how close{'\n'}the money is</Text>
-
-        <View style={styles.hunterSpacer} />
-
-        <View style={styles.hunterActions}>
-          <TouchableOpacity
-            style={[styles.locationButton, { backgroundColor: theme.primary }]}
-            onPress={onUseLocation}
-          >
-            <Text style={styles.locationButtonText}>Use my location</Text>
-          </TouchableOpacity>
-
-          {showZipInput ? (
-            <View style={styles.zipInputRow}>
-              <TextInput
-                style={styles.zipInput}
-                value={zipInput}
-                onChangeText={(text) => setZipInput(text.replace(/[^0-9]/g, '').slice(0, 5))}
-                placeholder="ZIP code"
-                placeholderTextColor={theme.textDisabled}
-                keyboardType="number-pad"
-                maxLength={5}
-                autoFocus
-              />
-              <TouchableOpacity
-                style={[styles.zipInputButton, { backgroundColor: theme.primary, opacity: zipInput.length === 5 ? 1 : 0.5 }]}
-                onPress={() => onSubmitZip(zipInput)}
-                disabled={zipInput.length !== 5}
-              >
-                <Text style={styles.zipInputButtonText}>Go</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <TouchableOpacity style={styles.zipButton} onPress={() => setShowZipInput(true)}>
-              <Text style={styles.zipButtonText}>Browse by ZIP instead</Text>
-            </TouchableOpacity>
-          )}
-
-          <Text style={styles.hunterFootnote}>
-            Only your area is stored — never your exact address.
-          </Text>
-
-          <TouchableOpacity style={styles.skipLink} onPress={onSkip}>
-            <Text style={styles.skipLinkText}>Skip for now</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-type HunterSampleBountyScreenProps = {
-  theme: AppTheme;
-  styles: ReturnType<typeof makeStyles>;
-  insets: { top: number; bottom: number };
-  recentBounties: Bounty[] | null;
-  onNext: () => void;
-  applying: boolean;
-  onSkip: () => void;
-};
-
-function HunterSampleBountyScreen({
-  theme,
-  styles,
-  insets,
-  recentBounties,
-  onNext,
-  applying,
-  onSkip,
-}: HunterSampleBountyScreenProps) {
-  const previewCards = getPreviewCards(recentBounties);
-  const sampleCard = previewCards[0];
-  const sampleBounty = recentBounties && recentBounties.length > 0 ? recentBounties[0] : null;
-
-  const bannerAmount =
-    recentBounties && recentBounties.length > 0
-      ? Math.max(...recentBounties.map((b) => b.amount))
-      : 125;
-
-  const detailText = sampleBounty
-    ? [
-        sampleBounty.timeline,
-        sampleBounty.location,
-        sampleBounty.duration_minutes ? `${Math.round(sampleBounty.duration_minutes / 60)} hrs` : null,
-      ]
-        .filter(Boolean)
-        .join(' · ')
-    : 'Sat 10am · 123 Oak St area · 2 hrs';
-
-  return (
-    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-      <View style={styles.hunterContent}>
-        <View style={styles.earnBanner}>
-          <Text style={styles.earnBannerText}>
-            Earn up to <Text style={styles.earnBannerAmount}>${bannerAmount}</Text> nearby
-          </Text>
-        </View>
-
-        <View style={styles.bountyCard}>
-          <View style={styles.bountyCardTopRow}>
-            <Text style={styles.sampleCardTitle} numberOfLines={1}>{sampleCard.title}</Text>
-            <Text style={styles.sampleCardPrice}>{sampleCard.priceLabel}</Text>
-          </View>
-          <View style={styles.bountyCardMetaRow}>
-            <Text style={styles.bountyCardMetaText}>{sampleCard.metaLabel}</Text>
-          </View>
-          <TouchableOpacity
-            style={[styles.viewAcceptButton, { backgroundColor: theme.primary }]}
-            onPress={onNext}
-            disabled={applying}
-          >
-            {applying ? (
-              <ActivityIndicator color="#ffffff" style={{ marginRight: 8 }} />
-            ) : null}
-            <Text style={styles.viewAcceptButtonText}>View &amp; accept</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.detailSheet}>
-          <Text style={styles.detailSheetLabel}>DETAIL SHEET</Text>
-          <Text style={styles.detailSheetText}>{detailText}</Text>
-          <TouchableOpacity
-            style={[styles.viewAcceptButton, { backgroundColor: theme.primary }]}
-            onPress={onNext}
-            disabled={applying}
-          >
-            {applying ? (
-              <ActivityIndicator color="#ffffff" style={{ marginRight: 8 }} />
-            ) : null}
-            <Text style={styles.viewAcceptButtonText}>
-              {applying ? 'Applying…' : '✓ I can do this today'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.hunterSpacer} />
-
-        <Text style={styles.hunterFootnote}>
-          Accepted bounty pins to top with next step (&ldquo;Sat 10am · get directions&rdquo;)
-        </Text>
-
-        <TouchableOpacity style={styles.skipLink} onPress={onSkip}>
-          <Text style={styles.skipLinkText}>Skip for now</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+    <ProfileDetailsForm
+      theme={theme}
+      styles={styles}
+      insets={insets}
+      avatarUri={avatarUri}
+      uploading={avatarUpload.isUploading || avatarUpload.isPicking}
+      onPickAvatar={pickAvatar}
+      displayName={displayName}
+      onChangeDisplayName={setDisplayName}
+      title={title}
+      onChangeTitle={setTitle}
+      bio={bio}
+      onChangeBio={setBio}
+      location={location}
+      onChangeLocation={setLocation}
+      skills={skills}
+      onToggleSkill={toggleSkill}
+      onRemoveSkill={removeSkill}
+      customSkill={customSkill}
+      onChangeCustomSkill={setCustomSkill}
+      onAddCustomSkill={addCustomSkill}
+      onNext={handleNext}
+      onSkip={handleSkip}
+      onBack={handleBack}
+      saving={saving}
+    />
   );
 }

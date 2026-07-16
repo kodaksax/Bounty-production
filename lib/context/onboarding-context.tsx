@@ -4,19 +4,29 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { useAuthContext } from '../../hooks/use-auth-context';
 
-const ONBOARDING_STATE_KEY = '@bounty_onboarding_state';
+const ONBOARDING_STATE_KEY_BASE = '@bounty_onboarding_state';
+
+/**
+ * Bumped whenever OnboardingData's shape or the onboarding flow itself
+ * changes meaningfully enough that a returning user's in-progress draft
+ * should be discarded rather than resumed. Written to
+ * `profiles.onboarding_version` on completion (see app/onboarding/done.tsx)
+ * so future onboarding redesigns can detect which flow a user completed.
+ */
+export const CURRENT_ONBOARDING_VERSION = 1;
+
+function storageKeyFor(userId: string | null | undefined): string {
+  return userId ? `${ONBOARDING_STATE_KEY_BASE}:${userId}` : ONBOARDING_STATE_KEY_BASE;
+}
 
 export interface OnboardingData {
   // Welcome screen — which of the two entry CTAs the user picked.
   // 'poster' = "Get something done", 'hunter' = "Start earning nearby"
   intent: 'poster' | 'hunter' | null;
 
-  // Username screen
-  username: string;
-  accepted: boolean;
-  
   // Details screen
   displayName: string;
   title: string;
@@ -36,8 +46,6 @@ export interface OnboardingData {
 
 const defaultOnboardingData: OnboardingData = {
   intent: null,
-  username: '',
-  accepted: false,
   displayName: '',
   title: '',
   bio: '',
@@ -60,40 +68,72 @@ interface OnboardingContextType {
 const OnboardingContext = createContext<OnboardingContextType | null>(null);
 
 export function OnboardingProvider({ children }: { children: React.ReactNode }) {
+  // Scope the draft to whichever account is currently signed in. Onboarding
+  // starts before auth (welcome.tsx picks an intent pre-login), so an
+  // "anonymous" draft is written first under the base key; once a session
+  // resolves we migrate that draft onto the user-scoped key so it isn't lost,
+  // then remove the anon copy. This prevents a second, different account
+  // signing in on the same device from inheriting the first account's
+  // abandoned draft (bio, intent, task description, etc).
+  const { session } = useAuthContext();
+  const userId = session?.user?.id ?? null;
+
   const [data, setData] = useState<OnboardingData>(defaultOnboardingData);
   const [loading, setLoading] = useState(true);
+  const loadedKeyRef = useRef<string | null>(null);
 
-  // Load persisted state on mount
   useEffect(() => {
+    const key = storageKeyFor(userId);
+    if (loadedKeyRef.current === key) return;
+
+    let cancelled = false;
     const loadState = async () => {
+      setLoading(true);
       try {
-        const stored = await AsyncStorage.getItem(ONBOARDING_STATE_KEY);
+        let stored = await AsyncStorage.getItem(key);
+
+        if (!stored && userId) {
+          const anonDraft = await AsyncStorage.getItem(ONBOARDING_STATE_KEY_BASE);
+          if (anonDraft) {
+            await AsyncStorage.setItem(key, anonDraft);
+            await AsyncStorage.removeItem(ONBOARDING_STATE_KEY_BASE);
+            stored = anonDraft;
+          }
+        }
+
         if (stored) {
           try {
             const parsed = JSON.parse(stored);
-            // Validate the parsed data has the expected structure
-            if (parsed && typeof parsed === 'object') {
+            if (parsed && typeof parsed === 'object' && !cancelled) {
               setData({ ...defaultOnboardingData, ...parsed });
             }
           } catch (parseError) {
             console.error('[OnboardingContext] Error parsing stored state:', parseError);
-            // Clear corrupted data
-            await AsyncStorage.removeItem(ONBOARDING_STATE_KEY);
+            await AsyncStorage.removeItem(key);
+            if (!cancelled) setData(defaultOnboardingData);
           }
+        } else if (!cancelled) {
+          setData(defaultOnboardingData);
         }
       } catch (error) {
         console.error('[OnboardingContext] Error loading state:', error);
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          loadedKeyRef.current = key;
+          setLoading(false);
+        }
       }
     };
     loadState();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
-  // Persist state on changes
+  // Persist state on changes, to whichever key we most recently loaded.
   useEffect(() => {
-    if (!loading) {
-      AsyncStorage.setItem(ONBOARDING_STATE_KEY, JSON.stringify(data)).catch((error) => {
+    if (!loading && loadedKeyRef.current) {
+      AsyncStorage.setItem(loadedKeyRef.current, JSON.stringify(data)).catch((error) => {
         console.error('[OnboardingContext] Error saving state:', error);
       });
     }
@@ -105,12 +145,13 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
 
   const clearData = useCallback(async () => {
     try {
-      await AsyncStorage.removeItem(ONBOARDING_STATE_KEY);
+      const key = loadedKeyRef.current || storageKeyFor(userId);
+      await AsyncStorage.removeItem(key);
       setData(defaultOnboardingData);
     } catch (error) {
       console.error('[OnboardingContext] Error clearing state:', error);
     }
-  }, []);
+  }, [userId]);
 
   return (
     <OnboardingContext.Provider value={{ data, updateData, clearData, loading }}>

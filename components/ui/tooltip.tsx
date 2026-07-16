@@ -3,7 +3,8 @@
 import { MaterialIcons } from '@expo/vector-icons'
 import * as React from "react"
 import { AccessibilityInfo, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native"
-import { theme } from '../../lib/theme'
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
+import type { AppTheme } from '../../lib/themes/types'
 
 
 // Enhanced RN Tooltip with mobile-friendly modal presentation
@@ -78,6 +79,9 @@ interface TooltipContentProps {
 
 const TooltipContent = React.forwardRef<View, TooltipContentProps>(
   ({ children, title, isOpen, setIsOpen, ...props }, ref) => {
+    const { theme } = useAppThemeContext()
+    const styles = React.useMemo(() => makeStyles(theme), [theme])
+
     if (!isOpen) return null
 
     return (
@@ -101,7 +105,7 @@ const TooltipContent = React.forwardRef<View, TooltipContentProps>(
             <View style={styles.content}>
               {title && (
                 <View style={styles.header}>
-                  <MaterialIcons name="info-outline" size={24} color="#059669" />
+                  <MaterialIcons name="info-outline" size={24} color={theme.primary} />
                   <Text style={[styles.title, { marginLeft: 8 }]}>{title}</Text>
                   <TouchableOpacity
                     onPress={() => setIsOpen?.(false)}
@@ -109,7 +113,7 @@ const TooltipContent = React.forwardRef<View, TooltipContentProps>(
                     accessibilityRole="button"
                     style={styles.closeButton}
                   >
-                    <MaterialIcons name="close" size={20} color="#6b7280" />
+                    <MaterialIcons name="close" size={20} color={theme.textSecondary} />
                   </TouchableOpacity>
                 </View>
               )}
@@ -131,6 +135,7 @@ interface InfoTooltipProps {
   title: string
   content: string
   iconSize?: number
+  /** Defaults to the theme's primary brand color when omitted. */
   iconColor?: string
 }
 
@@ -138,9 +143,12 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({
   title,
   content,
   iconSize = 18,
-  iconColor = '#059669',
+  iconColor,
 }) => {
   const [isOpen, setIsOpen] = React.useState(false)
+  const { theme } = useAppThemeContext()
+  const styles = React.useMemo(() => makeStyles(theme), [theme])
+  const resolvedIconColor = iconColor ?? theme.primary
 
   return (
     <View style={styles.infoTooltipContainer}>
@@ -154,7 +162,7 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({
         accessibilityHint="Opens help information"
         style={styles.infoIcon}
       >
-        <MaterialIcons name="help-outline" size={iconSize} color={iconColor} />
+        <MaterialIcons name="help-outline" size={iconSize} color={resolvedIconColor} />
       </TouchableOpacity>
 
       <Modal
@@ -172,7 +180,7 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({
           <View style={styles.contentContainer}>
             <View style={styles.content}>
               <View style={styles.header}>
-                <MaterialIcons name="info-outline" size={24} color="#059669" />
+                <MaterialIcons name="info-outline" size={24} color={theme.primary} />
                 <Text style={[styles.title, { marginLeft: 8 }]}>{title}</Text>
                 <TouchableOpacity
                   onPress={() => setIsOpen(false)}
@@ -180,7 +188,7 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({
                   accessibilityRole="button"
                   style={styles.closeButton}
                 >
-                  <MaterialIcons name="close" size={20} color="#6b7280" />
+                  <MaterialIcons name="close" size={20} color={theme.textSecondary} />
                 </TouchableOpacity>
               </View>
               <Text style={styles.description}>{content}</Text>
@@ -192,52 +200,59 @@ export const InfoTooltip: React.FC<InfoTooltipProps> = ({
   )
 }
 
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  contentContainer: {
-    maxWidth: 400,
-    width: '100%',
-  },
-  content: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 20,
-    ...theme.shadows.md,
-  },
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    overlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 20,
+    },
+    contentContainer: {
+      maxWidth: 400,
+      width: '100%',
+    },
+    content: {
+      backgroundColor: theme.surface,
+      borderRadius: 12,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: theme.border,
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: theme.isDark ? 0.4 : 0.1,
+      shadowRadius: 4,
+      elevation: 3,
+    },
 
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  title: {
-    flex: 1,
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1f2937',
-  },
-  description: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: '#4b5563',
-  },
-  closeButton: {
-    padding: 4,
-  },
-  infoTooltipContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  infoIcon: {
-    padding: 4,
-  },
-})
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 12,
+    },
+    title: {
+      flex: 1,
+      fontSize: 18,
+      fontWeight: '700',
+      color: theme.text,
+    },
+    description: {
+      fontSize: 15,
+      lineHeight: 22,
+      color: theme.textSecondary,
+    },
+    closeButton: {
+      padding: 4,
+    },
+    infoTooltipContainer: {
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    infoIcon: {
+      padding: 4,
+    },
+  })
+}
 
 export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger }
-
