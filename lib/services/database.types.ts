@@ -40,6 +40,11 @@ export type Bounty = {
   stale_detected_at?: string;
   // Stripe payment fields for escrow
   payment_intent_id?: string; // Stripe PaymentIntent ID for escrow
+  // Stripe Phase 2 (per-bounty escrow via bounty_payments) routing flag — see
+  // lib/utils/payment-architecture.ts. Defaults to 1 (legacy wallet) when
+  // unset/null; set to 2 server-side by supabase/functions/bounty-payments
+  // once a Phase 2 PaymentIntent is created for this bounty.
+  payment_architecture_version?: number | null;
   // Structured schedule fields (Phase 1: time as first-class citizen)
   schedule_type?: 'asap' | 'scheduled' | 'flexible';
   start_date?: string;         // ISO 8601 timestamptz

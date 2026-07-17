@@ -92,6 +92,12 @@ export type AnalyticsEvent =
   | 'payment_method_saved'
   | 'escrow_funded'
   | 'escrow_released'
+  | 'escrow_refunded'
+  // Stripe Phase 2 (payment_architecture_version=2) bounty escrow routing —
+  // see lib/utils/payment-architecture.ts. escrow_funded/escrow_released/
+  // escrow_refunded above are reused for both architectures (properties
+  // carry `architecture: 'v1' | 'v2'`); this event is v2-routing-specific.
+  | 'payment_architecture_routed'
   // Payout (withdrawal) events
   | 'payout_initiated'
   | 'payout_success'

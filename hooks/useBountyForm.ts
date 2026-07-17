@@ -1,8 +1,12 @@
 import { useRef, useState } from 'react'
 import { Alert, Animated } from 'react-native'
 import { bountyService } from 'lib/services/bounty-service'
+import { bountyPaymentsService } from 'lib/services/bounty-payments-service'
+import { stripeService } from 'lib/services/stripe-service'
+import { useStripe } from 'lib/stripe-context'
 import type { Bounty } from 'lib/services/database.types'
 import { logger } from 'lib/utils/error-logger'
+import { shouldFundNewBountiesWithPhase2 } from 'lib/utils/payment-architecture'
 import type { WalletTransactionRecord } from 'lib/wallet-context'
 import { momentsService } from 'lib/moments/momentsService'
 import { analyticsService } from 'lib/services/analytics-service'
@@ -76,6 +80,7 @@ export function useBountyForm({
   const [validationError, setValidationError] = useState<string | null>(null)
   const postButtonRef = useRef<any>(null)
   const lowBalanceAnim = useRef(new Animated.Value(0)).current
+  const { paymentMethods } = useStripe()
 
   const otherSelected = formData.amount !== 0 && !AMOUNT_PRESETS.includes(formData.amount)
 
@@ -126,8 +131,16 @@ export function useBountyForm({
     try {
       setIsSubmitting(true)
 
-      // Validate balance BEFORE posting bounty for paid bounties
-      if (!formData.isForHonor && formData.amount > 0) {
+      // Route new paid bounties to the Stripe-native Phase 2 escrow path when
+      // enabled; existing/legacy bounties always keep the custodial wallet
+      // flow they were created with (see lib/utils/payment-architecture.ts).
+      const useV2Payments =
+        !formData.isForHonor && formData.amount > 0 && shouldFundNewBountiesWithPhase2()
+
+      // Validate balance BEFORE posting bounty for paid, v1 bounties. The v2
+      // path charges a card directly via Stripe, so the custodial wallet
+      // balance is not relevant there.
+      if (!useV2Payments && !formData.isForHonor && formData.amount > 0) {
         if (balance < formData.amount) {
           // Real signal that the user needs funds right now — surface the
           // Moments Queue's fund_wallet prompt next time it's evaluated,
@@ -187,23 +200,118 @@ export function useBountyForm({
       // Create escrow for paid bounties (funds are held when bounty is posted)
       if (bounty && !bounty.is_for_honor && bounty.amount > 0) {
         try {
-          await createEscrow(
-            bounty.id,
-            bounty.amount,
-            bounty.title,
-            currentUserId
-          )
-        } catch (escrowError) {
-          console.error('Error creating escrow:', escrowError)
-          // If escrow creation fails, delete the bounty to maintain consistency
-          await bountyService.delete(bounty.id)
-          Alert.alert(
-            'Escrow Failed',
-            'Failed to create escrow for this bounty. The bounty has been removed.',
-            [{ text: 'OK' }]
-          )
-          setIsSubmitting(false)
-          return
+          await analyticsService.trackEvent('payment_architecture_routed', {
+            bountyId: String(bounty.id),
+            version: useV2Payments ? 2 : 1,
+            context: 'funding',
+          })
+        } catch {
+          /* analytics is best-effort */
+        }
+
+        if (useV2Payments) {
+          try {
+            try {
+              await analyticsService.trackEvent('payment_initiated', {
+                bountyId: String(bounty.id),
+                architecture: 'v2',
+                amount: bounty.amount,
+              })
+            } catch {
+              /* analytics is best-effort */
+            }
+
+            const paymentResult = await bountyPaymentsService.createBountyPayment(String(bounty.id))
+
+            // Confirm against the poster's saved payment method — this
+            // codebase does not use Stripe's PaymentSheet UI component (see
+            // lib/stripe-context.tsx / hooks/use-wallet-deposit.ts).
+            const paymentMethodId = paymentMethods[0]?.id
+            if (!paymentMethodId) {
+              throw new Error('No payment method available. Please add a payment method first.')
+            }
+            const confirmedIntent = await stripeService.confirmPaymentSecure(
+              paymentResult.clientSecret,
+              paymentMethodId,
+              undefined,
+              { userId: currentUserId }
+            )
+            if (confirmedIntent.status !== 'succeeded') {
+              throw new Error('Payment was not completed. Please try again.')
+            }
+
+            try {
+              await analyticsService.trackEvent('escrow_funded', {
+                bountyId: String(bounty.id),
+                architecture: 'v2',
+                amount: bounty.amount,
+              })
+            } catch {
+              /* analytics is best-effort */
+            }
+          } catch (escrowError) {
+            console.error('Error charging card for bounty:', escrowError)
+            try {
+              await analyticsService.trackEvent('payment_failed', {
+                bountyId: String(bounty.id),
+                architecture: 'v2',
+                stage: 'create_or_confirm',
+              })
+            } catch {
+              /* analytics is best-effort */
+            }
+            try {
+              await bountyPaymentsService.cancelBountyPayment(String(bounty.id))
+            } catch {
+              /* best-effort — the bounty delete below is the real safety net */
+            }
+            await bountyService.delete(bounty.id)
+            Alert.alert(
+              'Payment Failed',
+              'Failed to charge your card for this bounty. The bounty has been removed.',
+              [{ text: 'OK' }]
+            )
+            setIsSubmitting(false)
+            return
+          }
+        } else {
+          try {
+            await createEscrow(
+              bounty.id,
+              bounty.amount,
+              bounty.title,
+              currentUserId
+            )
+            try {
+              await analyticsService.trackEvent('escrow_funded', {
+                bountyId: String(bounty.id),
+                architecture: 'v1',
+                amount: bounty.amount,
+              })
+            } catch {
+              /* analytics is best-effort */
+            }
+          } catch (escrowError) {
+            console.error('Error creating escrow:', escrowError)
+            try {
+              await analyticsService.trackEvent('payment_failed', {
+                bountyId: String(bounty.id),
+                architecture: 'v1',
+                stage: 'create_escrow',
+              })
+            } catch {
+              /* analytics is best-effort */
+            }
+            // If escrow creation fails, delete the bounty to maintain consistency
+            await bountyService.delete(bounty.id)
+            Alert.alert(
+              'Escrow Failed',
+              'Failed to create escrow for this bounty. The bounty has been removed.',
+              [{ text: 'OK' }]
+            )
+            setIsSubmitting(false)
+            return
+          }
         }
       }
 

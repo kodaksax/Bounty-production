@@ -5,11 +5,14 @@ import { MaterialIcons } from "@expo/vector-icons"
 import { CreateBountyFlow } from "app/screens/CreateBounty"
 import { BrandingLogo } from "components/ui/branding-logo"
 import { useRouter } from "expo-router"
+import { analyticsService } from "lib/services/analytics-service"
 import type { BountyRequestWithDetails } from "lib/services/bounty-request-service"
 import { bountyRequestService } from "lib/services/bounty-request-service"
 import { bountyService } from "lib/services/bounty-service"
+import { bountyPaymentsService } from "lib/services/bounty-payments-service"
 import type { Bounty } from "lib/services/database.types"
 import { cn } from "lib/utils"
+import { isPhase2Bounty } from "lib/utils/payment-architecture"
 import { isBountyDeadlinePassed } from "lib/utils/schedule-utils"
 import * as React from "react"
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -474,10 +477,44 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
             try {
               // Process refund FIRST for paid bounties before any other operations
               if (bounty && !bounty.is_for_honor && bounty.amount > 0 && bounty.status === 'open') {
+                const useV2 = isPhase2Bounty(bounty)
                 try {
-                  await refundEscrow(bounty.id, bounty.title, 100); // 100% refund for unaccepted bounties
+                  await analyticsService.trackEvent('payment_architecture_routed', {
+                    bountyId: String(bounty.id),
+                    version: useV2 ? 2 : 1,
+                    context: 'cancel',
+                  })
+                } catch {
+                  /* analytics is best-effort */
+                }
+                try {
+                  if (useV2) {
+                    // Stripe-native Phase 2 escrow: cancels the PaymentIntent
+                    // pre-capture, or issues a refund post-capture.
+                    await bountyPaymentsService.cancelBountyPayment(String(bounty.id))
+                  } else {
+                    await refundEscrow(bounty.id, bounty.title, 100); // 100% refund for unaccepted bounties
+                  }
+                  try {
+                    await analyticsService.trackEvent('escrow_refunded', {
+                      bountyId: String(bounty.id),
+                      architecture: useV2 ? 'v2' : 'v1',
+                      amount: bounty.amount,
+                    })
+                  } catch {
+                    /* analytics is best-effort */
+                  }
                 } catch (refundError) {
                   console.error('Error refunding escrow:', refundError);
+                  try {
+                    await analyticsService.trackEvent('payment_failed', {
+                      bountyId: String(bounty.id),
+                      architecture: useV2 ? 'v2' : 'v1',
+                      stage: 'cancel',
+                    })
+                  } catch {
+                    /* analytics is best-effort */
+                  }
                   Alert.alert(
                     'Refund Failed',
                     'Could not refund escrowed funds. Please contact support before deleting.',
