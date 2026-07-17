@@ -613,7 +613,7 @@ function makeStyles(theme: AppTheme) {
     },
     warningBox: {
       flexDirection: 'row',
-      backgroundColor: 'rgba(245, 158, 11, 0.15)',
+      backgroundColor: theme.isDark ? 'rgba(245, 158, 11, 0.15)' : 'rgba(245, 158, 11, 0.1)',
       borderRadius: 12,
       padding: 14,
       gap: 12,
@@ -623,7 +623,7 @@ function makeStyles(theme: AppTheme) {
     },
     warningText: {
       flex: 1,
-      color: '#fbbf24',
+      color: theme.isDark ? '#fbbf24' : '#92400e',
       fontSize: 12,
       lineHeight: 18,
     },

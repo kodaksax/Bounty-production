@@ -20,6 +20,7 @@ import {
 } from 'react-native';
 import { ErrorBanner } from '../../components/error-banner';
 import { AnimatedScreen } from '../../components/ui/animated-screen';
+import { Button } from '../../components/ui/button';
 import { CaptchaChallenge } from '../../components/ui/captcha-challenge';
 import { Checkbox } from '../../components/ui/checkbox';
 import { useFormSubmission } from '../../hooks/useFormSubmission';
@@ -730,22 +731,13 @@ export function SignInForm() {
                 </View>
               )}
 
-              <TouchableOpacity
+              <Button
                 onPress={handleSubmit}
-                disabled={isSubmitting}
-                className="w-full bg-[#059669] rounded py-3 items-center flex-row justify-center"
-                accessibilityRole="button"
+                loading={isSubmitting}
                 accessibilityLabel="Sign in"
-                accessibilityState={{ disabled: isSubmitting }}
               >
-                {isSubmitting ? (
-                  <>
-                    <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />
-                  </>
-                ) : (
-                  <Text className="text-white font-medium">Sign In</Text>
-                )}
-              </TouchableOpacity>
+                Sign In
+              </Button>
 
               {Platform.OS === 'ios' && (
                 <View style={{ marginTop: 12 }}>

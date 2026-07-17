@@ -158,20 +158,20 @@ export function BountyCard({
         {/* Revision requested indicator (hunter-facing) */}
         {revisionRequested && (
           <View style={styles.revisionBadge}>
-            <MaterialIcons name="feedback" size={12} color="#92400e" />
+            <MaterialIcons name="feedback" size={12} color={theme.isDark ? '#fde68a' : '#92400e'} />
             <Text style={styles.revisionText}>REVISION REQUESTED</Text>
           </View>
         )}
         {/* Cancellation/Dispute indicators */}
         {hasCancellationRequest && (
           <View style={styles.cancellationBadge}>
-            <MaterialIcons name="cancel" size={12} color="#92400e" />
+            <MaterialIcons name="cancel" size={12} color={theme.isDark ? '#fed7aa' : '#92400e'} />
             <Text style={styles.cancellationText}>CANCELLATION</Text>
           </View>
         )}
         {hasDispute && (
           <View style={styles.disputeBadge}>
-            <MaterialIcons name="gavel" size={12} color="#7c2d12" />
+            <MaterialIcons name="gavel" size={12} color={theme.isDark ? '#fecaca' : '#7c2d12'} />
             <Text style={styles.disputeText}>DISPUTE</Text>
           </View>
         )}
@@ -529,7 +529,7 @@ function makeStyles(theme: AppTheme) {
     revisionBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: 'rgba(245, 158, 11, 0.15)',
+      backgroundColor: theme.isDark ? 'rgba(245, 158, 11, 0.25)' : 'rgba(245, 158, 11, 0.15)',
       paddingHorizontal: 8,
       paddingVertical: 4,
       borderRadius: 12,
@@ -537,7 +537,7 @@ function makeStyles(theme: AppTheme) {
       marginLeft: 8,
     },
     revisionText: {
-      color: '#92400e',
+      color: theme.isDark ? '#fde68a' : '#92400e',
       fontSize: 10,
       fontWeight: '700',
       letterSpacing: 0.4,
@@ -545,14 +545,14 @@ function makeStyles(theme: AppTheme) {
     cancellationBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: 'rgba(249, 115, 22, 0.15)',
+      backgroundColor: theme.isDark ? 'rgba(249, 115, 22, 0.25)' : 'rgba(249, 115, 22, 0.15)',
       paddingHorizontal: 8,
       paddingVertical: 4,
       borderRadius: 12,
       gap: 6,
     },
     cancellationText: {
-      color: '#92400e',
+      color: theme.isDark ? '#fed7aa' : '#92400e',
       fontSize: 10,
       fontWeight: '700',
       letterSpacing: 0.4,
@@ -560,14 +560,14 @@ function makeStyles(theme: AppTheme) {
     disputeBadge: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: 'rgba(220, 38, 38, 0.15)',
+      backgroundColor: theme.isDark ? 'rgba(220, 38, 38, 0.25)' : 'rgba(220, 38, 38, 0.15)',
       paddingHorizontal: 8,
       paddingVertical: 4,
       borderRadius: 12,
       gap: 6,
     },
     disputeText: {
-      color: '#7c2d12',
+      color: theme.isDark ? '#fecaca' : '#7c2d12',
       fontSize: 10,
       fontWeight: '700',
       letterSpacing: 0.4,

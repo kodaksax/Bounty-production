@@ -1,33 +1,54 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Skeleton } from './skeleton';
+import { useAppThemeContext } from 'lib/themes';
+
+/**
+ * Theme-aware container colors for skeleton screens. The static `styles`
+ * object below only holds layout (padding/radius/gap) — colors come from
+ * here so skeletons don't render as opaque dark panels in light mode.
+ */
+function useSkeletonColors() {
+  const { theme } = useAppThemeContext();
+  return React.useMemo(
+    () => ({
+      surface: { backgroundColor: theme.surface },
+      surfaceAlt: { backgroundColor: theme.surfaceSecondary },
+      surfaceBorder: { borderColor: theme.border },
+      surfaceBorderTop: { borderTopColor: theme.border },
+      screen: { backgroundColor: theme.background },
+    }),
+    [theme]
+  );
+}
 
 /**
  * Skeleton loader for posting cards
  */
 export function PostingCardSkeleton() {
+  const c = useSkeletonColors();
   return (
-    <View style={styles.postingCard}>
+    <View style={[styles.postingCard, c.surface]}>
       {/* Header: avatar and name */}
       <View style={styles.postingHeader}>
-        <Skeleton className="h-10 w-10 rounded-full bg-[#1F2937]" />
+        <Skeleton className="h-10 w-10 rounded-full " />
         <View style={styles.postingHeaderText}>
-          <Skeleton className="h-4 w-24 mb-2 bg-[#1F2937]" />
-          <Skeleton className="h-3 w-16 bg-[#1F2937]" />
+          <Skeleton className="h-4 w-24 mb-2 " />
+          <Skeleton className="h-3 w-16 " />
         </View>
       </View>
       
       {/* Title */}
-      <Skeleton className="h-5 w-full mb-2 bg-[#1F2937]" />
+      <Skeleton className="h-5 w-full mb-2 " />
       
       {/* Description lines */}
-      <Skeleton className="h-3 w-full mb-2 bg-[#1F2937]" />
-      <Skeleton className="h-3 w-4/5 mb-3 bg-[#1F2937]" />
+      <Skeleton className="h-3 w-full mb-2 " />
+      <Skeleton className="h-3 w-4/5 mb-3 " />
       
       {/* Amount and location */}
       <View style={styles.postingFooter}>
-        <Skeleton className="h-4 w-20 bg-[#1F2937]" />
-        <Skeleton className="h-4 w-24 bg-[#1F2937]" />
+        <Skeleton className="h-4 w-20 " />
+        <Skeleton className="h-4 w-24 " />
       </View>
     </View>
   );
@@ -37,15 +58,16 @@ export function PostingCardSkeleton() {
  * Skeleton loader for conversation items
  */
 export function ConversationItemSkeleton() {
+  const c = useSkeletonColors();
   return (
-    <View style={styles.conversationItem}>
-      <Skeleton className="h-12 w-12 rounded-full bg-[#1F2937]" />
+    <View style={[styles.conversationItem, c.surface]}>
+      <Skeleton className="h-12 w-12 rounded-full " />
       <View style={styles.conversationContent}>
         <View style={styles.conversationHeader}>
-          <Skeleton className="h-4 w-32 bg-[#1F2937]" />
-          <Skeleton className="h-3 w-12 bg-[#1F2937]" />
+          <Skeleton className="h-4 w-32 " />
+          <Skeleton className="h-3 w-12 " />
         </View>
-        <Skeleton className="h-3 w-48 mt-2 bg-[#1F2937]" />
+        <Skeleton className="h-3 w-48 mt-2 " />
       </View>
     </View>
   );
@@ -55,10 +77,11 @@ export function ConversationItemSkeleton() {
  * Skeleton loader for individual chat messages
  */
 export function ChatMessageSkeleton({ isUser = false }: { isUser?: boolean }) {
+  const c = useSkeletonColors();
   return (
-    <View style={[styles.chatMessage, isUser ? styles.chatMessageUser : styles.chatMessageOther]}>
-      <Skeleton className="h-3 w-48 mb-1 bg-[#1F2937]" />
-      <Skeleton className="h-3 w-32 bg-[#1F2937]" />
+    <View style={[styles.chatMessage, isUser ? c.surfaceAlt : c.surface]}>
+      <Skeleton className="h-3 w-48 mb-1 " />
+      <Skeleton className="h-3 w-32 " />
     </View>
   );
 }
@@ -80,16 +103,17 @@ export function ChatMessagesListSkeleton({ count = 4 }: { count?: number }) {
  * Skeleton loader for wallet transaction items
  */
 export function TransactionItemSkeleton() {
+  const c = useSkeletonColors();
   return (
-    <View style={styles.transactionItem}>
+    <View style={[styles.transactionItem, c.surface]}>
       <View style={styles.transactionIcon}>
-        <Skeleton className="h-10 w-10 rounded-lg bg-[#1F2937]" />
+        <Skeleton className="h-10 w-10 rounded-lg " />
       </View>
       <View style={styles.transactionContent}>
-        <Skeleton className="h-4 w-40 mb-2 bg-[#1F2937]" />
-        <Skeleton className="h-3 w-24 bg-[#1F2937]" />
+        <Skeleton className="h-4 w-40 mb-2 " />
+        <Skeleton className="h-3 w-24 " />
       </View>
-      <Skeleton className="h-5 w-16 bg-[#1F2937]" />
+      <Skeleton className="h-5 w-16 " />
     </View>
   );
 }
@@ -102,26 +126,26 @@ export function ProfileSkeleton() {
     <View style={styles.profile}>
       {/* Avatar */}
       <View style={styles.profileAvatar}>
-        <Skeleton className="h-20 w-20 rounded-full bg-[#1F2937]" />
+        <Skeleton className="h-20 w-20 rounded-full " />
       </View>
       
       {/* Name and bio */}
-      <Skeleton className="h-6 w-40 mb-2 bg-[#1F2937]" />
-      <Skeleton className="h-4 w-56 mb-3 bg-[#1F2937]" />
+      <Skeleton className="h-6 w-40 mb-2 " />
+      <Skeleton className="h-4 w-56 mb-3 " />
       
       {/* Stats */}
       <View style={styles.profileStats}>
         <View style={styles.profileStat}>
-          <Skeleton className="h-6 w-12 mb-1 bg-[#1F2937]" />
-          <Skeleton className="h-3 w-16 bg-[#1F2937]" />
+          <Skeleton className="h-6 w-12 mb-1 " />
+          <Skeleton className="h-3 w-16 " />
         </View>
         <View style={styles.profileStat}>
-          <Skeleton className="h-6 w-12 mb-1 bg-[#1F2937]" />
-          <Skeleton className="h-3 w-16 bg-[#1F2937]" />
+          <Skeleton className="h-6 w-12 mb-1 " />
+          <Skeleton className="h-3 w-16 " />
         </View>
         <View style={styles.profileStat}>
-          <Skeleton className="h-6 w-12 mb-1 bg-[#1F2937]" />
-          <Skeleton className="h-3 w-16 bg-[#1F2937]" />
+          <Skeleton className="h-6 w-12 mb-1 " />
+          <Skeleton className="h-3 w-16 " />
         </View>
       </View>
     </View>
@@ -133,58 +157,59 @@ export function ProfileSkeleton() {
  * Matches the layout of EnhancedProfileSection component
  */
 export function EnhancedProfileSectionSkeleton() {
+  const c = useSkeletonColors();
   return (
-    <View style={styles.enhancedProfile}>
+    <View style={[styles.enhancedProfile, c.surface]}>
       {/* Profile header row with avatar */}
       <View style={styles.enhancedProfileHeader}>
         {/* Avatar */}
-        <Skeleton className="h-16 w-16 rounded-full bg-[#1F2937]" />
+        <Skeleton className="h-16 w-16 rounded-full " />
         
         {/* Name and username */}
         <View style={styles.enhancedProfileInfo}>
-          <Skeleton className="h-5 w-32 mb-2 bg-[#1F2937]" />
-          <Skeleton className="h-3 w-20 mb-1 bg-[#1F2937]" />
-          <Skeleton className="h-3 w-28 bg-[#1F2937]" />
+          <Skeleton className="h-5 w-32 mb-2 " />
+          <Skeleton className="h-3 w-20 mb-1 " />
+          <Skeleton className="h-3 w-28 " />
         </View>
       </View>
 
       {/* Bio section */}
       <View style={styles.enhancedProfileBio}>
-        <Skeleton className="h-3 w-full mb-2 bg-[#1F2937]" />
-        <Skeleton className="h-3 w-4/5 bg-[#1F2937]" />
+        <Skeleton className="h-3 w-full mb-2 " />
+        <Skeleton className="h-3 w-4/5 " />
       </View>
 
       {/* Location and portfolio links */}
       <View style={styles.enhancedProfileMeta}>
         <View style={styles.enhancedProfileMetaItem}>
-          <Skeleton className="h-4 w-4 rounded bg-[#1F2937]" />
-          <Skeleton className="h-3 w-24 ml-2 bg-[#1F2937]" />
+          <Skeleton className="h-4 w-4 rounded " />
+          <Skeleton className="h-3 w-24 ml-2 " />
         </View>
         <View style={styles.enhancedProfileMetaItem}>
-          <Skeleton className="h-4 w-4 rounded bg-[#1F2937]" />
-          <Skeleton className="h-3 w-32 ml-2 bg-[#1F2937]" />
+          <Skeleton className="h-4 w-4 rounded " />
+          <Skeleton className="h-3 w-32 ml-2 " />
         </View>
       </View>
 
       {/* Stats row */}
-      <View style={styles.enhancedProfileStats}>
+      <View style={[styles.enhancedProfileStats, c.surfaceBorderTop]}>
         <View style={styles.enhancedProfileStatItem}>
-          <Skeleton className="h-7 w-10 mb-1 bg-[#1F2937]" />
-          <Skeleton className="h-3 w-20 bg-[#1F2937]" />
+          <Skeleton className="h-7 w-10 mb-1 " />
+          <Skeleton className="h-3 w-20 " />
         </View>
         <View style={styles.enhancedProfileStatItem}>
-          <Skeleton className="h-7 w-10 mb-1 bg-[#1F2937]" />
-          <Skeleton className="h-3 w-24 bg-[#1F2937]" />
+          <Skeleton className="h-7 w-10 mb-1 " />
+          <Skeleton className="h-3 w-24 " />
         </View>
         <View style={styles.enhancedProfileStatItem}>
-          <Skeleton className="h-7 w-10 mb-1 bg-[#1F2937]" />
-          <Skeleton className="h-3 w-20 bg-[#1F2937]" />
+          <Skeleton className="h-7 w-10 mb-1 " />
+          <Skeleton className="h-3 w-20 " />
         </View>
       </View>
 
       {/* Joined date */}
       <View style={styles.enhancedProfileJoined}>
-        <Skeleton className="h-3 w-32 bg-[#1F2937]" />
+        <Skeleton className="h-3 w-32 " />
       </View>
     </View>
   );
@@ -202,37 +227,37 @@ export function UserProfileScreenSkeleton() {
       
       {/* Action buttons */}
       <View style={styles.userProfileActions}>
-        <Skeleton className="h-12 flex-1 rounded-xl bg-[#1F2937]" />
-        <Skeleton className="h-12 flex-1 rounded-xl ml-3 bg-[#1F2937]" />
+        <Skeleton className="h-12 flex-1 rounded-xl " />
+        <Skeleton className="h-12 flex-1 rounded-xl ml-3 " />
       </View>
 
       {/* Skillsets section */}
       <View style={styles.userProfileSection}>
-        <Skeleton className="h-4 w-20 mb-3 bg-[#1F2937]" />
+        <Skeleton className="h-4 w-20 mb-3 " />
         <View style={styles.userProfileSkillsRow}>
-          <Skeleton className="h-8 w-24 rounded-lg mr-2 bg-[#1F2937]" />
-          <Skeleton className="h-8 w-32 rounded-lg mr-2 bg-[#1F2937]" />
-          <Skeleton className="h-8 w-28 rounded-lg bg-[#1F2937]" />
+          <Skeleton className="h-8 w-24 rounded-lg mr-2 " />
+          <Skeleton className="h-8 w-32 rounded-lg mr-2 " />
+          <Skeleton className="h-8 w-28 rounded-lg " />
         </View>
       </View>
 
       {/* Portfolio section */}
       <View style={styles.userProfileSection}>
-        <Skeleton className="h-4 w-20 mb-3 bg-[#1F2937]" />
+        <Skeleton className="h-4 w-20 mb-3 " />
         <View style={styles.userProfilePortfolioRow}>
-          <Skeleton className="h-32 w-32 rounded-lg mr-3 bg-[#1F2937]" />
-          <Skeleton className="h-32 w-32 rounded-lg mr-3 bg-[#1F2937]" />
-          <Skeleton className="h-32 w-32 rounded-lg bg-[#1F2937]" />
+          <Skeleton className="h-32 w-32 rounded-lg mr-3 " />
+          <Skeleton className="h-32 w-32 rounded-lg mr-3 " />
+          <Skeleton className="h-32 w-32 rounded-lg " />
         </View>
       </View>
 
       {/* Achievements section */}
       <View style={styles.userProfileSection}>
-        <Skeleton className="h-4 w-28 mb-3 bg-[#1F2937]" />
+        <Skeleton className="h-4 w-28 mb-3 " />
         <View style={styles.userProfileAchievementsRow}>
-          <Skeleton className="h-16 w-16 rounded-lg mr-3 bg-[#1F2937]" />
-          <Skeleton className="h-16 w-16 rounded-lg mr-3 bg-[#1F2937]" />
-          <Skeleton className="h-16 w-16 rounded-lg bg-[#1F2937]" />
+          <Skeleton className="h-16 w-16 rounded-lg mr-3 " />
+          <Skeleton className="h-16 w-16 rounded-lg mr-3 " />
+          <Skeleton className="h-16 w-16 rounded-lg " />
         </View>
       </View>
     </View>
@@ -244,12 +269,13 @@ export function UserProfileScreenSkeleton() {
  * e.g., in conversation lists, applicant previews
  */
 export function ProfileCardSkeleton() {
+  const c = useSkeletonColors();
   return (
-    <View style={styles.profileCard}>
-      <Skeleton className="h-12 w-12 rounded-full bg-[#1F2937]" />
+    <View style={[styles.profileCard, c.surface]}>
+      <Skeleton className="h-12 w-12 rounded-full " />
       <View style={styles.profileCardInfo}>
-        <Skeleton className="h-4 w-28 mb-2 bg-[#1F2937]" />
-        <Skeleton className="h-3 w-20 bg-[#1F2937]" />
+        <Skeleton className="h-4 w-28 mb-2 " />
+        <Skeleton className="h-3 w-20 " />
       </View>
     </View>
   );
@@ -264,15 +290,15 @@ export function PortfolioSkeleton({ count = 3 }: { count?: number }) {
     <View style={styles.portfolioContainer}>
       {/* Header with title and add button */}
       <View style={styles.portfolioHeader}>
-        <Skeleton className="h-4 w-20 bg-[#1F2937]" />
-        <Skeleton className="h-6 w-16 rounded bg-[#1F2937]" />
+        <Skeleton className="h-4 w-20 " />
+        <Skeleton className="h-6 w-16 rounded " />
       </View>
       {/* Portfolio items row */}
       <View style={styles.portfolioItems}>
         {Array.from({ length: count }).map((_, i) => (
           <Skeleton 
             key={`portfolio-skeleton-${i}`} 
-            className="h-32 w-32 rounded-lg mr-3 bg-[#1F2937]" 
+            className="h-32 w-32 rounded-lg mr-3 " 
           />
         ))}
       </View>
@@ -287,14 +313,14 @@ export function SkillsetsSkeleton({ count = 3 }: { count?: number }) {
   return (
     <View style={styles.skillsetsContainer}>
       <View style={styles.skillsetsHeader}>
-        <Skeleton className="h-4 w-20 bg-[#1F2937]" />
-        <Skeleton className="h-5 w-12 rounded bg-[#1F2937]" />
+        <Skeleton className="h-4 w-20 " />
+        <Skeleton className="h-5 w-12 rounded " />
       </View>
       <View style={styles.skillsetsItems}>
         {Array.from({ length: count }).map((_, i) => (
           <Skeleton 
             key={`skill-skeleton-${i}`} 
-            className={`h-8 ${i % 2 === 0 ? 'w-28' : 'w-36'} rounded-full mr-2 mb-2 bg-[#1F2937]`} 
+            className={`h-8 ${i % 2 === 0 ? 'w-28' : 'w-36'} rounded-full mr-2 mb-2 `} 
           />
         ))}
       </View>
@@ -306,12 +332,13 @@ export function SkillsetsSkeleton({ count = 3 }: { count?: number }) {
  * Skeleton loader for payment method cards
  */
 export function PaymentMethodSkeleton() {
+  const c = useSkeletonColors();
   return (
-    <View style={styles.paymentMethod}>
-      <Skeleton className="h-10 w-10 rounded-lg bg-[#1F2937]" />
+    <View style={[styles.paymentMethod, c.surface]}>
+      <Skeleton className="h-10 w-10 rounded-lg " />
       <View style={styles.paymentMethodContent}>
-        <Skeleton className="h-4 w-32 mb-2 bg-[#1F2937]" />
-        <Skeleton className="h-3 w-24 bg-[#1F2937]" />
+        <Skeleton className="h-4 w-32 mb-2 " />
+        <Skeleton className="h-3 w-24 " />
       </View>
     </View>
   );
@@ -321,25 +348,26 @@ export function PaymentMethodSkeleton() {
  * Skeleton loader for bounty request/applicant cards
  */
 export function ApplicantCardSkeleton() {
+  const c = useSkeletonColors();
   return (
-    <View style={styles.applicantCard}>
+    <View style={[styles.applicantCard, c.surface]}>
       {/* Header with avatar and name */}
       <View style={styles.applicantHeader}>
-        <Skeleton className="h-12 w-12 rounded-full bg-[#1F2937]" />
+        <Skeleton className="h-12 w-12 rounded-full " />
         <View style={styles.applicantInfo}>
-          <Skeleton className="h-4 w-32 mb-2 bg-[#1F2937]" />
-          <Skeleton className="h-3 w-24 bg-[#1F2937]" />
+          <Skeleton className="h-4 w-32 mb-2 " />
+          <Skeleton className="h-3 w-24 " />
         </View>
       </View>
       
       {/* Message preview */}
-      <Skeleton className="h-3 w-full mb-2 mt-3 bg-[#1F2937]" />
-      <Skeleton className="h-3 w-4/5 mb-3 bg-[#1F2937]" />
+      <Skeleton className="h-3 w-full mb-2 mt-3 " />
+      <Skeleton className="h-3 w-4/5 mb-3 " />
       
       {/* Action buttons */}
       <View style={styles.applicantActions}>
-        <Skeleton className="h-10 flex-1 rounded-lg mr-2 bg-[#1F2937]" />
-        <Skeleton className="h-10 flex-1 rounded-lg bg-[#1F2937]" />
+        <Skeleton className="h-10 flex-1 rounded-lg mr-2 " />
+        <Skeleton className="h-10 flex-1 rounded-lg " />
       </View>
     </View>
   );
@@ -389,54 +417,55 @@ export function TransactionsListSkeleton({ count = 4 }: { count?: number }) {
  * Used in apply, work-in-progress, review-and-verify, and payout screens
  */
 export function HunterDashboardSkeleton() {
+  const c = useSkeletonColors();
   return (
-    <View style={styles.hunterDashboard}>
+    <View style={[styles.hunterDashboard, c.screen]}>
       {/* Header skeleton */}
       <View style={styles.hunterHeader}>
-        <Skeleton className="h-8 w-8 rounded-lg bg-[#1F2937]" />
-        <Skeleton className="h-6 w-40 bg-[#1F2937]" />
+        <Skeleton className="h-8 w-8 rounded-lg " />
+        <Skeleton className="h-6 w-40 " />
       </View>
 
       {/* Bounty card skeleton */}
-      <View style={styles.hunterBountyCard}>
+      <View style={[styles.hunterBountyCard, c.surface, c.surfaceBorder]}>
         <View style={styles.hunterBountyHeader}>
-          <Skeleton className="h-12 w-12 rounded-full bg-[#1F2937]" />
+          <Skeleton className="h-12 w-12 rounded-full " />
           <View style={styles.hunterBountyInfo}>
-            <Skeleton className="h-5 w-48 bg-[#1F2937]" />
-            <Skeleton className="h-3 w-24 bg-[#1F2937]" />
+            <Skeleton className="h-5 w-48 " />
+            <Skeleton className="h-3 w-24 " />
           </View>
         </View>
-        <Skeleton className="h-7 w-20 self-end bg-[#1F2937]" />
+        <Skeleton className="h-7 w-20 self-end " />
       </View>
 
       {/* Timeline skeleton */}
       <View style={styles.hunterTimeline}>
-        <Skeleton className="h-4 w-32 bg-[#1F2937]" />
+        <Skeleton className="h-4 w-32 " />
         <View style={styles.hunterTimelineScroll}>
           {[1, 2, 3, 4].map((i) => (
-            <View key={i} style={styles.hunterStageItem}>
-              <Skeleton className="h-12 w-12 rounded-full bg-[#1F2937]" />
-              <Skeleton className="h-3 w-20 bg-[#1F2937]" />
+            <View key={i} style={[styles.hunterStageItem, c.surface]}>
+              <Skeleton className="h-12 w-12 rounded-full " />
+              <Skeleton className="h-3 w-20 " />
             </View>
           ))}
         </View>
       </View>
 
       {/* Status panel skeleton */}
-      <View style={styles.hunterPanel}>
-        <Skeleton className="h-8 w-8 rounded-full bg-[#1F2937]" />
-        <Skeleton className="h-5 w-44 bg-[#1F2937]" />
-        <Skeleton className="h-3 w-64 bg-[#1F2937]" />
-        <Skeleton className="h-3 w-56 bg-[#1F2937]" />
-        <Skeleton className="h-6 w-36 rounded-full bg-[#1F2937]" />
+      <View style={[styles.hunterPanel, c.surface, c.surfaceBorder]}>
+        <Skeleton className="h-8 w-8 rounded-full " />
+        <Skeleton className="h-5 w-44 " />
+        <Skeleton className="h-3 w-64 " />
+        <Skeleton className="h-3 w-56 " />
+        <Skeleton className="h-6 w-36 rounded-full " />
       </View>
 
       {/* Details card skeleton */}
-      <View style={styles.hunterDetailsCard}>
-        <Skeleton className="h-4 w-28 bg-[#1F2937]" />
-        <Skeleton className="h-3 w-full bg-[#1F2937]" />
-        <Skeleton className="h-3 w-4/5 bg-[#1F2937]" />
-        <Skeleton className="h-3 w-3/5 bg-[#1F2937]" />
+      <View style={[styles.hunterDetailsCard, c.surface]}>
+        <Skeleton className="h-4 w-28 " />
+        <Skeleton className="h-3 w-full " />
+        <Skeleton className="h-3 w-4/5 " />
+        <Skeleton className="h-3 w-3/5 " />
       </View>
     </View>
   );
@@ -444,7 +473,6 @@ export function HunterDashboardSkeleton() {
 
 const styles = StyleSheet.create({
   postingCard: {
-    backgroundColor: '#111827',
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -467,7 +495,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
-    backgroundColor: '#111827',
     borderRadius: 8,
     marginBottom: 8,
   },
@@ -488,18 +515,15 @@ const styles = StyleSheet.create({
   },
   chatMessageUser: {
     alignSelf: 'flex-end',
-    backgroundColor: '#1F2937',
     marginRight: 8,
   },
   chatMessageOther: {
     alignSelf: 'flex-start',
-    backgroundColor: '#111827',
     marginLeft: 8,
   },
   transactionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#111827',
     borderRadius: 12,
     padding: 16,
     marginBottom: 10,
@@ -529,7 +553,6 @@ const styles = StyleSheet.create({
   paymentMethod: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#111827',
     borderRadius: 12,
     padding: 16,
     marginBottom: 10,
@@ -539,7 +562,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   applicantCard: {
-    backgroundColor: '#111827',
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -558,7 +580,6 @@ const styles = StyleSheet.create({
   },
   // Enhanced profile section skeleton styles
   enhancedProfile: {
-    backgroundColor: '#111827',
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
@@ -589,7 +610,6 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#1F2937',
   },
   enhancedProfileStatItem: {
     alignItems: 'center',
@@ -625,7 +645,6 @@ const styles = StyleSheet.create({
   profileCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#111827',
     borderRadius: 12,
     padding: 12,
     marginBottom: 8,
@@ -664,7 +683,6 @@ const styles = StyleSheet.create({
   // Hunter dashboard skeleton styles
   hunterDashboard: {
     flex: 1,
-    backgroundColor: '#0B0F14',
     padding: 16,
   },
   hunterHeader: {
@@ -674,12 +692,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   hunterBountyCard: {
-    backgroundColor: '#111827',
     borderRadius: 12,
     padding: 16,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: '#374151',
   },
   hunterBountyHeader: {
     flexDirection: 'row',
@@ -703,22 +719,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 12,
     borderRadius: 12,
-    backgroundColor: '#111827',
     minWidth: 120,
     gap: 8,
   },
   hunterPanel: {
-    backgroundColor: '#111827',
     borderRadius: 12,
     padding: 24,
     alignItems: 'center',
     gap: 12,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: '#374151',
   },
   hunterDetailsCard: {
-    backgroundColor: '#111827',
     borderRadius: 12,
     padding: 16,
     gap: 12,

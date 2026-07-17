@@ -69,8 +69,8 @@ export default function ConnectOnboardingScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>Payouts Onboarding</Text>
       {verified === true && (
-        <View style={[styles.banner, { backgroundColor: '#1F2937' }]}> {/* emerald-100 */}
-          <Text style={[styles.bannerText, { color: '#111827' }]}> {/* emerald-800 */}
+        <View style={[styles.banner, { backgroundColor: '#d1fae5' }]}> {/* emerald-100 */}
+          <Text style={[styles.bannerText, { color: '#065f46' }]}> {/* emerald-800 */}
             Your account is verified for payouts.
           </Text>
         </View>
