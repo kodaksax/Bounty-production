@@ -196,7 +196,15 @@ export default function ConnectOnboardingScreen() {
     router.back();
   }, [router]);
 
-  if (authLoading) return null;
+  if (authLoading) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#059669" />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!session?.access_token) {
     return (

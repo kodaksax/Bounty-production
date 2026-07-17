@@ -35,6 +35,7 @@ export default function AdminLayout() {
       screenOptions={{
         headerShown: false,
         contentStyle: { backgroundColor: ADMIN_BG_COLOR },
+        animation: 'slide_from_right',
       }}
     />
   );

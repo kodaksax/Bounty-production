@@ -1,7 +1,7 @@
 // app/(admin)/users.tsx - Admin Users List
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AdminHeader } from '../../components/admin/AdminHeader';
 import { AdminStatusBadge } from '../../components/admin/AdminStatusBadge';
@@ -9,18 +9,15 @@ import { useAdminUsers } from '../../hooks/useAdminUsers';
 import { ROUTES } from '../../lib/routes';
 import type { AdminUserFilters, AdminUserSummary } from '../../lib/types-admin';
 
-export default function AdminUsersScreen() {
-  const router = useRouter();
-  const [filters, setFilters] = useState<AdminUserFilters>({ status: 'all' });
-  const { users, isLoading, error, refetch } = useAdminUsers(filters);
-
-  const statusOptions: AdminUserFilters['status'][] = ['all', 'active', 'suspended', 'banned'];
-
-  const renderUserItem = ({ item }: { item: AdminUserSummary }) => (
-    <TouchableOpacity
-      style={styles.userCard}
-      onPress={() => router.push(ROUTES.ADMIN.USER_DETAIL(item.id))}
-    >
+const AdminUserRow = React.memo(function AdminUserRow({
+  item,
+  onPress,
+}: {
+  item: AdminUserSummary;
+  onPress: (id: string) => void;
+}) {
+  return (
+    <TouchableOpacity style={styles.userCard} onPress={() => onPress(item.id)}>
       <View style={styles.userHeader}>
         <View style={styles.userInfo}>
           <Text style={styles.username}>{item.username}</Text>
@@ -57,6 +54,28 @@ export default function AdminUsersScreen() {
       </View>
     </TouchableOpacity>
   );
+});
+
+export default function AdminUsersScreen() {
+  const router = useRouter();
+  const [filters, setFilters] = useState<AdminUserFilters>({ status: 'all' });
+  const { users, isLoading, error, refetch } = useAdminUsers(filters);
+
+  const statusOptions: AdminUserFilters['status'][] = ['all', 'active', 'suspended', 'banned'];
+
+  const handleUserPress = useCallback(
+    (id: string) => router.push(ROUTES.ADMIN.USER_DETAIL(id)),
+    [router]
+  );
+
+  const renderUserItem = useCallback(
+    ({ item }: { item: AdminUserSummary }) => (
+      <AdminUserRow item={item} onPress={handleUserPress} />
+    ),
+    [handleUserPress]
+  );
+
+  const keyExtractorUser = useCallback((item: AdminUserSummary) => item.id, []);
 
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
@@ -114,11 +133,15 @@ export default function AdminUsersScreen() {
         <FlatList
           data={users}
           renderItem={renderUserItem}
-          keyExtractor={(item) => item.id}
+          keyExtractor={keyExtractorUser}
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={isLoading ? null : renderEmptyState}
           refreshing={isLoading}
           onRefresh={refetch}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          windowSize={7}
+          initialNumToRender={10}
         />
       )}
     </View>
