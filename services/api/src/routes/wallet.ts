@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { db } from '../db/connection';
 import { bounties } from '../db/schema';
 import { AuthenticatedRequest, authMiddleware } from '../middleware/auth';
-import { ConflictError, ValidationError } from '../middleware/error-handler';
+import { AppError, ConflictError, ValidationError } from '../middleware/error-handler';
 import { getRequestContext, logErrorWithContext } from '../middleware/request-context';
 import * as ConsolidatedWalletService from '../services/consolidated-wallet-service';
 import {
@@ -825,8 +825,14 @@ export async function registerWalletRoutes(fastify: FastifyInstance) {
           userId: request.userId,
         });
 
+        // Use the mapped AppError's real status (e.g. NotFoundError -> 404,
+        // ValidationError -> 400 for a Stripe rejection like "can't delete
+        // the only/default external account") instead of always 500, so the
+        // client can distinguish a user-actionable rejection from a real
+        // server failure.
+        const statusCode = error instanceof AppError ? error.statusCode : 500;
         const message = error instanceof Error ? error.message : 'Failed to remove bank account';
-        return reply.code(500).send({
+        return reply.code(statusCode).send({
           error: message,
           requestId: getRequestContext(request).requestId,
         });

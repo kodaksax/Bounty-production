@@ -222,6 +222,46 @@ Deno.serve(async (req: Request) => {
           break;
         }
 
+        // Phase 2 (payment_architecture_version=2) bounty escrow. With
+        // capture_method:'automatic' the PI goes straight to `succeeded` with
+        // funds captured to the platform balance, so this single event is the
+        // capture signal (no amount_capturable_updated needed). Advance the
+        // matching bounty_payments row to 'captured' and record the charge id.
+        // Idempotent + non-regressing: only from pending_payment/authorized, so
+        // a replay or an already-released row is left untouched.
+        if (paymentIntent.metadata?.purpose === 'bounty_escrow') {
+          const chargeId = (paymentIntent.latest_charge as string) ?? null;
+          const { data: updatedBp, error: bpUpdErr } = await supabase
+            .from('bounty_payments')
+            .update({
+              status: 'captured',
+              stripe_charge_id: chargeId,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('stripe_payment_intent_id', paymentIntent.id)
+            .in('status', ['pending_payment', 'authorized'])
+            .select('id')
+            .maybeSingle();
+
+          if (bpUpdErr) {
+            console.error('[webhooks] Failed to mark bounty_payment captured — letting Stripe retry', {
+              paymentIntentId: paymentIntent.id,
+              error: bpUpdErr,
+            });
+            throw bpUpdErr;
+          }
+          if (updatedBp) {
+            console.log(
+              `[webhooks] bounty_payment ${(updatedBp as any).id} captured (charge=${chargeId}) for intent ${paymentIntent.id}`
+            );
+          } else {
+            console.log(
+              `[webhooks] bounty_escrow PI ${paymentIntent.id} succeeded — no pending row to advance (already captured/released or not recorded)`
+            );
+          }
+          break;
+        }
+
         // Only process wallet deposits — skip all other payment intents
         if (paymentIntent.metadata?.purpose !== 'wallet_deposit') {
           console.log(
@@ -363,6 +403,38 @@ Deno.serve(async (req: Request) => {
         } catch (notifErr) {
           // Notification failure must not affect the webhook response
           console.error('[webhooks] Unexpected error enqueuing deposit notification', notifErr);
+        }
+        break;
+      }
+
+      case 'payment_intent.canceled': {
+        // Phase 2 bounty escrow only. A bounty escrow PI is canceled by the
+        // /bounty-payments/cancel endpoint (pre-capture) or if it expires
+        // uncaptured. Mirror that into bounty_payments idempotently. Legacy
+        // wallet-deposit PIs never reach a canceled state in this system, so a
+        // non-bounty_escrow purpose is a no-op here.
+        const paymentIntent = event.data.object as Stripe.PaymentIntent;
+        if (paymentIntent.metadata?.purpose === 'bounty_escrow') {
+          const { data: canceledBp, error: cancelErr } = await supabase
+            .from('bounty_payments')
+            .update({ status: 'canceled', updated_at: new Date().toISOString() })
+            .eq('stripe_payment_intent_id', paymentIntent.id)
+            // Never regress a row that already captured/released/refunded.
+            .in('status', ['pending_payment', 'authorized'])
+            .select('id')
+            .maybeSingle();
+          if (cancelErr) {
+            console.error('[webhooks] Failed to mark bounty_payment canceled — letting Stripe retry', {
+              paymentIntentId: paymentIntent.id,
+              error: cancelErr,
+            });
+            throw cancelErr;
+          }
+          console.log(
+            canceledBp
+              ? `[webhooks] bounty_payment ${(canceledBp as any).id} canceled for intent ${paymentIntent.id}`
+              : `[webhooks] bounty_escrow PI ${paymentIntent.id} canceled — no pending row to update (idempotent no-op)`
+          );
         }
         break;
       }
@@ -663,6 +735,40 @@ Deno.serve(async (req: Request) => {
               );
             }
           }
+        } else {
+          // Phase 2: no legacy wallet_transactions row for this payment intent,
+          // so this may be a bounty-escrow refund — issued by
+          // /bounty-payments/cancel (post-capture) or out-of-band from the
+          // Stripe Dashboard. Reflect it into bounty_payments. Idempotent and
+          // non-regressing via the status guard (only captured/refund_pending
+          // advance; released/refunded/canceled rows are left untouched).
+          const refunds = charge.refunds?.data ?? [];
+          const latestRefund = refunds.length > 0 ? refunds[refunds.length - 1] : null;
+          const refundStatus = latestRefund?.status === 'succeeded' ? 'refunded' : 'refund_pending';
+          const { data: refundedBp, error: bpRefundErr } = await supabase
+            .from('bounty_payments')
+            .update({
+              status: refundStatus,
+              stripe_refund_id: latestRefund?.id ?? null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('stripe_payment_intent_id', paymentIntentId)
+            .in('status', ['captured', 'refund_pending'])
+            .select('id')
+            .maybeSingle();
+          if (bpRefundErr) {
+            console.error('[webhooks] Failed to reflect refund into bounty_payments — letting Stripe retry', {
+              paymentIntentId,
+              chargeId: charge.id,
+              error: bpRefundErr,
+            });
+            throw bpRefundErr;
+          }
+          if (refundedBp) {
+            console.log(
+              `[webhooks] bounty_payment ${(refundedBp as any).id} → ${refundStatus} (refund=${latestRefund?.id ?? 'n/a'}) for intent ${paymentIntentId}`
+            );
+          }
         }
         break;
       }
@@ -682,6 +788,17 @@ Deno.serve(async (req: Request) => {
         // there), then UPDATE that specific row by id with an optimistic-lock guard.
         const transfer = event.data.object as Stripe.Transfer;
         console.log(`[webhooks] Transfer created: ${transfer.id}`);
+        // Phase 2 transfers carry bounty_id in metadata and are recorded
+        // synchronously by /bounty-payments/release (stripe_transfer_id +
+        // status='released' set at creation time). Skip the legacy
+        // amount/user-id heuristic backfill entirely so it can never
+        // mis-match a Phase 2 transfer onto a legacy withdrawal row.
+        if (transfer.metadata?.bounty_id) {
+          console.log(
+            `[webhooks] transfer.created for Phase 2 bounty ${transfer.metadata.bounty_id} — recorded synchronously, no action`
+          );
+          break;
+        }
         const transferUserId = transfer.metadata?.user_id;
         const transferAmountDollars = transfer.amount / 100;
         if (transferUserId) {
@@ -726,6 +843,15 @@ Deno.serve(async (req: Request) => {
       case 'transfer.paid': {
         const transfer = event.data.object as Stripe.Transfer;
         console.log(`[webhooks] Transfer paid: ${transfer.id}`);
+        // Phase 2: the release endpoint already marked the row 'released'
+        // synchronously (Connect balance transfers settle synchronously in
+        // this codebase). This event is a confirmation only — no action.
+        if (transfer.metadata?.bounty_id) {
+          console.log(
+            `[webhooks] transfer.paid for Phase 2 bounty ${transfer.metadata.bounty_id} — confirmation only, no action`
+          );
+          break;
+        }
         await supabase
           .from('wallet_transactions')
           .update({
@@ -739,6 +865,45 @@ Deno.serve(async (req: Request) => {
       case 'transfer.failed': {
         const transfer = event.data.object as Stripe.Transfer;
         console.log(`[webhooks] Transfer failed: ${transfer.id}`);
+
+        // Phase 2 bounty transfer: revert the release so the poster can retry.
+        // Guard by BOTH stripe_transfer_id and status='released' so a delayed
+        // or out-of-order failure for a transfer id that a successful retry has
+        // already superseded matches zero rows and is a no-op (never revert a
+        // since-succeeded release). No funds move here — the charge stayed on
+        // the platform balance; only the payout leg failed.
+        // NOTE: /bounty-payments/release uses a fixed Stripe idempotency key
+        // (bounty_release_<bp.id>), so a same-key retry would return this same
+        // failed transfer rather than a fresh one. transfer.failed for a
+        // Connect transfer is rare/legacy; a genuinely stuck payout after this
+        // revert needs manual reconciliation (documented in the rollout notes).
+        if (transfer.metadata?.bounty_id) {
+          const { data: revertedBp, error: revertErr } = await supabase
+            .from('bounty_payments')
+            .update({ status: 'captured', stripe_transfer_id: null, updated_at: new Date().toISOString() })
+            .eq('stripe_transfer_id', transfer.id)
+            .eq('status', 'released')
+            .select('id')
+            .maybeSingle();
+          if (revertErr) {
+            console.error('[webhooks] Failed to revert bounty_payment after transfer.failed — letting Stripe retry', {
+              transferId: transfer.id,
+              bountyId: transfer.metadata.bounty_id,
+              error: revertErr,
+            });
+            throw revertErr;
+          }
+          if (revertedBp) {
+            console.warn(
+              `[webhooks] bounty_payment ${(revertedBp as any).id} transfer ${transfer.id} failed — reverted to 'captured'. Manual retry/reconciliation required.`
+            );
+          } else {
+            console.log(
+              `[webhooks] transfer.failed ${transfer.id} for Phase 2 bounty ${transfer.metadata.bounty_id} — no matching 'released' row (superseded/retried), no-op`
+            );
+          }
+          break;
+        }
 
         // Read the existing metadata so we can (a) preserve fields written by
         // the retry endpoint (e.g. retry_count, retried_at) and (b) check

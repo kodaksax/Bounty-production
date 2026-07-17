@@ -20,22 +20,31 @@ jest.mock('../../../services/api/src/middleware/auth', () => ({
   authMiddleware: jest.fn(),
 }));
 
-jest.mock('../../../services/api/src/middleware/error-handler', () => ({
-  ValidationError: class ValidationError extends Error {
-    statusCode = 400;
-    constructor(m: string) {
+jest.mock('../../../services/api/src/middleware/error-handler', () => {
+  class AppError extends Error {
+    statusCode: number;
+    constructor(m: string, statusCode: number = 500) {
       super(m);
-      this.name = 'ValidationError';
+      this.name = 'AppError';
+      this.statusCode = statusCode;
     }
-  },
-  ConflictError: class ConflictError extends Error {
-    statusCode = 409;
-    constructor(m: string) {
-      super(m);
-      this.name = 'ConflictError';
-    }
-  },
-}));
+  }
+  return {
+    AppError,
+    ValidationError: class ValidationError extends AppError {
+      constructor(m: string) {
+        super(m, 400);
+        this.name = 'ValidationError';
+      }
+    },
+    ConflictError: class ConflictError extends AppError {
+      constructor(m: string) {
+        super(m, 409);
+        this.name = 'ConflictError';
+      }
+    },
+  };
+});
 
 jest.mock('../../../services/api/src/middleware/request-context', () => ({
   getRequestContext: jest.fn(() => ({ requestId: 'test-req-id' })),

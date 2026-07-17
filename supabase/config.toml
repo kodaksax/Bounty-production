@@ -125,6 +125,11 @@ verify_jwt = false
 [functions.connect]
 verify_jwt = false
 
+# bounty-payments: Phase 2 Stripe-native per-bounty escrow. Handles its own
+# auth via supabaseAdmin.auth.getUser(token), matching payments/wallet/connect.
+[functions.bounty-payments]
+verify_jwt = false
+
 # webhooks: receives events from Stripe (not from authenticated users),
 # so it must NOT require a Supabase JWT.
 [functions.webhooks]

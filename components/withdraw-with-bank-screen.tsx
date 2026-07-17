@@ -425,11 +425,16 @@ export function WithdrawWithBankScreen({
               await loadBankAccounts();
               Alert.alert('Success', 'Bank account removed successfully');
             } else {
-              throw new Error('Failed to remove bank account');
+              // Surface the server's actual reason (e.g. Stripe won't allow
+              // removing the only/default external account) instead of a
+              // generic message that hides what really happened.
+              const body = await response.json().catch(() => null);
+              throw new Error(body?.error || `Failed to remove bank account (${response.status})`);
             }
           } catch (error) {
             console.error('Error removing bank account:', error);
-            Alert.alert('Error', 'Failed to remove bank account');
+            const message = error instanceof Error ? error.message : 'Failed to remove bank account';
+            Alert.alert('Error', message);
           }
         },
       },
