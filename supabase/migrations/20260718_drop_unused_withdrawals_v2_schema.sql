@@ -1,0 +1,45 @@
+-- Migration: Drop unused withdrawals / withdraw_balance_v2 / cancel_withdrawal schema
+-- Created: 2026-07-18
+-- Purpose:
+--   These objects (table `withdrawals`, functions `withdraw_balance_v2()`
+--   and `cancel_withdrawal()`) exist live in production but were never
+--   created by any migration tracked in this repo, across all three
+--   migration directories (supabase/migrations/, database/migrations/,
+--   services/api/migrations/) — confirmed via `git log --all -S` for both
+--   function names, which each return exactly one commit, and it's a
+--   documentation commit describing them as unused, not SQL. They were
+--   applied directly to production outside any tracked history, matching
+--   the same untracked-drift pattern found and fixed elsewhere this session
+--   (profiles column grants, dispute_audit_log RLS).
+--
+--   Verified before dropping:
+--     - `SELECT count(*) FROM withdrawals` = 0. No real user data exists.
+--     - Repo-wide grep for `withdraw_balance_v2` and `cancel_withdrawal`:
+--       zero hits outside documentation. The live withdrawal path
+--       (supabase/functions/connect/index.ts) exclusively uses
+--       `withdraw_balance()` / `update_balance()` against
+--       `wallet_transactions` — a completely separate, actively-used
+--       schema untouched by this migration.
+--     - No trigger, view, or other function depends on `withdrawals`,
+--       `withdraw_balance_v2()`, or `cancel_withdrawal()` (checked via
+--       pg_depend / pg_trigger). One outbound FK exists FROM `withdrawals`
+--       TO auth.users — nothing points the other way.
+--     - EXECUTE on both functions was already restricted to
+--       `service_role`/`postgres` (never `anon`/`authenticated`), so no
+--       client-callable surface is being removed.
+--
+--   This schema appears to be either an abandoned migration or an
+--   unfinished rewrite (it has a more complete lifecycle design — proper
+--   idempotency-key-as-primary-guard, reserved/pending/paid/failed/canceled
+--   states — than the live path, but was evidently never cut over). Per
+--   the stated engineering principle of not leaving partially migrated,
+--   ambiguous systems in place: since it holds no data and nothing
+--   references it, it is removed rather than retained or half-documented
+--   as "maybe used later." If a v2 withdrawal rewrite is wanted in the
+--   future, it should be designed fresh against the current live schema
+--   (which has since evolved — e.g. the $10-$10,000 range vs. this
+--   schema's $1-$2,000 default) rather than resurrected from this attempt.
+
+DROP FUNCTION IF EXISTS public.cancel_withdrawal(uuid, text, text);
+DROP FUNCTION IF EXISTS public.withdraw_balance_v2(uuid, numeric, text, text, numeric, numeric, uuid);
+DROP TABLE IF EXISTS public.withdrawals;
