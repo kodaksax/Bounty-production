@@ -196,6 +196,29 @@ function mapWithdrawBalanceError(message: string | undefined): {
 }
 // ─── End inlined withdrawal-validation helpers ──────────────────────────────
 
+// ─── Staged Phase 2 retirement of the legacy wallet-balance withdrawal path ─
+// When true, /connect/transfer and /connect/retry-transfer return 410 Gone
+// (mirroring the completed /bank-accounts deprecation further below) instead
+// of running the legacy custodial-wallet withdrawal flow. Off by default —
+// this is a STAGED step for the Stripe Phase 2 migration
+// (see supabase/functions/bounty-payments) and must not be flipped on until
+// production wallet balances are confirmed fully migrated. The legacy
+// withdrawal logic below is left completely intact; this only adds a guard
+// in front of it.
+const CONNECT_TRANSFER_RETIRED = Deno.env.get('CONNECT_TRANSFER_RETIRED') === 'true';
+
+function legacyTransferRetiredResponse() {
+  return jsonResponse(
+    {
+      error:
+        'Wallet-balance withdrawals are being retired in favor of the new Stripe-backed payout flow. Please contact support if you still have a pending balance.',
+      code: 'legacy_transfer_deprecated',
+      migrate_to: '/functions/v1/bounty-payments',
+    },
+    410,
+  );
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -501,6 +524,7 @@ Deno.serve(async (req: Request) => {
 
     // POST /connect/transfer
     if (subPath === '/transfer') {
+      if (CONNECT_TRANSFER_RETIRED) return legacyTransferRetiredResponse();
       const body = await req.json();
 
       // Server-side validation: finite, whole-cent, min/max, USD only.
@@ -831,6 +855,7 @@ Deno.serve(async (req: Request) => {
 
     // POST /connect/retry-transfer
     if (subPath === '/retry-transfer') {
+      if (CONNECT_TRANSFER_RETIRED) return legacyTransferRetiredResponse();
       const body = await req.json();
       const { transactionId } = body;
 
