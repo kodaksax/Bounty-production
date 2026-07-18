@@ -63,6 +63,8 @@ As of the bank-account-selection fix, the app now actually wires the hunter's se
 
 As of this pass, support/engineering has a real tool for this: the **Admin → Withdrawal Recovery** screen, which calls an audited backend endpoint. It requires admin credentials and a written reason for every action — if you don't have admin access, escalate to someone who does rather than asking for a raw SQL fix.
 
+As of 2026-07-18, the same screen also supports **marking a withdrawal as externally settled** (for cases resolved outside the app, e.g. paid by another means after confirming with Stripe that no payout landed) and **on-demand reconciliation** (re-run the drift/stuck-withdrawal checks immediately instead of waiting for the daily job). A withdrawal marked this way shows `status: 'manually_paid'` — this is permanent and intentional; it will never auto-retry or auto-refund again, and support/engineering should never try to "fix" it back to a normal state.
+
 ## Escalation
 
 Escalate immediately, don't attempt to explain it away, when you see:

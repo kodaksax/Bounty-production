@@ -18,7 +18,8 @@ All served by Supabase Edge Functions.
 | GET | `/wallet/balance` | `wallet` | `false` | Sole source of truth for balance; no auto-reconciliation as of 2026-07-18 (that pattern was removed as a double-spend risk) |
 | GET | `/wallet/transactions` | `wallet` | `false` | Paginated history |
 | POST | `/webhooks` (also `/webhooks/stripe`) | `webhooks` | `false` (HMAC-verified instead) | All inbound Stripe events |
-| POST | `/admin-withdrawals` | `admin-withdrawals` | **`true`** | New — force-retry / manual adjustment / log listing, admin-role gated |
+| POST | `/admin-withdrawals` | `admin-withdrawals` | **`true`** | force-retry / manual adjustment / mark externally settled / reverse transfer / on-demand reconciliation / Stripe comparison / log listing, admin-role gated |
+| GET/POST | `/stripe-mode-check` | `stripe-mode-check` | `false` | *(new)* Unauthenticated diagnostic — reports `{configured, keyPrefix, livemode, webhookSecretConfigured}` for whichever project it's deployed to. No financial data or secrets exposed. Use before assuming any environment's Stripe mode. |
 
 ## `admin-withdrawals` — actions
 
@@ -31,11 +32,29 @@ Requires `Authorization: Bearer <admin JWT>` (checked via `app_metadata.role ===
 // Manual balance credit/debit (positive credits, negative debits)
 { "action": "manual_adjustment", "userId": "<uuid>", "amount": 38.00, "reason": "<required>", "relatedTransactionId": "<optional>" }
 
+// Mark a pending/failed withdrawal as manually_paid (resolved outside the app)
+{ "action": "mark_externally_settled", "transactionId": "<uuid>", "reason": "<required>", "confirmedNoStripePayout": true, "note": "<optional>", "balanceAdjustment": 0 }
+
+// Reverse the Stripe Transfer for a manually_paid withdrawal — MUST be called after mark_externally_settled, never before
+{ "action": "reverse_transfer", "transactionId": "<uuid>", "reason": "<required>" }
+
+// On-demand reconciliation run (same checks as the daily pg_cron job)
+{ "action": "run_reconciliation" }
+
+// Read-only Stripe-vs-ledger comparison for one transaction (Transfer + recent Payouts on the connected account)
+{ "action": "compare_stripe", "transactionId": "<uuid>" }
+
 // List recent admin actions (optionally filtered to one user)
 { "action": "list_log", "userId": "<optional>", "limit": 50 }
 ```
 
 Every action writes to `admin_action_log` regardless of success/failure. `manual_adjustment` also writes a real `wallet_transactions` row (`type: 'admin_adjustment'`) so the ledger stays reconciliation-accurate. `force_retry` reuses the exact destination-resolution/promotion logic as the self-service retry path — it does not skip the "confirm the bank account is actually the payout destination before charging the balance" safety check.
+
+**`mark_externally_settled`** requires `confirmedNoStripePayout: true` explicitly — the action cannot itself verify Stripe payout state, so it fails closed rather than trusting an implicit default. Idempotent: calling it again on an already-`manually_paid` row is a no-op success.
+
+**`reverse_transfer`** calls `stripe.transfers.createReversal()` using this function's own full-access `STRIPE_SECRET_KEY` — notably, this is the one place in the codebase (as of this pass) that can actually call the Transfers API for a reversal; some external tooling used during audits may have a separately-restricted Stripe key that doesn't expose Transfers at all. **Refuses to run on anything other than a `manually_paid` row** — see the idempotency-gap note under Webhooks below for why the ordering matters.
+
+**`compare_stripe`** is the only place that can read live Payout status scoped to a connected account (`stripe.payouts.list({...}, {stripeAccount: id})`) — useful when external tooling's Stripe access is restricted and can't see Connect-scoped resources.
 
 ## Edge Functions inventory (withdrawal-relevant)
 
@@ -63,13 +82,15 @@ The old Fastify mirror (`services/api/src/routes/wallet.ts`, `consolidated-webho
 **`wallet_transactions`**: `id`, `user_id`, `bounty_id`, `type`, `amount NUMERIC(12,2)` (negative for withdrawals), `status`, `stripe_transfer_id`, `stripe_connect_account_id`, `idempotency_key`, `metadata JSONB`.
 
 - `type` is a **Postgres ENUM** (`wallet_tx_type_enum`) in the live schema — `escrow`, `release`, `refund`, `deposit`, `withdrawal`, `dispute_loss`, `admin_adjustment` (the last one added this pass). Older migration files describe `type` as `TEXT` with a `wallet_transactions_type_check` CHECK constraint — that's stale; the live column has been an enum for some time (verified via `information_schema`/`pg_enum`, not assumed from the migration files). **`ALTER TYPE ... ADD VALUE` must run outside `apply_migration`'s transaction wrapper** (via `execute_sql`) — same class of constraint as `CREATE INDEX CONCURRENTLY`.
-- `status` is a 3-value enum: `pending`, `completed`, `failed`. No `'reserved'` — ignore anything referencing it, it describes the dead `withdrawals`/`v2` schema.
+- `status` is a 4-value enum as of 2026-07-18: `pending`, `completed`, `failed`, **`manually_paid`** *(new)*. `manually_paid` marks a withdrawal resolved outside Stripe's normal transfer/payout flow (e.g. paid by another means after confirming no Stripe payout landed) — it is permanently terminal, never retried or auto-refunded again. No `'reserved'` — ignore anything referencing it, it describes the dead `withdrawals`/`v2` schema.
 - Unique index on `(user_id, idempotency_key) WHERE type='withdrawal'` prevents double-processing.
 - Unique partial index limits a user to one `pending` withdrawal at a time (`idx_wallet_tx_one_pending_withdrawal`) — restored this pass alongside the balance floor, both had been present only in a git migration file, never actually applied live.
 
-**`admin_action_log`** *(new this pass)*: `id`, `admin_user_id`, `action_type` (`force_retry_withdrawal` | `manual_balance_adjustment`), `target_user_id`, `target_transaction_id`, `amount`, `reason`, `result` (`success`|`failure`), `metadata JSONB`, `created_at`. RLS enabled with **no policies at all** — `service_role` bypasses RLS by default, so only the `admin-withdrawals` function can read/write; there's no legitimate client-side use case, unlike `dispute_audit_log`.
+**`admin_action_log`** *(new this pass)*: `id`, `admin_user_id`, `action_type` (`force_retry_withdrawal` | `manual_balance_adjustment` | `mark_externally_settled_withdrawal` | `reverse_stripe_transfer`), `target_user_id`, `target_transaction_id`, `amount`, `reason`, `result` (`success`|`failure`), `metadata JSONB`, `created_at`. `action_type` is TEXT+CHECK (confirmed live, not an enum — verify before assuming otherwise given this project's drift history) — widened once already (2026-07-18) when `mark_externally_settled_withdrawal` was added; **always widen this CHECK constraint in the same deploy as any new `admin-withdrawals` action**, the omission was caught live via a real CHECK violation the first time the new action ran. RLS enabled with **no policies at all** — `service_role` bypasses RLS by default, so only the `admin-withdrawals` function can read/write; there's no legitimate client-side use case, unlike `dispute_audit_log`.
 
 **`reconciliation_findings`** *(new this pass)*: `id`, `run_at`, `finding_type`, `severity` (`info`|`warning`|`critical`), `user_id`, `details JSONB`, `acknowledged_at`, `acknowledged_by`. Same RLS posture as `admin_action_log` — service-role only.
+
+**`reconciliation_known_exceptions`** *(new 2026-07-18)*: `id`, `finding_type`, `user_id`, `reason`, `created_by`, `created_at`. An audited allowlist of `(finding_type, user_id)` pairs a human has reviewed and decided are not actionable — e.g. a documented balance write-off with no offsetting ledger row by design. `run_withdrawal_reconciliation()` checks this table before inserting a new `balance_drift` finding, so acknowledged-as-intentional cases stop being re-flagged daily. Same RLS posture (service-role only).
 
 **`notifications`** / **`notifications_outbox`**: in-app inbox vs. push queue — these are separate. `payout.paid`/`payout.failed`/`payout.canceled` write to `notifications` (in-app) only, not the push outbox. Don't assume a push notification fires for withdrawal events.
 
@@ -98,6 +119,13 @@ The old Fastify mirror (`services/api/src/routes/wallet.ts`, `consolidated-webho
 
 Check findings: `SELECT * FROM reconciliation_findings WHERE acknowledged_at IS NULL ORDER BY severity, run_at DESC;` See the Operations Playbook for the daily triage procedure.
 
+**Hardened 2026-07-18** after the job's first live run surfaced two real bugs in the checks themselves:
+
+- **Ledger math for `balance_drift`** now sums `status IN ('completed', 'manually_paid')`, not just `'completed'` — a `manually_paid` row represents a real, final debit and was previously excluded, making a correctly-settled withdrawal look like permanent drift.
+- **`withdrawal_missing_transfer_id`** now only checks `status = 'completed'` rows — a `'failed'` withdrawal legitimately can have no `stripe_transfer_id` if it failed before Stripe ever created the Transfer object (e.g. `balance_insufficient` at the platform level). Flagging failed rows was a false-positive generator.
+- **Every check now dedups against existing unacknowledged findings** with the same natural key (transaction ID, user ID, idempotency key, or transfer ID depending on the check) before inserting — the job previously had no such guard and would insert a fresh duplicate finding every single day for the same unresolved issue.
+- **`balance_drift` also excludes any `(user_id)` present in `reconciliation_known_exceptions`** for that finding type, so a human-reviewed-and-accepted case (see the table description above) stops being re-surfaced entirely, not just re-acknowledged daily.
+
 ## Idempotency and concurrency guarantees
 
 | Guard | Mechanism | Prevents |
@@ -109,6 +137,7 @@ Check findings: `SELECT * FROM reconciliation_findings WHERE acknowledged_at IS 
 | Single in-flight withdrawal | `withdraw_balance()` uses `SELECT ... FOR UPDATE` | Two concurrent withdrawals reading a stale balance |
 | Webhook replay | `stripe_events` upserted before processing; handlers additionally check `metadata.transfer_status`/`payout_status` before refunding | Double-refunding on redelivery |
 | Retry vs. late webhook race | Optimistic-lock guard (`.eq('stripe_transfer_id', ...)` re-filtered before UPDATE) | An old transfer's failure event corrupting a newer in-flight retry |
+| Reversal webhook vs. manual settlement | `handleTransferSetback()` checks `existingTx.status === 'manually_paid'` and returns early, before any status/balance mutation | A `transfer.reversed` event (triggered by `reverse_transfer`) resurrecting a balance that was already correctly settled outside the app — found live 2026-07-18 as a real gap before this guard existed; the fix is why `mark_externally_settled` must always precede `reverse_transfer` |
 
 ## Debugging checklist
 

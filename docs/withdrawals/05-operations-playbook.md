@@ -73,7 +73,7 @@ The four bolded events were added in this hardening pass — **explicitly confir
 
 ## Deployment checklist
 
-Before deploying any change to `connect`, `webhooks`, `wallet`, or `admin-withdrawals`:
+Before deploying any change to `connect`, `webhooks`, `wallet`, `admin-withdrawals`, or `stripe-mode-check`:
 
 1. `npx tsc --noEmit` clean
 2. `npm run lint` — 0 errors, no new warnings
@@ -97,8 +97,26 @@ Before deploying any change to `connect`, `webhooks`, `wallet`, or `admin-withdr
 
 Support staff should escalate per the [Support Runbook](02-support-runbook.md)'s escalation section. When an escalation lands with ops/engineering, the minimum required context is: `wallet_transactions.id`, `stripe_transfer_id` (if present), user ID, and exact timestamps — if a ticket arrives without these, get them before starting investigation rather than guessing at which transaction is in question.
 
+## Recovery tooling (as of 2026-07-18)
+
+`admin-withdrawals` now supports, all JWT-gated to `role=admin` and fully audited in `admin_action_log`:
+
+| Action | Purpose | Guardrail |
+|---|---|---|
+| `force_retry` | Bypass the 3-attempt client retry cap | None beyond admin auth — original behavior |
+| `manual_adjustment` | Credit/debit a balance directly, writes a real `admin_adjustment` ledger row | Capped at $10,000/adjustment |
+| `mark_externally_settled` | Mark a `pending`/`failed` withdrawal as `manually_paid` (paid outside the app) | Requires `confirmedNoStripePayout: true` explicitly — fails closed. Idempotent. |
+| `reverse_transfer` | Reverses the Stripe Transfer, pulling funds back from the connected account before Stripe's automatic payout can sweep them | **Only works on a `manually_paid` row** — calling it on anything else is refused. This ordering is load-bearing (see `webhooks/index.ts`'s `handleTransferSetback` guard). |
+| `run_reconciliation` | On-demand version of the daily job, read-only | None needed — read-heavy, no balance/Stripe writes |
+| `compare_stripe` | Read-only Stripe-vs-ledger comparison for one transaction, including live Payout status on the connected account | None needed — read-only |
+
+**The `manually_paid` status** is a new terminal `wallet_transactions.status` value (alongside `pending`/`completed`/`failed`) for withdrawals resolved outside Stripe's normal transfer/payout flow. A `manually_paid` row is permanently excluded from retry and from the webhook refund logic — never expect one to change state again except via `reverse_transfer` updating its metadata.
+
+**Correct order for settling a stuck/problem withdrawal externally:** always `mark_externally_settled` *before* `reverse_transfer`. Reversing first risks the resulting `transfer.reversed` webhook finding the row still in its old status and re-triggering the refund-and-fail path, which would resurrect the balance — the exact double-payment risk this tooling exists to prevent.
+
 ## Known accepted risks (not incidents if observed)
 
 - Payouts taking slightly longer than 1-2 business days near a weekend/holiday — no code-level handling exists for this, and none is planned; it's Stripe's own scheduling.
-- Two withdrawals with different bank-account selections landing before the same Stripe payout sweep still get swept together to whichever account is default at sweep time — documented architectural limitation, not a bug to chase.
-- No isolated test/staging environment — all verification of a live-money code path requires either careful read-only probing or a deliberate, human-present, minimal-amount live test. See the [Testing Guide](06-testing-guide.md).
+- Two withdrawals with different bank-account selections landing before the same Stripe payout sweep still get swept together to whichever account is default at sweep time — documented architectural limitation, not a bug to chase. See [07-manual-payouts-evaluation.md](07-manual-payouts-evaluation.md) for what fixing this properly would take.
+- **Some historical balance-drift findings are intentional, not bugs.** A small number of accounts had their balance zeroed by a documented "Wallet Phase 2" write-off with no offsetting ledger row by design — these are recorded in `reconciliation_known_exceptions` so the daily job stops re-flagging them. Before ever "fixing" a balance-drift finding by crediting money back, check this table first; a write-off resurrected by mistake once already (see the historical incident in `WITHDRAWAL_SYSTEM_RUNBOOK.md` §11.1) and had to be corrected back down.
+- A genuinely isolated test environment (Staging) exists and is confirmed to be on Stripe test mode, but its code/schema are currently stale relative to production — see the [Testing Guide](06-testing-guide.md) for exact status. Until synced, live-money-path verification still requires either careful read-only probing or a deliberate, human-present, minimal-amount live test against production.

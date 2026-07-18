@@ -112,8 +112,10 @@ Every money-touching failure path in `connect/index.ts` and `webhooks/index.ts` 
 
 Two things are true today and are **accepted, documented limitations**, not oversights:
 
-1. **Per-withdrawal destination precision.** The hunter's selected bank account is now correctly wired through and promoted to `default_for_currency` before the Transfer is created — but Stripe's *automatic* payout sweep pulls the connected account's *entire* available balance on its own schedule. Two withdrawals with different bank-account selections landing before the same sweep still get swept together to whatever is default *at sweep time*. Closing this fully requires switching to Stripe manual payouts with an explicit `destination` per withdrawal — an architectural change, not made in this pass.
-2. **No isolated test environment.** There is one Supabase project and Stripe is in live mode. See the [Testing Guide](06-testing-guide.md) for exactly what this means for verification.
+1. **Per-withdrawal destination precision.** The hunter's selected bank account is now correctly wired through and promoted to `default_for_currency` before the Transfer is created — but Stripe's *automatic* payout sweep pulls the connected account's *entire* available balance on its own schedule. Two withdrawals with different bank-account selections landing before the same sweep still get swept together to whatever is default *at sweep time*. Closing this fully requires switching to Stripe manual payouts with an explicit `destination` per withdrawal — an architectural change, evaluated but not made in this pass; see [07-manual-payouts-evaluation.md](07-manual-payouts-evaluation.md).
+2. **`profiles` table SELECT RLS is broader than it should be** (app-wide, not withdrawal-specific) — flagged in three prior audits, now converted into an actual sequenced migration plan rather than left as an open question; see [08-profiles-rls-migration-strategy.md](08-profiles-rls-migration-strategy.md).
+
+**Corrected 2026-07-18** — this used to say "no isolated test environment exists." That was wrong: a genuinely Stripe-test-mode Supabase branch (Staging) exists, it just has stale code/schema. See the [Testing Guide](06-testing-guide.md) for current status.
 
 ## Document map
 
@@ -124,6 +126,8 @@ Two things are true today and are **accepted, documented limitations**, not over
 | [03-engineering-runbook.md](03-engineering-runbook.md) | Engineers | APIs, RPCs, tables, SQL, debugging |
 | [04-automation-handler-guide.md](04-automation-handler-guide.md) | Future AI/automation agents | Decision tree, diagnostics, resolution boundaries |
 | [05-operations-playbook.md](05-operations-playbook.md) | On-call / ops | Daily checks, incident response, deploy checklist |
-| [06-testing-guide.md](06-testing-guide.md) | Engineers | What's actually tested vs. what requires manual live-mode verification |
+| [06-testing-guide.md](06-testing-guide.md) | Engineers | What's actually tested vs. what requires manual live-mode verification, current Staging environment status |
+| [07-manual-payouts-evaluation.md](07-manual-payouts-evaluation.md) | Engineers / product | Should we switch to Stripe manual payouts? Advantages, risks, migration effort |
+| [08-profiles-rls-migration-strategy.md](08-profiles-rls-migration-strategy.md) | Engineers | Sequenced plan to tighten `profiles` SELECT RLS without breaking the admin panel or search |
 
 Deeper architecture/state-machine/security material that predates this doc set and remains accurate: `docs/payments/WITHDRAWAL_SYSTEM_RUNBOOK.md`, `docs/payments/BOUNTY_WITHDRAWAL_TECHNICAL_SPECIFICATION.md`.

@@ -17,11 +17,12 @@
 - Call `admin-withdrawals` with `action: 'list_log'` (read-only)
 
 **You must escalate to a human before:**
-- Calling `admin-withdrawals` with `action: 'force_retry'` or `action: 'manual_adjustment'` — these move real money or directly alter a real balance. Even though the endpoint is audited and reason-gated, an automation agent initiating these autonomously is out of scope for this guide's authorization. Present the recommended action and the evidence for it; let a human execute it (or explicitly, narrowly authorize you to, per your own operating constraints — that authorization does not come from this document).
+- Calling `admin-withdrawals` with `action: 'force_retry'`, `'manual_adjustment'`, `'mark_externally_settled'`, or `'reverse_transfer'` — these move real money or directly alter a real balance or Stripe state. Even though the endpoint is audited and reason-gated, an automation agent initiating these autonomously is out of scope for this guide's authorization. Present the recommended action and the evidence for it; let a human execute it (or explicitly, narrowly authorize you to, per your own operating constraints — that authorization does not come from this document). `action: 'run_reconciliation'` and `action: 'compare_stripe'` are both read-only and safe to call without escalation.
 - Minting or using any real user's session/auth token
-- Directly calling `stripe.transfers.create`, `stripe.payouts.*` write methods, or any other Stripe write endpoint
+- Directly calling `stripe.transfers.create`, `stripe.transfers.createReversal`, `stripe.payouts.*` write methods, or any other Stripe write endpoint
 - Directly writing to `profiles.balance`, `wallet_transactions`, or any other financial table via SQL
 - Telling a hunter a definitive resolution timeline beyond what the Support Runbook's templates already say
+- **Calling `reverse_transfer` on a transaction that is not already `status: 'manually_paid'`** — even a human-authorized call must follow this order (`mark_externally_settled` first). The tool itself refuses out-of-order calls, but don't attempt to route around that by any other means.
 
 **Never, under any circumstances:**
 - Attempt to "test" the withdrawal flow end-to-end against production with real money

@@ -1,6 +1,32 @@
 # Withdrawal System — Testing Guide
 
-> **Read this framing before anything else:** there is no isolated test Supabase project and no Stripe test-mode credential set for this app. One production project, Stripe in live mode. This has been true throughout this project's history and remains true after this hardening pass — closing it is a recommended future architectural change (see the Production Readiness Review), not something done in this pass. Every scenario below is marked with what's actually automated today versus what requires manual, human-present, live-mode verification with real (minimal) amounts. **No scenario in this document was executed live during this documentation pass** — this is a specification of how to test, not a report of tests run.
+> **Read this framing before anything else — corrected 2026-07-18.** Every prior version of this document (and the technical spec) claimed no isolated test environment exists. That was wrong, or became wrong without anyone noticing: **Bounty-expo has a persistent Supabase branch named "Staging" (project ref `gwumwpoomwvkjyibdmpj`) that is genuinely configured with a Stripe *test-mode* secret key** (`sk_test_...`, confirmed live via a new `stripe-mode-check` diagnostic function — see below) and its own webhook secret. This was found by actually listing Supabase branches instead of trusting prior documentation, per this project's now well-established pattern of docs drifting from reality. **However, Staging's code and database schema are stale** — its `connect`/`webhooks` functions predate every hardening pass back to mid-2026, and its migrations stop at 2026-07-17, ~2 days behind production as of this writing. It is not currently safe to treat as a working parity test environment without first syncing it. See "Staging environment: current state" below for exactly what that requires.
+
+## Staging environment: current state (as of 2026-07-18)
+
+| Check | Result |
+|---|---|
+| Isolated Supabase project | ✅ Yes — persistent branch, project ref `gwumwpoomwvkjyibdmpj`, parent `xwlwqzzphmmhghiqvkeu` |
+| Stripe mode | ✅ **Test mode confirmed** (`sk_test_` prefix, `livemode: false` from a live `/v1/balance` call) |
+| Stripe webhook secret configured | ✅ Yes (`STRIPE_WEBHOOK_SECRET` present) — **not verified** that the Stripe test-mode dashboard's webhook endpoint actually points at this project's `/webhooks` URL; check before relying on webhook-driven test scenarios |
+| Edge function code parity with production | ❌ No — `connect` was at v19 vs. production's v32+, `webhooks` at v15 vs. v35+ at time of writing. Missing every fix from the last two hardening sessions (bank-account wiring, new webhook handlers, `manually_paid` status, the admin recovery tool, structured logging) |
+| Database schema parity with production | ❌ No — migrations stop at `20260717052514`; missing everything from `harden_apply_dispute_loss_privileges` onward, including the `profiles.balance` floor constraint, `admin_action_log`, `reconciliation_findings`, `reconciliation_known_exceptions`, and the `manually_paid` enum value |
+| Automated rebase (`rebase_branch` API) | ❌ Attempted twice this session, both failed (`MIGRATIONS_FAILED`) — consistent with this project's established pattern of live schema drifting from tracked migration history, which breaks in-order migration replay |
+
+**The `stripe-mode-check` function** (`supabase/functions/stripe-mode-check/index.ts`) is now deployed to both Staging and production. It's a tiny, unauthenticated, read-only diagnostic — `GET /functions/v1/stripe-mode-check` returns `{configured, keyPrefix, livemode, webhookSecretConfigured}` with no financial data or secrets exposed. Use it on any environment before assuming its Stripe mode.
+
+### What's needed to make Staging actually usable
+
+1. **Redeploy current code** — `connect`, `webhooks`, `wallet`, `admin-withdrawals`, `stripe-mode-check` all need a fresh deploy from the current `main` branch source.
+2. **Bring the schema current** — since the automated rebase failed, this needs either (a) investigating why the rebase failed (likely a specific migration conflicting with schema that was applied ad hoc, out of tracked order — check `MIGRATIONS_FAILED` branch logs if the Supabase dashboard exposes them) and retrying, or (b) manually replaying the missing migrations listed above against Staging directly, the same way most of this project's migrations have historically been applied (verify live schema state before each, per this document's own repeated lesson).
+3. **Confirm the Stripe test-mode webhook endpoint** in the Stripe Dashboard (test mode toggle on) actually targets Staging's `/webhooks` URL, not production's.
+4. **Re-run `stripe-mode-check` against Staging after any of the above** to confirm nothing regressed.
+
+Until this is done, Staging is a real, safely-isolated environment in principle, but not a reliable one to test against yet.
+
+> The paragraph below is preserved from the prior version of this document for historical context — it was the working assumption throughout every previous hardening pass, and is now known to have been incomplete rather than fully accurate:
+>
+> "There is no isolated test Supabase project and no Stripe test-mode credential set for this app. One production project, Stripe in live mode." Every scenario below is marked with what's actually automated today versus what requires manual, human-present, live-mode verification with real (minimal) amounts, or — once Staging is synced — safe test-mode verification. **No scenario in this document was executed live during this documentation pass** — this is a specification of how to test, not a report of tests run.
 
 ## What's actually automated today
 
@@ -98,11 +124,13 @@ For each scenario: what to check, and the expected database state after. Execute
 
 **Cannot be safely simulated against live Stripe.** Verify the code path instead: `connect/index.ts`'s `stripe.transfers.create()` call is wrapped in try/catch that refunds the balance on any thrown error and maps connection errors specifically (`StripeConnectionError`/`api_connection_error` → `503 stripe_unreachable`). If the refund itself also fails, that's the CRITICAL-logged double-failure case — verify the log line is emitted with full context (`logCritical()`, structured JSON as of this pass) rather than attempting to force a live double-failure.
 
-## What a future test environment would need (recommended future work, not built here)
+## What Staging still needs before it's fully usable (see also the section above)
 
-- A separate Supabase project (or branch) with its own schema, seeded with test profiles
-- Stripe test-mode API keys, a test-mode Connect platform, and test bank accounts (Stripe provides these for test mode)
-- A way to point the deployed Edge Functions at test-mode credentials without touching production
-- Stripe's test-mode tools for simulating payout failures, which don't exist in live mode
+- ~~A separate Supabase project (or branch) with its own schema, seeded with test profiles~~ — **exists** (Staging branch), schema is just stale
+- ~~Stripe test-mode API keys~~ — **exists and confirmed live** via `stripe-mode-check`
+- A test-mode Connect platform and test bank accounts — Stripe provides these for test mode; not yet exercised against Staging
+- A way to point the deployed Edge Functions at test-mode credentials without touching production — **already true**, since Staging's secrets are project-scoped and independent of production's
+- Stripe's test-mode tools for simulating payout failures — available once Staging is actually exercised; not yet used
+- Current code and schema deployed to Staging (see above) — this is the actual remaining blocker, not environment existence
 
-Until this exists, this document is the closest thing to a test plan — a checklist of what to verify and how, executed carefully and manually against production when necessary.
+Until Staging is synced, this document remains the closest thing to a test plan — a checklist of what to verify and how, executed carefully and manually against production when necessary, or against Staging once it's brought current.
