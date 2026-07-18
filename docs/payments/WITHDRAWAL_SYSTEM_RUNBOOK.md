@@ -1,8 +1,8 @@
 # Withdrawal System — Architecture, State Machine & Operational Runbook
 
-> **Last Updated:** 2026-07-17
+> **Last Updated:** 2026-07-18
 > **Scope:** The hunter withdrawal path only (wallet balance → Stripe Connect → hunter's bank account). For deposits, escrow, and disputes, see `docs/FINANCIAL_FLOWS.md`.
-> **Status:** Production. Live path uses `wallet_transactions` + `withdraw_balance()`/`update_balance()`. See §7 for a parallel, unused schema that should not be confused with the live path.
+> **Status:** Production. Live path uses `wallet_transactions` + `withdraw_balance()`/`update_balance()`. §7 documents a parallel, unused schema (`withdrawals`/`withdraw_balance_v2()`/`cancel_withdrawal()`) that was removed 2026-07-18 after this document's own audit — kept below as a historical record in case that context is needed again.
 
 ---
 
@@ -164,9 +164,9 @@ There is no scheduled reconciliation job (`scripts/reconcile_and_triage.sql` is 
 
 ---
 
-## 7. A Second, Unused Withdrawal Schema Exists — Do Not Confuse It With the Live Path
+## 7. A Second, Unused Withdrawal Schema Existed — Removed 2026-07-18
 
-The database also contains a `withdrawals` table plus `withdraw_balance_v2()` and `cancel_withdrawal()` RPCs, with a more mature `reserved/pending/paid/failed/canceled` lifecycle, proper idempotency-key-as-primary-guard, and configurable min/max ($1–$2,000 default — **different from the live $10–$10,000 range**). **`supabase/functions/connect/index.ts` does not call any of these** — confirmed by grep. This looks like either an abandoned migration or an unfinished rewrite. It is not wired into the app anywhere. Do not assume the RLS or logic on `withdrawals`/`withdraw_balance_v2` reflects the live system's behavior, and flag this to the product owner before treating the withdrawal system as fully "done" — dead schema with live-looking constraints sitting next to the real path is a sign this migration was interrupted, not finished.
+**Historical record — this schema no longer exists; kept here in case the context is needed again.** The database used to also contain a `withdrawals` table plus `withdraw_balance_v2()` and `cancel_withdrawal()` RPCs, with a more mature `reserved/pending/paid/failed/canceled` lifecycle, proper idempotency-key-as-primary-guard, and configurable min/max ($1–$2,000 default — **different from the live $10–$10,000 range**). `supabase/functions/connect/index.ts` never called any of these. A 2026-07-18 follow-up audit confirmed it was never created by any git-tracked migration (across all three migration directories in this repo), held 0 rows, and had zero dependents anywhere — see §11.2 — and dropped it. If a v2 withdrawal rewrite is wanted in the future, design it fresh against the current live schema rather than resurrecting this attempt.
 
 ---
 
@@ -187,13 +187,15 @@ The database also contains a `withdrawals` table plus `withdraw_balance_v2()` an
 ## 9. Future Improvements
 
 1. **Scheduled reconciliation job.** `scripts/reconcile_and_triage.sql` is manual-run only. Wire it into `pg_cron` (already used elsewhere per `docs/database/CRON_SETUP_GUIDE.md`) on a daily cadence, alerting (e.g. via the existing `notifications`/Slack integration if one exists) on any non-empty result set.
-2. **Resolve the balance-write-off vs. auto-reconcile conflict** (§8, last row). Either the Phase 2 legacy-balance write-off needs to insert an offsetting `'completed'` `wallet_transactions` row (making the write-off durable against the ledger-derive logic in `wallet/index.ts`), or the auto-reconcile logic needs a way to distinguish "balance is 0 because it was legitimately written off" from "balance is 0 because of a bug." Needs a product-owner decision, not just a code fix.
-3. **Decide the fate of the unused `withdrawals`/`withdraw_balance_v2`/`cancel_withdrawal` schema** (§7). Either finish cutting over to it, or drop it — leaving it live and unused is a standing source of confusion for anyone auditing this system fresh.
-4. **Remove `components/withdraw-screen.tsx`** — dead code (zero imports), duplicates the entire money-moving flow implemented in `withdraw-with-bank-screen.tsx`, and both have received the same hardening patches in lockstep so far by manual discipline alone; that discipline will eventually lapse.
-5. **Non-negative CHECK constraint on `profiles.balance` itself** — only `balance_on_hold` has one today; `balance` is only protected by app-level RPC logic. Cheap, high-value defense-in-depth given §5.1.
-6. **Support-side/admin retry or refund tooling** for withdrawals stuck beyond the 3-attempt client retry cap, so "contact support" has an actual resolution path beyond a manual SQL fix.
-7. **Reconcile the `auth.jwt()->>'role'` vs. `auth.jwt()->'app_metadata'->>'role'` inconsistency** across dispute-table RLS policies (found during this audit, adjacent to but not part of the withdrawal path) — depending on which claim your auth flow actually sets, some admin-gated policies may not work as intended.
-8. **`dispute_audit_log` INSERT policy is `WITH CHECK (true)`** — anyone can write forged audit-log rows for any dispute. Not withdrawal-critical but undermines dispute-resolution evidence integrity, which does eventually gate `balance_frozen`/`balance_on_hold`.
+2. ~~Resolve the balance-write-off vs. auto-reconcile conflict~~ — **Fixed 2026-07-18.** The unsafe auto-reconcile-on-zero logic was removed entirely from all three server surfaces rather than special-cased; see §11.1.
+3. ~~Decide the fate of the unused `withdrawals`/`withdraw_balance_v2`/`cancel_withdrawal` schema~~ — **Fixed 2026-07-18.** Verified thoroughly unused (0 rows, zero references, zero dependents) and dropped; see §7 and §11.2.
+4. ~~Remove `components/withdraw-screen.tsx`~~ — **Fixed 2026-07-18.** Dead code removed.
+5. **Non-negative CHECK constraint on `profiles.balance` itself** — only `balance_on_hold` has one today; `balance` is only protected by app-level RPC logic. Cheap, high-value defense-in-depth given §5.1. Still open.
+6. **Support-side/admin retry or refund tooling** for withdrawals stuck beyond the 3-attempt client retry cap, so "contact support" has an actual resolution path beyond a manual SQL fix. Still open.
+7. **Reconcile the `auth.jwt()->>'role'` vs. `auth.jwt()->'app_metadata'->>'role'` inconsistency** across dispute-table RLS policies (found during this audit, adjacent to but not part of the withdrawal path) — depending on which claim your auth flow actually sets, some admin-gated policies may not work as intended. Still open.
+8. ~~`dispute_audit_log` INSERT policy is `WITH CHECK (true)`~~ — **Fixed 2026-07-18.** See §11.4.
+9. **`backup_bounty_requests_duplicates` DROP TABLE not yet applied** — RLS was enabled as an interim fix (closes the live exposure), but the table itself (whose one-time job finished in March 2026) should still be dropped; the DROP could not be executed this session. See §11.5.
+10. **New, significant finding — `profiles` SELECT is broadly exposed independent of the `public_profiles` view.** Discovered while verifying §11.3 (`public_profiles`): the base `profiles` table has permissive SELECT RLS policies (`USING (true)`) alongside more restrictive ones — since RLS policies for the same command OR together, the net effect is **unrestricted SELECT on all 62 columns of `profiles` for any caller**, including `balance`, `stripe_connect_account_id`, `stripe_customer_id`, `risk_level`, `risk_score`, `balance_frozen`, `email`, `phone`, `e2e_public_key` — confirmed via `information_schema.column_privileges` showing SELECT granted to `anon`/`authenticated` on every column. This is the read-side counterpart to the write-side hole fixed 2026-07-17 (§5.1), and Supabase's advisor does not catch it either (it explicitly excludes `USING (true)` SELECT policies from its "RLS Policy Always True" check, treating that pattern as usually-intentional public-read design). **Not fixed this session** — restricting it safely requires first cataloging every legitimate place in the app that reads *other users'* profile fields (bounty listings, hunter/poster profile views, etc.), since a naive fix risks breaking core social/marketplace features. This needs its own dedicated audit pass, the same way the write-side fix required verifying every legitimate write path before acting.
 
 ---
 
@@ -205,10 +207,48 @@ No isolated test Supabase project or Stripe test-mode credential set exists for 
 - [ ] Duplicate request with the same `idempotencyKey` (simulate: call `/connect/transfer` twice with the same key before the first responds) — confirm only one Stripe Transfer is created and the second response has `duplicate: true`.
 - [ ] Insufficient balance — confirm `insufficient_balance` error, no Stripe API call made, balance unchanged.
 - [ ] Disconnected/restricted Stripe Connect account — confirm `payouts_disabled` error, balance unchanged (checked before debit).
-- [ ] Invalid/malformed amount (negative, NaN, sub-cent, over max) — covered by `__tests__/unit/withdrawal-validation.test.ts` (25 tests, run `npx jest withdrawal-validation`).
+- [ ] Invalid/malformed amount (negative, NaN, sub-cent, over max) — covered by `__tests__/unit/withdrawal-validation.test.ts` (run `npx jest withdrawal-validation`).
 - [ ] Stripe API failure during transfer creation — confirm balance is refunded via `update_balance`, and if that refund itself fails, confirm the `transfer_failed_refund_failed` error is returned and a `CRITICAL` log line is emitted (this is the "manual reconciliation required" path — verify it's loud, not silent).
 - [ ] `payout.failed` webhook for a real completed withdrawal — confirm balance is refunded exactly once even if the webhook is redelivered (idempotency guard on `metadata.payout_status`).
 - [ ] `transfer.failed` webhook race against a concurrent `/connect/retry-transfer` — confirm the optimistic lock either applies to the right row or logs `CRITICAL` for manual review, never silently corrupts the newer retry's state.
 - [ ] Retry a failed withdrawal 4 times — confirm the 4th is rejected with `maxRetriesReached: true`.
 - [ ] Concurrent withdrawal requests for the same user (two different idempotency keys, enough balance for only one) — confirm the `FOR UPDATE` lock in `withdraw_balance()` serializes them and only one succeeds.
 - [ ] (Post-2026-07-17 fix) Attempt a direct `supabase.from('profiles').update({ balance: <inflated> })` as an authenticated non-service-role user — confirm it's rejected with the `insufficient_privilege` error from `prevent_client_writes_to_protected_profile_columns`.
+- [ ] (Post-2026-07-18 fix) Call `GET /wallet/balance` for a user with a legitimately-zero balance and completed-transaction history summing positive (e.g. after a debit) — confirm the response is `$0`, not a resurrected positive value, and confirm no `profiles.update` call occurs as part of the read.
+- [ ] (Post-2026-07-18 fix) Insert into `dispute_audit_log` as an authenticated user, supplying a different user's ID as `actor_id` and `actor_type: 'admin'` — confirm the persisted row has your own `auth.uid()` and `actor_type: 'user'` instead.
+
+---
+
+## 11. Technical Debt Cleanup — 2026-07-18
+
+A follow-up audit validated and resolved four findings from the 2026-07-17 session. All DB changes were verified against the live schema before acting (not assumed from prior notes) and, where the finding was a security hole, verified live with a rolled-back simulated-attack transaction, matching the methodology established in §5.1.
+
+### 11.1 Legacy balance resurrection (`GET /wallet/balance`) — Fixed
+
+**Confirmed live before fixing**: user `hunter`'s Phase 2 write-off (balance zeroed 2026-07-17 with no offsetting ledger row) had already been silently resurrected — `profiles.balance` had flipped back from `0.00` to `5.70` sometime after the write-off, exactly as the 2026-07-17 audit predicted.
+
+**Root cause**: all three server surfaces (Supabase Edge Function, deprecated Express mirror, Fastify service) "reconciled" a cached `$0` balance by deriving `SUM(completed wallet_transactions)` and writing it back whenever positive — unsafe both for the write-off case and for a genuinely in-flight debit (e.g. a withdrawal whose row hadn't reached `'completed'` yet), the latter being a real double-spend vector, not just a display bug.
+
+**Fix**: removed the reconcile logic entirely (not patched) from all three surfaces, since every balance-affecting operation (`apply_deposit`, `apply_escrow`, `apply_refund_tx`, `apply_release_tx`, `withdraw_balance`) is already atomic — there's no remaining scenario where `profiles.balance` should legitimately lag the ledger. Added regression tests asserting the pattern doesn't reappear in any of the three surfaces (`__tests__/unit/wallet-balance-no-resurrection.test.ts`). Commit `9a8feef4`.
+
+**Not fixed**: `hunter`'s balance is still incorrectly at `$5.70` (should be `$0.00` per the write-off's intent) — this is stale *data*, not a code bug, and correcting a specific user's balance downward is a live-money decision outside this session's authorization. Flagged for the product owner.
+
+### 11.2 Unused `withdrawals`/`withdraw_balance_v2()`/`cancel_withdrawal()` schema — Removed
+
+Verified via full-repo grep and `git log --all -S` across all three migration directories: never created by any tracked migration, 0 rows of data, zero references anywhere in app code or scripts, zero dependents (no trigger/view/function referenced it), and `EXECUTE` was already restricted to `service_role`/`postgres`. Dropped. Commit `ad804778`. Full details, including the verbatim function bodies that existed, are preserved in this document's §7 and in git history for `supabase/migrations/20260718_drop_unused_withdrawals_v2_schema.sql`.
+
+### 11.3 `public_profiles` view — Confirmed required, verified safe; adjacent finding surfaced
+
+The view is **not** dead code — it's an active client-side fallback in `lib/services/auth-profile-service.ts` and `lib/services/userProfile.ts`. It bypasses RLS via view-owner privilege (owner `postgres`, `security_invoker` unset — this is what the advisor's "SECURITY DEFINER view" flag actually means for a view, as opposed to a function). Verified its column list (`id, username, display_name, avatar, location, about, verification_status, created_at` — 8 columns) exposes none of the sensitive fields protected by the 2026-07-17 fix. **No change needed or made.**
+
+While verifying this, an adjacent, more significant issue surfaced: the base `profiles` table's own SELECT RLS is effectively unrestricted for anyone (see §9, item 10) — all 62 columns, including the sensitive ones, independent of what the view exposes. This is **not fixed** and needs its own dedicated audit before any restriction is attempted, since many legitimate app features read other users' profile data.
+
+### 11.4 Forgeable `dispute_audit_log` — Fixed
+
+Confirmed: the live INSERT policy was `WITH CHECK (true)` (drifted outside git history from the original migration's admin-only check), and `lib/services/dispute-service.ts`'s `logAuditEvent()` — a legitimate, actively-used client-side helper called from 9+ places — inserts directly into the table trusting whatever `actor_id`/`actor_type` the calling code passes, with no server-side verification.
+
+**Fix**: a `BEFORE INSERT` trigger (`enforce_dispute_audit_log_actor`) overwrites `actor_id`/`actor_type`/`created_at` with server-derived values (`auth.uid()`/`auth.jwt()->>'role'`) on every non-`service_role` insert, regardless of what the caller supplied. This required **zero changes** to `dispute-service.ts` or any of its call sites — chosen specifically over an RPC-based redesign to avoid touching working, actively-used app code. Also dropped `log_dispute_audit_2(uuid, ...)`, a second, broken function overload (wrong parameter type against the live `integer` `dispute_id` column) with zero references anywhere. Verified live: a simulated authenticated insert claiming a different user's identity and `actor_type='admin'` had both fields silently overwritten to the real caller's identity. Commit `8268a7c1`.
+
+### 11.5 `backup_bounty_requests_duplicates` RLS disabled — Interim fix applied, DROP still pending
+
+Confirmed: a one-time pre-dedup safety backup from `database/migrations/20260322_dedupe_bounty_requests.sql`, job complete since March 2026, currently 0 rows, zero app references, RLS disabled with zero policies **and** full `anon`/`authenticated` table-wide grants (unlike some RLS-disabled tables, grants here did not limit the real exposure). Enabled RLS with zero policies (defaults to deny-all), closing the live exposure. The intended full fix — `DROP TABLE`, since the table's job is done and RLS-protecting a table nothing uses is pure overhead — could not be applied this session (see §9, item 9); the exact statement is documented in `supabase/migrations/20260718_lock_down_backup_bounty_requests_duplicates.sql` for a future session or the user to run directly.
