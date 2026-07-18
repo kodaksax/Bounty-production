@@ -13,10 +13,12 @@
 // regardless of success or failure, so there is always a durable record of
 // who did what, to whom, for how much, and why.
 //
-// POST body: { action: 'force_retry' | 'manual_adjustment' | 'list_log', ... }
-//   force_retry:       { transactionId, reason, bankAccountId? }
-//   manual_adjustment: { userId, amount, reason, relatedTransactionId? }
-//   list_log:          { userId?, limit? }
+// POST body: { action: 'force_retry' | 'manual_adjustment' | 'mark_externally_settled' | 'reverse_transfer' | 'list_log', ... }
+//   force_retry:              { transactionId, reason, bankAccountId? }
+//   manual_adjustment:        { userId, amount, reason, relatedTransactionId? }
+//   mark_externally_settled:  { transactionId, reason, confirmedNoStripePayout, note?, balanceAdjustment? }
+//   reverse_transfer:         { transactionId, reason }
+//   list_log:                 { userId?, limit? }
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Stripe from 'npm:stripe@14';
@@ -126,7 +128,11 @@ async function logAdminAction(
   supabase: any,
   entry: {
     adminUserId: string;
-    actionType: 'force_retry_withdrawal' | 'manual_balance_adjustment';
+    actionType:
+      | 'force_retry_withdrawal'
+      | 'manual_balance_adjustment'
+      | 'mark_externally_settled_withdrawal'
+      | 'reverse_stripe_transfer';
     targetUserId: string;
     targetTransactionId?: string | null;
     amount?: number | null;
@@ -199,6 +205,10 @@ Deno.serve(async (req: Request) => {
     bankAccountId?: string;
     relatedTransactionId?: string;
     limit?: number;
+    confirmedNoStripePayout?: boolean;
+    note?: string;
+    balanceAdjustment?: number;
+    dryRun?: boolean;
   };
   try {
     body = await req.json();
@@ -542,6 +552,377 @@ Deno.serve(async (req: Request) => {
     );
 
     return jsonResponse({ success: true, newBalance });
+  }
+
+  // ─── mark_externally_settled ────────────────────────────────────────────
+  // For a withdrawal resolved outside the normal Stripe transfer/payout flow
+  // (e.g. paid by another means after confirming no Stripe payout landed).
+  // Requires `confirmedNoStripePayout: true` to be passed explicitly — this
+  // action does not and cannot itself verify Stripe payout state, so it fails
+  // closed rather than trusting an implicit default. Idempotent: calling this
+  // again on an already-manually_paid transaction is a no-op success, not an
+  // error, so a retried request never double-applies a balance adjustment.
+  if (action === 'mark_externally_settled') {
+    const { transactionId, reason, note } = body;
+    const confirmedNoStripePayout = body.confirmedNoStripePayout === true;
+    const balanceAdjustment = Number(body.balanceAdjustment ?? 0);
+
+    if (!transactionId) {
+      return jsonResponse({ error: 'transactionId is required' }, 400);
+    }
+    if (!reason || !reason.trim()) {
+      return jsonResponse({ error: 'reason is required' }, 400);
+    }
+    if (!confirmedNoStripePayout) {
+      return jsonResponse(
+        {
+          error:
+            'confirmedNoStripePayout must be explicitly true — verify in the Stripe Dashboard (or via the compare_stripe action) that no payout has landed for this withdrawal before marking it externally settled.',
+        },
+        400
+      );
+    }
+    if (balanceAdjustment !== 0) {
+      if (!Number.isFinite(balanceAdjustment) || Math.abs(balanceAdjustment) > MAX_ADJUSTMENT_USD) {
+        return jsonResponse(
+          { error: `balanceAdjustment must be a finite number with magnitude <= $${MAX_ADJUSTMENT_USD}` },
+          400
+        );
+      }
+    }
+
+    const { data: tx, error: txError } = await supabase
+      .from('wallet_transactions')
+      .select('*')
+      .eq('id', transactionId)
+      .single();
+
+    if (txError || !tx) {
+      return jsonResponse({ error: 'Transaction not found' }, 404);
+    }
+    const t = tx as WalletTransaction;
+
+    if (t.status === 'manually_paid') {
+      // Already settled — idempotent no-op, not an error.
+      return jsonResponse({ success: true, alreadySettled: true, transactionId });
+    }
+    if (t.type !== 'withdrawal' || !['pending', 'failed'].includes(t.status)) {
+      return jsonResponse(
+        {
+          error: `Transaction status '${t.status}' is not eligible for external settlement (must be a withdrawal currently 'pending' or 'failed').`,
+        },
+        400
+      );
+    }
+
+    let newBalance: number | null = null;
+    if (balanceAdjustment !== 0) {
+      const { data: adjBalance, error: adjError } = await supabase.rpc('update_balance', {
+        p_user_id: t.user_id,
+        p_amount: balanceAdjustment,
+      });
+      if (adjError) {
+        await logAdminAction(supabase, {
+          adminUserId: adminUser.id,
+          actionType: 'mark_externally_settled_withdrawal',
+          targetUserId: t.user_id,
+          targetTransactionId: transactionId,
+          amount: balanceAdjustment,
+          reason,
+          result: 'failure',
+          metadata: { error: adjError.message },
+        });
+        return jsonResponse({ error: adjError.message || 'Balance adjustment failed' }, 400);
+      }
+      newBalance = adjBalance;
+    }
+
+    const { data: updated, error: updateError } = await supabase
+      .from('wallet_transactions')
+      .update({
+        status: 'manually_paid',
+        metadata: {
+          ...((t.metadata as Record<string, unknown> | null) ?? {}),
+          externally_settled: true,
+          externally_settled_at: new Date().toISOString(),
+          externally_settled_by: adminUser.id,
+          external_settlement_reason: reason,
+          external_settlement_note: note ?? null,
+          previous_status: t.status,
+          confirmed_no_stripe_payout: true,
+          balance_adjustment: balanceAdjustment || null,
+        },
+      })
+      .eq('id', transactionId)
+      .in('status', ['pending', 'failed']) // optimistic-lock guard against a concurrent race
+      .select()
+      .maybeSingle();
+
+    if (updateError || !updated) {
+      logCritical('mark_externally_settled: status update failed or was raced', {
+        transactionId,
+        error: updateError,
+        balanceAlreadyAdjusted: balanceAdjustment !== 0,
+      });
+      await logAdminAction(supabase, {
+        adminUserId: adminUser.id,
+        actionType: 'mark_externally_settled_withdrawal',
+        targetUserId: t.user_id,
+        targetTransactionId: transactionId,
+        amount: balanceAdjustment || null,
+        reason,
+        result: 'failure',
+        metadata: { error: updateError?.message ?? 'no_row_updated_possible_race' },
+      });
+      return jsonResponse(
+        { error: 'Failed to mark as externally settled (possibly raced by a concurrent update).' },
+        500
+      );
+    }
+
+    await logAdminAction(supabase, {
+      adminUserId: adminUser.id,
+      actionType: 'mark_externally_settled_withdrawal',
+      targetUserId: t.user_id,
+      targetTransactionId: transactionId,
+      amount: balanceAdjustment || null,
+      reason,
+      result: 'success',
+      metadata: { note: note ?? null, newBalance },
+    });
+
+    console.log(
+      `[admin-withdrawals] Admin ${adminUser.id} marked transaction ${transactionId} as manually_paid (externally settled): ${reason}`
+    );
+
+    return jsonResponse({ success: true, transactionId, newStatus: 'manually_paid', newBalance });
+  }
+
+  // ─── reverse_transfer ───────────────────────────────────────────────────
+  // Pulls a completed Transfer's funds back from the connected account's
+  // Stripe balance to the platform, preventing Stripe's own automatic payout
+  // schedule from later sweeping it to the hunter's bank. Deliberately
+  // restricted to transactions already 'manually_paid' — this ordering is
+  // load-bearing: handleTransferSetback (webhooks/index.ts) unconditionally
+  // refunds the balance and flips status back to 'failed' for a
+  // transfer.reversed event UNLESS the row is already manually_paid. If this
+  // action could fire against a still-'pending'/'completed' row, the
+  // resulting reversal webhook would resurrect the debited amount into the
+  // hunter's in-app balance — reopening the exact double-payment risk this
+  // exists to close, just via a different path. Always call
+  // mark_externally_settled first.
+  if (action === 'reverse_transfer') {
+    const { transactionId, reason } = body;
+    if (!transactionId) {
+      return jsonResponse({ error: 'transactionId is required' }, 400);
+    }
+    if (!reason || !reason.trim()) {
+      return jsonResponse({ error: 'reason is required' }, 400);
+    }
+
+    const { data: tx, error: txError } = await supabase
+      .from('wallet_transactions')
+      .select('*')
+      .eq('id', transactionId)
+      .single();
+    if (txError || !tx) {
+      return jsonResponse({ error: 'Transaction not found' }, 404);
+    }
+    const t = tx as WalletTransaction;
+    const existingMeta = (t.metadata as Record<string, unknown> | null) ?? {};
+
+    if (existingMeta.transfer_reversed === true) {
+      return jsonResponse({ success: true, alreadyReversed: true, transactionId });
+    }
+    if (t.status !== 'manually_paid') {
+      return jsonResponse(
+        {
+          error: `Transaction status '${t.status}' is not eligible for transfer reversal — it must already be 'manually_paid' (call mark_externally_settled first). This ordering prevents the reversal webhook from resurrecting the balance.`,
+        },
+        400
+      );
+    }
+    if (!t.stripe_transfer_id) {
+      return jsonResponse({ error: 'This transaction has no stripe_transfer_id to reverse.' }, 400);
+    }
+
+    const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
+    if (!stripeKey) {
+      return jsonResponse({ error: 'Stripe not configured' }, 500);
+    }
+    const stripe = new Stripe(stripeKey, {
+      apiVersion: '2023-10-16',
+      httpClient: Stripe.createFetchHttpClient(),
+    });
+
+    let reversal: Stripe.TransferReversal;
+    try {
+      reversal = await stripe.transfers.createReversal(t.stripe_transfer_id, {
+        amount: Math.round(Math.abs(t.amount) * 100),
+        metadata: {
+          transaction_id: transactionId,
+          admin_user_id: adminUser.id,
+          reason,
+        },
+      });
+    } catch (stripeError) {
+      const errMsg = (stripeError as { message?: string })?.message ?? 'Unknown Stripe error';
+      await logAdminAction(supabase, {
+        adminUserId: adminUser.id,
+        actionType: 'reverse_stripe_transfer',
+        targetUserId: t.user_id,
+        targetTransactionId: transactionId,
+        amount: t.amount,
+        reason,
+        result: 'failure',
+        metadata: { error: errMsg },
+      });
+      return jsonResponse({ error: `Failed to reverse transfer: ${errMsg}` }, 502);
+    }
+
+    const { error: updateError } = await supabase
+      .from('wallet_transactions')
+      .update({
+        metadata: {
+          ...existingMeta,
+          transfer_reversed: true,
+          transfer_reversed_at: new Date().toISOString(),
+          transfer_reversal_id: reversal.id,
+          transfer_reversed_by: adminUser.id,
+        },
+      })
+      .eq('id', transactionId);
+    if (updateError) {
+      logCritical('transfer reversed on Stripe but failed to record reversal metadata — manual backfill required', {
+        transactionId, reversalId: reversal.id, error: updateError,
+      });
+    }
+
+    await logAdminAction(supabase, {
+      adminUserId: adminUser.id,
+      actionType: 'reverse_stripe_transfer',
+      targetUserId: t.user_id,
+      targetTransactionId: transactionId,
+      amount: t.amount,
+      reason,
+      result: 'success',
+      metadata: { reversalId: reversal.id },
+    });
+
+    console.log(
+      `[admin-withdrawals] Admin ${adminUser.id} reversed transfer ${t.stripe_transfer_id} (reversal ${reversal.id}) for transaction ${transactionId}`
+    );
+
+    return jsonResponse({ success: true, transactionId, reversalId: reversal.id });
+  }
+
+  // ─── run_reconciliation ─────────────────────────────────────────────────
+  // On-demand version of the daily pg_cron job — same underlying function,
+  // safe to call anytime (read-heavy, only writes diagnostic findings rows,
+  // never touches balances or Stripe). Returns the current unacknowledged
+  // findings so this doubles as a report generator.
+  if (action === 'run_reconciliation') {
+    const { data: findingCount, error: rpcError } = await supabase.rpc(
+      'run_withdrawal_reconciliation'
+    );
+    if (rpcError) {
+      return jsonResponse({ error: rpcError.message || 'Reconciliation run failed' }, 500);
+    }
+    const { data: unacknowledged, error: findingsError } = await supabase
+      .from('reconciliation_findings')
+      .select('*')
+      .is('acknowledged_at', null)
+      .order('run_at', { ascending: false })
+      .limit(100);
+    if (findingsError) {
+      console.error('[admin-withdrawals] Failed to fetch findings after reconciliation run', {
+        error: findingsError,
+      });
+    }
+    console.log(
+      `[admin-withdrawals] Admin ${adminUser.id} ran on-demand reconciliation: ${findingCount} findings inserted this run`
+    );
+    return jsonResponse({
+      success: true,
+      findingCountThisRun: findingCount,
+      unacknowledgedFindings: unacknowledged ?? [],
+    });
+  }
+
+  // ─── compare_stripe ─────────────────────────────────────────────────────
+  // Read-only Stripe-vs-ledger comparison for a single transaction. Uses this
+  // function's own STRIPE_SECRET_KEY (full platform access), not the
+  // separately-restricted key some external tooling may be limited to — this
+  // is the one place in the system that can actually confirm live Payout
+  // status on a connected account (Stripe's Payouts list is only queryable
+  // scoped to the connected account, via the `stripeAccount` request option).
+  if (action === 'compare_stripe') {
+    const { transactionId } = body;
+    if (!transactionId) {
+      return jsonResponse({ error: 'transactionId is required' }, 400);
+    }
+
+    const { data: tx, error: txError } = await supabase
+      .from('wallet_transactions')
+      .select('id, user_id, amount, status, stripe_transfer_id, stripe_connect_account_id, created_at')
+      .eq('id', transactionId)
+      .single();
+    if (txError || !tx) {
+      return jsonResponse({ error: 'Transaction not found' }, 404);
+    }
+    const t = tx as WalletTransaction;
+
+    const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
+    if (!stripeKey) {
+      return jsonResponse({ error: 'Stripe not configured' }, 500);
+    }
+    const stripe = new Stripe(stripeKey, {
+      apiVersion: '2023-10-16',
+      httpClient: Stripe.createFetchHttpClient(),
+    });
+
+    const result: Record<string, unknown> = {
+      transactionId,
+      ledgerStatus: t.status,
+      ledgerAmount: t.amount,
+    };
+
+    if (t.stripe_transfer_id) {
+      try {
+        const transfer = await stripe.transfers.retrieve(t.stripe_transfer_id);
+        result.stripeTransfer = {
+          id: transfer.id,
+          amount: transfer.amount / 100,
+          reversed: transfer.reversed,
+          amountReversed: (transfer.amount_reversed ?? 0) / 100,
+          destination: transfer.destination,
+          created: new Date(transfer.created * 1000).toISOString(),
+        };
+      } catch (e) {
+        result.stripeTransferError = (e as { message?: string })?.message ?? 'lookup failed';
+      }
+    } else {
+      result.stripeTransfer = null;
+    }
+
+    if (t.stripe_connect_account_id) {
+      try {
+        const payouts = await stripe.payouts.list(
+          { limit: 10 },
+          { stripeAccount: t.stripe_connect_account_id }
+        );
+        result.recentPayoutsOnAccount = payouts.data.map(p => ({
+          id: p.id,
+          amount: p.amount / 100,
+          status: p.status,
+          arrivalDate: new Date(p.arrival_date * 1000).toISOString(),
+        }));
+      } catch (e) {
+        result.payoutsListError = (e as { message?: string })?.message ?? 'lookup failed';
+      }
+    }
+
+    return jsonResponse(result);
   }
 
   return jsonResponse({ error: 'Unknown action' }, 400);

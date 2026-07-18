@@ -341,7 +341,7 @@ async function handleTransferSetback(
 
   const { data: existingTx, error: existingTxError } = await supabase
     .from('wallet_transactions')
-    .select('id, metadata')
+    .select('id, status, metadata')
     .eq('stripe_transfer_id', transfer.id)
     .maybeSingle();
 
@@ -356,6 +356,23 @@ async function handleTransferSetback(
   if (!existingTx) {
     console.warn(
       `[webhooks] No wallet_transaction found for transfer ${transfer.id} (${outcome}) — possibly superseded by a retry. Skipping.`
+    );
+    return;
+  }
+
+  if (existingTx.status === 'manually_paid') {
+    // A human already resolved this withdrawal outside the normal Stripe
+    // flow (e.g. paid the hunter by another means after verifying no Stripe
+    // payout had landed, then reversed the Transfer to prevent Stripe's own
+    // automatic payout from also paying them). That reversal itself
+    // triggers this exact webhook — without this guard, this handler would
+    // unconditionally overwrite status back to 'failed' and refund the
+    // balance, silently undoing the manual settlement and reopening the
+    // double-payment risk it was meant to close. Never touch a
+    // manually_paid row here.
+    console.log(
+      `[webhooks] Transfer ${outcome} received for already manually_paid transaction ${existingTx.id} — skipping (see admin_action_log for the settlement record).`,
+      { transferId: transfer.id, transactionId: existingTx.id }
     );
     return;
   }
