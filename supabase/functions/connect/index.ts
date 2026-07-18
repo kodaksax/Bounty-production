@@ -29,6 +29,17 @@ function jsonResponse(data: unknown, status = 200) {
   });
 }
 
+// Structured logging for the CRITICAL/manual-reconciliation-required cases —
+// keeps the "CRITICAL" substring for backward-compatible grep against
+// existing saved log searches while emitting one machine-parseable JSON blob
+// per line instead of a message string plus a separate context object.
+// Duplicated identically in webhooks/index.ts and admin-withdrawals/index.ts
+// (local imports are not supported by the deploy bundler — see the
+// withdrawal-validation helpers below for the same constraint).
+function logCritical(event: string, context: Record<string, unknown>) {
+  console.error(`CRITICAL [connect] ${event}`, JSON.stringify({ event, ts: new Date().toISOString(), ...context }));
+}
+
 // ─── Inlined from ./withdrawal-validation.ts ────────────────────────────────
 // (local imports are not supported by the Supabase bundler — keep both copies
 // in sync; the sibling module is the unit-tested source of truth)
@@ -758,10 +769,9 @@ Deno.serve(async (req: Request) => {
             // actually report the account as default. Fail closed rather
             // than proceed on an unverified assumption about where the
             // money will end up.
-            console.error(
-              '[connect/transfer] CRITICAL: default_for_currency update did not take effect — refusing to proceed',
-              { userId, accountId: p.stripe_connect_account_id, bankAccountId: destinationAccount.id }
-            );
+            logCritical('default_for_currency update did not take effect — refusing to proceed', {
+              userId, accountId: p.stripe_connect_account_id, bankAccountId: destinationAccount.id,
+            });
             return jsonResponse(
               {
                 error:
@@ -866,10 +876,9 @@ Deno.serve(async (req: Request) => {
           p_amount: amount,
         });
         if (refundError) {
-          console.error(
-            '[connect/transfer] CRITICAL: balance refund after failed transfer also failed — manual reconciliation required',
-            { userId, amount, error: refundError }
-          );
+          logCritical('balance refund after failed transfer also failed — manual reconciliation required', {
+            userId, amount, error: refundError,
+          });
           return jsonResponse(
             {
               error:
@@ -934,10 +943,9 @@ Deno.serve(async (req: Request) => {
             p_amount: amount,
           });
           if (dupRefundError) {
-            console.error(
-              '[connect/transfer] CRITICAL: refund of duplicate deduction failed — manual reconciliation required',
-              { userId, amount, error: dupRefundError }
-            );
+            logCritical('refund of duplicate deduction failed — manual reconciliation required', {
+              userId, amount, error: dupRefundError,
+            });
           }
 
           const { data: winner } = await supabase
@@ -965,10 +973,9 @@ Deno.serve(async (req: Request) => {
         // The transfer already succeeded and the balance is correctly
         // deducted — only the history row failed. Do NOT surface an error
         // (the user's money IS on the way); log loudly for reconciliation.
-        console.error(
-          '[connect/transfer] CRITICAL: transfer succeeded but transaction record failed — manual reconciliation required',
-          { userId, transferId: transfer.id, amount, error: txError }
-        );
+        logCritical('transfer succeeded but transaction record failed — manual reconciliation required', {
+          userId, transferId: transfer.id, amount, error: txError,
+        });
         return jsonResponse({
           transferId: transfer.id,
           status: 'completed',
@@ -1092,10 +1099,9 @@ Deno.serve(async (req: Request) => {
             { default_for_currency: true } as Stripe.ExternalAccountUpdateParams
           )) as Stripe.BankAccount;
           if (!(updated as unknown as { default_for_currency?: boolean }).default_for_currency) {
-            console.error(
-              '[connect] CRITICAL: default_for_currency update did not take effect during retry — refusing to proceed',
-              { userId, accountId: p.stripe_connect_account_id, bankAccountId: destinationAccount.id }
-            );
+            logCritical('default_for_currency update did not take effect during retry — refusing to proceed', {
+              userId, accountId: p.stripe_connect_account_id, bankAccountId: destinationAccount.id,
+            });
             return jsonResponse(
               {
                 error:
@@ -1158,10 +1164,9 @@ Deno.serve(async (req: Request) => {
           p_amount: amount,
         });
         if (retryRefundError) {
-          console.error(
-            '[connect] CRITICAL: balance refund after failed retry transfer also failed — manual reconciliation required',
-            { userId, amount, error: retryRefundError }
-          );
+          logCritical('balance refund after failed retry transfer also failed — manual reconciliation required', {
+            userId, amount, error: retryRefundError,
+          });
           return jsonResponse(
             {
               error:

@@ -23,6 +23,13 @@ function jsonResponse(data: unknown, status = 200) {
   });
 }
 
+// Structured logging for CRITICAL/manual-reconciliation-required cases — see
+// the identical copy in supabase/functions/connect/index.ts for rationale
+// (duplicated because local imports aren't supported by the deploy bundler).
+function logCritical(event: string, context: Record<string, unknown>) {
+  console.error(`CRITICAL [webhooks] ${event}`, JSON.stringify({ event, ts: new Date().toISOString(), ...context }));
+}
+
 /**
  * Syncs a Stripe Connect `Account` snapshot into `profiles`. Writes the
  * current capability booleans and requirements payload on every call, but
@@ -219,10 +226,9 @@ async function handleUndeliveredPayout(
             p_amount: refundAmount,
           });
           if (retryError) {
-            console.error(
-              `[webhooks] CRITICAL: balance refund for ${outcome} payout could not be applied — letting Stripe retry`,
-              { payoutId: payout.id, userId: profile.id, error: retryError }
-            );
+            logCritical(`balance refund for ${outcome} payout could not be applied — letting Stripe retry`, {
+              payoutId: payout.id, userId: profile.id, error: retryError,
+            });
             throw retryError;
           }
         }
@@ -306,6 +312,359 @@ async function handleUndeliveredPayout(
       error: payoutFlagError,
     });
     throw payoutFlagError;
+  }
+}
+
+/**
+ * Shared handler for `transfer.failed` and `transfer.reversed`. Both mean the
+ * platform-to-connected-account Transfer that funded a withdrawal did not (or
+ * no longer does) hold, so the debited balance must be refunded.
+ *
+ * `failed` is expected to happen occasionally (Stripe-side transient issues)
+ * and follows the existing 3-strike retry ladder (MAX_TRANSFER_RETRIES).
+ * `reversed` means a Transfer that had ALREADY succeeded was pulled back —
+ * nothing in this app's own code calls stripe.transfers.createReversal(), so
+ * this should only happen via a manual Stripe Dashboard action or a
+ * Stripe-side fraud/compliance action. It is therefore always treated as
+ * permanently failed (retry_count is force-set to MAX_TRANSFER_RETRIES so the
+ * existing /connect/retry-transfer 3-attempt gate blocks self-service retry)
+ * and always logged as CRITICAL regardless of prior retry count, since it
+ * should never occur under normal operation and needs a human to look at it.
+ */
+async function handleTransferSetback(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  transfer: Stripe.Transfer,
+  outcome: 'failed' | 'reversed'
+): Promise<void> {
+  console.log(`[webhooks] Transfer ${outcome}: ${transfer.id}`);
+
+  const { data: existingTx, error: existingTxError } = await supabase
+    .from('wallet_transactions')
+    .select('id, metadata')
+    .eq('stripe_transfer_id', transfer.id)
+    .maybeSingle();
+
+  if (existingTxError) {
+    console.error(`[webhooks] Failed to look up transaction for transfer.${outcome}`, {
+      transferId: transfer.id,
+      error: existingTxError,
+    });
+    throw existingTxError;
+  }
+
+  if (!existingTx) {
+    console.warn(
+      `[webhooks] No wallet_transaction found for transfer ${transfer.id} (${outcome}) — possibly superseded by a retry. Skipping.`
+    );
+    return;
+  }
+
+  const existingMetadata = (existingTx?.metadata as Record<string, unknown> | null) ?? {};
+  const currentRetries = (existingMetadata.retry_count as number | undefined) ?? 0;
+  const permanentlyFailed = outcome === 'reversed' ? true : currentRetries >= MAX_TRANSFER_RETRIES;
+
+  const { data: tx, error: txUpdateError } = await supabase
+    .from('wallet_transactions')
+    .update({
+      status: 'failed',
+      metadata: {
+        ...existingMetadata,
+        transfer_status: permanentlyFailed ? 'permanently_failed' : 'failed',
+        ...(outcome === 'reversed' ? { retry_count: MAX_TRANSFER_RETRIES, reversed: true } : {}),
+        failure_reason:
+          outcome === 'reversed'
+            ? 'transfer_reversed'
+            : (transfer as Stripe.Transfer & { failure_code?: string }).failure_code,
+      },
+    })
+    .eq('id', existingTx.id)
+    .eq('stripe_transfer_id', transfer.id) // optimistic-lock guard
+    .select()
+    .maybeSingle();
+
+  if (txUpdateError) {
+    console.error(`[webhooks] Failed to update transaction for transfer.${outcome}`, {
+      transactionId: existingTx.id,
+      transferId: transfer.id,
+      error: txUpdateError,
+    });
+    throw txUpdateError;
+  }
+
+  if (!tx) {
+    // The optimistic-lock guard fired: /connect/retry-transfer replaced
+    // stripe_transfer_id with a new transfer ID between our SELECT and
+    // UPDATE. Surface for immediate manual investigation to avoid silent
+    // fund loss, same as the transfer.failed race case this mirrors.
+    logCritical(`transfer.${outcome} race condition detected — stripe_transfer_id for transaction ${existingTx.id} was replaced by a retry between SELECT and UPDATE, ${outcome} not recorded and refund not issued`, {
+      transferId: transfer.id, transactionId: existingTx.id,
+    });
+    return;
+  }
+
+  const txRow = tx as WalletTransaction;
+  const refundAmount = Math.abs(txRow.amount);
+  const txUserId = txRow.user_id;
+
+  // Idempotency guard: if transfer_status was already 'failed' or
+  // 'permanently_failed' before this execution's UPDATE, a prior invocation
+  // already issued the refund (covers redelivery of either event type
+  // against the same row).
+  const refundAlreadyIssued =
+    existingMetadata.transfer_status === 'failed' ||
+    existingMetadata.transfer_status === 'permanently_failed';
+
+  if (refundAlreadyIssued) {
+    console.log(
+      `[webhooks] Skipping duplicate refund for transfer ${transfer.id} (${outcome}) — balance already restored in a prior invocation`
+    );
+  } else {
+    const { error: rpcError } = await supabase.rpc('update_balance', {
+      p_user_id: txUserId,
+      p_amount: refundAmount,
+    });
+    if (rpcError) {
+      const { error: retryError } = await supabase.rpc('update_balance', {
+        p_user_id: txUserId,
+        p_amount: refundAmount,
+      });
+      if (retryError) {
+        console.error(
+          `[webhooks] Atomic balance update for transfer ${outcome} refund failed — letting Stripe retry`
+        );
+        throw retryError;
+      }
+    }
+    console.log(
+      `[webhooks] Refunded $${refundAmount} to user ${txUserId} for ${outcome} transfer (retries: ${currentRetries}/${MAX_TRANSFER_RETRIES})`
+    );
+  }
+
+  if (outcome === 'reversed') {
+    logCritical('transfer was reversed after appearing to succeed — no code path in this app does this and needs investigation (manual Stripe Dashboard reversal, or a Stripe-side fraud/compliance action)', {
+      transferId: transfer.id, userId: txUserId, amount: refundAmount,
+    });
+  }
+
+  if (permanentlyFailed) {
+    console.warn(
+      `[webhooks] Transfer ${transfer.id} permanently failed (${outcome}) after ${currentRetries} retries for user ${txUserId}. Manual review required.`
+    );
+
+    const notifTitle = outcome === 'reversed' ? 'Withdrawal Reversed' : 'Withdrawal Failed';
+    const notifBody =
+      outcome === 'reversed'
+        ? `A withdrawal of $${refundAmount.toFixed(2)} that had already been initiated was reversed. Your balance has been restored. Our support team has been notified and will follow up if needed.`
+        : 'Your withdrawal could not be completed after multiple attempts. Please contact support.';
+
+    // Check for an existing notification to keep this handler idempotent
+    // (Stripe may re-deliver the same webhook event on transient errors).
+    const { data: existingNotification, error: existingNotificationError } = await supabase
+      .from('notifications')
+      .select('id')
+      .eq('user_id', txUserId)
+      .eq('type', 'payment')
+      .eq('title', notifTitle)
+      .contains('data', { transferId: transfer.id })
+      .maybeSingle();
+
+    if (existingNotificationError) {
+      console.error(`[webhooks] Failed to check for existing ${outcome} notification`, {
+        userId: txUserId,
+        transferId: transfer.id,
+        error: existingNotificationError,
+      });
+      throw existingNotificationError;
+    }
+
+    if (!existingNotification) {
+      const { error: notifError } = await supabase.from('notifications').insert({
+        user_id: txUserId,
+        type: 'payment',
+        title: notifTitle,
+        body: notifBody,
+        data: { transferId: transfer.id, retry_count: currentRetries, outcome },
+      });
+      if (notifError) {
+        console.error(`[webhooks] Failed to insert ${outcome} notification`, {
+          userId: txUserId,
+          transferId: transfer.id,
+          error: notifError,
+        });
+        throw notifError;
+      }
+    } else {
+      console.log(
+        `[webhooks] Skipping duplicate ${outcome} notification for transfer ${transfer.id} and user ${txUserId}`
+      );
+    }
+  }
+}
+
+/**
+ * Handles `payout.updated` — status-tracking only, no balance action.
+ * payout.paid/failed/canceled remain the sole source of truth for
+ * balance-affecting outcomes; this just lets support see which lifecycle
+ * stage (e.g. `in_transit`) a payout is in without checking the Stripe
+ * Dashboard directly. Deliberately best-effort/non-throwing: a lookup issue
+ * here shouldn't cause Stripe to keep retrying a purely informational event.
+ */
+async function handlePayoutStatusUpdate(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  payout: Stripe.Payout,
+  accountId: string
+): Promise<void> {
+  // Terminal, balance-affecting statuses are handled by payout.paid/failed/
+  // canceled instead — avoid racing this handler onto the same row.
+  if (payout.status === 'paid' || payout.status === 'failed' || payout.status === 'canceled') {
+    return;
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('stripe_connect_account_id', accountId)
+    .maybeSingle();
+
+  if (profileError) {
+    console.error('[webhooks] Supabase error looking up profile for payout.updated', {
+      accountId,
+      error: profileError,
+    });
+    return;
+  }
+  if (!profile) {
+    console.warn(`[webhooks] No profile found for Connect account ${accountId} (payout.updated)`);
+    return;
+  }
+
+  const payoutAmountDollars = payout.amount / 100;
+  const { data: candidateTx, error: candidateTxError } = await supabase
+    .from('wallet_transactions')
+    .select('id, metadata')
+    .eq('user_id', profile.id)
+    .eq('type', 'withdrawal')
+    .eq('status', 'completed')
+    .eq('amount', -payoutAmountDollars)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (candidateTxError) {
+    console.error('[webhooks] Failed to look up candidate transaction for payout.updated', {
+      payoutId: payout.id,
+      userId: profile.id,
+      error: candidateTxError,
+    });
+    return;
+  }
+  if (!candidateTx) return;
+
+  const candidateMetadata = (candidateTx.metadata as Record<string, unknown> | null) ?? {};
+  const { error: updateErr } = await supabase
+    .from('wallet_transactions')
+    .update({
+      metadata: {
+        ...candidateMetadata,
+        payout_status: payout.status,
+        payout_id: payout.id,
+      },
+    })
+    .eq('id', candidateTx.id)
+    .eq('status', 'completed'); // don't overwrite a row a concurrent payout.failed/canceled already resolved
+
+  if (updateErr) {
+    console.error('[webhooks] Failed to record payout.updated status', {
+      transactionId: candidateTx.id,
+      payoutId: payout.id,
+      error: updateErr,
+    });
+  } else {
+    console.log(
+      `[webhooks] Payout ${payout.id} status updated to ${payout.status} for user ${profile.id}`
+    );
+  }
+}
+
+/**
+ * Handles `account.application.deauthorized` — the hunter (or someone with
+ * Stripe Dashboard access to their account) disconnected this Connect
+ * account from Bounty's platform application entirely. Updates the local
+ * capability flags immediately rather than waiting for the next live
+ * stripe.accounts.retrieve() check on a withdrawal attempt — that live check
+ * (§ every /connect/transfer call) remains as defense-in-depth, but this
+ * makes the gap visible to support right away via the profile instead of
+ * only surfacing as an opaque `account_verification_failed` error on the
+ * hunter's next attempt.
+ */
+async function handleAccountDeauthorized(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  accountId: string
+): Promise<void> {
+  console.log(`[webhooks] Connect account deauthorized: ${accountId}`);
+
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('id, stripe_connect_requirements')
+    .eq('stripe_connect_account_id', accountId)
+    .maybeSingle();
+
+  if (profileError) {
+    console.error(
+      '[webhooks] Supabase error looking up profile for account.application.deauthorized',
+      { accountId, error: profileError }
+    );
+    throw profileError;
+  }
+  if (!profile) {
+    console.warn(`[webhooks] No profile found for Connect account ${accountId} (deauthorized)`);
+    return;
+  }
+
+  const existingRequirements =
+    (profile.stripe_connect_requirements as Record<string, unknown> | null) ?? {};
+
+  const { error: updateError } = await supabase
+    .from('profiles')
+    .update({
+      stripe_connect_charges_enabled: false,
+      stripe_connect_payouts_enabled: false,
+      stripe_connect_onboarding_complete: false,
+      stripe_connect_requirements: {
+        ...existingRequirements,
+        deauthorized: true,
+        deauthorized_at: new Date().toISOString(),
+      },
+    })
+    .eq('id', profile.id);
+
+  if (updateError) {
+    console.error(
+      '[webhooks] Failed to update profile for account.application.deauthorized',
+      { userId: profile.id, accountId, error: updateError }
+    );
+    throw updateError;
+  }
+
+  const { error: notifError } = await supabase.from('notifications').insert({
+    user_id: profile.id,
+    type: 'payment',
+    title: 'Bank Connection Disconnected',
+    body: 'Your Stripe payout connection was disconnected. Please reconnect your account to withdraw funds.',
+    data: { accountId },
+  });
+  if (notifError) {
+    console.error('[webhooks] Failed to insert deauthorized notification', {
+      userId: profile.id,
+      accountId,
+      error: notifError,
+    });
+    // Non-fatal — the capability flags are already updated, which is the
+    // load-bearing part; a missed notification isn't worth retrying the
+    // whole webhook delivery for.
   }
 }
 
@@ -965,188 +1324,16 @@ Deno.serve(async (req: Request) => {
 
       case 'transfer.failed': {
         const transfer = event.data.object as Stripe.Transfer;
-        console.log(`[webhooks] Transfer failed: ${transfer.id}`);
+        await handleTransferSetback(supabase, transfer, 'failed');
+        break;
+      }
 
-        // Read the existing metadata so we can (a) preserve fields written by
-        // the retry endpoint (e.g. retry_count, retried_at) and (b) check
-        // whether the retry limit has been reached without double-incrementing
-        // retry_count (the retry endpoint already does that increment).
-        // IMPORTANT: Also select `id` so the subsequent UPDATE can be guarded by
-        // both the primary key and the original stripe_transfer_id (optimistic
-        // lock). A concurrent retry will overwrite stripe_transfer_id with a new
-        // Stripe transfer ID; the dual-column guard makes the UPDATE a no-op in
-        // that race rather than corrupting the in-flight retry's 'pending' status.
-        const { data: existingTx, error: existingTxError } = await supabase
-          .from('wallet_transactions')
-          .select('id, metadata')
-          .eq('stripe_transfer_id', transfer.id)
-          .maybeSingle();
-
-        if (existingTxError) {
-          console.error('[webhooks] Failed to look up transaction for transfer.failed', {
-            transferId: transfer.id,
-            error: existingTxError,
-          });
-          throw existingTxError;
-        }
-
-        if (!existingTx) {
-          // No matching row — the transfer ID may have already been superseded by
-          // a retry.  Log and skip; there is nothing to refund for this event.
-          console.warn(
-            `[webhooks] No wallet_transaction found for transfer ${transfer.id} — possibly superseded by a retry. Skipping.`
-          );
-          break;
-        }
-
-        const existingMetadata = (existingTx?.metadata as Record<string, unknown> | null) ?? {};
-        const currentRetries = (existingMetadata.retry_count as number | undefined) ?? 0;
-        const permanentlyFailed = currentRetries >= MAX_TRANSFER_RETRIES;
-
-        // Use both the primary key AND the original stripe_transfer_id as an
-        // optimistic-lock guard. If /connect/retry-transfer ran between our
-        // SELECT and this UPDATE it will have already replaced stripe_transfer_id
-        // with the new transfer's ID and set status='pending'. The extra
-        // .eq('stripe_transfer_id', transfer.id) makes this UPDATE a no-op in
-        // that case, preventing us from corrupting the in-flight retry's state.
-        const { data: tx, error: txUpdateError } = await supabase
-          .from('wallet_transactions')
-          .update({
-            // wallet_transactions.status is constrained to ('pending','completed','failed').
-            // Encode permanent-failure state in metadata.transfer_status instead.
-            status: 'failed',
-            metadata: {
-              ...existingMetadata,
-              transfer_status: permanentlyFailed ? 'permanently_failed' : 'failed',
-              // Stripe Transfer objects expose failure_code on the Transfer type
-              failure_reason: (transfer as Stripe.Transfer & { failure_code?: string })
-                .failure_code,
-            },
-          })
-          .eq('id', existingTx.id)
-          .eq('stripe_transfer_id', transfer.id) // optimistic-lock guard
-          .select()
-          .maybeSingle();
-
-        if (txUpdateError) {
-          console.error('[webhooks] Failed to update transaction for transfer.failed', {
-            transactionId: existingTx.id,
-            transferId: transfer.id,
-            error: txUpdateError,
-          });
-          throw txUpdateError;
-        }
-
-        if (!tx) {
-          // The optimistic-lock guard fired: /connect/retry-transfer replaced
-          // stripe_transfer_id with a new transfer ID between our SELECT and
-          // UPDATE. The in-flight retry's row was intentionally left untouched,
-          // but this failure event has not been reflected and its refund was not
-          // issued. Surface for immediate manual investigation to avoid silent
-          // fund loss.
-          console.error(
-            '[webhooks] CRITICAL: transfer.failed race condition detected. ' +
-              `stripe_transfer_id for transaction ${existingTx.id} was replaced by a retry ` +
-              `between SELECT and UPDATE. Transfer ${transfer.id} failure not recorded and ` +
-              'refund not issued. Manual review required.',
-            { transferId: transfer.id, transactionId: existingTx.id }
-          );
-          break;
-        }
-
-        const txRow = tx as WalletTransaction;
-        const refundAmount = Math.abs(txRow.amount);
-        const txUserId = txRow.user_id;
-
-        // Idempotency guard: if transfer_status was already 'failed' or
-        // 'permanently_failed' in the DB before this execution's UPDATE, a prior
-        // invocation of this handler already issued the refund. Stripe may re-deliver
-        // the same event (e.g. if a subsequent step threw after the refund was issued),
-        // and re-running update_balance would credit the user twice. Skip the RPC and
-        // fall through to the notification idempotency check instead.
-        const refundAlreadyIssued =
-          existingMetadata.transfer_status === 'failed' ||
-          existingMetadata.transfer_status === 'permanently_failed';
-
-        if (refundAlreadyIssued) {
-          console.log(
-            `[webhooks] Skipping duplicate refund for transfer ${transfer.id} — balance already restored in a prior invocation`
-          );
-        } else {
-          // Refund the debited balance — it was decremented when the transfer was
-          // initiated and must be restored on any permanent or temporary failure,
-          // matching the behaviour of the Express server implementation.
-          const { error: rpcError } = await supabase.rpc('update_balance', {
-            p_user_id: txUserId,
-            p_amount: refundAmount,
-          });
-          if (rpcError) {
-            const { error: retryError } = await supabase.rpc('update_balance', {
-              p_user_id: txUserId,
-              p_amount: refundAmount,
-            });
-            if (retryError) {
-              console.error(
-                '[webhooks] Atomic balance update for transfer refund failed — letting Stripe retry'
-              );
-              throw retryError;
-            }
-          }
-          console.log(
-            `[webhooks] Refunded $${refundAmount} to user ${txUserId} for failed transfer (retries: ${currentRetries}/${MAX_TRANSFER_RETRIES})`
-          );
-        }
-
-        if (permanentlyFailed) {
-          console.warn(
-            `[webhooks] Transfer ${transfer.id} permanently failed after ${currentRetries} retries for user ${txUserId}. Manual review required.`
-          );
-
-          // Check for an existing notification to keep this handler idempotent
-          // (Stripe may re-deliver the same webhook event on transient errors).
-          const { data: existingNotification, error: existingNotificationError } = await supabase
-            .from('notifications')
-            .select('id')
-            .eq('user_id', txUserId)
-            .eq('type', 'payment')
-            .eq('title', 'Withdrawal Failed')
-            .contains('data', { transferId: transfer.id })
-            .maybeSingle();
-
-          if (existingNotificationError) {
-            console.error(
-              '[webhooks] Failed to check for existing permanently_failed notification',
-              {
-                userId: txUserId,
-                transferId: transfer.id,
-                error: existingNotificationError,
-              }
-            );
-            throw existingNotificationError;
-          }
-
-          if (!existingNotification) {
-            const { error: notifError } = await supabase.from('notifications').insert({
-              user_id: txUserId,
-              type: 'payment',
-              title: 'Withdrawal Failed',
-              body: 'Your withdrawal could not be completed after multiple attempts. Please contact support.',
-              data: { transferId: transfer.id, retry_count: currentRetries },
-            });
-            if (notifError) {
-              console.error('[webhooks] Failed to insert permanently_failed notification', {
-                userId: txUserId,
-                transferId: transfer.id,
-                error: notifError,
-              });
-              throw notifError;
-            }
-          } else {
-            console.log(
-              `[webhooks] Skipping duplicate permanently_failed notification for transfer ${transfer.id} and user ${txUserId}`
-            );
-          }
-        }
+      case 'transfer.reversed': {
+        // A Transfer that had already succeeded (platform → connected
+        // account) was pulled back. See handleTransferSetback's docstring
+        // for why this always requires manual review.
+        const transfer = event.data.object as Stripe.Transfer;
+        await handleTransferSetback(supabase, transfer, 'reversed');
         break;
       }
 
@@ -1177,6 +1364,19 @@ Deno.serve(async (req: Request) => {
               error: err,
             });
           }
+        }
+        break;
+      }
+
+      case 'account.application.deauthorized': {
+        // The hunter (or someone with dashboard access) disconnected this
+        // Connect account from Bounty's platform application entirely. See
+        // handleAccountDeauthorized's docstring for why this is handled
+        // proactively rather than only surfacing on the next withdrawal
+        // attempt's live stripe.accounts.retrieve() check.
+        const deauthAccountId = (event as any).account as string | undefined;
+        if (deauthAccountId) {
+          await handleAccountDeauthorized(supabase, deauthAccountId);
         }
         break;
       }
@@ -1262,6 +1462,16 @@ Deno.serve(async (req: Request) => {
           } else {
             console.warn(`[webhooks] No profile found for Connect account ${paidAccountId}`);
           }
+        }
+        break;
+      }
+
+      case 'payout.updated': {
+        // Status-tracking only — see handlePayoutStatusUpdate's docstring.
+        const payout = event.data.object as Stripe.Payout;
+        const updatedAccountId = (event as any).account as string | undefined;
+        if (updatedAccountId) {
+          await handlePayoutStatusUpdate(supabase, payout, updatedAccountId);
         }
         break;
       }

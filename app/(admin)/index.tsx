@@ -22,6 +22,7 @@ export default function AdminDashboard() {
     { id: 'verifications', title: 'Verifications', icon: 'verified-user', route: ROUTES.ADMIN.VERIFICATIONS },
     { id: 'disputes', title: 'Disputes', icon: 'gavel', route: ROUTES.ADMIN.DISPUTES },
     { id: 'transactions', title: 'Transactions', icon: 'account-balance', route: ROUTES.ADMIN.TRANSACTIONS },
+    { id: 'withdrawal-recovery', title: 'Withdrawal Recovery', icon: 'build-circle', route: ROUTES.ADMIN.WITHDRAWAL_RECOVERY },
     { id: 'reports', title: 'Reports', icon: 'report', route: ROUTES.ADMIN.REPORTS },
     { id: 'blocked', title: 'Blocked Users', icon: 'block', route: ROUTES.ADMIN.BLOCKED_USERS },
     { id: 'settings', title: 'Settings', icon: 'settings', route: ROUTES.ADMIN.SETTINGS.INDEX },

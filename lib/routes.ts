@@ -50,6 +50,7 @@ export const ROUTES = {
     
     // Financial & Transactions
     TRANSACTIONS: '/(admin)/transactions',
+    WITHDRAWAL_RECOVERY: '/(admin)/withdrawal-recovery',
     
     // Analytics & Reporting
     ANALYTICS: '/(admin)/analytics',
