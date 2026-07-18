@@ -14,6 +14,7 @@ import {
   MIN_WITHDRAWAL_USD,
   mapStripeTransferError,
   mapWithdrawBalanceError,
+  resolveWithdrawalDestination,
   validateWithdrawalRequest,
 } from '../../supabase/functions/connect/withdrawal-validation';
 
@@ -157,6 +158,64 @@ describe('mapWithdrawBalanceError', () => {
   });
 });
 
+describe('resolveWithdrawalDestination', () => {
+  const accounts = [
+    { id: 'ba_1', default_for_currency: true, bank_name: 'Chase', last4: '1111' },
+    { id: 'ba_2', default_for_currency: false, bank_name: 'Ally', last4: '2222' },
+  ];
+
+  test('rejects when the account has no linked bank accounts', () => {
+    const result = resolveWithdrawalDestination([], 'ba_1');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe('no_bank_account');
+  });
+
+  test('rejects a requested bankAccountId that does not belong to the account', () => {
+    const result = resolveWithdrawalDestination(accounts, 'ba_does_not_exist');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe('bank_account_not_found');
+  });
+
+  test('selecting the already-default account requires no update', () => {
+    const result = resolveWithdrawalDestination(accounts, 'ba_1');
+    expect(result).toEqual({
+      ok: true,
+      targetAccount: accounts[0],
+      needsDefaultUpdate: false,
+    });
+  });
+
+  test('selecting a non-default account requires promoting it to default', () => {
+    const result = resolveWithdrawalDestination(accounts, 'ba_2');
+    expect(result).toEqual({
+      ok: true,
+      targetAccount: accounts[1],
+      needsDefaultUpdate: true,
+    });
+  });
+
+  test('falls back to the current default when no bankAccountId is requested (older client)', () => {
+    const result = resolveWithdrawalDestination(accounts, undefined);
+    expect(result).toEqual({
+      ok: true,
+      targetAccount: accounts[0],
+      needsDefaultUpdate: false,
+    });
+  });
+
+  test('falls back to the first account when none is marked default and none requested', () => {
+    const noDefault = [
+      { id: 'ba_3', default_for_currency: false, bank_name: 'Wells Fargo', last4: '3333' },
+    ];
+    const result = resolveWithdrawalDestination(noDefault, undefined);
+    expect(result).toEqual({
+      ok: true,
+      targetAccount: noDefault[0],
+      needsDefaultUpdate: false,
+    });
+  });
+});
+
 describe('connect edge function contract (inlined helpers stay in sync)', () => {
   const indexSource = fs.readFileSync(
     path.join(__dirname, '../../supabase/functions/connect/index.ts'),
@@ -196,5 +255,24 @@ describe('connect edge function contract (inlined helpers stay in sync)', () => 
   test('refunds the deducted balance when a concurrent duplicate loses the insert race', () => {
     expect(indexSource).toContain('concurrent duplicate detected');
     expect(indexSource).toContain("'23505'");
+  });
+
+  test('inlines resolveWithdrawalDestination and wires it into both transfer and retry-transfer', () => {
+    expect(indexSource).toContain('function resolveWithdrawalDestination');
+    // Both the primary transfer path and the retry path must call the
+    // resolver and, on success, promote a non-default selection via
+    // updateExternalAccount before ever touching the balance.
+    const resolverCallCount = (indexSource.match(/resolveWithdrawalDestination\(/g) || []).length;
+    expect(resolverCallCount).toBeGreaterThanOrEqual(2);
+    const updateExternalAccountCallCount = (
+      indexSource.match(/stripe\.accounts\.updateExternalAccount\(/g) || []
+    ).length;
+    // Once for the pre-existing /bank-accounts/:id/default route, twice more
+    // for the transfer + retry-transfer destination-promotion paths.
+    expect(updateExternalAccountCallCount).toBeGreaterThanOrEqual(3);
+  });
+
+  test('records the resolved destination bank account on the wallet_transactions row', () => {
+    expect(indexSource).toContain('destination_bank_account_id: destinationAccount.id');
   });
 });

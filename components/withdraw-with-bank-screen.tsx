@@ -50,6 +50,10 @@ const ERROR_TITLES: Record<string, string> = {
   frozen: 'Balance On Hold',
   platform_funds: 'Withdrawals Unavailable',
   transfer_failed: 'Withdrawal Failed',
+  no_bank_account: 'Bank Account Required',
+  bank_account_not_found: 'Bank Account Not Found',
+  bank_account_default_update_unconfirmed: 'Withdrawal Failed',
+  bank_account_resolution_failed: 'Withdrawal Failed',
 };
 
 function isNetworkError(error: unknown): boolean {
@@ -293,7 +297,7 @@ export function WithdrawWithBankScreen({
 
     Alert.alert(
       'Confirm Withdrawal',
-      `Withdraw ${formatCurrency(amount)} to your ${destination}?\n\nThis typically arrives in 1-2 business days and can't be canceled once started.`,
+      `Withdraw ${formatCurrency(amount)} to your ${destination}?\n\nThis account will also become your default payout account for future withdrawals. This typically arrives in 1-2 business days and can't be canceled once started.`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Withdraw', style: 'destructive', onPress: () => performWithdraw(amount) },
@@ -337,6 +341,11 @@ export function WithdrawWithBankScreen({
             amount,
             currency: 'usd',
             idempotencyKey,
+            // The server makes this account the actual Stripe payout
+            // destination (promoting it to default_for_currency if it
+            // isn't already) before creating the transfer — see
+            // resolveWithdrawalDestination() in supabase/functions/connect.
+            bankAccountId: selectedBankAccount,
           }),
           signal: controller.signal,
         });
@@ -657,7 +666,8 @@ export function WithdrawWithBankScreen({
           <MaterialIcons name="info-outline" size={20} color={theme.primary} />
           <Text style={s.infoText}>
             Withdrawals typically arrive in 1-2 business days. There are no fees for standard bank
-            transfers.
+            transfers. The bank account you select becomes your default payout account going
+            forward.
           </Text>
         </View>
       </ScrollView>

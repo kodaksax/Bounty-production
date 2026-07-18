@@ -4,12 +4,26 @@
 -- Read-only verification queries for the withdrawal pipeline. Safe to run
 -- against production at any time — no INSERT/UPDATE/DELETE statements.
 --
--- Schema notes (verified against the live `Bounty-expo` project 2026-07-15):
+-- Schema notes (verified against the live `Bounty-expo` project 2026-07-15,
+-- re-verified 2026-07-18/19):
 --   wallet_transactions.status is a Postgres ENUM (wallet_tx_status_enum)
 --   with exactly three values: 'pending', 'completed', 'failed'.
 --   There is no 'reserved' status in this schema — a withdrawal is inserted
---   directly as 'pending' by /connect/transfer AFTER the balance has already
---   been debited via the withdraw_balance RPC.
+--   directly as 'completed' by /connect/transfer (the platform->connected-
+--   account Transfer leg is synchronous; see
+--   docs/payments/BOUNTY_WITHDRAWAL_TECHNICAL_SPECIFICATION.md §1.2).
+--
+-- IMPORTANT: as of 2026-07-18, a live-schema audit found that
+-- `check_balance_non_negative` and `idx_wallet_tx_one_pending_withdrawal`
+-- (both referenced below) did NOT exist on production, despite a 2026-04-10
+-- migration file claiming to add them — that migration was committed to git
+-- but never actually applied (this project's migrations are deployed ad hoc,
+-- not via a `supabase db push` pass over the migrations folder — see
+-- supabase/migrations/20260719_restore_profiles_balance_floor.sql and
+-- 20260719b_restore_one_pending_withdrawal_index.sql, which restore them).
+-- The queries below that say "should be impossible given X" are only true
+-- once those two migrations have actually been applied — do not assume they
+-- have been without checking (`\d profiles`, `\di wallet_transactions`).
 -- ============================================================================
 
 
@@ -30,9 +44,10 @@ ORDER BY ABS(p.balance - COALESCE(SUM(wt.amount) FILTER (WHERE wt.status = 'comp
 
 
 -- ── Section 1b: Negative wallet balances ────────────────────────────────────
--- The DB has a CHECK (balance >= 0) constraint (see
--- 20260410_harden_withdrawal_flow.sql), so this should always return zero
--- rows unless the constraint was bypassed (e.g. direct SQL, migration).
+-- Once 20260719_restore_profiles_balance_floor.sql has been applied, the DB
+-- itself enforces CHECK (balance >= 0), so this should return zero rows
+-- unless the constraint was bypassed (e.g. direct SQL, migration, or the
+-- migration hasn't actually been applied yet — see the header note above).
 SELECT id AS user_id, balance, balance_on_hold
 FROM public.profiles
 WHERE balance < 0 OR balance_on_hold < 0 OR balance_on_hold > balance;
@@ -72,6 +87,46 @@ WHERE type = 'withdrawal'
 ORDER BY created_at DESC;
 
 
+-- ── Section 2d: Payout outcomes by type (failed vs. canceled) ───────────────
+-- Visibility into supabase/functions/webhooks/index.ts's handleUndeliveredPayout(),
+-- added 2026-07-19 to also handle `payout.canceled` (previously unhandled —
+-- a canceled payout was silently dropped with no refund, no notification,
+-- and no way to distinguish it from a normal in-flight payout). Both
+-- outcomes should always show a refunded ('failed' ledger status) row with
+-- metadata.payout_status matching one of these two values — a 'completed'
+-- withdrawal whose Stripe payout is independently known to have failed or
+-- been canceled (checked in the Stripe Dashboard) but has no matching row
+-- here means the webhook never arrived or found no candidate transaction —
+-- see the Section 3b Stripe cross-check below.
+SELECT id, user_id, amount, status,
+       metadata->>'payout_status' AS payout_status,
+       metadata->>'payout_failure_code' AS payout_failure_code,
+       metadata->>'payout_id' AS payout_id,
+       created_at
+FROM public.wallet_transactions
+WHERE type = 'withdrawal'
+  AND metadata->>'payout_status' IN ('failed', 'canceled')
+ORDER BY created_at DESC
+LIMIT 50;
+
+
+-- ── Section 2e: Withdrawals with no recorded destination bank account ──────
+-- supabase/functions/connect/index.ts now records metadata.destination_bank_
+-- account_id on every new withdrawal/retry (2026-07-19 fix for the bank-
+-- account-selection-not-wired bug). Rows created before that fix will
+-- legitimately have no value here — this is expected for old rows, not a
+-- bug — but if a *new* row (created_at after the fix was deployed) is
+-- missing it, that indicates a regression in the destination-resolution
+-- code path.
+SELECT id, user_id, amount, status, created_at,
+       metadata->>'destination_bank_account_id' AS destination_bank_account_id
+FROM public.wallet_transactions
+WHERE type = 'withdrawal'
+  AND metadata->>'destination_bank_account_id' IS NULL
+ORDER BY created_at DESC
+LIMIT 50;
+
+
 -- ── Section 3: Withdrawals reconcile with wallet ledger ─────────────────────
 -- Duplicate ledger entries for the same idempotency key (should be
 -- impossible given idx_wallet_tx_withdrawal_idempotency, included as a
@@ -83,8 +138,8 @@ WHERE type = 'withdrawal' AND idempotency_key IS NOT NULL
 GROUP BY user_id, idempotency_key
 HAVING COUNT(*) > 1;
 
--- More than one *pending* withdrawal per user (should be impossible given
--- idx_wallet_tx_one_pending_withdrawal).
+-- More than one *pending* withdrawal per user (should be impossible once
+-- idx_wallet_tx_one_pending_withdrawal has been applied — see header note).
 SELECT user_id, COUNT(*) AS pending_count, array_agg(id) AS transaction_ids
 FROM public.wallet_transactions
 WHERE type = 'withdrawal' AND status = 'pending'

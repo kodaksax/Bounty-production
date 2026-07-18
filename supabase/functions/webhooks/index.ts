@@ -82,6 +82,233 @@ async function syncConnectAccountToProfile(
   }
 }
 
+/**
+ * Shared handler for `payout.failed` and `payout.canceled`. Both events mean
+ * the same thing from the wallet's perspective: the platform-to-connected-
+ * account Transfer already succeeded (the withdrawal row is 'completed'),
+ * but the connected-account-to-bank Payout never delivered the money, so the
+ * balance must be credited back to the hunter — otherwise their app balance
+ * is permanently short by the withdrawal amount with no automated recovery.
+ *
+ * They are NOT semantically identical, so this is intentionally not a blind
+ * copy-paste: a `canceled` payout never reached the bank at all (Stripe
+ * pulled it back, or something canceled it, while it was still `pending` —
+ * per Stripe's Payout lifecycle a payout can only be canceled before it
+ * leaves `pending`), so it typically carries no `failure_code`/
+ * `failure_message` describing a bank-level rejection the way a genuine
+ * `failed` payout does. The customer-facing copy and `payout_status` marker
+ * below are adjusted per outcome accordingly; the refund/idempotency
+ * mechanics are identical because the financial consequence (money did not
+ * arrive) is identical.
+ *
+ * LIMITATION (shared with the original payout.failed logic): Stripe's
+ * automatic Connect payouts sweep the connected account's *entire* available
+ * balance on a schedule — a payout is not necessarily 1:1 with a single
+ * Transfer. We match by (user, exact amount) against the most recent
+ * unresolved completed withdrawal. If two completed, unresolved withdrawals
+ * of the exact same amount exist for one user, only the most recent is
+ * matched; this is logged for manual review, not silently wrong.
+ */
+async function handleUndeliveredPayout(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  payout: Stripe.Payout,
+  accountId: string,
+  outcome: 'failed' | 'canceled'
+): Promise<void> {
+  console.log(`[webhooks] Payout ${outcome}: ${payout.id}, reason: ${payout.failure_code}`);
+
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('stripe_connect_account_id', accountId)
+    .maybeSingle();
+
+  if (profileError) {
+    console.error(`[webhooks] Supabase error looking up profile for payout.${outcome}`, {
+      accountId,
+      error: profileError,
+    });
+    throw profileError;
+  }
+
+  if (!profile) {
+    console.warn(`[webhooks] No profile found for Connect account ${accountId}`);
+    return;
+  }
+
+  const payoutAmountDollars = payout.amount / 100;
+  const { data: candidateTx, error: candidateTxError } = await supabase
+    .from('wallet_transactions')
+    .select('id, amount, metadata')
+    .eq('user_id', profile.id)
+    .eq('type', 'withdrawal')
+    .eq('status', 'completed')
+    .eq('amount', -payoutAmountDollars)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (candidateTxError) {
+    console.error(`[webhooks] Failed to look up candidate transaction for payout.${outcome}`, {
+      payoutId: payout.id,
+      userId: profile.id,
+      error: candidateTxError,
+    });
+    throw candidateTxError;
+  }
+
+  if (!candidateTx) {
+    console.warn(
+      `[webhooks] No matching completed withdrawal found for payout ${payout.id} ` +
+        `(user ${profile.id}, amount $${payoutAmountDollars}) — nothing to refund. ` +
+        'Manual review recommended if this is unexpected.'
+    );
+  } else {
+    const candidateTxRow = candidateTx as unknown as WalletTransaction;
+    const candidateMetadata = (candidateTxRow.metadata as Record<string, unknown> | null) ?? {};
+    // Idempotency guard covers redelivery of either event type for the same
+    // transaction — once refunded via either outcome, never refund again.
+    const refundAlreadyIssued =
+      candidateMetadata.payout_status === 'failed' || candidateMetadata.payout_status === 'canceled';
+
+    if (refundAlreadyIssued) {
+      console.log(
+        `[webhooks] Skipping duplicate refund for payout ${payout.id} — balance already restored in a prior invocation`
+      );
+    } else {
+      const { data: updatedTx, error: txUpdateError } = await supabase
+        .from('wallet_transactions')
+        .update({
+          status: 'failed',
+          metadata: {
+            ...candidateMetadata,
+            payout_status: outcome,
+            payout_failure_code: payout.failure_code ?? (outcome === 'canceled' ? 'canceled' : null),
+            payout_failure_message: payout.failure_message ?? null,
+            payout_id: payout.id,
+          },
+        })
+        .eq('id', candidateTxRow.id)
+        .eq('status', 'completed') // optimistic-lock guard against a concurrent redelivery
+        .select()
+        .maybeSingle();
+
+      if (txUpdateError) {
+        console.error(`[webhooks] Failed to update transaction for payout.${outcome}`, {
+          transactionId: candidateTxRow.id,
+          payoutId: payout.id,
+          error: txUpdateError,
+        });
+        throw txUpdateError;
+      }
+
+      if (!updatedTx) {
+        console.log(
+          `[webhooks] Skipping duplicate refund for payout ${payout.id} — a concurrent delivery already resolved this transaction`
+        );
+      } else {
+        const refundAmount = Math.abs(candidateTxRow.amount);
+        const { error: rpcError } = await supabase.rpc('update_balance', {
+          p_user_id: profile.id,
+          p_amount: refundAmount,
+        });
+        if (rpcError) {
+          const { error: retryError } = await supabase.rpc('update_balance', {
+            p_user_id: profile.id,
+            p_amount: refundAmount,
+          });
+          if (retryError) {
+            console.error(
+              `[webhooks] CRITICAL: balance refund for ${outcome} payout could not be applied — letting Stripe retry`,
+              { payoutId: payout.id, userId: profile.id, error: retryError }
+            );
+            throw retryError;
+          }
+        }
+        console.log(
+          `[webhooks] Refunded $${refundAmount} to user ${profile.id} for ${outcome} payout ${payout.id}`
+        );
+      }
+    }
+  }
+
+  const notifTitle = outcome === 'canceled' ? 'Withdrawal Canceled' : 'Payout Failed';
+  const notifBody =
+    outcome === 'canceled'
+      ? `Your withdrawal of $${(payout.amount / 100).toFixed(2)} was canceled before it reached your bank. ${payout.failure_message || 'Your funds have been returned to your Bounty balance.'}`
+      : `Your payout of $${(payout.amount / 100).toFixed(2)} could not be processed. ${payout.failure_message || payout.failure_code || 'Please update your bank account details.'}`;
+
+  // Insert notification, falling back to an update when the insert
+  // conflicts. Avoid `.upsert()` because the DB uses a partial unique
+  // index on (user_id,type,stripe_payout_id) WHERE stripe_payout_id IS NOT NULL.
+  const notifRow = {
+    user_id: profile.id,
+    type: 'payment',
+    title: notifTitle,
+    body: notifBody,
+    data: {
+      payoutId: payout.id,
+      failureCode: payout.failure_code,
+      failureMessage: payout.failure_message,
+      outcome,
+    },
+    stripe_payout_id: payout.id,
+  };
+
+  const { error: insertErr } = await supabase.from('notifications').insert(notifRow);
+
+  if (insertErr) {
+    const { data: updatedNotif, error: updateFallbackErr } = await supabase
+      .from('notifications')
+      .update(notifRow)
+      .eq('user_id', profile.id)
+      .eq('type', 'payment')
+      .eq('stripe_payout_id', payout.id)
+      .select()
+      .maybeSingle();
+
+    if (updateFallbackErr) {
+      console.error(`[webhooks] Failed to insert payout.${outcome} notification`, {
+        profileId: profile.id,
+        insert_error: insertErr,
+        update_error: updateFallbackErr,
+      });
+      throw updateFallbackErr;
+    }
+
+    if (!updatedNotif) {
+      console.error(
+        `[webhooks] Failed to insert or update payout.${outcome} notification (no rows affected)`,
+        { profileId: profile.id, insert_error: insertErr }
+      );
+      throw new Error(`Failed to insert or update payout.${outcome} notification`);
+    }
+
+    console.log(`[webhooks] Notified hunter ${profile.id} of payout.${outcome} (update fallback)`);
+  } else {
+    console.log(`[webhooks] Notified hunter ${profile.id} of payout.${outcome}`);
+  }
+
+  // Flag the profile so support can follow up (reuses the existing
+  // payout_failed_at / PayoutFailedBanner mechanism for both outcomes —
+  // both mean "the hunter's payout did not arrive and may need attention").
+  const { error: payoutFlagError } = await supabase
+    .from('profiles')
+    .update({
+      payout_failed_at: new Date().toISOString(),
+      payout_failure_code: payout.failure_code ?? (outcome === 'canceled' ? 'canceled' : null),
+    })
+    .eq('id', profile.id);
+  if (payoutFlagError) {
+    console.error('[webhooks] Failed to flag profile payout_failed_at', {
+      profileId: profile.id,
+      error: payoutFlagError,
+    });
+    throw payoutFlagError;
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -1042,203 +1269,25 @@ Deno.serve(async (req: Request) => {
       case 'payout.failed': {
         const payout = event.data.object as Stripe.Payout;
         const failedAccountId = (event as any).account as string | undefined;
-        console.log(`[webhooks] Payout failed: ${payout.id}, reason: ${payout.failure_code}`);
-
         if (failedAccountId) {
-          const { data: failedProfile, error: failedProfileError } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('stripe_connect_account_id', failedAccountId)
-            .maybeSingle();
+          await handleUndeliveredPayout(supabase, payout, failedAccountId, 'failed');
+        }
+        break;
+      }
 
-          if (failedProfileError) {
-            console.error('[webhooks] Supabase error looking up profile for payout.failed', {
-              accountId: failedAccountId,
-              error: failedProfileError,
-            });
-            throw failedProfileError;
-          }
-
-          if (failedProfile) {
-            // Restore the balance for the withdrawal this payout was covering.
-            // By the time a bank-level payout fails, `transfer.paid` has already
-            // marked the wallet_transactions row 'completed' (the Transfer from
-            // platform -> connected account already succeeded). The money never
-            // reached the hunter's bank, so it must be credited back — otherwise
-            // the hunter's app balance is permanently short by the withdrawal
-            // amount with no automated recovery.
-            //
-            // LIMITATION: Stripe's automatic Connect payouts sweep the connected
-            // account's *entire* available balance on a schedule — a payout is
-            // not necessarily 1:1 with a single Transfer. We match by
-            // (user, amount) against the most recent unresolved completed
-            // withdrawal, mirroring the candidate-matching already used for
-            // `transfer.created` above. If two completed, unresolved withdrawals
-            // of the exact same amount exist for one user, only the most recent
-            // is matched; this is logged for manual review, not silently wrong.
-            const payoutAmountDollars = payout.amount / 100;
-            const { data: candidateTx, error: candidateTxError } = await supabase
-              .from('wallet_transactions')
-              .select('id, amount, metadata')
-              .eq('user_id', failedProfile.id)
-              .eq('type', 'withdrawal')
-              .eq('status', 'completed')
-              .eq('amount', -payoutAmountDollars)
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .maybeSingle();
-
-            if (candidateTxError) {
-              console.error(
-                '[webhooks] Failed to look up candidate transaction for payout.failed',
-                { payoutId: payout.id, userId: failedProfile.id, error: candidateTxError }
-              );
-              throw candidateTxError;
-            }
-
-            if (!candidateTx) {
-              console.warn(
-                `[webhooks] No matching completed withdrawal found for payout ${payout.id} ` +
-                  `(user ${failedProfile.id}, amount $${payoutAmountDollars}) — nothing to refund. ` +
-                  'Manual review recommended if this is unexpected.'
-              );
-            } else {
-              const candidateTxRow = candidateTx as unknown as WalletTransaction;
-              const candidateMetadata =
-                (candidateTxRow.metadata as Record<string, unknown> | null) ?? {};
-              const refundAlreadyIssued = candidateMetadata.payout_status === 'failed';
-
-              if (refundAlreadyIssued) {
-                console.log(
-                  `[webhooks] Skipping duplicate refund for payout ${payout.id} — balance already restored in a prior invocation`
-                );
-              } else {
-                const { data: updatedTx, error: txUpdateError } = await supabase
-                  .from('wallet_transactions')
-                  .update({
-                    status: 'failed',
-                    metadata: {
-                      ...candidateMetadata,
-                      payout_status: 'failed',
-                      payout_failure_code: payout.failure_code ?? null,
-                      payout_failure_message: payout.failure_message ?? null,
-                      payout_id: payout.id,
-                    },
-                  })
-                  .eq('id', candidateTxRow.id)
-                  .eq('status', 'completed') // optimistic-lock guard against a concurrent redelivery
-                  .select()
-                  .maybeSingle();
-
-                if (txUpdateError) {
-                  console.error('[webhooks] Failed to update transaction for payout.failed', {
-                    transactionId: candidateTxRow.id,
-                    payoutId: payout.id,
-                    error: txUpdateError,
-                  });
-                  throw txUpdateError;
-                }
-
-                if (!updatedTx) {
-                  console.log(
-                    `[webhooks] Skipping duplicate refund for payout ${payout.id} — a concurrent delivery already resolved this transaction`
-                  );
-                } else {
-                  const refundAmount = Math.abs(candidateTxRow.amount);
-                  const { error: rpcError } = await supabase.rpc('update_balance', {
-                    p_user_id: failedProfile.id,
-                    p_amount: refundAmount,
-                  });
-                  if (rpcError) {
-                    const { error: retryError } = await supabase.rpc('update_balance', {
-                      p_user_id: failedProfile.id,
-                      p_amount: refundAmount,
-                    });
-                    if (retryError) {
-                      console.error(
-                        '[webhooks] CRITICAL: balance refund for failed payout could not be applied — letting Stripe retry',
-                        { payoutId: payout.id, userId: failedProfile.id, error: retryError }
-                      );
-                      throw retryError;
-                    }
-                  }
-                  console.log(
-                    `[webhooks] Refunded $${refundAmount} to user ${failedProfile.id} for failed payout ${payout.id}`
-                  );
-                }
-              }
-            }
-
-            // Insert notification, falling back to an update when the insert
-            // conflicts. Avoid `.upsert()` because the DB uses a partial unique
-            // index on (user_id,type,stripe_payout_id) WHERE stripe_payout_id IS NOT NULL.
-            const notifRow = {
-              user_id: failedProfile.id,
-              type: 'payment',
-              title: 'Payout Failed',
-              body: `Your payout of $${(payout.amount / 100).toFixed(2)} could not be processed. ${payout.failure_message || payout.failure_code || 'Please update your bank account details.'}`,
-              data: {
-                payoutId: payout.id,
-                failureCode: payout.failure_code,
-                failureMessage: payout.failure_message,
-              },
-              stripe_payout_id: payout.id,
-            };
-
-            const { error: insertErr } = await supabase.from('notifications').insert(notifRow);
-
-            if (insertErr) {
-              const { data: updatedNotif, error: updateFallbackErr } = await supabase
-                .from('notifications')
-                .update(notifRow)
-                .eq('user_id', failedProfile.id)
-                .eq('type', 'payment')
-                .eq('stripe_payout_id', payout.id)
-                .select()
-                .maybeSingle();
-
-              if (updateFallbackErr) {
-                console.error('[webhooks] Failed to insert payout.failed notification', {
-                  profileId: failedProfile.id,
-                  insert_error: insertErr,
-                  update_error: updateFallbackErr,
-                });
-                throw updateFallbackErr;
-              }
-
-              if (!updatedNotif) {
-                console.error(
-                  '[webhooks] Failed to insert or update payout.failed notification (no rows affected)',
-                  { profileId: failedProfile.id, insert_error: insertErr }
-                );
-                throw new Error('Failed to insert or update payout.failed notification');
-              }
-
-              console.log(
-                `[webhooks] Notified hunter ${failedProfile.id} of payout.failed (update fallback)`
-              );
-            } else {
-              console.log(`[webhooks] Notified hunter ${failedProfile.id} of payout.failed`);
-            }
-
-            // Flag the profile so support can follow up
-            const { error: payoutFlagError } = await supabase
-              .from('profiles')
-              .update({
-                payout_failed_at: new Date().toISOString(),
-                payout_failure_code: payout.failure_code ?? null,
-              })
-              .eq('id', failedProfile.id);
-            if (payoutFlagError) {
-              console.error('[webhooks] Failed to flag profile payout_failed_at', {
-                profileId: failedProfile.id,
-                error: payoutFlagError,
-              });
-              throw payoutFlagError;
-            }
-          } else {
-            console.warn(`[webhooks] No profile found for Connect account ${failedAccountId}`);
-          }
+      case 'payout.canceled': {
+        // A payout can only be canceled by Stripe while it is still
+        // `pending` (i.e. before it has left for the bank) — see
+        // handleUndeliveredPayout()'s docstring for why this is handled with
+        // shared refund logic but distinct customer-facing copy from
+        // payout.failed. Previously this event had no handler at all: a
+        // canceled payout was silently dropped (no status update, no wallet
+        // correction, no notification), leaving the withdrawal permanently
+        // stuck with a 'completed' status the hunter could never resolve.
+        const payout = event.data.object as Stripe.Payout;
+        const canceledAccountId = (event as any).account as string | undefined;
+        if (canceledAccountId) {
+          await handleUndeliveredPayout(supabase, payout, canceledAccountId, 'canceled');
         }
         break;
       }

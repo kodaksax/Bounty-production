@@ -194,6 +194,58 @@ function mapWithdrawBalanceError(message: string | undefined): {
     status: 500,
   };
 }
+
+// ─── Withdrawal destination (bank account) resolution ───────────────────────
+// See the identical, documented copy in ./withdrawal-validation.ts for the
+// full rationale and the documented residual limitation. Keep in sync.
+
+interface ExternalAccountSummary {
+  id: string;
+  default_for_currency?: boolean | null;
+  bank_name?: string | null;
+  last4?: string | null;
+}
+
+type DestinationResolution =
+  | {
+      ok: true;
+      targetAccount: ExternalAccountSummary;
+      needsDefaultUpdate: boolean;
+    }
+  | {
+      ok: false;
+      error: string;
+      code: string;
+    };
+
+function resolveWithdrawalDestination(
+  accounts: ExternalAccountSummary[],
+  requestedBankAccountId: string | undefined
+): DestinationResolution {
+  if (accounts.length === 0) {
+    return {
+      ok: false,
+      error: 'No bank account is linked to your payout account. Please add one before withdrawing.',
+      code: 'no_bank_account',
+    };
+  }
+
+  if (requestedBankAccountId) {
+    const requested = accounts.find(a => a.id === requestedBankAccountId);
+    if (!requested) {
+      return {
+        ok: false,
+        error:
+          'Your selected bank account could not be found on your payout account. Please refresh and try again.',
+        code: 'bank_account_not_found',
+      };
+    }
+    return { ok: true, targetAccount: requested, needsDefaultUpdate: !requested.default_for_currency };
+  }
+
+  const current = accounts.find(a => a.default_for_currency) ?? accounts[0];
+  return { ok: true, targetAccount: current, needsDefaultUpdate: false };
+}
 // ─── End inlined withdrawal-validation helpers ──────────────────────────────
 
 // ─── Staged Phase 2 retirement of the legacy wallet-balance withdrawal path ─
@@ -544,10 +596,21 @@ Deno.serve(async (req: Request) => {
           ? body.idempotencyKey.trim().slice(0, 200)
           : undefined;
 
+      // Which external bank account the hunter selected in the withdraw
+      // screen. Optional for backward compatibility with older clients; see
+      // resolveWithdrawalDestination() above for why this is now required to
+      // actually control where the money goes (it previously wasn't wired
+      // through at all — see docs/payments/BOUNTY_WITHDRAWAL_TECHNICAL_SPECIFICATION.md §3.8).
+      const requestedBankAccountId =
+        typeof body.bankAccountId === 'string' && body.bankAccountId.trim()
+          ? body.bankAccountId.trim()
+          : undefined;
+
       console.log('[connect/transfer] withdrawal requested', {
         userId,
         amount,
         hasIdempotencyKey: !!idempotencyKey,
+        hasBankAccountId: !!requestedBankAccountId,
       });
 
       // Idempotency replay: if this key was already processed, return the
@@ -646,6 +709,85 @@ Deno.serve(async (req: Request) => {
             error:
               'We could not verify your payout account. Your balance has not been charged — please try again.',
             code: 'account_verification_failed',
+          },
+          503
+        );
+      }
+
+      // Resolve and (if needed) promote the destination bank account BEFORE
+      // touching the balance. stripe.transfers.create() below only moves
+      // funds into the connected account's shared Stripe balance — Stripe's
+      // own automatic payout schedule later sweeps that balance to whichever
+      // external account is `default_for_currency` at sweep time. Making the
+      // hunter's selection authoritative here is what actually fixes "money
+      // sent to the wrong account" (see the extended rationale next to
+      // resolveWithdrawalDestination() above).
+      let destinationAccount: ExternalAccountSummary;
+      try {
+        const externalAccounts = await stripe.accounts.listExternalAccounts(
+          p.stripe_connect_account_id,
+          { object: 'bank_account', limit: 100 }
+        );
+        const summaries: ExternalAccountSummary[] = externalAccounts.data.map(ba => ({
+          id: ba.id,
+          default_for_currency: (ba as unknown as { default_for_currency?: boolean }).default_for_currency,
+          bank_name: (ba as unknown as { bank_name?: string }).bank_name ?? null,
+          last4: (ba as unknown as { last4?: string }).last4 ?? null,
+        }));
+
+        const destination = resolveWithdrawalDestination(summaries, requestedBankAccountId);
+        if (!destination.ok) {
+          console.warn('[connect/transfer] bank account resolution failed', {
+            userId,
+            code: destination.code,
+            requestedBankAccountId,
+          });
+          return jsonResponse({ error: destination.error, code: destination.code }, 400);
+        }
+
+        destinationAccount = destination.targetAccount;
+
+        if (destination.needsDefaultUpdate) {
+          const updated = (await stripe.accounts.updateExternalAccount(
+            p.stripe_connect_account_id,
+            destinationAccount.id,
+            { default_for_currency: true } as Stripe.ExternalAccountUpdateParams
+          )) as Stripe.BankAccount;
+          if (!(updated as unknown as { default_for_currency?: boolean }).default_for_currency) {
+            // Read-back verification: Stripe accepted the call but did not
+            // actually report the account as default. Fail closed rather
+            // than proceed on an unverified assumption about where the
+            // money will end up.
+            console.error(
+              '[connect/transfer] CRITICAL: default_for_currency update did not take effect — refusing to proceed',
+              { userId, accountId: p.stripe_connect_account_id, bankAccountId: destinationAccount.id }
+            );
+            return jsonResponse(
+              {
+                error:
+                  'We could not confirm your selected bank account as the payout destination. Your balance has not been charged — please try again.',
+                code: 'bank_account_default_update_unconfirmed',
+              },
+              502
+            );
+          }
+          console.log('[connect/transfer] promoted selected bank account to default_for_currency', {
+            userId,
+            accountId: p.stripe_connect_account_id,
+            bankAccountId: destinationAccount.id,
+          });
+        }
+      } catch (bankAccountError) {
+        console.error('[connect/transfer] failed to resolve/set destination bank account', {
+          userId,
+          accountId: p.stripe_connect_account_id,
+          error: (bankAccountError as { message?: string })?.message,
+        });
+        return jsonResponse(
+          {
+            error:
+              'We could not confirm your payout destination. Your balance has not been charged — please try again.',
+            code: 'bank_account_resolution_failed',
           },
           503
         );
@@ -766,7 +908,13 @@ Deno.serve(async (req: Request) => {
           stripe_transfer_id: transfer.id,
           stripe_connect_account_id: p.stripe_connect_account_id,
           idempotency_key: idempotencyKey ?? null,
-          metadata: { transfer_id: transfer.id, idempotency_key: idempotencyKey ?? null },
+          metadata: {
+            transfer_id: transfer.id,
+            idempotency_key: idempotencyKey ?? null,
+            destination_bank_account_id: destinationAccount.id,
+            destination_bank_last4: destinationAccount.last4 ?? null,
+            destination_bank_name: destinationAccount.bank_name ?? null,
+          },
         })
         .select()
         .single();
@@ -858,6 +1006,15 @@ Deno.serve(async (req: Request) => {
       if (CONNECT_TRANSFER_RETIRED) return legacyTransferRetiredResponse();
       const body = await req.json();
       const { transactionId } = body;
+      // Optional: let the hunter pick a different destination on retry (e.g.
+      // the original attempt failed because that bank account was invalid).
+      // Falls back to the original transaction's recorded destination, then
+      // to whatever Stripe currently has as default for rows created before
+      // this fix existed — see resolveWithdrawalDestination() above.
+      const requestedBankAccountId =
+        typeof body.bankAccountId === 'string' && body.bankAccountId.trim()
+          ? body.bankAccountId.trim()
+          : undefined;
 
       if (!transactionId) {
         return jsonResponse({ error: 'Transaction ID is required' }, 400);
@@ -900,6 +1057,70 @@ Deno.serve(async (req: Request) => {
       }
 
       const amount = Math.abs(t.amount);
+
+      // Resolve/promote the destination bank account before touching the
+      // balance — same logic and rationale as the primary /transfer path.
+      const originalDestinationId =
+        (t.metadata as Record<string, unknown> | null)?.destination_bank_account_id;
+      const effectiveRequestedBankAccountId =
+        requestedBankAccountId ??
+        (typeof originalDestinationId === 'string' ? originalDestinationId : undefined);
+
+      let destinationAccount: ExternalAccountSummary;
+      try {
+        const externalAccounts = await stripe.accounts.listExternalAccounts(
+          p.stripe_connect_account_id,
+          { object: 'bank_account', limit: 100 }
+        );
+        const summaries: ExternalAccountSummary[] = externalAccounts.data.map(ba => ({
+          id: ba.id,
+          default_for_currency: (ba as unknown as { default_for_currency?: boolean }).default_for_currency,
+          bank_name: (ba as unknown as { bank_name?: string }).bank_name ?? null,
+          last4: (ba as unknown as { last4?: string }).last4 ?? null,
+        }));
+
+        const destination = resolveWithdrawalDestination(summaries, effectiveRequestedBankAccountId);
+        if (!destination.ok) {
+          return jsonResponse({ error: destination.error, code: destination.code }, 400);
+        }
+        destinationAccount = destination.targetAccount;
+
+        if (destination.needsDefaultUpdate) {
+          const updated = (await stripe.accounts.updateExternalAccount(
+            p.stripe_connect_account_id,
+            destinationAccount.id,
+            { default_for_currency: true } as Stripe.ExternalAccountUpdateParams
+          )) as Stripe.BankAccount;
+          if (!(updated as unknown as { default_for_currency?: boolean }).default_for_currency) {
+            console.error(
+              '[connect] CRITICAL: default_for_currency update did not take effect during retry — refusing to proceed',
+              { userId, accountId: p.stripe_connect_account_id, bankAccountId: destinationAccount.id }
+            );
+            return jsonResponse(
+              {
+                error:
+                  'We could not confirm your selected bank account as the payout destination. Your balance has not been charged — please try again.',
+                code: 'bank_account_default_update_unconfirmed',
+              },
+              502
+            );
+          }
+        }
+      } catch (bankAccountError) {
+        console.error('[connect] failed to resolve/set destination bank account during retry', {
+          userId,
+          accountId: p.stripe_connect_account_id,
+          error: (bankAccountError as { message?: string })?.message,
+        });
+        return jsonResponse(
+          {
+            error:
+              'We could not confirm your payout destination. Your balance has not been charged — please try again.',
+            code: 'bank_account_resolution_failed',
+          },
+          503
+        );
+      }
 
       // Enforce hold: available = balance - balance_on_hold.
       const available = (p.balance ?? 0) - (p.balance_on_hold ?? 0);
@@ -969,6 +1190,9 @@ Deno.serve(async (req: Request) => {
             ...t.metadata,
             retry_count: retryCount + 1,
             retried_at: new Date().toISOString(),
+            destination_bank_account_id: destinationAccount.id,
+            destination_bank_last4: destinationAccount.last4 ?? null,
+            destination_bank_name: destinationAccount.bank_name ?? null,
           },
         })
         .eq('id', transactionId);
