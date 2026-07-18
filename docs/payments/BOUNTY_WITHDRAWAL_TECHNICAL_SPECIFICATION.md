@@ -361,15 +361,17 @@ stateDiagram-v2
 
 Production Edge Functions have been redeployed directly at least three times in the week preceding this document, twice with real regressions (a stuck-withdrawal bug on 2026-07-17, and untracked-drift RLS/schema changes on 2026-07-17/18). **Do not trust `git log` alone.** Before relying on any assumption about current live behavior, fetch the deployed source for `connect` and `webhooks` and diff against the local repo (strip CRLF before diffing). If they differ and the difference isn't explained by a known, in-progress change, treat it as a live incident.
 
-### 4.8 Known code gaps (engineering backlog, not yet fixed)
+### 4.8 Known code gaps (engineering backlog)
 
-1. **Selected-bank-account is not wired to the transfer call** (§3.8) — cosmetic-only selection in the withdraw screen.
-2. **No `payout.canceled` webhook handler** (§3.2, §3.6) — silent, no automated recovery.
-3. **`profiles.balance` has no live database-level non-negative constraint**, despite a migration file intending to add one (§2.1 NEW FINDING) — protected only by application-layer RPC logic.
-4. **No index preventing more than one pending withdrawal per user** — likewise present in a migration file but not live; lower-risk given the synchronous-transfer design, but would matter if the transfer flow is ever made genuinely asynchronous.
-5. **No admin/support-side retry or refund tool** for withdrawals beyond the 3-attempt client cap.
-6. **No scheduled reconciliation job** — `scripts/reconcile_and_triage.sql` is manual-run only.
-7. **`profiles` SELECT RLS is effectively unrestricted** for any authenticated (or anon) caller across all 62 columns, including `balance`, `stripe_connect_account_id`, `risk_level`, `email`, `phone` — a read-side counterpart to a write-side hole that was fixed 2026-07-17. Not yet fixed; needs a dedicated audit of every legitimate cross-user profile read before it can be restricted safely.
+> **Update 2026-07-21 (RESOLVED):** items 1–6 below have all been fixed and deployed to production as part of two follow-up hardening passes (2026-07-19 and 2026-07-21). See `docs/withdrawals/` — a full 6-document operational doc set — for the current, authoritative state; this section is left as a historical record of what was originally found. Item 7 (`profiles` SELECT RLS) remains **deliberately not fixed** — confirmed during the 2026-07-21 pass to be an app-wide change (breaks the admin panel and 4+ client read paths), not safely scoped to withdrawal work; see the Production Readiness Review delivered that session for the recommended migration path.
+
+1. ~~**Selected-bank-account is not wired to the transfer call**~~ (§3.8) — **fixed 2026-07-19**: the selected account is now resolved and promoted to `default_for_currency` before the balance is debited.
+2. ~~**No `payout.canceled` webhook handler**~~ (§3.2, §3.6) — **fixed 2026-07-19**. `transfer.reversed`, `payout.updated`, and `account.application.deauthorized` handlers were additionally added **2026-07-21**.
+3. ~~**`profiles.balance` has no live database-level non-negative constraint**~~ (§2.1) — **fixed 2026-07-19**, `check_balance_non_negative` confirmed live.
+4. ~~**No index preventing more than one pending withdrawal per user**~~ — **fixed 2026-07-19**, `idx_wallet_tx_one_pending_withdrawal` confirmed live.
+5. ~~**No admin/support-side retry or refund tool**~~ — **fixed 2026-07-21**: new `admin-withdrawals` Edge Function (force-retry, manual balance adjustment, fully audited via `admin_action_log`) plus an admin UI screen.
+6. ~~**No scheduled reconciliation job**~~ — **fixed 2026-07-21**: `run_withdrawal_reconciliation()` runs daily via `pg_cron`, writing findings to `reconciliation_findings`.
+7. **`profiles` SELECT RLS is effectively unrestricted** for any authenticated (or anon) caller across all 62 columns, including `balance`, `stripe_connect_account_id`, `risk_level`, `email`, `phone` — a read-side counterpart to a write-side hole that was fixed 2026-07-17. **Still not fixed** — confirmed 2026-07-21 to require an app-wide change (a `public_profiles` view, migrating 4+ client call sites off `select('*')`, and an admin-role-aware RLS branch to avoid breaking the admin panel), not something safely scoped to a withdrawal-focused pass.
 
 ---
 
