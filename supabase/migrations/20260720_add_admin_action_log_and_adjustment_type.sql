@@ -21,14 +21,26 @@
 --      table out of the same anon-key-admin-panel pattern already flagged as
 --      risky elsewhere (profiles SELECT RLS).
 --
---   2. `wallet_transactions_type_check` gains `admin_adjustment` so a manual
---      balance correction shows up as a real ledger row (not just an opaque
+--   2. wallet_transactions.type gains 'admin_adjustment' so a manual balance
+--      correction shows up as a real ledger row (not just an opaque
 --      profiles.balance change) — this keeps scripts/reconcile_and_triage.sql
 --      and the new scheduled reconciliation job's balance-drift check
 --      (profiles.balance vs SUM(completed wallet_transactions)) accurate
 --      instead of flagging every admin adjustment as unexplained drift.
---      Mirrors the exact pattern used to add 'dispute_loss' in
---      20260414_add_stripe_dispute_columns.sql.
+--
+--      ⚠ Live-schema correction made while applying this migration: the
+--      migration files (20251001_baseline_schema.sql,
+--      20260414_add_stripe_dispute_columns.sql) describe `type` as a plain
+--      TEXT column governed by a `wallet_transactions_type_check` CHECK
+--      constraint — but the LIVE column is actually a Postgres ENUM
+--      (`wallet_tx_type_enum`, confirmed via information_schema/pg_enum),
+--      with no such CHECK constraint present. This is the same git/prod
+--      drift pattern documented throughout this project's other withdrawal
+--      migrations — the DROP/ADD CONSTRAINT approach below (copied from the
+--      'dispute_loss' migration's own described approach) does not apply
+--      live; `ALTER TYPE ... ADD VALUE` is used instead, guarded so it's
+--      also correct if a future environment genuinely has the CHECK-
+--      constraint version instead of the enum.
 
 CREATE TABLE IF NOT EXISTS public.admin_action_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -53,17 +65,14 @@ ALTER TABLE public.admin_action_log ENABLE ROW LEVEL SECURITY;
 COMMENT ON TABLE public.admin_action_log IS
   'Audit trail for admin-initiated withdrawal recovery actions (force-retry, manual balance adjustment), written exclusively by the admin-withdrawals Edge Function via service_role.';
 
--- Widen wallet_transactions.type to accept manual admin adjustments, same
--- DROP+ADD pattern used to add 'dispute_loss'.
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'wallet_transactions_type_check'
-  ) THEN
-    ALTER TABLE public.wallet_transactions DROP CONSTRAINT wallet_transactions_type_check;
-  END IF;
-END $$;
-
-ALTER TABLE public.wallet_transactions
-  ADD CONSTRAINT wallet_transactions_type_check
-  CHECK (type IN ('escrow', 'release', 'refund', 'deposit', 'withdrawal', 'dispute_loss', 'admin_adjustment'));
+-- Widen wallet_transactions.type to accept manual admin adjustments. Live
+-- schema uses a Postgres ENUM (wallet_tx_type_enum, confirmed via
+-- information_schema/pg_enum against project xwlwqzzphmmhghiqvkeu, PG17) —
+-- NOT the CHECK-constraint version described by the migration files.
+-- ALTER TYPE ... ADD VALUE must run as a standalone top-level statement (not
+-- inside a DO block/PL-pgSQL body, and applied outside apply_migration's
+-- transaction wrapper — same constraint class as CREATE INDEX CONCURRENTLY
+-- in 20260719b_restore_one_pending_withdrawal_index.sql). Deployed via
+-- execute_sql, not apply_migration, for that reason; this statement is
+-- captured here for the record and to keep git in sync with what's live.
+ALTER TYPE public.wallet_tx_type_enum ADD VALUE IF NOT EXISTS 'admin_adjustment';
