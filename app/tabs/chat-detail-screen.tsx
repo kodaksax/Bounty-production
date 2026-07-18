@@ -117,9 +117,14 @@ export function ChatDetailScreen({
     }
   }
 
-  const handleRetry = async (messageId: string) => {
+  // Stable identity: this is a dependency of the memoized `renderMessage`
+  // below, which in turn is passed as `onRetry` to every memoized
+  // MessageBubble row. An unstable handleRetry busts that memo on every
+  // render (e.g. every keystroke while composing), forcing every visible
+  // message bubble to re-render.
+  const handleRetry = useCallback(async (messageId: string) => {
     await retryMessage(messageId)
-  }
+  }, [retryMessage])
 
   const handleLongPress = useCallback((messageId: string) => {
     setSelectedMessageId(messageId)
@@ -170,11 +175,13 @@ export function ChatDetailScreen({
     )
   }, [handleLongPress, handleRetry, currentUserId])
 
-  const renderFooter = () => {
+  // Stable identity so ListFooterComponent isn't remounted by FlatList on
+  // every render (e.g. every keystroke in the composer).
+  const renderFooter = useCallback(() => {
     const isTyping = typingUsersRef.current && typingUsersRef.current.size > 0
     if (!isTyping) return null
     return <TypingIndicator userName={conversation.name} />
-  }
+  }, [typingUsersRef, conversation.name])
 
   const getItemLayout = (_: any, index: number) => ({
     length: 80,

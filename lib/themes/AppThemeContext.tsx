@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Appearance, ColorSchemeName } from 'react-native';
 import { darkTheme } from './darkTheme';
 import { lightTheme } from './lightTheme';
@@ -65,8 +65,16 @@ export function AppThemeProvider({ children, defaultMode = 'dark' }: AppThemePro
 
   const theme = resolveTheme(mode, systemScheme);
 
+  // Memoized: this context is consumed by nearly every screen in the app, so
+  // an unmemoized value would re-render the whole tree on any AppThemeProvider
+  // render (e.g. the Appearance change-listener effect re-running).
+  const value = useMemo(
+    () => ({ theme, mode, isDark: theme.isDark, toggleTheme, setTheme }),
+    [theme, mode, toggleTheme, setTheme]
+  );
+
   return (
-    <ThemeContext.Provider value={{ theme, mode, isDark: theme.isDark, toggleTheme, setTheme }}>
+    <ThemeContext.Provider value={value}>
       {children}
     </ThemeContext.Provider>
   );

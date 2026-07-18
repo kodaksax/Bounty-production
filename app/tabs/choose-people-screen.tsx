@@ -2,7 +2,7 @@
 
 import { MaterialIcons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar'
@@ -18,7 +18,7 @@ export default function ChoosePeopleScreen() {
   const insets = useSafeAreaInsets()
   const router = useRouter()
   const { theme } = useAppThemeContext()
-  const styles = makeStyles(theme)
+  const styles = useMemo(() => makeStyles(theme), [theme])
   const [loading, setLoading] = useState(true)
   const [mutuals, setMutuals] = useState<any[]>([])
   const [query, setQuery] = useState('')
@@ -96,7 +96,7 @@ export default function ChoosePeopleScreen() {
     }
   }
 
-  const renderItem = ({ item }: { item: any }) => {
+  const renderItem = useCallback(({ item }: { item: any }) => {
     const checked = selectedIds.includes(item.id)
     return (
       <TouchableOpacity style={styles.row} onPress={() => toggleSelect(item.id)}>
@@ -116,7 +116,7 @@ export default function ChoosePeopleScreen() {
         </View>
       </TouchableOpacity>
     )
-  }
+  }, [selectedIds, styles])
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>

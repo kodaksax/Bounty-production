@@ -235,11 +235,12 @@ export function useBounties(options: UseBountiesOptions = {}): BountiesState & B
     [status, userId, autoRefresh, refetch]
   );
 
-  // Subscribe to WebSocket events for real-time updates
-  // Memoize the handler to prevent unnecessary subscription cycles
-  useEffect(() => {
-    useWebSocketEvent('bounty.status', handleBountyStatusUpdate);
-  }, [handleBountyStatusUpdate]);
+  // Subscribe to WebSocket events for real-time updates.
+  // useWebSocketEvent is itself a hook (it calls useEffect internally), so it
+  // must be invoked directly in the render body — wrapping it in another
+  // useEffect calls a hook outside of render, which violates the Rules of
+  // Hooks and can silently break the subscription.
+  useWebSocketEvent('bounty.status', handleBountyStatusUpdate);
 
   return {
     bounties,

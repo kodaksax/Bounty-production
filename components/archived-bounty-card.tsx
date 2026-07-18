@@ -2,6 +2,7 @@
 
 import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
+import { useMemo } from "react"
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { useAppThemeContext } from "../lib/themes/AppThemeContext"
 import type { AppTheme } from "../lib/themes/types"
@@ -31,7 +32,7 @@ export function ArchivedBountyCard({
   onMenuClick,
 }: ArchivedBountyCardProps) {
   const { theme } = useAppThemeContext()
-  const s = makeStyles(theme)
+  const s = useMemo(() => makeStyles(theme), [theme])
   const validAvatarUrl = getValidAvatarUrl(avatarSrc)
 
   return (

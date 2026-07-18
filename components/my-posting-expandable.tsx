@@ -270,7 +270,7 @@ export function MyPostingExpandable({
   const [startTime] = useState(Date.now());
   const { transactions } = useWallet();
   const { theme } = useAppThemeContext();
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
 
   useEffect(() => {
     // Reset non-draft UI state when bounty changes; draft state is reset via reducer

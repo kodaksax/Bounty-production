@@ -17,7 +17,7 @@ import { CURRENT_USER_ID } from "lib/utils/data-utils";
 // import { CURRENT_USER_ID } from "lib/utils/data-utils";
 import { useFocusEffect, useRouter } from "expo-router";
 import * as React from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Platform, RefreshControl, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SettingsScreen } from "../../components/settings-screen";
 import { SkillsetEditScreen } from "../../components/skillset-edit-screen";
@@ -31,7 +31,7 @@ import type { AppTheme } from '../../lib/themes/types';
 export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   const router = useRouter();
   const { theme } = useAppThemeContext();
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const [isEditing, setIsEditing] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showHistory, setShowHistory] = useState(false)

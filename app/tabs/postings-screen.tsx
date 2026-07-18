@@ -121,7 +121,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   const BOTTOM_NAV_OFFSET = 60// height of BottomNav + gap so sticky actions sit fully above it
   const { balance, deposit, createEscrow, refundEscrow } = useWallet()
   const { theme } = useAppThemeContext()
-  const styles = makeStyles(theme)
+  const styles = useMemo(() => makeStyles(theme), [theme])
   // Filter chip state for each tab; kept separate so toggling one doesn't affect the other.
   // In Progress supports: all, review, applied, in_progress, rejected.
   // My Postings supports: all, review, open, in_progress.

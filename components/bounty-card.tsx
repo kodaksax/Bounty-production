@@ -6,6 +6,7 @@ import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import type { AppTheme } from 'lib/themes/types';
 import { isBountyDeadlinePassed } from 'lib/utils/schedule-utils';
 import { shareBounty } from 'lib/utils/share-utils';
+import { useMemo } from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface BountyCardProps {
@@ -66,7 +67,7 @@ export function BountyCard({
   const isOwner = currentUserId === bounty.user_id;
   const router = useRouter();
   const { theme } = useAppThemeContext();
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
 
   // A bounty whose deadline has passed without being completed/cancelled is
   // shown as "Deadline Passed" instead of its underlying open/in_progress

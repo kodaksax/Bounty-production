@@ -210,18 +210,20 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
        status={message.status}
        isPinned={message.isPinned}
        onLongPress={handleLongPress}
-       onRetry={(id) => retryMessage(id)}
+       onRetry={retryMessage}
      />
    ),
    [handleLongPress, retryMessage, currentUserId]
  );
 
 
- const renderFooter = () => {
+ // Stable identity so ListFooterComponent isn't remounted by FlatList on
+ // every render (e.g. every keystroke in the composer).
+ const renderFooter = useCallback(() => {
    const isTyping = typingUsersRef.current && typingUsersRef.current.size > 0;
    if (!isTyping) return null;
    return <TypingIndicator userName={conversation.name} />;
- };
+ }, [typingUsersRef, conversation.name]);
 
 
 

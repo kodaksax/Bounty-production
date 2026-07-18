@@ -2,6 +2,7 @@
 
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from "react";
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -33,10 +34,11 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   const [showAddMoney, setShowAddMoney] = useState(false)
   const [showPaymentMethods, setShowPaymentMethods] = useState(false)
   const [showTransactionHistory, setShowTransactionHistory] = useState(false)
-  const { balance, transactions, refreshFromApi, secureStoreAvailable } = useWallet();
+  const { balance, isLoading: walletLoading, transactions, refreshFromApi, secureStoreAvailable } = useWallet();
   const { paymentMethods, isLoading: stripeLoading, error: stripeError, loadPaymentMethods } = useStripe();
   const { triggerHaptic } = useHapticFeedback();
   const { session } = useAuthContext();
+  const router = useRouter();
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
 
@@ -141,7 +143,11 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
               <View style={s.balanceCard}>
                 <View style={s.balanceCardHeader}>
                   <Text style={s.balanceLabel}>BALANCE</Text>
-                  <Text style={s.balanceAmount}>${balance.toFixed(2)}</Text>
+                  {walletLoading ? (
+                    <View style={s.balanceSkeleton} />
+                  ) : (
+                    <Text style={s.balanceAmount}>${balance.toFixed(2)}</Text>
+                  )}
                 </View>
                 <View style={s.balanceActionsRow}>
                   <TouchableOpacity
@@ -272,7 +278,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
                 title="No Transactions Yet"
                 description="Your transaction history will appear here. Start by posting a bounty or completing work to see your activity."
                 actionLabel="Browse Bounties"
-                onAction={() => { }}
+                onAction={() => router.push('/tabs/bounty-app')}
                 style={{ paddingVertical: 40 }}
               />
             </View>
@@ -363,6 +369,13 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     fontSize: 32,
     fontWeight: 'bold',
     marginTop: 4,
+  },
+  balanceSkeleton: {
+    width: 120,
+    height: 32,
+    borderRadius: 6,
+    marginTop: 4,
+    backgroundColor: t.border ?? 'rgba(255,255,255,0.12)',
   },
   balanceActionsRow: {
     flexDirection: 'row',

@@ -55,7 +55,13 @@ export function useMessages(conversationId: string): UseMessagesResult {
     }
   }, [conversationId]);
 
-  const sendMessage = async (text: string, mediaUrl?: string | null) => {
+  // All of the action functions below are wrapped in useCallback so consumers
+  // (chat-detail-screen, full-chat-detail-screen) get stable references. Those
+  // screens pass these down as props to memoized FlatList row components
+  // (MessageBubble); an unstable function here silently busts that memo on
+  // every render, forcing every visible message bubble to re-render (e.g. on
+  // every keystroke in the composer).
+  const sendMessage = useCallback(async (text: string, mediaUrl?: string | null) => {
     let tempMessage: Message | undefined;
     try {
       setError(null);
@@ -113,30 +119,30 @@ export function useMessages(conversationId: string): UseMessagesResult {
         setMessages(prev => prev.filter(m => m.id !== tempId));
       }
     }
-  };
+  }, [conversationId, currentUserId]);
 
-  const retryMessage = async (messageId: string) => {
+  const retryMessage = useCallback(async (messageId: string) => {
     try {
       // For now, just refetch messages
       await fetchMessages();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to retry message');
     }
-  };
+  }, [fetchMessages]);
 
-  const pinMessage = async (messageId: string) => {
+  const pinMessage = useCallback(async (messageId: string) => {
     // Pin/unpin is not implemented in Supabase service yet
     // For now, just show error
     setError('Pin message feature not yet implemented');
-  };
+  }, []);
 
-  const unpinMessage = async (messageId: string) => {
+  const unpinMessage = useCallback(async (messageId: string) => {
     // Pin/unpin is not implemented in Supabase service yet
     // For now, just show error
     setError('Unpin message feature not yet implemented');
-  };
+  }, []);
 
-  const copyMessage = async (messageId: string) => {
+  const copyMessage = useCallback(async (messageId: string) => {
     try {
       const message = messages.find(m => m.id === messageId);
       if (message) {
@@ -145,19 +151,19 @@ export function useMessages(conversationId: string): UseMessagesResult {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to copy message');
     }
-  };
+  }, [messages]);
 
-  const reportMessage = async (messageId: string) => {
+  const reportMessage = useCallback(async (messageId: string) => {
     try {
       // Report functionality would need backend implementation
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to report message');
     }
-  };
+  }, []);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     await fetchMessages();
-  };
+  }, [fetchMessages]);
 
   useEffect(() => {
     let subscription: RealtimeChannel | null = null;
