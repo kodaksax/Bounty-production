@@ -153,57 +153,33 @@ describe('Consolidated Wallet Service', () => {
       await expect(svc.getBalance('user1')).rejects.toMatchObject({ name: 'ExternalServiceError' });
     });
 
-    it('derives balance from transactions when profile balance is 0 and derived > 0', async () => {
-      // Call 0: profiles.single → balance 0
-      // Call 1: wallet_transactions (deriveBalanceFromTransactions) → sum to 5000
-      // Call 2: profiles.update (fire-and-forget reconciliation)
-      const admin = makeAdmin([
-        { data: { balance: 0 }, error: null },
-        { data: [{ amount: 3000 }, { amount: 2000 }], error: null },
-        { error: null }, // reconcile update
-      ]);
+    it('returns 0 as-is when profile balance is 0, even if completed transactions would sum higher', async () => {
+      // Regression test for the 2026-07-18 fix: getBalance must NEVER derive a
+      // balance from wallet_transactions and write it back to profiles.balance.
+      // A cached $0 can be legitimately correct (an in-flight debit already
+      // happened, or a deliberate administrative write-off) even when
+      // completed-transaction history would sum to something positive — see
+      // docs/payments/WITHDRAWAL_SYSTEM_RUNBOOK.md §8/§9 for the real incident
+      // this guards against (a written-off balance silently reappearing).
+      // Only ONE `from()` call (the profiles read) should happen — no
+      // wallet_transactions read, no reconcile write.
+      const admin = makeAdmin([{ data: { balance: 0 }, error: null }]);
       const svc = buildService(admin);
       const result = await svc.getBalance('user1');
-      expect(result.balance).toBe(5000);
-      // Flush microtasks so the fire-and-forget reconcile logger.info callback runs (line 207)
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
+      expect(result.balance).toBe(0);
+      expect(admin.from).toHaveBeenCalledTimes(1);
+      expect(admin.from).toHaveBeenCalledWith('profiles');
     });
 
-    it('logs warn when reconcile update fails (fire-and-forget)', async () => {
-      const admin = makeAdmin([
-        { data: { balance: 0 }, error: null },
-        { data: [{ amount: 5000 }], error: null },
-        { error: { message: 'reconcile failed' } }, // reconcile update → error → logger.warn
-      ]);
+    it('never calls profiles.update from getBalance under any balance value', async () => {
+      // deriveBalanceFromTransactions and the fire-and-forget reconcile write
+      // were removed entirely — assert the underlying query builder's
+      // `.update()` is never invoked as part of a balance read.
+      const admin = makeAdmin([{ data: { balance: 12345 }, error: null }]);
       const svc = buildService(admin);
       await svc.getBalance('user1');
-      // Flush microtasks so the reconcile then-handler (line 202) executes
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    it('returns 0 when profile balance is 0 and no transactions exist', async () => {
-      const admin = makeAdmin([
-        { data: { balance: 0 }, error: null },
-        // deriveBalanceFromTransactions: error path → returns 0
-        { data: null, error: { message: 'DB error' } },
-      ]);
-      const svc = buildService(admin);
-      const result = await svc.getBalance('user1');
-      expect(result.balance).toBe(0);
-    });
-
-    it('returns 0 when profile balance is 0 and transactions sum to 0', async () => {
-      const admin = makeAdmin([
-        { data: { balance: 0 }, error: null },
-        { data: [], error: null },
-      ]);
-      const svc = buildService(admin);
-      const result = await svc.getBalance('user1');
-      expect(result.balance).toBe(0);
+      const profilesQuery = admin.from.mock.results[0].value;
+      expect(profilesQuery.update).not.toHaveBeenCalled();
     });
   });
 
@@ -1288,28 +1264,6 @@ describe('Consolidated Wallet Service', () => {
       );
 
       // Let fire-and-forget flag update settle
-      await new Promise<void>(resolve => setImmediate(resolve));
-    });
-  });
-
-  // =========================================================================
-  // getBalance — fire-and-forget reconcile catch path
-  // =========================================================================
-  describe('getBalance (reconcile catch path)', () => {
-    it('logs error when fire-and-forget reconcile update chain throws (not just returns error)', async () => {
-      // The reconcile update chain rejects (throws) instead of returning { error }.
-      // This covers the .catch() handler after the fire-and-forget .then() call.
-      const admin = makeAdmin([
-        { data: { balance: 0 }, error: null }, // profile balance = 0
-        { data: [{ amount: 5000 }], error: null }, // derived from transactions
-        Promise.reject(new Error('network timeout')), // reconcile update chain THROWS
-      ]);
-      const svc = buildService(admin);
-
-      // Should still resolve successfully (fire-and-forget)
-      await expect(svc.getBalance('user1')).resolves.toBeDefined();
-
-      // Flush micro-tasks so the catch handler fires
       await new Promise<void>(resolve => setImmediate(resolve));
     });
   });
