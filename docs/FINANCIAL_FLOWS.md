@@ -1,6 +1,6 @@
 # BOUNTYExpo Financial Flows
 
-> **Last Updated:** 2025  
+> **Last Updated:** 2025 (§5.3, §5.4, §6, §8 partially refreshed 2026-07-17 — see `docs/payments/WITHDRAWAL_SYSTEM_RUNBOOK.md` for the current, audited withdrawal-specific architecture, state machine, and runbook)
 > **Scope:** End-to-end payment, wallet, escrow, payout, and dispute flows for the BOUNTYExpo React-Native (Expo) application.
 
 ---
@@ -420,7 +420,7 @@ Hunter or Poster initiates dispute
 
 ### 5.3 Stripe Charge Dispute Webhooks
 
-> ⚠️ **Gap:** The `webhooks` Edge Function does **not** handle `charge.dispute.created` or `charge.dispute.closed` events. Stripe-level chargebacks are not surfaced in the app's dispute or transaction state.
+> **Updated 2026-07-17:** `charge.dispute.created` and `charge.dispute.closed` **are** handled (this section previously said they weren't — verified stale against the live code during a 2026-07-17 audit). `charge.dispute.created` records the dispute in `bounty_disputes`, sets `profiles.balance_frozen = true` for the poster, and notifies them; `withdraw_balance()` enforces the freeze server-side (see `docs/payments/WITHDRAWAL_SYSTEM_RUNBOOK.md` §5).
 
 The following webhook events **are** handled:
 
@@ -431,12 +431,14 @@ The following webhook events **are** handled:
 | `setup_intent.succeeded` | `webhooks/index.ts` | Saves card to `payment_methods`, updates `stripe_customer_id` |
 | `setup_intent.setup_failed` | `webhooks/index.ts` | Records failure in `stripe_events` |
 | `charge.refunded` | `webhooks/index.ts` | Inserts refund transaction, calls `update_balance` RPC |
-| `transfer.created` | `webhooks/index.ts` | Links `stripe_transfer_id` to withdrawal transaction |
-| `transfer.paid` | `webhooks/index.ts` | Marks withdrawal transaction as `completed` |
-| `transfer.failed` | `webhooks/index.ts` | Marks transaction `failed`, refunds balance via `update_balance` |
-| `account.updated` | `webhooks/index.ts` | Updates `stripe_connect_onboarded_at` on profile |
+| `transfer.created` | `webhooks/index.ts` | Backfills `stripe_transfer_id` onto the withdrawal transaction if missing |
+| `transfer.paid` | `webhooks/index.ts` | Defensive: marks transaction `completed` if not already (see §6.3 — the live `/connect/transfer` path already writes `completed` synchronously; Stripe does not actually deliver this event for connected-account balance transfers) |
+| `transfer.failed` | `webhooks/index.ts` | Marks transaction `failed`, refunds balance via `update_balance`, enforces `MAX_TRANSFER_RETRIES` before flagging `permanently_failed` |
+| `account.updated` | `webhooks/index.ts` | Syncs `stripe_connect_charges_enabled`/`payouts_enabled`/`requirements`/`stripe_connect_onboarded_at` on profile |
 | `payout.paid` | `webhooks/index.ts` | Inserts success notification for hunter |
-| `payout.failed` | `webhooks/index.ts` | Inserts failure notification, sets `payout_failed_at` on profile |
+| `payout.failed` | `webhooks/index.ts` | Refunds the matching `completed` withdrawal's balance via `update_balance`, marks it `failed`, inserts failure notification, sets `payout_failed_at` on profile |
+| `charge.dispute.created` | `webhooks/index.ts` | Records dispute in `bounty_disputes`, sets `profiles.balance_frozen = true`, notifies the poster |
+| `charge.dispute.closed` | `webhooks/index.ts` | Resolves the dispute record, unfreezes the balance if no other open disputes |
 
 ### 5.4 Webhook Idempotency
 
@@ -456,6 +458,8 @@ This ensures Stripe retries (which resend the same `event.id`) are safely dedupl
 ## 6. Payouts / Withdrawal Screen
 
 **Production Status: ⚠️ Partial** — Transfer infrastructure exists; Connect onboarding UI is incomplete for seamless in-app completion.
+
+> **See `docs/payments/WITHDRAWAL_SYSTEM_RUNBOOK.md` for the current, audited architecture, state machine, security model, operational runbook, and troubleshooting guide.** That document supersedes this section for anything beyond the high-level flow below. It also covers a staged (currently off) `CONNECT_TRANSFER_RETIRED` flag in `connect/index.ts`, part of an in-progress migration to a `bounty-payments` v2 function — not documented further here since it isn't live yet.
 
 ### 6.1 Hunter Payout Architecture
 
@@ -705,18 +709,22 @@ Stripe requires amounts as **integer cents** (minimum 50 cents), enforced at the
 
 ### 8.2 Known Gaps and Risks ⚠️❌
 
+> **2026-07-17 audit note:** several rows below were verified stale and corrected/removed. Two items were found and **fixed** the same day: a withdrawal-status regression (deployed outside git, causing withdrawals to get stuck `pending` forever) and a **critical** RLS/grant hole letting any authenticated user write their own `profiles.balance` directly and cash it out. See `docs/payments/WITHDRAWAL_SYSTEM_RUNBOOK.md` §5.1 and §8 for full detail — that document is now the source of truth for withdrawal-specific security/reliability state.
+
 | Issue | Severity | Detail |
 |-------|----------|--------|
-| **No `charge.dispute.created` / `charge.dispute.closed` webhook handlers** | ⚠️ High | If a cardholder files a chargeback with their bank, the platform has no automated response. Disputed funds are not frozen in the app. The application-level `bounty_disputes` table exists but is not linked to Stripe chargebacks. |
 | **Stripe Connect onboarding UX is incomplete** | ⚠️ High | Hunters are redirected to a Stripe-hosted URL; return flow to the app after KYC completion is not fully integrated with a seamless in-app experience. |
+| **A second, unused withdrawal schema exists** (`withdrawals` table, `withdraw_balance_v2()`, `cancel_withdrawal()`) | ⚠️ High | More mature than the live path (proper `reserved/pending/paid/failed/canceled` lifecycle) but not called anywhere in `connect/index.ts`. Looks like an abandoned migration or unfinished rewrite; needs a product decision. See runbook §7. |
 | **Three parallel server surfaces for the same routes** | ⚠️ Medium | `GET /wallet/balance` exists in the Express server, the Fastify service, and the Edge Function. Routing depends on which `API_BASE_URL` is resolved. A configuration mistake could silently route to the wrong surface. |
-| **RLS policies for `wallet_transactions` not verified** | ⚠️ Medium | The codebase uses service-role keys for most DB writes (bypassing RLS). It's unclear whether RLS policies exist on `wallet_transactions` for direct user access, which is required if client-side Supabase queries are ever used. |
-| **No dispute freeze UI** | ⚠️ Medium | When a dispute is opened (application level), there is no mechanism to freeze the wallet balance of the poster to prevent withdrawal of disputed funds. |
-| **Webhook replay risk beyond `stripe_event_id`** | ⚠️ Low | `apply_deposit` is idempotent, but `charge.refunded` and transfer event handlers perform direct inserts without conflict guards — a rare network-level replay could double-insert these records. |
-| **`transfer.failed` retry count not consistently enforced** | ⚠️ Low | `POST /connect/retry-transfer` checks a retry count, but the initial `transfer.failed` webhook handler does not increment or enforce it. |
+| **Dead duplicate withdrawal UI** | ⚠️ Medium | `components/withdraw-screen.tsx` (753 lines) is unreferenced dead code duplicating `withdraw-with-bank-screen.tsx`'s entire money-moving flow; both received the same hardening patch on 2026-07-11, meaning someone is manually keeping two copies in sync. Should be deleted. |
+| **Legacy-balance write-off vs. balance auto-reconcile can conflict** | ⚠️ Medium | `GET /wallet/balance` resurrects a zeroed `profiles.balance` from the ledger sum whenever cached balance is exactly 0 and a positive ledger sum exists — this can silently undo a legacy-balance write-off that didn't insert an offsetting `'completed'` ledger row. See runbook §8/§9. |
+| **Webhook replay risk beyond `stripe_event_id`** | ⚠️ Low | `apply_deposit` is idempotent, but `charge.refunded` performs a direct insert without a conflict guard — a rare network-level replay could double-insert. (Transfer/payout handlers were re-verified 2026-07-17 and *do* have proper idempotency guards via `metadata.transfer_status`/`payout_status` checks.) |
 | **No push notification on balance change** | ⚠️ Low | Webhooks update the DB balance but do not trigger a push notification to the mobile app. The app learns of balance changes only when `refreshFromApi` is called (screen focus or auth events). |
 | **Payout notification only on `payout.paid` event** | ℹ️ Info | `payout.failed` sets `profiles.payout_failed_at` but the UI has no recovery screen guiding the hunter to fix their bank details. |
 | **iOS SecureStore key format** | ℹ️ Info | Keys containing `:` are sanitized to `_` (e.g., `@bountyexpo:secure:wallet_balance` → `@bountyexpo_secure_wallet_balance`). Existing installs that wrote keys before sanitization was added may not be able to read them. |
+| ~~No `charge.dispute.created`/`closed` webhook handlers~~ | Resolved | Verified 2026-07-17: both are implemented and wired to `profiles.balance_frozen`. This row was stale. |
+| ~~RLS policies for `wallet_transactions` not verified~~ | Resolved | Verified 2026-07-17: `wallet_transactions` RLS is fully locked down (deny-all INSERT/UPDATE/DELETE). `profiles` was **not** locked down and had a critical hole — fixed same day, see §5.1 in the runbook. |
+| ~~No dispute freeze UI~~ / ~~`transfer.failed` retry count not enforced~~ | Resolved | Verified 2026-07-17: `balance_frozen` freeze is enforced server-side in `withdraw_balance()`; `transfer.failed` does check and enforce `MAX_TRANSFER_RETRIES` before flagging `permanently_failed`. Both rows were stale. |
 
 ---
 
