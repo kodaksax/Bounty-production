@@ -157,6 +157,48 @@ Executed on explicit executive approval ("Deploy both").
 
 **Remaining production-impacting work: only the 57-file dead-code deletion (§4), pending separate authorization (Gate #3).**
 
+## 6c. Phase 4 execution results — 58 dead-code files DELETED
+
+Executed on explicit executive approval ("Proceed"). Corrected count: the list was always 58 files, not 57 (a labeling discrepancy in the original session's count — the path list itself was unchanged and independently re-verified twice).
+
+`git rm` of exactly the 58 verified-dead paths, one commit (`fc380b73`), `58 files changed, 8126 deletions(-)`. Post-deletion validation:
+- `tsc --noEmit`: clean, zero errors.
+- `npm run lint`: 0 errors, 204 warnings (identical to pre-deletion baseline — the lint script only targets `app/**`/`lib/**`, so this was expected, not a false negative).
+- Full Jest suite (not just the targeted subset from earlier phases): **165 test suites, 2433 tests, 100% pass**, 0 failures.
+- Fresh repo-wide reference search for all 58 basenames post-deletion: only 7 matches total, every one confirmed to be either (a) the known live "superseded duplicate" counterparts (`transaction-history-screen.tsx`, `workflow-dispute-modal.tsx`, both unaffected and still present), or (b) a single unrelated `console.log` string in `scripts/test-remember-me.js` that merely prints a file path as documentation text, not an import.
+- A second, separate repo-wide search targeting only the 36 `components/ui/*` basenames returned **zero matches** — confirming no stray reference survived in any form.
+
+Zero regressions found.
+
+## 6d. Deployment Improvements — permanent Edge Function deployment process (DESIGN ONLY, not implemented)
+
+Per instruction, this is a documented recommendation only — no CI/CD files were created or modified this session.
+
+**Root problem recap:** there is currently no automated deployment path for Supabase Edge Functions in this repo at all (see §3). Every deploy is a manual, per-function action, which is exactly how `payments`/`apple-pay` fell multiple versions behind git.
+
+**Recommended design:**
+
+1. **GitHub Actions workflow** (`.github/workflows/deploy-edge-functions.yml`, new file, not created this session):
+   - Trigger: `push` to `main` with a `paths:` filter on `supabase/functions/**`, plus a `workflow_dispatch` manual trigger for ad hoc redeploys.
+   - Job matrix over every directory under `supabase/functions/*` (dynamically discovered via a `find`/`ls` step, so a newly-added function is automatically included — this is exactly the class of gap that caused this session's problem).
+   - Auth via a `SUPABASE_ACCESS_TOKEN` repo secret (Supabase CLI personal access token, not the project's service-role key) and `SUPABASE_PROJECT_REF` set to the **actual production ref** (`xwlwqzzphmmhghiqvkeu`) — the current `package.json` scripts pointing at unrelated dev/staging refs should be corrected or removed to avoid this exact confusion recurring.
+   - Step: `supabase functions deploy <slug> --project-ref $SUPABASE_PROJECT_REF` per function, preserving each function's existing `verify_jwt` setting (read from `supabase/config.toml`'s `[functions.<slug>]` section rather than hardcoding, so a mismatch like this session's near-miss on `payments`'s `verify_jwt: false` can't happen silently).
+
+2. **Deployment triggers:** push-to-main (automatic, scoped by path filter) + manual `workflow_dispatch` (for redeploying a single function without a code change, e.g. after a secret rotation).
+
+3. **Production safeguards:**
+   - Require the workflow to run `deno check`/`deno lint` (already exists in `ci.yml`, just needs to cover all functions, not the current hardcoded 4) as a blocking pre-deploy step.
+   - Post-deploy verification step (see #6 below) that fails the workflow (and ideally alerts) if deployed source doesn't match the git commit that triggered it.
+
+4. **Staging deployment flow:** this project currently has no staging Supabase project wired into any deploy path (the `deploy:functions:staging` npm script points at a project ref that isn't this repo's actual staging branch per Supabase's branching feature). Recommend either wiring the workflow to also deploy to the Supabase preview/staging branch on PRs (using `list_branches`/branch-specific refs), or explicitly documenting that there is no automated staging deploy and manual verification is required before merging function changes to `main`.
+
+5. **Rollback process:** Supabase retains per-function version history; a rollback is `supabase functions deploy <slug> --project-ref <ref>` with the prior version's source checked out (e.g. `git show <prior-commit>:supabase/functions/<slug>/index.ts`). The workflow should tag each deploy with the git SHA (via a version comment or Supabase function metadata if available) so "what git commit is live right now" is always answerable without needing this kind of manual audit again.
+
+6. **Version verification / post-deployment health checks:**
+   - Immediately after each deploy, call `get_edge_function` (or the CLI equivalent) and diff the returned source against the just-deployed git blob — fail the workflow on mismatch.
+   - A lightweight synthetic health-check request per function (e.g. an OPTIONS preflight, which every function here already handles cheaply) to confirm a 200/204 before declaring the deploy successful.
+   - Optionally, a scheduled (e.g. daily) job that runs the same source-diff check against all deployed functions independent of any deploy event — this would have caught the `payments`/`apple-pay` drift automatically instead of requiring a manual audit session to discover it.
+
 ## 7. Suggested next priorities (beyond this session)
 
 - Add test coverage for the admin suspend/ban `updateStatus` action (currently zero).
