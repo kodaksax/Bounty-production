@@ -375,7 +375,19 @@ Deno.serve(async (req: Request) => {
         paymentMethodId,
         paymentMethodType,
         confirm: shouldConfirm,
+        idempotencyKey,
       } = body
+
+      // Stripe idempotency keys are capped at 255 chars; sanitizeText already
+      // strips angle brackets and truncates to 1000, so just cap the length
+      // here. An absent/invalid key falls back to no idempotency protection
+      // (matches prior behavior) rather than failing the request outright.
+      const sanitizedIdempotencyKey = typeof idempotencyKey === 'string' && idempotencyKey.length > 0
+        ? sanitizeText(idempotencyKey).slice(0, 255)
+        : undefined
+      const stripeRequestOptions = sanitizedIdempotencyKey
+        ? { idempotencyKey: sanitizedIdempotencyKey }
+        : undefined
 
       let validatedAmount: number
       try {
@@ -479,7 +491,7 @@ Deno.serve(async (req: Request) => {
           },
         }
 
-        const paymentIntent = await stripe.paymentIntents.create(piParams)
+        const paymentIntent = await stripe.paymentIntents.create(piParams, stripeRequestOptions)
 
         // Persist the mandate id for off-session reuse on subsequent deposits.
         const newMandateId = (paymentIntent as any).mandate ?? null
@@ -516,7 +528,7 @@ Deno.serve(async (req: Request) => {
       if (typeof paymentMethodId === 'string' && paymentMethodId.startsWith('pm_')) {
         piParams.payment_method = paymentMethodId
       }
-      const paymentIntent = await stripe.paymentIntents.create(piParams)
+      const paymentIntent = await stripe.paymentIntents.create(piParams, stripeRequestOptions)
 
       return jsonResponse({ clientSecret: paymentIntent.client_secret, paymentIntentId: paymentIntent.id })
     }

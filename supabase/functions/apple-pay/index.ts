@@ -66,7 +66,19 @@ Deno.serve(async (req: Request) => {
     // POST /apple-pay/payment-intent
     if (subPath === '/payment-intent') {
       const body = await req.json()
-      const { amountCents, bountyId, description } = body ?? {}
+      const { amountCents, bountyId, description, idempotencyKey } = body ?? {}
+
+      // The client (lib/services/apple-pay-service.ts) generates a fresh key
+      // per payment attempt and reuses it across its own automatic retries.
+      // Without forwarding it to Stripe, a network-timeout retry could create
+      // a second PaymentIntent (and, if both are later confirmed, a double
+      // charge) for what the client believes is a single attempt.
+      const sanitizedIdempotencyKey = typeof idempotencyKey === 'string' && idempotencyKey.length > 0
+        ? sanitizeText(idempotencyKey).slice(0, 255)
+        : undefined
+      const stripeRequestOptions = sanitizedIdempotencyKey
+        ? { idempotencyKey: sanitizedIdempotencyKey }
+        : undefined
 
       let validatedAmount: number
       try {
@@ -100,7 +112,7 @@ Deno.serve(async (req: Request) => {
           purpose: 'wallet_deposit',
         },
         description: sanitizedDescription,
-      })
+      }, stripeRequestOptions)
 
       return jsonResponse({
         clientSecret: paymentIntent.client_secret,

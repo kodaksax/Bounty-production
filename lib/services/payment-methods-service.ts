@@ -17,6 +17,7 @@ import { logger } from '../utils/error-logger';
 import { getNetworkErrorMessage } from '../utils/network-connectivity';
 import { analyticsService } from './analytics-service';
 import { performanceService } from './performance-service';
+import { generateStripeIdempotencyKey } from './payment-error-handler';
 import {
   CreatePaymentMethodData,
   detectCardBrand,
@@ -866,6 +867,13 @@ class PaymentMethodsService {
         throw new Error('Invalid amount');
       }
 
+      // Fresh key per call — this method has no internal retry wrapper, so
+      // one key per invocation is correct (no automatic-retry reuse needed).
+      // Without this, a client-side retry after a dropped response could
+      // create a second ACH PaymentIntent (and a second bank debit) for the
+      // same deposit attempt.
+      const idempotencyKey = generateStripeIdempotencyKey('ach', 'wallet_deposit');
+
       const result = await invokePayments<{
         clientSecret: string;
         paymentIntentId: string;
@@ -880,6 +888,7 @@ class PaymentMethodsService {
           paymentMethodType: 'us_bank_account',
           confirm: true,
           metadata: { purpose: 'wallet_deposit', ...(params.metadata ?? {}) },
+          idempotencyKey,
         } as Record<string, unknown>,
         accessToken: authToken,
       });
