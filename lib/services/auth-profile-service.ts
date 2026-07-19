@@ -304,44 +304,47 @@ export class AuthProfileService {
 
     try {
       console.log('[authProfileService] No cache found, querying Supabase profiles table...');
-      
-      // Use Supabase SDK's built-in network handling and timeouts
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
 
-      console.log('[authProfileService] Supabase query completed', { 
-        hasData: !!data, 
+      // Self-profile read goes through get_my_profile() (SECURITY DEFINER,
+      // hard-scoped to auth.uid()) instead of a direct select('*') — the
+      // `authenticated` role's SELECT privilege on sensitive columns
+      // (balance, email, phone, stripe_*) is revoked at the column level
+      // (see docs/withdrawals/08-profiles-rls-migration-strategy.md step 5).
+      // Callers of fetchAndSyncProfile must only ever pass the caller's own
+      // id (verified: the sole non-test call site, useNormalizedProfile.ts,
+      // branches to getProfileById for any other user).
+      const { data, error } = await supabase.rpc('get_my_profile');
+
+      console.log('[authProfileService] Supabase query completed', {
+        hasData: !!data,
         hasError: !!error,
         errorCode: error?.code,
-        errorMessage: error?.message 
+        errorMessage: error?.message
       });
 
       if (error) {
-        // If profile doesn't exist, return a special state indicating onboarding is needed
-        // Instead of creating a minimal profile, we'll redirect the user to onboarding
-        if (error.code === 'PGRST116') {
-          console.log('[authProfileService] Profile not found (PGRST116), user needs to complete onboarding');
-          logger.warning('Profile not found, user needs onboarding', { userId });
-          
-          // Return a special profile state indicating onboarding is needed
-          const onboardingNeededProfile: AuthProfile = {
-            id: userId,
-            username: '', // Will be set during onboarding
-            email: this.currentSession?.user?.email,
-            balance: 0,
-            onboarding_completed: false,
-            needs_onboarding: true, // Special flag to indicate onboarding is required
-          };
-          
-          this.currentProfile = onboardingNeededProfile;
-          this.notifyListeners(onboardingNeededProfile);
-          return onboardingNeededProfile;
-        }
         console.error('[authProfileService] Supabase query error:', error);
         throw error;
+      }
+
+      if (!data) {
+        // get_my_profile() returns null when no row exists for auth.uid() —
+        // same "needs onboarding" case the old PGRST116 branch handled.
+        console.log('[authProfileService] Profile not found, user needs to complete onboarding');
+        logger.warning('Profile not found, user needs onboarding', { userId });
+
+        const onboardingNeededProfile: AuthProfile = {
+          id: userId,
+          username: '', // Will be set during onboarding
+          email: this.currentSession?.user?.email,
+          balance: 0,
+          onboarding_completed: false,
+          needs_onboarding: true, // Special flag to indicate onboarding is required
+        };
+
+        this.currentProfile = onboardingNeededProfile;
+        this.notifyListeners(onboardingNeededProfile);
+        return onboardingNeededProfile;
       }
 
       if (data) {
@@ -378,29 +381,7 @@ export class AuthProfileService {
         return profile;
       }
 
-      console.warn('[authProfileService] Supabase returned no data and no error - user needs onboarding');
-      // If no data and no error, return onboarding needed state
-      // This handles edge cases where the profile wasn't created by the trigger
-      logger.warning('Profile query returned no data, user needs onboarding. This should be rare if DB trigger is working.', { userId });
-      
-      // Track this fallback for monitoring
-      if (__DEV__) {
-        console.warn('[authProfileService] MONITORING: No profile found - check if DB trigger is working');
-      }
-      
-      // Return a special profile state indicating onboarding is needed
-      const onboardingNeededProfile: AuthProfile = {
-        id: userId,
-        username: '', // Will be set during onboarding
-        email: this.currentSession?.user?.email,
-        balance: 0,
-        onboarding_completed: false,
-        needs_onboarding: true, // Special flag to indicate onboarding is required
-      };
-      
-      this.currentProfile = onboardingNeededProfile;
-      this.notifyListeners(onboardingNeededProfile);
-      return onboardingNeededProfile;
+      return null;
     } catch (error) {
       // Detect cases where the server returned an HTML error page (common when
       // the SUPABASE URL is misconfigured or a proxy/hosting page is returned).
@@ -442,31 +423,12 @@ export class AuthProfileService {
     try {
       console.log('[authProfileService] Fetching fresh profile in background for userId:', userId);
       
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
+      // Self-profile read via get_my_profile() — see fetchAndSyncProfile for
+      // why this can't be a direct select('*') anymore.
+      const { data, error } = await supabase.rpc('get_my_profile');
 
       if (error) {
-        // If the profile no longer exists in the database, clear the stale
-        // cache and notify listeners so the app can redirect to onboarding.
-        if (error.code === 'PGRST116') {
-          console.log('[authProfileService] Background fetch: profile not found (PGRST116), clearing stale cache');
-          await this.clearCache(userId);
-          const onboardingNeededProfile: AuthProfile = {
-            id: userId,
-            username: '',
-            email: this.currentSession?.user?.email,
-            balance: 0,
-            onboarding_completed: false,
-            needs_onboarding: true,
-          };
-          this.currentProfile = onboardingNeededProfile;
-          this.notifyListeners(onboardingNeededProfile);
-          return;
-        }
-        // Don't throw for other errors — we already have cached data displayed
+        // Don't throw — we already have cached data displayed
         console.log('[authProfileService] Background fetch error (non-critical):', error.code, error.message);
         return;
       }
@@ -476,6 +438,25 @@ export class AuthProfileService {
       // Only apply results if no newer fetch has been initiated
       if (callerFetchTimestamp < this.latestFetchTimestamp) {
         console.log('[authProfileService] Discarding stale background fetch result (newer fetch has started)');
+        return;
+      }
+
+      if (!data) {
+        // get_my_profile() returns null when no row exists for auth.uid() —
+        // the profile no longer exists server-side; clear the stale cache
+        // and redirect to onboarding, same as the old PGRST116 branch.
+        console.log('[authProfileService] Background fetch: profile not found, clearing stale cache');
+        await this.clearCache(userId);
+        const onboardingNeededProfile: AuthProfile = {
+          id: userId,
+          username: '',
+          email: this.currentSession?.user?.email,
+          balance: 0,
+          onboarding_completed: false,
+          needs_onboarding: true,
+        };
+        this.currentProfile = onboardingNeededProfile;
+        this.notifyListeners(onboardingNeededProfile);
         return;
       }
 
@@ -566,10 +547,14 @@ export class AuthProfileService {
       }
       
       // Use Supabase SDK's built-in network handling and timeouts
-      const { data, error } = await supabase
+      // select('id') only, not select('*') — see updateProfile() for why an
+      // INSERT...RETURNING of sensitive columns would fail under the
+      // column-level REVOKE. The full row is re-fetched via get_my_profile()
+      // below once the insert is confirmed.
+      const { data: insertedRow, error } = await supabase
         .from('profiles')
         .insert(insertData)
-        .select()
+        .select('id')
         .single();
 
       if (error) {
@@ -614,23 +599,31 @@ export class AuthProfileService {
         return null;
       }
 
-      if (data) {
+      if (insertedRow) {
+        const { data: freshRow, error: rpcError } = await supabase.rpc('get_my_profile');
+        if (rpcError || !freshRow) {
+          logger.error('get_my_profile returned no row after minimal-profile insert', { userId, rpcError });
+          this.currentProfile = null;
+          this.notifyListeners(null);
+          return null;
+        }
+
         const profile: AuthProfile = {
-          id: data.id,
-          username: data.username,
-          email: data.email,
-          avatar: data.avatar || data.avatar_url || undefined,
-          about: data.about,
-          phone: data.phone,
-          title: data.title || undefined,
-          location: data.location || undefined,
-          skills: Array.isArray(data.skills) ? data.skills : undefined,
-          age_verified: typeof data.age_verified === 'boolean' ? data.age_verified : undefined,
-          age_verified_at: data.age_verified_at || undefined,
-          balance: data.balance || 0,
-          created_at: data.created_at,
-          updated_at: data.updated_at,
-          onboarding_completed: typeof data.onboarding_completed === 'boolean' ? data.onboarding_completed : undefined,
+          id: freshRow.id,
+          username: freshRow.username,
+          email: freshRow.email,
+          avatar: freshRow.avatar || freshRow.avatar_url || undefined,
+          about: freshRow.about,
+          phone: freshRow.phone,
+          title: freshRow.title || undefined,
+          location: freshRow.location || undefined,
+          skills: Array.isArray(freshRow.skills) ? freshRow.skills : undefined,
+          age_verified: typeof freshRow.age_verified === 'boolean' ? freshRow.age_verified : undefined,
+          age_verified_at: freshRow.age_verified_at || undefined,
+          balance: freshRow.balance || 0,
+          created_at: freshRow.created_at,
+          updated_at: freshRow.updated_at,
+          onboarding_completed: typeof freshRow.onboarding_completed === 'boolean' ? freshRow.onboarding_completed : undefined,
         };
 
         this.currentProfile = profile;
@@ -673,11 +666,20 @@ export class AuthProfileService {
       // Use Supabase SDK's built-in network handling and timeouts
       // Use update() with an equality filter so unit tests that mock
       // `from('profiles').update(...).eq(...).select().single()` work
+      //
+      // IMPORTANT: select('id') only, not select('*'). The `authenticated`
+      // role's SELECT privilege on sensitive profiles columns (balance,
+      // email, phone, stripe_*) is revoked at the column level (see
+      // docs/withdrawals/08-profiles-rls-migration-strategy.md step 5) — a
+      // PostgREST UPDATE...RETURNING requires SELECT privilege on whatever
+      // columns it returns, so selecting those columns here would fail even
+      // though the UPDATE itself is allowed. `id` is never restricted; it's
+      // only used to confirm a row was actually affected.
         const { data: initialRes, error: initialError } = await supabase
         .from('profiles')
         .update(updates)
         .eq('id', userId)
-        .select()
+        .select('id')
         .single();
       const fromProfiles: any = supabase.from('profiles');
 
@@ -693,13 +695,13 @@ export class AuthProfileService {
         if (typeof fromProfiles.upsert === 'function') {
           res = await fromProfiles
             .upsert({ id: userId, ...updates }, { onConflict: 'id' })
-            .select()
+            .select('id')
             .single();
         } else {
           res = await fromProfiles
             .update(updates)
             .eq('id', userId)
-            .select()
+            .select('id')
             .single();
         }
         data = res.data ?? null;
@@ -710,32 +712,42 @@ export class AuthProfileService {
         throw error;
       }
 
-      if (data) {
-        const profile: AuthProfile = {
-          id: data.id,
-          username: data.username,
-          email: data.email,
-          avatar: data.avatar || data.avatar_url || undefined,
-          about: data.about,
-          phone: data.phone,
-          title: data.title || undefined,
-          location: data.location || undefined,
-          skills: Array.isArray(data.skills) ? data.skills : undefined,
-          age_verified: typeof data.age_verified === 'boolean' ? data.age_verified : undefined,
-          age_verified_at: data.age_verified_at || undefined,
-          balance: data.balance || 0,
-          created_at: data.created_at,
-          updated_at: data.updated_at,
-          onboarding_completed: typeof data.onboarding_completed === 'boolean' ? data.onboarding_completed : undefined,
-        };
-
-        this.currentProfile = profile;
-        await this.cacheProfile(profile);
-        this.notifyListeners(profile);
-        return profile;
+      if (!data) {
+        return null;
       }
 
-      return null;
+      // Fetch the authoritative post-update row via the self-scoped RPC
+      // instead of relying on UPDATE...RETURNING for it. get_my_profile()
+      // is SECURITY DEFINER and hard-scoped to auth.uid(), so it can still
+      // read the sensitive columns the `authenticated` role itself can no
+      // longer SELECT directly.
+      const { data: freshRow, error: rpcError } = await supabase.rpc('get_my_profile');
+      if (rpcError || !freshRow) {
+        throw rpcError ?? new Error('get_my_profile returned no row after update');
+      }
+
+      const profile: AuthProfile = {
+        id: freshRow.id,
+        username: freshRow.username,
+        email: freshRow.email,
+        avatar: freshRow.avatar || freshRow.avatar_url || undefined,
+        about: freshRow.about,
+        phone: freshRow.phone,
+        title: freshRow.title || undefined,
+        location: freshRow.location || undefined,
+        skills: Array.isArray(freshRow.skills) ? freshRow.skills : undefined,
+        age_verified: typeof freshRow.age_verified === 'boolean' ? freshRow.age_verified : undefined,
+        age_verified_at: freshRow.age_verified_at || undefined,
+        balance: freshRow.balance || 0,
+        created_at: freshRow.created_at,
+        updated_at: freshRow.updated_at,
+        onboarding_completed: typeof freshRow.onboarding_completed === 'boolean' ? freshRow.onboarding_completed : undefined,
+      };
+
+      this.currentProfile = profile;
+      await this.cacheProfile(profile);
+      this.notifyListeners(profile);
+      return profile;
     } catch (error) {
       logger.error('Error updating profile', { userId, updates, error });
       return null;

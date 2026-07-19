@@ -18,6 +18,7 @@ import { storageService } from '../../lib/services/storage-service';
 jest.mock('../../lib/supabase', () => ({
   supabase: {
     from: jest.fn(),
+    rpc: jest.fn(),
     auth: {
       getSession: jest.fn(),
     },
@@ -79,13 +80,9 @@ describe('Edit Profile Integration Flow', () => {
 
   describe('Profile Loading', () => {
     it('should load profile data successfully', async () => {
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        single: jest.fn().mockResolvedValue({
-          data: mockProfile,
-          error: null,
-        }),
+      mockSupabase.rpc.mockResolvedValue({
+        data: mockProfile,
+        error: null,
       });
 
       const profile = await authProfileService.fetchAndSyncProfile(mockUserId);
@@ -93,15 +90,11 @@ describe('Edit Profile Integration Flow', () => {
       expect(profile).not.toBeNull();
       expect(profile?.id).toBe(mockUserId);
       expect(profile?.username).toBe('johndoe');
-      expect(mockSupabase.from).toHaveBeenCalledWith('profiles');
+      expect(mockSupabase.rpc).toHaveBeenCalledWith('get_my_profile');
     });
 
     it('should handle profile loading errors', async () => {
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        single: jest.fn().mockRejectedValue(new Error('Database error')),
-      });
+      mockSupabase.rpc.mockRejectedValue(new Error('Database error'));
 
       const profile = await authProfileService.fetchAndSyncProfile(mockUserId);
 
@@ -109,13 +102,9 @@ describe('Edit Profile Integration Flow', () => {
     });
 
     it('should notify listeners when profile loads', async () => {
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        single: jest.fn().mockResolvedValue({
-          data: mockProfile,
-          error: null,
-        }),
+      mockSupabase.rpc.mockResolvedValue({
+        data: mockProfile,
+        error: null,
       });
 
       let loadedProfile: any = null;
@@ -171,9 +160,15 @@ describe('Edit Profile Integration Flow', () => {
         eq: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
-          data: updatedProfile,
+          data: { id: mockUserId },
           error: null,
         }),
+      });
+      // Post-update reads go through get_my_profile() (SECURITY DEFINER),
+      // not the UPDATE...RETURNING that the mock above stands in for.
+      mockSupabase.rpc.mockResolvedValue({
+        data: updatedProfile,
+        error: null,
       });
 
       const result = await authProfileService.updateProfile({
@@ -206,12 +201,16 @@ describe('Edit Profile Integration Flow', () => {
           callCount += 1;
           if (callCount === 1) {
             // First call (initial update) succeeds
-            return Promise.resolve({ data: updatedProfile, error: null });
+            return Promise.resolve({ data: { id: mockUserId }, error: null });
           }
           // Any subsequent call (old secondary upsert) returns null — this
           // should no longer be reached after the fix.
           return Promise.resolve({ data: null, error: null });
         }),
+      });
+      mockSupabase.rpc.mockResolvedValue({
+        data: updatedProfile,
+        error: null,
       });
 
       const result = await authProfileService.updateProfile({
@@ -260,9 +259,13 @@ describe('Edit Profile Integration Flow', () => {
         eq: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
-          data: updatedProfile,
+          data: { id: mockUserId },
           error: null,
         }),
+      });
+      mockSupabase.rpc.mockResolvedValue({
+        data: updatedProfile,
+        error: null,
       });
 
       const result = await authProfileService.updateProfile({
@@ -318,9 +321,13 @@ describe('Edit Profile Integration Flow', () => {
         eq: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
-          data: updatedProfile,
+          data: { id: mockUserId },
           error: null,
         }),
+      });
+      mockSupabase.rpc.mockResolvedValue({
+        data: updatedProfile,
+        error: null,
       });
 
       const result = await authProfileService.updateProfile({
@@ -465,13 +472,9 @@ describe('Edit Profile Integration Flow', () => {
         username: 'user1',
       };
 
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        single: jest.fn().mockResolvedValue({
-          data: user1Profile,
-          error: null,
-        }),
+      mockSupabase.rpc.mockResolvedValue({
+        data: user1Profile,
+        error: null,
       });
 
       await authProfileService.fetchAndSyncProfile('user-1');
@@ -485,13 +488,9 @@ describe('Edit Profile Integration Flow', () => {
         username: 'user2',
       };
 
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        single: jest.fn().mockResolvedValue({
-          data: user2Profile,
-          error: null,
-        }),
+      mockSupabase.rpc.mockResolvedValue({
+        data: user2Profile,
+        error: null,
       });
 
       await authProfileService.fetchAndSyncProfile('user-2');
@@ -509,13 +508,9 @@ describe('Edit Profile Integration Flow', () => {
         },
       };
 
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        single: jest.fn().mockResolvedValue({
-          data: mockProfile,
-          error: null,
-        }),
+      mockSupabase.rpc.mockResolvedValue({
+        data: mockProfile,
+        error: null,
       });
 
       await authProfileService.setSession(mockSession as any);
@@ -527,11 +522,7 @@ describe('Edit Profile Integration Flow', () => {
 
   describe('Error Recovery', () => {
     it('should handle network errors gracefully', async () => {
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        single: jest.fn().mockRejectedValue(new Error('Network timeout')),
-      });
+      mockSupabase.rpc.mockRejectedValue(new Error('Network timeout'));
 
       const profile = await authProfileService.fetchAndSyncProfile(mockUserId);
 
@@ -590,13 +581,9 @@ describe('Edit Profile Integration Flow', () => {
 
     it('should complete full profile edit flow', async () => {
       // 1. Load profile
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        single: jest.fn().mockResolvedValue({
-          data: mockProfile,
-          error: null,
-        }),
+      mockSupabase.rpc.mockResolvedValue({
+        data: mockProfile,
+        error: null,
       });
 
       const loadedProfile = await authProfileService.fetchAndSyncProfile(mockUserId);
@@ -635,9 +622,13 @@ describe('Edit Profile Integration Flow', () => {
         eq: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
-          data: updatedProfile,
+          data: { id: mockUserId },
           error: null,
         }),
+      });
+      mockSupabase.rpc.mockResolvedValue({
+        data: updatedProfile,
+        error: null,
       });
 
       const result = await authProfileService.updateProfile({
@@ -654,13 +645,9 @@ describe('Edit Profile Integration Flow', () => {
 
     it('should rollback on save failure', async () => {
       // Initial profile state
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        single: jest.fn().mockResolvedValue({
-          data: mockProfile,
-          error: null,
-        }),
+      mockSupabase.rpc.mockResolvedValue({
+        data: mockProfile,
+        error: null,
       });
 
       const initialProfile = await authProfileService.fetchAndSyncProfile(mockUserId);
@@ -702,9 +689,13 @@ describe('Edit Profile Integration Flow', () => {
         eq: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({
-          data: { ...mockProfile, username: 'updated' },
+          data: { id: mockUserId },
           error: null,
         }),
+      });
+      mockSupabase.rpc.mockResolvedValue({
+        data: { ...mockProfile, username: 'updated' },
+        error: null,
       });
 
       // Simulate two concurrent updates
