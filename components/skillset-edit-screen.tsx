@@ -30,8 +30,15 @@ const ICON_LIBRARY = [
 
 export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: SkillsetEditScreenProps) {
   const { theme } = useAppThemeContext();
-  const { profile: localProfile, updateProfile } = useUserProfile();
-  const { userId: authUserId } = useAuthProfile();
+  // useUserProfile is local-cache-only (AsyncStorage, never reaches the
+  // server — see docs/withdrawals/09-security-audit-findings-2026-07-19.md
+  // finding #7) and is kept here only for its fast initial-skills read.
+  // Saving MUST go through useAuthProfile's updateProfile, which persists to
+  // Supabase — using useUserProfile's updateProfile here previously caused
+  // skill edits to show a "Skills saved" success toast while never actually
+  // reaching the backend, so no other user (or fresh install) ever saw them.
+  const { profile: localProfile } = useUserProfile();
+  const { userId: authUserId, updateProfile } = useAuthProfile();
 
   const resolvedUserId = userId || authUserId;
 
@@ -92,12 +99,14 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
   const handleSave = async () => {
     const cleaned = skills.filter((skill) => skill.text.trim() !== "")
     try {
-      // Prefer persisting into the profile service when available so other screens (and backend) see the update
+      // Persist via the authenticated profile service so the update actually
+      // reaches Supabase (and is visible to other users / other devices),
+      // not just this device's local cache.
       if (updateProfile) {
         // extract text strings to match Profile shape
         const skillTexts = cleaned.map(s => s.text)
-        const result = await updateProfile({ skills: skillTexts } as any)
-        if (!result.success) {
+        const result = await updateProfile({ skills: skillTexts })
+        if (!result) {
           setBanner('Error saving skills to profile')
           setTimeout(()=>setBanner(null), 1500)
         } else {
