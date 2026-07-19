@@ -1158,11 +1158,50 @@ export const bountyService = {
 
   /**
    * Process a queued bounty (called by offline queue service)
+   *
+   * Guards against the offline queue's retry-with-backoff wrapper creating a
+   * duplicate bounty (and its escrow) when a previous attempt's insert
+   * actually succeeded server-side but the client never saw the response
+   * (dropped connection, app killed mid-request) — the queue item then stays
+   * 'pending' and gets retried with the identical payload. Since this method
+   * has no other caller (the online create() path queues through here only
+   * when offline, and this is only ever invoked by the queue's own retry
+   * loop), it's safe to treat "an identical bounty from this poster was
+   * created moments ago" as "this is that same attempt" rather than a
+   * deliberate duplicate post.
    */
   async processQueuedBounty(bounty: Omit<Bounty, 'id' | 'created_at'>): Promise<Bounty | null> {
     // Use direct create logic without offline queueing
     try {
       if (isSupabaseConfigured) {
+        const posterId = (bounty as any).poster_id || (bounty as any).user_id;
+        const title = typeof (bounty as any).title === 'string' ? (bounty as any).title : undefined;
+        if (posterId && title) {
+          try {
+            const dedupeCutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+            const { data: existing } = await supabase
+              .from('bounties')
+              .select('*')
+              .eq('poster_id', posterId)
+              .eq('title', title)
+              .gte('created_at', dedupeCutoff)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (existing) {
+              logger.warning('Skipped re-inserting queued bounty — an identical one from this poster was created within the last 10 minutes (likely a retry of an attempt whose response was lost)', {
+                posterId,
+                bountyId: (existing as any).id,
+              });
+              return existing as unknown as Bounty;
+            }
+          } catch (dedupeCheckError) {
+            // If the dedupe check itself fails (network, RLS, etc.), fall through
+            // to the normal insert rather than blocking queue processing entirely.
+            logger.warning('Queued-bounty dedupe check failed, proceeding with insert', { error: dedupeCheckError });
+          }
+        }
+
         const { data, error } = await supabase
           .from('bounties')
           .insert(bounty as any)
