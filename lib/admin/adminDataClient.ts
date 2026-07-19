@@ -59,7 +59,7 @@ function mapUser(row: any): AdminUserSummary {
     totalSpent: row.total_spent ?? 0,
     totalEarned: row.total_earned ?? 0,
     balance: row.balance ?? 0,
-    status: row.status ?? 'active',
+    status: row.account_status ?? 'active',
   };
 }
 
@@ -191,14 +191,18 @@ export const adminDataClient = {
     return data?.user ? mapUser(data.user) : null;
   },
 
-  // Update user account status (suspend/ban/restore)
+  // Update user account status (suspend/ban/restore).
+  // Was a direct anon-key `.update({ status })` -- `profiles` has no `status`
+  // column (the real one is `account_status`) and every UPDATE policy on
+  // profiles is `auth.uid() = id`, so this failed for a different admin's
+  // target user regardless. Now routed through the service-role
+  // admin-profiles function, matching every other admin-panel write path.
   async updateUserStatus(id: string, status: AdminUserSummary['status']): Promise<void> {
-    const { error } = await supabase
-      .from('profiles')
-      .update({ status })
-      .eq('id', id);
-
+    const { data, error } = await supabase.functions.invoke('admin-profiles', {
+      body: { action: 'updateStatus', id, status },
+    });
     if (error) throw new Error(error.message);
+    if (data?.error) throw new Error(data.error);
   },
 
   // Send a guideline warning to a user

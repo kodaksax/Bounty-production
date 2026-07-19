@@ -12,7 +12,7 @@
 // service-role path instead. Same auth pattern as admin-withdrawals /
 // admin-review-id / admin-verifications-list (JWT `app_metadata.role` check).
 //
-// POST body: { action: 'list' | 'getById', id?, status?, verificationStatus? }
+// POST body: { action: 'list' | 'getById' | 'updateStatus', id?, status?, verificationStatus? }
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -89,8 +89,12 @@ Deno.serve(async (req: Request) => {
   if (action === 'list') {
     let query = supabase.from('profiles').select('*').order('created_at', { ascending: false });
 
+    // NOTE: was `.eq('status', ...)` -- profiles has never had a `status`
+    // column (verified via information_schema), so selecting any status
+    // filter chip in the admin panel silently errored out the whole list.
+    // account_status is the real column, added alongside updateStatus below.
     if (body.status && body.status !== 'all') {
-      query = query.eq('status', body.status);
+      query = query.eq('account_status', body.status);
     }
     if (body.verificationStatus && body.verificationStatus !== 'all') {
       query = query.eq('verification_status', body.verificationStatus);
@@ -119,6 +123,41 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: 'Failed to fetch user' }, 500);
     }
     return jsonResponse({ user: data });
+  }
+
+  // ─── updateStatus ───────────────────────────────────────────────────────
+  // Admin suspend/ban/restore. Service-role write so it works regardless of
+  // the caller's own RLS/column grants -- every UPDATE policy on profiles is
+  // `auth.uid() = id`, which would otherwise reject an admin updating someone
+  // else's row entirely, independent of whether the target column exists.
+  //
+  // Plumbing only: this records account_status but nothing else in the app
+  // (RLS, login, bounty posting, withdrawals) reads it yet -- a suspended or
+  // banned user can still fully use the app today. See
+  // docs/withdrawals/09-security-audit-findings-2026-07-19.md finding #3.
+  if (action === 'updateStatus') {
+    const { id, status } = body;
+    if (!id) {
+      return jsonResponse({ error: 'id is required' }, 400);
+    }
+    if (status !== 'active' && status !== 'suspended' && status !== 'banned') {
+      return jsonResponse({ error: "status must be one of 'active', 'suspended', 'banned'" }, 400);
+    }
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ account_status: status, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select('id, account_status')
+      .single();
+
+    if (error) {
+      console.error('[admin-profiles] updateStatus failed', { id, status, error });
+      return jsonResponse({ error: 'Failed to update user status' }, 500);
+    }
+
+    console.log('[admin-profiles] account status updated', { targetUserId: id, status, adminUserId: adminUser.id });
+    return jsonResponse({ id: data.id, status: data.account_status });
   }
 
   return jsonResponse({ error: 'Unknown action' }, 400);

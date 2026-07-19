@@ -87,6 +87,7 @@ GRANT SELECT (
   phone_verified,
   phone_verified_at,
   account_restricted,
+  account_status,
   restriction_reason,
   restricted_at,
   disabled_reason,
