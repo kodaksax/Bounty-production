@@ -40,7 +40,7 @@ export default function OnboardingIndex() {
     // from the sign-in step and landed back here) — resume that flow
     // instead of re-showing the welcome/intent screen.
     if (onboardingData.intent) {
-      router.replace('/onboarding/details');
+      router.replace('/onboarding/style');
       return;
     }
 

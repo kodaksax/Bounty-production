@@ -316,7 +316,7 @@ export function ProfileDetailsForm({
           </TouchableOpacity>
         </View>
 
-        <OnboardingProgressDots total={3} activeIndex={1} style={styles.progressContainer} />
+        <OnboardingProgressDots total={4} activeIndex={2} style={styles.progressContainer} />
       </ScrollView>
     </KeyboardAvoidingView>
   );

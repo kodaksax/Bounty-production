@@ -95,7 +95,7 @@ export function PosterFundingScreen({ styles, price, posting, onBack, onFunded, 
         <View style={styles.fundingHeaderButton} />
       </View>
 
-      <OnboardingProgressDots total={4} activeIndex={2} />
+      <OnboardingProgressDots total={5} activeIndex={3} />
 
       <ScrollView
         style={styles.fundingScroll}

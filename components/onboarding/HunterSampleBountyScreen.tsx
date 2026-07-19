@@ -33,6 +33,8 @@ type HunterSampleBountyScreenProps = {
   isResolvingLocation: boolean;
   discoveryError: UserFriendlyError | null;
   onRetryDiscovery: () => void;
+  /** Returns to the location step. Matches the back button PosterFundingScreen already has. */
+  onBack: () => void;
 };
 
 // Hunter branch, step 3 of 4: sign in -> location -> [this] -> done.
@@ -52,6 +54,7 @@ export function HunterSampleBountyScreen({
   isResolvingLocation,
   discoveryError,
   onRetryDiscovery,
+  onBack,
 }: HunterSampleBountyScreenProps) {
   const [notifyState, setNotifyState] = useState<'idle' | 'requesting' | 'granted' | 'denied'>('idle');
 
@@ -93,11 +96,32 @@ export function HunterSampleBountyScreen({
     onSwitchToPoster();
   };
 
+  const handleBack = () => {
+    if (applying) return;
+    hapticFeedback.light();
+    onBack();
+  };
+
+  const backButton = (
+    <View style={styles.stepBackRow}>
+      <TouchableOpacity
+        onPress={handleBack}
+        style={styles.backButton}
+        disabled={applying}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+      >
+        <MaterialIcons name="arrow-back" size={24} color={theme.textSecondary} />
+      </TouchableOpacity>
+    </View>
+  );
+
   if (isLoading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+        {backButton}
         <View style={styles.hunterContent}>
-          <OnboardingProgressDots total={4} activeIndex={2} style={{ marginTop: 16, marginBottom: 24 }} />
+          <OnboardingProgressDots total={5} activeIndex={3} style={{ marginTop: 16, marginBottom: 24 }} />
           <Skeleton style={{ height: 96, borderRadius: 16, marginBottom: 16 }} />
           <Skeleton style={{ height: 120, borderRadius: 16 }} />
         </View>
@@ -115,8 +139,9 @@ export function HunterSampleBountyScreen({
 
     return (
       <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+        {backButton}
         <View style={styles.hunterContent}>
-          <OnboardingProgressDots total={4} activeIndex={2} style={{ marginTop: 16, marginBottom: 24 }} />
+          <OnboardingProgressDots total={5} activeIndex={3} style={{ marginTop: 16, marginBottom: 24 }} />
 
           {discoveryError ? (
             <View style={styles.discoveryErrorWrapper}>
@@ -216,8 +241,9 @@ export function HunterSampleBountyScreen({
 
   return (
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      {backButton}
       <View style={styles.hunterContent}>
-        <OnboardingProgressDots total={4} activeIndex={2} style={{ marginTop: 16, marginBottom: 8 }} />
+        <OnboardingProgressDots total={5} activeIndex={3} style={{ marginTop: 16, marginBottom: 8 }} />
 
         {discoveryError ? (
           <View style={styles.discoveryErrorWrapper}>

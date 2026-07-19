@@ -8,7 +8,9 @@ import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } f
 import { useAuthProfile } from '../hooks/useAuthProfile';
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile';
 import { useAdmin } from '../lib/admin-context';
-import { type BountyFormat, useBountyFormat } from '../lib/bounty-format-context';
+import { useBountyFormat } from '../lib/bounty-format-context';
+import { BOUNTY_FORMAT_OPTIONS } from '../lib/bounty-format-options';
+import { analyticsService } from '../lib/services/analytics-service';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme, ThemeMode } from '../lib/themes/types';
 import { markIntentionalSignOut } from '../lib/utils/session-handler';
@@ -184,18 +186,15 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
             Choose how bounties appear in your feed.
           </Text>
           <View className="flex-row gap-2">
-            {(
-              [
-                ['card', '🃏', 'Card'],
-                ['compact', '☰', 'Compact'],
-                ['grid', '⊞', 'Grid'],
-              ] as [BountyFormat, string, string][]
-            ).map(([value, icon, label]) => {
+            {BOUNTY_FORMAT_OPTIONS.map(({ value, icon, label }) => {
               const active = bountyFormat === value;
               return (
                 <TouchableOpacity
                   key={value}
-                  onPress={() => setBountyFormat(value)}
+                  onPress={() => {
+                    setBountyFormat(value);
+                    analyticsService.trackEvent('settings_bounty_format_changed', { format: value });
+                  }}
                   style={active ? s.themeChipActive : s.themeChipInactive}
                   className="flex-1 py-2 rounded-lg items-center border"
                   accessibilityRole="radio"

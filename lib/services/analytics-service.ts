@@ -27,19 +27,25 @@ export type AnalyticsEvent =
   | 'email_verified'
   // Onboarding funnel — see app/onboarding/*. Fired in order for a fresh
   // signup: welcome_viewed -> role_selected -> auth_started -> auth_completed
-  // -> profile_step_viewed -> (profile_submitted | step_skipped)* -> completed
+  // -> style_step_viewed -> (style_selected)* -> profile_step_viewed ->
+  // (profile_submitted | step_skipped)* -> completed
   | 'onboarding_welcome_viewed'
   | 'onboarding_role_selected'
   | 'onboarding_intent_switched'
   | 'onboarding_login_tapped'
   | 'onboarding_auth_started'
   | 'onboarding_auth_completed'
+  | 'onboarding_style_step_viewed'
+  | 'onboarding_style_selected'
   | 'onboarding_profile_step_viewed'
   | 'onboarding_profile_submitted'
   | 'onboarding_step_skipped'
   | 'onboarding_bounty_posted'
   | 'onboarding_bounty_accepted'
   | 'onboarding_completed'
+  // Settings — fired when a user changes a display/layout preference after
+  // onboarding, so it can be compared against the onboarding-time choice.
+  | 'settings_bounty_format_changed'
   // Hunter discovery step (part of onboarding_profile_step_viewed with
   // intent=hunter) — see HunterLocationPrompt.tsx / HunterSampleBountyScreen.tsx.
   // One of granted/denied fires per "Use my location" tap; zip_searched fires

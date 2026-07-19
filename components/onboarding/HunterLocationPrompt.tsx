@@ -1,3 +1,4 @@
+import { MaterialIcons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { ErrorBanner } from '../error-banner';
@@ -23,6 +24,8 @@ type HunterLocationPromptProps = {
   onSkip: () => void;
   /** Subtle secondary escape hatch for someone who meant to pick Poster on welcome.tsx. */
   onSwitchToPoster: () => void;
+  /** Returns to the style step. Matches the back button ProfileDetailsForm/PosterFundingScreen already have. */
+  onBack: () => void;
   /** True while GPS or ZIP resolution is in flight — disables both CTAs and shows an inline spinner on whichever was pressed. */
   isResolvingLocation: boolean;
   /** Geocode-level ZIP failure surfaced by the parent (e.g. "couldn't find that ZIP"), distinct from local format validation. */
@@ -57,6 +60,7 @@ export function HunterLocationPrompt({
   onSubmitZip,
   onSkip,
   onSwitchToPoster,
+  onBack,
   isResolvingLocation,
   zipSubmitError,
   discoveryError,
@@ -113,12 +117,28 @@ export function HunterLocationPrompt({
     onSwitchToPoster();
   };
 
+  const handleBack = () => {
+    hapticFeedback.light();
+    onBack();
+  };
+
   const zipError = zipFormatError || zipSubmitError;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      <View style={styles.stepBackRow}>
+        <TouchableOpacity
+          onPress={handleBack}
+          style={styles.backButton}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <MaterialIcons name="arrow-back" size={24} color={theme.textSecondary} />
+        </TouchableOpacity>
+      </View>
+
       <View style={styles.hunterStatusRow}>
-        <OnboardingProgressDots total={4} activeIndex={1} />
+        <OnboardingProgressDots total={5} activeIndex={2} />
         <Text style={styles.hunterStatusSeparator}>·</Text>
         <Text style={styles.hunterStatusText}>
           Hunting as <Text style={styles.hunterStatusName}>{displayName}</Text>

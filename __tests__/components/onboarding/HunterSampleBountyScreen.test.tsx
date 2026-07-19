@@ -57,6 +57,7 @@ function renderScreen(overrides: Partial<React.ComponentProps<typeof HunterSampl
   const onBrowseOnline = jest.fn()
   const onUseLocation = jest.fn()
   const onRetryDiscovery = jest.fn()
+  const onBack = jest.fn()
 
   const utils = render(
     <HunterSampleBountyScreen
@@ -75,11 +76,12 @@ function renderScreen(overrides: Partial<React.ComponentProps<typeof HunterSampl
       isResolvingLocation={false}
       discoveryError={null}
       onRetryDiscovery={onRetryDiscovery}
+      onBack={onBack}
       {...overrides}
     />,
   )
 
-  return { ...utils, onNext, onSkip, onNotifyMe, onSwitchToPoster, onBrowseOnline, onUseLocation, onRetryDiscovery }
+  return { ...utils, onNext, onSkip, onNotifyMe, onSwitchToPoster, onBrowseOnline, onUseLocation, onRetryDiscovery, onBack }
 }
 
 describe('HunterSampleBountyScreen empty states', () => {

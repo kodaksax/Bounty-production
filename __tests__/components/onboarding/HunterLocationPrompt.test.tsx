@@ -45,6 +45,7 @@ function renderPrompt(overrides: Partial<React.ComponentProps<typeof HunterLocat
   const onSkip = jest.fn()
   const onSwitchToPoster = jest.fn()
   const onRetryDiscovery = jest.fn()
+  const onBack = jest.fn()
 
   const utils = render(
     <HunterLocationPrompt
@@ -57,6 +58,7 @@ function renderPrompt(overrides: Partial<React.ComponentProps<typeof HunterLocat
       onSubmitZip={onSubmitZip}
       onSkip={onSkip}
       onSwitchToPoster={onSwitchToPoster}
+      onBack={onBack}
       isResolvingLocation={false}
       zipSubmitError={null}
       discoveryError={null}
@@ -65,7 +67,7 @@ function renderPrompt(overrides: Partial<React.ComponentProps<typeof HunterLocat
     />,
   )
 
-  return { ...utils, onUseLocation, onSubmitZip, onSkip, onSwitchToPoster, onRetryDiscovery }
+  return { ...utils, onUseLocation, onSubmitZip, onSkip, onSwitchToPoster, onBack, onRetryDiscovery }
 }
 
 describe('HunterLocationPrompt', () => {

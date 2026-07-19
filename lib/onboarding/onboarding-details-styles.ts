@@ -241,6 +241,15 @@ export function makeOnboardingDetailsStyles(theme: AppTheme) {
     progressContainer: {
       paddingTop: 16,
     },
+    // Shared back-navigation row used above the progress dots on the
+    // poster/hunter branch screens, matching the back button ProfileDetailsForm
+    // already shows on the generic branch (see backButton/headerRow above).
+    stepBackRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingTop: 8,
+    },
     posterContent: {
       flex: 1,
       paddingHorizontal: 24,

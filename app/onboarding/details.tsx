@@ -702,6 +702,7 @@ export default function DetailsScreen() {
         posting={posting}
         onSkip={handleSkipToApp}
         onSwitchToHunter={() => handleSwitchIntent('hunter')}
+        onBack={handleBack}
       />
     );
   }
@@ -719,6 +720,7 @@ export default function DetailsScreen() {
           onSubmitZip={handleSubmitZip}
           onSkip={handleSkipLocation}
           onSwitchToPoster={() => handleSwitchIntent('poster')}
+          onBack={handleBack}
           isResolvingLocation={isResolvingLocation}
           zipSubmitError={zipSubmitError}
           discoveryError={discoveryError}
@@ -743,6 +745,7 @@ export default function DetailsScreen() {
         isResolvingLocation={isResolvingLocation}
         discoveryError={discoveryError}
         onRetryDiscovery={handleRetryDiscovery}
+        onBack={() => setHunterStep('location')}
       />
     );
   }

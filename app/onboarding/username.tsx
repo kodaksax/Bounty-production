@@ -12,10 +12,12 @@ import { useEffect } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { OnboardingProgressDots } from '../../components/onboarding/OnboardingProgressDots';
+import { SkipAuthLink } from '../../components/onboarding/SkipAuthLink';
 import { GoogleLogo } from '../../components/ui/google-logo';
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { useSocialAuth } from '../../hooks/useSocialAuth';
 import { useOnboarding } from '../../lib/context/onboarding-context';
+import { ONBOARDING_SKIP_AUTH_ENABLED } from '../../lib/feature-flags';
 import { hapticFeedback } from '../../lib/haptic-feedback';
 import { analyticsService } from '../../lib/services/analytics-service';
 import { hasLocalOnboardingFlag } from '../../lib/storage/onboarding';
@@ -23,10 +25,11 @@ import { supabase } from '../../lib/supabase';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 
-// Generic (no intent picked) is a 3-step flow: sign in -> about you -> done.
-// Poster/hunter branches are 4 steps: sign in -> details -> confirm -> done.
+// Generic (no intent picked) is a 4-step flow: sign in -> style -> about you
+// -> done. Poster/hunter branches are 5 steps: sign in -> style -> details ->
+// confirm -> done.
 function totalStepsFor(intent: 'poster' | 'hunter' | null) {
-  return intent ? 4 : 3;
+  return intent ? 5 : 4;
 }
 
 // After a real sign-in, decide whether this is an existing, fully-onboarded
@@ -46,7 +49,7 @@ async function routeAfterSocialSignIn(
     if (error) {
       // No profile row (brand new account) or lookup failed — continue onboarding.
       analyticsService.trackEvent('onboarding_auth_completed', { method, outcome: 'new_account' });
-      router.push('/onboarding/details');
+      router.push('/onboarding/style');
       return;
     }
 
@@ -59,11 +62,11 @@ async function routeAfterSocialSignIn(
       router.replace('/tabs/bounty-app');
     } else {
       analyticsService.trackEvent('onboarding_auth_completed', { method, outcome: 'existing_incomplete' });
-      router.push('/onboarding/details');
+      router.push('/onboarding/style');
     }
   } catch {
     // On any unexpected error, don't block the user — continue onboarding.
-    router.push('/onboarding/details');
+    router.push('/onboarding/style');
   }
 }
 
@@ -95,7 +98,7 @@ export default function UsernameScreen() {
       if (userId) {
         await routeAfterSocialSignIn(userId, router, 'google');
       } else {
-        router.push('/onboarding/details');
+        router.push('/onboarding/style');
       }
     })();
   }, [googleSessionReady, router]);
@@ -117,7 +120,7 @@ export default function UsernameScreen() {
     if (userId) {
       await routeAfterSocialSignIn(userId, router, 'apple');
     } else {
-      router.push('/onboarding/details');
+      router.push('/onboarding/style');
     }
   };
 
@@ -138,7 +141,7 @@ export default function UsernameScreen() {
     // Already signed in (e.g. reached this screen mid-onboarding) — safe to
     // continue straight through. If not, there's no session yet for the
     // next screen to save data against, so send them to create an account.
-    router.push(isLoggedIn ? '/onboarding/details' : '/auth/sign-up-form');
+    router.push(isLoggedIn ? '/onboarding/style' : '/auth/sign-up-form');
   };
 
   return (
@@ -197,14 +200,7 @@ export default function UsernameScreen() {
           <Text style={styles.emailButtonText}>Continue with email</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.skipLink}
-          onPress={handleSkip}
-          accessibilityRole="button"
-          accessibilityLabel="Skip for now"
-        >
-          <Text style={styles.skipLinkText}>Skip for now</Text>
-        </TouchableOpacity>
+        {ONBOARDING_SKIP_AUTH_ENABLED && <SkipAuthLink onPress={handleSkip} />}
       </View>
     </View>
   );
@@ -285,15 +281,6 @@ function makeStyles(theme: AppTheme) {
     },
     buttonIcon: {
       marginRight: 8,
-    },
-    skipLink: {
-      alignItems: 'center',
-      paddingVertical: 12,
-    },
-    skipLinkText: {
-      fontSize: 15,
-      color: theme.textDisabled,
-      textDecorationLine: 'underline',
     },
   });
 }

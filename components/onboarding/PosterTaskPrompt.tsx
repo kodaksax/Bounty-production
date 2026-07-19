@@ -28,6 +28,8 @@ type PosterTaskPromptProps = {
   onSkip: () => void;
   /** Subtle secondary escape hatch for someone who meant to pick Hunter on welcome.tsx. */
   onSwitchToHunter: () => void;
+  /** Returns to the style step. Matches the back button ProfileDetailsForm/PosterFundingScreen already have. */
+  onBack: () => void;
 };
 
 // Poster branch, step 2 of 4: sign in -> [this] -> fund/confirm -> done.
@@ -45,10 +47,16 @@ export function PosterTaskPrompt({
   posting,
   onSkip,
   onSwitchToHunter,
+  onBack,
 }: PosterTaskPromptProps) {
   const handleNext = () => {
     hapticFeedback.light();
     onNext();
+  };
+
+  const handleBack = () => {
+    hapticFeedback.light();
+    onBack();
   };
 
   const handleSwitchToHunter = () => {
@@ -66,7 +74,19 @@ export function PosterTaskPrompt({
       style={[styles.container, { paddingTop: insets.top }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <OnboardingProgressDots total={4} activeIndex={1} style={styles.progressContainer} />
+      <View style={styles.stepBackRow}>
+        <TouchableOpacity
+          onPress={handleBack}
+          style={styles.backButton}
+          disabled={posting}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <MaterialIcons name="arrow-back" size={24} color={theme.textSecondary} />
+        </TouchableOpacity>
+      </View>
+
+      <OnboardingProgressDots total={5} activeIndex={2} style={styles.progressContainer} />
 
       <View style={[styles.posterContent, { paddingBottom: insets.bottom }]}>
         <Text style={styles.posterHeading} accessibilityRole="header">

@@ -23,6 +23,7 @@ import { useAuthContext } from '../../hooks/use-auth-context';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
+import { useBountyFormat } from '../../lib/bounty-format-context';
 import { DEFERRED_PUSH_REGISTRATION_KEY } from '../../lib/constants';
 import { CURRENT_ONBOARDING_VERSION, useOnboarding } from '../../lib/context/onboarding-context';
 import { hapticFeedback } from '../../lib/haptic-feedback';
@@ -35,10 +36,10 @@ import { getOnboardingCompleteKey } from '../../lib/storage/onboarding';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 
-// Generic (no intent) is a 3-step flow; poster/hunter branches are 4 steps.
+// Generic (no intent) is a 4-step flow; poster/hunter branches are 5 steps.
 // See app/onboarding/username.tsx's totalStepsFor for the matching logic.
 function totalStepsFor(intent: 'poster' | 'hunter' | null) {
-  return intent ? 4 : 3;
+  return intent ? 5 : 4;
 }
 /**
  * Maximum time to wait for pre-navigation work (e.g. profile sync, push registration)
@@ -98,6 +99,7 @@ export default function DoneScreen() {
   const { userId } = useAuthProfile();
   const { session } = useAuthContext();
   const { data: onboardingData, clearData: clearOnboardingData } = useOnboarding();
+  const { bountyFormat } = useBountyFormat();
 
   const displayUsername = normalized?.username || (localProfile as any)?.username;
   const displayName = onboardingData.displayName || normalized?.name || (localProfile as any)?.displayName;
@@ -293,6 +295,7 @@ export default function DoneScreen() {
       hasAvatar: !!onboardingData.avatarUri,
       hasBio: !!onboardingData.bio,
       skillCount: onboardingData.skills?.length ?? 0,
+      bountyFormat,
     });
 
     // Prime the marketplace-activation moments (post_first_bounty /

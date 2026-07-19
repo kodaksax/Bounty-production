@@ -20,6 +20,7 @@ export default function OnboardingLayout() {
         <Stack.Screen name="index" />
         <Stack.Screen name="welcome" />
         <Stack.Screen name="username" />
+        <Stack.Screen name="style" />
         <Stack.Screen name="details" />
         <Stack.Screen name="phone" />
         <Stack.Screen name="done" />
