@@ -83,7 +83,7 @@ export function WithdrawWithBankScreen({
   const [maxWithdrawal, setMaxWithdrawal] = useState<number | null>(null);
   const [serverAvailableBalance, setServerAvailableBalance] = useState<number | null>(null);
 
-  const { balance: walletBalance, refresh } = useWallet();
+  const { balance: walletBalance, refreshFromApi } = useWallet();
   const { session } = useAuthContext();
   const { isEmailVerified, canWithdrawFunds, userEmail } = useEmailVerification();
   const { theme } = useAppThemeContext();
@@ -364,8 +364,12 @@ export function WithdrawWithBankScreen({
 
       const { transferId } = await response.json();
 
-      // Refresh wallet balance
-      await refresh();
+      // Refresh wallet balance from the server -- the withdrawal itself was a
+      // direct fetch() to /connect/transfer, not a wallet-context mutation, so
+      // the local SecureStore-cached balance was never updated. `refresh()`
+      // only re-reads that stale local cache; refreshFromApi() is the one
+      // that actually re-fetches the post-withdrawal balance.
+      await refreshFromApi(session?.access_token);
 
       // Rotate the idempotency key so the next withdrawal gets a fresh key.
       idempotencyKeyRef.current = `withdraw_${session?.user?.id ?? 'u'}_${Date.now()}`;
