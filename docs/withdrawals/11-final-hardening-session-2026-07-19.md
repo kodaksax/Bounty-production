@@ -144,6 +144,19 @@ Executed on explicit executive approval, one at a time, each independently verif
 
 **Remaining from the original 4-migration set: none — all applied.** Remaining production-impacting work: edge function deployment (§3) and dead-code deletion (§4), both still pending separate authorization.
 
+## 6b. Phase 3 execution results — payments and apple-pay DEPLOYED to production
+
+Executed on explicit executive approval ("Deploy both").
+
+1. **`apple-pay`**: v20 → v21. `verify_jwt` preserved as `true`. Verified via `get_edge_function`: deployed source matches the git-tracked `supabase/functions/apple-pay/index.ts` byte-for-byte, including the `idempotencyKey` handling.
+2. **`payments`**: v31 → v32. `verify_jwt` preserved as `false`. Verified via `get_edge_function`: deployed source matches git byte-for-byte, including the ACH/Financial Connections routes (`/create-financial-connections-session`, `/financial-connections-complete`) and `idempotencyKey` handling on both the ACH and card branches.
+
+**Log check:** `get_logs` (edge-function service) immediately post-deploy showed no error/crash entries for either function. No real invocation against the new versions had occurred yet at check time (expected — only seconds had elapsed since deploy), so this confirms *no evidence of startup failure*, not a confirmed successful live request. Recommend keeping an eye on the next real payment/deposit through each function.
+
+**Rollback available:** full source for the pre-deploy versions (`payments` v31, `apple-pay` v20) was captured during this session's verification queries and is preserved in this doc's git history (see the earlier `get_edge_function` output in this session) — an exact revert is possible without depending on the Supabase dashboard's version history UI.
+
+**Remaining production-impacting work: only the 57-file dead-code deletion (§4), pending separate authorization (Gate #3).**
+
 ## 7. Suggested next priorities (beyond this session)
 
 - Add test coverage for the admin suspend/ban `updateStatus` action (currently zero).
