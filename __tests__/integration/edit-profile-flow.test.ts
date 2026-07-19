@@ -95,10 +95,40 @@ describe('Edit Profile Integration Flow', () => {
 
     it('should handle profile loading errors', async () => {
       mockSupabase.rpc.mockRejectedValue(new Error('Database error'));
+      // beforeEach's setSession() call isn't awaited and jest.clearAllMocks()
+      // doesn't clear a prior test's mockResolvedValue implementation, so it
+      // can race-populate a real in-memory profile before this test's
+      // mockRejectedValue above takes effect. Force a clean "no profile yet"
+      // starting state so this test exercises "first fetch ever fails" —
+      // fetchAndSyncProfile intentionally preserves a genuine last-known-good
+      // profile through a transient error instead of nulling it (see
+      // lib/services/auth-profile-service.ts's getLastFetchError() doc).
+      (authProfileService as any).currentProfile = null;
 
       const profile = await authProfileService.fetchAndSyncProfile(mockUserId);
 
       expect(profile).toBeNull();
+    });
+
+    it('preserves a last-known-good profile through a transient fetch error instead of nulling it', async () => {
+      // Regression test for the 2026-07-19 incident: a profiles-table SELECT
+      // REVOKE went live before every client had the get_my_profile() RPC
+      // fix, so already-onboarded users' self-reads started 403ing. The old
+      // code nulled currentProfile on ANY error, which made a fully-onboarded
+      // user look identical to a brand new one — onboarding/index.tsx routed
+      // them back into the username step, and app/profile/[userId].tsx
+      // showed "Profile not found" for their own account.
+      mockSupabase.rpc.mockResolvedValueOnce({ data: mockProfile, error: null });
+      const loaded = await authProfileService.fetchAndSyncProfile(mockUserId);
+      expect(loaded?.username).toBe('johndoe');
+      expect(authProfileService.getLastFetchError()).toBeNull();
+
+      mockSupabase.rpc.mockRejectedValueOnce(new Error('permission denied for table profiles'));
+      const afterError = await authProfileService.fetchAndSyncProfile(mockUserId);
+
+      expect(afterError).not.toBeNull();
+      expect(afterError?.username).toBe('johndoe');
+      expect(authProfileService.getLastFetchError()).toContain('permission denied');
     });
 
     it('should notify listeners when profile loads', async () => {
@@ -523,10 +553,12 @@ describe('Edit Profile Integration Flow', () => {
   describe('Error Recovery', () => {
     it('should handle network errors gracefully', async () => {
       mockSupabase.rpc.mockRejectedValue(new Error('Network timeout'));
+      // See the identical note in 'should handle profile loading errors' above.
+      (authProfileService as any).currentProfile = null;
 
       const profile = await authProfileService.fetchAndSyncProfile(mockUserId);
 
-      // Should return null instead of throwing
+      // Should return null when there's no last-known-good profile to fall back to
       expect(profile).toBeNull();
     });
 

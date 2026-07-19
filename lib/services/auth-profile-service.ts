@@ -62,6 +62,15 @@ export class AuthProfileService {
   // Track the timestamp of the most recent fetchAndSyncProfile call to prevent
   // race conditions where background fetches complete out of order
   private latestFetchTimestamp: number = 0;
+  // Set when the most recent fetch failed (network/permission/RPC error) as
+  // opposed to genuinely finding no row for this user. Consumers (onboarding
+  // gate, profile screen) must not treat a fetch failure the same as "new
+  // user, no profile yet" -- that conflation is what caused already-onboarded
+  // users to be routed back into username collection and see "Profile not
+  // found" during the 2026-07-19 profiles-SELECT-REVOKE incident, when a
+  // client still on the pre-get_my_profile() bundle got 403s on its own
+  // profile reads. See docs/onboarding/ for the incident writeup.
+  private lastFetchError: string | null = null;
 
   private constructor() {}
 
@@ -250,6 +259,18 @@ export class AuthProfileService {
   }
 
   /**
+   * True if the most recent fetch failed (network/permission/RPC error)
+   * rather than genuinely finding no profile row. Callers must check this
+   * before treating a null/needs_onboarding profile as "new user" -- e.g.
+   * the onboarding gate should retry or show an error instead of resetting
+   * an already-onboarded user's progress, and the profile screen should
+   * show a retry option instead of "Profile not found" for the self case.
+   */
+  getLastFetchError(): string | null {
+    return this.lastFetchError;
+  }
+
+  /**
    * Fetch profile from Supabase and sync with local cache
    * OPTIMIZATION: Check cache first for faster session restoration on app reopen
    */
@@ -330,6 +351,9 @@ export class AuthProfileService {
       if (!data) {
         // get_my_profile() returns null when no row exists for auth.uid() —
         // same "needs onboarding" case the old PGRST116 branch handled.
+        // This is a *confirmed* absence (the query succeeded with zero rows),
+        // not a fetch failure, so clear any stale error flag.
+        this.lastFetchError = null;
         console.log('[authProfileService] Profile not found, user needs to complete onboarding');
         logger.warning('Profile not found, user needs onboarding', { userId });
 
@@ -373,6 +397,7 @@ export class AuthProfileService {
         };
 
         console.log('[authProfileService] Profile data mapped', { username: profile.username, id: profile.id });
+        this.lastFetchError = null;
         this.currentProfile = profile;
         await this.cacheProfile(profile);
         console.log('[authProfileService] Notifying listeners, count:', this.listeners.length);
@@ -394,6 +419,10 @@ export class AuthProfileService {
         logger.error('Error fetching profile', { userId, error });
       }
       
+      // Mark this as a fetch failure (not a confirmed "no profile"). Consumers
+      // must check getLastFetchError() before treating this as a new user.
+      this.lastFetchError = msg || 'Unknown error fetching profile';
+
       // Try to load from cache
       console.log('[authProfileService] Attempting to load from cache...');
       const cached = await this.loadFromCache(userId);
@@ -403,7 +432,19 @@ export class AuthProfileService {
         this.notifyListeners(cached);
         return cached;
       }
-      
+
+      // No cache either. If we already had a real (non-onboarding-placeholder)
+      // profile in memory from earlier in this session, keep it rather than
+      // nulling it out — a transient/permission fetch error must never look
+      // like "this user has no profile." This is what caused already-onboarded
+      // users to be routed back into the username step and see "Profile not
+      // found" during the 2026-07-19 profiles-SELECT-REVOKE incident.
+      if (this.currentProfile && !this.currentProfile.needs_onboarding) {
+        console.warn('[authProfileService] Fetch failed but keeping last-known-good in-memory profile', { userId });
+        this.notifyListeners(this.currentProfile);
+        return this.currentProfile;
+      }
+
       console.error('[authProfileService] No cached profile available, returning null');
       // IMPORTANT: Always notify listeners even on failure to clear loading states
       this.currentProfile = null;
@@ -493,157 +534,6 @@ export class AuthProfileService {
     } catch (error) {
       // Silent failure - we have cached data already displayed
       console.log('[authProfileService] Background fetch failed (non-critical):', error);
-    }
-  }
-
-  /**
-   * Create a minimal profile for a new user with retry logic
-   * This is called when a Supabase auth user exists but has no profile record
-   * Note: Minimal profiles are temporary - users should complete onboarding
-   */
-  private async createMinimalProfile(userId: string, retryCount: number = 0): Promise<AuthProfile | null> {
-    if (!isSupabaseConfigured) {
-      return null;
-    }
-
-    const MAX_RETRIES = 3;
-    const BASE_DELAY_MS = 1000;
-
-    try {
-      // Generate a temporary username from email or user ID
-      // This will be replaced during onboarding
-  const username = this.currentSession?.user?.email?.split('@')[0] || `user_${userId.slice(0, 8)}`;
-  const email = this.currentSession?.user?.email;
-  const metaAgeVerified = (this.currentSession?.user?.user_metadata as any)?.age_verified;
-  const age_verified = typeof metaAgeVerified === 'boolean' ? metaAgeVerified : false;
-  // Set age_verified_at timestamp if age was verified during signup (for audit purposes)
-  // Use undefined instead of null to properly omit the field when not verified
-  const age_verified_at = age_verified ? new Date().toISOString() : undefined;
-
-      // Check if profile already exists (race condition protection)
-      const existing = await this.getProfileById(userId, { bypassCache: true });
-
-      if (existing) {
-        // Profile was created by another process, use it
-        logger.info('Profile already exists, using existing profile', { userId, retryCount });
-        this.currentProfile = existing;
-        await this.cacheProfile(existing);
-        this.notifyListeners(existing);
-        return existing;
-      }
-
-      // Create new minimal profile - only include age_verified_at if age is verified
-      // NEW USERS: Set onboarding_completed = false so they go through onboarding
-      const insertData: Record<string, any> = {
-        id: userId,
-        username: username,
-        email: email,
-        balance: 0,
-        age_verified: age_verified,
-        onboarding_completed: false, // New users haven't completed onboarding yet
-      };
-      if (age_verified_at) {
-        insertData.age_verified_at = age_verified_at;
-      }
-      
-      // Use Supabase SDK's built-in network handling and timeouts
-      // select('id') only, not select('*') — see updateProfile() for why an
-      // INSERT...RETURNING of sensitive columns would fail under the
-      // column-level REVOKE. The full row is re-fetched via get_my_profile()
-      // below once the insert is confirmed.
-      const { data: insertedRow, error } = await supabase
-        .from('profiles')
-        .insert(insertData)
-        .select('id')
-        .single();
-
-      if (error) {
-        // If error is due to duplicate key, profile was created concurrently
-        if (error.code === '23505') {
-          logger.warning('Profile already exists (concurrent creation)', { userId, retryCount });
-          // Fetch the existing profile
-          const existingProfile = await this.getProfileById(userId, { bypassCache: true });
-
-          if (existingProfile) {
-            this.currentProfile = existingProfile;
-            await this.cacheProfile(existingProfile);
-            this.notifyListeners(existingProfile);
-            return existingProfile;
-          }
-        }
-
-        if (error.code === '42501') {
-          logger.error('Supabase RLS blocked profile insert. Grant authenticated users insert access on public.profiles (id = auth.uid()).', { userId, error });
-        } else {
-          logger.error('Error creating minimal profile', { userId, error, retryCount });
-          
-          // Retry on transient errors (network, timeout, etc.)
-          const isRetryableError = 
-            error.message?.includes('network') ||
-            error.message?.includes('timeout') ||
-            error.code === 'PGRST301' || // Connection error
-            error.code === '08000' || // Connection exception
-            error.code === '08003' || // Connection does not exist
-            error.code === '08006'; // Connection failure
-          
-          if (isRetryableError && retryCount < MAX_RETRIES) {
-            const delayMs = BASE_DELAY_MS * Math.pow(2, retryCount); // Exponential backoff
-            logger.info('Retrying profile creation after transient error', { userId, retryCount, delayMs });
-            await new Promise(resolve => setTimeout(resolve, delayMs));
-            return this.createMinimalProfile(userId, retryCount + 1);
-          }
-        }
-        // IMPORTANT: Notify listeners with null to clear loading states even on failure
-        this.currentProfile = null;
-        this.notifyListeners(null);
-        return null;
-      }
-
-      if (insertedRow) {
-        const { data: freshRow, error: rpcError } = await supabase.rpc('get_my_profile');
-        if (rpcError || !freshRow) {
-          logger.error('get_my_profile returned no row after minimal-profile insert', { userId, rpcError });
-          this.currentProfile = null;
-          this.notifyListeners(null);
-          return null;
-        }
-
-        const profile: AuthProfile = {
-          id: freshRow.id,
-          username: freshRow.username,
-          email: freshRow.email,
-          avatar: freshRow.avatar || freshRow.avatar_url || undefined,
-          about: freshRow.about,
-          phone: freshRow.phone,
-          title: freshRow.title || undefined,
-          location: freshRow.location || undefined,
-          skills: Array.isArray(freshRow.skills) ? freshRow.skills : undefined,
-          age_verified: typeof freshRow.age_verified === 'boolean' ? freshRow.age_verified : undefined,
-          age_verified_at: freshRow.age_verified_at || undefined,
-          balance: freshRow.balance || 0,
-          created_at: freshRow.created_at,
-          updated_at: freshRow.updated_at,
-          onboarding_completed: typeof freshRow.onboarding_completed === 'boolean' ? freshRow.onboarding_completed : undefined,
-        };
-
-        this.currentProfile = profile;
-        await this.cacheProfile(profile);
-        this.notifyListeners(profile);
-        logger.info('Created minimal profile for new user', { userId, username, retryCount });
-        return profile;
-      }
-
-      // No data returned from insert - notify listeners with null
-      console.warn('[authProfileService] Profile insert returned no data');
-      this.currentProfile = null;
-      this.notifyListeners(null);
-      return null;
-    } catch (error) {
-      logger.error('Error creating minimal profile', { userId, error });
-      // IMPORTANT: Always notify listeners even on error to clear loading states
-      this.currentProfile = null;
-      this.notifyListeners(null);
-      return null;
     }
   }
 
