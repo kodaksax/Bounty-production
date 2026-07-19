@@ -25,14 +25,18 @@ ALTER TABLE bounties
     REFERENCES profiles(id) 
     ON DELETE SET NULL;
 
--- For bounty_requests table: Keep CASCADE on bounty_id but SET NULL on user_id
--- This preserves request history but anonymizes the hunter
-ALTER TABLE bounty_requests 
-  DROP CONSTRAINT IF EXISTS bounty_requests_user_id_fkey,
-  ADD CONSTRAINT bounty_requests_user_id_fkey 
-    FOREIGN KEY (user_id) 
-    REFERENCES profiles(id) 
-    ON DELETE SET NULL;
+-- NOTE (found 2026-07-18 while diagnosing why a fresh branch/rebase always
+-- fails MIGRATIONS_FAILED on this project): the block that used to be here
+-- targeted a `bounty_requests.user_id` column and `bounty_requests_user_id_fkey`
+-- constraint that have never existed -- `bounty_requests` (created two days
+-- later by 20251119_add_bounty_requests_table.sql) uses `hunter_id`/`poster_id`,
+-- never `user_id`. This ALTER could not have succeeded as written against the
+-- real schema regardless of migration ordering; removed as dead/impossible
+-- code rather than "fixed," since production's tracked history for this
+-- migration predates normal validated application (see this project's
+-- established drift pattern) and the table it targeted never had this shape.
+-- `hunter_id`/`poster_id` already have their own ON DELETE CASCADE behavior
+-- defined at table-creation time in 20251119 -- nothing to replace this with.
 
 -- For completion_submissions: SET NULL on hunter_id to preserve submission records
 ALTER TABLE completion_submissions 
@@ -50,14 +54,13 @@ ALTER TABLE completion_ready
     REFERENCES profiles(id) 
     ON DELETE CASCADE;
 
--- For messages: Keep CASCADE - messages are personal data that should be deleted
--- (Already set to CASCADE in schema, but ensure it's correct)
-ALTER TABLE messages 
-  DROP CONSTRAINT IF EXISTS messages_user_id_fkey,
-  ADD CONSTRAINT messages_user_id_fkey 
-    FOREIGN KEY (user_id) 
-    REFERENCES profiles(id) 
-    ON DELETE CASCADE;
+-- NOTE (found 2026-07-18, same diagnostic pass as the bounty_requests block
+-- above): `messages` has never had a `user_id` column -- its sender
+-- reference is `sender_id`. Same phantom-column class of bug; removed rather
+-- than "fixed onto sender_id" since that FK's ON DELETE behavior is already
+-- defined wherever `messages.sender_id` was originally created, and redefining
+-- it here without checking that definition risks silently changing intended
+-- behavior rather than just unblocking migration replay.
 
 -- For conversation_participants: CASCADE delete participation records
 ALTER TABLE conversation_participants 
