@@ -131,6 +131,19 @@ In order:
 6. `git rm` the 57 confirmed-dead files (§4) — purely a repo cleanliness item, zero production risk, can happen independently of 1–5
 7. After 1–4: spot-check a real profile edit, onboarding flow, and an admin dispute-resolution action in whatever environment you validate in, to confirm no regression before/shortly after
 
+## 6a. Phase 2 execution results — all 4 migrations APPLIED to production
+
+Executed on explicit executive approval, one at a time, each independently verified before proceeding to the next. No verification failures occurred.
+
+1. **`20260719060000_drop_untracked_permissive_anon_profiles_policies`** — Applied. Verified via `pg_policy`: both dangerous policies gone; every remaining policy is either `TO authenticated` or gated by `auth.uid() = id` (evaluates false for anon). Anon can no longer read any row of `profiles`.
+2. **`20260719020000_restore_fn_close_dispute_hold_security_definer`** — Applied. Verified via `pg_proc`: `prosecdef=true`, `proconfig=[search_path=public]`, owner `postgres`, EXECUTE limited to `authenticated`/`service_role`.
+3. **`20260719020500_revoke_sensitive_profile_columns_select`** — Applied. Verified via `information_schema.role_table_grants` (no table-level SELECT remains for `anon`/`authenticated`) and `information_schema.column_privileges` (authenticated's column-level SELECT list is exactly the 52 intended columns — the 10 excluded columns confirmed absent).
+4. **`20260719050000_tighten_execute_grants_unauth_callable_functions`** — Applied. Verified via `information_schema.role_routine_grants`: `unfreeze_profile_if_no_open_disputes` and `has_stripe_connect` now `postgres`/`service_role` only; `send_system_notification` retains `authenticated` (still needed by `dispute-service.ts`/admin verifications) but lost `anon`/`PUBLIC`.
+
+**Verification method note:** all four were verified against the live privilege/policy model directly (exact grant/policy diff before → after), not by exercising the deployed app end-to-end — this environment has no way to authenticate as a real app user against production. A manual smoke test of profile view/edit and an admin dispute resolution is recommended as a follow-up, though the privilege-model verification leaves no ambiguity about what changed.
+
+**Remaining from the original 4-migration set: none — all applied.** Remaining production-impacting work: edge function deployment (§3) and dead-code deletion (§4), both still pending separate authorization.
+
 ## 7. Suggested next priorities (beyond this session)
 
 - Add test coverage for the admin suspend/ban `updateStatus` action (currently zero).
