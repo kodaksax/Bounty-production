@@ -1,0 +1,50 @@
+-- CRITICAL FINDING (2026-07-19 continuation-hardening session, independent re-audit):
+-- Two RLS policies on public.profiles were found live in production that were
+-- NEVER created by any tracked migration -- untracked schema drift, most likely
+-- a leftover default policy from Supabase Studio's table-creation wizard
+-- ("Enable read access for all users" is the canned template name/text Studio
+-- offers when you click "Enable RLS" + "select" on a fresh table):
+--
+--   "Enable read access for all users"          FOR SELECT USING (true)  -- no role restriction
+--   "Public profiles are viewable by everyone"  FOR SELECT USING (true)  -- no role restriction
+--
+-- Both have an empty `polroles` (meaning they apply to PUBLIC, i.e. every role,
+-- including `anon`). Since `anon` also independently holds a table-level SELECT
+-- grant on public.profiles (from early schema setup), and Postgres RLS OR's all
+-- applicable permissive policies together, these two policies alone are
+-- sufficient for a fully unauthenticated caller (just the public anon key, no
+-- login) to run `select * from profiles` and read EVERY column of EVERY user
+-- row -- including balance, balance_on_hold, email, phone, stripe_customer_id,
+-- stripe_connect_account_id, risk_score, and risk_level.
+--
+-- This is more severe than the already-documented/in-progress finding that any
+-- *authenticated* user can read all columns of all profiles (see
+-- 20260719020500_revoke_sensitive_profile_columns_select.sql and
+-- docs/withdrawals/08-profiles-rls-migration-strategy.md) -- that gap requires
+-- a valid login; this one requires nothing at all.
+--
+-- The intended, documented design already accounts for legitimate cross-user
+-- profile reads via two other mechanisms that remain fully intact after this
+-- change:
+--   1. `profiles_select_authenticated` (tracked, 20260303_add_profiles_rls_policies.sql)
+--      -- authenticated-only, broad row read, to be column-narrowed by the
+--      pending REVOKE migration.
+--   2. `public.public_profiles` view (tracked, 20260718235500_formalize_public_profiles_view.sql)
+--      -- curated safe-columns view already GRANTed to anon + authenticated,
+--      the intended path for any pre-login/cross-user profile display.
+--
+-- Dropping these two policies removes ONLY the anon-reachable, zero-restriction
+-- path. No authenticated functionality depends on them (profiles_select_authenticated
+-- already covers every case they'd otherwise serve for logged-in users), and no
+-- anon-facing feature in the app queries public.profiles directly (the app
+-- requires authentication before any profile-adjacent screen; unauthenticated
+-- display, if ever added, should use public.public_profiles, which already
+-- grants anon SELECT on a safe column subset).
+--
+-- Rollback (re-adds the exact same permissive policies, restoring the prior
+-- exposure -- only do this if this migration is found to break something):
+--   CREATE POLICY "Enable read access for all users" ON public.profiles FOR SELECT USING (true);
+--   CREATE POLICY "Public profiles are viewable by everyone" ON public.profiles FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Enable read access for all users" ON public.profiles;
+DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.profiles;
