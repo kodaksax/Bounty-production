@@ -105,86 +105,57 @@ export class AuthProfileService {
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
         console.log('[authProfileService] Fetching profile from Supabase for userId:', userId);
       }
-      // Try canonical profiles table first
+      // This method is for viewing ANOTHER user's profile (see docstring above
+      // and hooks/useNormalizedProfile.ts, which only calls this on the
+      // non-self branch). Query `public_profiles` -- a curated safe-columns
+      // view -- directly, rather than `profiles.select('*')`, which would
+      // expose balance/Stripe IDs/risk fields/email/phone for arbitrary other
+      // users. See docs/withdrawals/08-profiles-rls-migration-strategy.md.
       let data: any = null;
-      let error: any = null;
 
       try {
         // Use Supabase SDK without custom timeout wrapper
         // Allows SDK to use its internal network handling and retry logic
-        // Custom timeouts were causing premature request cancellation
-        const res = await supabase
-          .from('profiles')
-          .select('*')
+        const pub = await supabase
+          .from('public_profiles')
+          // PostgREST aliasing uses `alias:column` — alias the snake_case DB column
+          // to a camelCase property so the app can read `displayName` safely.
+          .select('id,username,displayName:display_name,avatar,location')
           .eq('id', userId)
           .maybeSingle();
-        data = res.data ?? null;
-        error = res.error ?? null;
         if (typeof __DEV__ !== 'undefined' && __DEV__) {
-          console.log('[authProfileService] Profiles table query result', { hasData: !!data, hasError: !!error });
+          console.log('[authProfileService] Public_profiles query result', { hasData: !!pub.data, hasError: !!pub.error });
         }
-      } catch (e) {
-        if (typeof __DEV__ !== 'undefined' && __DEV__) {
-          console.error('[authProfileService] Profiles table query exception:', e);
-        }
-        logger.warning('Profile fetch error', { userId, error: e });
-        data = null;
-        error = e;
-      }
-
-      // If profiles returned an error or no data, attempt public_profiles fallback
-      if (!data) {
-        if (typeof __DEV__ !== 'undefined' && __DEV__) {
-          console.log('[authProfileService] Trying public_profiles fallback...');
-        }
-        try {
-          // Use Supabase SDK without custom timeout wrapper
-          // Allows SDK to use its internal network handling and retry logic
-          const pub = await supabase
-            .from('public_profiles')
-            // PostgREST aliasing uses `alias:column` — alias the snake_case DB column
-            // to a camelCase property so the app can read `displayName` safely.
-            .select('id,username,displayName:display_name,avatar,location')
-            .eq('id', userId)
-            .maybeSingle();
-          if (typeof __DEV__ !== 'undefined' && __DEV__) {
-            console.log('[authProfileService] Public_profiles query result', { hasData: !!pub.data, hasError: !!pub.error });
-          }
-          if (pub.error) {
-            // If both attempts fail, surface a warning and return null
-            // Include error.code/message and the select used so we can trace 42703 (undefined column) errors.
-            logger.warning('public_profiles fetch error', {
-              userId,
-              select: "id,username,displayName:display_name,avatar,location",
-              errorCode: pub.error?.code,
-              errorMessage: pub.error?.message || pub.error,
-              rawError: pub.error,
-            });
-            return null;
-          }
-
-          if (!pub.data) {
-            // No public profile either
-            if (typeof __DEV__ !== 'undefined' && __DEV__) {
-              console.log('[authProfileService] No data in public_profiles either');
-            }
-            return null;
-          }
-
-          data = pub.data;
-        } catch (e) {
-          console.error('[authProfileService] Public_profiles query exception:', e);
-          logger.error('Error fetching public_profiles', { userId, error: e });
+        if (pub.error) {
+          // Include error.code/message and the select used so we can trace 42703 (undefined column) errors.
+          logger.warning('public_profiles fetch error', {
+            userId,
+            select: "id,username,displayName:display_name,avatar,location",
+            errorCode: pub.error?.code,
+            errorMessage: pub.error?.message || pub.error,
+            rawError: pub.error,
+          });
           return null;
         }
-      }
 
-      if (!data) {
-        console.warn('[authProfileService] No profile data found for userId:', userId);
+        if (!pub.data) {
+          if (typeof __DEV__ !== 'undefined' && __DEV__) {
+            console.log('[authProfileService] No public_profiles row for userId:', userId);
+          }
+          return null;
+        }
+
+        data = pub.data;
+      } catch (e) {
+        console.error('[authProfileService] Public_profiles query exception:', e);
+        logger.error('Error fetching public_profiles', { userId, error: e });
         return null;
       }
 
-      // Map returned row (from profiles or public_profiles) into AuthProfile shape
+      // Map the public_profiles row into AuthProfile shape. Fields not present
+      // in the safe-columns view (email, phone, balance, verification/Stripe
+      // state, etc.) are intentionally absent here -- this is another user's
+      // profile, not the caller's own.
       const profile: AuthProfile = {
         id: data.id,
         username: data.username,

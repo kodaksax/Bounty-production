@@ -19,7 +19,8 @@ All served by Supabase Edge Functions.
 | GET | `/wallet/transactions` | `wallet` | `false` | Paginated history |
 | POST | `/webhooks` (also `/webhooks/stripe`) | `webhooks` | `false` (HMAC-verified instead) | All inbound Stripe events |
 | POST | `/admin-withdrawals` | `admin-withdrawals` | **`true`** | force-retry / manual adjustment / mark externally settled / reverse transfer / on-demand reconciliation / Stripe comparison / log listing, admin-role gated |
-| GET/POST | `/stripe-mode-check` | `stripe-mode-check` | `false` | *(new)* Unauthenticated diagnostic — reports `{configured, keyPrefix, livemode, webhookSecretConfigured}` for whichever project it's deployed to. No financial data or secrets exposed. Use before assuming any environment's Stripe mode. |
+| GET/POST | `/stripe-mode-check` | `stripe-mode-check` | `false` | Unauthenticated diagnostic — reports `{configured, keyPrefix, livemode, webhookSecretConfigured}` for whichever project it's deployed to. No financial data or secrets exposed. Use before assuming any environment's Stripe mode. Documented as deployed to production since the prior pass but was actually missing until 2026-07-18 (doc/reality drift, same pattern as everything else in this project — verify deployment, don't trust the doc) — now genuinely live, confirmed via a real call (`keyPrefix: sk_live_`, `livemode: true`). |
+| POST | `/admin-profiles` | `admin-profiles` | **`true`** | *(new 2026-07-18)* `{ action: 'list' \| 'getById', id?, status?, verificationStatus? }`, admin-role gated, service-role-backed. Not withdrawal-specific — supports the admin panel's user list/detail screens (`lib/admin/adminDataClient.ts`) without depending on the broad `profiles` SELECT RLS policy. See `docs/withdrawals/08-profiles-rls-migration-strategy.md`. |
 
 ## `admin-withdrawals` — actions
 
