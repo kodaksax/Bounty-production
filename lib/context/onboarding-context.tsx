@@ -42,6 +42,25 @@ export interface OnboardingData {
   taskDescription: string;
   price: string;
   schedule: 'saturday' | 'flexible' | null;
+
+  // Set immediately after the onboarding poster flow successfully creates a
+  // bounty (details.tsx createBountyNow). Used to (a) redirect straight to
+  // /onboarding/bounty-posted instead of re-rendering the composer if the
+  // user navigates back into details.tsx, preventing a duplicate bounty, and
+  // (b) let bounty-posted.tsx render a summary of what was just posted.
+  firstBountyPostedId: string | null;
+  firstBountyPostedTitle: string | null;
+  firstBountyPostedAmount: number | null;
+
+  // Set immediately after the onboarding hunter flow successfully applies to
+  // a sample bounty (details.tsx handleApplyToSample). Used to (a) redirect
+  // straight to /onboarding/application-submitted instead of re-rendering the
+  // sample-bounty screen if the user navigates back into details.tsx,
+  // preventing a duplicate application, and (b) let application-submitted.tsx
+  // track/reference what was just applied to.
+  firstAppliedBountyId: string | null;
+  firstAppliedBountyTitle: string | null;
+  firstBountyRequestId: string | null;
 }
 
 const defaultOnboardingData: OnboardingData = {
@@ -56,6 +75,12 @@ const defaultOnboardingData: OnboardingData = {
   taskDescription: '',
   price: '',
   schedule: null,
+  firstBountyPostedId: null,
+  firstBountyPostedTitle: null,
+  firstBountyPostedAmount: null,
+  firstAppliedBountyId: null,
+  firstAppliedBountyTitle: null,
+  firstBountyRequestId: null,
 };
 
 interface OnboardingContextType {

@@ -123,6 +123,26 @@ export default function DetailsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // A bounty was already created earlier in this onboarding session (e.g. the
+  // user navigated back into this screen after createBountyNow succeeded).
+  // Redirect straight to the congrats screen instead of re-rendering the
+  // poster composer, which would let them post a second bounty.
+  useEffect(() => {
+    if (onboardingData.intent === 'poster' && onboardingData.firstBountyPostedId) {
+      router.replace('/onboarding/bounty-posted');
+    }
+  }, [onboardingData.intent, onboardingData.firstBountyPostedId, router]);
+
+  // An application was already submitted earlier in this onboarding session
+  // (e.g. the user navigated back into this screen after handleApplyToSample
+  // succeeded). Redirect straight to the congrats screen instead of
+  // re-rendering the sample-bounty screen, which would let them apply twice.
+  useEffect(() => {
+    if (onboardingData.intent === 'hunter' && onboardingData.firstAppliedBountyId) {
+      router.replace('/onboarding/application-submitted');
+    }
+  }, [onboardingData.intent, onboardingData.firstAppliedBountyId, router]);
+
   // Initial (pre-location) preview: recent local bounties, recency-sorted —
   // matches what the location prompt shows before we know where the hunter
   // is. Once location/ZIP resolves, resolveNearby() re-ranks a fresh fetch by
@@ -588,7 +608,7 @@ export default function DetailsScreen() {
 
     setPosting(true);
     try {
-      await bountyCreationService.createBounty({
+      const result = await bountyCreationService.createBounty({
         title,
         description,
         amount: isForHonor ? 0 : amount,
@@ -609,7 +629,12 @@ export default function DetailsScreen() {
               : undefined,
       });
       analyticsService.trackEvent('onboarding_bounty_posted', { isForHonor, amount });
-      router.push('/onboarding/done');
+      updateOnboardingData({
+        firstBountyPostedId: String(result.bounty.id),
+        firstBountyPostedTitle: result.bounty.title,
+        firstBountyPostedAmount: result.bounty.amount,
+      });
+      router.replace('/onboarding/bounty-posted');
       return true;
     } catch (err) {
       console.error('[Onboarding] Failed to post bounty:', err);
@@ -642,11 +667,19 @@ export default function DetailsScreen() {
   };
 
   const handleApplyToSample = async () => {
+    // Synchronous re-entrancy guard against a fast double-tap outrunning the
+    // `applying` state update that disables the button (belt-and-suspenders;
+    // the DB's unique_bounty_hunter constraint also makes a second insert
+    // idempotent, but this avoids firing a redundant network call/analytics
+    // event).
+    if (applying) return;
+
     const sampleBounty = recentBounties && recentBounties.length > 0 ? recentBounties[0] : null;
     const hunterId = userId || session?.user?.id;
 
     if (!sampleBounty || !hunterId) {
-      // No real bounty to apply to (mock preview / no session) — just continue.
+      // No real bounty to apply to (mock preview / no session) — nothing to
+      // confirm, so just continue to the generic profile-summary screen.
       router.push('/onboarding/done');
       return;
     }
@@ -657,17 +690,42 @@ export default function DetailsScreen() {
         bounty_id: String(sampleBounty.id),
         hunter_id: hunterId,
         status: 'pending',
+        poster_id: sampleBounty.poster_id || (sampleBounty as any).user_id,
+        message: null,
       } as any);
-      if (!result.success) {
-        console.warn('[Onboarding] Bounty application failed:', result.error);
-      } else {
+
+      if (result.success) {
         analyticsService.trackEvent('onboarding_bounty_accepted', { bountyId: String(sampleBounty.id) });
+        updateOnboardingData({
+          firstAppliedBountyId: String(sampleBounty.id),
+          firstAppliedBountyTitle: sampleBounty.title,
+          firstBountyRequestId: String(result.request.id),
+        });
+        router.replace('/onboarding/application-submitted');
+        return;
       }
+
+      console.warn('[Onboarding] Bounty application failed:', result.error);
+      Alert.alert(
+        'Could Not Submit Application',
+        result.error || 'Please check your connection and try again.',
+        [
+          { text: 'Try Again', onPress: () => handleApplyToSample() },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
     } catch (err) {
       console.error('[Onboarding] Failed to apply to sample bounty:', err);
+      Alert.alert(
+        'Connection Error',
+        "We couldn't submit your application. Please check your internet connection and try again.",
+        [
+          { text: 'Try Again', onPress: () => handleApplyToSample() },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
     } finally {
       setApplying(false);
-      router.push('/onboarding/done');
     }
   };
 

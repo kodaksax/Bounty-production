@@ -41,7 +41,9 @@ export type AnalyticsEvent =
   | 'onboarding_profile_submitted'
   | 'onboarding_step_skipped'
   | 'onboarding_bounty_posted'
+  | 'onboarding_bounty_posted_screen_shown'
   | 'onboarding_bounty_accepted'
+  | 'onboarding_application_submitted_screen_shown'
   | 'onboarding_completed'
   // Settings — fired when a user changes a display/layout preference after
   // onboarding, so it can be compared against the onboarding-time choice.

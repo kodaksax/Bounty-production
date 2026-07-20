@@ -1,5 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
 import { ErrorBanner } from '../error-banner';
 import { Skeleton } from '../ui/skeleton';
@@ -57,12 +57,25 @@ export function HunterSampleBountyScreen({
   onBack,
 }: HunterSampleBountyScreenProps) {
   const [notifyState, setNotifyState] = useState<'idle' | 'requesting' | 'granted' | 'denied'>('idle');
+  // Gates the detail sheet behind an explicit "View & accept" tap so the two
+  // cards read as sequential steps of one decision instead of two buttons
+  // that independently fire the same real application (see previous bug:
+  // both CTAs called onNext directly, so either tap silently submitted a
+  // live bounty_requests row with no review step in between).
+  const [reviewing, setReviewing] = useState(false);
 
   const isLoading = recentBounties === null;
   const previewCards = getPreviewCards(recentBounties);
   const isEmpty = !isLoading && previewCards.length === 0;
   const sampleCard = previewCards[0];
   const sampleBounty = recentBounties && recentBounties.length > 0 ? recentBounties[0] : null;
+
+  // Collapse back to the preview card whenever the underlying bounty changes
+  // (e.g. "Browse Online Bounties" swaps in a different list) so "reviewing"
+  // never carries over onto a bounty the user hasn't actually looked at.
+  useEffect(() => {
+    setReviewing(false);
+  }, [sampleBounty?.id]);
 
   const bannerAmount =
     recentBounties && recentBounties.length > 0
@@ -79,7 +92,15 @@ export function HunterSampleBountyScreen({
         .join(' · ')
     : '';
 
-  const handleNext = () => {
+  // "View & accept" only reveals the detail sheet — it does not touch the
+  // backend. The real application only fires from the detail sheet's
+  // "I can do this today" confirm button below.
+  const handleViewAccept = () => {
+    hapticFeedback.light();
+    setReviewing(true);
+  };
+
+  const handleConfirmAccept = () => {
     hapticFeedback.light();
     onNext();
   };
@@ -257,48 +278,58 @@ export function HunterSampleBountyScreen({
           </Text>
         </View>
 
-        <View style={styles.bountyCard}>
-          <View style={styles.bountyCardTopRow}>
-            <Text style={styles.sampleCardTitle} numberOfLines={1}>{sampleCard.title}</Text>
-            <Text style={styles.sampleCardPrice}>{sampleCard.priceLabel}</Text>
+        {!reviewing ? (
+          <View style={styles.bountyCard}>
+            <View style={styles.bountyCardTopRow}>
+              <Text style={styles.sampleCardTitle} numberOfLines={1}>{sampleCard.title}</Text>
+              <Text style={styles.sampleCardPrice}>{sampleCard.priceLabel}</Text>
+            </View>
+            <View style={styles.bountyCardMetaRow}>
+              <Text style={styles.bountyCardMetaText}>{sampleCard.metaLabel}</Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.viewAcceptButton, { backgroundColor: theme.primary }]}
+              onPress={handleViewAccept}
+              accessibilityRole="button"
+              accessibilityLabel="View details for this bounty"
+            >
+              <Text style={styles.viewAcceptButtonText}>View &amp; accept</Text>
+            </TouchableOpacity>
           </View>
-          <View style={styles.bountyCardMetaRow}>
-            <Text style={styles.bountyCardMetaText}>{sampleCard.metaLabel}</Text>
+        ) : (
+          <View style={styles.detailSheet}>
+            <Text style={styles.detailSheetLabel}>DETAIL SHEET</Text>
+            <View style={styles.bountyCardTopRow}>
+              <Text style={styles.sampleCardTitle} numberOfLines={1}>{sampleCard.title}</Text>
+              <Text style={styles.sampleCardPrice}>{sampleCard.priceLabel}</Text>
+            </View>
+            <Text style={styles.detailSheetText}>{detailText}</Text>
+            <TouchableOpacity
+              style={[styles.viewAcceptButton, { backgroundColor: theme.primary }]}
+              onPress={handleConfirmAccept}
+              disabled={applying}
+              accessibilityRole="button"
+              accessibilityLabel="I can do this today"
+              accessibilityState={{ disabled: applying, busy: applying }}
+            >
+              {applying ? (
+                <ActivityIndicator color="#ffffff" style={{ marginRight: 8 }} />
+              ) : null}
+              <Text style={styles.viewAcceptButtonText}>
+                {applying ? 'Applying…' : '✓ I can do this today'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.skipLink}
+              onPress={() => setReviewing(false)}
+              disabled={applying}
+              accessibilityRole="button"
+              accessibilityLabel="Back to bounty preview"
+            >
+              <Text style={styles.skipLinkText}>Back</Text>
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={[styles.viewAcceptButton, { backgroundColor: theme.primary }]}
-            onPress={handleNext}
-            disabled={applying}
-            accessibilityRole="button"
-            accessibilityLabel="View and accept this bounty"
-            accessibilityState={{ disabled: applying, busy: applying }}
-          >
-            {applying ? (
-              <ActivityIndicator color="#ffffff" style={{ marginRight: 8 }} />
-            ) : null}
-            <Text style={styles.viewAcceptButtonText}>View &amp; accept</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.detailSheet}>
-          <Text style={styles.detailSheetLabel}>DETAIL SHEET</Text>
-          <Text style={styles.detailSheetText}>{detailText}</Text>
-          <TouchableOpacity
-            style={[styles.viewAcceptButton, { backgroundColor: theme.primary }]}
-            onPress={handleNext}
-            disabled={applying}
-            accessibilityRole="button"
-            accessibilityLabel="I can do this today"
-            accessibilityState={{ disabled: applying, busy: applying }}
-          >
-            {applying ? (
-              <ActivityIndicator color="#ffffff" style={{ marginRight: 8 }} />
-            ) : null}
-            <Text style={styles.viewAcceptButtonText}>
-              {applying ? 'Applying…' : '✓ I can do this today'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        )}
 
         <View style={styles.hunterSpacer} />
 
