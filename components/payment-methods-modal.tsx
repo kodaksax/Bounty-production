@@ -191,7 +191,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
           ref={modalRef}
           {...panResponder.panHandlers}
           style={{
-            backgroundColor: '#059669', // emerald-600 — intentional payment branding
+            backgroundColor: theme.primary, // intentional payment branding — matches Add Money screen
             width: '100%',
             borderTopLeftRadius: 24,
             borderTopRightRadius: 24,
@@ -281,7 +281,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
                   flex: 1,
                   paddingVertical: 10,
                   borderRadius: 8,
-                  backgroundColor: selectedMethodType === 'card' ? '#059669' : 'transparent',
+                  backgroundColor: selectedMethodType === 'card' ? theme.primary : 'transparent',
                 }}
                 onPress={() => setSelectedMethodType('card')}
                 accessibilityRole="tab"
@@ -302,7 +302,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
                   flex: 1,
                   paddingVertical: 10,
                   borderRadius: 8,
-                  backgroundColor: selectedMethodType === 'bank_account' ? '#059669' : 'transparent',
+                  backgroundColor: selectedMethodType === 'bank_account' ? theme.primary : 'transparent',
                 }}
                 onPress={() => setSelectedMethodType('bank_account')}
                 accessibilityRole="tab"
@@ -330,7 +330,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
                 padding: 18,
                 marginBottom: 20,
                 minHeight: 56,
-                shadowColor: '#059669',
+                shadowColor: theme.primary,
                 shadowOpacity: 0.3,
                 shadowRadius: 8,
                 shadowOffset: { width: 0, height: 3 },
@@ -359,8 +359,8 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
             ) : (loadFailed || stripeError) && selectedMethodType === 'card' && paymentMethods.length === 0 ? (
               // Show error state if load ultimately failed
               <View style={{ alignItems: 'center', padding: 20 }}>
-                <MaterialIcons name="error-outline" size={48} color="#fee2e2" />
-                <Text style={{ color: '#fee2e2', textAlign: 'center', marginTop: 12, fontSize: 15, lineHeight: 22 }}>
+                <MaterialIcons name="error-outline" size={48} color={theme.error} />
+                <Text style={{ color: 'rgba(255,255,255,0.9)', textAlign: 'center', marginTop: 12, fontSize: 15, lineHeight: 22 }}>
                   {(() => {
                     if (!stripeError) {
                       return 'Unable to load payment methods. Please check your connection and try again.';
@@ -435,11 +435,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
                     padding: 18,
                     marginBottom: 14,
                     minHeight: 72, // Comfortable touch target height
-                    shadowColor: '#000',
-                    shadowOpacity: 0.05,
-                    shadowRadius: 2,
-                    shadowOffset: { width: 0, height: 1 },
-                    elevation: 1,
+                    ...theme.shadows.sm,
                   }}>
                     <MaterialIcons name="credit-card" size={34} color="#ffffff" />
                     <View style={{ flex: 1, marginLeft: 14 }}>

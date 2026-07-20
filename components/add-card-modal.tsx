@@ -8,7 +8,8 @@ import { useAuthContext } from "../hooks/use-auth-context"
 import { stripeService } from "../lib/services/stripe-service"
 import { useStripe } from "../lib/stripe-context"
 import { supabase } from "../lib/supabase"
-import { theme } from "../lib/theme"
+import { useAppThemeContext } from "../lib/themes/AppThemeContext"
+import type { AppTheme } from "../lib/themes/types"
 import PaymentElementWrapper from "./payment-element-wrapper"
 
 interface AddCardModalProps {
@@ -49,6 +50,8 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
 
   const { createPaymentMethod, loadPaymentMethods, error: stripeError } = useStripe()
   const { session, isAuthStale, attemptRefresh, isLoading: isAuthLoading } = useAuthContext()
+  const { theme } = useAppThemeContext()
+  const styles = makeStyles(theme)
   const insets = useSafeAreaInsets()
   // Guarantee the action button / form bottom clears the home indicator and
   // the rounded sheet edge on larger devices (e.g. iPad), where the modal is
@@ -596,7 +599,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
           >
             {isLoading ? (
               <>
-                <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 8 }} />
+                <ActivityIndicator size="small" color={theme.background} style={{ marginRight: 8 }} />
                 <Text style={styles.primaryButtonText}>Adding Card...</Text>
               </>
             ) : (
@@ -737,7 +740,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
           >
             {isLoading ? (
               <>
-                <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 8 }} />
+                <ActivityIndicator size="small" color={theme.background} style={{ marginRight: 8 }} />
                 <Text style={styles.primaryButtonText}>Adding Card...</Text>
               </>
             ) : (
@@ -762,80 +765,85 @@ const embeddedStyles = StyleSheet.create({
   title: { color: '#fff', fontSize: 18, fontWeight: '600', textAlign: 'center', flex: 1 },
 })
 
-const styles = StyleSheet.create({
-  overlayContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    backgroundColor: '#059669',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingBottom: 12,
-    maxHeight: '92%',
-  },
-  navBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 20 : 12,
-    paddingBottom: 12,
-  },
-  navButton: {
-    padding: 8,
-    minWidth: 44,
-    minHeight: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  navButtonPlaceholder: { width: 44, height: 44 },
-  navTitle: { color: '#fff', fontSize: 18, fontWeight: '600', letterSpacing: 0.5 },
-  contentScroll: { flex: 1 },
-  contentContainer: { paddingHorizontal: 20, paddingBottom: 40 },
-  instructions: { color: '#1F2937', fontSize: 13, marginBottom: 16 },
-  previewCard: {
-    backgroundColor: '#0B0F14',
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 24,
-    ...theme.shadows.sm,
-  },
-  previewLogosRow: { flexDirection: 'row', marginBottom: 12 },
-  brandLogoPrimary: { height: 32, width: 32, borderRadius: 16, backgroundColor: '#ef4444' },
-  brandLogoSecondary: { height: 32, width: 32, borderRadius: 16, backgroundColor: '#f59e0b', marginLeft: -10 },
-  previewNumber: { color: '#fff', fontSize: 18, letterSpacing: 2, fontWeight: '600', marginBottom: 20 },
-  previewFooterRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  previewMetaBlock: {},
-  previewMetaLabel: { color: '#6ee7b7', fontSize: 11, marginBottom: 4 },
-  previewMetaValue: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  formFieldBlock: { marginBottom: 18 },
-  fieldLabel: { color: '#1F2937', fontSize: 13, marginBottom: 6, fontWeight: '500' },
-  textInput: {
-    backgroundColor: 'rgba(4,120,87,0.55)',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    color: '#fff',
-    fontSize: 15,
-  },
-  textInputError: { borderWidth: 1, borderColor: '#f87171' },
-  errorText: { color: '#fca5a5', fontSize: 11, marginTop: 6 },
-  inlineRow: { flexDirection: 'row', gap: 16 },
-  inlineHalf: { flex: 1 },
-  primaryButton: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#111827',
-    borderRadius: 28,
-    paddingVertical: 14,
-    marginTop: 8,
-    ...theme.shadows.emerald,
-  },
-  primaryButtonDisabled: { opacity: 0.55 },
-  primaryButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  inlineErrorBanner: { marginTop: 10, padding: 10, backgroundColor: '#fee2e2', borderRadius: 10 },
-  inlineErrorText: { color: '#b91c1c', textAlign: 'center', fontSize: 13 },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    overlayContainer: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      justifyContent: 'flex-end',
+    },
+    sheet: {
+      backgroundColor: theme.primary, // intentional payment branding — matches Add Money screen
+      borderTopLeftRadius: 28,
+      borderTopRightRadius: 28,
+      paddingBottom: 12,
+      maxHeight: '92%',
+    },
+    navBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 20,
+      paddingTop: Platform.OS === 'ios' ? 20 : 12,
+      paddingBottom: 12,
+    },
+    navButton: {
+      padding: 8,
+      minWidth: 44,
+      minHeight: 44,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    navButtonPlaceholder: { width: 44, height: 44 },
+    navTitle: { color: '#fff', fontSize: 18, fontWeight: '600', letterSpacing: 0.5 },
+    contentScroll: { flex: 1 },
+    contentContainer: { paddingHorizontal: 20, paddingBottom: 40 },
+    instructions: { color: 'rgba(255,255,255,0.85)', fontSize: 13, marginBottom: 16 },
+    // Card-face mockup — intentionally stays a fixed dark navy regardless of app
+    // theme (like the face of a physical card), so its accent text below is
+    // fixed-light rather than theme-derived to guarantee contrast against it.
+    previewCard: {
+      backgroundColor: '#0B0F14',
+      borderRadius: 18,
+      padding: 16,
+      marginBottom: 24,
+      ...theme.shadows.sm,
+    },
+    previewLogosRow: { flexDirection: 'row', marginBottom: 12 },
+    brandLogoPrimary: { height: 32, width: 32, borderRadius: 16, backgroundColor: '#ef4444' },
+    brandLogoSecondary: { height: 32, width: 32, borderRadius: 16, backgroundColor: '#f59e0b', marginLeft: -10 },
+    previewNumber: { color: '#fff', fontSize: 18, letterSpacing: 2, fontWeight: '600', marginBottom: 20 },
+    previewFooterRow: { flexDirection: 'row', justifyContent: 'space-between' },
+    previewMetaBlock: {},
+    previewMetaLabel: { color: '#6ee7b7', fontSize: 11, marginBottom: 4 },
+    previewMetaValue: { color: '#fff', fontSize: 14, fontWeight: '600' },
+    formFieldBlock: { marginBottom: 18 },
+    fieldLabel: { color: 'rgba(255,255,255,0.85)', fontSize: 13, marginBottom: 6, fontWeight: '500' },
+    textInput: {
+      backgroundColor: 'rgba(4,120,87,0.55)',
+      borderRadius: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      color: '#fff',
+      fontSize: 15,
+    },
+    textInputError: { borderWidth: 1, borderColor: theme.error },
+    errorText: { color: '#fca5a5', fontSize: 11, marginTop: 6 },
+    inlineRow: { flexDirection: 'row', gap: 16 },
+    inlineHalf: { flex: 1 },
+    primaryButton: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: theme.text,
+      borderRadius: 28,
+      paddingVertical: 14,
+      marginTop: 8,
+      ...theme.shadows.brand,
+    },
+    primaryButtonDisabled: { opacity: 0.55 },
+    primaryButtonText: { color: theme.background, fontSize: 16, fontWeight: '600' },
+    inlineErrorBanner: { marginTop: 10, padding: 10, backgroundColor: '#fee2e2', borderRadius: 10 },
+    inlineErrorText: { color: '#b91c1c', textAlign: 'center', fontSize: 13 },
+  });
+}

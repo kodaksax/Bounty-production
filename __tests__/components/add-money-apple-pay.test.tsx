@@ -58,6 +58,10 @@ jest.mock('../../components/payment-methods-modal', () => ({
   PaymentMethodsModal: () => null,
 }));
 
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: jest.fn(() => ({ top: 0, bottom: 0, left: 0, right: 0 })),
+}));
+
 // ---- imports after mocks ----
 
 import { AddMoneyScreen } from '../../components/add-money-screen';

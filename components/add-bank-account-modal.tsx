@@ -15,6 +15,8 @@ import {
 import { useAuthContext } from "../hooks/use-auth-context"
 import { stripeService } from "../lib/services/stripe-service"
 import type { StripePaymentMethod } from "../lib/services/stripe-internal"
+import { useAppThemeContext } from "../lib/themes/AppThemeContext"
+import type { AppTheme } from "../lib/themes/types"
 
 /**
  * Payload passed to the optional `onSave` callback once Financial Connections
@@ -51,6 +53,8 @@ export function AddBankAccountModal({
 }: AddBankAccountModalProps) {
   const [isLoading, setIsLoading] = useState(false)
   const { session } = useAuthContext()
+  const { theme } = useAppThemeContext()
+  const styles = makeStyles(theme)
 
   const handleLinkBank = async () => {
     if (isLoading) return
@@ -150,7 +154,7 @@ export function AddBankAccountModal({
       >
         {isLoading ? (
           <>
-            <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 8 }} />
+            <ActivityIndicator size="small" color={theme.background} style={{ marginRight: 8 }} />
             <Text style={styles.primaryButtonText}>Opening secure form…</Text>
           </>
         ) : (
@@ -233,82 +237,85 @@ const embeddedStyles = StyleSheet.create({
   },
 })
 
-const styles = StyleSheet.create({
-  overlayContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    backgroundColor: '#059669',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingBottom: 12,
-    maxHeight: '92%',
-  },
-  navBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 20 : 12,
-    paddingBottom: 12,
-  },
-  navButton: {
-    padding: 8,
-    minWidth: 44,
-    minHeight: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  navButtonPlaceholder: { width: 44, height: 44 },
-  navTitle: { color: '#fff', fontSize: 18, fontWeight: '600', letterSpacing: 0.5 },
-  contentContainer: { paddingHorizontal: 20, paddingBottom: 40 },
-  heroIconWrap: {
-    alignSelf: 'center',
-    marginTop: 8,
-    marginBottom: 16,
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  heroTitle: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  heroSubtitle: {
-    color: '#1F2937',
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  bulletList: { marginBottom: 24, gap: 10 },
-  bulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  bulletText: { color: '#1F2937', fontSize: 13, lineHeight: 18, flex: 1 },
-  primaryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#059669',
-    borderRadius: 14,
-    paddingVertical: 14,
-    marginBottom: 16,
-  },
-  primaryButtonDisabled: { opacity: 0.6 },
-  primaryButtonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  securityNotice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-  },
-  securityText: { color: '#9CA3AF', fontSize: 11, textAlign: 'center', flex: 1 },
-})
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    overlayContainer: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      justifyContent: 'flex-end',
+    },
+    sheet: {
+      backgroundColor: theme.primary, // intentional payment branding — matches Add Money screen
+      borderTopLeftRadius: 28,
+      borderTopRightRadius: 28,
+      paddingBottom: 12,
+      maxHeight: '92%',
+    },
+    navBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 20,
+      paddingTop: Platform.OS === 'ios' ? 20 : 12,
+      paddingBottom: 12,
+    },
+    navButton: {
+      padding: 8,
+      minWidth: 44,
+      minHeight: 44,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    navButtonPlaceholder: { width: 44, height: 44 },
+    navTitle: { color: '#fff', fontSize: 18, fontWeight: '600', letterSpacing: 0.5 },
+    contentContainer: { paddingHorizontal: 20, paddingBottom: 40 },
+    heroIconWrap: {
+      alignSelf: 'center',
+      marginTop: 8,
+      marginBottom: 16,
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      backgroundColor: 'rgba(255,255,255,0.1)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    heroTitle: {
+      color: '#fff',
+      fontSize: 20,
+      fontWeight: '700',
+      textAlign: 'center',
+      marginBottom: 8,
+    },
+    heroSubtitle: {
+      color: 'rgba(255,255,255,0.85)',
+      fontSize: 14,
+      lineHeight: 20,
+      textAlign: 'center',
+      marginBottom: 20,
+    },
+    bulletList: { marginBottom: 24, gap: 10 },
+    bulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+    bulletText: { color: 'rgba(255,255,255,0.85)', fontSize: 13, lineHeight: 18, flex: 1 },
+    primaryButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.text,
+      borderRadius: 14,
+      paddingVertical: 14,
+      marginBottom: 16,
+      ...theme.shadows.md,
+    },
+    primaryButtonDisabled: { opacity: 0.6 },
+    primaryButtonText: { color: theme.background, fontWeight: '700', fontSize: 16 },
+    securityNotice: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingHorizontal: 12,
+    },
+    securityText: { color: 'rgba(255,255,255,0.6)', fontSize: 11, textAlign: 'center', flex: 1 },
+  });
+}
