@@ -15,6 +15,7 @@ import {
 import { useAuthContext } from "../hooks/use-auth-context"
 import { stripeService } from "../lib/services/stripe-service"
 import type { StripePaymentMethod } from "../lib/services/stripe-internal"
+import { useAppThemeContext } from "../lib/themes/AppThemeContext"
 
 /**
  * Payload passed to the optional `onSave` callback once Financial Connections
@@ -51,6 +52,7 @@ export function AddBankAccountModal({
 }: AddBankAccountModalProps) {
   const [isLoading, setIsLoading] = useState(false)
   const { session } = useAuthContext()
+  const { theme } = useAppThemeContext()
 
   const handleLinkBank = async () => {
     if (isLoading) return
@@ -109,12 +111,12 @@ export function AddBankAccountModal({
       contentContainerStyle={styles.contentContainer}
       keyboardShouldPersistTaps="handled"
     >
-      <View style={styles.heroIconWrap}>
+      <View style={[styles.heroIconWrap, { backgroundColor: theme.primary }]}>
         <MaterialIcons name="account-balance" size={48} color="#fff" />
       </View>
 
-      <Text style={styles.heroTitle}>Link your bank securely</Text>
-      <Text style={styles.heroSubtitle}>
+      <Text style={[styles.heroTitle, { color: theme.text }]}>Link your bank securely</Text>
+      <Text style={[styles.heroSubtitle, { color: theme.textSecondary }]}>
         We use Stripe Financial Connections so you never share routing or account
         numbers with us. The same linked bank can be used for both deposits and
         withdrawals.
@@ -122,19 +124,19 @@ export function AddBankAccountModal({
 
       <View style={styles.bulletList}>
         <View style={styles.bulletRow}>
-          <MaterialIcons name="lock" size={18} color="#6ee7b7" />
-          <Text style={styles.bulletText}>Bank-grade encryption end-to-end.</Text>
+          <MaterialIcons name="lock" size={18} color={theme.primaryLight} />
+          <Text style={[styles.bulletText, { color: theme.text }]}>Bank-grade encryption end-to-end.</Text>
         </View>
         <View style={styles.bulletRow}>
-          <MaterialIcons name="bolt" size={18} color="#6ee7b7" />
-          <Text style={styles.bulletText}>
+          <MaterialIcons name="bolt" size={18} color={theme.primaryLight} />
+          <Text style={[styles.bulletText, { color: theme.text }]}>
             Instant verification when your bank supports it; otherwise tiny
             test deposits arrive in 1–2 business days.
           </Text>
         </View>
         <View style={styles.bulletRow}>
-          <MaterialIcons name="sync" size={18} color="#6ee7b7" />
-          <Text style={styles.bulletText}>
+          <MaterialIcons name="sync" size={18} color={theme.primaryLight} />
+          <Text style={[styles.bulletText, { color: theme.text }]}>
             Reusable for deposits and payouts. Link once, use forever.
           </Text>
         </View>
@@ -143,7 +145,11 @@ export function AddBankAccountModal({
       <TouchableOpacity
         onPress={handleLinkBank}
         disabled={isLoading}
-        style={[styles.primaryButton, isLoading && styles.primaryButtonDisabled]}
+        style={[
+          styles.primaryButton,
+          { backgroundColor: theme.primary },
+          isLoading && styles.primaryButtonDisabled,
+        ]}
         accessibilityRole="button"
         accessibilityLabel="Link bank with Stripe"
         accessibilityState={{ disabled: isLoading }}
@@ -159,8 +165,8 @@ export function AddBankAccountModal({
       </TouchableOpacity>
 
       <View style={styles.securityNotice}>
-        <MaterialIcons name="verified-user" size={16} color="#6ee7b7" />
-        <Text style={styles.securityText}>
+        <MaterialIcons name="verified-user" size={16} color={theme.primaryLight} />
+        <Text style={[styles.securityText, { color: theme.textSecondary }]}>
           Powered by Stripe — supports thousands of US banks. We never see your
           credentials.
         </Text>
@@ -170,7 +176,7 @@ export function AddBankAccountModal({
 
   if (embedded) {
     return (
-      <View style={embeddedStyles.container}>
+      <View style={[embeddedStyles.container, { backgroundColor: theme.surface }]}>
         <View style={embeddedStyles.navBar}>
           <TouchableOpacity
             onPress={onBack}
@@ -178,9 +184,9 @@ export function AddBankAccountModal({
             accessibilityRole="button"
             accessibilityLabel="Back"
           >
-            <MaterialIcons name="arrow-back" size={22} color="#fff" />
+            <MaterialIcons name="arrow-back" size={22} color={theme.text} />
           </TouchableOpacity>
-          <Text style={embeddedStyles.title}>Link Bank Account</Text>
+          <Text style={[embeddedStyles.title, { color: theme.text }]}>Link Bank Account</Text>
           <View style={{ width: 44 }} />
         </View>
         {Body}
@@ -190,7 +196,7 @@ export function AddBankAccountModal({
 
   return (
     <View style={styles.overlayContainer}>
-      <View style={styles.sheet}>
+      <View style={[styles.sheet, { backgroundColor: theme.surface }]}>
         <View style={styles.navBar}>
           <TouchableOpacity
             accessibilityRole="button"
@@ -198,9 +204,9 @@ export function AddBankAccountModal({
             onPress={onBack}
             style={styles.navButton}
           >
-            <MaterialIcons name="close" size={24} color="#fff" />
+            <MaterialIcons name="close" size={24} color={theme.text} />
           </TouchableOpacity>
-          <Text style={styles.navTitle}>Link Bank Account</Text>
+          <Text style={[styles.navTitle, { color: theme.text }]}>Link Bank Account</Text>
           <View style={styles.navButtonPlaceholder} />
         </View>
         {Body}
@@ -210,6 +216,7 @@ export function AddBankAccountModal({
 }
 
 const embeddedStyles = StyleSheet.create({
+  // Color comes from theme (backgroundColor applied inline).
   container: { paddingBottom: 24 },
   navBar: {
     flexDirection: 'row',
@@ -225,7 +232,7 @@ const embeddedStyles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    color: '#fff',
+    // color applied inline from theme
     fontSize: 18,
     fontWeight: '600',
     textAlign: 'center',
@@ -240,7 +247,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#059669',
+    // backgroundColor applied inline from theme
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingBottom: 12,
@@ -262,7 +269,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   navButtonPlaceholder: { width: 44, height: 44 },
-  navTitle: { color: '#fff', fontSize: 18, fontWeight: '600', letterSpacing: 0.5 },
+  navTitle: { fontSize: 18, fontWeight: '600', letterSpacing: 0.5 },
   contentContainer: { paddingHorizontal: 20, paddingBottom: 40 },
   heroIconWrap: {
     alignSelf: 'center',
@@ -271,19 +278,19 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    // backgroundColor applied inline from theme
     justifyContent: 'center',
     alignItems: 'center',
   },
   heroTitle: {
-    color: '#fff',
+    // color applied inline from theme
     fontSize: 20,
     fontWeight: '700',
     textAlign: 'center',
     marginBottom: 8,
   },
   heroSubtitle: {
-    color: '#1F2937',
+    // color applied inline from theme
     fontSize: 14,
     lineHeight: 20,
     textAlign: 'center',
@@ -291,12 +298,12 @@ const styles = StyleSheet.create({
   },
   bulletList: { marginBottom: 24, gap: 10 },
   bulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  bulletText: { color: '#1F2937', fontSize: 13, lineHeight: 18, flex: 1 },
+  bulletText: { fontSize: 13, lineHeight: 18, flex: 1 }, // color applied inline from theme
   primaryButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#059669',
+    // backgroundColor applied inline from theme
     borderRadius: 14,
     paddingVertical: 14,
     marginBottom: 16,
@@ -310,5 +317,5 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 12,
   },
-  securityText: { color: '#9CA3AF', fontSize: 11, textAlign: 'center', flex: 1 },
+  securityText: { fontSize: 11, textAlign: 'center', flex: 1 }, // color applied inline from theme
 })
