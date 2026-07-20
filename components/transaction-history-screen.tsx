@@ -193,7 +193,14 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
               <Text
                 style={[
                   s.statusText,
-                  { color: transaction.details.status?.toLowerCase() === "completed" ? '#6ee7b7' : '#fde68a' }
+                  {
+                    color:
+                      transaction.details.status?.toLowerCase() === "completed"
+                        ? '#6ee7b7'
+                        : transaction.details.status?.toLowerCase() === "failed"
+                          ? '#f87171'
+                          : '#fde68a',
+                  },
                 ]}
               >
                 {transaction.details.status}

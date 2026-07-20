@@ -266,6 +266,7 @@ jobs:
         run: |
           deno check supabase/functions/connect/index.ts
           deno check supabase/functions/connect/withdrawal-validation.ts
+          deno check supabase/functions/connect/instant-payout-validation.ts
           deno check supabase/functions/webhooks/index.ts
           deno check supabase/functions/wallet/index.ts
           deno check supabase/functions/admin-withdrawals/index.ts

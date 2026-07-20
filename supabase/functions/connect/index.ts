@@ -7,10 +7,14 @@
 //   POST /connect/verify-onboarding
 //   POST /connect/transfer
 //   POST /connect/retry-transfer
+//   POST /connect/instant-payout           (Instant Cash Out to a linked debit card — flag-gated)
 //   GET  /connect/bank-accounts            (list external bank accounts on Connect account)
 //   POST /connect/bank-accounts            (add a bank account to Connect account)
 //   DELETE /connect/bank-accounts/:id      (remove a bank account)
 //   POST /connect/bank-accounts/:id/default (set a bank account as default for currency)
+//   GET  /connect/debit-cards              (list debit-card external accounts, Instant Cash Out only)
+//   POST /connect/debit-cards              (add a debit card via a client-tokenized card token)
+//   DELETE /connect/debit-cards/:id        (remove a debit card)
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Stripe from 'npm:stripe@14';
@@ -259,6 +263,107 @@ function resolveWithdrawalDestination(
 }
 // ─── End inlined withdrawal-validation helpers ──────────────────────────────
 
+// ─── Inlined from ./instant-payout-validation.ts ────────────────────────────
+// (local imports are not supported by the Supabase bundler — keep both
+// copies in sync; the sibling module is the unit-tested source of truth)
+
+// Named distinctly from readEnvNumber() above (rather than reusing it)
+// because both inlined copies coexist in this module's scope, where two
+// `function readEnvNumber` declarations would collide.
+function readEnvNumberForInstantPayout(key: string, fallback: number): number {
+  const raw = Deno.env.get(key);
+  if (raw === undefined) return fallback;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+/** Estimated instant-payout fee rate, as a percent — env-configurable via INSTANT_PAYOUT_FEE_PERCENT; defaults to 1 (%). */
+const INSTANT_PAYOUT_FEE_PERCENT = readEnvNumberForInstantPayout('INSTANT_PAYOUT_FEE_PERCENT', 1);
+
+/** Estimated minimum instant-payout fee in USD — env-configurable via INSTANT_PAYOUT_FEE_MIN_USD; defaults to 0.50. */
+const INSTANT_PAYOUT_FEE_MIN_USD = readEnvNumberForInstantPayout('INSTANT_PAYOUT_FEE_MIN_USD', 0.5);
+
+/**
+ * Estimates the instant-payout fee (in whole cents) for pre-confirmation
+ * display only — the authoritative fee is whatever Stripe actually charges
+ * on the created Payout, reconciled via the payout.paid/payout.updated
+ * webhook handling in webhooks/index.ts.
+ */
+function estimateInstantFeeCents(amountCents: number): number {
+  const percentFee = Math.round((amountCents * INSTANT_PAYOUT_FEE_PERCENT) / 100);
+  const minFeeCents = Math.round(INSTANT_PAYOUT_FEE_MIN_USD * 100);
+  return Math.max(percentFee, minFeeCents);
+}
+
+interface InstantCardSummary {
+  id: string;
+  brand?: string | null;
+  last4?: string | null;
+  available_payout_methods?: string[] | null;
+}
+
+type InstantDestinationResolution =
+  | { ok: true; targetCard: InstantCardSummary }
+  | { ok: false; error: string; code: string };
+
+/**
+ * Decides which linked debit card an Instant Cash Out should target. Unlike
+ * resolveWithdrawalDestination() above, this NEVER instructs promoting the
+ * chosen card to default_for_currency — Stripe's automatic payout sweep
+ * (which still drives every *standard* withdrawal) must keep targeting the
+ * bank account, never a linked instant-payout card.
+ */
+function resolveInstantDestination(
+  cards: InstantCardSummary[],
+  requestedCardId: string | undefined
+): InstantDestinationResolution {
+  if (cards.length === 0) {
+    return {
+      ok: false,
+      error: 'No debit card is linked for Instant Cash Out. Add a debit card to use this feature.',
+      code: 'no_debit_card',
+    };
+  }
+
+  const instantEligible = cards.filter(
+    c => Array.isArray(c.available_payout_methods) && c.available_payout_methods.includes('instant')
+  );
+
+  if (requestedCardId) {
+    const requested = cards.find(c => c.id === requestedCardId);
+    if (!requested) {
+      return {
+        ok: false,
+        error: 'Your selected debit card could not be found. Please refresh and try again.',
+        code: 'debit_card_not_found',
+      };
+    }
+    const isEligible = Array.isArray(requested.available_payout_methods)
+      && requested.available_payout_methods.includes('instant');
+    if (!isEligible) {
+      return {
+        ok: false,
+        error:
+          'This debit card does not currently support Instant Cash Out. Choose a different card, or use a standard bank withdrawal instead.',
+        code: 'card_not_instant_eligible',
+      };
+    }
+    return { ok: true, targetCard: requested };
+  }
+
+  if (instantEligible.length === 0) {
+    return {
+      ok: false,
+      error:
+        "None of your linked debit cards currently support Instant Cash Out. This is determined by your card's bank and may change — you can still withdraw normally to your bank account.",
+      code: 'no_instant_eligible_card',
+    };
+  }
+
+  return { ok: true, targetCard: instantEligible[0] };
+}
+// ─── End inlined instant-payout-validation helpers ──────────────────────────
+
 // ─── Staged Phase 2 retirement of the legacy wallet-balance withdrawal path ─
 // When true, /connect/transfer and /connect/retry-transfer return 410 Gone
 // (mirroring the completed /bank-accounts deprecation further below) instead
@@ -281,6 +386,18 @@ function legacyTransferRetiredResponse() {
     410,
   );
 }
+
+// ─── Instant Cash Out rollout flag ───────────────────────────────────────────
+// Off by default. POST /connect/instant-payout and the debit-card management
+// routes are implemented and safe to deploy inert, but must not be flipped on
+// in production until: (1) the migration adding wallet_transactions'
+// payout_method/stripe_payout_id/instant_fee_amount columns has been applied,
+// (2) an end-to-end Instant Cash Out has been exercised against a Stripe
+// test-mode account (add a test card, confirm available_payout_methods
+// includes 'instant', run a payout, confirm the webhook updates the row),
+// and (3) a standard withdrawal has been re-confirmed to still route to the
+// bank account, never a linked card — see docs/withdrawals/13-instant-cash-out.md.
+const INSTANT_CASHOUT_ENABLED = Deno.env.get('INSTANT_CASHOUT_ENABLED') === 'true';
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -315,10 +432,11 @@ Deno.serve(async (req: Request) => {
   }
 
   const isBankAccountsPath = subPath === '/bank-accounts' || subPath.startsWith('/bank-accounts/');
+  const isDebitCardsPath = subPath === '/debit-cards' || subPath.startsWith('/debit-cards/');
   if (
     req.method !== 'POST' &&
-    !(req.method === 'GET' && isBankAccountsPath) &&
-    !(req.method === 'DELETE' && isBankAccountsPath)
+    !(req.method === 'GET' && (isBankAccountsPath || isDebitCardsPath)) &&
+    !(req.method === 'DELETE' && (isBankAccountsPath || isDebitCardsPath))
   ) {
     return jsonResponse({ error: 'Method not allowed' }, 405);
   }
@@ -1214,18 +1332,484 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // GET /connect/bank-accounts — list external bank accounts on the Connect account
-    if (req.method === 'GET' && subPath === '/bank-accounts') {
+    // POST /connect/instant-payout — Instant Cash Out to a linked debit card.
+    // Deliberately a fresh, independent implementation rather than a refactor
+    // of /transfer's internals (which are already audited/tested and out of
+    // scope to touch here) — it duplicates the platform-Transfer step but
+    // never shares code paths with /transfer, so nothing about that route's
+    // existing behavior changes.
+    if (subPath === '/instant-payout') {
+      if (!INSTANT_CASHOUT_ENABLED) {
+        return jsonResponse(
+          {
+            error: 'Instant Cash Out is not currently available. Please use a standard bank withdrawal.',
+            code: 'instant_cashout_disabled',
+          },
+          503
+        );
+      }
+
+      const body = await req.json();
+
+      const validation = validateWithdrawalRequest(body);
+      if (!validation.ok) {
+        console.warn('[connect/instant-payout] validation failed', { userId, code: validation.code });
+        return jsonResponse({ error: validation.error, code: validation.code }, 400);
+      }
+      const amount = validation.amount;
+      const currency = 'usd';
+
+      const idempotencyKey =
+        typeof body.idempotencyKey === 'string' && body.idempotencyKey.trim()
+          ? body.idempotencyKey.trim().slice(0, 200)
+          : undefined;
+
+      const requestedCardId =
+        typeof body.debitCardId === 'string' && body.debitCardId.trim()
+          ? body.debitCardId.trim()
+          : undefined;
+
+      console.log('[connect/instant-payout] instant cash out requested', {
+        userId,
+        amount,
+        hasIdempotencyKey: !!idempotencyKey,
+        hasDebitCardId: !!requestedCardId,
+      });
+
+      // Idempotency replay — same DB-level pattern as /transfer, sharing the
+      // (user_id, idempotency_key) unique index on wallet_transactions. A
+      // client generates a fresh key per attempt (never reused across
+      // /transfer and /instant-payout), so this is safe to share.
+      if (idempotencyKey) {
+        const { data: existing } = await supabase
+          .from('wallet_transactions')
+          .select('id, stripe_transfer_id, stripe_payout_id, stripe_connect_account_id, amount, status, payout_method')
+          .eq('user_id', userId)
+          .eq('type', 'withdrawal')
+          .eq('idempotency_key', idempotencyKey)
+          .maybeSingle();
+
+        if (existing) {
+          const e = existing as WalletTransaction & {
+            stripe_connect_account_id?: string;
+            stripe_payout_id?: string | null;
+            payout_method?: string;
+          };
+          console.log('[connect/instant-payout] idempotent replay', { userId, transactionId: e.id });
+          const { data: replayProfile } = await supabase
+            .from('profiles')
+            .select('balance')
+            .eq('id', userId)
+            .single();
+          const replayBalance =
+            typeof (replayProfile as { balance?: number } | null)?.balance === 'number'
+              ? (replayProfile as { balance: number }).balance
+              : null;
+          return jsonResponse({
+            transferId: e.stripe_transfer_id,
+            payoutId: e.stripe_payout_id ?? null,
+            payoutMethod: e.payout_method ?? 'standard',
+            status: e.status ?? 'completed',
+            amount: Math.abs(e.amount),
+            currency,
+            accountId: e.stripe_connect_account_id,
+            transactionId: e.id,
+            newBalance: replayBalance,
+            duplicate: true,
+            message: 'This Instant Cash Out was already submitted and is being processed.',
+          });
+        }
+      }
+
       const { data: profile } = await supabase
         .from('profiles')
-        .select('stripe_connect_account_id')
+        .select('balance, balance_on_hold, stripe_connect_account_id, stripe_connect_onboarded_at')
         .eq('id', userId)
         .single();
 
-      const accountId = (profile as { stripe_connect_account_id?: string } | null)
-        ?.stripe_connect_account_id;
+      if (!profile) {
+        return jsonResponse({ error: 'Profile not found' }, 404);
+      }
+
+      const p = profile as Profile;
+      if (!p.stripe_connect_account_id || !p.stripe_connect_onboarded_at) {
+        return jsonResponse(
+          {
+            error:
+              'Your payout account is not set up yet. Please complete Stripe Connect onboarding before withdrawing.',
+            code: 'connect_not_onboarded',
+          },
+          400
+        );
+      }
+
+      // Live payout eligibility + instant-eligible card resolution, before
+      // touching the balance — same fail-closed discipline as /transfer.
+      let destinationCard: InstantCardSummary;
+      try {
+        const account = await stripe.accounts.retrieve(p.stripe_connect_account_id);
+        if (!account.payouts_enabled) {
+          console.warn('[connect/instant-payout] payouts disabled on connected account', {
+            userId,
+            accountId: p.stripe_connect_account_id,
+          });
+          return jsonResponse(
+            {
+              error:
+                'Payouts are currently disabled on your account. Please review and update your payout details, then try again.',
+              code: 'payouts_disabled',
+            },
+            400
+          );
+        }
+
+        const externalAccounts = await stripe.accounts.listExternalAccounts(
+          p.stripe_connect_account_id,
+          { object: 'card', limit: 100 }
+        );
+        const cards: InstantCardSummary[] = externalAccounts.data.map(c => ({
+          id: c.id,
+          brand: (c as unknown as { brand?: string }).brand ?? null,
+          last4: (c as unknown as { last4?: string }).last4 ?? null,
+          available_payout_methods:
+            (c as unknown as { available_payout_methods?: string[] }).available_payout_methods ?? null,
+        }));
+
+        const destination = resolveInstantDestination(cards, requestedCardId);
+        if (!destination.ok) {
+          console.warn('[connect/instant-payout] destination resolution failed', {
+            userId,
+            code: destination.code,
+          });
+          return jsonResponse({ error: destination.error, code: destination.code }, 400);
+        }
+        destinationCard = destination.targetCard;
+      } catch (accountError) {
+        console.error('[connect/instant-payout] failed to verify connected account or cards', {
+          userId,
+          accountId: p.stripe_connect_account_id,
+          error: (accountError as { message?: string })?.message,
+        });
+        return jsonResponse(
+          {
+            error:
+              'We could not verify your Instant Cash Out eligibility. Your balance has not been charged — please try again.',
+            code: 'account_verification_failed',
+          },
+          503
+        );
+      }
+
+      const available = (p.balance ?? 0) - (p.balance_on_hold ?? 0);
+      if (available < amount) {
+        console.warn('[connect/instant-payout] insufficient available balance', { userId, amount });
+        return jsonResponse(
+          {
+            error:
+              'Insufficient available balance. Part of your balance may be on hold or already reserved.',
+            code: 'insufficient_balance',
+          },
+          400
+        );
+      }
+
+      const { data: newBalanceData, error: balanceError } = await supabase.rpc('withdraw_balance', {
+        p_user_id: userId,
+        p_amount: amount,
+      });
+
+      if (balanceError) {
+        console.error('[connect/instant-payout] Error deducting balance before transfer:', {
+          userId,
+          amount,
+          error: balanceError.message,
+        });
+        const mapped = mapWithdrawBalanceError(balanceError.message);
+        return jsonResponse({ error: mapped.error, code: mapped.code }, mapped.status);
+      }
+
+      const newBalance = typeof newBalanceData === 'number' ? newBalanceData : null;
+
+      // Step 1: move funds from the platform balance into the connected
+      // account's Stripe balance — required before Stripe will let the
+      // connected account pay any of it out, instant or otherwise.
+      let transfer: Stripe.Transfer;
+      try {
+        console.log('[connect/instant-payout] creating platform transfer', {
+          userId,
+          amountCents: validation.amountCents,
+          accountId: p.stripe_connect_account_id,
+        });
+        transfer = await stripe.transfers.create(
+          {
+            amount: validation.amountCents,
+            currency,
+            destination: p.stripe_connect_account_id,
+            metadata: {
+              user_id: userId,
+              purpose: 'instant_cash_out',
+              ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
+            },
+          },
+          idempotencyKey
+            ? { idempotencyKey: `instant_transfer_${userId}_${idempotencyKey}_${validation.amountCents}` }
+            : undefined
+        );
+      } catch (stripeError) {
+        const errInfo = stripeError as { code?: string; type?: string; message?: string };
+        console.error('[connect/instant-payout] Transfer creation failed, refunding balance:', {
+          userId,
+          amount,
+          stripeCode: errInfo?.code,
+          message: errInfo?.message,
+        });
+        const { error: refundError } = await supabase.rpc('update_balance', {
+          p_user_id: userId,
+          p_amount: amount,
+        });
+        if (refundError) {
+          logCritical('balance refund after failed instant-payout transfer also failed — manual reconciliation required', {
+            userId, amount, error: refundError,
+          });
+          return jsonResponse(
+            {
+              error:
+                'Transfer failed and your balance may have been affected. Please contact support for assistance.',
+              code: 'transfer_failed_refund_failed',
+            },
+            500
+          );
+        }
+        const mapped = mapStripeTransferError(errInfo);
+        return jsonResponse({ error: mapped.error, code: mapped.code }, mapped.status);
+      }
+
+      console.log('[connect/instant-payout] platform transfer created', {
+        userId,
+        transferId: transfer.id,
+      });
+
+      // Step 2: request the actual instant payout FROM the connected
+      // account's now-funded balance TO the debit card. Scoped via
+      // { stripeAccount } — this Stripe call acts "as" the connected
+      // account, unlike every other Stripe call in this file.
+      const estimatedFeeCents = estimateInstantFeeCents(validation.amountCents);
+      let payout: Stripe.Payout;
+      try {
+        payout = await stripe.payouts.create(
+          {
+            amount: validation.amountCents,
+            currency,
+            method: 'instant',
+            destination: destinationCard.id,
+            metadata: {
+              user_id: userId,
+              transfer_id: transfer.id,
+              ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
+            },
+          },
+          {
+            stripeAccount: p.stripe_connect_account_id,
+            idempotencyKey: idempotencyKey
+              ? `instant_payout_${userId}_${idempotencyKey}_${validation.amountCents}`
+              : undefined,
+          }
+        );
+      } catch (payoutError) {
+        // The platform Transfer above already succeeded — the money is
+        // already sitting in the connected account's Stripe balance and will
+        // still go out via Stripe's normal automatic payout schedule
+        // regardless of this failure. This is NOT a failed withdrawal and
+        // must never trigger a balance refund (that would let the hunter
+        // double-collect once the automatic sweep pays out anyway). Record
+        // it as a completed STANDARD withdrawal that simply couldn't be
+        // expedited, and tell the hunter plainly.
+        const errInfo = payoutError as { code?: string; type?: string; message?: string };
+        console.warn('[connect/instant-payout] instant payout call failed, falling back to standard sweep', {
+          userId,
+          transferId: transfer.id,
+          stripeCode: errInfo?.code,
+          message: errInfo?.message,
+        });
+
+        const { data: fallbackTx } = await supabase
+          .from('wallet_transactions')
+          .insert({
+            user_id: userId,
+            type: 'withdrawal',
+            amount: -amount,
+            description: 'Withdrawal to bank account (Instant Cash Out unavailable)',
+            status: 'completed',
+            payout_method: 'standard',
+            stripe_transfer_id: transfer.id,
+            stripe_connect_account_id: p.stripe_connect_account_id,
+            idempotency_key: idempotencyKey ?? null,
+            metadata: {
+              transfer_id: transfer.id,
+              idempotency_key: idempotencyKey ?? null,
+              instant_payout_attempted_but_fell_back: true,
+              instant_payout_error: errInfo?.code ?? errInfo?.message ?? 'unknown',
+            },
+          })
+          .select()
+          .single();
+
+        return jsonResponse({
+          transferId: transfer.id,
+          payoutMethod: 'standard',
+          status: 'completed',
+          amount,
+          currency,
+          accountId: p.stripe_connect_account_id,
+          transactionId: (fallbackTx as WalletTransaction | null)?.id,
+          newBalance,
+          fellBackToStandard: true,
+          message:
+            "Instant Cash Out couldn't be completed for this card, but your withdrawal is still on its way via standard transfer (typically 1-2 business days). Your balance has been deducted only once.",
+        });
+      }
+
+      console.log('[connect/instant-payout] instant payout created', {
+        userId,
+        payoutId: payout.id,
+      });
+
+      const { data: transaction, error: txError } = await supabase
+        .from('wallet_transactions')
+        .insert({
+          user_id: userId,
+          type: 'withdrawal',
+          amount: -amount,
+          description: 'Instant Cash Out to debit card',
+          status: 'completed',
+          payout_method: 'instant',
+          stripe_transfer_id: transfer.id,
+          stripe_payout_id: payout.id,
+          stripe_connect_account_id: p.stripe_connect_account_id,
+          idempotency_key: idempotencyKey ?? null,
+          instant_fee_amount: estimatedFeeCents / 100,
+          metadata: {
+            transfer_id: transfer.id,
+            payout_id: payout.id,
+            idempotency_key: idempotencyKey ?? null,
+            destination_card_id: destinationCard.id,
+            destination_card_last4: destinationCard.last4 ?? null,
+            destination_card_brand: destinationCard.brand ?? null,
+            estimated_fee_cents: estimatedFeeCents,
+          },
+        })
+        .select()
+        .single();
+
+      if (txError) {
+        // Same concurrent-duplicate-insert race handling as /transfer.
+        if ((txError as { code?: string }).code === '23505' && idempotencyKey) {
+          console.warn('[connect/instant-payout] concurrent duplicate detected, refunding extra deduction', {
+            userId,
+            transferId: transfer.id,
+            payoutId: payout.id,
+          });
+          const { error: dupRefundError } = await supabase.rpc('update_balance', {
+            p_user_id: userId,
+            p_amount: amount,
+          });
+          if (dupRefundError) {
+            logCritical('refund of duplicate instant-payout deduction failed — manual reconciliation required', {
+              userId, amount, error: dupRefundError,
+            });
+          }
+
+          const { data: winner } = await supabase
+            .from('wallet_transactions')
+            .select('id, stripe_transfer_id, stripe_payout_id, status, payout_method')
+            .eq('user_id', userId)
+            .eq('type', 'withdrawal')
+            .eq('idempotency_key', idempotencyKey)
+            .maybeSingle();
+
+          const w = winner as
+            | (WalletTransaction & { stripe_payout_id?: string; payout_method?: string })
+            | null;
+          return jsonResponse({
+            transferId: w?.stripe_transfer_id ?? transfer.id,
+            payoutId: w?.stripe_payout_id ?? payout.id,
+            payoutMethod: w?.payout_method ?? 'instant',
+            status: w?.status ?? 'completed',
+            amount,
+            currency,
+            accountId: p.stripe_connect_account_id,
+            transactionId: w?.id,
+            duplicate: true,
+            message: 'This Instant Cash Out was already submitted and is being processed.',
+          });
+        }
+
+        logCritical('instant payout succeeded but transaction record failed — manual reconciliation required', {
+          userId, transferId: transfer.id, payoutId: payout.id, amount, error: txError,
+        });
+        return jsonResponse({
+          transferId: transfer.id,
+          payoutId: payout.id,
+          payoutMethod: 'instant',
+          status: 'completed',
+          amount,
+          currency,
+          accountId: p.stripe_connect_account_id,
+          newBalance,
+          message: 'Instant Cash Out initiated.',
+          warning: 'Transaction history may take a moment to update.',
+        });
+      }
+
+      console.log('[connect/instant-payout] instant cash out completed', {
+        userId,
+        transferId: transfer.id,
+        payoutId: payout.id,
+        transactionId: (transaction as WalletTransaction).id,
+      });
+
+      return jsonResponse({
+        transferId: transfer.id,
+        payoutId: payout.id,
+        payoutMethod: 'instant',
+        status: 'completed',
+        amount,
+        currency,
+        accountId: p.stripe_connect_account_id,
+        transactionId: (transaction as WalletTransaction).id,
+        newBalance,
+        estimatedFee: estimatedFeeCents / 100,
+        message: 'Instant Cash Out complete. Funds typically arrive within minutes.',
+      });
+    }
+
+    // GET /connect/bank-accounts — list external bank accounts on the Connect
+    // account, plus the server-computed withdrawal limits/available balance
+    // the withdraw screen renders. BUGFIX: this response previously returned
+    // only `{ bankAccounts }`, but withdraw-with-bank-screen.tsx has always
+    // read `minWithdrawal`/`maxWithdrawal`/`availableBalance` from it too —
+    // those fields were silently always undefined, so the screen fell back
+    // to a client-side default minimum, no maximum, and the wallet context's
+    // cached balance instead of the real balance-minus-hold figure. Fixed by
+    // actually returning the values this file already computes elsewhere.
+    if (req.method === 'GET' && subPath === '/bank-accounts') {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('stripe_connect_account_id, balance, balance_on_hold')
+        .eq('id', userId)
+        .single();
+
+      const p = profile as Profile | null;
+      const accountId = p?.stripe_connect_account_id;
+      const availableBalance = (p?.balance ?? 0) - (p?.balance_on_hold ?? 0);
+
       if (!accountId) {
-        return jsonResponse({ bankAccounts: [] });
+        return jsonResponse({
+          bankAccounts: [],
+          minWithdrawal: MIN_WITHDRAWAL_USD,
+          maxWithdrawal: MAX_WITHDRAWAL_USD,
+          availableBalance,
+        });
       }
 
       const accounts = await stripe.accounts.listExternalAccounts(accountId, {
@@ -1243,7 +1827,153 @@ Deno.serve(async (req: Request) => {
         default: ba.default_for_currency,
         status: ba.status,
       }));
-      return jsonResponse({ bankAccounts });
+      return jsonResponse({
+        bankAccounts,
+        minWithdrawal: MIN_WITHDRAWAL_USD,
+        maxWithdrawal: MAX_WITHDRAWAL_USD,
+        availableBalance,
+      });
+    }
+
+    // GET /connect/debit-cards — list debit-card external accounts (Instant
+    // Cash Out destinations only; never used for the standard automatic
+    // payout sweep, see the default_for_currency note on POST below).
+    if (req.method === 'GET' && subPath === '/debit-cards') {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('stripe_connect_account_id')
+        .eq('id', userId)
+        .single();
+
+      const accountId = (profile as { stripe_connect_account_id?: string } | null)
+        ?.stripe_connect_account_id;
+      if (!accountId) {
+        return jsonResponse({ debitCards: [] });
+      }
+
+      const cards = await stripe.accounts.listExternalAccounts(accountId, {
+        object: 'card',
+        limit: 20,
+      });
+      const debitCards = cards.data.map(c => {
+        const methods = (c as unknown as { available_payout_methods?: string[] })
+          .available_payout_methods ?? [];
+        return {
+          id: c.id,
+          brand: (c as unknown as { brand?: string }).brand ?? null,
+          last4: (c as unknown as { last4?: string }).last4 ?? null,
+          expMonth: (c as unknown as { exp_month?: number }).exp_month ?? null,
+          expYear: (c as unknown as { exp_year?: number }).exp_year ?? null,
+          availablePayoutMethods: methods,
+          instantEligible: methods.includes('instant'),
+        };
+      });
+      return jsonResponse({ debitCards });
+    }
+
+    // POST /connect/debit-cards — add a debit card as an Instant Cash Out
+    // destination. Body: { token } — a Stripe card token (tok_...) created
+    // CLIENT-SIDE via stripe-react-native's useStripe().createToken({type:
+    // 'Card'}); raw card numbers are never accepted server-side, matching the
+    // PCI posture of the (deprecated) raw-bank-entry route below.
+    //
+    // CRITICAL: never pass default_for_currency here. Stripe's automatic
+    // payout sweep — which still drives every *standard* withdrawal — always
+    // pays out to whichever external account is currently default. Promoting
+    // a card would silently redirect standard withdrawals to it instead of
+    // the hunter's bank.
+    if (req.method === 'POST' && subPath === '/debit-cards') {
+      const body = await req.json().catch(() => ({}));
+      const token = typeof body?.token === 'string' ? body.token.trim() : '';
+      if (!token) {
+        return jsonResponse({ error: 'A card token is required.', code: 'missing_token' }, 400);
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('stripe_connect_account_id')
+        .eq('id', userId)
+        .single();
+
+      const accountId = (profile as { stripe_connect_account_id?: string } | null)
+        ?.stripe_connect_account_id;
+      if (!accountId) {
+        return jsonResponse(
+          {
+            error: 'Complete Stripe Connect onboarding before adding a payout card.',
+            code: 'connect_not_onboarded',
+          },
+          400
+        );
+      }
+
+      try {
+        const card = (await stripe.accounts.createExternalAccount(accountId, {
+          external_account: token,
+        })) as unknown as {
+          id: string;
+          brand?: string;
+          last4?: string;
+          exp_month?: number;
+          exp_year?: number;
+          available_payout_methods?: string[];
+        };
+
+        console.log('[connect/debit-cards] added debit card external account', {
+          userId,
+          accountId,
+          cardId: card.id,
+        });
+
+        const methods = card.available_payout_methods ?? [];
+        return jsonResponse({
+          debitCard: {
+            id: card.id,
+            brand: card.brand ?? null,
+            last4: card.last4 ?? null,
+            expMonth: card.exp_month ?? null,
+            expYear: card.exp_year ?? null,
+            availablePayoutMethods: methods,
+            instantEligible: methods.includes('instant'),
+          },
+        });
+      } catch (cardError) {
+        console.error('[connect/debit-cards] failed to add debit card', {
+          userId,
+          accountId,
+          error: (cardError as { message?: string })?.message,
+        });
+        return jsonResponse(
+          {
+            error: 'We could not add this debit card. Please check the card details and try again.',
+            code: 'debit_card_add_failed',
+          },
+          400
+        );
+      }
+    }
+
+    // DELETE /connect/debit-cards/:debitCardId — remove a debit card
+    if (req.method === 'DELETE' && subPath.startsWith('/debit-cards/')) {
+      const debitCardId = subPath.slice('/debit-cards/'.length).split('/')[0];
+      if (!debitCardId) {
+        return jsonResponse({ error: 'debitCardId is required' }, 400);
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('stripe_connect_account_id')
+        .eq('id', userId)
+        .single();
+
+      const accountId = (profile as { stripe_connect_account_id?: string } | null)
+        ?.stripe_connect_account_id;
+      if (!accountId) {
+        return jsonResponse({ error: 'Stripe Connect account not found' }, 404);
+      }
+
+      await stripe.accounts.deleteExternalAccount(accountId, debitCardId);
+      return jsonResponse({ success: true });
     }
 
     // POST /connect/bank-accounts — DEPRECATED.

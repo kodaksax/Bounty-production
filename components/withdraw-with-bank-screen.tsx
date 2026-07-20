@@ -22,6 +22,8 @@ import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
 import { useWallet } from '../lib/wallet-context';
 import { AddBankAccountModal } from './add-bank-account-modal';
+import { InstantCashOutScreen } from './instant-cash-out-screen';
+import { PayoutMethodsScreen } from './payout-methods-screen';
 import { EmailVerificationBanner } from './ui/email-verification-banner';
 
 interface BankAccount {
@@ -77,13 +79,16 @@ export function WithdrawWithBankScreen({
   const [selectedBankAccount, setSelectedBankAccount] = useState<string>('');
   const [isLoadingAccounts, setIsLoadingAccounts] = useState(false);
   const [showAddBankAccount, setShowAddBankAccount] = useState(false);
+  const [showInstantCashOut, setShowInstantCashOut] = useState(false);
+  const [showPayoutMethods, setShowPayoutMethods] = useState(false);
+  const [hasInstantEligibleCard, setHasInstantEligibleCard] = useState(false);
   // Server-driven limits from GET /connect/bank-accounts. Fall back to the
   // local MIN_WITHDRAWAL_AMOUNT constant / no cap until that call resolves.
   const [minWithdrawal, setMinWithdrawal] = useState<number>(MIN_WITHDRAWAL_AMOUNT);
   const [maxWithdrawal, setMaxWithdrawal] = useState<number | null>(null);
   const [serverAvailableBalance, setServerAvailableBalance] = useState<number | null>(null);
 
-  const { balance: walletBalance, refreshFromApi } = useWallet();
+  const { balance: walletBalance, refreshFromApi, transactions } = useWallet();
   const { session } = useAuthContext();
   const { isEmailVerified, canWithdrawFunds, userEmail } = useEmailVerification();
   const { theme } = useAppThemeContext();
@@ -173,6 +178,24 @@ export function WithdrawWithBankScreen({
     }
   }, [session?.access_token]);
 
+  const loadDebitCards = useCallback(async () => {
+    if (!session?.access_token) return;
+    try {
+      const response = await fetch(`${API_BASE_URL}/connect/debit-cards`, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setHasInstantEligibleCard(
+          Array.isArray(data.debitCards) && data.debitCards.some((c: { instantEligible?: boolean }) => c.instantEligible)
+        );
+      }
+    } catch (error) {
+      console.error('Error loading debit cards:', error);
+    }
+  }, [session?.access_token]);
+
   // Refresh Connect status and bank accounts when returning from the embedded
   // onboarding screen, then clear the loading indicator.
   useFocusEffect(
@@ -191,11 +214,34 @@ export function WithdrawWithBankScreen({
     }, [loadConnectStatus, loadBankAccounts])
   );
 
-  // Load Connect status and bank accounts when session changes
+  // Load Connect status, bank accounts, and debit-card eligibility when session changes
   useEffect(() => {
     loadConnectStatus();
     loadBankAccounts();
-  }, [loadConnectStatus, loadBankAccounts]);
+    loadDebitCards();
+  }, [loadConnectStatus, loadBankAccounts, loadDebitCards]);
+
+  // Withdrawal history, segmented by status — sourced from the same
+  // transactions list the Wallet tab already loads (GET /wallet/transactions
+  // via useWallet().refreshFromApi()), not a separate fetch.
+  const withdrawalHistory = useMemo(
+    () => transactions.filter(tx => tx.type === 'withdrawal'),
+    [transactions]
+  );
+  const statusOf = (tx: (typeof withdrawalHistory)[number]) =>
+    (tx.details?.status ?? '').toLowerCase();
+  const pendingWithdrawals = useMemo(
+    () => withdrawalHistory.filter(tx => statusOf(tx) === 'pending'),
+    [withdrawalHistory]
+  );
+  const failedWithdrawals = useMemo(
+    () => withdrawalHistory.filter(tx => statusOf(tx) === 'failed'),
+    [withdrawalHistory]
+  );
+  const completedWithdrawals = useMemo(
+    () => withdrawalHistory.filter(tx => statusOf(tx) === 'completed').slice(0, 5),
+    [withdrawalHistory]
+  );
 
   const router = useRouter();
 
@@ -475,6 +521,31 @@ export function WithdrawWithBankScreen({
     );
   }
 
+  if (showInstantCashOut) {
+    return (
+      <InstantCashOutScreen
+        balance={balance}
+        onBack={() => setShowInstantCashOut(false)}
+        onComplete={() => {
+          loadBankAccounts();
+          loadDebitCards();
+        }}
+      />
+    );
+  }
+
+  if (showPayoutMethods) {
+    return (
+      <PayoutMethodsScreen
+        onBack={() => {
+          setShowPayoutMethods(false);
+          loadBankAccounts();
+          loadDebitCards();
+        }}
+      />
+    );
+  }
+
   return (
     <View style={s.container}>
       {/* Email Verification Banner */}
@@ -497,9 +568,55 @@ export function WithdrawWithBankScreen({
       <ScrollView contentContainerStyle={s.content}>
         {/* Balance Display */}
         <View style={s.balanceCard}>
-          <Text style={s.balanceLabel}>Available Balance</Text>
+          <Text style={s.balanceLabel}>Total Balance</Text>
           <Text style={s.balanceAmount}>{formatCurrency(balance)}</Text>
+          <View style={s.breakdownRow}>
+            <View style={s.breakdownItem}>
+              <Text style={s.breakdownLabel}>Available</Text>
+              <Text style={s.breakdownValue}>
+                {formatCurrency(serverAvailableBalance ?? balance)}
+              </Text>
+            </View>
+            <View style={s.breakdownDivider} />
+            <View style={s.breakdownItem}>
+              <Text style={s.breakdownLabel}>Pending</Text>
+              <Text style={s.breakdownValue}>
+                {formatCurrency(
+                  serverAvailableBalance != null ? Math.max(balance - serverAvailableBalance, 0) : 0
+                )}
+              </Text>
+            </View>
+          </View>
         </View>
+
+        {/* Instant Cash Out entry point — only surfaced once an
+            instant-eligible debit card is actually linked, so this never
+            promises something the account can't currently deliver. */}
+        {hasConnectedAccount && hasInstantEligibleCard && (
+          <TouchableOpacity
+            style={s.instantCard}
+            onPress={() => setShowInstantCashOut(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Instant Cash Out"
+          >
+            <MaterialIcons name="bolt" size={24} color="#22c55e" />
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={s.instantCardTitle}>Instant Cash Out</Text>
+              <Text style={s.instantCardSubtitle}>Get paid in minutes for a small fee</Text>
+            </View>
+            <MaterialIcons name="chevron-right" size={22} color={theme.textSecondary} />
+          </TouchableOpacity>
+        )}
+
+        <TouchableOpacity
+          onPress={() => setShowPayoutMethods(true)}
+          style={s.manageMethodsLink}
+          accessibilityRole="button"
+          accessibilityLabel="Manage payout methods"
+        >
+          <MaterialIcons name="settings" size={16} color={theme.primary} />
+          <Text style={s.manageMethodsLinkText}>Manage Payout Methods</Text>
+        </TouchableOpacity>
 
         {/* Connect Status — surfaced first since it blocks withdrawal entirely */}
         {!hasConnectedAccount && (
@@ -674,6 +791,53 @@ export function WithdrawWithBankScreen({
             forward.
           </Text>
         </View>
+
+        {/* Withdrawal History — segmented by status, sourced from the same
+            transactions list the Wallet tab loads (no separate fetch). */}
+        {(pendingWithdrawals.length > 0 || failedWithdrawals.length > 0 || completedWithdrawals.length > 0) && (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Withdrawal History</Text>
+
+            {pendingWithdrawals.length > 0 && (
+              <View style={{ marginBottom: 12 }}>
+                <Text style={s.historyGroupLabel}>Pending</Text>
+                {pendingWithdrawals.map(tx => (
+                  <View key={tx.id} style={s.historyRow}>
+                    <MaterialIcons name="hourglass-empty" size={18} color="#fbbf24" />
+                    <Text style={s.historyAmount}>{formatCurrency(Math.abs(tx.amount))}</Text>
+                    <Text style={s.historyDate}>{tx.date.toLocaleDateString()}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {failedWithdrawals.length > 0 && (
+              <View style={{ marginBottom: 12 }}>
+                <Text style={s.historyGroupLabel}>Failed</Text>
+                {failedWithdrawals.map(tx => (
+                  <View key={tx.id} style={s.historyRow}>
+                    <MaterialIcons name="error-outline" size={18} color="#ef4444" />
+                    <Text style={s.historyAmount}>{formatCurrency(Math.abs(tx.amount))}</Text>
+                    <Text style={s.historyDate}>{tx.date.toLocaleDateString()}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {completedWithdrawals.length > 0 && (
+              <View>
+                <Text style={s.historyGroupLabel}>Completed</Text>
+                {completedWithdrawals.map(tx => (
+                  <View key={tx.id} style={s.historyRow}>
+                    <MaterialIcons name="check-circle-outline" size={18} color="#6ee7b7" />
+                    <Text style={s.historyAmount}>{formatCurrency(Math.abs(tx.amount))}</Text>
+                    <Text style={s.historyDate}>{tx.date.toLocaleDateString()}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
       </ScrollView>
 
       {/* Withdraw Button */}
@@ -745,6 +909,86 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     fontSize: 28,
     fontWeight: 'bold',
     color: t.text,
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    marginTop: 10,
+    alignItems: 'center',
+  },
+  breakdownItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  breakdownDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: 28,
+    backgroundColor: t.textDisabled,
+    opacity: 0.4,
+  },
+  breakdownLabel: {
+    fontSize: 11,
+    color: t.textSecondary,
+    marginBottom: 2,
+  },
+  breakdownValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: t.text,
+  },
+  instantCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(34,197,94,0.12)',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(34,197,94,0.35)',
+  },
+  instantCardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: t.text,
+  },
+  instantCardSubtitle: {
+    fontSize: 12,
+    color: t.textSecondary,
+    marginTop: 2,
+  },
+  manageMethodsLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    marginBottom: 16,
+    gap: 6,
+  },
+  manageMethodsLinkText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: t.primary,
+  },
+  historyGroupLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: t.textSecondary,
+    marginBottom: 6,
+    textTransform: 'uppercase',
+  },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 6,
+  },
+  historyAmount: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: t.text,
+  },
+  historyDate: {
+    fontSize: 12,
+    color: t.textDisabled,
   },
   section: {
     marginBottom: 12,

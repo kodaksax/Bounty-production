@@ -90,6 +90,110 @@ async function syncConnectAccountToProfile(
 }
 
 /**
+ * Locates the wallet_transactions row a Payout event should update. Prefers
+ * an exact match on stripe_payout_id — unambiguous, and always set at
+ * creation time for Instant Cash Out rows (POST /connect/instant-payout).
+ * Falls back to matching by (user, exact amount) among completed
+ * withdrawals, which remains the only option for STANDARD withdrawals before
+ * any payout webhook has named them yet — see handleUndeliveredPayout's own
+ * docstring for the residual ambiguity that fallback cannot fully resolve
+ * (two completed withdrawals of the exact same amount for one user).
+ */
+async function findCandidateWithdrawalTx(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  userId: string,
+  payout: Stripe.Payout
+): Promise<{ id: string; amount: number; metadata: Record<string, unknown> | null; payout_method?: string } | null> {
+  const { data: byPayoutId, error: byPayoutIdError } = await supabase
+    .from('wallet_transactions')
+    .select('id, amount, metadata, payout_method')
+    .eq('stripe_payout_id', payout.id)
+    .eq('status', 'completed')
+    .maybeSingle();
+
+  if (byPayoutIdError) {
+    console.error('[webhooks] Failed to look up transaction by stripe_payout_id', {
+      payoutId: payout.id,
+      error: byPayoutIdError,
+    });
+  } else if (byPayoutId) {
+    return byPayoutId;
+  }
+
+  const payoutAmountDollars = payout.amount / 100;
+  const { data: byAmount, error: byAmountError } = await supabase
+    .from('wallet_transactions')
+    .select('id, amount, metadata, payout_method')
+    .eq('user_id', userId)
+    .eq('type', 'withdrawal')
+    .eq('status', 'completed')
+    .eq('amount', -payoutAmountDollars)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (byAmountError) {
+    console.error('[webhooks] Failed to look up candidate transaction by amount', {
+      payoutId: payout.id,
+      userId,
+      error: byAmountError,
+    });
+    throw byAmountError;
+  }
+  return byAmount ?? null;
+}
+
+/**
+ * Reconciles the actual Stripe-charged instant-payout fee against the
+ * pre-submission UI estimate stored at creation time (see
+ * estimateInstantFeeCents() in connect/index.ts). Deliberately best-effort
+ * and non-throwing (called from inside a try/catch at every call site) —
+ * the exact shape of a Payout's balance_transaction fee breakdown for
+ * Instant Payouts has not been exercised against a live/test-mode Stripe
+ * account as part of this change (Stripe API access was unavailable in this
+ * session). Verify this against Stripe test mode before INSTANT_CASHOUT_ENABLED
+ * is ever turned on in production — see docs/withdrawals/13-instant-cash-out.md.
+ */
+async function reconcileInstantPayoutFee(
+  stripe: Stripe,
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  payout: Stripe.Payout,
+  accountId: string,
+  transactionId: string
+): Promise<void> {
+  const balanceTransactionId =
+    typeof payout.balance_transaction === 'string'
+      ? payout.balance_transaction
+      : (payout.balance_transaction as Stripe.BalanceTransaction | null)?.id;
+  if (!balanceTransactionId) return;
+
+  const balanceTransaction = await stripe.balanceTransactions.retrieve(balanceTransactionId, {
+    stripeAccount: accountId,
+  });
+  const actualFee = balanceTransaction.fee / 100;
+
+  const { data: txRow } = await supabase
+    .from('wallet_transactions')
+    .select('instant_fee_amount')
+    .eq('id', transactionId)
+    .maybeSingle();
+  const estimatedFee = (txRow as { instant_fee_amount?: number } | null)?.instant_fee_amount ?? null;
+
+  if (estimatedFee != null && Math.abs(actualFee - estimatedFee) > 0.5) {
+    logCritical('instant payout fee diverged materially from the pre-submission estimate', {
+      payoutId: payout.id,
+      transactionId,
+      estimatedFee,
+      actualFee,
+    });
+  }
+
+  await supabase.from('wallet_transactions').update({ instant_fee_amount: actualFee }).eq('id', transactionId);
+}
+
+/**
  * Shared handler for `payout.failed` and `payout.canceled`. Both events mean
  * the same thing from the wallet's perspective: the platform-to-connected-
  * account Transfer already succeeded (the withdrawal row is 'completed'),
@@ -144,26 +248,7 @@ async function handleUndeliveredPayout(
     return;
   }
 
-  const payoutAmountDollars = payout.amount / 100;
-  const { data: candidateTx, error: candidateTxError } = await supabase
-    .from('wallet_transactions')
-    .select('id, amount, metadata')
-    .eq('user_id', profile.id)
-    .eq('type', 'withdrawal')
-    .eq('status', 'completed')
-    .eq('amount', -payoutAmountDollars)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (candidateTxError) {
-    console.error(`[webhooks] Failed to look up candidate transaction for payout.${outcome}`, {
-      payoutId: payout.id,
-      userId: profile.id,
-      error: candidateTxError,
-    });
-    throw candidateTxError;
-  }
+  const candidateTx = await findCandidateWithdrawalTx(supabase, profile.id, payout);
 
   if (!candidateTx) {
     console.warn(
@@ -188,6 +273,7 @@ async function handleUndeliveredPayout(
         .from('wallet_transactions')
         .update({
           status: 'failed',
+          stripe_payout_id: payout.id,
           metadata: {
             ...candidateMetadata,
             payout_status: outcome,
@@ -557,19 +643,10 @@ async function handlePayoutStatusUpdate(
     return;
   }
 
-  const payoutAmountDollars = payout.amount / 100;
-  const { data: candidateTx, error: candidateTxError } = await supabase
-    .from('wallet_transactions')
-    .select('id, metadata')
-    .eq('user_id', profile.id)
-    .eq('type', 'withdrawal')
-    .eq('status', 'completed')
-    .eq('amount', -payoutAmountDollars)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (candidateTxError) {
+  let candidateTx: Awaited<ReturnType<typeof findCandidateWithdrawalTx>>;
+  try {
+    candidateTx = await findCandidateWithdrawalTx(supabase, profile.id, payout);
+  } catch (candidateTxError) {
     console.error('[webhooks] Failed to look up candidate transaction for payout.updated', {
       payoutId: payout.id,
       userId: profile.id,
@@ -583,6 +660,7 @@ async function handlePayoutStatusUpdate(
   const { error: updateErr } = await supabase
     .from('wallet_transactions')
     .update({
+      stripe_payout_id: payout.id,
       metadata: {
         ...candidateMetadata,
         payout_status: payout.status,
@@ -1475,6 +1553,33 @@ Deno.serve(async (req: Request) => {
               );
             } else {
               console.log(`[webhooks] Notified hunter ${paidProfile.id} of payout.paid`);
+            }
+
+            // Best-effort: backfill stripe_payout_id (useful for standard
+            // rows, where this is the first time Bounty learns the payout
+            // id) and reconcile the instant-payout fee against the
+            // pre-submission estimate. Deliberately non-throwing —
+            // payout.paid is "notification only, no balance action" by
+            // design; a failure here must never turn an already-successful
+            // payout into a retried/erroring webhook delivery.
+            try {
+              const candidateTx = await findCandidateWithdrawalTx(supabase, paidProfile.id, payout);
+              if (candidateTx) {
+                await supabase
+                  .from('wallet_transactions')
+                  .update({ stripe_payout_id: payout.id })
+                  .eq('id', candidateTx.id)
+                  .is('stripe_payout_id', null);
+
+                if (payout.method === 'instant' || candidateTx.payout_method === 'instant') {
+                  await reconcileInstantPayoutFee(stripe, supabase, payout, paidAccountId, candidateTx.id);
+                }
+              }
+            } catch (reconcileError) {
+              console.warn('[webhooks] payout.paid reconciliation step failed (non-fatal)', {
+                payoutId: payout.id,
+                error: (reconcileError as { message?: string })?.message,
+              });
             }
           } else {
             console.warn(`[webhooks] No profile found for Connect account ${paidAccountId}`);

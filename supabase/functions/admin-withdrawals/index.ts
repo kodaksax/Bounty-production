@@ -864,13 +864,20 @@ Deno.serve(async (req: Request) => {
 
     const { data: tx, error: txError } = await supabase
       .from('wallet_transactions')
-      .select('id, user_id, amount, status, stripe_transfer_id, stripe_connect_account_id, created_at')
+      .select(
+        'id, user_id, amount, status, stripe_transfer_id, stripe_payout_id, payout_method, instant_fee_amount, stripe_connect_account_id, created_at'
+      )
       .eq('id', transactionId)
       .single();
     if (txError || !tx) {
       return jsonResponse({ error: 'Transaction not found' }, 404);
     }
-    const t = tx as WalletTransaction;
+    const t = tx as WalletTransaction & {
+      stripe_connect_account_id?: string;
+      stripe_payout_id?: string | null;
+      payout_method?: string;
+      instant_fee_amount?: number | null;
+    };
 
     const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
     if (!stripeKey) {
@@ -885,6 +892,9 @@ Deno.serve(async (req: Request) => {
       transactionId,
       ledgerStatus: t.status,
       ledgerAmount: t.amount,
+      ledgerPayoutMethod: t.payout_method ?? 'standard',
+      ledgerStripePayoutId: t.stripe_payout_id ?? null,
+      ledgerInstantFeeAmount: t.instant_fee_amount ?? null,
     };
 
     if (t.stripe_transfer_id) {
@@ -915,10 +925,31 @@ Deno.serve(async (req: Request) => {
           id: p.id,
           amount: p.amount / 100,
           status: p.status,
+          method: p.method,
           arrivalDate: new Date(p.arrival_date * 1000).toISOString(),
         }));
       } catch (e) {
         result.payoutsListError = (e as { message?: string })?.message ?? 'lookup failed';
+      }
+
+      try {
+        const cards = await stripe.accounts.listExternalAccounts(t.stripe_connect_account_id, {
+          object: 'card',
+          limit: 10,
+        });
+        result.linkedDebitCards = cards.data.map(c => {
+          const methods =
+            (c as unknown as { available_payout_methods?: string[] }).available_payout_methods ?? [];
+          return {
+            id: c.id,
+            brand: (c as unknown as { brand?: string }).brand ?? null,
+            last4: (c as unknown as { last4?: string }).last4 ?? null,
+            availablePayoutMethods: methods,
+            instantEligible: methods.includes('instant'),
+          };
+        });
+      } catch (e) {
+        result.linkedDebitCardsError = (e as { message?: string })?.message ?? 'lookup failed';
       }
     }
 
