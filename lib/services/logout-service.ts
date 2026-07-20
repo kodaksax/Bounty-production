@@ -1,5 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
-import { clearAllSessionData, clearRememberMePreference } from '../auth-session-storage';
+import { clearAllSessionData } from '../auth-session-storage';
 import { PROJECT_STORAGE_KEY, supabase } from '../supabase';
 import { markIntentionalSignOut } from '../utils/session-handler';
 import { authProfileService } from './auth-profile-service';
@@ -9,7 +9,6 @@ export type LogoutDeps = Partial<{
   supabase: typeof supabase;
   authProfileService: typeof authProfileService;
   SecureStore: typeof SecureStore;
-  clearRememberMePreference: typeof clearRememberMePreference;
   markIntentionalSignOut: typeof markIntentionalSignOut;
   router: { replace: (path: string) => void } | null;
   currentUserId: string | null;
@@ -25,7 +24,6 @@ export async function performLogout(deps: LogoutDeps = {}) {
     supabase: sup = supabase,
     authProfileService: profileSvc = authProfileService,
     SecureStore: Secure = SecureStore,
-    clearRememberMePreference: clearRemember = clearRememberMePreference,
     markIntentionalSignOut: markIntent = markIntentionalSignOut,
     router = null,
     currentUserId = null,
@@ -88,7 +86,6 @@ export async function performLogout(deps: LogoutDeps = {}) {
 
   // Fire-and-forget background cleanup. Only attempt a redundant signOut when prior attempts failed.
   const backgroundTasks: Promise<unknown>[] = [
-    (clearRemember?.() as Promise<unknown>)?.catch?.(() => undefined),
     // Wipe the project-scoped session key (and the legacy shared key) from
     // SecureStore and the in-memory cache so no stale token can survive logout.
     clearAllSessionData(PROJECT_STORAGE_KEY).catch(() => undefined),

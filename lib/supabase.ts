@@ -1,9 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 // Polyfill is now imported in index.js to ensure it's loaded as early as possible
-import {
-    createAuthSessionStorageAdapter,
-    getRememberMePreference,
-} from './auth-session-storage';
+import { createAuthSessionStorageAdapter } from './auth-session-storage';
 import { config } from './config';
 import { checkEnvironmentIntegrity } from './config/env-guard';
 
@@ -111,24 +108,6 @@ async function initSupabase(): Promise<void> {
     urlPrefix: supabaseUrl ? String(supabaseUrl).substring(0, 60) : undefined,
     hasKey: !!supabaseAnonKey,
   });
-  try {
-    // Kick off a background read of the remember-me preference to prime the
-    // in-memory cache without blocking client creation. We intentionally do
-    // NOT `await` here to avoid adding latency to first access. The storage
-    // adapter (`getRememberMePreference`) internally tracks an in-flight
-    // promise and will await it when a runtime `getItem`/`setItem` needs the
-    // authoritative preference. This keeps first-access fast while still
-    // avoiding the original race between adapter reads and writes.
-    void getRememberMePreference().catch((e) => {
-      // eslint-disable-next-line no-console
-      console.warn('[supabase] background getRememberMePreference failed during init', e);
-    });
-  } catch (e) {
-    // Defensive: log unexpected errors but continue with client creation.
-    // eslint-disable-next-line no-console
-    console.warn('[supabase] warning: getRememberMePreference background start failed during init', e);
-  }
-
   try {
     // Use PROJECT_STORAGE_KEY as the single source of truth so all auth-related
     // code shares the same key. This ensures sessions from different Supabase

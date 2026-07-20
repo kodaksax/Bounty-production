@@ -1,20 +1,18 @@
 /**
- * Unit tests for Auth Session Storage - Race Condition Fix
- * 
- * Tests the in-memory cache for remember me preference to ensure
- * race conditions are avoided when reading from SecureStore immediately
- * after writing.
+ * Unit tests for the auth session storage adapter.
+ *
+ * Session persistence is now unconditional — there is no "Remember Me"
+ * preference gating whether the session survives an app restart. Every
+ * signed-in session is written straight to SecureStore; the only way it
+ * goes away is an explicit sign-out (removeItem) or clearAllSessionData().
  */
 
 import * as SecureStore from 'expo-secure-store';
 import {
-  getRememberMePreference,
-  setRememberMePreference,
-  clearRememberMePreference,
   clearAllSessionData,
+  createAuthSessionStorageAdapter,
 } from '../../../lib/auth-session-storage';
 
-// Mock expo-secure-store
 jest.mock('expo-secure-store', () => ({
   getItemAsync: jest.fn(),
   setItemAsync: jest.fn(),
@@ -22,276 +20,179 @@ jest.mock('expo-secure-store', () => ({
   AFTER_FIRST_UNLOCK: 'AFTER_FIRST_UNLOCK',
 }));
 
-describe('Auth Session Storage - Remember Me Preference', () => {
+const SESSION_KEY = 'supabase.auth.token.testproject';
+const mockSession = JSON.stringify({
+  access_token: 'test_token',
+  refresh_token: 'test_refresh',
+  expires_at: Math.floor(Date.now() / 1000) + 3600,
+  user: { id: 'user123', email: 'test@example.com' },
+});
+
+describe('createAuthSessionStorageAdapter', () => {
   beforeEach(async () => {
-    // Clear all mocks before each test
     jest.clearAllMocks();
-    
-    // Reset mock implementations
     (SecureStore.getItemAsync as jest.Mock).mockResolvedValue(null);
     (SecureStore.setItemAsync as jest.Mock).mockResolvedValue(undefined);
     (SecureStore.deleteItemAsync as jest.Mock).mockResolvedValue(undefined);
-    
-    // Reset the in-memory cache to ensure test isolation
-    // Since the cache is module-level, we reset it by calling clearRememberMePreference
-    await clearRememberMePreference();
+    // Reset the module-level in-memory read-through cache between tests.
+    await clearAllSessionData();
   });
 
-  describe('setRememberMePreference', () => {
-    it('should cache preference in memory immediately before SecureStore write', async () => {
-      await setRememberMePreference(true);
-      
-      // Verify SecureStore was called
+  describe('setItem', () => {
+    it('always persists to SecureStore, regardless of any prior preference', async () => {
+      const adapter = createAuthSessionStorageAdapter();
+      await adapter.setItem(SESSION_KEY, mockSession);
+
+      expect(SecureStore.setItemAsync).toHaveBeenCalledWith(SESSION_KEY, mockSession, expect.any(Object));
+    });
+
+    it('chunks values larger than the single-item limit', async () => {
+      const bigValue = 'x'.repeat(5000);
+      const adapter = createAuthSessionStorageAdapter();
+      await adapter.setItem(SESSION_KEY, bigValue);
+
+      // Marker + metadata + at least 2 chunks
+      expect(SecureStore.setItemAsync).toHaveBeenCalledWith(SESSION_KEY, '__chunked__', expect.any(Object));
       expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
-        'auth_remember_me_preference',
-        'true',
+        SESSION_KEY + '__chunkCount',
+        expect.any(String),
         expect.any(Object)
       );
-      
-      // Immediately read preference (before SecureStore write completes)
-      // This should return from memory cache, not SecureStore
-      const preference = await getRememberMePreference();
-      
-      // Should get cached value without calling SecureStore.getItemAsync
-      // because it was cached in memory
-      expect(preference).toBe(true);
-    });
-
-    it('should cache false preference correctly', async () => {
-      await setRememberMePreference(false);
-      
-      // Verify SecureStore was called with 'false'
-      expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
-        'auth_remember_me_preference',
-        'false',
-        expect.any(Object)
-      );
-      
-      // Read immediately from cache
-      const preference = await getRememberMePreference();
-      expect(preference).toBe(false);
-    });
-
-    it('should handle SecureStore write failure gracefully', async () => {
-      // Mock SecureStore to fail
-      (SecureStore.setItemAsync as jest.Mock).mockRejectedValue(new Error('SecureStore write failed'));
-      
-      // Should not throw - error is caught and logged
-      await expect(setRememberMePreference(true)).resolves.not.toThrow();
-      
-      // Cache should still be updated even if SecureStore fails
-      const preference = await getRememberMePreference();
-      expect(preference).toBe(true);
-      
-      // Verify that multiple subsequent reads still return the cached value
-      // This ensures the cache persisted despite the SecureStore write failure
-      const preference2 = await getRememberMePreference();
-      const preference3 = await getRememberMePreference();
-      expect(preference2).toBe(true);
-      expect(preference3).toBe(true);
-      
-      // Verify SecureStore.getItemAsync was not called (cache is being used)
-      expect(SecureStore.getItemAsync).not.toHaveBeenCalled();
+      expect(SecureStore.setItemAsync).toHaveBeenCalledWith(`${SESSION_KEY}__0`, expect.any(String), expect.any(Object));
     });
   });
 
-  describe('getRememberMePreference', () => {
-    it('should return cached value without calling SecureStore after initial set', async () => {
-      // Set preference (populates cache)
-      await setRememberMePreference(true);
-      
-      // Clear mock call count
+  describe('getItem', () => {
+    it('reads a persisted session back from SecureStore on a cold cache', async () => {
+      (SecureStore.getItemAsync as jest.Mock).mockImplementation(async (key: string) => {
+        if (key === SESSION_KEY) return mockSession;
+        return null;
+      });
+
+      const adapter = createAuthSessionStorageAdapter();
+      const session = await adapter.getItem(SESSION_KEY);
+
+      expect(session).toBe(mockSession);
+      expect(SecureStore.getItemAsync).toHaveBeenCalledWith(SESSION_KEY);
+    });
+
+    it('serves subsequent reads from the in-memory cache without hitting SecureStore again', async () => {
+      (SecureStore.getItemAsync as jest.Mock).mockImplementation(async (key: string) => {
+        if (key === SESSION_KEY) return mockSession;
+        return null;
+      });
+
+      const adapter = createAuthSessionStorageAdapter();
+      await adapter.getItem(SESSION_KEY);
       jest.clearAllMocks();
-      
-      // Get preference multiple times
-      const result1 = await getRememberMePreference();
-      const result2 = await getRememberMePreference();
-      const result3 = await getRememberMePreference();
-      
-      // Should all return true
-      expect(result1).toBe(true);
-      expect(result2).toBe(true);
-      expect(result3).toBe(true);
-      
-      // SecureStore.getItemAsync should NOT be called (using cache)
+
+      const second = await adapter.getItem(SESSION_KEY);
+      expect(second).toBe(mockSession);
       expect(SecureStore.getItemAsync).not.toHaveBeenCalled();
     });
 
-    it('should read from SecureStore on cache miss and populate cache', async () => {
-      // Mock SecureStore to return 'true'
-      (SecureStore.getItemAsync as jest.Mock).mockResolvedValue('true');
-      
-      // First call - cache miss, reads from SecureStore
-      const result1 = await getRememberMePreference();
-      expect(result1).toBe(true);
-      expect(SecureStore.getItemAsync).toHaveBeenCalledTimes(1);
-      
-      // Clear mock call count
-      jest.clearAllMocks();
-      
-      // Second call - cache hit, no SecureStore call
-      const result2 = await getRememberMePreference();
-      expect(result2).toBe(true);
-      expect(SecureStore.getItemAsync).not.toHaveBeenCalled();
+    it('returns null when nothing has ever been written (e.g. after sign-out, or a fresh install)', async () => {
+      const adapter = createAuthSessionStorageAdapter();
+      const session = await adapter.getItem(SESSION_KEY);
+      expect(session).toBeNull();
     });
 
-    it('should return false by default if no preference is set', async () => {
-      // Mock SecureStore to return null (no preference set)
-      (SecureStore.getItemAsync as jest.Mock).mockResolvedValue(null);
-      
-      const preference = await getRememberMePreference();
-      expect(preference).toBe(false);
-    });
+    it('reassembles a chunked value written by setItem', async () => {
+      const bigValue = 'y'.repeat(5000);
+      const store = new Map<string, string>();
+      (SecureStore.setItemAsync as jest.Mock).mockImplementation(async (key: string, value: string) => {
+        store.set(key, value);
+      });
+      (SecureStore.getItemAsync as jest.Mock).mockImplementation(async (key: string) => store.get(key) ?? null);
 
-    it('should handle SecureStore read failure gracefully', async () => {
-      // Mock SecureStore to fail
-      (SecureStore.getItemAsync as jest.Mock).mockRejectedValue(new Error('SecureStore read failed'));
-      
-      // Should not throw and should return false
-      const preference = await getRememberMePreference();
-      expect(preference).toBe(false);
+      const writer = createAuthSessionStorageAdapter();
+      await writer.setItem(SESSION_KEY, bigValue);
+
+      // A fresh adapter instance still shares the module-level SecureStore
+      // (via the mock `store` map) but starts with a cold in-memory cache —
+      // this is what actually exercises the chunk-reassembly path in getItem
+      // rather than just serving the cached write.
+      await clearAllSessionData();
+      const reader = createAuthSessionStorageAdapter();
+      const readBack = await reader.getItem(SESSION_KEY);
+      expect(readBack).toBe(bigValue);
     });
   });
 
-  describe('clearRememberMePreference', () => {
-    it('should clear both memory cache and SecureStore', async () => {
-      // Set preference first
-      await setRememberMePreference(true);
-      
-      // Verify it's cached
-      let preference = await getRememberMePreference();
-      expect(preference).toBe(true);
-      
-      // Clear preference
-      await clearRememberMePreference();
-      
-      // Verify SecureStore.deleteItemAsync was called
-      expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith('auth_remember_me_preference');
-      
-      // Mock SecureStore to return null (as if cleared)
+  describe('removeItem', () => {
+    it('deletes the session from SecureStore and the in-memory cache', async () => {
+      (SecureStore.getItemAsync as jest.Mock).mockResolvedValue(mockSession);
+
+      const adapter = createAuthSessionStorageAdapter();
+      await adapter.setItem(SESSION_KEY, mockSession);
+      await adapter.removeItem(SESSION_KEY);
+
+      expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(SESSION_KEY);
+
+      // Cache must be gone too — a subsequent getItem must not serve stale data.
       (SecureStore.getItemAsync as jest.Mock).mockResolvedValue(null);
-      
-      // Verify cache was cleared - should read from SecureStore now
-      preference = await getRememberMePreference();
-      expect(preference).toBe(false);
+      const session = await adapter.getItem(SESSION_KEY);
+      expect(session).toBeNull();
     });
 
-    it('should handle SecureStore delete failure gracefully', async () => {
-      // Mock SecureStore to fail
-      (SecureStore.deleteItemAsync as jest.Mock).mockRejectedValue(new Error('SecureStore delete failed'));
-      
-      // Should not throw
-      await expect(clearRememberMePreference()).resolves.not.toThrow();
+    it('cleans up chunk parts for a chunked value', async () => {
+      (SecureStore.getItemAsync as jest.Mock).mockImplementation(async (key: string) => {
+        if (key === SESSION_KEY) return '__chunked__';
+        if (key === SESSION_KEY + '__chunkCount') return '2';
+        return 'part';
+      });
+
+      const adapter = createAuthSessionStorageAdapter();
+      await adapter.removeItem(SESSION_KEY);
+
+      expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(`${SESSION_KEY}__0`);
+      expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(`${SESSION_KEY}__1`);
+      expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(SESSION_KEY + '__chunkCount');
+      expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(SESSION_KEY);
     });
   });
 
   describe('clearAllSessionData', () => {
-    it('should clear remember me preference cache', async () => {
-      // Set preference
-      await setRememberMePreference(true);
-      
-      // Verify it's cached
-      let preference = await getRememberMePreference();
-      expect(preference).toBe(true);
-      
-      // Clear all session data
-      await clearAllSessionData();
-      
-      // Mock SecureStore to return null
-      (SecureStore.getItemAsync as jest.Mock).mockResolvedValue(null);
-      
-      // Cache should be cleared, reads from SecureStore
-      preference = await getRememberMePreference();
-      expect(preference).toBe(false);
+    it('wipes both the legacy shared key and the project-scoped key', async () => {
+      (SecureStore.getItemAsync as jest.Mock).mockResolvedValue(mockSession);
+
+      await clearAllSessionData(SESSION_KEY);
+
+      expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith('supabase.auth.token');
+      expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(SESSION_KEY);
+    });
+
+    it('clears the in-memory cache so a subsequent getItem re-reads SecureStore', async () => {
+      (SecureStore.getItemAsync as jest.Mock).mockResolvedValue(mockSession);
+      const adapter = createAuthSessionStorageAdapter();
+      await adapter.getItem(SESSION_KEY); // populate cache
+
+      await clearAllSessionData(SESSION_KEY);
+      jest.clearAllMocks();
+      (SecureStore.getItemAsync as jest.Mock).mockResolvedValue(mockSession);
+
+      await adapter.getItem(SESSION_KEY);
       expect(SecureStore.getItemAsync).toHaveBeenCalled();
     });
   });
 
-  describe('Race Condition Scenarios', () => {
-    it('should handle rapid set followed by get without race condition', async () => {
-      // Simulate the sign-in flow where preference is set then immediately read
-      await setRememberMePreference(false);
-      
-      // Immediately read (simulates Supabase storage adapter reading preference)
-      // This happens before SecureStore.setItemAsync has a chance to complete
-      const preference = await getRememberMePreference();
-      
-      // Should get the correct value from cache, not from SecureStore
-      expect(preference).toBe(false);
-      
-      // SecureStore.getItemAsync should NOT be called because cache was hit
-      // (We only expect setItemAsync from the set call, not getItemAsync)
-      expect(SecureStore.getItemAsync).not.toHaveBeenCalled();
-    });
+  describe('concurrent reads', () => {
+    it('handles concurrent getItem calls for the same key gracefully', async () => {
+      (SecureStore.getItemAsync as jest.Mock).mockImplementation(async (key: string) => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return key === SESSION_KEY ? mockSession : null;
+      });
 
-    it('should handle multiple rapid sets correctly', async () => {
-      // Rapidly change preference
-      await setRememberMePreference(true);
-      await setRememberMePreference(false);
-      await setRememberMePreference(true);
-      
-      // Final value should be correct
-      const preference = await getRememberMePreference();
-      expect(preference).toBe(true);
-    });
+      const adapter = createAuthSessionStorageAdapter();
+      const [a, b, c] = await Promise.all([
+        adapter.getItem(SESSION_KEY),
+        adapter.getItem(SESSION_KEY),
+        adapter.getItem(SESSION_KEY),
+      ]);
 
-    it('should handle concurrent set and get operations', async () => {
-      // Start set operation
-      const setPromise = setRememberMePreference(true);
-      
-      // Immediately try to get (before set completes)
-      const getPromise = getRememberMePreference();
-      
-      // Wait for both to complete
-      await Promise.all([setPromise, getPromise]);
-      
-      // Verify the concurrent get operation itself received the correct cached value
-      const getResult = await getPromise;
-      expect(getResult).toBe(true);
-      
-      // Also verify subsequent calls still return the correct value
-      const preference = await getRememberMePreference();
-      expect(preference).toBe(true);
-    });
-  });
-
-  describe('Edge Cases', () => {
-    it('should handle null cache correctly', async () => {
-      // Don't set any preference
-      // Mock SecureStore to return null
-      (SecureStore.getItemAsync as jest.Mock).mockResolvedValue(null);
-      
-      const preference = await getRememberMePreference();
-      expect(preference).toBe(false);
-    });
-
-    it('should handle switching between true and false', async () => {
-      await setRememberMePreference(true);
-      let preference = await getRememberMePreference();
-      expect(preference).toBe(true);
-      
-      await setRememberMePreference(false);
-      preference = await getRememberMePreference();
-      expect(preference).toBe(false);
-      
-      await setRememberMePreference(true);
-      preference = await getRememberMePreference();
-      expect(preference).toBe(true);
-    });
-
-    it('should persist cache across multiple get calls', async () => {
-      const CACHE_PERSISTENCE_TEST_ITERATIONS = 10;
-      
-      await setRememberMePreference(true);
-      
-      // Call get multiple times to verify cache persistence
-      for (let i = 0; i < CACHE_PERSISTENCE_TEST_ITERATIONS; i++) {
-        const preference = await getRememberMePreference();
-        expect(preference).toBe(true);
-      }
-      
-      // SecureStore.setItemAsync should only be called once (from set)
-      expect(SecureStore.setItemAsync).toHaveBeenCalledTimes(1);
+      expect(a).toBe(mockSession);
+      expect(b).toBe(mockSession);
+      expect(c).toBe(mockSession);
     });
   });
 });

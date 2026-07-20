@@ -12,7 +12,6 @@ import { useIdTokenAuthRequest } from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
-import { setRememberMePreference } from '../lib/auth-session-storage';
 import { supabase } from '../lib/supabase';
 import { getAuthErrorMessage } from '../lib/utils/auth-errors';
 
@@ -70,7 +69,6 @@ export function useSocialAuth() {
         return;
       }
       try {
-        await setRememberMePreference(true);
         const { error: authError } = await supabase.auth.signInWithIdToken({
           provider: 'google',
           token: idToken,
@@ -105,7 +103,6 @@ export function useSocialAuth() {
         setError('Apple did not return an identity token');
         return false;
       }
-      await setRememberMePreference(true);
       const { error: authError } = await supabase.auth.signInWithIdToken({
         provider: 'apple',
         token: credential.identityToken,

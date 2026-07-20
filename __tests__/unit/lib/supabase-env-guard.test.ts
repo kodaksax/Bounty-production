@@ -95,7 +95,6 @@ async function loadSupabaseModule(
       setItem: jest.fn().mockResolvedValue(undefined),
       removeItem: jest.fn().mockResolvedValue(undefined),
     })),
-    getRememberMePreference: jest.fn().mockResolvedValue(true),
   }));
 
   // Import the freshly-mocked module
