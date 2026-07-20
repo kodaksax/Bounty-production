@@ -11,24 +11,33 @@
  * evaluation" means in practice: adding a new moment is adding one entry
  * here, never scattering an `if` into an unrelated screen.
  *
- * Two groups:
+ * Three groups:
  *  - STATE-DERIVED moments (identity_verification, stripe_connect_onboarding,
- *    enable_notifications, enable_location, add_profile_photo,
- *    complete_profile): eligibility is a pure function of MomentContext
- *    (profile + permission snapshot) and needs no explicit trigger — it's
- *    re-evaluated every time MomentsProvider refreshes. These are fully
- *    wired end-to-end in this change.
- *  - EVENT-TRIGGERED moments (post_first_bounty, accept_first_bounty,
- *    fund_wallet, rate_completed_bounty, bounty_completed_followup,
- *    dispute_resolved_followup, inactive_user_return, large_payout_eligible,
- *    invite_friends, feature_announcement): only become eligible once
- *    another part of the app calls
- *    `momentsService.enqueue(userId, momentType, metadata)` at the moment
- *    the underlying event happens (e.g. a bounty is accepted). They are
- *    fully defined and ready to show — wiring the `enqueue()` call at each
- *    event's real call site (bounty acceptance, bounty completion, dispute
- *    resolution, etc.) is listed as follow-up work, since those call sites
- *    live in unrelated parts of the app outside this change's scope.
+ *    enable_notifications, enable_location, complete_profile): eligibility
+ *    is a pure function of MomentContext (profile + permission snapshot)
+ *    and needs no explicit trigger — it's re-evaluated every time
+ *    MomentsProvider refreshes.
+ *  - SESSION/SCREEN-GATED moments (add_profile_photo, post_first_bounty,
+ *    accept_first_bounty): also state-derived (or enqueue-derived — see
+ *    below), but additionally require `ctx.sessionCount` to clear a
+ *    per-moment threshold and/or `ctx.activeScreen` to be a relevant tab
+ *    before they're eligible. This is what keeps engagement prompts out of
+ *    the immediate post-onboarding moment: a brand-new user's first
+ *    MomentsProvider evaluation is always sessionCount === 1, so nothing in
+ *    this group can appear until the user has come back for a later
+ *    session (or, for the photo prompt, actually opened Profile). See each
+ *    moment's own comment for its specific rule and reasoning.
+ *  - EVENT-TRIGGERED moments (fund_wallet, rate_completed_bounty,
+ *    bounty_completed_followup, dispute_resolved_followup,
+ *    inactive_user_return, large_payout_eligible, invite_friends,
+ *    feature_announcement): only become eligible once another part of the
+ *    app calls `momentsService.enqueue(userId, momentType, metadata)` at
+ *    the moment the underlying event happens (e.g. a bounty is accepted).
+ *    They are fully defined and ready to show — wiring the `enqueue()`
+ *    call at each event's real call site (bounty acceptance, bounty
+ *    completion, dispute resolution, etc.) is listed as follow-up work,
+ *    since those call sites live in unrelated parts of the app outside
+ *    this change's scope.
  */
 
 import { referralService } from './referral-service';
@@ -45,6 +54,20 @@ function accountAgeDays(ctx: MomentContext): number {
 function eligibleWhenEnqueued(_ctx: MomentContext, state: MomentState | null): boolean {
   return state?.status === 'pending' && Object.keys(state.metadata ?? {}).length >= 0;
 }
+
+/**
+ * Bottom-nav screens where a "post a bounty" / "browse bounties" nudge is
+ * contextually relevant (Feed = 'bounty', Activity/Requests = 'postings').
+ * See app/tabs/bounty-app.tsx's ScreenKey for the full set of screen keys —
+ * 'wallet'/'profile'/'messages'/'admin' are deliberately excluded so these
+ * prompts never interrupt an unrelated task.
+ */
+const BOUNTY_RELEVANT_SCREENS = new Set(['bounty', 'postings']);
+
+/** A brand-new user's very first MomentsProvider evaluation is always sessionCount === 1 (see MomentContext doc comment). Requiring >= 2 guarantees nothing in this file can fire in that first sitting. */
+const MIN_SESSIONS_FOR_ACTIVATION_PROMPT = 2;
+/** Profile-photo prompt is lower urgency, so it waits for a couple of return visits before nagging on its own — unless the user is already on the Profile screen, in which case it's not an interruption. */
+const MIN_SESSIONS_FOR_PROFILE_PHOTO = 3;
 
 export const MOMENT_REGISTRY: MomentDefinition[] = [
   // ---------------------------------------------------------------------
@@ -74,7 +97,13 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
     category: 'profile',
     cooldownHours: 96,
     maxShownCount: 2,
-    isEligible: (ctx) => !ctx.profile.hasAvatar,
+    // Never right after onboarding: either the user has been back for a
+    // few sessions (MIN_SESSIONS_FOR_PROFILE_PHOTO), or they're already on
+    // the Profile screen, which is the one place this prompt isn't an
+    // interruption — it's exactly what they're there to do.
+    isEligible: (ctx) =>
+      !ctx.profile.hasAvatar &&
+      (ctx.sessionCount >= MIN_SESSIONS_FOR_PROFILE_PHOTO || ctx.activeScreen === 'profile'),
     checkCompleted: (ctx) => ctx.profile.hasAvatar,
     content: () => ({
       icon: 'add-a-photo',
@@ -179,8 +208,11 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
   },
 
   // ---------------------------------------------------------------------
-  // EVENT-TRIGGERED — defined and ready; enqueue() call sites are backlog
-  // (see class-level doc comment above for where each belongs)
+  // SESSION/SCREEN-GATED — enqueue-derived, but only actually surface after
+  // a later session + relevant screen (see class-level doc comment above).
+  // add_profile_photo (above, in the state-derived block) belongs to this
+  // group too; it's ordered there because its enqueue mechanism differs
+  // (purely state-derived, no momentsService.enqueue() call at all).
   // ---------------------------------------------------------------------
   {
     type: 'post_first_bounty',
@@ -188,9 +220,17 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
     category: 'engagement',
     cooldownHours: 24,
     maxShownCount: 3,
-    // Enqueue from: app/onboarding/done.tsx or the poster's first tabs
-    // session, when primaryRole === 'poster' and they have zero bounties.
-    isEligible: eligibleWhenEnqueued,
+    // Enqueued (status: 'pending') from lib/moments/backfill.ts, which runs
+    // once per session and marks this completed outright if the user
+    // already has a bounty — see that file for the query. Enqueuing does
+    // NOT make this visible by itself: it only becomes eligible once the
+    // user has been back for a second session AND is on a screen where
+    // posting is contextually relevant (Feed or Activity/Requests), so it
+    // never fires as part of the immediate post-onboarding transition.
+    isEligible: (ctx, state) =>
+      eligibleWhenEnqueued(ctx, state) &&
+      ctx.sessionCount >= MIN_SESSIONS_FOR_ACTIVATION_PROMPT &&
+      (ctx.activeScreen == null || BOUNTY_RELEVANT_SCREENS.has(ctx.activeScreen)),
     content: () => ({
       icon: 'add-circle-outline',
       title: 'Ready to get something done?',
@@ -206,9 +246,14 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
     category: 'engagement',
     cooldownHours: 24,
     maxShownCount: 3,
-    // Enqueue from: the hunter feed, when primaryRole === 'hunter' and they
-    // have zero accepted bounty_requests.
-    isEligible: eligibleWhenEnqueued,
+    // Enqueued from lib/moments/backfill.ts (see post_first_bounty comment
+    // above for the general mechanism). Gated to the Feed screen
+    // specifically ("browsing available bounties"), not Activity, since
+    // that's the actual browse surface for a hunter.
+    isEligible: (ctx, state) =>
+      eligibleWhenEnqueued(ctx, state) &&
+      ctx.sessionCount >= MIN_SESSIONS_FOR_ACTIVATION_PROMPT &&
+      (ctx.activeScreen == null || ctx.activeScreen === 'bounty'),
     content: () => ({
       icon: 'explore',
       title: 'Your first bounty is waiting',
@@ -218,6 +263,10 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
     }),
     action: { type: 'navigate', route: '/tabs/bounty-app' },
   },
+  // ---------------------------------------------------------------------
+  // EVENT-TRIGGERED — defined and ready; enqueue() call sites are backlog
+  // (see class-level doc comment above for where each belongs)
+  // ---------------------------------------------------------------------
   {
     type: 'fund_wallet',
     priority: 15,

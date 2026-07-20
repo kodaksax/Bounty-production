@@ -12,7 +12,35 @@
  * seasonal re-engagement) can key off the same column.
  */
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Per-user, per-device count of distinct sessions (see shouldRecordSession for the session-boundary definition). */
+const SESSION_COUNT_KEY_PREFIX = '@bounty_moments_session_count:';
+
+/** Reads the current session count without incrementing it. Returns 0 if never recorded on this device. */
+export async function getSessionCount(userId: string): Promise<number> {
+  try {
+    const raw = await AsyncStorage.getItem(SESSION_COUNT_KEY_PREFIX + userId);
+    const parsed = raw ? parseInt(raw, 10) : 0;
+    return Number.isFinite(parsed) ? parsed : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** Increments and persists the session count, returning the new value. Call once per detected session boundary. */
+export async function incrementSessionCount(userId: string): Promise<number> {
+  const next = (await getSessionCount(userId)) + 1;
+  try {
+    await AsyncStorage.setItem(SESSION_COUNT_KEY_PREFIX + userId, String(next));
+  } catch {
+    // Best-effort — worst case a session goes uncounted, which only makes
+    // session-gated moments slightly more conservative, never less.
+  }
+  return next;
+}
 
 /** Below this many days since last_session_at, a user isn't "returning" — just continuing a normal cadence. */
 export const INACTIVITY_THRESHOLD_DAYS = 14;

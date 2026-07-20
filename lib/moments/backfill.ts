@@ -1,18 +1,20 @@
 /**
- * Moments Queue — one-time backfill for event-triggered moments.
+ * Moments Queue — enqueue resolution for post_first_bounty / accept_first_bounty.
  *
- * New users get `post_first_bounty` / `accept_first_bounty` enqueued
- * directly in app/onboarding/done.tsx when their role becomes known. Users
- * who completed onboarding before that wiring existed (or before
- * `primary_role` existed at all) have no user_activation_moments row for
- * either moment, so the engine would never surface — or ever retire — them.
+ * This is the sole place either moment gets enqueued — deliberately not
+ * app/onboarding/done.tsx, since enqueuing there (status: 'pending' the
+ * instant onboarding finishes) is exactly what used to make the "post a
+ * bounty" / "hunt a bounty" prompts appear the moment a user landed in the
+ * app. Enqueuing here instead just creates the row; registry.ts's
+ * isEligible for both moments additionally requires a later session and a
+ * relevant screen before either is actually shown (see its comments).
  *
- * This does one lightweight count query per moment to resolve that: if the
- * user already has a bounty/accepted request, the moment is marked
- * completed (it doesn't apply); otherwise it's enqueued. Either outcome
- * creates a state row, so the `!states.has(...)` guard means this query
- * runs at most once per user, ever — MomentsProvider additionally gates
- * this to once per app session via a ref so it never repeats within a
+ * This does one lightweight count query per moment to resolve enqueue vs.
+ * complete: if the user already has a bounty/accepted request, the moment
+ * is marked completed (it doesn't apply); otherwise it's enqueued. Either
+ * outcome creates a state row, so the `!states.has(...)` guard means this
+ * query runs at most once per user, ever — MomentsProvider additionally
+ * gates this to once per app session via a ref so it never repeats within a
  * single run even before that row exists.
  */
 import { supabase } from '../supabase';

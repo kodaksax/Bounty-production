@@ -59,6 +59,23 @@ export interface MomentState {
 export interface MomentContext {
   userId: string;
   accountCreatedAt: string | null;
+  /**
+   * Number of distinct app sessions this device has recorded for this user
+   * (see lib/moments/sessionTracking.ts) — a session boundary is the same
+   * 30-minute-gap definition already used for profiles.last_session_at.
+   * Lets a moment require "the user has come back at least once" before
+   * ever showing, instead of firing the instant onboarding finishes.
+   */
+  sessionCount: number;
+  /**
+   * The bottom-nav screen key currently active in the tab shell (see
+   * app/tabs/bounty-app.tsx's `activeScreen` state), or null if unknown
+   * (e.g. context built outside the tab shell). Lets a moment prefer
+   * showing while the user is on a relevant screen (e.g. Feed for
+   * bounty-related prompts, Profile for the photo prompt) instead of
+   * interrupting whatever else they're doing.
+   */
+  activeScreen: string | null;
   profile: {
     hasAvatar: boolean;
     hasBio: boolean;

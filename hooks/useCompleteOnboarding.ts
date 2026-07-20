@@ -13,7 +13,6 @@ import { useAuthProfile } from './useAuthProfile';
 import { useBountyFormat } from '../lib/bounty-format-context';
 import { CURRENT_ONBOARDING_VERSION, useOnboarding } from '../lib/context/onboarding-context';
 import { DEFERRED_PUSH_REGISTRATION_KEY } from '../lib/constants';
-import { momentsService } from '../lib/moments/momentsService';
 import { analyticsService } from '../lib/services/analytics-service';
 import { authProfileService } from '../lib/services/auth-profile-service';
 import { Profile } from '../lib/services/database.types';
@@ -258,20 +257,13 @@ export function useCompleteOnboarding(destination: OnboardingDestination = '/tab
       bountyFormat,
     });
 
-    // Prime the marketplace-activation moments (post_first_bounty /
-    // accept_first_bounty) right as the user's role becomes known — see
-    // lib/moments/registry.ts doc comments. These self-retire (server-side
-    // trigger, see supabase/migrations/20260714f) the moment the user
-    // actually posts/accepts a bounty, so it's safe to enqueue eagerly here.
-    if (resolvedUserId) {
-      if (onboardingData.intent === 'poster') {
-        momentsService.enqueue(resolvedUserId, 'post_first_bounty', {});
-        analyticsService.trackEvent('moment_event_enqueued', { momentType: 'post_first_bounty', source: 'onboarding_done' });
-      } else if (onboardingData.intent === 'hunter') {
-        momentsService.enqueue(resolvedUserId, 'accept_first_bounty', {});
-        analyticsService.trackEvent('moment_event_enqueued', { momentType: 'accept_first_bounty', source: 'onboarding_done' });
-      }
-    }
+    // Deliberately NOT priming any Moments Queue prompts here. The
+    // marketplace-activation moments (post_first_bounty / accept_first_bounty)
+    // are enqueued by lib/moments/backfill.ts on the user's next
+    // MomentsProvider session instead, and stay ineligible to actually show
+    // until the user has returned for a later session and is on a relevant
+    // screen (see registry.ts) — so finishing onboarding never redirects
+    // straight into another prompt.
 
     try {
       router.replace((overrideDestination ?? destination) as any);

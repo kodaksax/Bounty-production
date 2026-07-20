@@ -235,7 +235,7 @@ function BountyAppInner() {
   }
 
   return (
-    <MomentsProvider>
+    <MomentsProvider activeScreen={activeScreen}>
       <View style={{ flex: 1, backgroundColor: theme.background, position: 'relative' }}>
         {/* Connection Status Banner - appears at top when offline */}
         <ConnectionStatus showQueueCount={true} />

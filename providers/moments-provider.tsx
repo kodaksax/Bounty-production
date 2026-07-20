@@ -21,7 +21,12 @@ import { evaluateNextMoment } from '../lib/moments/engine';
 import { momentsService } from '../lib/moments/momentsService';
 import { referralService } from '../lib/moments/referral-service';
 import { MOMENT_REGISTRY } from '../lib/moments/registry';
-import { evaluateReturningUser, shouldRecordSession } from '../lib/moments/sessionTracking';
+import {
+  evaluateReturningUser,
+  getSessionCount,
+  incrementSessionCount,
+  shouldRecordSession,
+} from '../lib/moments/sessionTracking';
 import type {
   MomentContent,
   MomentContext as MomentCtx,
@@ -63,7 +68,20 @@ const INLINE_HANDLERS: Record<string, () => Promise<boolean>> = {
   share_invite: async () => referralService.shareInvite(),
 };
 
-export function MomentsProvider({ children }: { children: React.ReactNode }) {
+interface MomentsProviderProps {
+  children: React.ReactNode;
+  /**
+   * Current bottom-nav screen key (see app/tabs/bounty-app.tsx), passed
+   * down so registry.ts can gate certain moments to relevant screens (e.g.
+   * only offer to post a bounty while on Feed/Activity, not mid-conversation
+   * in Messages). Optional so this provider still works if ever mounted
+   * outside the tab shell — moments that key off activeScreen simply won't
+   * be eligible in that case.
+   */
+  activeScreen?: string | null;
+}
+
+export function MomentsProvider({ children, activeScreen = null }: MomentsProviderProps) {
   const router = useRouter();
   const { session } = useAuthContext();
   const { profile } = useAuthProfile();
@@ -72,6 +90,7 @@ export function MomentsProvider({ children }: { children: React.ReactNode }) {
   const [states, setStates] = useState<Map<MomentType, MomentState>>(new Map());
   const [notifPermission, setNotifPermission] = useState<'granted' | 'denied' | 'undetermined'>('undetermined');
   const [locPermission, setLocPermission] = useState<'granted' | 'denied' | 'undetermined'>('undetermined');
+  const [sessionCount, setSessionCount] = useState(0);
   const [activeMoment, setActiveMoment] = useState<MomentDefinition | null>(null);
   const [activeContent, setActiveContent] = useState<MomentContent | null>(null);
   const shownAtRef = useRef<number | null>(null);
@@ -124,6 +143,9 @@ export function MomentsProvider({ children }: { children: React.ReactNode }) {
       momentsService.enqueue(userId, 'inactive_user_return', { daysSinceLastSession });
     }
     if (shouldRecordSession(lastSessionAt)) {
+      // Same throttle window doubles as this device's session-boundary
+      // definition — see MomentContext.sessionCount doc comment.
+      incrementSessionCount(userId).then(setSessionCount);
       supabase
         .from('profiles')
         .update({ last_session_at: new Date().toISOString() })
@@ -131,6 +153,8 @@ export function MomentsProvider({ children }: { children: React.ReactNode }) {
         .then(({ error }) => {
           if (error) console.error('[moments] failed to record last_session_at', error);
         });
+    } else {
+      getSessionCount(userId).then(setSessionCount);
     }
   }, [userId, profile?.primary_role, profile?.last_session_at]);
 
@@ -154,6 +178,8 @@ export function MomentsProvider({ children }: { children: React.ReactNode }) {
     return {
       userId,
       accountCreatedAt: profile.created_at ?? null,
+      sessionCount,
+      activeScreen,
       profile: {
         hasAvatar: !!profile.avatar,
         hasBio: !!profile.about,
@@ -170,7 +196,7 @@ export function MomentsProvider({ children }: { children: React.ReactNode }) {
         location: locPermission,
       },
     };
-  }, [userId, profile, notifPermission, locPermission]);
+  }, [userId, profile, notifPermission, locPermission, sessionCount, activeScreen]);
 
   // Auto-complete state-derived moments whose underlying goal was met after
   // they were shown (e.g. user added an avatar via the profile screen, not
