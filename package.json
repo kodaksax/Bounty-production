@@ -144,7 +144,7 @@
     "express-rate-limit": "^8.2.1",
     "express-session": "^1.19.0",
     "fastlane": "^0.0.9",
-    "hermes-compiler": "250829098.0.4",
+    "hermes-compiler": "250829098.0.10",
     "invariant": "^2.2.4",
     "logrocket": "^11.0.0",
     "lucide-react-native": "^0.563.0",
@@ -231,10 +231,10 @@
     "node": ">=18 <24"
   },
   "resolutions": {
-    "hermes-compiler": "250829098.0.4"
+    "hermes-compiler": "250829098.0.10"
   },
   "overrides": {
-    "hermes-compiler": "250829098.0.4"
+    "hermes-compiler": "250829098.0.10"
   },
   "overrides_backup": {
     "react-native-safe-area-context": "~5.6.2",
