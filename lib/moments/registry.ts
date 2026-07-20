@@ -69,6 +69,24 @@ const MIN_SESSIONS_FOR_ACTIVATION_PROMPT = 2;
 /** Profile-photo prompt is lower urgency, so it waits for a couple of return visits before nagging on its own — unless the user is already on the Profile screen, in which case it's not an interruption. */
 const MIN_SESSIONS_FOR_PROFILE_PHOTO = 3;
 
+/**
+ * Screens where trust/payout prompts (identity verification, Connect setup)
+ * are directly relevant to what the user is doing right now — a "strong
+ * reason" to offer them even to a brand-new user in their very first
+ * session, per the same principle MIN_SESSIONS_FOR_ACTIVATION_PROMPT exists
+ * to protect against for passive, out-of-context nudging.
+ */
+const WALLET_RELEVANT_SCREENS = new Set(['wallet']);
+/**
+ * Balance (in dollars — profiles.balance is NUMERIC, not cents) above which
+ * an unverified account is enough of a trust/safety concern that verifying
+ * is worth surfacing regardless of session count. Mirrors the $100 "high-
+ * value account" threshold hooks/use-two-factor-auth.ts already uses to
+ * prompt 2FA enrollment, applied here in dollars since MomentContext's
+ * balance field isn't in cents.
+ */
+const HIGH_VALUE_BALANCE_THRESHOLD = 100;
+
 export const MOMENT_REGISTRY: MomentDefinition[] = [
   // ---------------------------------------------------------------------
   // STATE-DERIVED — fully wired
@@ -159,22 +177,57 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
     category: 'trust',
     cooldownHours: 96,
     maxShownCount: 3,
-    isEligible: (ctx) => ctx.profile.idVerificationStatus === 'unverified' || ctx.profile.idVerificationStatus === null,
+    // Never right after onboarding, unless there's a strong reason: the
+    // user is somewhere verification actually unlocks something right now
+    // (wallet/payouts — VERIFICATION_RELEVANT_SCREENS), or their balance has
+    // grown enough that verifying is a real trust/safety concern rather
+    // than a nice-to-have (HIGH_VALUE_BALANCE_THRESHOLD). Either of those is
+    // shown to a brand-new user in their very first session. Absent a
+    // strong reason, this waits for a later session like every other
+    // passive activation prompt (MIN_SESSIONS_FOR_ACTIVATION_PROMPT).
+    // 'rejected' is included alongside 'unverified'/null so a resubmission
+    // nudge follows the same cooldown/suppression rules instead of nagging
+    // unboundedly — matching the resubmit entry point already on the
+    // profile screen.
+    isEligible: (ctx) => {
+      const needsVerification =
+        ctx.profile.idVerificationStatus === 'unverified' ||
+        ctx.profile.idVerificationStatus === null ||
+        ctx.profile.idVerificationStatus === 'rejected';
+      if (!needsVerification) return false;
+
+      const hasStrongReason =
+        (ctx.activeScreen != null && WALLET_RELEVANT_SCREENS.has(ctx.activeScreen)) ||
+        ctx.profile.balance >= HIGH_VALUE_BALANCE_THRESHOLD;
+      if (hasStrongReason) return true;
+
+      return ctx.sessionCount >= MIN_SESSIONS_FOR_ACTIVATION_PROMPT;
+    },
     checkCompleted: (ctx) => ctx.profile.idVerificationStatus === 'pending' || ctx.profile.idVerificationStatus === 'verified',
-    content: () => ({
-      icon: 'verified-user',
-      title: 'Verify your identity',
-      body: 'A quick ID check builds trust with other users and unlocks higher limits. It takes about 2 minutes, and you can always do it later from your profile.',
-      benefits: [
-        'Verified badge on your profile',
-        'Higher transaction limits',
-        'Priority in bounty matching',
-        'Enhanced trust score',
-      ],
-      primaryLabel: 'Verify now',
-      secondaryLabel: 'Later',
-      estimatedMinutes: 2,
-    }),
+    content: (ctx) =>
+      ctx.profile.idVerificationStatus === 'rejected'
+        ? {
+            icon: 'verified-user',
+            title: 'Resubmit your ID verification',
+            body: 'Your last submission wasn’t approved. Try again with a clear, well-lit photo — it takes about 2 minutes.',
+            primaryLabel: 'Resubmit now',
+            secondaryLabel: 'Later',
+            estimatedMinutes: 2,
+          }
+        : {
+            icon: 'verified-user',
+            title: 'Verify your identity',
+            body: 'A quick ID check builds trust with other users and unlocks higher limits. It takes about 2 minutes, and you can always do it later from your profile.',
+            benefits: [
+              'Verified badge on your profile',
+              'Higher transaction limits',
+              'Priority in bounty matching',
+              'Enhanced trust score',
+            ],
+            primaryLabel: 'Verify now',
+            secondaryLabel: 'Later',
+            estimatedMinutes: 2,
+          },
     action: { type: 'navigate', route: '/verification/upload-id' },
   },
   {
@@ -187,9 +240,23 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
     // and therefore actually stand to receive payouts — ever see this.
     // Posters would never benefit, so showing it to them would be exactly
     // the "presenting before it's relevant" the spec warns against.
-    isEligible: (ctx) =>
-      (ctx.profile.primaryRole === 'hunter' || ctx.profile.primaryRole === 'both') &&
-      !ctx.profile.stripeConnectPayoutsEnabled,
+    //
+    // Same "strong reason" pattern as identity_verification: never right
+    // after onboarding by default — either the user is somewhere payouts
+    // are actually relevant right now (the wallet screen, where "receive
+    // earnings"/"withdraw" live — WALLET_RELEVANT_SCREENS), or they've come
+    // back for a later session. This is what keeps it from firing on the
+    // very first render after signup and from feeling like a random
+    // interruption on an unrelated screen.
+    isEligible: (ctx) => {
+      const isPayoutEligibleRole = ctx.profile.primaryRole === 'hunter' || ctx.profile.primaryRole === 'both';
+      if (!isPayoutEligibleRole || ctx.profile.stripeConnectPayoutsEnabled) return false;
+
+      const hasStrongReason = ctx.activeScreen != null && WALLET_RELEVANT_SCREENS.has(ctx.activeScreen);
+      if (hasStrongReason) return true;
+
+      return ctx.sessionCount >= MIN_SESSIONS_FOR_ACTIVATION_PROMPT;
+    },
     checkCompleted: (ctx) => ctx.profile.stripeConnectPayoutsEnabled,
     content: () => ({
       icon: 'account-balance',

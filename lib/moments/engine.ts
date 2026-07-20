@@ -19,6 +19,14 @@ function isOnCooldown(def: MomentDefinition, state: MomentState | null): boolean
   if (state.status === 'snoozed' && state.snoozedUntil) {
     return new Date(state.snoozedUntil).getTime() > Date.now();
   }
+  // Deliberately NOT applied to 'shown': a currently-active moment must
+  // stay eligible on every re-evaluation while it's still on screen and
+  // unresolved, or the caller's "same type as last time → keep it" bailout
+  // (see MomentsProvider's compute-next-moment effect) never gets a chance
+  // to run — the moment would flip eligible→ineligible→eligible on its own
+  // cooldown the instant it's marked shown, closing itself before the user
+  // does anything. A moment left 'shown' across many separate sessions
+  // without ever being resolved is already bounded by maxShownCount instead.
   if (state.status === 'dismissed' && state.lastShownAt) {
     return Date.now() - new Date(state.lastShownAt).getTime() < def.cooldownHours * MS_PER_HOUR;
   }

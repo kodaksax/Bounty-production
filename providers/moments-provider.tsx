@@ -163,6 +163,42 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
+  /**
+   * Applies a status/metadata change to the in-memory `states` map
+   * immediately, in addition to whatever momentsService write is also in
+   * flight to Supabase. Without this, `states` only ever changes on the
+   * next refresh() (mount or app-foreground) — so a dismiss/snooze/accept
+   * during the current session wouldn't be reflected until then. Since the
+   * "compute next moment" effect below re-evaluates on every buildContext
+   * change (which includes activeScreen, i.e. essentially every bottom-nav
+   * tap or onBack call), that stale snapshot would make evaluateNextMoment
+   * pick the very moment the user just dismissed right back up on the next
+   * button press — this is what synchronizes them so a resolved moment
+   * actually stays resolved for the rest of the session.
+   */
+  const patchState = useCallback(
+    (momentType: MomentType, patch: Partial<MomentState> | ((existing: MomentState) => Partial<MomentState>)) => {
+      setStates((prev) => {
+        const next = new Map(prev);
+        const existing: MomentState = next.get(momentType) ?? {
+          momentType,
+          status: 'pending',
+          shownCount: 0,
+          firstShownAt: null,
+          lastShownAt: null,
+          dismissedAt: null,
+          completedAt: null,
+          snoozedUntil: null,
+          metadata: {},
+        };
+        const resolved = typeof patch === 'function' ? patch(existing) : patch;
+        next.set(momentType, { ...existing, ...resolved });
+        return next;
+      });
+    },
+    []
+  );
+
   // Re-evaluate whenever the app comes back to the foreground — catches
   // permission grants/denials and profile edits made outside a live session
   // (e.g. in OS Settings) without requiring a full remount.
@@ -208,8 +244,16 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
     (async () => {
       for (const def of MOMENT_REGISTRY) {
         const state = states.get(def.type);
-        if (state?.status === 'shown' && def.checkCompleted?.(ctx)) {
+        // Any non-terminal status (shown, snoozed, dismissed, pending) can
+        // resolve early if the underlying goal is met through some other
+        // path than tapping this moment's own primary button — e.g. the
+        // user completes Stripe Connect via the wallet screen's own button
+        // after having dismissed/snoozed the prompt. Keeps the persisted
+        // status an accurate "completed" rather than stuck on whatever it
+        // last was.
+        if (state && state.status !== 'completed' && state.status !== 'expired' && def.checkCompleted?.(ctx)) {
           await momentsService.markCompleted(userId, def.type);
+          patchState(def.type, { status: 'completed', completedAt: new Date().toISOString() });
           analyticsService.trackEvent('moment_completed', {
             momentType: def.type,
             source: 'auto_detected',
@@ -226,6 +270,7 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
           state.shownCount >= def.maxShownCount
         ) {
           await momentsService.markExpired(userId, def.type);
+          patchState(def.type, { status: 'expired' });
           analyticsService.trackEvent('moment_expired', {
             momentType: def.type,
             shownCount: state.shownCount,
@@ -233,7 +278,7 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
         }
       }
     })();
-  }, [states, buildContext, userId]);
+  }, [states, buildContext, userId, patchState]);
 
   // Compute the single next-eligible moment. Structurally impossible to
   // surface more than one at a time — evaluateNextMoment always returns
@@ -263,31 +308,41 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
   useEffect(() => {
     if (!activeMoment || !userId) return;
     shownAtRef.current = Date.now();
+    const now = new Date().toISOString();
+    patchState(activeMoment.type, (existing) => ({
+      status: 'shown',
+      shownCount: existing.shownCount + 1,
+      firstShownAt: existing.firstShownAt ?? now,
+      lastShownAt: now,
+    }));
     momentsService.markShown(userId, activeMoment.type);
     analyticsService.trackEvent('moment_shown', { momentType: activeMoment.type });
-  }, [activeMoment, userId]);
+  }, [activeMoment, userId, patchState]);
 
   const dismiss = useCallback(() => {
     if (!activeMoment || !userId) return;
     hapticFeedback.light();
     momentsService.markDismissed(userId, activeMoment.type);
+    patchState(activeMoment.type, { status: 'dismissed', dismissedAt: new Date().toISOString() });
     analyticsService.trackEvent('moment_dismissed', {
       momentType: activeMoment.type,
       msVisible: shownAtRef.current ? Date.now() - shownAtRef.current : undefined,
     });
     setActiveMoment(null);
     setActiveContent(null);
-  }, [activeMoment, userId]);
+  }, [activeMoment, userId, patchState]);
 
   const snooze = useCallback(
     (hours = 24) => {
       if (!activeMoment || !userId) return;
+      const snoozedUntil = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
       momentsService.markSnoozed(userId, activeMoment.type, hours);
+      patchState(activeMoment.type, { status: 'snoozed', snoozedUntil });
       analyticsService.trackEvent('moment_snoozed', { momentType: activeMoment.type, hours });
       setActiveMoment(null);
       setActiveContent(null);
     },
-    [activeMoment, userId]
+    [activeMoment, userId, patchState]
   );
 
   const accept = useCallback(async () => {
@@ -300,6 +355,26 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
     setActiveContent(null);
 
     if (def.action.type === 'navigate') {
+      // Not resolved yet — the user still has to finish the destination
+      // flow (e.g. Stripe Connect onboarding). Record that they actively
+      // engaged it (distinct from merely having it shown), and snooze it
+      // for its normal cooldown window: 'shown' status is deliberately
+      // exempt from cooldown (see engine.ts isOnCooldown) so the currently-
+      // displayed modal doesn't close itself, but that same exemption means
+      // leaving it as 'shown' here would let it pop right back up on the
+      // very next button press if the user backs out without finishing —
+      // snoozing is what actually suppresses it once it's no longer on
+      // screen. The auto-complete effect below still recognizes 'snoozed'
+      // (not just 'shown'), so finishing the flow still resolves it early.
+      const startedAt = new Date().toISOString();
+      const snoozedUntil = new Date(Date.now() + def.cooldownHours * 60 * 60 * 1000).toISOString();
+      patchState(def.type, (existing) => ({
+        status: 'snoozed',
+        snoozedUntil,
+        metadata: { ...existing.metadata, startedAt: existing.metadata?.startedAt ?? startedAt },
+      }));
+      momentsService.markStarted(userId, def.type);
+      momentsService.markSnoozed(userId, def.type, def.cooldownHours);
       router.push(def.action.route as any);
       return;
     }
@@ -308,6 +383,7 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
     const success = handler ? await handler() : false;
     if (success) {
       await momentsService.markCompleted(userId, def.type);
+      patchState(def.type, { status: 'completed', completedAt: new Date().toISOString() });
       analyticsService.trackEvent('moment_completed', {
         momentType: def.type,
         source: 'inline_action',
@@ -317,7 +393,7 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
       analyticsService.trackEvent('moment_skipped', { momentType: def.type, reason: 'inline_action_failed' });
     }
     await refresh();
-  }, [activeMoment, userId, router, refresh]);
+  }, [activeMoment, userId, router, refresh, patchState]);
 
   const value = useMemo<MomentsContextValue>(
     () => ({ activeMoment, activeContent, accept, dismiss, snooze, refresh }),

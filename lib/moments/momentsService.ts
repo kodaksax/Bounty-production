@@ -139,6 +139,28 @@ export const momentsService = {
   },
 
   /**
+   * Records that the user actively engaged a 'navigate' moment's primary
+   * action (e.g. tapped "Set up payouts" and is now in the Connect
+   * onboarding screen), without resolving it as completed on its own —
+   * merges startedAt into metadata and leaves status untouched (still
+   * 'shown', still subject to its normal cooldown) so a moment the user
+   * genuinely started isn't indistinguishable from one they never engaged.
+   */
+  async markStarted(userId: string, momentType: MomentType): Promise<void> {
+    const existing = await fetchRow(userId, momentType);
+    const { error } = await supabase.from('user_activation_moments').upsert(
+      {
+        user_id: userId,
+        moment_type: momentType,
+        status: existing?.status ?? 'shown',
+        metadata: { ...(existing?.metadata ?? {}), startedAt: existing?.metadata?.startedAt ?? new Date().toISOString() },
+      },
+      { onConflict: 'user_id,moment_type' }
+    );
+    if (error) console.error('[moments] markStarted failed', { momentType, error });
+  },
+
+  /**
    * Explicit trigger for event-driven moments (see registry.ts doc
    * comments for which types expect this). Re-arms a previously completed
    * *recurring* moment; otherwise a no-op if already completed/dismissed
