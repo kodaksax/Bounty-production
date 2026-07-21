@@ -227,8 +227,13 @@ export async function fetchConversations(userId: string): Promise<Conversation[]
       // against an older local/staging database, make sure that migration has
       // been applied before debugging missing names here; pre-migration rows may
       // still have data in `full_name` only until the schema/data migration is run.
+      // Read from the `public_profiles` view, NOT the base `profiles` table:
+      // production RLS only permits reading the caller's OWN `profiles` row, so a
+      // direct `profiles` read here returns nothing for the other participant and
+      // the inbox falls back to "Unknown". `public_profiles` is the sanctioned
+      // cross-user safe-columns view (see 20260718235500_formalize_public_profiles_view).
       const { data, error: profilesError } = await supabase
-        .from('profiles')
+        .from('public_profiles')
         .select('id, username, display_name, avatar')
         .in('id', Array.from(otherUserIds));
 
@@ -533,8 +538,10 @@ export async function createConversation(
     let avatar: string | undefined;
 
     if (!isGroup && participantIds.length === 2) {
+      // Cross-user read → use `public_profiles` (base `profiles` is RLS-restricted
+      // to the caller's own row on production). See note above / 20260718235500.
       const { data: profiles } = await supabase
-        .from('profiles')
+        .from('public_profiles')
         .select('id, username, display_name, avatar')
         .in('id', participantIds);
 
