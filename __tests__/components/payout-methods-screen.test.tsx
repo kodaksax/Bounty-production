@@ -22,6 +22,8 @@ function makePayoutMethods(overrides: Partial<UsePayoutMethodsResult> = {}): Use
     bankAccounts: [],
     debitCards: [],
     hasInstantEligibleCard: false,
+    instantAvailableCents: 0,
+    canInstantCashOut: false,
     minWithdrawal: 10,
     maxWithdrawal: null,
     availableBalance: null,

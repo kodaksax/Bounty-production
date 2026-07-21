@@ -38,7 +38,28 @@ const REQUEST_ERROR_MESSAGES: Record<string, string> = {
   platform_balance_insufficient: 'Withdrawals are temporarily unavailable. Your balance has not been charged.',
   destination_account_invalid: 'Your linked bank account cannot receive transfers right now.',
   stripe_unreachable: 'We could not reach our payment provider. Your balance has not been charged.',
+  bank_account_not_default: 'This bank account is not your default payout method. Set it as default in your payout dashboard, then try again.',
+  above_instant_maximum: 'Instant Cash Out has a maximum amount per transfer. Try a smaller amount, or use a standard bank withdrawal.',
+  insufficient_instant_balance: 'Your Stripe balance available for Instant Cash Out is lower than this amount right now. Try a smaller amount, or use a standard bank withdrawal.',
+  daily_instant_limit_reached: "You've reached today's Instant Cash Out limit. Please try again tomorrow, or use a standard bank withdrawal.",
 };
+
+// Error codes where the fix lives in the Stripe payout dashboard (add/remove/
+// default a bank account or debit card) — these get a direct "Manage Payout
+// Methods" action instead of leaving the hunter to find their own way there.
+// This is the "map the permission error to an actionable UI, not a raw
+// error" requirement: these Connect accounts have
+// controller.requirement_collection === "stripe", so the platform can never
+// fix any of these server-side — only the hunter, via their dashboard, can.
+const MANAGE_PAYOUT_METHODS_ERROR_CODES = new Set([
+  'payouts_disabled',
+  'no_bank_account',
+  'no_debit_card',
+  'no_instant_eligible_card',
+  'card_not_instant_eligible',
+  'bank_account_not_default',
+  'destination_account_invalid',
+]);
 
 function resolveErrorCopy(errorCode: string | null | undefined, errorMessage: string | null | undefined): string {
   if (errorCode && REQUEST_ERROR_MESSAGES[errorCode]) return REQUEST_ERROR_MESSAGES[errorCode];
@@ -64,6 +85,8 @@ export interface WithdrawalResultScreenProps {
   onDismiss: () => void;
   /** failure only — re-attempt with the same amount/destination. */
   onRetry?: () => void;
+  /** failure only — opens the Stripe payout dashboard (login link). Shown only for errorCodes in MANAGE_PAYOUT_METHODS_ERROR_CODES. */
+  onManagePayoutMethods?: () => void;
 }
 
 export function WithdrawalResultScreen({
@@ -80,10 +103,13 @@ export function WithdrawalResultScreen({
   errorMessage,
   onDismiss,
   onRetry,
+  onManagePayoutMethods,
 }: WithdrawalResultScreenProps) {
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const insets = useSafeAreaInsets();
+  const showManagePayoutMethods =
+    !!onManagePayoutMethods && !!errorCode && MANAGE_PAYOUT_METHODS_ERROR_CODES.has(errorCode);
 
   if (status === 'processing') {
     return (
@@ -113,13 +139,25 @@ export function WithdrawalResultScreen({
         </View>
 
         <View style={s.actions}>
-          {onRetry && (
-            <TouchableOpacity style={s.primaryButton} onPress={onRetry} accessibilityRole="button" accessibilityLabel="Try again">
-              <Text style={s.primaryButtonText}>Try Again</Text>
+          {showManagePayoutMethods ? (
+            <TouchableOpacity
+              style={s.primaryButton}
+              onPress={onManagePayoutMethods}
+              accessibilityRole="button"
+              accessibilityLabel="Manage payout methods"
+              accessibilityHint="Opens your Stripe payout dashboard"
+            >
+              <Text style={s.primaryButtonText}>Manage Payout Methods</Text>
             </TouchableOpacity>
+          ) : (
+            onRetry && (
+              <TouchableOpacity style={s.primaryButton} onPress={onRetry} accessibilityRole="button" accessibilityLabel="Try again">
+                <Text style={s.primaryButtonText}>Try Again</Text>
+              </TouchableOpacity>
+            )
           )}
           <TouchableOpacity style={s.secondaryButton} onPress={onDismiss} accessibilityRole="button" accessibilityLabel="Dismiss">
-            <Text style={s.secondaryButtonText}>{onRetry ? 'Cancel' : 'Done'}</Text>
+            <Text style={s.secondaryButtonText}>{onRetry || showManagePayoutMethods ? 'Cancel' : 'Done'}</Text>
           </TouchableOpacity>
         </View>
       </View>

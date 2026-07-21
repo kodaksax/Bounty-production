@@ -82,7 +82,7 @@ export function InstantCashOutScreen({
     [session?.access_token]
   );
 
-  const { debitCards, availableBalance, hasInstantEligibleCard } = payoutMethods;
+  const { debitCards, availableBalance, hasInstantEligibleCard, instantAvailableCents } = payoutMethods;
   const loading = eligibility.loading || payoutMethods.isLoading;
   const loadError = eligibility.error ?? payoutMethods.error;
 
@@ -96,11 +96,16 @@ export function InstantCashOutScreen({
 
   const parsedAmount = parseFloat(amount);
   const effectiveAvailable = availableBalance ?? balance;
+  // Stripe's instant_available balance (not the wallet balance above) is a
+  // second, independent ceiling: even with plenty of in-app balance, Stripe
+  // may not yet report enough of it as instant-payout-eligible.
+  const instantAvailable = instantAvailableCents / 100;
   const isFullyEligible =
     eligibility.connectedAccountExists &&
     eligibility.chargesEnabled &&
     eligibility.payoutsEnabled &&
-    hasInstantEligibleCard;
+    hasInstantEligibleCard &&
+    instantAvailableCents > 0;
 
   const isCashOutDisabled =
     !isFullyEligible ||
@@ -108,6 +113,7 @@ export function InstantCashOutScreen({
     isNaN(parsedAmount) ||
     parsedAmount <= 0 ||
     parsedAmount > effectiveAvailable ||
+    parsedAmount > instantAvailable ||
     !selectedCardId;
 
   const estimatedFee = estimateFee(parsedAmount || 0);
@@ -205,6 +211,7 @@ export function InstantCashOutScreen({
           }
         }}
         onRetry={cashOutResult.status === 'failure' ? () => performCashOut() : undefined}
+        onManagePayoutMethods={cashOutResult.status === 'failure' ? handleOpenPayoutDashboard : undefined}
       />
     );
   }
@@ -217,6 +224,11 @@ export function InstantCashOutScreen({
     { label: 'Payouts enabled', met: eligibility.payoutsEnabled, hint: 'Review your payout details — something may need attention.' },
     { label: 'Eligible debit card linked', met: hasInstantEligibleCard, hint: 'Add a debit card. Not every card supports Instant Cash Out.' },
     { label: 'Sufficient available balance', met: effectiveAvailable > 0 },
+    {
+      label: 'Instant funds available',
+      met: instantAvailableCents > 0,
+      hint: 'Some of your balance isn’t eligible for instant payout yet — this can take a little time to clear on Stripe’s side. You can still withdraw normally to your bank account.',
+    },
   ];
 
   return (

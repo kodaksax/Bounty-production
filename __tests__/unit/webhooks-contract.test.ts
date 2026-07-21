@@ -30,6 +30,19 @@ function extractFunctionBody(source: string, functionName: string): string {
   throw new Error(`unterminated body for ${functionName}`);
 }
 
+describe("case 'payout.created'", () => {
+  test('is handled, and its backfill never throws (payout.paid/failed/canceled remain the source of truth)', () => {
+    const start = webhooksSource.indexOf("case 'payout.created':");
+    expect(start).toBeGreaterThan(-1);
+    const nextCase = webhooksSource.indexOf("case 'payout.paid':", start);
+    expect(nextCase).toBeGreaterThan(start);
+    const body = webhooksSource.slice(start, nextCase);
+    expect(body).toContain('findCandidateWithdrawalTx');
+    expect(body).toContain('catch (backfillError)');
+    expect(body).not.toMatch(/throw\s+backfillError/);
+  });
+});
+
 describe('handleUndeliveredPayout (payout.failed / payout.canceled)', () => {
   const body = extractFunctionBody(webhooksSource, 'handleUndeliveredPayout');
 

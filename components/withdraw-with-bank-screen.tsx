@@ -82,6 +82,7 @@ export function WithdrawWithBankScreen({
     maxWithdrawal,
     availableBalance: serverAvailableBalance,
     hasInstantEligibleCard,
+    canInstantCashOut,
     isLoading: isLoadingAccounts,
   } = payoutMethods;
   const hasConnectedAccount = eligibility.isFullyOnboarded;
@@ -440,6 +441,9 @@ export function WithdrawWithBankScreen({
         onRetry={
           withdrawalResult.status === 'failure' ? () => performWithdraw(submittedAmount) : undefined
         }
+        onManagePayoutMethods={
+          withdrawalResult.status === 'failure' ? handleOpenPayoutDashboard : undefined
+        }
       />
     );
   }
@@ -498,8 +502,12 @@ export function WithdrawWithBankScreen({
             onSelect={method => {
               if (method === 'instant') setShowInstantCashOut(true);
             }}
-            instantEligible={hasInstantEligibleCard}
-            instantIneligibleReason="Add a debit card to unlock"
+            instantEligible={canInstantCashOut}
+            instantIneligibleReason={
+              hasInstantEligibleCard
+                ? 'Instant funds not available right now'
+                : 'Add a debit card to unlock'
+            }
             onAddDebitCard={handleOpenPayoutDashboard}
           />
         )}

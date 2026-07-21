@@ -15,8 +15,13 @@ import * as path from 'path';
 import {
   INSTANT_PAYOUT_FEE_MIN_USD,
   INSTANT_PAYOUT_FEE_PERCENT,
+  INSTANT_PAYOUT_MAX_USD,
+  MAX_INSTANT_PAYOUTS_PER_DAY,
+  checkInstantBalance,
+  checkInstantDailyLimit,
   estimateInstantFeeCents,
   resolveInstantDestination,
+  validateInstantAmount,
 } from '../../supabase/functions/connect/instant-payout-validation';
 
 describe('estimateInstantFeeCents', () => {
@@ -89,6 +94,65 @@ describe('resolveInstantDestination', () => {
   });
 });
 
+describe('validateInstantAmount', () => {
+  test('exposes the configured ceiling as a named constant', () => {
+    expect(INSTANT_PAYOUT_MAX_USD).toBe(9999);
+  });
+
+  test('accepts an amount at or below the ceiling', () => {
+    expect(validateInstantAmount(9999)).toEqual({ ok: true });
+    expect(validateInstantAmount(500)).toEqual({ ok: true });
+  });
+
+  test('rejects an amount above the ceiling', () => {
+    const result = validateInstantAmount(10000);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe('above_instant_maximum');
+  });
+});
+
+describe('checkInstantBalance', () => {
+  test('accepts an amount at or below the instant-available balance', () => {
+    expect(checkInstantBalance(5000, 5000)).toEqual({ ok: true });
+    expect(checkInstantBalance(4999, 5000)).toEqual({ ok: true });
+  });
+
+  test('rejects an amount above the instant-available balance, distinctly from the wallet balance check', () => {
+    const result = checkInstantBalance(5001, 5000);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe('insufficient_instant_balance');
+  });
+
+  test('rejects any positive amount when instant-available balance is zero', () => {
+    const result = checkInstantBalance(1, 0);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe('insufficient_instant_balance');
+  });
+});
+
+describe('checkInstantDailyLimit', () => {
+  test('exposes the configured daily cap as a named constant', () => {
+    expect(MAX_INSTANT_PAYOUTS_PER_DAY).toBe(10);
+  });
+
+  test('accepts counts below the daily cap', () => {
+    expect(checkInstantDailyLimit(0)).toEqual({ ok: true });
+    expect(checkInstantDailyLimit(9)).toEqual({ ok: true });
+  });
+
+  test('rejects once the count reaches the daily cap', () => {
+    const result = checkInstantDailyLimit(10);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe('daily_instant_limit_reached');
+  });
+
+  test('rejects counts above the daily cap too (defensive)', () => {
+    const result = checkInstantDailyLimit(11);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe('daily_instant_limit_reached');
+  });
+});
+
 describe('connect edge function contract (inlined instant-payout helpers stay in sync)', () => {
   const indexSource = fs.readFileSync(
     path.join(__dirname, '../../supabase/functions/connect/index.ts'),
@@ -133,5 +197,26 @@ describe('connect edge function contract (inlined instant-payout helpers stay in
     expect(indexSource).toMatch(/stripe\.payouts\.create\(/);
     expect(indexSource).toContain("method: 'instant'");
     expect(indexSource).toMatch(/stripeAccount:\s*p\.stripe_connect_account_id/);
+  });
+
+  test('inlines the instant-specific limit helpers and wires them into the route', () => {
+    expect(indexSource).toContain('function validateInstantAmount');
+    expect(indexSource).toContain('function checkInstantBalance');
+    expect(indexSource).toContain('function checkInstantDailyLimit');
+    expect(indexSource).toContain(
+      `readEnvNumberForInstantPayout('INSTANT_PAYOUT_MAX_USD', ${INSTANT_PAYOUT_MAX_USD})`
+    );
+    expect(indexSource).toContain(
+      `readEnvNumberForInstantPayout('MAX_INSTANT_PAYOUTS_PER_DAY', ${MAX_INSTANT_PAYOUTS_PER_DAY})`
+    );
+  });
+
+  test('checks balance.instant_available (never the plain available balance) before creating an instant payout', () => {
+    // The wrong-field mistake the integration spec calls out by name:
+    // `available` reflects funds Stripe hasn't necessarily cleared for
+    // instant payout; only `instant_available` has.
+    expect(indexSource).toContain('stripe.balance.retrieve(');
+    expect(indexSource).toContain('balance.instant_available');
+    expect(indexSource).not.toMatch(/balance\.available\?\.\s*find/);
   });
 });

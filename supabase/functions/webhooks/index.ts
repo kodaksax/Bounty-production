@@ -1476,6 +1476,57 @@ Deno.serve(async (req: Request) => {
         break;
       }
 
+      case 'payout.created': {
+        // Informational only — Stripe fires this the moment it creates the
+        // Payout, well before it's actually paid/failed/canceled (those
+        // remain the sole source of truth for balance actions and user
+        // notifications). Best-effort backfill of stripe_payout_id onto the
+        // matching wallet_transactions row shrinks the window where a
+        // completed withdrawal has no payout id yet (useful for
+        // admin-withdrawals' compare_stripe and the reconciliation cron).
+        // NOTE: requires 'payout.created' to be enabled on this webhook
+        // endpoint's subscribed events in the Stripe Dashboard.
+        const payout = event.data.object as Stripe.Payout;
+        const createdAccountId = (event as any).account as string | undefined;
+        console.log(`[webhooks] Payout created: ${payout.id} for $${payout.amount / 100} (method: ${payout.method})`);
+
+        if (createdAccountId) {
+          try {
+            const { data: createdProfile, error: createdProfileError } = await supabase
+              .from('profiles')
+              .select('id')
+              .eq('stripe_connect_account_id', createdAccountId)
+              .maybeSingle();
+
+            if (createdProfileError) {
+              console.warn('[webhooks] Supabase error looking up profile for payout.created (non-fatal)', {
+                accountId: createdAccountId,
+                error: createdProfileError,
+              });
+            } else if (createdProfile) {
+              const candidateTx = await findCandidateWithdrawalTx(supabase, createdProfile.id, payout);
+              if (candidateTx) {
+                await supabase
+                  .from('wallet_transactions')
+                  .update({ stripe_payout_id: payout.id })
+                  .eq('id', candidateTx.id)
+                  .is('stripe_payout_id', null);
+              }
+            }
+          } catch (backfillError) {
+            // Deliberately non-throwing: payout.paid/failed/canceled will
+            // still do their own (also best-effort) backfill, so losing this
+            // early one is never fatal — never turn it into a retried
+            // webhook delivery.
+            console.warn('[webhooks] payout.created backfill step failed (non-fatal)', {
+              payoutId: payout.id,
+              error: (backfillError as { message?: string })?.message,
+            });
+          }
+        }
+        break;
+      }
+
       case 'payout.paid': {
         const payout = event.data.object as Stripe.Payout;
         const paidAccountId = (event as any).account as string | undefined;

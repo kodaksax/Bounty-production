@@ -176,5 +176,42 @@ describe('WithdrawalResultScreen', () => {
       expect(queryByText('Try Again')).toBeNull();
       expect(getByText('Done')).toBeTruthy();
     });
+
+    it('shows "Manage Payout Methods" instead of "Try Again" for a payout-method error code, and calls onManagePayoutMethods', () => {
+      const onManagePayoutMethods = jest.fn();
+      const onRetry = jest.fn();
+      const { getByText, queryByText } = render(
+        <WithdrawalResultScreen
+          status="failure"
+          method="standard"
+          amount={50}
+          errorCode="bank_account_not_default"
+          onDismiss={jest.fn()}
+          onRetry={onRetry}
+          onManagePayoutMethods={onManagePayoutMethods}
+        />
+      );
+      expect(queryByText('Try Again')).toBeNull();
+      fireEvent.press(getByText('Manage Payout Methods'));
+      expect(onManagePayoutMethods).toHaveBeenCalledTimes(1);
+      expect(onRetry).not.toHaveBeenCalled();
+    });
+
+    it('falls back to Try Again for a non-payout-method error code even when onManagePayoutMethods is provided', () => {
+      const onManagePayoutMethods = jest.fn();
+      const { getByText, queryByText } = render(
+        <WithdrawalResultScreen
+          status="failure"
+          method="standard"
+          amount={50}
+          errorCode="insufficient_balance"
+          onDismiss={jest.fn()}
+          onRetry={jest.fn()}
+          onManagePayoutMethods={onManagePayoutMethods}
+        />
+      );
+      expect(queryByText('Manage Payout Methods')).toBeNull();
+      expect(getByText('Try Again')).toBeTruthy();
+    });
   });
 });

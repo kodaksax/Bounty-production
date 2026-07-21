@@ -49,6 +49,66 @@ export function estimateInstantFeeCents(amountCents: number): number {
   return Math.max(percentFee, minFeeCents);
 }
 
+// ─── Instant-specific limits ─────────────────────────────────────────────────
+//
+// Standard withdrawals share MIN_WITHDRAWAL_USD/MAX_WITHDRAWAL_USD from
+// withdrawal-validation.ts ($10 min is a deliberate business floor, not a
+// Stripe technical limit — kept as-is for Instant too, since a sub-$10
+// instant cash-out would mostly just pay the fee). MAX_WITHDRAWAL_USD
+// ($10,000 default) is looser than Stripe's own hard ceiling for `instant`
+// payouts (US: $9,999), so that ceiling needs its own, tighter check here.
+/** Stripe's US instant-payout max in USD — env-configurable via INSTANT_PAYOUT_MAX_USD; defaults to 9999. */
+export const INSTANT_PAYOUT_MAX_USD = readEnvNumberForInstantPayout('INSTANT_PAYOUT_MAX_USD', 9999);
+
+/** Stripe's US cap on instant payouts per connected account per day — env-configurable via MAX_INSTANT_PAYOUTS_PER_DAY; defaults to 10. */
+export const MAX_INSTANT_PAYOUTS_PER_DAY = readEnvNumberForInstantPayout('MAX_INSTANT_PAYOUTS_PER_DAY', 10);
+
+export type InstantLimitResult = { ok: true } | { ok: false; error: string; code: string };
+
+/** Rejects an instant amount above Stripe's $9,999 ceiling — checked in addition to (and tighter than) the shared MAX_WITHDRAWAL_USD. */
+export function validateInstantAmount(amount: number): InstantLimitResult {
+  if (amount > INSTANT_PAYOUT_MAX_USD) {
+    return {
+      ok: false,
+      error: `Instant Cash Out is limited to $${INSTANT_PAYOUT_MAX_USD.toLocaleString('en-US')} per transfer. Please use a standard bank withdrawal for larger amounts.`,
+      code: 'above_instant_maximum',
+    };
+  }
+  return { ok: true };
+}
+
+/**
+ * Checked against the connected account's live Balance object
+ * (`balance.instant_available`, filtered to 'usd') before ever touching the
+ * hunter's in-app balance — using `available` instead of `instant_available`
+ * here would let an instant payout be attempted against funds Stripe hasn't
+ * actually cleared for instant payout, which is exactly the wrong-field bug
+ * the pasted spec calls out by name.
+ */
+export function checkInstantBalance(amountCents: number, netAvailableCents: number): InstantLimitResult {
+  if (amountCents > netAvailableCents) {
+    return {
+      ok: false,
+      error:
+        'Your Stripe balance available for Instant Cash Out is lower than this amount right now. Try a smaller amount, or use a standard bank withdrawal.',
+      code: 'insufficient_instant_balance',
+    };
+  }
+  return { ok: true };
+}
+
+/** Stripe hard-caps instant payouts to 10/day per connected account — checked against a same-day count of this hunter's completed instant withdrawals. */
+export function checkInstantDailyLimit(countToday: number): InstantLimitResult {
+  if (countToday >= MAX_INSTANT_PAYOUTS_PER_DAY) {
+    return {
+      ok: false,
+      error: `You've reached the limit of ${MAX_INSTANT_PAYOUTS_PER_DAY} Instant Cash Outs per day. Please try again tomorrow, or use a standard bank withdrawal.`,
+      code: 'daily_instant_limit_reached',
+    };
+  }
+  return { ok: true };
+}
+
 // ─── Instant Cash Out destination (debit card) resolution ───────────────────
 //
 // Unlike bank accounts (see resolveWithdrawalDestination in

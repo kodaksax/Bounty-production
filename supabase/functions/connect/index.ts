@@ -389,6 +389,47 @@ function resolveInstantDestination(
 
   return { ok: true, targetCard: instantEligible[0] };
 }
+
+// Instant-specific limits — see the identical, documented copy in
+// ./instant-payout-validation.ts for the full rationale. Keep in sync.
+const INSTANT_PAYOUT_MAX_USD = readEnvNumberForInstantPayout('INSTANT_PAYOUT_MAX_USD', 9999);
+const MAX_INSTANT_PAYOUTS_PER_DAY = readEnvNumberForInstantPayout('MAX_INSTANT_PAYOUTS_PER_DAY', 10);
+
+type InstantLimitResult = { ok: true } | { ok: false; error: string; code: string };
+
+function validateInstantAmount(amount: number): InstantLimitResult {
+  if (amount > INSTANT_PAYOUT_MAX_USD) {
+    return {
+      ok: false,
+      error: `Instant Cash Out is limited to $${INSTANT_PAYOUT_MAX_USD.toLocaleString('en-US')} per transfer. Please use a standard bank withdrawal for larger amounts.`,
+      code: 'above_instant_maximum',
+    };
+  }
+  return { ok: true };
+}
+
+function checkInstantBalance(amountCents: number, netAvailableCents: number): InstantLimitResult {
+  if (amountCents > netAvailableCents) {
+    return {
+      ok: false,
+      error:
+        'Your Stripe balance available for Instant Cash Out is lower than this amount right now. Try a smaller amount, or use a standard bank withdrawal.',
+      code: 'insufficient_instant_balance',
+    };
+  }
+  return { ok: true };
+}
+
+function checkInstantDailyLimit(countToday: number): InstantLimitResult {
+  if (countToday >= MAX_INSTANT_PAYOUTS_PER_DAY) {
+    return {
+      ok: false,
+      error: `You've reached the limit of ${MAX_INSTANT_PAYOUTS_PER_DAY} Instant Cash Outs per day. Please try again tomorrow, or use a standard bank withdrawal.`,
+      code: 'daily_instant_limit_reached',
+    };
+  }
+  return { ok: true };
+}
 // ─── End inlined instant-payout-validation helpers ──────────────────────────
 
 // ─── Staged Phase 2 retirement of the legacy wallet-balance withdrawal path ─
@@ -1432,6 +1473,13 @@ Deno.serve(async (req: Request) => {
       const amount = validation.amount;
       const currency = 'usd';
 
+      // Instant-specific ceiling — tighter than the shared MAX_WITHDRAWAL_USD.
+      const instantAmountCheck = validateInstantAmount(amount);
+      if (!instantAmountCheck.ok) {
+        console.warn('[connect/instant-payout] amount above instant maximum', { userId, amount });
+        return jsonResponse({ error: instantAmountCheck.error, code: instantAmountCheck.code }, 400);
+      }
+
       const idempotencyKey =
         typeof body.idempotencyKey === 'string' && body.idempotencyKey.trim()
           ? body.idempotencyKey.trim().slice(0, 200)
@@ -1523,8 +1571,37 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      // Live payout eligibility + instant-eligible card resolution, before
-      // touching the balance — same fail-closed discipline as /transfer.
+      // Stripe caps instant payouts at 10/day per connected account — count
+      // this hunter's completed instant withdrawals in the last rolling 24h
+      // before touching the balance, same fail-closed discipline as the rest
+      // of this route.
+      const { count: instantPayoutsToday, error: instantCountError } = await supabase
+        .from('wallet_transactions')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('type', 'withdrawal')
+        .eq('payout_method', 'instant')
+        .eq('status', 'completed')
+        .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+      if (instantCountError) {
+        console.error('[connect/instant-payout] failed to count today\'s instant payouts', {
+          userId,
+          error: instantCountError,
+        });
+        return jsonResponse(
+          { error: 'We could not verify your Instant Cash Out eligibility. Please try again.', code: 'account_verification_failed' },
+          503
+        );
+      }
+      const dailyLimitCheck = checkInstantDailyLimit(instantPayoutsToday ?? 0);
+      if (!dailyLimitCheck.ok) {
+        console.warn('[connect/instant-payout] daily instant limit reached', { userId, count: instantPayoutsToday });
+        return jsonResponse({ error: dailyLimitCheck.error, code: dailyLimitCheck.code }, 429);
+      }
+
+      // Live payout eligibility + instant-eligible card resolution + instant
+      // balance check, before touching the balance — same fail-closed
+      // discipline as /transfer.
       let destinationCard: InstantCardSummary;
       try {
         const account = await stripe.accounts.retrieve(p.stripe_connect_account_id);
@@ -1564,6 +1641,24 @@ Deno.serve(async (req: Request) => {
           return jsonResponse({ error: destination.error, code: destination.code }, 400);
         }
         destinationCard = destination.targetCard;
+
+        // Use instant_available (not the plain `available` balance) — only
+        // funds Stripe reports here are actually eligible to pay out via
+        // `method: "instant"` right now. Using `available` instead is the
+        // exact wrong-field mistake called out in the integration spec this
+        // logic implements.
+        const balance = await stripe.balance.retrieve({ stripeAccount: p.stripe_connect_account_id });
+        const instantAvailableCents =
+          balance.instant_available?.find(b => b.currency === 'usd')?.net_available?.[0]?.amount ?? 0;
+        const instantBalanceCheck = checkInstantBalance(validation.amountCents, instantAvailableCents);
+        if (!instantBalanceCheck.ok) {
+          console.warn('[connect/instant-payout] insufficient instant-available balance', {
+            userId,
+            amountCents: validation.amountCents,
+            instantAvailableCents,
+          });
+          return jsonResponse({ error: instantBalanceCheck.error, code: instantBalanceCheck.code }, 400);
+        }
       } catch (accountError) {
         console.error('[connect/instant-payout] failed to verify connected account or cards', {
           userId,
@@ -1917,7 +2012,12 @@ Deno.serve(async (req: Request) => {
 
     // GET /connect/debit-cards — list debit-card external accounts (Instant
     // Cash Out destinations only; never used for the standard automatic
-    // payout sweep, see the default_for_currency note on POST below).
+    // payout sweep, see the default_for_currency note on POST below). Also
+    // returns instantAvailableCents (from balance.instant_available, NOT the
+    // plain `available` balance — see checkInstantBalance() above for why)
+    // so the client can gray out the Instant option *before* the hunter ever
+    // attempts a payout, rather than only discovering insufficient instant
+    // funds after tapping Confirm.
     if (req.method === 'GET' && subPath === '/debit-cards') {
       const { data: profile } = await supabase
         .from('profiles')
@@ -1928,7 +2028,7 @@ Deno.serve(async (req: Request) => {
       const accountId = (profile as { stripe_connect_account_id?: string } | null)
         ?.stripe_connect_account_id;
       if (!accountId) {
-        return jsonResponse({ debitCards: [] });
+        return jsonResponse({ debitCards: [], instantAvailableCents: 0 });
       }
 
       const cards = await stripe.accounts.listExternalAccounts(accountId, {
@@ -1948,7 +2048,23 @@ Deno.serve(async (req: Request) => {
           instantEligible: methods.includes('instant'),
         };
       });
-      return jsonResponse({ debitCards });
+
+      let instantAvailableCents = 0;
+      try {
+        const balance = await stripe.balance.retrieve({ stripeAccount: accountId });
+        instantAvailableCents =
+          balance.instant_available?.find(b => b.currency === 'usd')?.net_available?.[0]?.amount ?? 0;
+      } catch (balanceError) {
+        console.warn('[connect/debit-cards] failed to fetch instant_available balance', {
+          userId,
+          accountId,
+          error: (balanceError as { message?: string })?.message,
+        });
+        // Non-fatal: the list of cards is still useful without this figure;
+        // the client just can't pre-gate on instant balance this refresh.
+      }
+
+      return jsonResponse({ debitCards, instantAvailableCents });
     }
 
     // POST /connect/debit-cards — DEPRECATED.

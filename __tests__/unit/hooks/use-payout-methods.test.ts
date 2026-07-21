@@ -53,7 +53,10 @@ describe('usePayoutMethods', () => {
             availableBalance: 123.45,
           }),
       },
-      { ok: true, json: () => Promise.resolve({ debitCards: [eligibleCard, ineligibleCard] }) },
+      {
+        ok: true,
+        json: () => Promise.resolve({ debitCards: [eligibleCard, ineligibleCard], instantAvailableCents: 500 }),
+      },
     ]);
 
     const { result } = renderHook(() => usePayoutMethods());
@@ -62,10 +65,23 @@ describe('usePayoutMethods', () => {
     expect(result.current.bankAccounts).toEqual([bankAccount]);
     expect(result.current.debitCards).toEqual([eligibleCard, ineligibleCard]);
     expect(result.current.hasInstantEligibleCard).toBe(true);
+    expect(result.current.instantAvailableCents).toBe(500);
+    expect(result.current.canInstantCashOut).toBe(true);
     expect(result.current.minWithdrawal).toBe(15);
     expect(result.current.maxWithdrawal).toBe(5000);
     expect(result.current.availableBalance).toBe(123.45);
     expect(result.current.error).toBeNull();
+  });
+
+  it('canInstantCashOut is false when a card is instant-eligible but instantAvailableCents is 0', async () => {
+    mockFetchSequence([
+      { ok: true, json: () => Promise.resolve({ bankAccounts: [] }) },
+      { ok: true, json: () => Promise.resolve({ debitCards: [eligibleCard], instantAvailableCents: 0 }) },
+    ]);
+    const { result } = renderHook(() => usePayoutMethods());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.hasInstantEligibleCard).toBe(true);
+    expect(result.current.canInstantCashOut).toBe(false);
   });
 
   it('hasInstantEligibleCard is false when no card is instant-eligible', async () => {

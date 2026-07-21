@@ -45,7 +45,12 @@ export interface DebitCard {
 export interface UsePayoutMethodsResult {
   bankAccounts: BankAccount[];
   debitCards: DebitCard[];
+  /** True when at least one linked card supports instant payouts, regardless of current instant-available balance. Use for "add a card" messaging. */
   hasInstantEligibleCard: boolean;
+  /** Funds Stripe currently reports as eligible to pay out via method: "instant" right now (balance.instant_available, USD, in cents) — NOT the same as availableBalance. */
+  instantAvailableCents: number;
+  /** hasInstantEligibleCard AND instantAvailableCents > 0 — the actual "can the hunter tap Instant right now" gate. */
+  canInstantCashOut: boolean;
   minWithdrawal: number;
   maxWithdrawal: number | null;
   /** Available-to-withdraw balance as computed server-side (balance minus holds). */
@@ -61,6 +66,7 @@ export function usePayoutMethods(): UsePayoutMethodsResult {
   const { session } = useAuthContext();
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [debitCards, setDebitCards] = useState<DebitCard[]>([]);
+  const [instantAvailableCents, setInstantAvailableCents] = useState<number>(0);
   const [minWithdrawal, setMinWithdrawal] = useState<number>(MIN_WITHDRAWAL_AMOUNT);
   const [maxWithdrawal, setMaxWithdrawal] = useState<number | null>(null);
   const [availableBalance, setAvailableBalance] = useState<number | null>(null);
@@ -91,6 +97,7 @@ export function usePayoutMethods(): UsePayoutMethodsResult {
 
       setBankAccounts(bankData.bankAccounts ?? []);
       setDebitCards(cardData.debitCards ?? []);
+      setInstantAvailableCents(typeof cardData.instantAvailableCents === 'number' ? cardData.instantAvailableCents : 0);
       if (typeof bankData.minWithdrawal === 'number') setMinWithdrawal(bankData.minWithdrawal);
       if (typeof bankData.maxWithdrawal === 'number') setMaxWithdrawal(bankData.maxWithdrawal);
       if (typeof bankData.availableBalance === 'number') setAvailableBalance(bankData.availableBalance);
@@ -143,11 +150,14 @@ export function usePayoutMethods(): UsePayoutMethodsResult {
     () => debitCards.some(c => c.instantEligible),
     [debitCards]
   );
+  const canInstantCashOut = hasInstantEligibleCard && instantAvailableCents > 0;
 
   return {
     bankAccounts,
     debitCards,
     hasInstantEligibleCard,
+    instantAvailableCents,
+    canInstantCashOut,
     minWithdrawal,
     maxWithdrawal,
     availableBalance,
