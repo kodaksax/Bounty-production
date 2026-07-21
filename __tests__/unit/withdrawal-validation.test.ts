@@ -15,6 +15,7 @@ import {
   mapStripeTransferError,
   mapWithdrawBalanceError,
   resolveWithdrawalDestination,
+  validateAccountEligibility,
   validateWithdrawalRequest,
 } from '../../supabase/functions/connect/withdrawal-validation';
 
@@ -216,6 +217,18 @@ describe('resolveWithdrawalDestination', () => {
   });
 });
 
+describe('validateAccountEligibility', () => {
+  test.each(['suspended', 'banned'])('blocks a %s account', status => {
+    const result = validateAccountEligibility(status);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe('account_not_eligible');
+  });
+
+  test.each(['active', undefined, null, '', 'anything-else'])('allows account_status %p', status => {
+    expect(validateAccountEligibility(status as string | null | undefined)).toEqual({ ok: true });
+  });
+});
+
 describe('connect edge function contract (inlined helpers stay in sync)', () => {
   const indexSource = fs.readFileSync(
     path.join(__dirname, '../../supabase/functions/connect/index.ts'),
@@ -274,5 +287,15 @@ describe('connect edge function contract (inlined helpers stay in sync)', () => 
 
   test('records the resolved destination bank account on the wallet_transactions row', () => {
     expect(indexSource).toContain('destination_bank_account_id: destinationAccount.id');
+  });
+
+  test('inlines validateAccountEligibility and enforces it on both /transfer and /instant-payout', () => {
+    expect(indexSource).toContain('function validateAccountEligibility');
+    const callCount = (indexSource.match(/validateAccountEligibility\(p\.account_status\)/g) || []).length;
+    expect(callCount).toBe(2);
+    expect(indexSource).toContain("code: 'account_not_eligible'");
+    // Must be fetched from the DB wherever it's consumed, not assumed.
+    const selectsAccountStatus = (indexSource.match(/select\([^)]*account_status[^)]*\)/g) || []).length;
+    expect(selectsAccountStatus).toBeGreaterThanOrEqual(2);
   });
 });

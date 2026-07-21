@@ -11,6 +11,7 @@ export interface Profile {
   stripe_connect_onboarded_at?: string | null
   payout_failed_at?: string | null
   payout_failure_code?: string | null
+  account_status?: string | null
 }
 
 export interface WalletTransaction {

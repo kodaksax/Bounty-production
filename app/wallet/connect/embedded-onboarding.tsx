@@ -31,7 +31,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -40,13 +40,16 @@ import { API_BASE_URL } from '../../../lib/config/api';
 import { CONNECT_REFRESH_URL, CONNECT_RETURN_URL } from '../../../lib/config/app';
 import { analyticsService } from '../../../lib/services/analytics-service';
 import { supabase } from '../../../lib/supabase';
-import { colors } from '../../../lib/theme';
+import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../../lib/themes/types';
 
 type Phase = 'starting' | 'in_browser' | 'finalizing' | 'error';
 
 export default function ConnectOnboardingScreen() {
   const router = useRouter();
   const { session, isLoading: authLoading } = useAuthContext();
+  const { theme } = useAppThemeContext();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
 
   const [phase, setPhase] = useState<Phase>('starting');
   const [error, setError] = useState<string | null>(null);
@@ -200,7 +203,7 @@ export default function ConnectOnboardingScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#059669" />
+          <ActivityIndicator size="large" color={theme.primary} />
         </View>
       </SafeAreaView>
     );
@@ -249,7 +252,7 @@ export default function ConnectOnboardingScreen() {
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           style={styles.closeBtn}
         >
-          <MaterialIcons name="close" size={24} color={colors.text.primary} />
+          <MaterialIcons name="close" size={24} color={theme.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Set up payouts</Text>
         <View style={{ width: 24 }} />
@@ -258,10 +261,10 @@ export default function ConnectOnboardingScreen() {
       <View style={styles.body}>
         {phase === 'error' ? (
           <View style={styles.iconBadgeError}>
-            <MaterialIcons name="error-outline" size={40} color="#7f1d1d" />
+            <MaterialIcons name="error-outline" size={40} color="#ef4444" />
           </View>
         ) : (
-          <ActivityIndicator size="large" color="#059669" />
+          <ActivityIndicator size="large" color={theme.primary} />
         )}
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.message}>{message}</Text>
@@ -282,67 +285,69 @@ export default function ConnectOnboardingScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background.primary },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border.muted,
-    backgroundColor: colors.background.secondary,
-  },
-  headerTitle: { color: colors.text.primary, fontSize: 17, fontWeight: '600' },
-  closeBtn: { padding: 4 },
-  body: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  title: {
-    marginTop: 20,
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.text.primary,
-    textAlign: 'center',
-  },
-  message: {
-    marginTop: 8,
-    fontSize: 14,
-    lineHeight: 20,
-    color: colors.text.secondary,
-    textAlign: 'center',
-    maxWidth: 320,
-  },
-  iconBadgeError: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#fecaca',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primaryBtn: {
-    marginTop: 24,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#059669',
-    paddingVertical: 12,
-    paddingHorizontal: 28,
-    borderRadius: 999,
-  },
-  primaryBtnText: { color: '#ffffff', fontSize: 16, fontWeight: '700' },
-  secondaryBtn: {
-    marginTop: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-  },
-  secondaryBtnText: { color: colors.text.secondary, fontSize: 14, fontWeight: '500' },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  errorTitle: { color: colors.text.primary, fontSize: 18, fontWeight: '600' },
-  muted: { color: colors.text.secondary, marginTop: 8, fontSize: 14, textAlign: 'center' },
-});
+function makeStyles(t: AppTheme) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: t.background },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: t.border,
+      backgroundColor: t.surface,
+    },
+    headerTitle: { color: t.text, fontSize: 17, fontWeight: '600' },
+    closeBtn: { padding: 4 },
+    body: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 24,
+    },
+    title: {
+      marginTop: 20,
+      fontSize: 20,
+      fontWeight: '700',
+      color: t.text,
+      textAlign: 'center',
+    },
+    message: {
+      marginTop: 8,
+      fontSize: 14,
+      lineHeight: 20,
+      color: t.textSecondary,
+      textAlign: 'center',
+      maxWidth: 320,
+    },
+    iconBadgeError: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      backgroundColor: 'rgba(239,68,68,0.15)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    primaryBtn: {
+      marginTop: 24,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: t.primary,
+      paddingVertical: 12,
+      paddingHorizontal: 28,
+      borderRadius: 999,
+    },
+    primaryBtnText: { color: '#ffffff', fontSize: 16, fontWeight: '700' },
+    secondaryBtn: {
+      marginTop: 12,
+      paddingVertical: 10,
+      paddingHorizontal: 20,
+    },
+    secondaryBtnText: { color: t.textSecondary, fontSize: 14, fontWeight: '500' },
+    centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+    errorTitle: { color: t.text, fontSize: 18, fontWeight: '600' },
+    muted: { color: t.textSecondary, marginTop: 8, fontSize: 14, textAlign: 'center' },
+  });
+}

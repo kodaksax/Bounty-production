@@ -18,9 +18,11 @@ import type { AppTheme } from '../../lib/themes/types';
 import { openUrlInBrowser } from '../../lib/utils/browser';
 import { useWallet } from '../../lib/wallet-context';
 
-// Human-friendly messages for well-known Stripe failure codes.
+// Human-friendly messages for well-known Stripe failure codes. Exported so
+// withdrawal-result-screen.tsx can reuse the same on-brand copy for
+// standard-withdrawal and Instant Cash Out failures, not just this banner.
 // https://stripe.com/docs/api/payouts/object#payout_object-failure_code
-const FAILURE_CODE_MESSAGES: Record<string, string> = {
+export const FAILURE_CODE_MESSAGES: Record<string, string> = {
   account_closed: 'Your bank account has been closed. Please add a new one.',
   account_frozen: 'Your bank account is frozen. Please contact your bank.',
   bank_account_restricted:
@@ -44,7 +46,7 @@ const FAILURE_CODE_MESSAGES: Record<string, string> = {
   unsupported_card: 'Payouts to this card type are not supported.',
 };
 
-function getFailureMessage(failureCode: string | null, fallback?: string): string {
+export function getFailureMessage(failureCode: string | null, fallback?: string): string {
   if (failureCode && FAILURE_CODE_MESSAGES[failureCode]) {
     return FAILURE_CODE_MESSAGES[failureCode];
   }

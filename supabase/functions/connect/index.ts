@@ -261,6 +261,23 @@ function resolveWithdrawalDestination(
   const current = accounts.find(a => a.default_for_currency) ?? accounts[0];
   return { ok: true, targetAccount: current, needsDefaultUpdate: false };
 }
+
+type AccountEligibilityResult = { ok: true } | { ok: false; error: string; code: string };
+
+// Blocks self-service /transfer and /instant-payout for suspended/banned
+// accounts (profiles.account_status). Deliberately not applied to
+// admin-withdrawals' recovery actions — see withdrawal-validation.ts for
+// the full rationale. Keep in sync.
+function validateAccountEligibility(accountStatus: string | null | undefined): AccountEligibilityResult {
+  if (accountStatus === 'suspended' || accountStatus === 'banned') {
+    return {
+      ok: false,
+      error: 'Withdrawals are unavailable while your account is under review. Contact support for details.',
+      code: 'account_not_eligible',
+    };
+  }
+  return { ok: true };
+}
 // ─── End inlined withdrawal-validation helpers ──────────────────────────────
 
 // ─── Inlined from ./instant-payout-validation.ts ────────────────────────────
@@ -786,7 +803,7 @@ Deno.serve(async (req: Request) => {
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('balance, balance_on_hold, stripe_connect_account_id, stripe_connect_onboarded_at')
+        .select('balance, balance_on_hold, stripe_connect_account_id, stripe_connect_onboarded_at, account_status')
         .eq('id', userId)
         .single();
 
@@ -795,6 +812,13 @@ Deno.serve(async (req: Request) => {
       }
 
       const p = profile as Profile;
+
+      const accountEligibility = validateAccountEligibility(p.account_status);
+      if (!accountEligibility.ok) {
+        console.warn('[connect/transfer] blocked for account_status', { userId, accountStatus: p.account_status });
+        return jsonResponse({ error: accountEligibility.error, code: accountEligibility.code }, 403);
+      }
+
       if (!p.stripe_connect_account_id || !p.stripe_connect_onboarded_at) {
         return jsonResponse(
           {
@@ -1423,7 +1447,7 @@ Deno.serve(async (req: Request) => {
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('balance, balance_on_hold, stripe_connect_account_id, stripe_connect_onboarded_at')
+        .select('balance, balance_on_hold, stripe_connect_account_id, stripe_connect_onboarded_at, account_status')
         .eq('id', userId)
         .single();
 
@@ -1432,6 +1456,13 @@ Deno.serve(async (req: Request) => {
       }
 
       const p = profile as Profile;
+
+      const accountEligibility = validateAccountEligibility(p.account_status);
+      if (!accountEligibility.ok) {
+        console.warn('[connect/instant-payout] blocked for account_status', { userId, accountStatus: p.account_status });
+        return jsonResponse({ error: accountEligibility.error, code: accountEligibility.code }, 403);
+      }
+
       if (!p.stripe_connect_account_id || !p.stripe_connect_onboarded_at) {
         return jsonResponse(
           {

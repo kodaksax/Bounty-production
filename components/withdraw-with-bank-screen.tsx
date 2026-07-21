@@ -13,50 +13,35 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthContext } from '../hooks/use-auth-context';
+import { useConnectEligibility } from '../hooks/use-connect-eligibility';
 import { useEmailVerification } from '../hooks/use-email-verification';
+import { usePayoutMethods } from '../hooks/use-payout-methods';
 import { API_BASE_URL } from '../lib/config/api';
-import { MIN_WITHDRAWAL_AMOUNT } from '../lib/constants';
 import { analyticsService } from '../lib/services/analytics-service';
 import { formatCurrency } from '../lib/utils';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
 import { useWallet } from '../lib/wallet-context';
 import { AddBankAccountModal } from './add-bank-account-modal';
+import { AddDebitCardModal } from './add-debit-card-modal';
 import { InstantCashOutScreen } from './instant-cash-out-screen';
 import { PayoutMethodsScreen } from './payout-methods-screen';
 import { EmailVerificationBanner } from './ui/email-verification-banner';
-
-interface BankAccount {
-  id: string;
-  accountHolderName: string;
-  last4: string;
-  bankName?: string;
-  accountType: 'checking' | 'savings';
-  status: string;
-  default: boolean;
-}
+import { WithdrawalConfirmSheet } from './ui/withdrawal-confirm-sheet';
+import { WithdrawalResultScreen, type WithdrawalResultStatus } from './ui/withdrawal-result-screen';
+import { WithdrawMethodSelect } from './withdraw-method-select';
 
 interface WithdrawWithBankScreenProps {
   onBack?: () => void;
   balance?: number;
 }
 
-// Client-side copy for server-classified withdrawal error codes (see
-// supabase/functions/connect/index.ts). The server's `error` string is still
-// shown as the alert body; this only picks a more specific title.
-const ERROR_TITLES: Record<string, string> = {
-  not_onboarded: 'Setup Required',
-  insufficient_balance: 'Insufficient Balance',
-  below_minimum: 'Minimum Withdrawal',
-  above_maximum: 'Maximum Withdrawal',
-  frozen: 'Balance On Hold',
-  platform_funds: 'Withdrawals Unavailable',
-  transfer_failed: 'Withdrawal Failed',
-  no_bank_account: 'Bank Account Required',
-  bank_account_not_found: 'Bank Account Not Found',
-  bank_account_default_update_unconfirmed: 'Withdrawal Failed',
-  bank_account_resolution_failed: 'Withdrawal Failed',
-};
+interface WithdrawalResultData {
+  status: WithdrawalResultStatus;
+  transferId?: string | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+}
 
 function isNetworkError(error: unknown): boolean {
   return error instanceof TypeError || (error instanceof Error && /network/i.test(error.message));
@@ -72,21 +57,16 @@ export function WithdrawWithBankScreen({
   balance: propBalance,
 }: WithdrawWithBankScreenProps) {
   const [withdrawalAmount, setWithdrawalAmount] = useState<string>('');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [hasConnectedAccount, setHasConnectedAccount] = useState(false);
   const [isOnboarding, setIsOnboarding] = useState(false);
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [selectedBankAccount, setSelectedBankAccount] = useState<string>('');
-  const [isLoadingAccounts, setIsLoadingAccounts] = useState(false);
   const [showAddBankAccount, setShowAddBankAccount] = useState(false);
   const [showInstantCashOut, setShowInstantCashOut] = useState(false);
   const [showPayoutMethods, setShowPayoutMethods] = useState(false);
-  const [hasInstantEligibleCard, setHasInstantEligibleCard] = useState(false);
-  // Server-driven limits from GET /connect/bank-accounts. Fall back to the
-  // local MIN_WITHDRAWAL_AMOUNT constant / no cap until that call resolves.
-  const [minWithdrawal, setMinWithdrawal] = useState<number>(MIN_WITHDRAWAL_AMOUNT);
-  const [maxWithdrawal, setMaxWithdrawal] = useState<number | null>(null);
-  const [serverAvailableBalance, setServerAvailableBalance] = useState<number | null>(null);
+  const [showAddDebitCard, setShowAddDebitCard] = useState(false);
+  const [showConfirmSheet, setShowConfirmSheet] = useState(false);
+  const [submittedAmount, setSubmittedAmount] = useState(0);
+  const [submittedDestinationLabel, setSubmittedDestinationLabel] = useState('');
+  const [withdrawalResult, setWithdrawalResult] = useState<WithdrawalResultData | null>(null);
 
   const { balance: walletBalance, refreshFromApi, transactions } = useWallet();
   const { session } = useAuthContext();
@@ -96,6 +76,31 @@ export function WithdrawWithBankScreen({
   const insets = useSafeAreaInsets();
 
   const balance = propBalance ?? walletBalance;
+
+  const eligibility = useConnectEligibility();
+  const payoutMethods = usePayoutMethods();
+  const {
+    bankAccounts,
+    minWithdrawal,
+    maxWithdrawal,
+    availableBalance: serverAvailableBalance,
+    hasInstantEligibleCard,
+    isLoading: isLoadingAccounts,
+  } = payoutMethods;
+  const hasConnectedAccount = eligibility.isFullyOnboarded;
+
+  // Auto-select the default bank account (or the first one) whenever the
+  // shared bank-account list changes — mirrors the old loadBankAccounts()
+  // auto-select behavior.
+  useEffect(() => {
+    if (selectedBankAccount && bankAccounts.some(a => a.id === selectedBankAccount)) return;
+    const defaultAccount = bankAccounts.find(a => a.default);
+    if (defaultAccount) {
+      setSelectedBankAccount(defaultAccount.id);
+    } else if (bankAccounts.length > 0) {
+      setSelectedBankAccount(bankAccounts[0].id);
+    }
+  }, [bankAccounts, selectedBankAccount]);
 
   // Tracks whether we need to refresh Connect status when this screen
   // regains focus (i.e. the user returns from the embedded onboarding screen).
@@ -110,7 +115,6 @@ export function WithdrawWithBankScreen({
 
   const parsedAmount = parseFloat(withdrawalAmount);
   const isWithdrawDisabled =
-    isProcessing ||
     !hasConnectedAccount ||
     !withdrawalAmount ||
     isNaN(parsedAmount) ||
@@ -119,107 +123,23 @@ export function WithdrawWithBankScreen({
     bankAccounts.length === 0 ||
     !selectedBankAccount;
 
-  const loadConnectStatus = useCallback(async () => {
-    if (!session?.access_token) return;
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/connect/verify-onboarding`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setHasConnectedAccount(data.onboarded && data.payoutsEnabled);
-      }
-    } catch (error) {
-      console.error('Error loading Connect status:', error);
-    }
-  }, [session?.access_token]);
-
-  const loadBankAccounts = useCallback(async () => {
-    if (!session?.access_token) return;
-
-    setIsLoadingAccounts(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/connect/bank-accounts`, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setBankAccounts(data.bankAccounts || []);
-
-        if (typeof data.minWithdrawal === 'number') setMinWithdrawal(data.minWithdrawal);
-        if (typeof data.maxWithdrawal === 'number') setMaxWithdrawal(data.maxWithdrawal);
-        if (typeof data.availableBalance === 'number') setServerAvailableBalance(data.availableBalance);
-        // Only ever flip this on — verify-onboarding remains the source of
-        // truth for turning it off / triggering the DB write.
-        if (data.onboarded && data.payoutsEnabled) setHasConnectedAccount(true);
-
-        // Auto-select default bank account or first one
-        const defaultAccount = data.bankAccounts?.find((acc: BankAccount) => acc.default);
-        if (defaultAccount) {
-          setSelectedBankAccount(defaultAccount.id);
-        } else if (data.bankAccounts?.length > 0) {
-          setSelectedBankAccount(data.bankAccounts[0].id);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading bank accounts:', error);
-    } finally {
-      setIsLoadingAccounts(false);
-    }
-  }, [session?.access_token]);
-
-  const loadDebitCards = useCallback(async () => {
-    if (!session?.access_token) return;
-    try {
-      const response = await fetch(`${API_BASE_URL}/connect/debit-cards`, {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setHasInstantEligibleCard(
-          Array.isArray(data.debitCards) && data.debitCards.some((c: { instantEligible?: boolean }) => c.instantEligible)
-        );
-      }
-    } catch (error) {
-      console.error('Error loading debit cards:', error);
-    }
-  }, [session?.access_token]);
-
-  // Refresh Connect status and bank accounts when returning from the embedded
-  // onboarding screen, then clear the loading indicator.
+  // Refresh Connect status and payout methods when returning from the
+  // embedded onboarding screen, then clear the loading indicator.
   useFocusEffect(
     useCallback(() => {
       if (needsRefreshOnFocusRef.current) {
         needsRefreshOnFocusRef.current = false;
         (async () => {
           try {
-            await loadConnectStatus();
-            await loadBankAccounts();
+            await eligibility.refresh();
+            await payoutMethods.refresh();
           } finally {
             setIsOnboarding(false);
           }
         })();
       }
-    }, [loadConnectStatus, loadBankAccounts])
+    }, [eligibility.refresh, payoutMethods.refresh])
   );
-
-  // Load Connect status, bank accounts, and debit-card eligibility when session changes
-  useEffect(() => {
-    loadConnectStatus();
-    loadBankAccounts();
-    loadDebitCards();
-  }, [loadConnectStatus, loadBankAccounts, loadDebitCards]);
 
   // Withdrawal history, segmented by status — sourced from the same
   // transactions list the Wallet tab already loads (GET /wallet/transactions
@@ -341,18 +261,13 @@ export function WithdrawWithBankScreen({
       ? `${selectedAccount.bankName} account ending in ${selectedAccount.last4}`
       : `account ending in ${selectedAccount?.last4 ?? '****'}`;
 
-    Alert.alert(
-      'Confirm Withdrawal',
-      `Withdraw ${formatCurrency(amount)} to your ${destination}?\n\nThis account will also become your default payout account for future withdrawals. This typically arrives in 1-2 business days and can't be canceled once started.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Withdraw', style: 'destructive', onPress: () => performWithdraw(amount) },
-      ]
-    );
+    setSubmittedAmount(amount);
+    setSubmittedDestinationLabel(destination);
+    setShowConfirmSheet(true);
   };
 
   const performWithdraw = async (amount: number) => {
-    setIsProcessing(true);
+    setWithdrawalResult({ status: 'processing' });
 
     try {
       if (!session?.access_token) {
@@ -416,6 +331,7 @@ export function WithdrawWithBankScreen({
       // only re-reads that stale local cache; refreshFromApi() is the one
       // that actually re-fetches the post-withdrawal balance.
       await refreshFromApi(session?.access_token);
+      await payoutMethods.refresh();
 
       // Rotate the idempotency key so the next withdrawal gets a fresh key.
       idempotencyKeyRef.current = `withdraw_${session?.user?.id ?? 'u'}_${Date.now()}`;
@@ -432,12 +348,7 @@ export function WithdrawWithBankScreen({
         /* analytics is best-effort */
       }
 
-      // Show success
-      Alert.alert(
-        'Withdrawal Initiated',
-        `Transfer of ${formatCurrency(amount)} has been initiated to your bank account.\n\nEstimated arrival: 1-2 business days\n\nTransfer ID: ${transferId}`,
-        [{ text: 'OK', onPress: onBack }]
-      );
+      setWithdrawalResult({ status: 'success', transferId: transferId ?? null });
     } catch (error: any) {
       console.error('Withdrawal error:', error);
       try {
@@ -451,25 +362,22 @@ export function WithdrawWithBankScreen({
         /* analytics is best-effort */
       }
       if (error?.name === 'AbortError') {
-        Alert.alert(
-          'Request Timed Out',
-          'The request took too long to complete. Please check your connection and try again.',
-          [{ text: 'OK' }]
-        );
+        setWithdrawalResult({
+          status: 'failure',
+          errorMessage: 'The request took too long to complete. Please check your connection and try again.',
+        });
       } else if (isNetworkError(error)) {
-        Alert.alert(
-          'Connection Error',
-          'Could not reach the server. Please check your connection and try again.',
-          [{ text: 'OK' }]
-        );
+        setWithdrawalResult({
+          status: 'failure',
+          errorMessage: 'Could not reach the server. Please check your connection and try again.',
+        });
       } else {
-        const title = (error?.code && ERROR_TITLES[error.code]) || 'Withdrawal Failed';
-        Alert.alert(title, error.message || 'Failed to process withdrawal. Please try again.', [
-          { text: 'OK' },
-        ]);
+        setWithdrawalResult({
+          status: 'failure',
+          errorCode: error?.code,
+          errorMessage: error?.message || 'Failed to process withdrawal. Please try again.',
+        });
       }
-    } finally {
-      setIsProcessing(false);
     }
   };
 
@@ -479,7 +387,7 @@ export function WithdrawWithBankScreen({
 
   const handleBankAccountAdded = async () => {
     setShowAddBankAccount(false);
-    await loadBankAccounts();
+    await payoutMethods.refresh();
   };
 
   const handleRemoveBankAccount = async (bankAccountId: string) => {
@@ -489,23 +397,11 @@ export function WithdrawWithBankScreen({
         text: 'Remove',
         style: 'destructive',
         onPress: async () => {
-          try {
-            const response = await fetch(`${API_BASE_URL}/connect/bank-accounts/${bankAccountId}`, {
-              method: 'DELETE',
-              headers: {
-                Authorization: `Bearer ${session?.access_token}`,
-              },
-            });
-
-            if (response.ok) {
-              await loadBankAccounts();
-              Alert.alert('Success', 'Bank account removed successfully');
-            } else {
-              throw new Error('Failed to remove bank account');
-            }
-          } catch (error) {
-            console.error('Error removing bank account:', error);
-            Alert.alert('Error', 'Failed to remove bank account');
+          const result = await payoutMethods.removeBankAccount(bankAccountId);
+          if (result.ok) {
+            Alert.alert('Success', 'Bank account removed successfully');
+          } else {
+            Alert.alert('Error', result.error);
           }
         },
       },
@@ -521,15 +417,26 @@ export function WithdrawWithBankScreen({
     );
   }
 
+  if (showAddDebitCard) {
+    return (
+      <AddDebitCardModal
+        onBack={() => setShowAddDebitCard(false)}
+        onSave={async () => {
+          setShowAddDebitCard(false);
+          await payoutMethods.refresh();
+        }}
+      />
+    );
+  }
+
   if (showInstantCashOut) {
     return (
       <InstantCashOutScreen
         balance={balance}
         onBack={() => setShowInstantCashOut(false)}
-        onComplete={() => {
-          loadBankAccounts();
-          loadDebitCards();
-        }}
+        onComplete={() => payoutMethods.refresh()}
+        eligibility={eligibility}
+        payoutMethods={payoutMethods}
       />
     );
   }
@@ -539,9 +446,36 @@ export function WithdrawWithBankScreen({
       <PayoutMethodsScreen
         onBack={() => {
           setShowPayoutMethods(false);
-          loadBankAccounts();
-          loadDebitCards();
+          eligibility.refresh();
         }}
+        payoutMethods={payoutMethods}
+        eligibility={eligibility}
+      />
+    );
+  }
+
+  if (withdrawalResult) {
+    return (
+      <WithdrawalResultScreen
+        status={withdrawalResult.status}
+        method="standard"
+        amount={submittedAmount}
+        destinationLabel={submittedDestinationLabel}
+        estimatedArrival="1-3 business days"
+        transferId={withdrawalResult.transferId}
+        errorCode={withdrawalResult.errorCode}
+        errorMessage={withdrawalResult.errorMessage}
+        onDismiss={() => {
+          const wasSuccess = withdrawalResult.status === 'success';
+          setWithdrawalResult(null);
+          if (wasSuccess) {
+            setWithdrawalAmount('');
+            onBack?.();
+          }
+        }}
+        onRetry={
+          withdrawalResult.status === 'failure' ? () => performWithdraw(submittedAmount) : undefined
+        }
       />
     );
   }
@@ -589,23 +523,21 @@ export function WithdrawWithBankScreen({
           </View>
         </View>
 
-        {/* Instant Cash Out entry point — only surfaced once an
-            instant-eligible debit card is actually linked, so this never
-            promises something the account can't currently deliver. */}
-        {hasConnectedAccount && hasInstantEligibleCard && (
-          <TouchableOpacity
-            style={s.instantCard}
-            onPress={() => setShowInstantCashOut(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Instant Cash Out"
-          >
-            <MaterialIcons name="bolt" size={24} color="#22c55e" />
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={s.instantCardTitle}>Instant Cash Out</Text>
-              <Text style={s.instantCardSubtitle}>Get paid in minutes for a small fee</Text>
-            </View>
-            <MaterialIcons name="chevron-right" size={22} color={theme.textSecondary} />
-          </TouchableOpacity>
+        {/* Standard vs Instant chooser — always visible once a payout
+            account exists, so Instant is a real advertised choice rather
+            than a card that silently disappears when ineligible. Picking
+            Instant opens the dedicated Instant Cash Out screen; picking
+            Standard is a no-op (this screen already is the standard flow). */}
+        {hasConnectedAccount && (
+          <WithdrawMethodSelect
+            selected="standard"
+            onSelect={method => {
+              if (method === 'instant') setShowInstantCashOut(true);
+            }}
+            instantEligible={hasInstantEligibleCard}
+            instantIneligibleReason="Add a debit card to unlock"
+            onAddDebitCard={() => setShowAddDebitCard(true)}
+          />
         )}
 
         <TouchableOpacity
@@ -786,7 +718,7 @@ export function WithdrawWithBankScreen({
         <View style={s.infoCard}>
           <MaterialIcons name="info-outline" size={20} color={theme.primary} />
           <Text style={s.infoText}>
-            Withdrawals typically arrive in 1-2 business days. There are no fees for standard bank
+            Withdrawals typically arrive in 1-3 business days. There are no fees for standard bank
             transfers. The bank account you select becomes your default payout account going
             forward.
           </Text>
@@ -854,18 +786,25 @@ export function WithdrawWithBankScreen({
           accessibilityRole="button"
           accessibilityState={{ disabled: isWithdrawDisabled }}
         >
-          {isProcessing ? (
-            <>
-              <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />
-              <Text style={s.withdrawButtonText}>Processing...</Text>
-            </>
-          ) : (
-            <Text style={s.withdrawButtonText}>
-              Withdraw {withdrawalAmount ? formatCurrency(parseFloat(withdrawalAmount)) : ''}
-            </Text>
-          )}
+          <Text style={s.withdrawButtonText}>
+            Withdraw {withdrawalAmount ? formatCurrency(parseFloat(withdrawalAmount)) : ''}
+          </Text>
         </TouchableOpacity>
       </View>
+
+      <WithdrawalConfirmSheet
+        visible={showConfirmSheet}
+        method="standard"
+        amount={submittedAmount}
+        destinationLabel={submittedDestinationLabel}
+        estimatedArrival="1-3 business days"
+        isSubmitting={false}
+        onConfirm={() => {
+          setShowConfirmSheet(false);
+          performWithdraw(submittedAmount);
+        }}
+        onCancel={() => setShowConfirmSheet(false)}
+      />
     </View>
   );
 }
@@ -934,26 +873,6 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: t.text,
-  },
-  instantCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(34,197,94,0.12)',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(34,197,94,0.35)',
-  },
-  instantCardTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: t.text,
-  },
-  instantCardSubtitle: {
-    fontSize: 12,
-    color: t.textSecondary,
-    marginTop: 2,
   },
   manageMethodsLink: {
     flexDirection: 'row',

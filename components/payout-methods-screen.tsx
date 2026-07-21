@@ -1,5 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { Href } from 'expo-router';
+import { useRouter } from 'expo-router';
+import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -10,34 +12,17 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAuthContext } from '../hooks/use-auth-context';
-import { config } from '../lib/config';
-import { API_BASE_URL } from '../lib/config/api';
+import type { UseConnectEligibilityResult } from '../hooks/use-connect-eligibility';
+import type { UsePayoutMethodsResult } from '../hooks/use-payout-methods';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
 import { AddBankAccountModal } from './add-bank-account-modal';
 import { AddDebitCardModal } from './add-debit-card-modal';
 
-interface BankAccount {
-  id: string;
-  bankName?: string | null;
-  last4: string | null;
-  accountType?: string | null;
-  default: boolean;
-  status: string;
-}
-
-interface DebitCard {
-  id: string;
-  brand: string | null;
-  last4: string | null;
-  expMonth: number | null;
-  expYear: number | null;
-  instantEligible: boolean;
-}
-
 interface PayoutMethodsScreenProps {
   onBack: () => void;
+  payoutMethods: UsePayoutMethodsResult;
+  eligibility: UseConnectEligibilityResult;
 }
 
 /**
@@ -48,60 +33,21 @@ interface PayoutMethodsScreenProps {
  * default_for_currency; see the constraint documented next to
  * resolveInstantDestination() in supabase/functions/connect/index.ts).
  */
-export function PayoutMethodsScreen({ onBack }: PayoutMethodsScreenProps) {
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
-  const [debitCards, setDebitCards] = useState<DebitCard[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+export function PayoutMethodsScreen({ onBack, payoutMethods, eligibility }: PayoutMethodsScreenProps) {
   const [showAddBank, setShowAddBank] = useState(false);
   const [showAddCard, setShowAddCard] = useState(false);
 
-  const { session } = useAuthContext();
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const insets = useSafeAreaInsets();
+  const router = useRouter();
 
-  const authHeaders = useCallback(
-    () => ({
-      Authorization: `Bearer ${session?.access_token ?? ''}`,
-      ...(config.supabase.anonKey ? { apikey: config.supabase.anonKey } : {}),
-    }),
-    [session?.access_token]
-  );
-
-  const load = useCallback(async () => {
-    if (!session?.access_token) return;
-    setIsLoading(true);
-    try {
-      const [bankRes, cardRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/connect/bank-accounts`, { method: 'GET', headers: authHeaders() }),
-        fetch(`${API_BASE_URL}/connect/debit-cards`, { method: 'GET', headers: authHeaders() }),
-      ]);
-      const bankData = bankRes.ok ? await bankRes.json() : { bankAccounts: [] };
-      const cardData = cardRes.ok ? await cardRes.json() : { debitCards: [] };
-      setBankAccounts(bankData.bankAccounts ?? []);
-      setDebitCards(cardData.debitCards ?? []);
-    } catch (error) {
-      console.error('[payout-methods] Failed to load payout methods:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [session?.access_token, authHeaders]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const { bankAccounts, debitCards, isLoading, refresh, removeBankAccount, removeDebitCard, setDefaultBankAccount } =
+    payoutMethods;
 
   const handleSetDefaultBank = async (bankAccountId: string) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/connect/bank-accounts/${bankAccountId}/default`, {
-        method: 'POST',
-        headers: authHeaders(),
-      });
-      if (!response.ok) throw new Error('Failed to set default bank account');
-      await load();
-    } catch {
-      Alert.alert('Error', 'Failed to update your default bank account.');
-    }
+    const result = await setDefaultBankAccount(bankAccountId);
+    if (!result.ok) Alert.alert('Error', result.error);
   };
 
   const handleRemoveBank = (bankAccountId: string) => {
@@ -111,16 +57,8 @@ export function PayoutMethodsScreen({ onBack }: PayoutMethodsScreenProps) {
         text: 'Remove',
         style: 'destructive',
         onPress: async () => {
-          try {
-            const response = await fetch(`${API_BASE_URL}/connect/bank-accounts/${bankAccountId}`, {
-              method: 'DELETE',
-              headers: authHeaders(),
-            });
-            if (!response.ok) throw new Error('Failed to remove bank account');
-            await load();
-          } catch {
-            Alert.alert('Error', 'Failed to remove bank account.');
-          }
+          const result = await removeBankAccount(bankAccountId);
+          if (!result.ok) Alert.alert('Error', result.error);
         },
       },
     ]);
@@ -133,26 +71,18 @@ export function PayoutMethodsScreen({ onBack }: PayoutMethodsScreenProps) {
         text: 'Remove',
         style: 'destructive',
         onPress: async () => {
-          try {
-            const response = await fetch(`${API_BASE_URL}/connect/debit-cards/${debitCardId}`, {
-              method: 'DELETE',
-              headers: authHeaders(),
-            });
-            if (!response.ok) throw new Error('Failed to remove debit card');
-            await load();
-          } catch {
-            Alert.alert('Error', 'Failed to remove debit card.');
-          }
+          const result = await removeDebitCard(debitCardId);
+          if (!result.ok) Alert.alert('Error', result.error);
         },
       },
     ]);
   };
 
   if (showAddBank) {
-    return <AddBankAccountModal onBack={() => setShowAddBank(false)} onSave={() => load()} />;
+    return <AddBankAccountModal onBack={() => setShowAddBank(false)} onSave={() => refresh()} />;
   }
   if (showAddCard) {
-    return <AddDebitCardModal onBack={() => setShowAddCard(false)} onSave={() => load()} />;
+    return <AddDebitCardModal onBack={() => setShowAddCard(false)} onSave={() => refresh()} />;
   }
 
   return (
@@ -260,6 +190,19 @@ export function PayoutMethodsScreen({ onBack }: PayoutMethodsScreenProps) {
                 ))
               )}
             </View>
+
+            {eligibility.connectedAccountExists && (
+              <TouchableOpacity
+                onPress={() => router.push('/wallet/payments' as Href)}
+                style={s.paymentActivityLink}
+                accessibilityRole="button"
+                accessibilityLabel="View payment activity"
+              >
+                <MaterialIcons name="receipt-long" size={20} color={theme.text} />
+                <Text style={s.paymentActivityLinkText}>View Payment Activity</Text>
+                <MaterialIcons name="chevron-right" size={22} color={theme.textSecondary} />
+              </TouchableOpacity>
+            )}
           </>
         )}
       </ScrollView>
@@ -306,4 +249,9 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
   ineligibleBadgeText: { fontSize: 10, fontWeight: '600', color: t.textDisabled },
   setDefaultLink: { fontSize: 12, fontWeight: '600', color: t.primary, marginTop: 4 },
   removeButton: { padding: 8 },
+  paymentActivityLink: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: t.surface,
+    borderRadius: 12, padding: 14, marginTop: 4,
+  },
+  paymentActivityLinkText: { flex: 1, fontSize: 14, fontWeight: '600', color: t.text, marginLeft: 10 },
 }); }

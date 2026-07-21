@@ -301,3 +301,29 @@ export function resolveWithdrawalDestination(
   const current = accounts.find(a => a.default_for_currency) ?? accounts[0];
   return { ok: true, targetAccount: current, needsDefaultUpdate: false };
 }
+
+export type AccountEligibilityResult = { ok: true } | { ok: false; error: string; code: string };
+
+/**
+ * Blocks self-service withdrawals (both standard and Instant Cash Out) for
+ * accounts an admin has suspended or banned via profiles.account_status
+ * (see 20260719030000_add_profiles_account_status.sql). That migration
+ * shipped as plumbing-only and explicitly named "no withdrawal check reads
+ * this column yet" as a known follow-up (docs/withdrawals/09-security-audit-findings-2026-07-19.md
+ * finding #3) — this is that follow-up. Deliberately NOT applied to the
+ * admin-withdrawals recovery tool (force_retry/manual_adjustment): paying
+ * out a legitimately-earned balance to a suspended/banned user is a human
+ * admin decision, not something this guard should block.
+ */
+export function validateAccountEligibility(
+  accountStatus: string | null | undefined
+): AccountEligibilityResult {
+  if (accountStatus === 'suspended' || accountStatus === 'banned') {
+    return {
+      ok: false,
+      error: 'Withdrawals are unavailable while your account is under review. Contact support for details.',
+      code: 'account_not_eligible',
+    };
+  }
+  return { ok: true };
+}

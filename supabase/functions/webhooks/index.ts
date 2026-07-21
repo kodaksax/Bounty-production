@@ -253,7 +253,7 @@ async function handleUndeliveredPayout(
   if (!candidateTx) {
     console.warn(
       `[webhooks] No matching completed withdrawal found for payout ${payout.id} ` +
-        `(user ${profile.id}, amount $${payoutAmountDollars}) — nothing to refund. ` +
+        `(user ${profile.id}, amount $${payout.amount / 100}) — nothing to refund. ` +
         'Manual review recommended if this is unexpected.'
     );
   } else {

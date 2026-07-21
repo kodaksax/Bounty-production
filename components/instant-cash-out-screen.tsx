@@ -2,7 +2,6 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,6 +11,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthContext } from '../hooks/use-auth-context';
+import type { UseConnectEligibilityResult } from '../hooks/use-connect-eligibility';
+import type { UsePayoutMethodsResult } from '../hooks/use-payout-methods';
 import { config } from '../lib/config';
 import { API_BASE_URL } from '../lib/config/api';
 import { formatCurrency } from '../lib/utils';
@@ -19,33 +20,8 @@ import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
 import { useWallet } from '../lib/wallet-context';
 import { AddDebitCardModal } from './add-debit-card-modal';
-
-interface DebitCard {
-  id: string;
-  brand: string | null;
-  last4: string | null;
-  instantEligible: boolean;
-}
-
-interface EligibilityState {
-  loading: boolean;
-  connectedAccountExists: boolean;
-  detailsSubmitted: boolean;
-  chargesEnabled: boolean;
-  payoutsEnabled: boolean;
-  hasInstantEligibleCard: boolean;
-  error: string | null;
-}
-
-const INITIAL_ELIGIBILITY: EligibilityState = {
-  loading: true,
-  connectedAccountExists: false,
-  detailsSubmitted: false,
-  chargesEnabled: false,
-  payoutsEnabled: false,
-  hasInstantEligibleCard: false,
-  error: null,
-};
+import { WithdrawalConfirmSheet } from './ui/withdrawal-confirm-sheet';
+import { WithdrawalResultScreen, type WithdrawalResultStatus } from './ui/withdrawal-result-screen';
 
 // Mirrors the server-side defaults (INSTANT_PAYOUT_FEE_PERCENT /
 // INSTANT_PAYOUT_FEE_MIN_USD in supabase/functions/connect/index.ts) for
@@ -65,16 +41,28 @@ interface InstantCashOutScreenProps {
   /** Called after a successful (or gracefully-fallen-back) cash out so the caller can refresh balance/history. */
   onComplete?: () => void;
   balance?: number;
+  eligibility: UseConnectEligibilityResult;
+  payoutMethods: UsePayoutMethodsResult;
 }
 
-export function InstantCashOutScreen({ onBack, onComplete, balance: propBalance }: InstantCashOutScreenProps) {
-  const [eligibility, setEligibility] = useState<EligibilityState>(INITIAL_ELIGIBILITY);
-  const [debitCards, setDebitCards] = useState<DebitCard[]>([]);
+export function InstantCashOutScreen({
+  onBack,
+  onComplete,
+  balance: propBalance,
+  eligibility,
+  payoutMethods,
+}: InstantCashOutScreenProps) {
   const [selectedCardId, setSelectedCardId] = useState<string>('');
-  const [availableBalance, setAvailableBalance] = useState<number | null>(null);
   const [amount, setAmount] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
   const [showAddCard, setShowAddCard] = useState(false);
+  const [showConfirmSheet, setShowConfirmSheet] = useState(false);
+  const [cashOutResult, setCashOutResult] = useState<{
+    status: WithdrawalResultStatus;
+    payoutId?: string | null;
+    fellBackToStandard?: boolean;
+    errorCode?: string | null;
+    errorMessage?: string | null;
+  } | null>(null);
 
   const { balance: walletBalance, refreshFromApi } = useWallet();
   const { session } = useAuthContext();
@@ -94,47 +82,17 @@ export function InstantCashOutScreen({ onBack, onComplete, balance: propBalance 
     [session?.access_token]
   );
 
-  const loadEligibility = useCallback(async () => {
-    if (!session?.access_token) return;
-    setEligibility(prev => ({ ...prev, loading: true, error: null }));
-    try {
-      const [onboardingRes, cardsRes, bankRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/connect/verify-onboarding`, { method: 'POST', headers: authHeaders() }),
-        fetch(`${API_BASE_URL}/connect/debit-cards`, { method: 'GET', headers: authHeaders() }),
-        fetch(`${API_BASE_URL}/connect/bank-accounts`, { method: 'GET', headers: authHeaders() }),
-      ]);
+  const { debitCards, availableBalance, hasInstantEligibleCard } = payoutMethods;
+  const loading = eligibility.loading || payoutMethods.isLoading;
+  const loadError = eligibility.error ?? payoutMethods.error;
 
-      const onboardingData = onboardingRes.ok ? await onboardingRes.json() : {};
-      const cardsData = cardsRes.ok ? await cardsRes.json() : { debitCards: [] };
-      const bankData = bankRes.ok ? await bankRes.json() : {};
-
-      const cards: DebitCard[] = cardsData.debitCards ?? [];
-      setDebitCards(cards);
-      const eligibleCard = cards.find(c => c.instantEligible);
-      if (eligibleCard) setSelectedCardId(eligibleCard.id);
-
-      if (typeof bankData.availableBalance === 'number') {
-        setAvailableBalance(bankData.availableBalance);
-      }
-
-      setEligibility({
-        loading: false,
-        connectedAccountExists: !!onboardingData.accountId,
-        detailsSubmitted: !!onboardingData.detailsSubmitted,
-        chargesEnabled: !!onboardingData.chargesEnabled,
-        payoutsEnabled: !!onboardingData.payoutsEnabled,
-        hasInstantEligibleCard: cards.some(c => c.instantEligible),
-        error: null,
-      });
-    } catch (error) {
-      console.error('[instant-cash-out] Failed to load eligibility:', error);
-      setEligibility(prev => ({ ...prev, loading: false, error: 'Could not check Instant Cash Out eligibility. Please try again.' }));
-    }
-  }, [session?.access_token, authHeaders]);
-
+  // Auto-select the first instant-eligible card whenever the shared card
+  // list changes (e.g. after adding one via AddDebitCardModal).
   useEffect(() => {
-    loadEligibility();
-  }, [loadEligibility]);
+    if (selectedCardId && debitCards.some(c => c.id === selectedCardId && c.instantEligible)) return;
+    const eligibleCard = debitCards.find(c => c.instantEligible);
+    if (eligibleCard) setSelectedCardId(eligibleCard.id);
+  }, [debitCards, selectedCardId]);
 
   const parsedAmount = parseFloat(amount);
   const effectiveAvailable = availableBalance ?? balance;
@@ -142,10 +100,9 @@ export function InstantCashOutScreen({ onBack, onComplete, balance: propBalance 
     eligibility.connectedAccountExists &&
     eligibility.chargesEnabled &&
     eligibility.payoutsEnabled &&
-    eligibility.hasInstantEligibleCard;
+    hasInstantEligibleCard;
 
   const isCashOutDisabled =
-    isProcessing ||
     !isFullyEligible ||
     !amount ||
     isNaN(parsedAmount) ||
@@ -155,25 +112,17 @@ export function InstantCashOutScreen({ onBack, onComplete, balance: propBalance 
 
   const estimatedFee = estimateFee(parsedAmount || 0);
   const estimatedNet = Math.max((parsedAmount || 0) - estimatedFee, 0);
+  const selectedCard = debitCards.find(c => c.id === selectedCardId);
+  const destinationLabel = selectedCard
+    ? `${selectedCard.brand ?? 'card'} •••• ${selectedCard.last4 ?? ''}`
+    : 'your debit card';
 
   const handleCashOut = () => {
-    const selectedCard = debitCards.find(c => c.id === selectedCardId);
-    const destination = selectedCard
-      ? `${selectedCard.brand ?? 'card'} •••• ${selectedCard.last4 ?? ''}`
-      : 'your debit card';
-
-    Alert.alert(
-      'Confirm Instant Cash Out',
-      `Send ${formatCurrency(parsedAmount)} to ${destination}?\n\nEstimated fee: ${formatCurrency(estimatedFee)}\nYou'll receive: ${formatCurrency(estimatedNet)}\n\nMost instant cash outs arrive within minutes.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Cash Out Now', style: 'default', onPress: performCashOut },
-      ]
-    );
+    setShowConfirmSheet(true);
   };
 
   const performCashOut = async () => {
-    setIsProcessing(true);
+    setCashOutResult({ status: 'processing' });
     try {
       if (!session?.access_token) throw new Error('Not authenticated. Please sign in again.');
 
@@ -206,27 +155,17 @@ export function InstantCashOutScreen({ onBack, onComplete, balance: propBalance 
       await refreshFromApi(session.access_token);
       idempotencyKeyRef.current = `instant_${session?.user?.id ?? 'u'}_${Date.now()}`;
 
-      if (data.fellBackToStandard) {
-        Alert.alert(
-          'Sent via Standard Transfer',
-          data.message ?? "Instant Cash Out couldn't complete, but your withdrawal is on its way via standard transfer.",
-          [{ text: 'OK', onPress: () => { onComplete?.(); onBack(); } }]
-        );
-      } else {
-        Alert.alert(
-          'Cash Out Sent',
-          `${formatCurrency(parsedAmount)} is on its way to your card, typically within minutes.`,
-          [{ text: 'OK', onPress: () => { onComplete?.(); onBack(); } }]
-        );
-      }
+      setCashOutResult({
+        status: 'success',
+        payoutId: data.payoutId ?? data.transferId ?? null,
+        fellBackToStandard: !!data.fellBackToStandard,
+      });
     } catch (error: any) {
-      if (error?.code === 'instant_cashout_disabled') {
-        Alert.alert('Instant Cash Out Unavailable', 'This feature is not currently available. Please use a standard withdrawal.');
-      } else {
-        Alert.alert('Cash Out Failed', error?.message ?? 'Something went wrong. Please try again.');
-      }
-    } finally {
-      setIsProcessing(false);
+      setCashOutResult({
+        status: 'failure',
+        errorCode: error?.code,
+        errorMessage: error?.message ?? 'Something went wrong. Please try again.',
+      });
     }
   };
 
@@ -234,7 +173,34 @@ export function InstantCashOutScreen({ onBack, onComplete, balance: propBalance 
     return (
       <AddDebitCardModal
         onBack={() => setShowAddCard(false)}
-        onSave={() => loadEligibility()}
+        onSave={() => payoutMethods.refresh()}
+      />
+    );
+  }
+
+  if (cashOutResult) {
+    return (
+      <WithdrawalResultScreen
+        status={cashOutResult.status}
+        method="instant"
+        amount={parsedAmount || 0}
+        netAmount={cashOutResult.fellBackToStandard ? undefined : estimatedNet}
+        fee={cashOutResult.fellBackToStandard ? undefined : estimatedFee}
+        destinationLabel={cashOutResult.fellBackToStandard ? undefined : destinationLabel}
+        transferId={cashOutResult.payoutId}
+        fellBackToStandard={cashOutResult.fellBackToStandard}
+        errorCode={cashOutResult.errorCode}
+        errorMessage={cashOutResult.errorMessage}
+        onDismiss={() => {
+          const wasSuccess = cashOutResult.status === 'success';
+          setCashOutResult(null);
+          if (wasSuccess) {
+            setAmount('');
+            onComplete?.();
+            onBack();
+          }
+        }}
+        onRetry={cashOutResult.status === 'failure' ? () => performCashOut() : undefined}
       />
     );
   }
@@ -245,7 +211,7 @@ export function InstantCashOutScreen({ onBack, onComplete, balance: propBalance 
     { label: 'Identity details submitted', met: eligibility.detailsSubmitted, hint: 'Finish submitting your identity details with Stripe.' },
     { label: 'Charges enabled', met: eligibility.chargesEnabled },
     { label: 'Payouts enabled', met: eligibility.payoutsEnabled, hint: 'Review your payout details — something may need attention.' },
-    { label: 'Eligible debit card linked', met: eligibility.hasInstantEligibleCard, hint: 'Add a debit card. Not every card supports Instant Cash Out.' },
+    { label: 'Eligible debit card linked', met: hasInstantEligibleCard, hint: 'Add a debit card. Not every card supports Instant Cash Out.' },
     { label: 'Sufficient available balance', met: effectiveAvailable > 0 },
   ];
 
@@ -265,7 +231,7 @@ export function InstantCashOutScreen({ onBack, onComplete, balance: propBalance 
           <Text style={s.balanceAmount}>{formatCurrency(effectiveAvailable)}</Text>
         </View>
 
-        {eligibility.loading ? (
+        {loading ? (
           <ActivityIndicator size="small" color={theme.primary} style={{ marginVertical: 16 }} />
         ) : (
           <View style={s.section}>
@@ -283,11 +249,11 @@ export function InstantCashOutScreen({ onBack, onComplete, balance: propBalance 
                 </View>
               </View>
             ))}
-            {eligibility.error ? <Text style={s.errorText}>{eligibility.error}</Text> : null}
+            {loadError ? <Text style={s.errorText}>{loadError}</Text> : null}
           </View>
         )}
 
-        {eligibility.hasInstantEligibleCard && (
+        {hasInstantEligibleCard && (
           <View style={s.section}>
             <Text style={s.sectionTitle}>Send To</Text>
             {debitCards.filter(c => c.instantEligible).map(card => (
@@ -310,7 +276,7 @@ export function InstantCashOutScreen({ onBack, onComplete, balance: propBalance 
           </View>
         )}
 
-        {!eligibility.loading && (
+        {!loading && (
           <TouchableOpacity
             onPress={() => setShowAddCard(true)}
             style={s.addCardButton}
@@ -345,7 +311,7 @@ export function InstantCashOutScreen({ onBack, onComplete, balance: propBalance 
           )}
           {parsedAmount > 0 && (
             <View style={s.feeRow}>
-              <Text style={s.feeLabelStrong}>You'll receive</Text>
+              <Text style={s.feeLabelStrong}>You&apos;ll receive</Text>
               <Text style={s.feeValueStrong}>{formatCurrency(estimatedNet)}</Text>
             </View>
           )}
@@ -369,18 +335,27 @@ export function InstantCashOutScreen({ onBack, onComplete, balance: propBalance 
           accessibilityLabel={amount ? `Cash out ${formatCurrency(parsedAmount)} instantly` : 'Cash out instantly'}
           accessibilityState={{ disabled: isCashOutDisabled }}
         >
-          {isProcessing ? (
-            <>
-              <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />
-              <Text style={s.cashOutButtonText}>Sending…</Text>
-            </>
-          ) : (
-            <Text style={s.cashOutButtonText}>
-              {amount ? `Cash Out ${formatCurrency(parsedAmount)}` : 'Cash Out Instantly'}
-            </Text>
-          )}
+          <Text style={s.cashOutButtonText}>
+            {amount ? `Cash Out ${formatCurrency(parsedAmount)}` : 'Cash Out Instantly'}
+          </Text>
         </TouchableOpacity>
       </View>
+
+      <WithdrawalConfirmSheet
+        visible={showConfirmSheet}
+        method="instant"
+        amount={parsedAmount || 0}
+        fee={estimatedFee}
+        netAmount={estimatedNet}
+        destinationLabel={destinationLabel}
+        estimatedArrival="Usually within minutes"
+        isSubmitting={false}
+        onConfirm={() => {
+          setShowConfirmSheet(false);
+          performCashOut();
+        }}
+        onCancel={() => setShowConfirmSheet(false)}
+      />
     </View>
   );
 }
