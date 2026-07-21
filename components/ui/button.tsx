@@ -1,10 +1,11 @@
 import { cva, type VariantProps } from "class-variance-authority"
+import { useAccessibleAnimation } from "hooks/use-accessible-animation"
 import { useHapticFeedback } from "lib/haptic-feedback"
-import { useAppThemeContext } from "lib/themes/AppThemeContext"
+import { useAppThemeContext } from "lib/themes"
 import type { AppTheme } from "lib/themes/types"
-import { cn } from "lib/utils"
+import { cn, withAlpha } from "lib/utils"
 import * as React from "react"
-import { StyleSheet, Text, TouchableOpacity, TouchableOpacityProps } from "react-native"
+import { ActivityIndicator, Animated, StyleSheet, Text, TouchableOpacity, TouchableOpacityProps } from "react-native"
 
 export const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
@@ -42,80 +43,39 @@ export interface ButtonProps
   children?: React.ReactNode;
   accessibilityLabel?: string;
   accessibilityHint?: string;
+  /**
+   * Shows an inline spinner in place of the label and blocks interaction.
+   * The label stays laid out (invisible) underneath so the button doesn't
+   * change size when toggling in/out of the loading state.
+   */
+  loading?: boolean;
 }
 
-// Text color placed on top of the bright brand-green primary fill. Matches
-// the dark-on-green convention used across onboarding/wallet (see e.g.
-// lib/onboarding/onboarding-details-styles.ts nextButtonText) so a button
-// rendered through this shared component looks identical to the hand-rolled
-// primary CTAs elsewhere in the app.
-const ON_PRIMARY_TEXT = '#052e1b';
-const ON_DESTRUCTIVE_TEXT = '#ffffff';
-
-type Variant = NonNullable<VariantProps<typeof buttonVariants>["variant"]>;
-type Size = NonNullable<VariantProps<typeof buttonVariants>["size"]>;
-
-interface VariantColors {
-  background: string;
-  border: string;
-  text: string;
-  shadowColor: string;
-}
-
-function makeVariantColors(appTheme: AppTheme): Record<Variant, VariantColors> {
-  return {
-    default: {
-      background: appTheme.primary,
-      border: appTheme.primary,
-      text: ON_PRIMARY_TEXT,
-      shadowColor: appTheme.primary,
-    },
-    destructive: {
-      background: appTheme.error,
-      border: appTheme.error,
-      text: ON_DESTRUCTIVE_TEXT,
-      shadowColor: appTheme.error,
-    },
-    outline: {
-      background: 'transparent',
-      border: appTheme.primary,
-      text: appTheme.primary,
-      shadowColor: 'transparent',
-    },
-    secondary: {
-      background: appTheme.surfaceSecondary,
-      border: appTheme.border,
-      text: appTheme.text,
-      shadowColor: 'transparent',
-    },
-    ghost: {
-      background: 'transparent',
-      border: 'transparent',
-      text: appTheme.primary,
-      shadowColor: 'transparent',
-    },
-    link: {
-      background: 'transparent',
-      border: 'transparent',
-      text: appTheme.primary,
-      shadowColor: 'transparent',
-    },
-  };
-}
+// Hoisted to module scope — recreating this on every render would remount
+// the underlying native view on every press (state update -> new component
+// type -> full unmount/mount), breaking the press animation.
+const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
 const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, ButtonProps>(
-  ({ className, variant, size, disabled, onPress, children, accessibilityLabel, accessibilityHint, style, ...props }, ref) => {
+  ({ className, variant, size, disabled, loading, onPress, children, accessibilityLabel, accessibilityHint, ...props }, ref) => {
+    const { theme } = useAppThemeContext();
     const { triggerHaptic } = useHapticFeedback();
-    const { theme: appTheme } = useAppThemeContext();
-    const scaleAnim = React.useRef(new (require('react-native').Animated.Value)(1)).current;
+    const { createSpring, createTiming } = useAccessibleAnimation();
+    const scaleAnim = React.useRef(new Animated.Value(1)).current;
+    const loadingAnim = React.useRef(new Animated.Value(loading ? 1 : 0)).current;
     const [isFocused, setIsFocused] = React.useState(false);
+    const isDisabled = disabled || loading;
+
+    React.useEffect(() => {
+      createTiming(loadingAnim, loading ? 1 : 0, 150).start();
+    }, [loading, loadingAnim, createTiming]);
 
     const resolvedVariant: Variant = variant ?? "default";
     const resolvedSize: Size = size ?? "default";
     const colors = React.useMemo(() => makeVariantColors(appTheme)[resolvedVariant], [appTheme, resolvedVariant]);
 
     const handlePress = React.useCallback((event: any) => {
-      if (disabled) return;
+      if (isDisabled) return;
 
       // Trigger appropriate haptic feedback based on variant
       if (variant === 'destructive') {
@@ -125,42 +85,33 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
       }
 
       onPress?.(event);
-    }, [disabled, onPress, triggerHaptic, variant]);
+    }, [isDisabled, onPress, triggerHaptic, variant]);
 
     const handlePressIn = React.useCallback(() => {
-      if (disabled) return;
+      if (isDisabled) return;
       setIsFocused(true);
-      require('react-native').Animated.spring(scaleAnim, {
-        toValue: 0.95,
-        useNativeDriver: true,
-        tension: 300,
-        friction: 10,
-      }).start();
-    }, [disabled, scaleAnim]);
+      createSpring(scaleAnim, 0.95).start();
+    }, [isDisabled, scaleAnim, createSpring]);
 
     const handlePressOut = React.useCallback(() => {
-      if (disabled) return;
+      if (isDisabled) return;
       setIsFocused(false);
-      require('react-native').Animated.spring(scaleAnim, {
-        toValue: 1,
-        useNativeDriver: true,
-        tension: 300,
-        friction: 10,
-      }).start();
-    }, [disabled, scaleAnim]);
+      createSpring(scaleAnim, 1).start();
+    }, [isDisabled, scaleAnim, createSpring]);
 
     // Handle keyboard focus events for web/keyboard navigation
     const handleFocus = React.useCallback(() => {
-      if (disabled) return;
+      if (isDisabled) return;
       setIsFocused(true);
-    }, [disabled]);
+    }, [isDisabled]);
 
     const handleBlur = React.useCallback(() => {
-      if (disabled) return;
+      if (isDisabled) return;
       setIsFocused(false);
-    }, [disabled]);
+    }, [isDisabled]);
 
-    const AnimatedTouchable = require('react-native').Animated.createAnimatedComponent(TouchableOpacity);
+    const { styles: buttonStyles, spinnerColor: spinnerColors } = React.useMemo(() => makeButtonStyles(theme), [theme]);
+    const spinnerColor = spinnerColors[variant ?? "default"];
 
     const hasGlow = resolvedVariant === 'default' || resolvedVariant === 'destructive';
     const borderWidth = resolvedVariant === 'outline' ? 1.5 : resolvedVariant === 'ghost' || resolvedVariant === 'link' ? 0 : 1;
@@ -170,31 +121,21 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
         style={[
-          layoutStyles.base,
-          layoutStyles[resolvedSize],
-          {
-            backgroundColor: colors.background,
-            borderWidth,
-            borderColor: colors.border,
-          },
-          hasGlow && {
-            shadowColor: colors.shadowColor,
-            shadowOffset: { width: 0, height: 0 },
-            shadowOpacity: 0.3,
-            shadowRadius: 12,
-            elevation: 6,
-          },
-          disabled && layoutStyles.disabled,
-          // Visible keyboard-focus ring (WCAG 2.4.7). Shape lives in the
-          // static `focused` style below; color comes from the live theme
-          // so the ring stays visible in both light and dark mode.
-          isFocused && [layoutStyles.focused, { borderColor: appTheme.primaryLight, shadowColor: appTheme.primary }],
+          buttonStyles.base,
+          buttonStyles[variant ?? "default"],
+          // "default" is deliberately excluded here — it's the *variant* key
+          // (primary green bg/border), and re-applying it whenever `size` is
+          // unset would silently override destructive/outline/secondary/ghost
+          // variants back to green (base already covers default dimensions).
+          size && size !== "default" && buttonStyles[size],
+          isDisabled && buttonStyles.disabled,
+          isFocused && buttonStyles.focused,
           {
             transform: [{ scale: scaleAnim }],
           },
           style,
         ]}
-        disabled={disabled}
+        disabled={isDisabled}
         onPress={handlePress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
@@ -204,82 +145,159 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel || (typeof children === "string" ? children : undefined)}
         accessibilityHint={accessibilityHint}
-        accessibilityState={{ disabled: disabled || false }}
+        accessibilityState={{ disabled: isDisabled || false, busy: loading || undefined }}
         {...props}
       >
-        {typeof children === "string" ? (
-          <Text
-            className="text-inherit font-inherit"
-            style={[
-              layoutStyles.text,
-              { color: colors.text },
-              resolvedVariant === 'link' && layoutStyles.linkText,
-              disabled && layoutStyles.disabledText,
-            ]}
-          >
-            {children}
-          </Text>
-        ) : (
-          children
-        )}
+        <Animated.View
+          style={{
+            opacity: loadingAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {typeof children === "string" ? (
+            <Text
+              className="text-inherit font-inherit"
+              style={[
+                buttonStyles.text,
+                buttonStyles[`${variant ?? "default"}Text` as keyof typeof buttonStyles],
+                isDisabled && buttonStyles.disabledText,
+              ]}
+            >
+              {children}
+            </Text>
+          ) : (
+            children
+          )}
+        </Animated.View>
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFill,
+            { alignItems: 'center', justifyContent: 'center', opacity: loadingAnim },
+          ]}
+        >
+          <ActivityIndicator size="small" color={spinnerColor} />
+        </Animated.View>
       </AnimatedTouchable>
     );
   }
 );
 Button.displayName = "Button"
 
-// Pill-shaped, theme-agnostic layout (padding/sizing/shape only — colors come
-// from makeVariantColors(theme) above so the button adapts to light/dark).
-const layoutStyles = StyleSheet.create({
-  base: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 999,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    minHeight: 48,
-  },
-  default: {},
-  sm: {
-    minHeight: 40,
-    paddingHorizontal: 16,
-    borderRadius: 999,
-  },
-  lg: {
-    minHeight: 56,
-    paddingHorizontal: 28,
-    borderRadius: 999,
-  },
-  icon: {
-    width: 48,
-    height: 48,
-    paddingHorizontal: 0,
-    paddingVertical: 0,
-  },
-  disabled: {
-    opacity: 0.5,
-  },
-  // Focus state shape for keyboard navigation (WCAG 2.4.7); color is applied
-  // at render time from the live theme (see the `isFocused &&` override above).
-  focused: {
-    borderWidth: 3,
-    borderColor: 'transparent',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 8,
-    elevation: 10,
-  },
-  text: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  linkText: {
-    textDecorationLine: 'underline',
-  },
-  disabledText: {
-    opacity: 0.7,
-  },
-})
+function makeButtonStyles(theme: AppTheme) {
+  const onBrand = '#fffef5'; // off-white text/spinner on filled brand-colored buttons
+
+  const spinnerColor: Record<string, string> = {
+    default: onBrand,
+    destructive: onBrand,
+    outline: theme.primary,
+    secondary: theme.isDark ? onBrand : theme.text,
+    ghost: theme.primary,
+    link: theme.primary,
+  };
+
+  const styles = StyleSheet.create({
+    base: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: theme.radius.lg,
+      paddingHorizontal: theme.spacing.xl,
+      paddingVertical: theme.spacing.md,
+      minHeight: 48,
+    },
+    default: {
+      backgroundColor: theme.primary,
+      borderWidth: 1,
+      borderColor: withAlpha(theme.primary, 0.6),
+      ...theme.shadows.brand,
+    },
+    destructive: {
+      backgroundColor: theme.error,
+      borderWidth: 1,
+      borderColor: withAlpha(theme.error, 0.6),
+      ...theme.shadows.sm,
+    },
+    outline: {
+      backgroundColor: 'transparent',
+      borderWidth: 1.5,
+      borderColor: withAlpha(theme.primary, 0.5),
+    },
+    secondary: {
+      backgroundColor: theme.surfaceSecondary,
+      borderWidth: 1,
+      borderColor: withAlpha(theme.primary, 0.3),
+      ...theme.shadows.sm,
+    },
+    ghost: {
+      backgroundColor: 'transparent',
+      borderWidth: 0,
+    },
+    link: {
+      backgroundColor: 'transparent',
+      borderWidth: 0,
+    },
+    sm: {
+      minHeight: 40,
+      paddingHorizontal: theme.spacing.lg,
+      borderRadius: theme.radius.md,
+    },
+    lg: {
+      minHeight: 56,
+      paddingHorizontal: theme.spacing['2xl'],
+      borderRadius: theme.radius.xl,
+    },
+    icon: {
+      width: 48,
+      height: 48,
+      paddingHorizontal: 0,
+      paddingVertical: 0,
+    },
+    disabled: {
+      opacity: 0.5,
+    },
+    // Focus state for keyboard navigation (WCAG 2.4.7)
+    focused: {
+      shadowColor: theme.primary,
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0.6,
+      shadowRadius: 8,
+      elevation: 10,
+      // Add visible border for high contrast
+      borderWidth: 3,
+      borderColor: theme.primaryLight,
+    },
+    text: {
+      fontSize: theme.typography.fontSize.sm,
+      fontWeight: '600',
+    },
+    defaultText: {
+      color: onBrand,
+    },
+    destructiveText: {
+      color: onBrand,
+    },
+    outlineText: {
+      color: theme.primary,
+    },
+    secondaryText: {
+      color: theme.isDark ? onBrand : theme.text,
+    },
+    ghostText: {
+      color: theme.primary,
+    },
+    linkText: {
+      color: theme.primary,
+      textDecorationLine: 'underline',
+    },
+    disabledText: {
+      opacity: 0.7,
+    },
+  });
+
+  return { styles, spinnerColor };
+}
 
 export { Button }

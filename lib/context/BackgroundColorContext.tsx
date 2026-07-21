@@ -1,4 +1,4 @@
-import React, { createContext, ReactNode, useCallback, useContext, useState } from "react";
+import React, { createContext, ReactNode, useCallback, useContext, useMemo, useState } from "react";
 import { darkTheme } from "../themes/darkTheme";
 
 type BGContext = {
@@ -36,8 +36,13 @@ export const BackgroundColorProvider = ({ children }: { children: ReactNode }) =
 
   const color = stack[stack.length - 1] ?? DEFAULT;
 
+  const value = useMemo(
+    () => ({ color, pushColor, popColor, setColor }),
+    [color, pushColor, popColor, setColor]
+  );
+
   return (
-    <BackgroundColorContext.Provider value={{ color, pushColor, popColor, setColor }}>
+    <BackgroundColorContext.Provider value={value}>
       {children}
     </BackgroundColorContext.Provider>
   );

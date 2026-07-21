@@ -79,6 +79,7 @@ jest.mock('../../../lib/services/payment-error-handler', () => ({
   checkDuplicatePayment: jest.fn().mockReturnValue(false),
   completePaymentAttempt: jest.fn(),
   generateIdempotencyKey: jest.fn().mockReturnValue('key_123'),
+  generateStripeIdempotencyKey: jest.fn().mockReturnValue('stripe_key_123'),
   logPaymentError: jest.fn(),
   parsePaymentError: jest.fn((e: any) => ({ error: e, parsed: true })),
   recordPaymentAttempt: jest.fn(),

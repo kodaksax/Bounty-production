@@ -1537,39 +1537,14 @@ app.get('/wallet/balance', apiLimiter, authenticateUser, async (req, res) => {
       return res.status(500).json({ error: 'Failed to fetch balance' });
     }
 
-    let balance = profile?.balance || 0;
-
-    // Cross-check: when cached balance is 0, derive from completed transactions.
-    // wallet_transactions stores signed amounts (negative for debits), so we
-    // sum them directly instead of applying direction based on type.
-    if (balance === 0) {
-      const { data: txRows } = await supabase
-        .from('wallet_transactions')
-        .select('amount')
-        .eq('user_id', userId)
-        .eq('status', 'completed');
-
-      if (txRows && txRows.length > 0) {
-        let derived = 0;
-        for (const tx of txRows) {
-          derived += Number(tx.amount) || 0;
-        }
-        if (derived > 0) {
-          balance = derived;
-          // Reconcile (fire-and-forget)
-          supabase
-            .from('profiles')
-            .update({ balance: derived, updated_at: new Date().toISOString() })
-            .eq('id', userId)
-            .then(() =>
-              console.log('[Wallet] Reconciled stale profile balance', { userId, derived })
-            )
-            .catch(err =>
-              console.warn('[Wallet] Failed to reconcile cached balance', { userId, err })
-            );
-        }
-      }
-    }
+    // profiles.balance is the sole source of truth (see
+    // supabase/functions/wallet/index.ts for the full rationale). A prior
+    // version of this handler "reconciled" a $0 cached balance by trusting a
+    // derived SUM(completed wallet_transactions) instead and writing it back
+    // to profiles.balance — removed 2026-07-18 because it could resurrect a
+    // legitimately-zeroed balance (an in-flight debit, or a deliberate
+    // administrative write-off) into a phantom, double-spendable balance.
+    const balance = profile?.balance || 0;
 
     res.json({
       balance,

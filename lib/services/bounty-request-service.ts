@@ -187,7 +187,14 @@ export const bountyRequestService = {
               ? supabase.from('bounties').select('*').in('id', bountyIds)
               : Promise.resolve({ data: [], error: null } as any),
             userIds.length
-              ? supabase.from('profiles').select('*').in('id', userIds)
+              ? supabase
+                  .from('profiles')
+                  // Public-safe columns only -- this batch-fetches OTHER
+                  // users' (hunters') profiles for a poster's bounty-request
+                  // list, not the caller's own row. See
+                  // docs/withdrawals/08-profiles-rls-migration-strategy.md.
+                  .select('id, username, display_name, avatar, location, about, verification_status, created_at')
+                  .in('id', userIds)
               : Promise.resolve({ data: [], error: null } as any),
           ]);
         if (bErr) throw bErr;
@@ -353,7 +360,14 @@ export const bountyRequestService = {
               ? supabase.from('bounties').select('*').in('id', bountyIdsSet)
               : Promise.resolve({ data: [], error: null } as any),
             userIds.length
-              ? supabase.from('profiles').select('*').in('id', userIds)
+              ? supabase
+                  .from('profiles')
+                  // Public-safe columns only -- this batch-fetches OTHER
+                  // users' (hunters') profiles for a poster's bounty-request
+                  // list, not the caller's own row. See
+                  // docs/withdrawals/08-profiles-rls-migration-strategy.md.
+                  .select('id, username, display_name, avatar, location, about, verification_status, created_at')
+                  .in('id', userIds)
               : Promise.resolve({ data: [], error: null } as any),
           ]);
         if (bErr) throw bErr;

@@ -9,6 +9,7 @@ import { authProfileService, type AuthProfile } from '../../lib/services/auth-pr
 jest.mock('../../lib/supabase', () => {
   const mockSupabase = {
     from: jest.fn(),
+    rpc: jest.fn(),
     auth: {
       getSession: jest.fn(),
     },
@@ -63,24 +64,11 @@ describe('Profile Loading and Creation', () => {
         },
       };
 
-      // Mock profile query - returns no profile (PGRST116 error)
-      const mockSelect = jest.fn().mockReturnThis();
-      const mockEq = jest.fn().mockReturnThis();
-      const mockSingle = jest.fn().mockResolvedValue({
+      // Mock profile query - get_my_profile() returns null when no row exists
+      // for auth.uid() (no PGRST116 error, since it's an RPC, not a direct select)
+      mockSupabase.rpc.mockResolvedValue({
         data: null,
-        error: { code: 'PGRST116', message: 'No rows returned' },
-      });
-
-      mockSupabase.from.mockReturnValue({
-        select: mockSelect,
-      });
-
-      mockSelect.mockReturnValue({
-        eq: mockEq,
-      });
-
-      mockEq.mockReturnValue({
-        single: mockSingle,
+        error: null,
       });
 
       try {
@@ -110,11 +98,7 @@ describe('Profile Loading and Creation', () => {
       };
 
       // Mock profile query - throws error
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        single: jest.fn().mockRejectedValue(new Error('Network error')),
-      });
+      mockSupabase.rpc.mockRejectedValue(new Error('Network error'));
 
       let listenerCalledWithNull = false;
       authProfileService.subscribe((profile) => {
@@ -141,11 +125,7 @@ describe('Profile Loading and Creation', () => {
       const userId = 'test-user-789';
 
       // Mock profile query - throws error
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        single: jest.fn().mockRejectedValue(new Error('Database error')),
-      });
+      mockSupabase.rpc.mockRejectedValue(new Error('Database error'));
 
       let listenerCalls = 0;
       authProfileService.subscribe(() => {
@@ -176,14 +156,9 @@ describe('Profile Loading and Creation', () => {
       };
 
       // Mock profile query - returns no data and no error (onboarding needed state)
-      mockSupabase.from.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        single: jest.fn().mockResolvedValue({
-          data: null,
-          error: null,
-        }),
-        insert: jest.fn().mockReturnThis(),
+      mockSupabase.rpc.mockResolvedValue({
+        data: null,
+        error: null,
       });
 
       let listenerCalled = false;
@@ -230,18 +205,9 @@ describe('Profile Loading and Creation', () => {
       };
 
       // Mock to return existing profile
-      mockSupabase.from.mockImplementation((table: string) => {
-        if (table === 'profiles') {
-          return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({
-              data: existingProfile,
-              error: null,
-            }),
-          };
-        }
-        return { select: jest.fn().mockReturnThis() };
+      mockSupabase.rpc.mockResolvedValue({
+        data: existingProfile,
+        error: null,
       });
 
       try {
@@ -269,19 +235,10 @@ describe('Profile Loading and Creation', () => {
         },
       };
 
-      // Mock to return PGRST116 (no profile found)
-      mockSupabase.from.mockImplementation((table: string) => {
-        if (table === 'profiles') {
-          return {
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            single: jest.fn().mockResolvedValue({
-              data: null,
-              error: { code: 'PGRST116', message: 'No rows returned' },
-            }),
-          };
-        }
-        return { select: jest.fn().mockReturnThis() };
+      // Mock get_my_profile() returning null (no profile found)
+      mockSupabase.rpc.mockResolvedValue({
+        data: null,
+        error: null,
       });
 
       try {

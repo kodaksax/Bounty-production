@@ -4,7 +4,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuthContext } from '../../hooks/use-auth-context';
 
 const ONBOARDING_STATE_KEY_BASE = '@bounty_onboarding_state';
@@ -17,6 +17,11 @@ const ONBOARDING_STATE_KEY_BASE = '@bounty_onboarding_state';
  * so future onboarding redesigns can detect which flow a user completed.
  */
 export const CURRENT_ONBOARDING_VERSION = 1;
+
+// Debounce persistence so rapid keystrokes (e.g. typing bio/skills) don't each
+// trigger a disk write. Short enough that a user who stops typing still sees
+// their progress persisted almost immediately.
+const PERSIST_DEBOUNCE_MS = 400;
 
 function storageKeyFor(userId: string | null | undefined): string {
   return userId ? `${ONBOARDING_STATE_KEY_BASE}:${userId}` : ONBOARDING_STATE_KEY_BASE;
@@ -155,14 +160,48 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     };
   }, [userId]);
 
-  // Persist state on changes, to whichever key we most recently loaded.
+  // Persist state on changes, debounced so typing doesn't write to disk on
+  // every keystroke. dataRef always holds the latest value so the unmount
+  // flush below never writes stale data.
+  const dataRef = useRef(data);
+  dataRef.current = data;
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
-    if (!loading && loadedKeyRef.current) {
-      AsyncStorage.setItem(loadedKeyRef.current, JSON.stringify(data)).catch((error) => {
+    if (loading || !loadedKeyRef.current) return;
+
+    const key = loadedKeyRef.current;
+    if (persistTimerRef.current) {
+      clearTimeout(persistTimerRef.current);
+    }
+    persistTimerRef.current = setTimeout(() => {
+      persistTimerRef.current = null;
+      AsyncStorage.setItem(key, JSON.stringify(data)).catch((error) => {
         console.error('[OnboardingContext] Error saving state:', error);
       });
-    }
+    }, PERSIST_DEBOUNCE_MS);
+
+    return () => {
+      if (persistTimerRef.current) {
+        clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+      }
+    };
   }, [data, loading]);
+
+  // Flush any pending debounced write immediately on unmount so navigating
+  // away right after typing never loses the last keystrokes.
+  useEffect(() => {
+    return () => {
+      if (persistTimerRef.current) {
+        clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+        AsyncStorage.setItem(loadedKeyRef.current || ONBOARDING_STATE_KEY_BASE, JSON.stringify(dataRef.current)).catch((error) => {
+          console.error('[OnboardingContext] Error saving state on unmount:', error);
+        });
+      }
+    };
+  }, []);
 
   const updateData = useCallback((updates: Partial<OnboardingData>) => {
     setData((prev) => ({ ...prev, ...updates }));
@@ -178,8 +217,13 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     }
   }, [userId]);
 
+  const value = useMemo(
+    () => ({ data, updateData, clearData, loading }),
+    [data, updateData, clearData, loading]
+  );
+
   return (
-    <OnboardingContext.Provider value={{ data, updateData, clearData, loading }}>
+    <OnboardingContext.Provider value={value}>
       {children}
     </OnboardingContext.Provider>
   );

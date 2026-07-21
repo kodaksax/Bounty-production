@@ -23,6 +23,25 @@ jest.setTimeout(30000);
 // Mock AppThemeContext so components using useAppThemeContext() work in tests
 // without requiring an AppThemeProvider wrapper.
 jest.mock('lib/themes/AppThemeContext', () => {
+  // Mirrors lib/themes/tokens.ts — kept in sync manually since this mock can't
+  // import the real module (jest.mock factories can't reference out-of-scope
+  // requires cleanly). Components relying on theme.spacing/radius/typography/
+  // shadows need these present or they'll throw "Cannot read properties of
+  // undefined" in tests, same as they would with a real, incomplete theme.
+  const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, '2xl': 32, '3xl': 48, '4xl': 64 };
+  const radius = { sm: 4, md: 8, lg: 12, xl: 16, '2xl': 24, full: 9999 };
+  const typography = {
+    fontSize: { xs: 12, sm: 14, base: 16, lg: 18, xl: 20, '2xl': 24, '3xl': 30, '4xl': 36 },
+    fontWeight: { normal: '400', medium: '500', semibold: '600', bold: '700' },
+    lineHeight: { tight: 1.25, normal: 1.5, relaxed: 1.75 },
+  };
+  const shadows = {
+    sm: { shadowColor: '#000000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
+    md: { shadowColor: '#000000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
+    lg: { shadowColor: '#000000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 5 },
+    xl: { shadowColor: '#000000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 8 },
+    brand: { shadowColor: '#059669', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
+  };
   const mockTheme = {
     background: '#0B0F14',
     surface: '#111827',
@@ -41,6 +60,10 @@ jest.mock('lib/themes/AppThemeContext', () => {
     completed: '#6366F1',
     cancelled: '#F97316',
     isDark: true,
+    spacing,
+    radius,
+    typography,
+    shadows,
   };
   return {
     useAppThemeContext: () => ({

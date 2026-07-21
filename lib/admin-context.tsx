@@ -1,6 +1,6 @@
 // lib/admin-context.tsx - Admin authentication and role management context
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { isSupabaseConfigured, supabase } from './supabase';
 
 interface AdminContextValue {
@@ -166,8 +166,13 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
     };
   }, [isSupabaseConfigured]);
 
+  const value = useMemo(
+    () => ({ isAdmin, isAdminTabEnabled, isLoading, setIsAdmin, setAdminTabEnabled, verifyAdminStatus }),
+    [isAdmin, isAdminTabEnabled, isLoading, setIsAdmin, setAdminTabEnabled, verifyAdminStatus]
+  );
+
   return (
-    <AdminContext.Provider value={{ isAdmin, isAdminTabEnabled, isLoading, setIsAdmin, setAdminTabEnabled, verifyAdminStatus }}>
+    <AdminContext.Provider value={value}>
       {children}
     </AdminContext.Provider>
   );

@@ -1,3 +1,5 @@
+import type { Radius, Shadows, Spacing, Typography } from './tokens';
+
 export type ThemeMode = 'dark' | 'light' | 'system';
 
 export type AppTheme = {
@@ -38,4 +40,10 @@ export type AppTheme = {
   target: string;
   // ── Meta ──────────────────────────────────────────────────────────────────
   isDark: boolean;
+
+  // ── Layout tokens (identical across light/dark, see tokens.ts) ────────────
+  spacing: Spacing;
+  radius: Radius;
+  typography: Typography;
+  shadows: Shadows;
 };

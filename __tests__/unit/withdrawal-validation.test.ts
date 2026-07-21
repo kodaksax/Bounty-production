@@ -14,6 +14,8 @@ import {
   MIN_WITHDRAWAL_USD,
   mapStripeTransferError,
   mapWithdrawBalanceError,
+  resolveWithdrawalDestination,
+  validateAccountEligibility,
   validateWithdrawalRequest,
 } from '../../supabase/functions/connect/withdrawal-validation';
 
@@ -157,6 +159,76 @@ describe('mapWithdrawBalanceError', () => {
   });
 });
 
+describe('resolveWithdrawalDestination', () => {
+  const accounts = [
+    { id: 'ba_1', default_for_currency: true, bank_name: 'Chase', last4: '1111' },
+    { id: 'ba_2', default_for_currency: false, bank_name: 'Ally', last4: '2222' },
+  ];
+
+  test('rejects when the account has no linked bank accounts', () => {
+    const result = resolveWithdrawalDestination([], 'ba_1');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe('no_bank_account');
+  });
+
+  test('rejects a requested bankAccountId that does not belong to the account', () => {
+    const result = resolveWithdrawalDestination(accounts, 'ba_does_not_exist');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe('bank_account_not_found');
+  });
+
+  test('selecting the already-default account requires no update', () => {
+    const result = resolveWithdrawalDestination(accounts, 'ba_1');
+    expect(result).toEqual({
+      ok: true,
+      targetAccount: accounts[0],
+      needsDefaultUpdate: false,
+    });
+  });
+
+  test('selecting a non-default account requires promoting it to default', () => {
+    const result = resolveWithdrawalDestination(accounts, 'ba_2');
+    expect(result).toEqual({
+      ok: true,
+      targetAccount: accounts[1],
+      needsDefaultUpdate: true,
+    });
+  });
+
+  test('falls back to the current default when no bankAccountId is requested (older client)', () => {
+    const result = resolveWithdrawalDestination(accounts, undefined);
+    expect(result).toEqual({
+      ok: true,
+      targetAccount: accounts[0],
+      needsDefaultUpdate: false,
+    });
+  });
+
+  test('falls back to the first account when none is marked default and none requested', () => {
+    const noDefault = [
+      { id: 'ba_3', default_for_currency: false, bank_name: 'Wells Fargo', last4: '3333' },
+    ];
+    const result = resolveWithdrawalDestination(noDefault, undefined);
+    expect(result).toEqual({
+      ok: true,
+      targetAccount: noDefault[0],
+      needsDefaultUpdate: false,
+    });
+  });
+});
+
+describe('validateAccountEligibility', () => {
+  test.each(['suspended', 'banned'])('blocks a %s account', status => {
+    const result = validateAccountEligibility(status);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe('account_not_eligible');
+  });
+
+  test.each(['active', undefined, null, '', 'anything-else'])('allows account_status %p', status => {
+    expect(validateAccountEligibility(status as string | null | undefined)).toEqual({ ok: true });
+  });
+});
+
 describe('connect edge function contract (inlined helpers stay in sync)', () => {
   const indexSource = fs.readFileSync(
     path.join(__dirname, '../../supabase/functions/connect/index.ts'),
@@ -196,5 +268,52 @@ describe('connect edge function contract (inlined helpers stay in sync)', () => 
   test('refunds the deducted balance when a concurrent duplicate loses the insert race', () => {
     expect(indexSource).toContain('concurrent duplicate detected');
     expect(indexSource).toContain("'23505'");
+  });
+
+  test('inlines resolveWithdrawalDestination and wires it into both transfer and retry-transfer', () => {
+    expect(indexSource).toContain('function resolveWithdrawalDestination');
+    // Both the primary transfer path and the retry path must call the
+    // resolver.
+    const resolverCallCount = (indexSource.match(/resolveWithdrawalDestination\(/g) || []).length;
+    expect(resolverCallCount).toBeGreaterThanOrEqual(2);
+  });
+
+  test('never calls stripe.accounts.updateExternalAccount — these Connect accounts reject it unconditionally', () => {
+    // controller.requirement_collection === "stripe" on these accounts means
+    // Stripe rejects createExternalAccount/updateExternalAccount/
+    // deleteExternalAccount from the platform side with a permissions error,
+    // always — there is no "payouts disabled" case that unblocks it. Every
+    // call site that used to attempt this (bank-accounts/:id/default,
+    // /transfer, /retry-transfer, debit-cards add/delete) must instead fail
+    // closed with an actionable error pointing at the Stripe payout
+    // dashboard (POST /connect/login-link).
+    expect(indexSource).not.toContain('stripe.accounts.updateExternalAccount(');
+    expect(indexSource).not.toContain('stripe.accounts.createExternalAccount(');
+    expect(indexSource).not.toContain('stripe.accounts.deleteExternalAccount(');
+  });
+
+  test('fails closed with bank_account_not_default instead of promoting a non-default account', () => {
+    const failClosedCount = (indexSource.match(/code: 'bank_account_not_default'/g) || []).length;
+    // Once in /transfer, once in /retry-transfer.
+    expect(failClosedCount).toBe(2);
+  });
+
+  test('exposes a login-link endpoint into the Stripe Express Dashboard', () => {
+    expect(indexSource).toContain("subPath === '/login-link'");
+    expect(indexSource).toContain('stripe.accounts.createLoginLink(');
+  });
+
+  test('records the resolved destination bank account on the wallet_transactions row', () => {
+    expect(indexSource).toContain('destination_bank_account_id: destinationAccount.id');
+  });
+
+  test('inlines validateAccountEligibility and enforces it on both /transfer and /instant-payout', () => {
+    expect(indexSource).toContain('function validateAccountEligibility');
+    const callCount = (indexSource.match(/validateAccountEligibility\(p\.account_status\)/g) || []).length;
+    expect(callCount).toBe(2);
+    expect(indexSource).toContain("code: 'account_not_eligible'");
+    // Must be fetched from the DB wherever it's consumed, not assumed.
+    const selectsAccountStatus = (indexSource.match(/select\([^)]*account_status[^)]*\)/g) || []).length;
+    expect(selectsAccountStatus).toBeGreaterThanOrEqual(2);
   });
 });

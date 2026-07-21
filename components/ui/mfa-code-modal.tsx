@@ -5,15 +5,17 @@
  * Replaces `Alert.prompt` which is iOS-only and inaccessible.
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import { useAppThemeContext } from 'lib/themes/AppThemeContext';
+import type { AppTheme } from 'lib/themes/types';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Modal,
+  StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
+import { ThemedButton } from '../themed/ThemedButton';
 
 interface MfaCodeModalProps {
   visible: boolean;
@@ -34,6 +36,8 @@ export function MfaCodeModal({
   onVerify,
   onCancel,
 }: MfaCodeModalProps) {
+  const { theme } = useAppThemeContext();
+  const s = useMemo(() => makeStyles(theme), [theme]);
   const [code, setCode] = useState('');
   const inputRef = useRef<TextInput>(null);
   const focusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -70,103 +74,114 @@ export function MfaCodeModal({
       onRequestClose={onCancel}
       accessibilityViewIsModal
     >
-      <View
-        style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)' }}
-      >
-        <View
-          style={{
-            width: '85%',
-            backgroundColor: '#111827',
-            borderRadius: 16,
-            padding: 24,
-            borderWidth: 1,
-            borderColor: 'rgba(167,243,208,0.2)',
-          }}
-        >
-          <Text style={{ fontSize: 18, fontWeight: '600', color: '#fff', marginBottom: 8 }}>
-            {title}
-          </Text>
-          <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginBottom: 20, lineHeight: 18 }}>
-            {subtitle}
-          </Text>
+      <View style={s.scrim}>
+        <View style={s.card}>
+          <Text style={s.title}>{title}</Text>
+          <Text style={s.subtitle}>{subtitle}</Text>
 
           <TextInput
             ref={inputRef}
             value={code}
             onChangeText={text => setCode(text.replace(/\D/g, '').slice(0, 6))}
             placeholder="000000"
-            placeholderTextColor="rgba(255,255,255,0.3)"
+            placeholderTextColor={theme.textDisabled}
             keyboardType="number-pad"
             maxLength={6}
             editable={!isLoading}
             onSubmitEditing={handleVerify}
-            style={{
-              backgroundColor: 'rgba(255,255,255,0.1)',
-              borderRadius: 10,
-              paddingHorizontal: 16,
-              paddingVertical: 14,
-              color: '#fff',
-              fontSize: 24,
-              textAlign: 'center',
-              letterSpacing: 8,
-              fontVariant: ['tabular-nums'],
-              borderWidth: error ? 1 : 0,
-              borderColor: error ? '#f87171' : undefined,
-              marginBottom: 8,
-            }}
+            style={[s.codeInput, error ? s.codeInputError : null]}
             accessibilityLabel="Enter your 2FA verification code"
             accessibilityHint="6-digit code from your authenticator app"
           />
 
           {error ? (
-            <Text style={{ fontSize: 12, color: '#f87171', marginBottom: 16, textAlign: 'center' }}>
-              {error}
-            </Text>
+            <Text style={s.errorText}>{error}</Text>
           ) : (
             <View style={{ height: 16 }} />
           )}
 
-          <View style={{ flexDirection: 'row', gap: 12 }}>
-            <TouchableOpacity
+          <View style={s.actionsRow}>
+            <ThemedButton
+              variant="secondary"
+              label="Cancel"
               onPress={onCancel}
               disabled={isLoading}
-              style={{
-                flex: 1,
-                paddingVertical: 12,
-                borderRadius: 8,
-                backgroundColor: 'rgba(255,255,255,0.1)',
-                alignItems: 'center',
-              }}
-              accessibilityRole="button"
+              style={s.actionButton}
               accessibilityLabel="Cancel"
-            >
-              <Text style={{ color: 'rgba(255,255,255,0.8)', fontWeight: '500' }}>Cancel</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
+            />
+            <ThemedButton
+              variant="primary"
+              label="Verify"
               onPress={handleVerify}
               disabled={isLoading || code.length !== 6}
-              style={{
-                flex: 1,
-                paddingVertical: 12,
-                borderRadius: 8,
-                backgroundColor: code.length === 6 && !isLoading ? '#059669' : 'rgba(5,150,105,0.4)',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-              accessibilityRole="button"
+              loading={isLoading}
+              style={s.actionButton}
               accessibilityLabel="Verify code"
-              accessibilityState={{ disabled: isLoading || code.length !== 6 }}
-            >
-              {isLoading ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text style={{ color: '#fff', fontWeight: '600' }}>Verify</Text>
-              )}
-            </TouchableOpacity>
+            />
           </View>
         </View>
       </View>
     </Modal>
   );
+}
+
+function makeStyles(t: AppTheme) {
+  return StyleSheet.create({
+    scrim: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: 'rgba(0,0,0,0.6)',
+    },
+    card: {
+      width: '85%',
+      backgroundColor: t.surface,
+      borderRadius: 16,
+      padding: 24,
+      borderWidth: 1,
+      borderColor: t.border,
+    },
+    title: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: t.text,
+      marginBottom: 8,
+    },
+    subtitle: {
+      fontSize: 13,
+      color: t.textSecondary,
+      marginBottom: 20,
+      lineHeight: 18,
+    },
+    codeInput: {
+      backgroundColor: t.surfaceSecondary,
+      borderRadius: 10,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      color: t.text,
+      fontSize: 24,
+      textAlign: 'center',
+      letterSpacing: 8,
+      fontVariant: ['tabular-nums'],
+      borderWidth: 1,
+      borderColor: t.border,
+      marginBottom: 8,
+    },
+    codeInputError: {
+      borderColor: t.error,
+    },
+    errorText: {
+      fontSize: 12,
+      color: t.error,
+      marginBottom: 16,
+      textAlign: 'center',
+    },
+    actionsRow: {
+      flexDirection: 'row',
+      gap: 12,
+    },
+    actionButton: {
+      flex: 1,
+    },
+  });
 }

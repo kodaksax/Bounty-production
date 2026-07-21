@@ -195,7 +195,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
           ref={modalRef}
           {...panResponder.panHandlers}
           style={{
-            backgroundColor: theme.surface,
+            backgroundColor: theme.primary, // intentional payment branding — matches Add Money screen
             width: '100%',
             borderTopLeftRadius: 24,
             borderTopRightRadius: 24,
@@ -367,7 +367,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
               // Show error state if load ultimately failed
               <View style={{ alignItems: 'center', padding: 20 }}>
                 <MaterialIcons name="error-outline" size={48} color={theme.error} />
-                <Text style={{ color: theme.error, textAlign: 'center', marginTop: 12, fontSize: 15, lineHeight: 22 }}>
+                <Text style={{ color: 'rgba(255,255,255,0.9)', textAlign: 'center', marginTop: 12, fontSize: 15, lineHeight: 22 }}>
                   {(() => {
                     if (!stripeError) {
                       return 'Unable to load payment methods. Please check your connection and try again.';
@@ -412,7 +412,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
                 </Text>
               </View>
             ) : selectedMethodType === 'bank_account' ? (
-              // Bank accounts - UI for listing will be added in future iteration
+              // Bank accounts are managed via Stripe Connect onboarding, not listed here.
               <View style={{ alignItems: 'center', padding: 40 }}>
                 <MaterialIcons name="account-balance" size={56} color={theme.textSecondary} />
                 <Text style={{
@@ -429,6 +429,10 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
               <FlatList
                 data={paymentMethods}
                 keyExtractor={(item) => item.id}
+                removeClippedSubviews={true}
+                maxToRenderPerBatch={5}
+                windowSize={5}
+                initialNumToRender={3}
                 renderItem={({ item }) => (
                   <View style={{
                     flexDirection: 'row',
@@ -438,11 +442,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
                     padding: 18,
                     marginBottom: 14,
                     minHeight: 72, // Comfortable touch target height
-                    shadowColor: '#000',
-                    shadowOpacity: 0.05,
-                    shadowRadius: 2,
-                    shadowOffset: { width: 0, height: 1 },
-                    elevation: 1,
+                    ...theme.shadows.sm,
                   }}>
                     <MaterialIcons name="credit-card" size={34} color={theme.text} />
                     <View style={{ flex: 1, marginLeft: 14 }}>

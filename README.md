@@ -625,6 +625,41 @@ npm run test:watch
 npm run test:verbose
 ```
 
+### Browser UI Testing (Playwright)
+
+Playwright drives the app's **web** target (`react-native-web`, via `expo start --web`) in a real Chromium browser — useful for visually reviewing frontend changes, taking screenshots, and catching rendering regressions that Jest's component tests can't see. It complements, but does not replace, the Jest suites above (`__tests__/e2e` are still the Node-level API/flow tests behind `npm run test:e2e`).
+
+```bash
+# Run all Playwright tests headlessly (auto-starts the web dev server on :8090)
+npm run test:e2e:pw
+
+# Open Playwright's interactive UI mode — step through tests, inspect the DOM/network
+npm run test:e2e:pw:ui
+
+# Run headed (visible browser window) for a quick visual pass
+npm run test:e2e:pw:headed
+
+# Debug a specific test with the Playwright inspector
+npm run test:e2e:pw:debug
+
+# View the last HTML report (screenshots, traces, videos for any failures)
+npm run test:e2e:pw:report
+
+# Record a new test by clicking through the app in a real browser
+npm run test:e2e:pw:codegen
+```
+
+**How it's wired up**
+
+- `playwright.config.ts` boots `npm run web:pw` (`expo start --web --port 8090`) automatically and waits for it to respond before running tests, so `npm run test:e2e:pw` works standalone. Port `8090` is deliberately different from the default `8081` so it never collides with a native `expo start --dev-client` session you already have running.
+- Every test gets a screenshot on failure, a video on failure (`retain-on-failure`), and a trace on the first retry — open any of these from the HTML report (`npm run test:e2e:pw:report`) or `npx playwright show-trace <trace.zip>`.
+- Tests run against **desktop Chrome** and a **Pixel 7 viewport** by default (see `projects` in `playwright.config.ts`) since this is a mobile-first app. Add `firefox` / `webkit` projects (after `npx playwright install firefox webkit`) if you need cross-browser coverage.
+- `e2e/utils/ui-inspector.ts` has reusable helpers: `gotoAndCapture` (navigate + attach a full-page screenshot), `captureAcrossViewports` (same page at mobile/tablet/desktop breakpoints), and `collectConsoleErrors` (assert a screen renders with no console noise).
+- **Auth is intentionally not wired up.** This app's sign-in goes through a real Supabase project (`lib/supabase.ts`), so the example tests only cover unauthenticated/public routes (`/`, `/legal/*`). `e2e/auth.setup.ts` documents the pattern for authenticated coverage — it no-ops unless you set `E2E_TEST_EMAIL` / `E2E_TEST_PASSWORD` for a **dedicated test account**, and it's not enabled in `playwright.config.ts` by default so no real sign-in traffic happens without explicit opt-in.
+- `app.json`'s `platforms` array now includes `"web"` (previously `["ios", "android"]` only) — required for `expo start --web` to run at all; it does not affect native iOS/Android builds. `react-native-web` was also added as a dependency via `npx expo install react-native-web` since the web target referenced it but it wasn't installed.
+
+**Writing new tests**: add `*.spec.ts` files under `e2e/`. Use relative paths with `page.goto('/some/route')` — `baseURL` is already configured. Prefer `getByRole` / `getByText` locators (matches how the app renders through react-native-web's accessibility mapping) over CSS selectors, which are brittle against Metro's generated class names.
+
 ### Test Status
 
 **Current Coverage** (~20% overall):

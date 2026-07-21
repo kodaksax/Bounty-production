@@ -347,7 +347,7 @@ export default function EditProfileScreen() {
           accessibilityState={{ disabled: saving || !isDirty }}
         >
           {saving ? (
-            <ActivityIndicator size="small" color="#fff" />
+            <ActivityIndicator size="small" color="#ffffff" />
           ) : (
             <Text style={[styles.saveText, !isDirty && styles.saveTextDisabled]}>Save</Text>
           )}
@@ -359,7 +359,7 @@ export default function EditProfileScreen() {
         <View style={styles.errorBanner}>
           <Text style={styles.errorBannerText}>{error || saveError}</Text>
           <TouchableOpacity onPress={() => setDismissedError(true)}>
-            <MaterialIcons name="close" size={20} color="#fff" />
+            <MaterialIcons name="close" size={20} color="#ffffff" />
           </TouchableOpacity>
         </View>
       )}
@@ -435,9 +435,9 @@ export default function EditProfileScreen() {
                 accessibilityHint="Upload a new profile picture"
               >
                 {avatarUpload.isUploading || avatarUpload.isPicking ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <ActivityIndicator size="small" color="#ffffff" />
                 ) : (
-                  <MaterialIcons name="camera-alt" size={18} color="#fff" />
+                  <MaterialIcons name="camera-alt" size={18} color="#ffffff" />
                 )}
               </TouchableOpacity>
             </View>
@@ -595,6 +595,9 @@ export default function EditProfileScreen() {
 const BANNER_HEIGHT = 140; // Increased from 120px for better visual presence
 
 function makeStyles(theme: AppTheme) {
+  const primaryTint = theme.isDark ? 'rgba(5,150,105,0.16)' : 'rgba(5,150,105,0.06)';
+  const primaryTintFocused = theme.isDark ? 'rgba(5,150,105,0.24)' : 'rgba(5,150,105,0.1)';
+
   return StyleSheet.create({
     container: {
       flex: 1,
@@ -628,7 +631,7 @@ function makeStyles(theme: AppTheme) {
       fontWeight: "500",
     },
     saveButton: {
-      backgroundColor: "#059669",
+      backgroundColor: theme.primary,
       borderRadius: 16,
       paddingHorizontal: 16,
       paddingVertical: 6,
@@ -661,7 +664,7 @@ function makeStyles(theme: AppTheme) {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      backgroundColor: "#dc2626",
+      backgroundColor: theme.error,
       paddingHorizontal: 16,
       paddingVertical: 12,
       marginBottom: 8,
@@ -669,7 +672,7 @@ function makeStyles(theme: AppTheme) {
     },
     errorBannerText: {
       flex: 1,
-      color: "#fff",
+      color: "#ffffff",
       fontSize: 14,
     },
     keyboardAvoidingView: {
@@ -684,11 +687,7 @@ function makeStyles(theme: AppTheme) {
     bannerSection: {
       position: "relative",
       marginBottom: 60,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-      elevation: 3,
+      ...theme.shadows.md,
     },
     bannerPlaceholder: {
       height: BANNER_HEIGHT,
@@ -714,12 +713,12 @@ function makeStyles(theme: AppTheme) {
       width: 100,
       height: 100,
       borderRadius: 50,
-      backgroundColor: "#059669",
+      backgroundColor: theme.primary,
       justifyContent: "center",
       alignItems: "center",
       borderWidth: 5,
       borderColor: theme.background,
-      shadowColor: "#000",
+      shadowColor: "#000000",
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.3,
       shadowRadius: 5,
@@ -737,12 +736,12 @@ function makeStyles(theme: AppTheme) {
       width: 44,
       height: 44,
       borderRadius: 22,
-      backgroundColor: "#059669",
+      backgroundColor: theme.primary,
       justifyContent: "center",
       alignItems: "center",
       borderWidth: 4,
       borderColor: theme.background,
-      shadowColor: "#000",
+      shadowColor: "#000000",
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.25,
       shadowRadius: 3,
@@ -759,7 +758,7 @@ function makeStyles(theme: AppTheme) {
       paddingHorizontal: 16,
     },
     fieldContainer: {
-      backgroundColor: theme.isDark ? "rgba(16, 185, 129, 0.08)" : "rgba(5, 150, 105, 0.06)",
+      backgroundColor: primaryTint,
       paddingHorizontal: 16,
       paddingVertical: 14,
       marginBottom: 1,
@@ -767,13 +766,13 @@ function makeStyles(theme: AppTheme) {
       borderLeftColor: "transparent",
     },
     fieldContainerFocused: {
-      backgroundColor: theme.isDark ? "rgba(16, 185, 129, 0.12)" : "rgba(5, 150, 105, 0.1)",
-      borderLeftColor: "#059669",
+      backgroundColor: primaryTintFocused,
+      borderLeftColor: theme.primary,
     },
     label: {
       fontSize: 12,
       fontWeight: "600",
-      color: theme.isDark ? "#6ee7b7" : "#059669",
+      color: theme.primaryLight,
       marginBottom: 6,
     },
     input: {
@@ -797,14 +796,14 @@ function makeStyles(theme: AppTheme) {
     },
     helpText: {
       fontSize: 11,
-      color: theme.isDark ? "#6ee7b7" : "#059669",
+      color: theme.primaryLight,
       marginTop: 4,
       fontStyle: "italic",
     },
     infoBox: {
       flexDirection: "row",
       alignItems: "flex-start",
-      backgroundColor: theme.isDark ? "rgba(16, 185, 129, 0.12)" : "rgba(5, 150, 105, 0.08)",
+      backgroundColor: primaryTintFocused,
       padding: 12,
       marginHorizontal: 16,
       marginTop: 8,

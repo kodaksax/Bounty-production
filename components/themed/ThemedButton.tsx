@@ -37,7 +37,7 @@ export function ThemedButton({
     'transparent';
 
   const textColor =
-    variant === 'ghost' ? theme.text : '#ffffff';
+    variant === 'ghost' || variant === 'secondary' ? theme.text : '#ffffff';
 
   const borderStyle =
     variant === 'ghost'
@@ -48,7 +48,13 @@ export function ThemedButton({
     <TouchableOpacity
       style={[
         styles.base,
-        { backgroundColor: bgColor, opacity: isDisabled ? 0.5 : 1 },
+        {
+          backgroundColor: bgColor,
+          opacity: isDisabled ? 0.5 : 1,
+          borderRadius: theme.radius.lg,
+          paddingHorizontal: theme.spacing.lg,
+          paddingVertical: theme.spacing.md,
+        },
         borderStyle,
         style,
       ]}
@@ -61,7 +67,17 @@ export function ThemedButton({
       ) : (
         <View style={styles.inner}>
           {leftIcon}
-          <Text style={[styles.label, { color: textColor, marginLeft: leftIcon ? 8 : 0 }]}>
+          <Text
+            style={[
+              styles.label,
+              {
+                color: textColor,
+                marginLeft: leftIcon ? theme.spacing.sm : 0,
+                fontSize: theme.typography.fontSize.sm,
+                fontWeight: theme.typography.fontWeight.semibold,
+              },
+            ]}
+          >
             {label}
           </Text>
         </View>
@@ -72,9 +88,6 @@ export function ThemedButton({
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
     minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
@@ -84,8 +97,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  label: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
+  label: {},
 });

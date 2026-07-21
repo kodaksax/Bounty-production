@@ -13,6 +13,8 @@ import {
     View,
 } from 'react-native';
 import { SPACING } from '../../lib/constants/accessibility';
+import { EmptyState } from '../../components/ui/empty-state';
+import { Skeleton } from '../../components/ui/skeleton';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 import { bountyService } from '../../lib/services/bounty-service';
@@ -590,11 +592,29 @@ export default function EnhancedSearchScreen() {
         </View>
       )}
 
+      {/* Trending Bounties — loading skeleton, shown while the initial fetch is in flight */}
+      {!query && !isSearching && isLoadingTrending && (
+        <View style={s.trendingSection}>
+          <View style={s.trendingHeader}>
+            <MaterialIcons name="local-fire-department" size={18} color={theme.primary} />
+            <Text style={s.trendingTitle}>Trending</Text>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {[0, 1, 2].map((i) => (
+              <View key={`trending-skeleton-${i}`} style={s.trendingCard}>
+                <Skeleton style={s.trendingSkeletonLine} />
+                <Skeleton style={s.trendingSkeletonAmount} />
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
       {/* Trending Bounties — shown only when search is empty */}
-{!query && !isSearching && trendingBounties.length > 0 && (
+{!query && !isSearching && !isLoadingTrending && trendingBounties.length > 0 && (
   <View style={s.trendingSection}>
     <View style={s.trendingHeader}>
-      <MaterialIcons name="local-fire-department" size={18} color="#059669" />
+      <MaterialIcons name="local-fire-department" size={18} color={theme.primary} />
       <Text style={s.trendingTitle}>Trending</Text>
     </View>
     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -641,13 +661,12 @@ export default function EnhancedSearchScreen() {
           keyboardDismissMode="on-drag"
           ListEmptyComponent={
             query && !isSearching && !error ? (
-              <View style={s.emptyCenter}>
-                <Text style={s.emptyText}>
-                  No bounties found for {"\""}
-                  {query}
-                  {"\""}
-                </Text>
-              </View>
+              <EmptyState
+                icon="search-off"
+                title="No bounties found"
+                description={`No bounties matched "${query}". Try a different keyword or check your spelling.`}
+                size="sm"
+              />
             ) : null
           }
           removeClippedSubviews={true}
@@ -664,13 +683,12 @@ export default function EnhancedSearchScreen() {
           keyboardDismissMode="on-drag"
           ListEmptyComponent={
             query && !isSearching && !error ? (
-              <View style={s.emptyCenter}>
-                <Text style={s.emptyText}>
-                  No users found for {"\""}
-                  {query}
-                  {"\""}
-                </Text>
-              </View>
+              <EmptyState
+                icon="person-search"
+                title="No users found"
+                description={`No users matched "${query}". Try a different name or username.`}
+                size="sm"
+              />
             ) : null
           }
           removeClippedSubviews={true}
@@ -936,13 +954,6 @@ function makeStyles(t: AppTheme) {
     resultsContainer: {
       padding: 12,
       paddingBottom: 100,
-    },
-    emptyCenter: {
-      padding: 24,
-      alignItems: 'center',
-    },
-    emptyText: {
-      color: t.textSecondary,
     },
     filterBtn: {
       padding: SPACING.COMPACT_GAP,
@@ -1312,6 +1323,16 @@ function makeStyles(t: AppTheme) {
       color: '#D4AF37',
       fontSize: 14,
       fontWeight: '700',
+    },
+    trendingSkeletonLine: {
+      width: '85%',
+      height: 13,
+      borderRadius: 6,
+    },
+    trendingSkeletonAmount: {
+      width: '40%',
+      height: 14,
+      borderRadius: 6,
     },
     // Semantic amber — preserved
     trendingHonorBadge: {

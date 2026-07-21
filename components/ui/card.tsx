@@ -1,4 +1,4 @@
-import { theme } from "lib/theme"
+import { useAppThemeContext } from "lib/themes"
 import * as React from "react"
 import { StyleProp, StyleSheet, Text, TextProps, TextStyle, View, ViewProps, ViewStyle } from "react-native"
 
@@ -8,22 +8,26 @@ interface CardProps extends ViewProps {
   children?: React.ReactNode
 }
 
-type CardVariant = "default" | "elevated";
+const Card = ({ variant = "default", style, children, ...props }: CardProps) => {
+  const { theme } = useAppThemeContext();
 
-// Narrow the variant map to only the view-style keys we expect
-const cardVariantMap: Record<CardVariant, 'base' | 'elevated'> = {
-  default: "base",
-  elevated: "elevated",
-};
-
-const Card = ({ variant = "default", style, children, ...props }: CardProps) => (
-  <View
-    style={[cardStyles[cardVariantMap[variant]], style]}
-    {...props}
-  >
-    {children}
-  </View>
-)
+  return (
+    <View
+      style={[
+        {
+          borderRadius: theme.radius.md,
+          backgroundColor: theme.surface,
+          ...theme.shadows.sm,
+        },
+        variant === "elevated" && theme.shadows.md,
+        style,
+      ]}
+      {...props}
+    >
+      {children}
+    </View>
+  )
+}
 Card.displayName = "Card"
 
 interface CardHeaderProps extends ViewProps {
@@ -50,28 +54,34 @@ interface CardTextProps extends TextProps {
 }
 
 const CardTitle = React.forwardRef<Text, CardTextProps>(
-  ({ style, children, ...props }, ref) => (
-    <Text
-      ref={ref}
-      style={[cardStyles.title, style]}
-      {...props}
-    >
-      {children}
-    </Text>
-  )
+  ({ style, children, ...props }, ref) => {
+    const { theme } = useAppThemeContext();
+    return (
+      <Text
+        ref={ref}
+        style={[cardStyles.title, { color: theme.text }, style]}
+        {...props}
+      >
+        {children}
+      </Text>
+    );
+  }
 )
 CardTitle.displayName = "CardTitle"
 
 const CardDescription = React.forwardRef<Text, CardTextProps>(
-  ({ style, children, ...props }, ref) => (
-    <Text
-      ref={ref}
-      style={[cardStyles.description, style]}
-      {...props}
-    >
-      {children}
-    </Text>
-  )
+  ({ style, children, ...props }, ref) => {
+    const { theme } = useAppThemeContext();
+    return (
+      <Text
+        ref={ref}
+        style={[cardStyles.description, { color: theme.textSecondary }, style]}
+        {...props}
+      >
+        {children}
+      </Text>
+    );
+  }
 )
 CardDescription.displayName = "CardDescription"
 
@@ -108,8 +118,6 @@ const CardFooter = React.forwardRef<View, CardFooterProps>(
 CardFooter.displayName = "CardFooter"
 
 interface CardStyles {
-  base: ViewStyle
-  elevated: ViewStyle
   header: ViewStyle
   title: TextStyle
   description: TextStyle
@@ -118,14 +126,6 @@ interface CardStyles {
 }
 
 const cardStyles = StyleSheet.create<CardStyles>({
-  base: {
-    borderRadius: 8,
-    backgroundColor: '#ffffff',
-    ...theme.shadows.sm,
-  },
-  elevated: {
-    ...theme.shadows.md,
-  },
   header: {
     paddingTop: 24,
     paddingHorizontal: 24,
@@ -134,12 +134,10 @@ const cardStyles = StyleSheet.create<CardStyles>({
   title: {
     fontSize: 24,
     fontWeight: '600',
-    color: '#111827',
     marginBottom: 4,
   },
   description: {
     fontSize: 14,
-    color: '#6b7280',
   },
   content: {
     paddingHorizontal: 24,

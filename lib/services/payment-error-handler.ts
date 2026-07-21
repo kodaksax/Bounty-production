@@ -345,6 +345,25 @@ export function generateIdempotencyKey(
 }
 
 /**
+ * Generate the key actually sent to Stripe as the Idempotency-Key header for
+ * a single payment attempt. Unlike generateIdempotencyKey() above (which is
+ * intentionally deterministic for the client-side rapid-double-click guard —
+ * same user+amount+purpose always collides for 24h), this key must be
+ * per-attempt: stable across this attempt's own automatic retries (so a
+ * network-timeout retry doesn't create a second PaymentIntent), but distinct
+ * for every new user-initiated attempt (so a legitimate second $20 deposit an
+ * hour later isn't silently deduped against the first by Stripe's own
+ * 24h idempotency cache). Generate this once per call site, before any retry
+ * wrapper, and reuse it across that call's own retries only.
+ */
+export function generateStripeIdempotencyKey(userId: string, purpose: string): string {
+  const nonce = typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2, 15)}`;
+  return `${IDEMPOTENCY_KEY_PREFIX}${userId}_${purpose}_${nonce}`;
+}
+
+/**
  * Check if a payment with this idempotency key is already in progress
  */
 export function checkDuplicatePayment(idempotencyKey: string): boolean {

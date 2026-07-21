@@ -30,6 +30,7 @@ import {
   completePaymentAttempt,
   checkDuplicatePayment,
   generateIdempotencyKey,
+  generateStripeIdempotencyKey,
   logPaymentError,
   parsePaymentError,
   recordPaymentAttempt,
@@ -231,7 +232,8 @@ class StripeService {
   async createPaymentIntent(
     amount: number,
     currency: string = 'usd',
-    authToken?: string
+    authToken?: string,
+    idempotencyKey?: string
   ): Promise<StripePaymentIntent> {
     performanceService.startMeasurement('payment_initiate', 'payment_process', {
       amount,
@@ -258,6 +260,7 @@ class StripeService {
           amountCents: Math.round(amount * 100),
           currency,
           metadata: { purpose: 'wallet_deposit' },
+          ...(idempotencyKey ? { idempotencyKey } : {}),
         },
         ...(authToken ? { accessToken: authToken } : {}),
       });
@@ -644,11 +647,15 @@ class StripeService {
   ): Promise<StripePaymentIntent> {
     const { userId = 'anonymous', purpose = 'payment' } = options || {};
 
-    // Generate idempotency key for duplicate protection
-    const idempotencyKey = generateIdempotencyKey(userId, amount, purpose);
+    // Deterministic key: only used for the client-side rapid-double-click
+    // guard below (checkDuplicatePayment/recordPaymentAttempt), NOT sent to
+    // Stripe — it collides for 24h across any repeat of the same
+    // user+amount+purpose, which would incorrectly block a legitimate second
+    // deposit of the same amount if used as the actual Stripe idempotency key.
+    const dedupeKey = generateIdempotencyKey(userId, amount, purpose);
 
     // Check for duplicate submission
-    if (checkDuplicatePayment(idempotencyKey)) {
+    if (checkDuplicatePayment(dedupeKey)) {
       const duplicateError = {
         type: 'idempotency_error',
         code: 'duplicate_transaction',
@@ -658,13 +665,17 @@ class StripeService {
     }
 
     // Record the payment attempt
-    recordPaymentAttempt(idempotencyKey);
+    recordPaymentAttempt(dedupeKey);
+
+    // Separate, per-attempt key actually sent to Stripe via the backend —
+    // stable across this call's own automatic retries, distinct per attempt.
+    const stripeIdempotencyKey = generateStripeIdempotencyKey(userId, purpose);
 
     try {
       // Use retry wrapper for transient errors
       const result = await withPaymentRetry(
         async () => {
-          return await this.createPaymentIntent(amount, currency, authToken);
+          return await this.createPaymentIntent(amount, currency, authToken, stripeIdempotencyKey);
         },
         {
           maxRetries: 3,
@@ -674,7 +685,7 @@ class StripeService {
       );
 
       // Payment successful, complete the attempt tracking
-      completePaymentAttempt(idempotencyKey);
+      completePaymentAttempt(dedupeKey);
 
       return result;
     } catch (error) {
@@ -688,7 +699,7 @@ class StripeService {
       });
 
       // Complete the attempt tracking (allows retry after error)
-      completePaymentAttempt(idempotencyKey);
+      completePaymentAttempt(dedupeKey);
 
       throw error;
     }

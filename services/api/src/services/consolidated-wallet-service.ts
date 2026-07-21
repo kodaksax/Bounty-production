@@ -124,33 +124,6 @@ export interface TransactionsResult {
 }
 
 /**
- * Compute the authoritative balance by summing completed wallet_transactions.
- * Used as a cross-check / fallback when profiles.balance might be stale.
- *
- * wallet_transactions stores **signed** amounts: deposits/releases/refunds are
- * positive, escrows/withdrawals are negative. We therefore sum them directly
- * instead of applying direction based on type, which would double-negate debits.
- */
-async function deriveBalanceFromTransactions(
-  admin: SupabaseClient<any>,
-  userId: string
-): Promise<number> {
-  const { data: transactions, error } = await admin
-    .from('wallet_transactions')
-    .select('amount')
-    .eq('user_id', userId)
-    .eq('status', 'completed');
-
-  if (error || !transactions) return 0;
-
-  let balance = 0;
-  for (const tx of transactions) {
-    balance += Number(tx.amount) || 0;
-  }
-  return balance;
-}
-
-/**
  * Get user's current wallet balance
  * @param userId - User ID
  * @returns Current balance in USD
@@ -173,48 +146,14 @@ export async function getBalance(userId: string): Promise<BalanceResult> {
     });
   }
 
-  let balance = profile?.balance || 0;
-
-  // Cross-check: when the cached profile balance is 0, compute the
-  // authoritative balance from wallet_transactions.  This catches cases
-  // where a deposit webhook created a transaction but profiles.balance
-  // was not updated (e.g. race condition, partial failure, or a code path
-  // that inserts into wallet_transactions without updating profiles).
-  if (balance === 0) {
-    const derivedBalance = await deriveBalanceFromTransactions(admin, userId);
-    if (derivedBalance > 0) {
-      balance = derivedBalance;
-      // Reconcile the stale cached value (fire-and-forget).
-      // Wrap in Promise.resolve() to get a full Promise with .catch() support.
-      // The Supabase update resolves with { data, error } rather than rejecting
-      // on DB errors, so we must check the error field inside .then().
-      Promise.resolve(
-        admin
-          .from('profiles')
-          .update({ balance: derivedBalance, updated_at: new Date().toISOString() })
-          .eq('id', userId)
-      )
-        .then(({ error: reconcileErr }: { error: any }) => {
-          if (reconcileErr) {
-            logger.warn(
-              { userId, derivedBalance, err: reconcileErr },
-              '[WalletService] Failed to reconcile cached balance'
-            );
-          } else {
-            logger.info(
-              { userId, derivedBalance },
-              '[WalletService] Reconciled stale profile balance'
-            );
-          }
-        })
-        .catch((err: unknown) => {
-          logger.warn(
-            { userId, derivedBalance, err },
-            '[WalletService] Failed to reconcile cached balance'
-          );
-        });
-    }
-  }
+  // profiles.balance is the sole source of truth (see
+  // supabase/functions/wallet/index.ts for the full rationale). This
+  // previously "reconciled" a $0 cached balance by trusting a derived
+  // SUM(completed wallet_transactions) instead and writing it back to
+  // profiles.balance — removed 2026-07-18 because it could resurrect a
+  // legitimately-zeroed balance (an in-flight debit, or a deliberate
+  // administrative write-off) into a phantom, double-spendable balance.
+  const balance = profile?.balance || 0;
 
   return {
     balance,

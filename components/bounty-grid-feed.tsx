@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useMemo, useRef } from "react"
+import React, { useCallback, useEffect, useMemo, useRef } from "react"
 import { Animated, Dimensions, FlatList, ScrollView, StyleSheet, View } from "react-native"
 import { SPACING } from '../lib/constants/accessibility'
 
@@ -36,7 +36,7 @@ function getBountyCategory(bounty: Bounty): string {
 // ── Data shaping ───────────────────────────────────────────────────────────
 
 type FeaturedCarouselRow = { type: 'featuredCarousel'; items: Array<{ item: Bounty; categoryKey: string }> }
-type PairRow             = { type: 'pair'; left: Bounty; right: Bounty | null; categoryKey: string }
+type PairRow             = { type: 'pair'; left: Bounty; right: Bounty | null; categoryKey: string; rightCategoryKey: string | null }
 type GridRow             = FeaturedCarouselRow | PairRow
 
 const FEATURED_COUNT = 3
@@ -64,11 +64,13 @@ function buildGridRows(bounties: Bounty[]): GridRow[] {
   }
 
   for (let i = 0; i < rest.length; i += 2) {
+    const right = rest[i + 1] ?? null
     rows.push({
       type: 'pair',
       left: rest[i],
-      right: rest[i + 1] ?? null,
+      right,
       categoryKey: getBountyCategory(rest[i]),
+      rightCategoryKey: right ? getBountyCategory(right) : null,
     })
   }
 
@@ -119,7 +121,7 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
 
   const rows = useMemo(() => buildGridRows(bounties), [bounties])
 
-  const renderRow = ({ item, index }: { item: GridRow; index: number }) => {
+  const renderRow = useCallback(({ item, index }: { item: GridRow; index: number }) => {
     let content: React.ReactNode
 
     if (item.type === 'featuredCarousel') {
@@ -161,8 +163,8 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
       )
     } else {
       const { left, right } = item
-      const leftDef = CATEGORY_DEFS[getBountyCategory(left)]
-      const rightDef = right ? CATEGORY_DEFS[getBountyCategory(right)] : null
+      const leftDef = CATEGORY_DEFS[item.categoryKey]
+      const rightDef = item.rightCategoryKey ? CATEGORY_DEFS[item.rightCategoryKey] : null
       content = (
         <View style={s.pairRow}>
           <BountyGridItem
@@ -208,7 +210,7 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
         {content}
       </AnimatedRow>
     )
-  }
+  }, [bountyDistances, s])
 
   return (
     <FlatList

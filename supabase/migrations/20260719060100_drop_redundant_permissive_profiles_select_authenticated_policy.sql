@@ -1,0 +1,31 @@
+-- Migration: Drop overly-broad profiles_select_authenticated RLS policy
+-- Created: 2026-07-19
+--
+-- FOLLOW-UP to 20260719060000_restore_profiles_select_grant_pending_client_rollout.sql.
+--
+-- That migration restored table-level SELECT on public.profiles (emergency
+-- stop-gap for clients still on the pre-get_my_profile() bundle getting 403s
+-- on their own profile reads). Restoring the table grant exposed a policy gap
+-- that had been masked by the column-level REVOKE it rolled back:
+-- `profiles_select_authenticated` has `USING (true)` for role `authenticated`
+-- -- i.e. it lets ANY authenticated user read ANY OTHER user's full row,
+-- including balance/stripe_customer_id/email/phone/risk_* -- the exact
+-- cross-user leak 20260719051832_revoke_sensitive_profile_columns_select.sql
+-- existed to close.
+--
+-- 20260719051618_drop_untracked_permissive_anon_profiles_policies.sql already
+-- dropped two similarly-permissive untracked policies ("Enable read access
+-- for all users", "Public profiles are viewable by everyone") in an earlier
+-- pass this same day but missed this one.
+--
+-- This policy is redundant: three other SELECT policies on this table already
+-- cover the legitimate self-read case, all equivalent (`auth.uid() = id`):
+--   "Users can view own profile", "allow_profiles_select_self", "profiles_select_own"
+-- Cross-user reads for display purposes (poster/hunter username+avatar, search,
+-- profile pages) go through public.public_profiles, a curated safe-columns
+-- view that bypasses base-table RLS via view-owner privilege -- see
+-- 20260718235342_formalize_public_profiles_view.sql. Dropping
+-- profiles_select_authenticated does not remove any functionality that view
+-- doesn't already serve.
+
+DROP POLICY IF EXISTS "profiles_select_authenticated" ON public.profiles;

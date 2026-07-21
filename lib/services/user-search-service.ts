@@ -23,14 +23,25 @@ export const userSearchService = {
       const limit = filters.limit ?? 20;
       const offset = filters.offset ?? 0;
 
-      let query = supabase.from('profiles').select('*', { count: 'exact' });
+      // Cross-user search: select only public-safe columns, not `select('*')`
+      // (which would expose balance/Stripe IDs/risk fields/email/phone for
+      // arbitrary other users). See
+      // docs/withdrawals/08-profiles-rls-migration-strategy.md.
+      let query = supabase
+        .from('profiles')
+        .select('id, username, display_name, avatar, about, created_at', { count: 'exact' });
 
-      // Apply keyword search on username, name, bio
+      // Apply keyword search on username, name, bio. Deliberately does NOT
+      // search `email` -- searching arbitrary users by email would let any
+      // authenticated caller enumerate whether an email address is
+      // registered, which is a separate privacy concern from the
+      // column-exposure fix above and needs its own product decision (see
+      // the migration strategy doc) rather than being folded in silently.
       if (filters.keywords) {
         const keyword = escapeIlike(filters.keywords.trim());
         const pattern = `%${keyword}%`;
         const quoted = quotePostgrestValue(pattern);
-        query = query.or(`username.ilike.${quoted},email.ilike.${quoted},about.ilike.${quoted}`);
+        query = query.or(`username.ilike.${quoted},about.ilike.${quoted}`);
       }
 
       // Location filter
@@ -77,8 +88,8 @@ export const userSearchService = {
       const profiles: UserProfile[] = (data || []).map((item: any) => ({
         id: item.id,
         username: item.username || `@user_${item.id.slice(0, 8)}`,
-        name: item.email?.split('@')[0],
-        avatar: item.avatar || item.avatar_url || undefined,
+        name: item.display_name || undefined,
+        avatar: item.avatar || undefined,
         bio: item.about,
         joinDate: item.created_at,
         skills: [], // Would need to be populated from a skills table
@@ -125,7 +136,7 @@ export const userSearchService = {
 
       const { data, error } = await supabase
         .from('profiles')
-        .select('*')
+        .select('id, username, display_name, avatar, about, created_at')
         .or(`username.eq.${cleanUsername},username.eq.@${cleanUsername}`)
         .single();
 
@@ -136,8 +147,8 @@ export const userSearchService = {
       return {
         id: data.id,
         username: data.username || `@user_${data.id.slice(0, 8)}`,
-        name: data.email?.split('@')[0],
-        avatar: data.avatar || data.avatar_url || undefined,
+        name: data.display_name || undefined,
+        avatar: data.avatar || undefined,
         bio: data.about,
         joinDate: data.created_at,
         skills: [],

@@ -1,9 +1,12 @@
-import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useAppThemeContext } from 'lib/themes/AppThemeContext';
+import type { AppTheme } from 'lib/themes/types';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BrandingLogo } from 'components/ui/branding-logo';
+import { SettingsRow } from '../ui/settings-row';
+import { SettingsScreenHeader } from '../ui/settings-screen-header';
+import { SettingsSection } from '../ui/settings-section';
 import { API_BASE_URL } from '../../lib/config/api';
 import { supabase } from '../../lib/supabase';
 
@@ -24,6 +27,10 @@ interface NotificationPrefs {
 const NOTIF_KEY = 'settings:notifications';
 
 export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps> = ({ onBack }) => {
+  const { theme } = useAppThemeContext();
+  const insets = useSafeAreaInsets();
+  const s = useMemo(() => makeStyles(theme), [theme]);
+
   const [prefs, setPrefs] = useState<NotificationPrefs>({
     newApplicants: true,
     acceptedRequests: true,
@@ -37,7 +44,6 @@ export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps>
   });
   const [loaded, setLoaded] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     loadPreferences();
@@ -47,7 +53,7 @@ export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps>
     try {
       // First, try to load from backend
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       if (session?.access_token) {
         try {
           const response = await fetch(
@@ -63,7 +69,7 @@ export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps>
           if (response.ok) {
             const data = await response.json();
             const backendPrefs = data.preferences;
-            
+
             // Map backend preferences to frontend format
             setPrefs({
               newApplicants: backendPrefs.applications_enabled,
@@ -76,7 +82,7 @@ export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps>
               payments: backendPrefs.payments_enabled,
               reminderLeadMinutes: '30', // This is still local only
             });
-            
+
             // Also save to local storage as backup
             await AsyncStorage.setItem(NOTIF_KEY, JSON.stringify({
               newApplicants: backendPrefs.applications_enabled,
@@ -88,7 +94,7 @@ export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps>
               completions: backendPrefs.completions_enabled,
               payments: backendPrefs.payments_enabled,
             }));
-            
+
             setLoaded(true);
             return;
           }
@@ -113,15 +119,15 @@ export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps>
   const persist = async (patch: Partial<NotificationPrefs>) => {
     setPrefs(prev => {
       const next = { ...prev, ...patch };
-      
+
       // Save locally immediately for responsive UI
-      AsyncStorage.setItem(NOTIF_KEY, JSON.stringify(next)).catch(err => 
+      AsyncStorage.setItem(NOTIF_KEY, JSON.stringify(next)).catch(err =>
         console.error('persist notif failed', err)
       );
-      
+
       // Sync with backend
       syncToBackend(next);
-      
+
       return next;
     });
   };
@@ -130,7 +136,7 @@ export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps>
     setSyncing(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       if (!session?.access_token) {
         return;
       }
@@ -171,128 +177,143 @@ export const NotificationsCenterScreen: React.FC<NotificationsCenterScreenProps>
     }
   };
 
+  const switchProps = (value: boolean, onChange: (v: boolean) => void, label: string) => ({
+    value,
+    onValueChange: onChange,
+    trackColor: { false: theme.border, true: theme.primary },
+    thumbColor: theme.surface,
+    ios_backgroundColor: theme.border,
+    accessibilityLabel: label,
+  });
+
   return (
-    <View
-      className="flex-1 bg-[#059669]"
-      style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
-    >
-      <View className="flex-row justify-between items-center p-4 pt-8">
-        <View className="flex-row items-center">
-          <BrandingLogo size="small" />
-        </View>
-        <View className="flex-row items-center">
-          {syncing && <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />}
-          <TouchableOpacity onPress={onBack} className="p-2">
-            <MaterialIcons name="arrow-back" size={24} color="#fff" />
-          </TouchableOpacity>
-        </View>
-      </View>
+    <View style={s.screen}>
+      <SettingsScreenHeader
+        icon="notifications"
+        title="Notification Center"
+        onBack={onBack}
+        rightNode={syncing ? <ActivityIndicator size="small" color={theme.primary} /> : undefined}
+      />
+
       {!loaded ? (
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#fff" />
-          <Text className="text-white mt-2">Loading preferences...</Text>
+        <View style={s.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={s.loadingText}>Loading preferences...</Text>
         </View>
       ) : (
-        <ScrollView className="px-4" contentContainerStyle={{ paddingBottom: 96 }}>
-          <Text className="text-xl font-semibold text-white mb-4">Notification Center</Text>
-          <Text className="text-white text-xs mb-4">Control which push notifications you receive. Settings are synced across all your devices.</Text>
-          
-          <NotifToggle 
-            label="New Applicants" 
-            subtitle="Alerts when a hunter applies to your bounty." 
-            icon="person-add-alt" 
-            value={prefs.newApplicants} 
-            onChange={v => persist({ newApplicants: v })} 
-          />
-          
-          <NotifToggle 
-            label="Accepted Requests" 
-            subtitle="Updates when your request is accepted." 
-            icon="check-circle" 
-            value={prefs.acceptedRequests} 
-            onChange={v => persist({ acceptedRequests: v })} 
-          />
-          
-          <NotifToggle 
-            label="Bounty Completions" 
-            subtitle="Notifications when bounties are completed." 
-            icon="task-alt" 
-            value={prefs.completions} 
-            onChange={v => persist({ completions: v })} 
-          />
-          
-          <NotifToggle 
-            label="Payments" 
-            subtitle="Alerts when you receive payments." 
-            icon="attach-money" 
-            value={prefs.payments} 
-            onChange={v => persist({ payments: v })} 
-          />
-          
-          <NotifToggle 
-            label="Chat Messages" 
-            subtitle="Direct messages & bounty discussions." 
-            icon="chat" 
-            value={prefs.chatMessages} 
-            onChange={v => persist({ chatMessages: v })} 
-          />
-          
-          <NotifToggle 
-            label="New Followers" 
-            subtitle="Notifications when someone follows you." 
-            icon="favorite" 
-            value={prefs.follows} 
-            onChange={v => persist({ follows: v })} 
-          />
-          
-          <NotifToggle 
-            label="Reminders" 
-            subtitle="Due date & follow-up reminders." 
-            icon="schedule" 
-            value={prefs.reminders} 
-            onChange={v => persist({ reminders: v })} 
-            extra={
-              prefs.reminders && (
-                <View className="mt-3">
-                  <Text className="text-[10px] text-white mb-1">Minutes before due date</Text>
-                  <TextInput 
-                    keyboardType="numeric" 
-                    value={prefs.reminderLeadMinutes} 
-                    onChangeText={v => /^(\d{0,3})$/.test(v) && persist({ reminderLeadMinutes: v })} 
-                    placeholder="30" 
-                    placeholderTextColor="#9CA3AF" 
-                    className="bg-black/40 rounded-md px-3 py-2 text-white w-24" 
-                  />
-                </View>
-              )
-            } 
-          />
-          
-          <NotifToggle 
-            label="System" 
-            subtitle="Platform updates & maintenance notices." 
-            icon="info" 
-            value={prefs.system} 
-            onChange={v => persist({ system: v })} 
-          />
+        <ScrollView
+          contentContainerStyle={[s.scrollContent, { paddingBottom: Math.max(insets.bottom, 24) + 24 }]}
+        >
+          <SettingsSection description="Control which push notifications you receive. Settings are synced across all your devices.">
+            <SettingsRow
+              icon="person-add-alt"
+              label="New Applicants"
+              description="Alerts when a hunter applies to your bounty."
+              right={<Switch {...switchProps(prefs.newApplicants, v => persist({ newApplicants: v }), 'New applicants notifications')} />}
+            />
+            <SettingsRow
+              icon="check-circle"
+              label="Accepted Requests"
+              description="Updates when your request is accepted."
+              right={<Switch {...switchProps(prefs.acceptedRequests, v => persist({ acceptedRequests: v }), 'Accepted requests notifications')} />}
+            />
+            <SettingsRow
+              icon="task-alt"
+              label="Bounty Completions"
+              description="Notifications when bounties are completed."
+              right={<Switch {...switchProps(prefs.completions, v => persist({ completions: v }), 'Bounty completion notifications')} />}
+            />
+            <SettingsRow
+              icon="attach-money"
+              label="Payments"
+              description="Alerts when you receive payments."
+              right={<Switch {...switchProps(prefs.payments, v => persist({ payments: v }), 'Payment notifications')} />}
+            />
+            <SettingsRow
+              icon="chat"
+              label="Chat Messages"
+              description="Direct messages & bounty discussions."
+              right={<Switch {...switchProps(prefs.chatMessages, v => persist({ chatMessages: v }), 'Chat message notifications')} />}
+            />
+            <SettingsRow
+              icon="favorite"
+              label="New Followers"
+              description="Notifications when someone follows you."
+              right={<Switch {...switchProps(prefs.follows, v => persist({ follows: v }), 'New follower notifications')} />}
+            />
+            <SettingsRow
+              icon="schedule"
+              label="Reminders"
+              description="Due date & follow-up reminders."
+              right={<Switch {...switchProps(prefs.reminders, v => persist({ reminders: v }), 'Reminder notifications')} />}
+            />
+            {prefs.reminders && (
+              <View style={s.reminderRow}>
+                <Text style={s.reminderLabel}>Minutes before due date</Text>
+                <TextInput
+                  keyboardType="numeric"
+                  value={prefs.reminderLeadMinutes}
+                  onChangeText={v => /^(\d{0,3})$/.test(v) && persist({ reminderLeadMinutes: v })}
+                  placeholder="30"
+                  placeholderTextColor={theme.textDisabled}
+                  style={s.reminderInput}
+                  accessibilityLabel="Minutes before due date"
+                />
+              </View>
+            )}
+            <SettingsRow
+              icon="info"
+              label="System"
+              description="Platform updates & maintenance notices."
+              right={<Switch {...switchProps(prefs.system, v => persist({ system: v }), 'System notifications')} />}
+            />
+          </SettingsSection>
         </ScrollView>
       )}
     </View>
   );
 };
 
-const NotifToggle = ({ label, subtitle, icon, value, onChange, extra }: { label: string; subtitle: string; icon: any; value: boolean; onChange: (v: boolean) => void; extra?: React.ReactNode }) => (
-  <View className="bg-black/30 rounded-xl p-4 mb-4">
-    <View className="flex-row items-start justify-between">
-      <View className="flex-1 pr-3">
-        <View className="flex-row items-center mb-1">
-          <MaterialIcons name={icon} size={18} color="#9CA3AF" />
-          <Text className="ml-2 text-white font-medium text-sm" numberOfLines={1}>{label}</Text>
-        </View>
-        <Text className="text-white text-[11px] leading-4">{subtitle}</Text>
-      </View>
-      <Switch value={value} onValueChange={onChange} />
-    </View>
-    {extra}
-  </View>
-);
+function makeStyles(t: AppTheme) {
+  return StyleSheet.create({
+    screen: {
+      flex: 1,
+      backgroundColor: t.background,
+    },
+    scrollContent: {
+      paddingHorizontal: 16,
+      paddingTop: 20,
+    },
+    loadingContainer: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    loadingText: {
+      color: t.textSecondary,
+      marginTop: 12,
+      fontSize: 14,
+    },
+    reminderRow: {
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+      paddingLeft: 56,
+    },
+    reminderLabel: {
+      fontSize: 12,
+      color: t.textSecondary,
+      marginBottom: 8,
+    },
+    reminderInput: {
+      backgroundColor: t.surfaceSecondary,
+      borderWidth: 1,
+      borderColor: t.border,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      color: t.text,
+      fontSize: 15,
+      width: 100,
+    },
+  });
+}

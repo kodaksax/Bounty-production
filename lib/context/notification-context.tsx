@@ -1,6 +1,6 @@
 // Lazily require expo-notifications to avoid native import at module evaluation time
 import { useRouter } from 'expo-router';
-import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { navigationIntent } from '../services/navigation-intent';
 import { notificationService } from '../services/notification-service';
@@ -56,7 +56,9 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const refreshUnreadCount = useCallback(async () => {
     try {
       const count = await notificationService.getUnreadCount();
-      if (isMountedRef.current) setUnreadCount(count);
+      // Skip the state update (and the re-render fan-out to every consumer)
+      // when the poll returns the same count as last time.
+      if (isMountedRef.current) setUnreadCount(prev => (prev === count ? prev : count));
     } catch {
       // Silent failure - getUnreadCount already handles logging appropriately
       // Don't spam console with additional error messages
@@ -284,15 +286,23 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     };
   }, [refreshUnreadCount]);
 
-  const value: NotificationContextType = {
-    notifications,
-    unreadCount,
-    loading,
-    fetchNotifications,
-    markAsRead,
-    markAllAsRead,
-    refreshUnreadCount,
-  };
+  // Memoized so consumers only re-render when notifications/unreadCount/loading
+  // actually change, not on every 30s poll tick when the count is unchanged
+  // (refreshUnreadCount above already skips the setState in that case, but
+  // memoizing here also protects against re-renders from unrelated state in
+  // this provider, e.g. AppState listener churn).
+  const value: NotificationContextType = useMemo(
+    () => ({
+      notifications,
+      unreadCount,
+      loading,
+      fetchNotifications,
+      markAsRead,
+      markAllAsRead,
+      refreshUnreadCount,
+    }),
+    [notifications, unreadCount, loading, fetchNotifications, markAsRead, markAllAsRead, refreshUnreadCount]
+  );
 
   return (
     <NotificationContext.Provider value={value}>

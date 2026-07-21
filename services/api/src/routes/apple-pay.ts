@@ -245,8 +245,9 @@ export async function registerApplePayRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // Note: Stripe webhook endpoint is registered centrally by
-  // `registerConsolidatedWebhookRoutes` in services/api/src/routes/consolidated-webhooks.ts.
-  // Apple Pay no longer registers its own `/webhooks/stripe` route to avoid duplicate
-  // route registrations in the consolidated Fastify server.
+  // Note: this Fastify server never registers its own `/webhooks/stripe` route.
+  // The route module that previously handled it here
+  // (services/api/src/routes/consolidated-webhooks.ts) was deleted as dead
+  // code — this whole services/api server has no deploy path; the live
+  // webhook handler is supabase/functions/webhooks/index.ts.
 }

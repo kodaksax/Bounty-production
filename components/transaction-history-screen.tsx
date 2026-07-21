@@ -9,6 +9,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAppThemeContext } from "../lib/themes/AppThemeContext"
 import type { AppTheme } from "../lib/themes/types"
 import { TransactionDetailModal } from "./transaction-detail-modal"
+import { BrandingLogo } from "./ui/branding-logo"
+import { EmptyState } from "./ui/empty-state"
 import { TransactionsListSkeleton } from "./ui/skeleton-loaders"
 
 // Constants for transaction display
@@ -191,7 +193,14 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
               <Text
                 style={[
                   s.statusText,
-                  { color: transaction.details.status === "Completed" ? '#6ee7b7' : '#fde68a' }
+                  {
+                    color:
+                      transaction.details.status?.toLowerCase() === "completed"
+                        ? '#6ee7b7'
+                        : transaction.details.status?.toLowerCase() === "failed"
+                          ? '#f87171'
+                          : '#fde68a',
+                  },
                 ]}
               >
                 {transaction.details.status}
@@ -243,8 +252,7 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
       {/* Header - improved spacing for iPhone */}
       <View className="flex flex-row items-center justify-between p-5 pt-safe">
         <View className="flex flex-row items-center">
-          <MaterialIcons name="gps-fixed" size={24} color="#ffffff" />
-          <Text className="text-xl font-bold tracking-wider ml-2" style={{ color: theme.text }}>BOUNTY</Text>
+          <BrandingLogo size="small" />
         </View>
         <TouchableOpacity
           onPress={onBack}
@@ -255,8 +263,10 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
             justifyContent: 'center',
             alignItems: 'center'
           }}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
         >
-          <MaterialIcons name="arrow-back" size={24} color="#ffffff" />
+          <MaterialIcons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
       </View>
 
@@ -369,21 +379,20 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
             <TransactionsListSkeleton count={5} />
           </View>
         ) : filteredTransactions.length === 0 ? (
-          <View style={s.emptyContainer}>
-            <View style={s.emptyIcon}>
-              <MaterialIcons name="receipt-long" size={32} color={theme.primaryLight} />
-            </View>
-            <Text style={s.emptyTitle}>No transactions found</Text>
-            <Text style={s.emptySubtitle}>
-              {activeFilter === "all"
+          <EmptyState
+            icon="receipt-long"
+            title="No transactions found"
+            description={
+              activeFilter === "all"
                 ? "Your transaction history will appear here once you make deposits, withdraw funds, or complete bounties."
                 : activeFilter === "deposits"
                 ? "No deposits yet. Add funds to your wallet to get started."
                 : activeFilter === "withdrawals"
                 ? "No withdrawals yet. Your withdrawal history will appear here."
-                : "No bounty transactions yet. Complete or post bounties to see them here."}
-            </Text>
-          </View>
+                : "No bounty transactions yet. Complete or post bounties to see them here."
+            }
+            size="md"
+          />
         ) : (
           <FlatList
             data={flatListData}

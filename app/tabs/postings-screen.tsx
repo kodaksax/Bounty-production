@@ -124,7 +124,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   const BOTTOM_NAV_OFFSET = 60// height of BottomNav + gap so sticky actions sit fully above it
   const { balance, deposit, createEscrow, refundEscrow } = useWallet()
   const { theme } = useAppThemeContext()
-  const styles = makeStyles(theme)
+  const styles = useMemo(() => makeStyles(theme), [theme])
   // Filter chip state for each tab; kept separate so toggling one doesn't affect the other.
   // In Progress supports: all, review, applied, in_progress, rejected.
   // My Postings supports: all, review, open, in_progress.
@@ -1041,10 +1041,18 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                     ) : (
                       <EmptyState
                         icon="work-outline"
-                        title="No Active Work Yet"
-                        description="Ready to start earning? Browse available bounties and accept one to begin!"
-                        actionLabel="Browse Bounties"
+                        title="Track Every Bounty You Accept"
+                        description="This is your work hub. Once you accept a bounty, it lands here so you can follow it from kickoff to payout."
+                        size="lg"
+                        features={[
+                          { icon: 'play-circle-outline', label: 'Active work' },
+                          { icon: 'check-circle-outline', label: 'Completed work' },
+                          { icon: 'archive', label: 'Archived work' },
+                          { icon: 'cancel', label: 'Canceled work' },
+                        ]}
+                        actionLabel="Find Bounties"
                         onAction={() => setActiveScreen('bounty')}
+                        footnote="Browse nearby or online bounties to get started."
                       />
                     )
                   }
@@ -1097,11 +1105,12 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                       />
                     ) : (
                       <EmptyState
-                        icon="inbox"
-                        title="No Applications Yet"
-                        description="When hunters apply to your bounties, you'll review and accept them here. Post a bounty to get started!"
-                        actionLabel="Post a Bounty"
-                        onAction={() => setActiveTab('new')}
+                        icon="mark-email-read"
+                        tone="success"
+                        title="You're All Caught Up"
+                        description="No pending requests right now. Anything that needs your attention — like a bounty application or invitation — will show up here automatically."
+                        size="lg"
+                        footnote="New requests appear instantly — no need to refresh."
                       />
                     )
                   }
@@ -1184,10 +1193,17 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                       />
                     ) : (
                       <EmptyState
-                        icon="add-box"
-                        title="No Postings Yet"
-                        description="You haven't posted any bounties yet. Create your first bounty to get started!"
-                        actionLabel="Create Your First Bounty"
+                        icon="post-add"
+                        title="Every Bounty You've Posted, In One Place"
+                        description="This is where you'll manage everything you post — from the first applicant to the final payout."
+                        size="lg"
+                        features={[
+                          { icon: 'person-search', label: 'Monitor applicants' },
+                          { icon: 'trending-up', label: 'Manage progress' },
+                          { icon: 'forum', label: 'Communicate with hunters' },
+                          { icon: 'task-alt', label: 'Track completed work' },
+                        ]}
+                        actionLabel="Post a Bounty"
                         onAction={() => setActiveTab('new')}
                       />
                     )

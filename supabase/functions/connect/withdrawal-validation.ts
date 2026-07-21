@@ -202,3 +202,128 @@ export function mapWithdrawBalanceError(message: string | undefined): {
     status: 500,
   };
 }
+
+// ─── Withdrawal destination (bank account) resolution ───────────────────────
+//
+// BACKGROUND: stripe.transfers.create({ destination: connectedAccountId })
+// moves funds into the connected account's shared Stripe balance — it does
+// NOT target a specific external bank account. Which bank account actually
+// receives money is decided later, entirely by Stripe, based on whichever
+// external account is currently `default_for_currency` on that connected
+// account when Stripe's automatic payout schedule next sweeps the balance.
+//
+// Previously the withdraw screen let a hunter pick a bank account in the UI,
+// but that selection was never communicated to Stripe and never promoted to
+// `default_for_currency` — so Stripe would always pay out to whatever was
+// already default, regardless of what was tapped. This is the confirmed root
+// cause of "I withdrew to the wrong account" reports.
+//
+// FIX: the withdrawal request now carries the selected `bankAccountId`. This
+// pure resolver decides, given the account's current list of external bank
+// accounts and the requested id, which account should be the transfer's
+// intended destination and whether index.ts needs to call
+// stripe.accounts.updateExternalAccount(..., { default_for_currency: true })
+// before creating the Transfer. The actual Stripe API calls stay in index.ts;
+// this function is kept pure and dependency-free so the decision logic is
+// unit-testable without mocking the Stripe SDK.
+//
+// RESIDUAL LIMITATION (cannot be fully closed without a bigger architectural
+// change — see docs/payments/BOUNTY_WITHDRAWAL_TECHNICAL_SPECIFICATION.md):
+// because Transfers land in a single shared connected-account balance and
+// Stripe's automatic payout schedule sweeps that whole balance to whatever is
+// default AT SWEEP TIME (not per-transfer), two withdrawals for the same user
+// with different bank-account selections that both land before the next
+// Stripe payout will still be swept together to a single account — the last
+// selection to actually update `default_for_currency` wins for the combined
+// balance. True per-withdrawal destination precision would require switching
+// the connected accounts to Stripe's manual payout schedule and creating
+// explicit `stripe.payouts.create({ destination })` calls per withdrawal,
+// which is a materially larger architectural change and is documented as a
+// recommendation, not implemented here.
+
+export interface ExternalAccountSummary {
+  id: string;
+  default_for_currency?: boolean | null;
+  bank_name?: string | null;
+  last4?: string | null;
+}
+
+export type DestinationResolution =
+  | {
+      ok: true;
+      targetAccount: ExternalAccountSummary;
+      /** True if index.ts must call stripe.accounts.updateExternalAccount to promote targetAccount to default_for_currency before transferring. */
+      needsDefaultUpdate: boolean;
+    }
+  | {
+      ok: false;
+      error: string;
+      code: string;
+    };
+
+/**
+ * Decides which external bank account a withdrawal should target.
+ * - If the caller requested a specific bankAccountId, it must exist on the
+ *   connected account (otherwise `bank_account_not_found`).
+ * - If no bankAccountId was supplied (older client), falls back to whichever
+ *   account Stripe already has marked default — no state is changed.
+ */
+export function resolveWithdrawalDestination(
+  accounts: ExternalAccountSummary[],
+  requestedBankAccountId: string | undefined
+): DestinationResolution {
+  if (accounts.length === 0) {
+    return {
+      ok: false,
+      error: 'No bank account is linked to your payout account. Please add one before withdrawing.',
+      code: 'no_bank_account',
+    };
+  }
+
+  if (requestedBankAccountId) {
+    const requested = accounts.find(a => a.id === requestedBankAccountId);
+    if (!requested) {
+      return {
+        ok: false,
+        error:
+          'Your selected bank account could not be found on your payout account. Please refresh and try again.',
+        code: 'bank_account_not_found',
+      };
+    }
+    return { ok: true, targetAccount: requested, needsDefaultUpdate: !requested.default_for_currency };
+  }
+
+  // No explicit selection — preserve prior behavior (whatever Stripe already
+  // has as default) rather than changing anything. Stripe always keeps
+  // exactly one default_for_currency account when at least one external
+  // account exists in practice; fall back to the first account so this stays
+  // a total function even if that invariant were ever violated.
+  const current = accounts.find(a => a.default_for_currency) ?? accounts[0];
+  return { ok: true, targetAccount: current, needsDefaultUpdate: false };
+}
+
+export type AccountEligibilityResult = { ok: true } | { ok: false; error: string; code: string };
+
+/**
+ * Blocks self-service withdrawals (both standard and Instant Cash Out) for
+ * accounts an admin has suspended or banned via profiles.account_status
+ * (see 20260719030000_add_profiles_account_status.sql). That migration
+ * shipped as plumbing-only and explicitly named "no withdrawal check reads
+ * this column yet" as a known follow-up (docs/withdrawals/09-security-audit-findings-2026-07-19.md
+ * finding #3) — this is that follow-up. Deliberately NOT applied to the
+ * admin-withdrawals recovery tool (force_retry/manual_adjustment): paying
+ * out a legitimately-earned balance to a suspended/banned user is a human
+ * admin decision, not something this guard should block.
+ */
+export function validateAccountEligibility(
+  accountStatus: string | null | undefined
+): AccountEligibilityResult {
+  if (accountStatus === 'suspended' || accountStatus === 'banned') {
+    return {
+      ok: false,
+      error: 'Withdrawals are unavailable while your account is under review. Contact support for details.',
+      code: 'account_not_eligible',
+    };
+  }
+  return { ok: true };
+}

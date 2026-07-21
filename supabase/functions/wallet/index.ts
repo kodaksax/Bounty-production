@@ -173,39 +173,29 @@ Deno.serve(async (req: Request) => {
           return jsonResponse({ error: 'Failed to fetch balance' }, 500);
         }
 
-        let balance = (profile as Profile | null)?.balance ?? 0;
-
-        // Cross-check: when cached balance is 0, derive from completed
-        // transactions. wallet_transactions stores signed amounts (negative for
-        // debits), so we sum them directly instead of applying direction by type.
-        if (balance === 0) {
-          const { data: txRows } = await supabase
-            .from('wallet_transactions')
-            .select('amount')
-            .eq('user_id', userId)
-            .eq('status', 'completed');
-
-          if (txRows && txRows.length > 0) {
-            let derived = 0;
-            for (const tx of txRows as { amount: number }[]) {
-              derived += Number(tx.amount) || 0;
-            }
-            if (derived > 0) {
-              balance = derived;
-              // Reconcile (fire-and-forget)
-              supabase
-                .from('profiles')
-                .update({ balance: derived, updated_at: new Date().toISOString() })
-                .eq('id', userId)
-                .then(() =>
-                  console.log('[wallet] Reconciled stale profile balance', userId, derived)
-                )
-                .catch((err: unknown) =>
-                  console.warn('[wallet] Failed to reconcile cached balance', userId, err)
-                );
-            }
-          }
-        }
+        // profiles.balance is the sole source of truth for the current balance.
+        // Every operation that touches it (apply_deposit, apply_escrow,
+        // apply_refund_tx, apply_release_tx, withdraw_balance) is a single
+        // atomic SECURITY DEFINER RPC that updates profiles.balance in the same
+        // transaction as its wallet_transactions row (or, for withdrawals,
+        // debits balance strictly before the row is inserted) — so balance can
+        // never legitimately lag behind SUM(completed wallet_transactions).
+        //
+        // This function previously "reconciled" a $0 cached balance by trusting
+        // a derived ledger sum instead and writing it back to profiles.balance.
+        // That was unsafe in two ways this codebase has actually hit in
+        // production: (1) a user with a genuinely in-flight debit (e.g. a
+        // withdrawal whose wallet_transactions row hadn't reached 'completed'
+        // yet) would have their correct $0 "resurrected" to a phantom balance
+        // they could then double-spend; (2) a deliberate administrative
+        // balance write-off (e.g. the Phase 2 legacy-balance migration, which
+        // zeroes profiles.balance without an offsetting 'completed' ledger row
+        // by design) would get silently undone the next time the user opened
+        // their wallet. Removed 2026-07-18. Real balance/ledger drift should
+        // never happen under the atomic-RPC design above; if it ever does,
+        // investigate and fix the root cause via scripts/reconcile_and_triage.sql
+        // (a manual, human-reviewed process) rather than auto-correcting here.
+        const balance = (profile as Profile | null)?.balance ?? 0;
 
         const typedProfile = profile as
           | (Profile & {

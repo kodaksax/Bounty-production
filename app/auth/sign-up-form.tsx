@@ -5,7 +5,6 @@ import type { Href } from 'expo-router';
 import { useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
 import {
-    ActivityIndicator,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -18,6 +17,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PRIVACY_TEXT } from '../../assets/legal/privacy';
 import { TERMS_TEXT } from '../../assets/legal/terms';
+import { Button } from '../../components/ui/button';
 import { BrandingLogo } from '../../components/ui/branding-logo';
 import { ValidationPatterns } from '../../hooks/use-form-validation';
 import { config } from '../../lib/config';
@@ -565,20 +565,13 @@ export function SignUpForm() {
                 ) : null}
               </View>
 
-              <TouchableOpacity
+              <Button
                 onPress={handleSubmit}
-                disabled={isLoading}
-                className="w-full bg-[#059669] rounded py-3 items-center flex-row justify-center"
-                accessibilityRole="button"
+                loading={isLoading}
                 accessibilityLabel="Create account"
-                accessibilityState={{ disabled: isLoading }}
               >
-                {isLoading ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text className="text-white font-medium">Create Account</Text>
-                )}
-              </TouchableOpacity>
+                Create Account
+              </Button>
 
               <TouchableOpacity
                 onPress={() => router.replace('/auth/sign-in-form' as Href)}

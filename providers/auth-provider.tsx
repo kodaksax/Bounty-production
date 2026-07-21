@@ -5,7 +5,7 @@ import { DEFERRED_PUSH_REGISTRATION_KEY } from 'lib/constants'
 import { cachedDataService } from 'lib/services/cached-data-service'
 import { notificationService } from 'lib/services/notification-service'
 import { AppState, AppStateStatus } from 'react-native'
-import { PropsWithChildren, useContext, useEffect, useRef, useState } from 'react'
+import { PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { clearBountyDraftForUser } from '../app/hooks/useBountyDraft'
 import { clearAllSessionData } from '../lib/auth-session-storage'
 import { analyticsService } from '../lib/services/analytics-service'
@@ -192,6 +192,23 @@ export default function AuthProvider({ children }: PropsWithChildren) {
 
     return refreshPromiseRef.current
   }
+
+  // Ref indirection so `attemptRefresh` (exposed on context) can have a
+  // permanently stable identity via useCallback([]) while still always
+  // invoking the latest `refreshTokenNow` closure (which reads current
+  // `session` state). Updated on every render — no effect needed since a
+  // plain assignment during render is enough to keep it current before
+  // attemptRefresh could possibly be called.
+  const refreshTokenNowRef = useRef(refreshTokenNow)
+  refreshTokenNowRef.current = refreshTokenNow
+
+  const attemptRefresh = useCallback(async () => {
+    try {
+      await refreshTokenNowRef.current()
+    } catch (e) {
+      reportWarning('[AuthProvider] attemptRefresh failed', e)
+    }
+  }, [])
 
   /**
    * Schedule automatic token refresh before expiration
@@ -806,28 +823,26 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     }
   }, [])
 
-  return (
-    <AuthContext.Provider
-      value={{
-        session,
-        isLoading,
-        profile,
-        isLoggedIn: Boolean(session),
-        isEmailVerified,
-        isPasswordRecovery,
-        isAuthStale,
-        attemptRefresh: async () => {
-          try {
-            await refreshTokenNow()
-          } catch (e) {
-            reportWarning('[AuthProvider] attemptRefresh failed', e)
-          }
-        },
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  // Memoized so consumers (35+ screens/components) only re-render when a
+  // value they actually read changes, instead of on every AuthProvider
+  // render (timers, subscriptions, and profile updates fire frequently).
+  // attemptRefresh has a stable identity via useCallback above, so it no
+  // longer busts this memo on every render either.
+  const value = useMemo(
+    () => ({
+      session,
+      isLoading,
+      profile,
+      isLoggedIn: Boolean(session),
+      isEmailVerified,
+      isPasswordRecovery,
+      isAuthStale,
+      attemptRefresh,
+    }),
+    [session, isLoading, profile, isEmailVerified, isPasswordRecovery, isAuthStale, attemptRefresh]
   )
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
 export const useAuth = () => useContext(AuthContext);

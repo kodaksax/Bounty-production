@@ -3,8 +3,8 @@ import React from 'react';
 import { AccessibilityInfo, Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SIZING, SPACING, TYPOGRAPHY } from '../lib/constants/accessibility';
 import { useHapticFeedback } from '../lib/haptic-feedback';
-import { theme } from '../lib/theme';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
+import type { AppTheme } from '../lib/themes/types';
 import type { UserFriendlyError } from '../lib/utils/error-messages';
 
 
@@ -30,7 +30,8 @@ export function ErrorBanner({
   autoDismissMs = 0,
 }: ErrorBannerProps) {
   const { triggerHaptic } = useHapticFeedback();
-  const { theme: appTheme } = useAppThemeContext();
+  const { theme } = useAppThemeContext();
+  const styles = makeStyles(theme);
   const slideAnim = React.useRef(new Animated.Value(-100)).current;
   const opacityAnim = React.useRef(new Animated.Value(0)).current;
   const [prefersReducedMotion, setPrefersReducedMotion] = React.useState(false);
@@ -103,7 +104,14 @@ export function ErrorBanner({
     onAction?.();
   }, [triggerHaptic, onAction]);
 
-  const backgroundColor = error.type === 'validation' ? appTheme.warning : appTheme.error;
+  const isWarning = error.type === 'validation';
+  const backgroundColor = isWarning ? theme.warning : theme.error;
+  // theme.warning is a bright amber in both modes — white text on it fails
+  // contrast badly, so the warning variant uses fixed dark "ink" text instead
+  // (matching how amber alerts read elsewhere). The red error variant keeps
+  // white text, consistent with ThemedButton's destructive variant.
+  const contentColor = isWarning ? '#1F2937' : '#ffffff';
+  const actionPillBg = isWarning ? 'rgba(31,41,55,0.12)' : 'rgba(255,255,255,0.25)';
   const iconName = getIconForErrorType(error.type);
 
   return (
@@ -123,18 +131,18 @@ export function ErrorBanner({
         <MaterialIcons
           name={iconName}
           size={22}
-          color="#fff"
+          color={contentColor}
           accessibilityElementsHidden={true}
         />
         <View style={styles.textContainer}>
           <Text
-            style={styles.title}
+            style={[styles.title, { color: contentColor }]}
             accessibilityRole="text"
           >
             {error.title}
           </Text>
           <Text
-            style={styles.message}
+            style={[styles.message, { color: contentColor }]}
             accessibilityRole="text"
           >
             {error.message}
@@ -146,13 +154,13 @@ export function ErrorBanner({
         {error.retryable && onAction && error.action && (
           <TouchableOpacity
             onPress={handleAction}
-            style={styles.actionButton}
+            style={[styles.actionButton, { backgroundColor: actionPillBg }]}
             activeOpacity={0.7}
             accessibilityRole="button"
             accessibilityLabel={error.action}
             accessibilityHint="Retry the failed operation"
           >
-            <Text style={styles.actionText}>{error.action}</Text>
+            <Text style={[styles.actionText, { color: contentColor }]}>{error.action}</Text>
           </TouchableOpacity>
         )}
 
@@ -165,7 +173,7 @@ export function ErrorBanner({
             accessibilityRole="button"
             accessibilityLabel="Dismiss error"
           >
-            <MaterialIcons name="close" size={20} color="#fff" />
+            <MaterialIcons name="close" size={20} color={contentColor} />
           </TouchableOpacity>
         )}
       </View>
@@ -199,63 +207,61 @@ function getIconForErrorType(type: UserFriendlyError['type']): keyof typeof Mate
   }
 }
 
-const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
-    paddingVertical: SPACING.ELEMENT_GAP,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    borderRadius: 12,
-    marginBottom: SPACING.ELEMENT_GAP,
-    ...theme.shadows.lg,
-  },
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
+      paddingVertical: SPACING.ELEMENT_GAP,
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      borderRadius: 12,
+      marginBottom: SPACING.ELEMENT_GAP,
+      ...theme.shadows.lg,
+    },
 
-  content: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: SPACING.ELEMENT_GAP,
-  },
-  textContainer: {
-    flex: 1,
-  },
-  title: {
-    color: '#fff',
-    fontSize: TYPOGRAPHY.SIZE_BODY,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  message: {
-    color: '#fff',
-    fontSize: TYPOGRAPHY.SIZE_SMALL,
-    opacity: 0.95,
-    lineHeight: TYPOGRAPHY.SIZE_SMALL * TYPOGRAPHY.LINE_HEIGHT_RELAXED,
-  },
-  actions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.COMPACT_GAP,
-    marginLeft: SPACING.COMPACT_GAP,
-  },
-  actionButton: {
-    paddingHorizontal: SPACING.ELEMENT_GAP,
-    paddingVertical: SPACING.COMPACT_GAP,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-    borderRadius: 8,
-    minHeight: SIZING.MIN_TOUCH_TARGET,
-    justifyContent: 'center',
-  },
-  actionText: {
-    color: '#fff',
-    fontSize: TYPOGRAPHY.SIZE_SMALL,
-    fontWeight: '700',
-  },
-  dismissButton: {
-    padding: SPACING.COMPACT_GAP,
-    minWidth: SIZING.MIN_TOUCH_TARGET,
-    minHeight: SIZING.MIN_TOUCH_TARGET,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-});
+    content: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: SPACING.ELEMENT_GAP,
+    },
+    textContainer: {
+      flex: 1,
+    },
+    title: {
+      fontSize: TYPOGRAPHY.SIZE_BODY,
+      fontWeight: '700',
+      marginBottom: 2,
+    },
+    message: {
+      fontSize: TYPOGRAPHY.SIZE_SMALL,
+      opacity: 0.95,
+      lineHeight: TYPOGRAPHY.SIZE_SMALL * TYPOGRAPHY.LINE_HEIGHT_RELAXED,
+    },
+    actions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: SPACING.COMPACT_GAP,
+      marginLeft: SPACING.COMPACT_GAP,
+    },
+    actionButton: {
+      paddingHorizontal: SPACING.ELEMENT_GAP,
+      paddingVertical: SPACING.COMPACT_GAP,
+      borderRadius: 8,
+      minHeight: SIZING.MIN_TOUCH_TARGET,
+      justifyContent: 'center',
+    },
+    actionText: {
+      fontSize: TYPOGRAPHY.SIZE_SMALL,
+      fontWeight: '700',
+    },
+    dismissButton: {
+      padding: SPACING.COMPACT_GAP,
+      minWidth: SIZING.MIN_TOUCH_TARGET,
+      minHeight: SIZING.MIN_TOUCH_TARGET,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+  });
+}

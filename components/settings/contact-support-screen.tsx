@@ -1,13 +1,20 @@
-import { MaterialIcons } from '@expo/vector-icons';
-import React, { useState } from 'react';
-import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { BrandingLogo } from 'components/ui/branding-logo';
+import { SettingsScreenHeader } from 'components/ui/settings-screen-header';
+import { SettingsSection } from 'components/ui/settings-section';
+import { ThemedButton } from 'components/themed/ThemedButton';
+import { ThemedInput } from 'components/themed/ThemedInput';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
+import React, { useMemo, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 interface ContactSupportScreenProps { onBack: () => void }
 
 export const ContactSupportScreen: React.FC<ContactSupportScreenProps> = ({ onBack }) => {
+  const { theme } = useAppThemeContext();
+  const s = useMemo(() => makeStyles(theme), [theme]);
   const [subject, setSubject] = useState('');
   const [details, setDetails] = useState('');
+  const canSubmit = !!subject && !!details;
 
   const submit = () => {
     // Placeholder: integrate with backend ticket system later
@@ -18,31 +25,64 @@ export const ContactSupportScreen: React.FC<ContactSupportScreenProps> = ({ onBa
   };
 
   return (
-    <View className="flex-1 bg-[#059669]">
-      <View className="flex-row justify-between items-center p-4 pt-8">
-        <View className="flex-row items-center">
-          <BrandingLogo size="small" />
-        </View>
-        <TouchableOpacity onPress={onBack} className="p-2">
-          <MaterialIcons name="arrow-back" size={24} color="#000" />
-        </TouchableOpacity>
-      </View>
-      <ScrollView className="px-4" contentContainerStyle={{ paddingBottom: 64 }}>
-        <Text className="text-xl font-semibold text-white mb-4">Contact Support</Text>
-        <Text className="text-[#9CA3AF] text-xs leading-4 mb-4">Provide detailed information so our team can respond quickly.</Text>
-        <Text className="text-xs text-white mb-1">Subject</Text>
-        <TextInput value={subject} onChangeText={setSubject} placeholder="Issue subject" placeholderTextColor="#9CA3AF" className="bg-black/30 rounded-md px-3 py-2 text-white mb-4" />
-        <Text className="text-xs text-white mb-1">Details</Text>
-        <TextInput value={details} onChangeText={setDetails} placeholder="Describe the issue or request" placeholderTextColor="#9CA3AF" multiline numberOfLines={6} textAlignVertical="top" className="bg-black/30 rounded-md px-3 py-2 text-white mb-4" />
+    <View style={s.container}>
+      <SettingsScreenHeader icon="support-agent" title="Contact Support" onBack={onBack} />
+      <ScrollView className="px-4" contentContainerStyle={{ paddingBottom: 64, paddingTop: 16 }}>
+        <SettingsSection description="Provide detailed information so our team can respond quickly.">
+          <View style={s.formBlock}>
+            <Text style={s.label}>Subject</Text>
+            <ThemedInput
+              value={subject}
+              onChangeText={setSubject}
+              placeholder="Issue subject"
+              accessibilityLabel="Subject"
+              containerStyle={s.subjectInput}
+            />
+            <Text style={s.label}>Details</Text>
+            <ThemedInput
+              value={details}
+              onChangeText={setDetails}
+              placeholder="Describe the issue or request"
+              multiline
+              numberOfLines={6}
+              textAlignVertical="top"
+              accessibilityLabel="Details"
+              containerStyle={s.detailsInput}
+            />
+          </View>
+        </SettingsSection>
+
         <View className="flex-row gap-3">
-          <TouchableOpacity onPress={submit} disabled={!subject || !details} className={`px-4 py-2 rounded-md ${subject && details ? 'bg-[#111827]' : 'bg-[#0B0F14] opacity-60'}`}>
-            <Text className="text-white text-sm font-medium">Submit Request</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={onBack} className="px-4 py-2 rounded-md bg-black/30">
-            <Text className="text-white text-sm font-medium">Cancel</Text>
-          </TouchableOpacity>
+          <ThemedButton variant="primary" label="Submit Request" onPress={submit} disabled={!canSubmit} />
+          <ThemedButton variant="secondary" label="Cancel" onPress={onBack} />
         </View>
       </ScrollView>
     </View>
   );
 };
+
+function makeStyles(t: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: t.background,
+    },
+    formBlock: {
+      padding: 16,
+    },
+    label: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: t.text,
+      marginBottom: 6,
+    },
+    subjectInput: {
+      marginBottom: 16,
+    },
+    detailsInput: {
+      marginBottom: 4,
+      minHeight: 120,
+      alignItems: 'flex-start',
+    },
+  });
+}

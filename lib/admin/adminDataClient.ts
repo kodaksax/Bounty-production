@@ -59,7 +59,7 @@ function mapUser(row: any): AdminUserSummary {
     totalSpent: row.total_spent ?? 0,
     totalEarned: row.total_earned ?? 0,
     balance: row.balance ?? 0,
-    status: row.status ?? 'active',
+    status: row.account_status ?? 'active',
   };
 }
 
@@ -164,49 +164,45 @@ export const adminDataClient = {
     if (!data) throw new Error('No bounty found to remove');
   },
 
-  // Fetch users with optional status/verification filter
+  // Fetch users with optional status/verification filter.
+  // Goes through the admin-profiles Edge Function (service-role-backed,
+  // admin-JWT-gated) rather than querying `profiles` directly with the
+  // anon-key client -- see docs/withdrawals/08-profiles-rls-migration-strategy.md.
   async fetchAdminUsers(filters?: AdminUserFilters): Promise<AdminUserSummary[]> {
-    let query = supabase
-      .from('profiles')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (filters?.status && filters.status !== 'all') {
-      query = query.eq('status', filters.status);
-    }
-
-    if (filters?.verificationStatus && filters.verificationStatus !== 'all') {
-      query = query.eq('verification_status', filters.verificationStatus);
-    }
-
-    const { data, error } = await query;
+    const { data, error } = await supabase.functions.invoke('admin-profiles', {
+      body: {
+        action: 'list',
+        status: filters?.status,
+        verificationStatus: filters?.verificationStatus,
+      },
+    });
     if (error) throw new Error(error.message);
-    return (data ?? []).map(mapUser);
+    if (data?.error) throw new Error(data.error);
+    return ((data?.users ?? []) as any[]).map(mapUser);
   },
 
-  // Fetch single user by ID
+  // Fetch single user by ID (same admin-profiles Edge Function path).
   async fetchAdminUserById(id: string): Promise<AdminUserSummary | null> {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (error) {
-      if (error.code === 'PGRST116') return null;
-      throw new Error(error.message);
-    }
-    return data ? mapUser(data) : null;
+    const { data, error } = await supabase.functions.invoke('admin-profiles', {
+      body: { action: 'getById', id },
+    });
+    if (error) throw new Error(error.message);
+    if (data?.error) throw new Error(data.error);
+    return data?.user ? mapUser(data.user) : null;
   },
 
-  // Update user account status (suspend/ban/restore)
+  // Update user account status (suspend/ban/restore).
+  // Was a direct anon-key `.update({ status })` -- `profiles` has no `status`
+  // column (the real one is `account_status`) and every UPDATE policy on
+  // profiles is `auth.uid() = id`, so this failed for a different admin's
+  // target user regardless. Now routed through the service-role
+  // admin-profiles function, matching every other admin-panel write path.
   async updateUserStatus(id: string, status: AdminUserSummary['status']): Promise<void> {
-    const { error } = await supabase
-      .from('profiles')
-      .update({ status })
-      .eq('id', id);
-
+    const { data, error } = await supabase.functions.invoke('admin-profiles', {
+      body: { action: 'updateStatus', id, status },
+    });
     if (error) throw new Error(error.message);
+    if (data?.error) throw new Error(data.error);
   },
 
   // Send a guideline warning to a user

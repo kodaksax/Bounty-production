@@ -77,13 +77,11 @@ const { refundService } = require('./services/refund-service');
 const { stripeConnectService } = require('./services/stripe-connect-service');
 const { staleBountyService } = require('./services/stale-bounty-service');
 const { registerApplePayRoutes } = require('./routes/apple-pay');
-const { registerWalletRoutes } = require('./routes/wallet');
 const riskManagementRoutes = require('./routes/risk-management');
 const { registerConsolidatedAuthRoutes } = require('./routes/consolidated-auth');
 const { registerConsolidatedProfileRoutes } = require('./routes/consolidated-profiles');
 const { registerConsolidatedBountyRoutes } = require('./routes/consolidated-bounties');
 const { registerConsolidatedBountyRequestRoutes } = require('./routes/consolidated-bounty-requests');
-const { registerConsolidatedWebhookRoutes } = require('./routes/consolidated-webhooks');
 const { registerDisputeRoutes } = require('./routes/disputes');
 const { registerHealthRoutes } = require('./routes/health');
 const { registerMetricsRoutes } = require('./routes/metrics');
@@ -233,9 +231,6 @@ const startServer = async () => {
 
   // Register consolidated bounty request routes
   await registerConsolidatedBountyRequestRoutes(fastify);
-
-  // Register consolidated webhook routes (Stripe events)
-  await registerConsolidatedWebhookRoutes(fastify);
 
   // Register dispute routes (evidence staging, upload proxy, transactional commit)
   await registerDisputeRoutes(fastify);
@@ -942,9 +937,6 @@ const start = async () => {
 
     // Register Apple Pay routes (async) now that `fastify` has been created
     await registerApplePayRoutes(fastify);
-
-    // Register Wallet routes for transactions and balance
-    await registerWalletRoutes(fastify);
 
     await startServer();
     await fastify.listen({ port, host });

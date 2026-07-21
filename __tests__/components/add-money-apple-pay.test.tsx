@@ -59,40 +59,7 @@ jest.mock('../../components/payment-methods-modal', () => ({
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: jest.fn(() => ({ top: 44, bottom: 34, left: 0, right: 0 })),
-}));
-
-jest.mock('../../lib/themes/AppThemeContext', () => ({
-  useAppThemeContext: jest.fn(() => ({
-    theme: {
-      background: '#0B0F14',
-      surface: '#111827',
-      surfaceSecondary: '#1F2937',
-      border: '#374151',
-      text: '#ffffff',
-      textSecondary: '#9CA3AF',
-      textDisabled: '#6B7280',
-      primary: '#059669',
-      primaryLight: '#6ee7b7',
-      overlay: 'rgba(255,255,255,0.1)',
-      success: '#10B981',
-      error: '#EF4444',
-      warning: '#FBBF24',
-      info: '#60A5FA',
-      completed: '#6366F1',
-      cancelled: '#F97316',
-      target: '#ffffff',
-      isDark: true,
-      foreground: '#ffffff',
-      accent1: '#059669',
-      accent2: '#6ee7b7',
-      accent3: '#60A5FA',
-    },
-    mode: 'dark',
-    isDark: true,
-    toggleTheme: jest.fn(),
-    setTheme: jest.fn(),
-  })),
+  useSafeAreaInsets: jest.fn(() => ({ top: 0, bottom: 0, left: 0, right: 0 })),
 }));
 
 // ---- imports after mocks ----

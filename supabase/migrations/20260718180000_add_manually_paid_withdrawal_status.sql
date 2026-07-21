@@ -1,0 +1,24 @@
+-- Migration: Add 'manually_paid' to wallet_tx_status_enum
+-- Created: 2026-07-18
+--
+-- BACKGROUND: same live-schema-vs-migration-files drift already documented
+-- for wallet_tx_type_enum (see 20260720_add_admin_action_log_and_adjustment_type.sql) —
+-- `wallet_transactions.status` is a live Postgres ENUM (`wallet_tx_status_enum`,
+-- values: pending, completed, failed), not a TEXT + CHECK constraint. Verified
+-- live via pg_enum before writing this migration.
+--
+-- PURPOSE: a new terminal status for withdrawals resolved outside the normal
+-- Stripe transfer/payout flow — e.g. a historical stuck 'pending' withdrawal
+-- whose hunter is paid by some other means (check, another payment rail) after
+-- verifying with Stripe that no payout has landed and reversing the original
+-- Transfer to prevent Stripe's own automatic payout schedule from also paying
+-- them. Distinct from 'failed' (which implies balance was refunded and the
+-- hunter can retry in-app) — 'manually_paid' means the hunter WAS paid, just
+-- not through this app's normal rails, and must never be retried or refunded.
+--
+-- IMPORTANT — DO NOT wrap this file in an explicit transaction, and do not
+-- apply it via a tool that auto-wraps DDL in one. `ALTER TYPE ... ADD VALUE`
+-- cannot run inside a transaction block — same constraint class as
+-- `CREATE INDEX CONCURRENTLY` elsewhere in this migration history.
+
+ALTER TYPE public.wallet_tx_status_enum ADD VALUE IF NOT EXISTS 'manually_paid';

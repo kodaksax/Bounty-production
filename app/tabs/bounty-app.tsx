@@ -12,8 +12,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { BottomNav } from 'components/ui/bottom-nav'
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ActivityIndicator, Text, View } from 'react-native'
+import { ActivityIndicator, Animated, Text, View } from 'react-native'
 import { useAuthContext } from '../../hooks/use-auth-context'
+import { useFadeAnimation } from '../../hooks/use-accessible-animation'
 import { useConversations } from '../../hooks/useConversations'
 import { useAdmin } from '../../lib/admin-context'
 import { API_TIMEOUTS } from '../../lib/config/network'
@@ -21,6 +22,55 @@ import { authProfileService } from '../../lib/services/auth-profile-service'
 import { navigationIntent } from '../../lib/services/navigation-intent'
 import { getOnboardingCompleteKey } from '../../lib/storage/onboarding'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
+
+// Fades a conditionally-mounted tab screen in on mount, so switching tabs
+// reads as a smooth transition instead of an instant cut. Respects the
+// device's reduced-motion setting via useFadeAnimation.
+function FadeInScreen({ children }: { children: React.ReactNode }) {
+  const { fadeIn, style } = useFadeAnimation(0)
+
+  useEffect(() => {
+    fadeIn(220)
+    // Only re-run if the fadeIn identity itself changes (reduced-motion
+    // toggling) — this should fire once per mount, not per render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return <Animated.View style={[{ flex: 1 }, style]}>{children}</Animated.View>
+}
+
+// BountyFeed stays mounted across tab switches to preserve scroll position,
+// so it can't rely on a mount-triggered fade like the other tabs. Instead it
+// re-fades in every time `active` flips true, and is pulled out of layout
+// flow (position: absolute) so it doesn't compete for flex space with
+// whichever other tab is currently the normal-flow child.
+function BountyFeedFade({ active, children }: { active: boolean; children: React.ReactNode }) {
+  const { fadeValue, fadeIn } = useFadeAnimation(active ? 1 : 0)
+
+  useEffect(() => {
+    if (active) {
+      fadeIn(220)
+    } else {
+      fadeValue.setValue(0)
+    }
+  }, [active, fadeIn, fadeValue])
+
+  return (
+    <Animated.View
+      pointerEvents={active ? 'auto' : 'none'}
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        opacity: fadeValue,
+      }}
+    >
+      {children}
+    </Animated.View>
+  )
+}
 
 function BountyAppInner() {
   const router = useRouter()
@@ -241,20 +291,25 @@ function BountyAppInner() {
         <ConnectionStatus showQueueCount={true} />
 
         {/* BountyFeed is always mounted to preserve scroll position/cached data.
-            display:none hides it visually while other tabs are active. */}
-        <View style={{ display: activeScreen === 'bounty' ? 'flex' : 'none', flex: 1 }}>
+            BountyFeedFade cross-fades it in/out while other tabs are active,
+            and is position:absolute so it doesn't take flex space away from
+            whichever tab below is the current normal-flow child. */}
+        <BountyFeedFade active={activeScreen === 'bounty'}>
           <BountyFeed
             ref={bountyFeedRef}
             activeScreen={activeScreen}
             setActiveScreen={setActiveScreen}
             currentUserId={currentUserId}
           />
-        </View>
+        </BountyFeedFade>
 
         {activeScreen === "wallet" && (
-          <WalletScreen onBack={() => setActiveScreen("bounty")} />
+          <FadeInScreen>
+            <WalletScreen onBack={() => setActiveScreen("bounty")} />
+          </FadeInScreen>
         )}
         {activeScreen === "postings" && (
+          <FadeInScreen>
           <PostingsScreen
             initialTab={pendingInitialTab ?? paramInitialTab}
             onBack={() => setActiveScreen("bounty")}
@@ -264,16 +319,21 @@ function BountyAppInner() {
             onBountyAccepted={() => bountyFeedRef.current?.refresh()} // Refresh feed when a bounty is accepted
             setShowBottomNav={setShowBottomNav}
           />
+          </FadeInScreen>
         )}
         {activeScreen === "profile" && (
-          <ProfileScreen onBack={() => setActiveScreen("bounty")} />
+          <FadeInScreen>
+            <ProfileScreen onBack={() => setActiveScreen("bounty")} />
+          </FadeInScreen>
         )}
         {activeScreen === "messages" && (
+          <FadeInScreen>
           <MessengerScreen
             activeScreen={activeScreen}
             onNavigate={setActiveScreen}
             onConversationModeChange={() => setShowBottomNav(true)}
           />
+          </FadeInScreen>
         )}
 
         {showBottomNav && <BottomNav activeScreen={activeScreen} onNavigate={setActiveScreen} showAdmin={showAdminTab} onBountyTabRepress={handleBountyTabRepress} unreadMessageCount={unreadMessageCount} />}

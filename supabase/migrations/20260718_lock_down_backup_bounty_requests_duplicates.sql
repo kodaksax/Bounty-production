@@ -1,0 +1,36 @@
+-- Migration: Lock down backup_bounty_requests_duplicates (interim), drop planned
+-- Created: 2026-07-18
+-- Purpose:
+--   This table was created by database/migrations/20260322_dedupe_bounty_requests.sql
+--   as a one-time, pre-dedup safety backup before that migration deduped
+--   bounty_requests and added a UNIQUE (bounty_id, hunter_id) constraint —
+--   confirmed via that migration's own SQL:
+--     CREATE TABLE IF NOT EXISTS backup_bounty_requests_duplicates AS
+--       SELECT * FROM bounty_requests WHERE FALSE;
+--     INSERT INTO backup_bounty_requests_duplicates SELECT * FROM
+--       bounty_requests br WHERE EXISTS (...duplicate check...);
+--
+--   Its one-time job finished in March 2026. Verified before touching it:
+--     - 0 rows currently (whatever duplicates existed, if any, are already
+--       resolved; there is nothing left to preserve).
+--     - Zero references anywhere in the repo outside its own creation
+--       migration (no app code, edge function, or script queries it).
+--     - Flagged by the Supabase security advisor: RLS is disabled with
+--       zero policies (`rls_disabled_in_public`), AND — unlike some
+--       RLS-disabled tables where minimal grants limit the real exposure —
+--       anon/authenticated hold full table-wide INSERT/SELECT/UPDATE/DELETE
+--       grants here, so this table currently has no protection at all
+--       (any anon caller could read or write it right now).
+--
+--   Applied live 2026-07-18: ENABLE ROW LEVEL SECURITY with zero policies,
+--   which defaults to deny-all for anon/authenticated — this closes the
+--   live exposure immediately without a destructive DROP.
+--
+--   DROP TABLE was the originally intended fix (this table's one-time job
+--   is complete and nothing depends on it, so there's no ongoing reason to
+--   keep it around even RLS-protected) but the DROP could not be applied
+--   this session — flag for the user to run directly, or re-run in a
+--   future session:
+--     DROP TABLE IF EXISTS public.backup_bounty_requests_duplicates;
+
+ALTER TABLE public.backup_bounty_requests_duplicates ENABLE ROW LEVEL SECURITY;
