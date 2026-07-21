@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthProfile } from '../hooks/useAuthProfile';
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile';
 import { useAdmin } from '../lib/admin-context';
-import { useBountyFormat } from '../lib/bounty-format-context';
+import { type BountyFormat, useBountyFormat } from '../lib/bounty-format-context';
 import { BOUNTY_FORMAT_OPTIONS } from '../lib/bounty-format-options';
 import { analyticsService } from '../lib/services/analytics-service';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';

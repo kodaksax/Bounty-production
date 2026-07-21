@@ -100,7 +100,7 @@ export default function OnboardingIndex() {
   if (showRetryError) {
     return (
       <View style={[styles.container, styles.errorContainer]}>
-        <Text style={styles.errorTitle}>Couldn't verify your account</Text>
+        <Text style={styles.errorTitle}>Couldn&apos;t verify your account</Text>
         <Text style={styles.errorText}>
           We had trouble loading your profile. Check your connection and try again.
         </Text>

@@ -39,7 +39,7 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
   // skill edits to show a "Skills saved" success toast while never actually
   // reaching the backend, so no other user (or fresh install) ever saw them.
   const { profile: localProfile } = useUserProfile();
-  const { userId: authUserId, updateProfile } = useAuthProfile();
+  const { profile: authProfile, userId: authUserId, updateProfile } = useAuthProfile();
 
   const resolvedUserId = userId || authUserId;
 
@@ -125,7 +125,11 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
       if (updateProfile) {
         // extract text strings to match Profile shape
         const skillTexts = cleaned.map(s => s.text)
-        const result = await updateProfile({ skills: skillTexts })
+        // Preset skill-category tags persist to the remote profile alongside
+        // skills (unlike the free-text skills above, which are also mirrored
+        // to AsyncStorage below) so they're available server-side for the
+        // future recommendation feature.
+        const result = await updateProfile({ skills: skillTexts, skill_categories: selectedCategories })
         if (!result) {
           setBanner('Error saving skills to profile')
           setTimeout(()=>setBanner(null), 1500)
@@ -138,10 +142,6 @@ export function SkillsetEditScreen({ onBack, onSave, initialSkills, userId }: Sk
         setBanner('Skills saved')
         setTimeout(()=>setBanner(null), 1500)
       }
-      // Preset skill-category tags persist to the remote profile (unlike the
-      // free-text skills above, which are local-only via useUserProfile) so
-      // they're available server-side for the future recommendation feature.
-      await updateAuthProfile({ skill_categories: selectedCategories })
     } catch {
       setBanner('Error saving skills')
     }

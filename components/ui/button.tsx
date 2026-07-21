@@ -70,10 +70,6 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
       createTiming(loadingAnim, loading ? 1 : 0, 150).start();
     }, [loading, loadingAnim, createTiming]);
 
-    const resolvedVariant: Variant = variant ?? "default";
-    const resolvedSize: Size = size ?? "default";
-    const colors = React.useMemo(() => makeVariantColors(appTheme)[resolvedVariant], [appTheme, resolvedVariant]);
-
     const handlePress = React.useCallback((event: any) => {
       if (isDisabled) return;
 
@@ -113,9 +109,6 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
     const { styles: buttonStyles, spinnerColor: spinnerColors } = React.useMemo(() => makeButtonStyles(theme), [theme]);
     const spinnerColor = spinnerColors[variant ?? "default"];
 
-    const hasGlow = resolvedVariant === 'default' || resolvedVariant === 'destructive';
-    const borderWidth = resolvedVariant === 'outline' ? 1.5 : resolvedVariant === 'ghost' || resolvedVariant === 'link' ? 0 : 1;
-
     return (
       <AnimatedTouchable
         className={cn(buttonVariants({ variant, size, className }))}
@@ -133,7 +126,6 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
           {
             transform: [{ scale: scaleAnim }],
           },
-          style,
         ]}
         disabled={isDisabled}
         onPress={handlePress}
