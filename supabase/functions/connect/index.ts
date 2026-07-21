@@ -813,6 +813,8 @@ Deno.serve(async (req: Request) => {
         payoutsEnabled: account.payouts_enabled,
         detailsSubmitted: account.details_submitted,
         payoutFailedCleared: account.payouts_enabled && !!profileRow.payout_failed_at,
+        requirementsCurrentlyDue: account.requirements?.currently_due ?? [],
+        disabledReason: account.requirements?.disabled_reason ?? null,
       });
     }
 

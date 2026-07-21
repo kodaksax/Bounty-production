@@ -129,14 +129,17 @@ export function WithdrawWithBankScreen({
         needsRefreshOnFocusRef.current = false;
         (async () => {
           try {
-            await eligibility.refresh();
-            await payoutMethods.refresh();
+            await Promise.allSettled([
+              eligibility.refresh(),
+              payoutMethods.refresh(),
+              refreshFromApi(),
+            ]);
           } finally {
             setIsOnboarding(false);
           }
         })();
       }
-    }, [eligibility.refresh, payoutMethods.refresh])
+    }, [eligibility.refresh, payoutMethods.refresh, refreshFromApi])
   );
 
   // Withdrawal history, segmented by status — sourced from the same
