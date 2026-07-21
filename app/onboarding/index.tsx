@@ -1,19 +1,17 @@
 /**
  * Onboarding Index
  * Entry point for onboarding flow
- * Checks if carousel was already shown and routes accordingly
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
+import { useOnboarding } from '../../lib/context/onboarding-context';
 import { logger } from '../../lib/utils/error-logger';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 
-const ONBOARDING_KEY = '@bounty_onboarding_complete';
 // A fetch error alongside an already-verified username means "we couldn't
 // confirm current state," not "this is a new user" — retry a bounded number
 // of times before falling back to an explicit error instead of silently
@@ -25,6 +23,7 @@ const MAX_FETCH_RETRIES = 2;
 export default function OnboardingIndex() {
   const router = useRouter();
   const { profile, loading, profileFetchError, refreshProfile } = useAuthProfile();
+  const { data: onboardingData, loading: onboardingLoading } = useOnboarding();
   const { theme } = useAppThemeContext();
   const styles = makeStyles(theme);
   const retryCountRef = useRef(0);
@@ -32,27 +31,26 @@ export default function OnboardingIndex() {
   const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
-    // Wait until auth profile service has resolved initial state
-    if (loading) return;
+    // Wait until auth profile service and the local onboarding-context cache
+    // have both resolved their initial state.
+    if (loading || onboardingLoading) return;
     checkOnboardingStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, profile, profileFetchError]);
+  }, [loading, onboardingLoading, profile, onboardingData.intent, profileFetchError]);
 
   const checkOnboardingStatus = async () => {
     try {
-      // A confirmed profile (fetch succeeded) with a username: skip straight
-      // past username collection, regardless of any past fetch error.
-      if (profile && profile.username) {
-        retryCountRef.current = 0;
-        setShowRetryError(false);
-        router.replace('/onboarding/details');
+      // Fully onboarded already — this route should be unreachable in practice
+      // (app/index.tsx sends onboarded users straight to /tabs/bounty-app), but
+      // guard it directly in case this screen is ever reached via a stale deep
+      // link or race between profile/bootstrap state.
+      if (profile && profile.username && profile.onboarding_completed === true) {
+        router.replace('/tabs/bounty-app');
         return;
       }
 
-      // profile is null/needs_onboarding *and* the last fetch failed: we do
-      // not actually know whether this user has a profile — do not treat
-      // this the same as a confirmed new user. Retry a bounded number of
-      // times, then surface a retry-able error instead of guessing.
+      // profile fetch failed: do not treat as a confirmed "no profile" — retry
+      // a bounded number of times, then show a recoverable error.
       if (profileFetchError) {
         if (retryCountRef.current < MAX_FETCH_RETRIES) {
           retryCountRef.current += 1;
@@ -75,20 +73,19 @@ export default function OnboardingIndex() {
       retryCountRef.current = 0;
       setShowRetryError(false);
 
-      const hasSeenOnboarding = await AsyncStorage.getItem(ONBOARDING_KEY);
-
-      if (hasSeenOnboarding === 'true') {
-        // User has seen the carousel before, go directly to username setup
-        router.replace('/onboarding/username');
-      } else {
-        // First time user, show the carousel
-        router.replace('/onboarding/carousel');
+      // Already picked poster/hunter earlier (e.g. went to create an account
+      // from the sign-in step and landed back here) — resume that flow
+      // instead of re-showing the welcome/intent screen.
+      if (onboardingData.intent) {
+        router.replace('/onboarding/style');
+        return;
       }
+
+      // Otherwise this is a genuinely fresh onboarding — start at welcome.
+      router.replace('/onboarding/welcome');
     } catch (error) {
-      console.error('Error checking onboarding status:', error);
       logger.error('[onboarding] checkOnboardingStatus threw', { error });
-      // On error, default to showing carousel
-      router.replace('/onboarding/carousel');
+      router.replace('/onboarding/welcome');
     }
   };
 
@@ -103,7 +100,7 @@ export default function OnboardingIndex() {
   if (showRetryError) {
     return (
       <View style={[styles.container, styles.errorContainer]}>
-        <Text style={styles.errorTitle}>Couldn't verify your account</Text>
+        <Text style={styles.errorTitle}>Couldn&apos;t verify your account</Text>
         <Text style={styles.errorText}>
           We had trouble loading your profile. Check your connection and try again.
         </Text>

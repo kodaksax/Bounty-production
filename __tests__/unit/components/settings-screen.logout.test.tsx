@@ -10,7 +10,6 @@ describe('performLogout', () => {
       setSession: jest.fn().mockResolvedValue(undefined),
     } as any;
     const mockSecureStore = { deleteItemAsync: jest.fn().mockResolvedValue(undefined) } as any;
-    const mockClearRemember = jest.fn().mockResolvedValue(undefined);
     const mockMarkIntent = jest.fn();
     const mockRouter = { replace: jest.fn() } as any;
     const mockDeregisterPushToken = jest.fn().mockResolvedValue(undefined);
@@ -19,7 +18,6 @@ describe('performLogout', () => {
       supabase: mockSupabase,
       authProfileService: mockProfileSvc,
       SecureStore: mockSecureStore,
-      clearRememberMePreference: mockClearRemember,
       markIntentionalSignOut: mockMarkIntent,
       router: mockRouter,
       currentUserId: 'user-1',
@@ -34,7 +32,6 @@ describe('performLogout', () => {
     expect(mockRouter.replace).toHaveBeenCalledWith('/auth/sign-in-form');
 
     // Background cleanup scheduled (fire-and-forget)
-    expect(mockClearRemember).toHaveBeenCalled();
     expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith('sb-access-token');
     expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith('sb-refresh-token');
   });
@@ -49,7 +46,6 @@ describe('performLogout', () => {
       supabase: badSupabase,
       authProfileService: mockProfileSvc,
       SecureStore: mockSecureStore,
-      clearRememberMePreference: jest.fn().mockResolvedValue(undefined),
       markIntentionalSignOut: jest.fn(),
       router: { replace: jest.fn() },
       currentUserId: null,
@@ -73,7 +69,6 @@ describe('performLogout', () => {
       supabase: mockSupabase,
       authProfileService: mockProfileSvc,
       SecureStore: mockSecureStore,
-      clearRememberMePreference: jest.fn().mockResolvedValue(undefined),
       markIntentionalSignOut: jest.fn(),
       router: mockRouter,
       currentUserId: null,

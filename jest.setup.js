@@ -156,6 +156,16 @@ jest.mock('react-native', () => {
       createAnimatedComponent: jest.fn(component => component),
       View: 'Animated.View',
     },
+    Easing: {
+      ease: jest.fn(t => t),
+      linear: jest.fn(t => t),
+      inOut: jest.fn(fn => fn || (t => t)),
+      in: jest.fn(fn => fn || (t => t)),
+      out: jest.fn(fn => fn || (t => t)),
+      quad: jest.fn(t => t),
+      cubic: jest.fn(t => t),
+      bezier: jest.fn(() => (t => t)),
+    },
     Dimensions: {
       get: jest.fn().mockReturnValue({ width: 375, height: 812 }),
     },

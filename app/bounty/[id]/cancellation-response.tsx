@@ -12,9 +12,12 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, AlertCircle, CheckCircle, XCircle, HelpCircle, Phone, Mail, Flag } from 'lucide-react-native';
 import { cancellationService } from 'lib/services/cancellation-service';
+import { analyticsService } from 'lib/services/analytics-service';
+import { bountyPaymentsService } from 'lib/services/bounty-payments-service';
 import { bountyService } from 'lib/services/bounty-service';
 import { useAuthContext } from 'hooks/use-auth-context';
 import { useWallet } from 'lib/wallet-context';
+import { isPhase2Bounty } from 'lib/utils/payment-architecture';
 import type { BountyCancellation } from 'lib/types';
 import type { Bounty } from 'lib/services/database.types';
 import { SUPPORT_EMAIL, SUPPORT_RESPONSE_TIMES, EMAIL_SUBJECTS, createSupportTel } from 'lib/constants/support';
@@ -83,8 +86,48 @@ export default function CancellationResponseScreen() {
                 userId,
                 responseMessage || undefined,
                 async (bountyId: string, title: string, refundPercentage: number) => {
-                  // Process wallet refund
-                  return await refundEscrow(bountyId, title, refundPercentage);
+                  const useV2 = isPhase2Bounty(bounty);
+                  try {
+                    await analyticsService.trackEvent('payment_architecture_routed', {
+                      bountyId: String(bountyId),
+                      version: useV2 ? 2 : 1,
+                      context: 'cancel',
+                    });
+                  } catch {
+                    /* analytics is best-effort */
+                  }
+                  try {
+                    let result: boolean;
+                    if (useV2) {
+                      // Stripe-native Phase 2 escrow only supports a full
+                      // cancel/refund server-side; the v1-only partial
+                      // refundPercentage isn't applicable here.
+                      await bountyPaymentsService.cancelBountyPayment(String(bountyId));
+                      result = true;
+                    } else {
+                      result = await refundEscrow(bountyId, title, refundPercentage);
+                    }
+                    try {
+                      await analyticsService.trackEvent('escrow_refunded', {
+                        bountyId: String(bountyId),
+                        architecture: useV2 ? 'v2' : 'v1',
+                      });
+                    } catch {
+                      /* analytics is best-effort */
+                    }
+                    return result;
+                  } catch (refundError) {
+                    try {
+                      await analyticsService.trackEvent('payment_failed', {
+                        bountyId: String(bountyId),
+                        architecture: useV2 ? 'v2' : 'v1',
+                        stage: 'cancel',
+                      });
+                    } catch {
+                      /* analytics is best-effort */
+                    }
+                    throw refundError;
+                  }
                 }
               );
               
@@ -322,6 +365,11 @@ export default function CancellationResponseScreen() {
             <Text className="text-sm text-[#9CA3AF] mt-1">
               ({cancellation.refundPercentage ?? 100}% of ${bounty.amount.toFixed(2)})
             </Text>
+            {isPhase2Bounty(bounty) && (
+              <Text className="text-sm text-[#9CA3AF] mt-2">
+                Refunded automatically to the original payment method via Stripe-backed payment processing.
+              </Text>
+            )}
           </View>
           
           {/* Response Message */}

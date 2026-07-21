@@ -25,6 +25,14 @@ export interface AuthProfile {
   title?: string; // Professional title/role
   location?: string; // Geographic location
   skills?: string[]; // Array of skills/expertise
+  // Preset skill category tags selected on the profile (subset of
+  // lib/constants/bounty-categories.ts ids). Used to power future
+  // recommended-bounty notifications — not consumed anywhere yet.
+  skill_categories?: string[];
+  // ZIP code entered by the user (e.g. on the hunter onboarding "Browse by
+  // ZIP" step). Used to match users to bounties posted in the same ZIP for a
+  // future notification feature — not consumed anywhere yet.
+  zip_code?: string;
   age_verified?: boolean;
   age_verified_at?: string; // ISO timestamp for audit purposes
   balance: number;
@@ -38,6 +46,13 @@ export interface AuthProfile {
   id_verification_status?: 'unverified' | 'pending' | 'verified' | 'rejected';
   selfie_submitted_at?: string;
   display_name?: string;
+  // Activation-related fields, natively exposed here so callers (e.g.
+  // providers/moments-provider.tsx) don't need a separate ad-hoc query
+  // against `profiles` just to evaluate activation-moment eligibility.
+  primary_role?: 'poster' | 'hunter' | 'both';
+  stripe_connect_charges_enabled?: boolean;
+  stripe_connect_payouts_enabled?: boolean;
+  last_session_at?: string;
 }
 
 interface CachedProfile {
@@ -175,6 +190,8 @@ export class AuthProfileService {
         title: data.title || undefined,
         location: data.location || undefined,
         skills: Array.isArray(data.skills) ? data.skills : undefined,
+        skill_categories: Array.isArray(data.skill_categories) ? data.skill_categories : undefined,
+        zip_code: data.zip_code || undefined,
         age_verified: typeof data.age_verified === 'boolean' ? data.age_verified : undefined,
         age_verified_at: data.age_verified_at || undefined,
         balance: data.balance || 0,
@@ -187,6 +204,10 @@ export class AuthProfileService {
         id_verification_status: data.id_verification_status || undefined,
         selfie_submitted_at: data.selfie_submitted_at || undefined,
         display_name: data.display_name || undefined,
+        primary_role: data.primary_role || undefined,
+        stripe_connect_charges_enabled: typeof data.stripe_connect_charges_enabled === 'boolean' ? data.stripe_connect_charges_enabled : undefined,
+        stripe_connect_payouts_enabled: typeof data.stripe_connect_payouts_enabled === 'boolean' ? data.stripe_connect_payouts_enabled : undefined,
+        last_session_at: data.last_session_at || undefined,
       };
 
       console.log('[authProfileService] Successfully fetched profile', { username: profile.username, id: profile.id });
@@ -382,6 +403,8 @@ export class AuthProfileService {
           title: data.title || undefined,
           location: data.location || undefined,
           skills: Array.isArray(data.skills) ? data.skills : undefined,
+        skill_categories: Array.isArray(data.skill_categories) ? data.skill_categories : undefined,
+        zip_code: data.zip_code || undefined,
           age_verified: typeof data.age_verified === 'boolean' ? data.age_verified : undefined,
           age_verified_at: data.age_verified_at || undefined,
           balance: data.balance || 0,
@@ -394,6 +417,10 @@ export class AuthProfileService {
           id_verification_status: data.id_verification_status || undefined,
           selfie_submitted_at: data.selfie_submitted_at || undefined,
           display_name: data.display_name || undefined,
+          primary_role: data.primary_role || undefined,
+          stripe_connect_charges_enabled: typeof data.stripe_connect_charges_enabled === 'boolean' ? data.stripe_connect_charges_enabled : undefined,
+          stripe_connect_payouts_enabled: typeof data.stripe_connect_payouts_enabled === 'boolean' ? data.stripe_connect_payouts_enabled : undefined,
+          last_session_at: data.last_session_at || undefined,
         };
 
         console.log('[authProfileService] Profile data mapped', { username: profile.username, id: profile.id });
@@ -512,6 +539,8 @@ export class AuthProfileService {
           title: data.title || undefined,
           location: data.location || undefined,
           skills: Array.isArray(data.skills) ? data.skills : undefined,
+        skill_categories: Array.isArray(data.skill_categories) ? data.skill_categories : undefined,
+        zip_code: data.zip_code || undefined,
           age_verified: typeof data.age_verified === 'boolean' ? data.age_verified : undefined,
           age_verified_at: data.age_verified_at || undefined,
           balance: data.balance || 0,
@@ -524,6 +553,10 @@ export class AuthProfileService {
           id_verification_status: data.id_verification_status || undefined,
           selfie_submitted_at: data.selfie_submitted_at || undefined,
           display_name: data.display_name || undefined,
+          primary_role: data.primary_role || undefined,
+          stripe_connect_charges_enabled: typeof data.stripe_connect_charges_enabled === 'boolean' ? data.stripe_connect_charges_enabled : undefined,
+          stripe_connect_payouts_enabled: typeof data.stripe_connect_payouts_enabled === 'boolean' ? data.stripe_connect_payouts_enabled : undefined,
+          last_session_at: data.last_session_at || undefined,
         };
 
         console.log('[authProfileService] Fresh profile fetched, updating cache and notifying listeners');

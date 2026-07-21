@@ -15,9 +15,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ConfettiAnimation, SuccessAnimation } from '../../../components/ui/success-animation';
 import { analyticsService } from '../../../lib/services/analytics-service';
+import { bountyPaymentsService, BountyPaymentError } from '../../../lib/services/bounty-payments-service';
 import { bountyService } from '../../../lib/services/bounty-service';
 import type { Bounty } from '../../../lib/services/database.types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
+import { isPhase2Bounty } from '../../../lib/utils/payment-architecture';
 import { useWallet } from '../../../lib/wallet-context';
 
 export default function PayoutScreen() {
@@ -87,15 +89,61 @@ export default function PayoutScreen() {
     try {
       setIsProcessing(true);
 
-      // Release escrowed funds (this updates escrow transaction and logs release)
-      const released = await releaseFunds(
-        Number(bounty.id),
-        bounty.accepted_by || 'hunter', // In production, get actual hunter ID
-        bounty.title
-      );
+      const useV2 = isPhase2Bounty(bounty);
+      try {
+        await analyticsService.trackEvent('payment_architecture_routed', {
+          bountyId: String(bounty.id),
+          version: useV2 ? 2 : 1,
+          context: 'release',
+        });
+      } catch {
+        /* analytics is best-effort */
+      }
 
-      if (!released) {
-        throw new Error('Failed to release escrowed funds - no active escrow found');
+      if (useV2) {
+        // Stripe-native Phase 2 escrow: transfer captured funds to the
+        // hunter's Connect account via the bounty-payments edge function.
+        try {
+          await bountyPaymentsService.releaseBountyPayment(
+            String(bounty.id),
+            bounty.accepted_by || undefined
+          );
+          try {
+            await analyticsService.trackEvent('escrow_released', {
+              bountyId: String(bounty.id),
+              architecture: 'v2',
+              amount: bounty.amount,
+            });
+          } catch {
+            /* analytics is best-effort */
+          }
+        } catch (releaseErr) {
+          try {
+            await analyticsService.trackEvent('payment_failed', {
+              bountyId: String(bounty.id),
+              architecture: 'v2',
+              stage: 'release',
+            });
+          } catch {
+            /* analytics is best-effort */
+          }
+          const message =
+            releaseErr instanceof BountyPaymentError
+              ? releaseErr.message
+              : 'Failed to release the payout. Please try again.';
+          throw new Error(message);
+        }
+      } else {
+        // Release escrowed funds (this updates escrow transaction and logs release)
+        const released = await releaseFunds(
+          Number(bounty.id),
+          bounty.accepted_by || 'hunter', // In production, get actual hunter ID
+          bounty.title
+        );
+
+        if (!released) {
+          throw new Error('Failed to release escrowed funds - no active escrow found');
+        }
       }
 
       // Update bounty status to completed
@@ -389,10 +437,17 @@ export default function PayoutScreen() {
           ) : (
             <>
               <Text style={styles.payoutAmount}>${bounty.amount.toFixed(2)}</Text>
-              <View style={styles.balanceInfo}>
-                <Text style={styles.balanceLabel}>Current Balance:</Text>
-                <Text style={styles.balanceAmount}>${balance.toFixed(2)}</Text>
-              </View>
+              {isPhase2Bounty(bounty) ? (
+                <View style={styles.balanceInfo}>
+                  <MaterialIcons name="verified-user" size={16} color="#6ee7b7" />
+                  <Text style={styles.balanceLabel}>Secured in Stripe escrow — automatic payout on release</Text>
+                </View>
+              ) : (
+                <View style={styles.balanceInfo}>
+                  <Text style={styles.balanceLabel}>Current Balance:</Text>
+                  <Text style={styles.balanceAmount}>${balance.toFixed(2)}</Text>
+                </View>
+              )}
             </>
           )}
         </View>

@@ -93,28 +93,51 @@ export async function checkSessionExpiration(): Promise<SessionState> {
   }
 }
 
+export interface RefreshSessionResult {
+  refreshed: boolean;
+  /**
+   * True when the failure looks like a transient connectivity problem
+   * (offline, DNS hiccup, 5xx) rather than a definitive auth rejection
+   * (revoked/invalid refresh token). Callers must NOT treat a network-error
+   * failure as "the session is gone" — see checkAndRefresh below, which is
+   * exactly the distinction AuthProvider.refreshTokenNow already makes
+   * (providers/auth-provider.tsx) for its own proactive refresh.
+   */
+  isNetworkError: boolean;
+}
+
 /**
- * Attempt to refresh the session
+ * Attempt to refresh the session.
  */
-export async function refreshSession(): Promise<boolean> {
+export async function refreshSession(): Promise<RefreshSessionResult> {
   try {
     const { data, error } = await supabase.auth.refreshSession();
-    
+
     if (error) {
       logger.error('Error refreshing session', { error });
-      return false;
+
+      const isNetworkError =
+        error.message?.includes('network') ||
+        error.message?.includes('fetch') ||
+        (error as { status?: number }).status === 503 ||
+        (error as { status?: number }).status === 504;
+
+      return { refreshed: false, isNetworkError };
     }
-    
+
     if (!data.session) {
       logger.warning('Session refresh returned no session');
-      return false;
+      return { refreshed: false, isNetworkError: false };
     }
-    
+
     logger.info('Session refreshed successfully');
-    return true;
+    return { refreshed: true, isNetworkError: false };
   } catch (error) {
+    // A thrown (rather than returned) error from the SDK is almost always a
+    // network-level failure (e.g. a rejected fetch), not a definitive auth
+    // rejection — treat it as a network error rather than signing out.
     logger.error('Unexpected error refreshing session', { error });
-    return false;
+    return { refreshed: false, isNetworkError: true };
   }
 }
 
@@ -150,16 +173,22 @@ export function startSessionMonitoring(): () => void {
   
   const checkAndRefresh = async () => {
     const state = await checkSessionExpiration();
-    
+
     if (state.isExpired) {
       await handleSessionExpiration();
     } else if (state.needsRefresh) {
-      const refreshed = await refreshSession();
-      if (!refreshed) {
+      const { refreshed, isNetworkError } = await refreshSession();
+      // Only a definitive failure (bad/revoked refresh token, or the SDK
+      // returning no session at all) means the user is actually signed
+      // out. A network error just means this attempt didn't go through —
+      // leave the session alone and let the next scheduled check (or
+      // AuthProvider's own proactive refresh) retry once connectivity is
+      // back, instead of forcing a real sign-out for a connectivity blip.
+      if (!refreshed && !isNetworkError) {
         await handleSessionExpiration();
       }
     }
-    
+
     // Update last check time
     await AsyncStorage.setItem(SESSION_CHECK_KEY, Date.now().toString());
   };

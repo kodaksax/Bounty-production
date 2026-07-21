@@ -190,7 +190,7 @@ export function AddBankAccountModal({
 
   if (embedded) {
     return (
-      <View style={embeddedStyles.container}>
+      <View style={[embeddedStyles.container, { backgroundColor: theme.surface }]}>
         <View style={embeddedStyles.navBar}>
           <TouchableOpacity
             onPress={onBack}
@@ -198,9 +198,9 @@ export function AddBankAccountModal({
             accessibilityRole="button"
             accessibilityLabel="Back"
           >
-            <MaterialIcons name="arrow-back" size={22} color="#fff" />
+            <MaterialIcons name="arrow-back" size={22} color={theme.text} />
           </TouchableOpacity>
-          <Text style={embeddedStyles.title}>Link Bank Account</Text>
+          <Text style={[embeddedStyles.title, { color: theme.text }]}>Link Bank Account</Text>
           <View style={{ width: 44 }} />
         </View>
         {Body}
@@ -210,7 +210,7 @@ export function AddBankAccountModal({
 
   return (
     <View style={styles.overlayContainer}>
-      <View style={styles.sheet}>
+      <View style={[styles.sheet, { backgroundColor: theme.surface }]}>
         <View style={styles.navBar}>
           <TouchableOpacity
             accessibilityRole="button"
@@ -220,7 +220,7 @@ export function AddBankAccountModal({
           >
             <MaterialIcons name="close" size={24} color={theme.text} />
           </TouchableOpacity>
-          <Text style={styles.navTitle}>Link Bank Account</Text>
+          <Text style={[styles.navTitle, { color: theme.text }]}>Link Bank Account</Text>
           <View style={styles.navButtonPlaceholder} />
         </View>
         {Body}
@@ -233,6 +233,7 @@ export function AddBankAccountModal({
 // for embedded mode) still renders a solid-green sheet with white text, so
 // embedded content keeps the same white-on-green palette for contrast.
 const embeddedStyles = StyleSheet.create({
+  // Color comes from theme (backgroundColor applied inline).
   container: { paddingBottom: 24 },
   navBar: {
     flexDirection: 'row',
@@ -248,7 +249,7 @@ const embeddedStyles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    color: '#fff',
+    // color applied inline from theme
     fontSize: 18,
     fontWeight: '600',
     textAlign: 'center',

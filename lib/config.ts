@@ -49,6 +49,10 @@ function resolveWithFallback(
 const supabaseUrl   = resolveWithFallback('EXPO_PUBLIC_SUPABASE_URL', 'SUPABASE_URL');
 const supabaseAnon  = resolveWithFallback('EXPO_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_ANON_KEY');
 const apiBaseUrl    = resolveWithFallback('EXPO_PUBLIC_API_URL', 'EXPO_PUBLIC_API_BASE_URL');
+const paymentArchitectureVersion = resolveWithFallback(
+  'EXPO_PUBLIC_PAYMENT_ARCHITECTURE_VERSION',
+  'PAYMENT_ARCHITECTURE_VERSION'
+);
 
 /**
  * Safe diagnostics — records only which source was used per key.
@@ -80,6 +84,16 @@ export const config = {
 
   api: {
     baseUrl: apiBaseUrl.value,
+  },
+
+  features: {
+    // '2' opts newly-created bounties into the Stripe-native Phase 2 escrow
+    // path (lib/services/bounty-payments-service.ts) instead of the legacy
+    // custodial-wallet flow. Defaults to '1' (legacy) when unset so the
+    // rollout is opt-in. Existing bounties are unaffected by this flag — they
+    // always keep whatever version they were created with (read from the
+    // bounty row itself; see lib/utils/payment-architecture.ts).
+    paymentArchitectureVersion: paymentArchitectureVersion.value || '1',
   },
 } as const;
 

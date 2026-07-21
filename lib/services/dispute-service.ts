@@ -1,7 +1,9 @@
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
 import { logger } from 'lib/utils/error-logger';
+import { isPhase2Bounty } from 'lib/utils/payment-architecture';
 import type { BountyDispute, LocalDisputeEvidence } from '../types';
 import { analyticsService } from './analytics-service';
+import { bountyPaymentsService } from './bounty-payments-service';
 import { bountyService } from './bounty-service';
 import { cancellationService } from './cancellation-service';
 import type { Bounty } from './database.types';
@@ -558,6 +560,12 @@ export const disputeService = {
       const bounty = prefetchedBounty || (await bountyService.getById(dispute.bountyId));
       const isHonorBounty = bounty?.is_for_honor || !bounty?.amount || bounty.amount <= 0;
       const hasStripeEscrow = bounty && !isHonorBounty && !!bounty.payment_intent_id;
+      // Stripe Phase 2 (payment_architecture_version=2) per-bounty escrow —
+      // see lib/utils/payment-architecture.ts. Checked ahead of
+      // hasStripeEscrow below (mutually exclusive: a bounty is funded via
+      // either the legacy payment_intent_id field or bounty_payments, never
+      // both).
+      const isPhase2 = !!bounty && !isHonorBounty && isPhase2Bounty(bounty);
 
       // Map the winner to the new application-level resolution status and
       // atomically release the balance_on_hold via fn_close_dispute_hold.
@@ -576,7 +584,7 @@ export const disputeService = {
       // would cause, which would double-charge the poster (once via Stripe, once via wallet).
       // The dispute row's status is corrected to resolvedStatus by the update() call below.
       const holdReleaseStatus =
-        winner === 'hunter' && hasStripeEscrow ? 'resolved' : resolvedStatus;
+        winner === 'hunter' && (hasStripeEscrow || isPhase2) ? 'resolved' : resolvedStatus;
 
       const _pDisputeId = normalizeDisputeIdParam(disputeId);
       const { error: holdRpcError } = await (supabase as any).rpc('fn_close_dispute_hold', {
@@ -618,6 +626,7 @@ export const disputeService = {
           resolvedStatus,
           isHonorBounty: !!isHonorBounty,
           hasStripeEscrow: !!hasStripeEscrow,
+          paymentArchitectureVersion: isPhase2 ? 2 : 1,
         });
       } catch {
         /* analytics is best-effort */
@@ -635,7 +644,62 @@ export const disputeService = {
       let escrowActionExecuted = false;
       if (winner) {
         try {
-          if (bounty && !isHonorBounty && bounty.payment_intent_id) {
+          await analyticsService.trackEvent('payment_architecture_routed', {
+            bountyId: String(dispute.bountyId),
+            version: isPhase2 ? 2 : 1,
+            context: 'dispute_resolution',
+          });
+        } catch {
+          /* analytics is best-effort */
+        }
+        try {
+          if (isPhase2) {
+            // Stripe-native Phase 2 escrow (bounty_payments) — see
+            // lib/services/bounty-payments-service.ts.
+            if (winner === 'hunter') {
+              try {
+                await bountyPaymentsService.releaseBountyPayment(dispute.bountyId);
+                escrowActionExecuted = true;
+                await analyticsService.trackEvent('escrow_released', {
+                  bountyId: String(dispute.bountyId),
+                  architecture: 'v2',
+                  via: 'dispute_resolution',
+                });
+              } catch (releaseErr) {
+                logger.error('Failed to release Phase 2 escrow to hunter during dispute resolution', {
+                  disputeId,
+                  bountyId: dispute.bountyId,
+                  error: releaseErr,
+                });
+                await analyticsService.trackEvent('payment_failed', {
+                  bountyId: String(dispute.bountyId),
+                  architecture: 'v2',
+                  stage: 'dispute_release',
+                });
+              }
+            } else if (winner === 'poster') {
+              try {
+                await bountyPaymentsService.cancelBountyPayment(dispute.bountyId);
+                escrowActionExecuted = true;
+                await analyticsService.trackEvent('escrow_refunded', {
+                  bountyId: String(dispute.bountyId),
+                  architecture: 'v2',
+                  via: 'dispute_resolution',
+                });
+              } catch (refundErr) {
+                logger.error('Failed to refund Phase 2 escrow to poster during dispute resolution', {
+                  disputeId,
+                  bountyId: dispute.bountyId,
+                  error: refundErr,
+                });
+                await analyticsService.trackEvent('payment_failed', {
+                  bountyId: String(dispute.bountyId),
+                  architecture: 'v2',
+                  stage: 'dispute_cancel',
+                });
+              }
+            }
+          } else if (bounty && !isHonorBounty && bounty.payment_intent_id) {
             if (winner === 'hunter') {
               const releaseResult = await paymentService.releaseEscrow(bounty.payment_intent_id);
               if (!releaseResult.success) {

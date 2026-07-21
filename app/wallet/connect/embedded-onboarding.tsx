@@ -260,7 +260,7 @@ export default function ConnectOnboardingScreen() {
           /* analytics is best-effort */
         }
         try {
-          await supabase.from('profiles').update({ onboarding_complete: true }).eq('id', userId);
+          await supabase.from('profiles').update({ stripe_connect_onboarding_complete: true }).eq('id', userId);
         } catch (err) {
           console.warn('[connect-onboarding] optimistic update failed', err);
         }

@@ -1,396 +1,208 @@
 /**
- * Username Onboarding Screen
- * First step: collect unique username (required)
- * Features: Bounty branding, state persistence via context, navigation to legal docs
+ * Onboarding Sign In Screen
+ * Second step: real Apple / Google sign-in (via useSocialAuth), plus a
+ * "Continue with email" path to the real create-account screen.
+ * First-time visitors reach this screen unauthenticated, so these need to
+ * be real auth actions, not decorative ones.
  */
 
-import { MaterialIcons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  View,
-} from 'react-native';
+import { useEffect } from 'react';
+import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BrandingLogo } from '../../components/ui/branding-logo';
-import { useAuthProfile } from '../../hooks/useAuthProfile';
-import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
-import { useUserProfile } from '../../hooks/useUserProfile';
+import { OnboardingProgressDots } from '../../components/onboarding/OnboardingProgressDots';
+import { SkipAuthLink } from '../../components/onboarding/SkipAuthLink';
+import { GoogleLogo } from '../../components/ui/google-logo';
+import { useAuthContext } from '../../hooks/use-auth-context';
+import { useSocialAuth } from '../../hooks/useSocialAuth';
 import { useOnboarding } from '../../lib/context/onboarding-context';
-import { isUsernameUnique, validateUsername } from '../../lib/services/userProfile';
+import { ONBOARDING_SKIP_AUTH_ENABLED } from '../../lib/feature-flags';
+import { hapticFeedback } from '../../lib/haptic-feedback';
+import { analyticsService } from '../../lib/services/analytics-service';
+import { hasLocalOnboardingFlag } from '../../lib/storage/onboarding';
 import { supabase } from '../../lib/supabase';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 
+// Generic (no intent picked) is a 4-step flow: sign in -> style -> about you
+// -> done. Poster/hunter branches are 5 steps: sign in -> style -> details ->
+// confirm -> done.
+function totalStepsFor(intent: 'poster' | 'hunter' | null) {
+  return intent ? 5 : 4;
+}
+
+// After a real sign-in, decide whether this is an existing, fully-onboarded
+// account (go straight to the app) or a new/incomplete one (continue onboarding).
+async function routeAfterSocialSignIn(
+  userId: string,
+  router: ReturnType<typeof useRouter>,
+  method: 'apple' | 'google'
+) {
+  try {
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('username, onboarding_completed')
+      .eq('id', userId)
+      .single();
+
+    if (error) {
+      // No profile row (brand new account) or lookup failed — continue onboarding.
+      analyticsService.trackEvent('onboarding_auth_completed', { method, outcome: 'new_account' });
+      router.push('/onboarding/style');
+      return;
+    }
+
+    const onboarded =
+      profile?.username &&
+      (profile.onboarding_completed === true || (await hasLocalOnboardingFlag(userId)));
+
+    if (onboarded) {
+      analyticsService.trackEvent('onboarding_auth_completed', { method, outcome: 'existing_onboarded' });
+      router.replace('/tabs/bounty-app');
+    } else {
+      analyticsService.trackEvent('onboarding_auth_completed', { method, outcome: 'existing_incomplete' });
+      router.push('/onboarding/style');
+    }
+  } catch {
+    // On any unexpected error, don't block the user — continue onboarding.
+    router.push('/onboarding/style');
+  }
+}
+
 export default function UsernameScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { profile: localProfile, updateProfile } = useUserProfile();
-  const { userId, updateProfile: updateAuthProfile } = useAuthProfile();
-  const { profile: normalized } = useNormalizedProfile();
-  const { data: onboardingData, updateData: updateOnboardingData } = useOnboarding();
   const { theme } = useAppThemeContext();
+  const { isLoggedIn } = useAuthContext();
+  const { data: onboardingData } = useOnboarding();
   const styles = makeStyles(theme);
+  const {
+    isGoogleConfigured,
+    googleRequest,
+    promptGoogleSignIn,
+    googleSessionReady,
+    signInWithApple,
+    loading,
+    error,
+    clearError,
+  } = useSocialAuth();
 
-  // Initialize state from context
-  const [username, setUsername] = useState(onboardingData.username);
-  const [error, setError] = useState<string | null>(null);
-  const [checking, setChecking] = useState(false);
-  const [isValid, setIsValid] = useState(false);
-  const [accepted, setAccepted] = useState(onboardingData.accepted);
-  const [submitTick, setSubmitTick] = useState(0);
-  const submittingRef = useRef(false);
+  const totalSteps = totalStepsFor(onboardingData.intent);
 
-  // Sync from context on mount
   useEffect(() => {
-    if (onboardingData.username && onboardingData.username !== username) {
-      setUsername(onboardingData.username);
-    }
-    if (onboardingData.accepted !== accepted) {
-      setAccepted(onboardingData.accepted);
-    }
-    // Cleanup guard on unmount: ensure submitting ref is cleared so retries remain possible
-    return () => {
-      if (submittingRef.current) {
-        submittingRef.current = false;
-        setSubmitTick((t) => t + 1);
-      }
-    };
-  }, []);
-
-  // Load prior acceptance
-  useEffect(() => {
-    AsyncStorage.getItem('BE:acceptedLegal').then((v) => {
-      if (v === 'true' && !accepted) {
-        setAccepted(true);
-        updateOnboardingData({ accepted: true });
-      }
-    }).catch(() => {});
-  }, []);
-
-  // Persist username to context when it changes
-  useEffect(() => {
-    updateOnboardingData({ username });
-  }, [username]);
-
-  // Persist accepted to context when it changes
-  useEffect(() => {
-    updateOnboardingData({ accepted });
-  }, [accepted]);
-
-  // Validate username on change (debounced uniqueness check)
-  useEffect(() => {
-    if (!username) {
-      setError(null);
-      setIsValid(false);
-      setChecking(false);
-      return;
-    }
-
-    // Format validation (synchronous — no debounce needed)
-    const validation = validateUsername(username);
-    if (!validation.valid) {
-      setError(validation.error ?? null);
-      setIsValid(false);
-      setChecking(false);
-      return;
-    }
-
-    // Skip uniqueness check until userId is resolved
-    if (!userId) {
-      setChecking(false);
-      return;
-    }
-
-    // Cancellation guard: prevents stale in-flight checks from updating state
-    let cancelled = false;
-
-    // Debounced uniqueness check
-    setChecking(true);
-    setError(null);
-
-    const timer = setTimeout(async () => {
-      try {
-        const unique = await isUsernameUnique(username, userId);
-        if (cancelled) return;
-        if (!unique) {
-          setError('Username is already taken');
-          setIsValid(false);
-        } else {
-          setError(null);
-          setIsValid(true);
-        }
-      } catch {
-        if (cancelled) return;
-        // Optimistic — allow if check fails
-        setIsValid(true);
-      } finally {
-        if (!cancelled) setChecking(false);
-      }
-    }, 500);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [username, userId]);
-
-  const handleNext = async () => {
-    // Validate prerequisites - guard against disabled state
-    if (!isValid || checking || !accepted) {
-      return;
-    }
-
-    // Check if user is authenticated
-    if (!userId) {
-      setError('Please sign in to continue. Your session may have expired.');
-      return;
-    }
-
-    // Prevent duplicate submissions / navigation (use ref as immediate guard)
-    if (submittingRef.current) return;
-    submittingRef.current = true;
-    setSubmitTick((t) => t + 1);
-
-    try {
-      // Fire-and-forget: persist legal acceptance (non-blocking)
-      AsyncStorage.setItem('BE:acceptedLegal', 'true').catch(() => {});
-
-      // Fire-and-forget: save to local profile (non-blocking — Supabase is source of truth)
-      const localProfileData = {
-        username,
-        displayName: normalized?.name || localProfile?.displayName,
-        avatar: normalized?.avatar || localProfile?.avatar,
-        location: (normalized?._raw && (normalized as any)._raw.location) || localProfile?.location,
-        phone: (normalized?._raw && (normalized as any)._raw.phone) || localProfile?.phone,
-      };
-      updateProfile(localProfileData).catch((localError) => {
-        console.error('[onboarding] Local profile save error:', localError);
-      });
-
-      // Upsert the username into the profiles table.
-      // upsert() handles both the "profile already exists" (UPDATE path) and the
-      // rare "profile row missing" (INSERT path) cases in one round-trip.
-      // onConflict:'id' ensures that a conflict on the primary key triggers an
-      // update rather than an error, while a conflict on the UNIQUE username
-      // column (different user already owns it) still surfaces as error 23505.
-      // Wrapped in Promise.race so a non-responsive network surfaces quickly
-      // instead of blocking the user indefinitely.
-      const SAVE_TIMEOUT_MS = 10000;
-      let saveTimerId: ReturnType<typeof setTimeout> | undefined;
-
-      class SaveTimeoutError extends Error {
-        constructor() { super('SaveTimeoutError'); this.name = 'SaveTimeoutError'; }
-      }
-
-      const supabaseResult = await Promise.race([
-        supabase
-          .from('profiles')
-          .upsert(
-            { id: userId, username },
-            { onConflict: 'id' },
-          )
-          .select('id, username')
-          .single(),
-        new Promise<never>((_, reject) => {
-          saveTimerId = setTimeout(
-            () => reject(new SaveTimeoutError()),
-            SAVE_TIMEOUT_MS,
-          );
-        }),
-      ]).finally(() => clearTimeout(saveTimerId));
-
-      // Check Supabase result
-      if (supabaseResult.error) {
-        if (supabaseResult.error.code === '23505') {
-          setError('This username is already taken. Please choose another.');
-          submittingRef.current = false;
-          setSubmitTick((t) => t + 1);
-          return;
-        }
-        // For other Supabase errors log and fall through to navigate anyway —
-        // the username can be retried from profile settings.
-        console.error('[onboarding] Supabase upsert error:', supabaseResult.error);
-      }
-
-      // Fire-and-forget: sync auth profile cache (non-blocking)
-      updateAuthProfile({ username }).catch((authError) => {
-        console.error('[onboarding] Error updating auth profile:', authError);
-      });
-
-      // Navigate to next onboarding step
-      try {
-        router.push('/onboarding/details');
-      } catch (navError) {
-        console.error('[onboarding] Navigation error:', navError);
-        setError('Navigation failed. Please try again.');
-      } finally {
-        if (submittingRef.current) {
-          submittingRef.current = false;
-          setSubmitTick((t) => t + 1);
-        }
-      }
-    } catch (err) {
-      console.error('[onboarding] Error:', err);
-      if (err instanceof Error && err.name === 'SaveTimeoutError') {
-        // Network too slow — save locally and let the user continue onboarding.
-        // The username will be synced on the next successful Supabase operation.
-        console.warn('[onboarding] Save timed out — proceeding with local save only');
-        updateAuthProfile({ username }).catch((authError) => {
-          console.error('[onboarding] Error updating auth profile after timeout:', authError);
-        });
-        try {
-          router.push('/onboarding/details');
-        } catch (navError) {
-          console.error('[onboarding] Navigation error after timeout:', navError);
-          setError('Navigation failed. Please try again.');
-        } finally {
-          submittingRef.current = false;
-          setSubmitTick((t) => t + 1);
-        }
+    if (!googleSessionReady) return;
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      const userId = data.session?.user?.id;
+      if (userId) {
+        await routeAfterSocialSignIn(userId, router, 'google');
       } else {
-        setError(err instanceof Error ? err.message : 'Failed to save username. Please try again.');
-        submittingRef.current = false;
-        setSubmitTick((t) => t + 1);
+        router.push('/onboarding/style');
       }
+    })();
+  }, [googleSessionReady, router]);
+
+  useEffect(() => {
+    if (error) {
+      Alert.alert('Sign-in failed', error, [{ text: 'OK', onPress: clearError }]);
+    }
+  }, [error, clearError]);
+
+  const handleAppleContinue = async () => {
+    hapticFeedback.light();
+    analyticsService.trackEvent('onboarding_auth_started', { method: 'apple' });
+    const success = await signInWithApple();
+    if (!success) return;
+
+    const { data } = await supabase.auth.getSession();
+    const userId = data.session?.user?.id;
+    if (userId) {
+      await routeAfterSocialSignIn(userId, router, 'apple');
+    } else {
+      router.push('/onboarding/style');
     }
   };
 
+  const handleGooglePress = () => {
+    hapticFeedback.light();
+    analyticsService.trackEvent('onboarding_auth_started', { method: 'google' });
+    promptGoogleSignIn();
+  };
+
+  const handleContinueWithEmail = () => {
+    hapticFeedback.light();
+    analyticsService.trackEvent('onboarding_auth_started', { method: 'email' });
+    router.push('/auth/sign-up-form');
+  };
+
+  const handleSkip = () => {
+    analyticsService.trackEvent('onboarding_step_skipped', { step: 'sign_in' });
+    // Already signed in (e.g. reached this screen mid-onboarding) — safe to
+    // continue straight through. If not, there's no session yet for the
+    // next screen to save data against, so send them to create an account.
+    router.push(isLoggedIn ? '/onboarding/style' : '/auth/sign-up-form');
+  };
+
   return (
-    <KeyboardAvoidingView
-      style={[styles.container, { paddingTop: insets.top }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
-        <View style={[styles.content, { paddingBottom: insets.bottom + 40 }]}>
-        {/* Branding Header */}
-        <View style={styles.brandingHeader}>
-          <BrandingLogo size="medium" />
-        </View>
+    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      <OnboardingProgressDots total={totalSteps} activeIndex={0} style={styles.dotsContainer} />
 
-        {/* Header */}
-        <View style={styles.header}>
-          <MaterialIcons name="person-outline" size={56} color="#9CA3AF" />
-          <Text style={styles.title}>Choose Your Username</Text>
-          <Text style={styles.subtitle}>
-            This is how others will find you. Pick something unique and memorable.
-          </Text>
-        </View>
+      <Text style={styles.heading}>Sign in — one tap, no password</Text>
+      <Text style={styles.subheading}>We never post or share anything without asking.</Text>
 
-        {/* Input */}
-        <View style={styles.inputSection}>
-          <View style={styles.inputWrapper}>
-            <Text style={styles.atSymbol}>@</Text>
-            <TextInput
-              style={styles.input}
-              value={username}
-              onChangeText={(text) => setUsername(text.toLowerCase())}
-              placeholder="username"
-              placeholderTextColor="rgba(255,255,255,0.4)"
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoFocus
-            />
-            {checking && (
-              <ActivityIndicator size="small" color="#9CA3AF" style={styles.indicator} />
-            )}
-            {!checking && username && isValid && (
-              <MaterialIcons name="check-circle" size={24} color="#059669" style={styles.indicator} />
-            )}
-          </View>
-          
-          {/* Error message */}
-          {error && (
-            <View style={styles.errorContainer}>
-              <MaterialIcons name="error-outline" size={16} color="#ef4444" />
-              <Text style={styles.errorText}>{error}</Text>
+      <View style={styles.content} />
+
+      <View style={styles.actionContainer}>
+        <TouchableOpacity
+          style={styles.appleButton}
+          onPress={handleAppleContinue}
+          disabled={loading}
+          accessibilityRole="button"
+          accessibilityLabel="Continue with Apple"
+          accessibilityState={{ disabled: loading, busy: loading }}
+        >
+          {loading ? (
+            <ActivityIndicator color="#ffffff" style={styles.buttonIcon} />
+          ) : (
+            <FontAwesome name="apple" size={20} color="#ffffff" style={styles.buttonIcon} />
+          )}
+          <Text style={styles.appleButtonText}>Continue with Apple</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.googleButton}
+          onPress={handleGooglePress}
+          disabled={!isGoogleConfigured || !googleRequest || loading}
+          accessibilityRole="button"
+          accessibilityLabel={isGoogleConfigured ? 'Continue with Google' : 'Google sign-in unavailable'}
+          accessibilityState={{ disabled: !isGoogleConfigured || !googleRequest || loading, busy: loading }}
+        >
+          {loading ? (
+            <ActivityIndicator color="#000000" style={styles.buttonIcon} />
+          ) : (
+            <View style={styles.buttonIcon}>
+              <GoogleLogo size={18} />
             </View>
           )}
-          
-          {/* Requirements */}
-          <View style={styles.requirements}>
-            <Text style={styles.requirementTitle}>Requirements:</Text>
-            <Text style={styles.requirement}>• 3-20 characters</Text>
-            <Text style={styles.requirement}>• Lowercase letters, numbers, and underscores only</Text>
-            <Text style={styles.requirement}>• Must be unique</Text>
-          </View>
-        </View>
+          <Text style={styles.googleButtonText}>
+            {isGoogleConfigured ? 'Continue with Google' : 'Google sign-in unavailable'}
+          </Text>
+        </TouchableOpacity>
 
-        {/* Legal acceptance */}
-        <View style={styles.legalBox}>
-          <View style={styles.checkboxRow}>
-            <TouchableOpacity
-              onPress={() => setAccepted(!accepted)}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: accepted }}
-              accessibilityLabel="Accept terms and privacy policy"
-              style={styles.checkboxButton}
-            >
-              <MaterialIcons name={accepted ? 'check-box' : 'check-box-outline-blank'} size={22} color="#9CA3AF" />
-            </TouchableOpacity>
-            <Text style={styles.legalText}>I agree to the</Text>
-            <TouchableOpacity 
-              onPress={() => router.push('/legal/terms')}
-              accessibilityRole="link"
-              accessibilityLabel="View Terms of Service"
-            >
-              <Text style={styles.linkText}> Terms of Service</Text>
-            </TouchableOpacity>
-            <Text style={styles.legalText}> and</Text>
-            <TouchableOpacity 
-              onPress={() => router.push('/legal/privacy')}
-              accessibilityRole="link"
-              accessibilityLabel="View Privacy Policy"
-            >
-              <Text style={styles.linkText}> Privacy Policy</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        <TouchableOpacity
+          style={styles.emailButton}
+          onPress={handleContinueWithEmail}
+          accessibilityRole="button"
+          accessibilityLabel="Continue with email"
+        >
+          <MaterialIcons name="alternate-email" size={20} color={theme.text} style={styles.buttonIcon} />
+          <Text style={styles.emailButtonText}>Continue with email</Text>
+        </TouchableOpacity>
 
-        {/* Next Button */}
-        {(() => {
-          // Depend on submitTick so that updates to it trigger re-renders that reflect the latest submittingRef state
-          const submitting = submittingRef.current && submitTick >= 0;
-          return (
-            <TouchableOpacity
-              style={[
-                styles.nextButton,
-                (!isValid || checking || !accepted || submitting) && styles.nextButtonDisabled,
-              ]}
-              onPress={handleNext}
-              disabled={!isValid || checking || !accepted || submitting}
-            >
-              {submitting ? (
-                <ActivityIndicator size="small" color="#052e1b" style={{ marginRight: 8 }} />
-              ) : null}
-              <Text style={styles.nextButtonText}>
-                {submitting ? 'Saving...' : checking ? 'Checking...' : 'Next'}
-              </Text>
-              <MaterialIcons name="arrow-forward" size={20} color="#052e1b" />
-            </TouchableOpacity>
-          );
-        })()}
-
-        {/* Progress indicator — step 1 of 5 */}
-        <View style={styles.progressContainer}>
-          <View style={[styles.progressDot, styles.progressDotActive]} />
-          <View style={styles.progressDot} />
-          <View style={styles.progressDot} />
-          <View style={styles.progressDot} />
-          <View style={styles.progressDot} />
-        </View>
-        </View>
-      </TouchableWithoutFeedback>
-    </KeyboardAvoidingView>
+        {ONBOARDING_SKIP_AUTH_ENABLED && <SkipAuthLink onPress={handleSkip} />}
+      </View>
+    </View>
   );
 }
 
@@ -399,158 +211,76 @@ function makeStyles(theme: AppTheme) {
     container: {
       flex: 1,
       backgroundColor: theme.background,
-    },
-    content: {
-      flex: 1,
       paddingHorizontal: 24,
     },
-    brandingHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingTop: 8,
-      paddingBottom: 8,
+    dotsContainer: {
+      paddingTop: 16,
     },
-    brandingText: {
-      fontSize: 22,
-      fontWeight: 'bold',
+    heading: {
+      fontSize: 30,
+      fontWeight: '600',
       color: theme.text,
-      letterSpacing: 3,
-      marginLeft: 8,
-    },
-    header: {
-      alignItems: 'center',
-      marginTop: 16,
-      marginBottom: 32,
-    },
-    title: {
-      fontSize: 26,
-      fontWeight: 'bold',
-      color: theme.text,
-      marginTop: 12,
-      marginBottom: 8,
       textAlign: 'center',
+      marginTop: 24,
     },
-    subtitle: {
+    subheading: {
       fontSize: 15,
       color: theme.textSecondary,
       textAlign: 'center',
-      lineHeight: 22,
-      paddingHorizontal: 16,
-    },
-    legalBox: {
-      backgroundColor: theme.surface,
-      borderRadius: 12,
-      padding: 12,
-      borderWidth: 1,
-      borderColor: theme.border,
-      marginBottom: 20,
-    },
-    checkboxRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      flexWrap: 'wrap',
-    },
-    checkboxButton: {
-      marginRight: 4,
-    },
-    legalText: {
-      color: theme.textSecondary,
-      fontSize: 13,
-    },
-    linkText: {
-      color: theme.primaryLight,
-      textDecorationLine: 'underline',
-      fontSize: 13,
-      fontWeight: '600',
-    },
-    inputSection: {
-      marginBottom: 24,
-    },
-    inputWrapper: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: theme.surface,
-      borderRadius: 12,
-      paddingHorizontal: 16,
-      paddingVertical: 4,
-      borderWidth: 2,
-      borderColor: theme.border,
-    },
-    atSymbol: {
-      fontSize: 24,
-      color: theme.textSecondary,
-      fontWeight: '600',
-      marginRight: 4,
-    },
-    input: {
-      flex: 1,
-      fontSize: 20,
-      color: theme.text,
-      paddingVertical: 14,
-      fontWeight: '500',
-    },
-    indicator: {
-      marginLeft: 8,
-    },
-    errorContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
       marginTop: 8,
-      paddingHorizontal: 4,
     },
-    errorText: {
-      color: '#ef4444',
-      fontSize: 14,
-      marginLeft: 6,
+    content: {
+      flex: 1,
     },
-    requirements: {
-      marginTop: 12,
-      paddingHorizontal: 4,
+    actionContainer: {
+      paddingBottom: 40,
+      gap: 12,
     },
-    requirementTitle: {
-      color: theme.text,
-      fontSize: 14,
-      fontWeight: '600',
-      marginBottom: 6,
-    },
-    requirement: {
-      color: theme.textSecondary,
-      fontSize: 13,
-      lineHeight: 20,
-    },
-    nextButton: {
+    appleButton: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: theme.primary,
+      backgroundColor: '#000000',
       paddingVertical: 16,
       borderRadius: 999,
-      marginBottom: 20,
-      gap: 8,
     },
-    nextButtonDisabled: {
-      backgroundColor: theme.surfaceSecondary,
-    },
-    nextButtonText: {
-      color: '#052e1b',
+    appleButtonText: {
+      color: '#ffffff',
       fontSize: 18,
       fontWeight: 'bold',
     },
-    progressContainer: {
+    googleButton: {
       flexDirection: 'row',
+      alignItems: 'center',
       justifyContent: 'center',
-      gap: 8,
-      paddingTop: 8,
+      backgroundColor: '#ffffff',
+      borderWidth: 2,
+      borderColor: '#000000',
+      paddingVertical: 16,
+      borderRadius: 999,
     },
-    progressDot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-      backgroundColor: theme.border,
+    googleButtonText: {
+      color: '#000000',
+      fontSize: 18,
+      fontWeight: 'bold',
     },
-    progressDotActive: {
-      backgroundColor: theme.primary,
+    emailButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.surface,
+      borderWidth: 1,
+      borderColor: theme.border,
+      paddingVertical: 16,
+      borderRadius: 999,
+    },
+    emailButtonText: {
+      color: theme.text,
+      fontSize: 18,
+      fontWeight: 'bold',
+    },
+    buttonIcon: {
+      marginRight: 8,
     },
   });
 }

@@ -82,6 +82,40 @@ const roleArg = (argv.find((a) => a.startsWith('--role=')) || '').replace('--rol
 const role   = roleArg || 'all'; // 'frontend' | 'backend' | 'all'
 
 // ---------------------------------------------------------------------------
+// Ref validation: confirm EXPO_PUBLIC_SUPABASE_URL / SUPABASE_URL actually
+// point at the project this APP_ENV is supposed to use, per the single
+// source of truth in lib/config/supabase-refs.json (shared with
+// app.config.js and lib/config/env-guard.ts). Presence checks alone don't
+// catch "right variable name, wrong project" — this does.
+// ---------------------------------------------------------------------------
+const { byAppEnv: EXPECTED_REFS } = require('../lib/config/supabase-refs.json');
+
+function projectRefFromUrl(url) {
+  if (!url) return null;
+  const match = /^https?:\/\/([^./?#]+)\./i.exec(String(url).trim());
+  return match ? match[1] : null;
+}
+
+function checkSupabaseRef() {
+  const expectedRef = EXPECTED_REFS[APP_ENV];
+  if (!expectedRef) return null; // unknown APP_ENV already rejected above
+
+  const url = process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  const actualRef = projectRefFromUrl(url);
+
+  if (!actualRef) return null; // presence check below already reports this as missing
+  if (actualRef !== expectedRef) {
+    return (
+      `EXPO_PUBLIC_SUPABASE_URL resolves to project "${actualRef}", but APP_ENV="${APP_ENV}" ` +
+      `expects project "${expectedRef}" (see lib/config/supabase-refs.json). ` +
+      `This is exactly the mismatch that lets a dev/staging build talk to the wrong ` +
+      `Supabase project — double check .env.${APP_ENV}.`
+    );
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Required key definitions
 // ---------------------------------------------------------------------------
 
@@ -163,6 +197,8 @@ if (role === 'backend' || role === 'all') {
   }
 }
 
+const refMismatch = checkSupabaseRef();
+
 // ---------------------------------------------------------------------------
 // Print diagnostic (safe — never prints full values)
 // ---------------------------------------------------------------------------
@@ -193,11 +229,24 @@ for (const w of warnings) {
 }
 
 // ---------------------------------------------------------------------------
+// Report ref mismatch (wrong Supabase project for this APP_ENV)
+// ---------------------------------------------------------------------------
+if (refMismatch) {
+  console.error(`\n[check-env] ❌ Supabase project mismatch:\n\n  ${refMismatch}\n`);
+}
+
+// ---------------------------------------------------------------------------
 // Report missing keys
 // ---------------------------------------------------------------------------
-if (allMissing.length === 0) {
-  console.log(`[check-env] ✅ All required env keys present for APP_ENV="${APP_ENV}" (role=${role}).`);
+if (allMissing.length === 0 && !refMismatch) {
+  console.log(`[check-env] ✅ All required env keys present and Supabase project matches for APP_ENV="${APP_ENV}" (role=${role}).`);
   process.exit(0);
+}
+
+if (allMissing.length === 0) {
+  // Only the ref mismatch failed — still a hard failure, but skip the
+  // "missing keys" banner below since there aren't any.
+  process.exit(1);
 }
 
 console.error(

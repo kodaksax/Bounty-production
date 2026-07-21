@@ -22,9 +22,8 @@ import { ErrorBanner } from '../../components/error-banner';
 import { AnimatedScreen } from '../../components/ui/animated-screen';
 import { Button } from '../../components/ui/button';
 import { CaptchaChallenge } from '../../components/ui/captcha-challenge';
-import { Checkbox } from '../../components/ui/checkbox';
+import { GoogleLogo } from '../../components/ui/google-logo';
 import { useFormSubmission } from '../../hooks/useFormSubmission';
-import { setRememberMePreference } from '../../lib/auth-session-storage';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
 import { capture as posthogCapture, identify as posthogIdentify } from '../../lib/posthog';
 import { ROUTES } from '../../lib/routes';
@@ -61,7 +60,6 @@ export function SignInForm() {
   const [loginAttempts, setLoginAttempts] = useState(0);
   const [lockoutUntil, setLockoutUntil] = useState<number | null>(null);
   const [captchaVerified, setCaptchaVerified] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
   console.log('[sign-in] Component rendered', { loginAttempts, lockoutUntil, captchaVerified });
   const passwordRef = useRef<TextInput>(null);
 
@@ -132,19 +130,6 @@ export function SignInForm() {
           });
         }
 
-        // IMPORTANT: Set remember me preference BEFORE authentication
-        // This ensures the session storage adapter can immediately use it
-        try {
-          console.log('[sign-in] Setting remember me preference:', rememberMe, { correlationId });
-          await setRememberMePreference(rememberMe);
-        } catch (prefError) {
-          // Don't block sign-in if preference storage fails
-          // The user can still sign in, just won't have persistent session
-          console.warn('[sign-in] Failed to save remember me preference:', prefError, {
-            correlationId,
-          });
-        }
-
         // SIMPLIFIED AUTH FLOW: Let Supabase handle its own timeouts and network logic
         // The previous complex retry/timeout logic was causing valid requests to fail
         // See SIGN_IN_SIMPLIFICATION_SUMMARY.md for detailed rationale
@@ -191,15 +176,13 @@ export function SignInForm() {
 
         console.log('[sign-in] Authentication successful', { correlationId });
 
-        // Handle remember me preference
+        // Save the email for prefill convenience next time — unconditional
+        // now that session persistence itself is always-on and no longer
+        // tied to a "remember me" choice.
         try {
-          if (rememberMe) {
-            await storage.setItem('rememberMeEmail', identifier.trim().toLowerCase());
-          } else {
-            await storage.removeItem('rememberMeEmail');
-          }
+          await storage.setItem('lastUsedEmail', identifier.trim().toLowerCase());
         } catch (error) {
-          console.error('[sign-in] Failed to save remember me preference:', error, {
+          console.error('[sign-in] Failed to save last-used email:', error, {
             correlationId,
           });
         }
@@ -400,14 +383,14 @@ export function SignInForm() {
     scopes: ['openid', 'email', 'profile'],
   });
 
-  // Load saved email on mount
+  // Prefill the last-used email on mount (pure convenience — unrelated to
+  // session persistence, which is always-on now).
   useEffect(() => {
     const loadSavedEmail = async () => {
       try {
-        const savedEmail = await storage.getItem('rememberMeEmail');
+        const savedEmail = await storage.getItem('lastUsedEmail');
         if (savedEmail) {
           setIdentifier(savedEmail);
-          setRememberMe(true);
         }
       } catch (error) {
         console.error('[sign-in] Failed to load saved email:', error);
@@ -471,10 +454,6 @@ export function SignInForm() {
       try {
         setSocialAuthLoading(true);
         console.log('[google] Starting Google sign-in with id_token');
-
-        // Social auth: default to remember me = true
-        console.log('[google] Setting remember me preference: true (social auth)');
-        await setRememberMePreference(true);
 
         // Simplified: Let Supabase handle its own timeout
         // See SIGN_IN_SIMPLIFICATION_SUMMARY.md for rationale
@@ -703,22 +682,6 @@ export function SignInForm() {
                 ) : null}
               </View>
 
-              <View className="flex-row items-center">
-                <Checkbox
-                  checked={rememberMe}
-                  onCheckedChange={setRememberMe}
-                  disabled={isSubmitting}
-                />
-                <TouchableOpacity
-                  onPress={() => !isSubmitting && setRememberMe(!rememberMe)}
-                  disabled={isSubmitting}
-                >
-                  <Text className="text-sm ml-2" style={{ color: theme.text }}>
-                    Remember me
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
               {captchaRequired && (
                 <View className="mt-4">
                   <Text className="text-xs mb-2" style={{ color: theme.text }}>
@@ -765,10 +728,6 @@ export function SignInForm() {
                           setSocialAuthError('Authentication service is not configured.');
                           return;
                         }
-
-                        // Social auth: default to remember me = true
-                        console.log('[apple] Setting remember me preference: true (social auth)');
-                        await setRememberMePreference(true);
 
                         console.log('[apple] Exchanging token with Supabase');
                         const { data, error } = await supabase.auth.signInWithIdToken({
@@ -888,14 +847,21 @@ export function SignInForm() {
                 {socialAuthLoading ? (
                   <ActivityIndicator color="#000" />
                 ) : (
-                  <Text className="text-black font-medium">
-                    {isGoogleConfigured ? 'Continue with Google' : 'Google setup required'}
-                  </Text>
+                  <>
+                    {isGoogleConfigured && (
+                      <View style={{ marginRight: 8 }}>
+                        <GoogleLogo size={18} />
+                      </View>
+                    )}
+                    <Text className="text-black font-medium">
+                      {isGoogleConfigured ? 'Continue with Google' : 'Google setup required'}
+                    </Text>
+                  </>
                 )}
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={() => router.push('/auth/sign-up-form')}
+                onPress={() => router.push('/onboarding/welcome')}
                 accessibilityRole="button"
                 accessibilityLabel="Create an account"
               >

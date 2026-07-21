@@ -11,6 +11,10 @@ import { AddCardModal } from "./add-card-modal"
 
 type PaymentMethodType = 'card' | 'bank_account'
 
+// Text color placed on top of the bright brand-green primary fill, matching
+// the dark-on-green convention used across onboarding/wallet.
+const ON_PRIMARY_TEXT = '#052e1b'
+
 interface PaymentMethodsModalProps {
   isOpen: boolean
   onClose: () => void
@@ -195,6 +199,9 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
             width: '100%',
             borderTopLeftRadius: 24,
             borderTopRightRadius: 24,
+            borderWidth: 1,
+            borderBottomWidth: 0,
+            borderColor: theme.border,
             overflow: 'hidden',
             transform: [{ translateY: animatedTranslateY }],
             maxHeight: Dimensions.get('window').height * 0.92, // Increased for iPhone
@@ -205,7 +212,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
         <View style={{
           width: 56,
           height: 6,
-          backgroundColor: 'rgba(255,255,255,0.3)',
+          backgroundColor: theme.border,
           borderRadius: 8,
           alignSelf: 'center',
           marginVertical: 14
@@ -232,13 +239,13 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
             accessibilityRole="button"
             accessibilityLabel="Close payment methods"
           >
-            <MaterialIcons name="close" size={24} color="#ffffff" />
+            <MaterialIcons name="close" size={24} color={theme.text} />
           </TouchableOpacity>
           <Text style={{
             marginLeft: 8,
             fontSize: 20,
             fontWeight: '600',
-            color: 'white',
+            color: theme.text,
             letterSpacing: 0.3
           }}>Payment Methods</Text>
         </View>
@@ -289,7 +296,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
                 accessibilityLabel="Cards"
               >
                 <Text style={{
-                  color: selectedMethodType === 'card' ? 'white' : (theme.isDark ? 'rgba(255,255,255,0.7)' : theme.textSecondary),
+                  color: selectedMethodType === 'card' ? ON_PRIMARY_TEXT : theme.textSecondary,
                   textAlign: 'center',
                   fontWeight: selectedMethodType === 'card' ? '600' : '400',
                   fontSize: 15,
@@ -310,7 +317,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
                 accessibilityLabel="Bank Accounts"
               >
                 <Text style={{
-                  color: selectedMethodType === 'bank_account' ? 'white' : (theme.isDark ? 'rgba(255,255,255,0.7)' : theme.textSecondary),
+                  color: selectedMethodType === 'bank_account' ? ON_PRIMARY_TEXT : theme.textSecondary,
                   textAlign: 'center',
                   fontWeight: selectedMethodType === 'bank_account' ? '600' : '400',
                   fontSize: 15,
@@ -340,7 +347,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
               accessibilityRole="button"
               accessibilityLabel={`Add new ${selectedMethodType === 'card' ? 'card' : 'bank account'}`}
             >
-              <MaterialIcons name="add" size={26} color={theme.isDark ? '#ffffff' : theme.primary} />
+              <MaterialIcons name="add" size={26} color={theme.isDark ? theme.text : theme.primary} />
               <Text style={{
                 color: theme.text,
                 fontWeight: '600',
@@ -354,7 +361,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
             {/* Payment Methods List */}
             {isLoading && !loadFailed && !stripeError ? (
               <View style={{ alignItems: 'center', padding: 40 }}>
-                <Text style={{ color: 'white', fontSize: 16 }}>Loading payment methods...</Text>
+                <Text style={{ color: theme.text, fontSize: 16 }}>Loading payment methods...</Text>
               </View>
             ) : (loadFailed || stripeError) && selectedMethodType === 'card' && paymentMethods.length === 0 ? (
               // Show error state if load ultimately failed
@@ -387,15 +394,15 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
                   accessibilityRole="button"
                   accessibilityLabel="Retry loading payment methods"
                 >
-                  <Text style={{ color: 'white', fontWeight: '600', fontSize: 15 }}>Retry</Text>
+                  <Text style={{ color: theme.text, fontWeight: '600', fontSize: 15 }}>Retry</Text>
                 </TouchableOpacity>
               </View>
             ) : selectedMethodType === 'card' && paymentMethods.length === 0 ? (
               // Empty state when no error
               <View style={{ alignItems: 'center', padding: 40 }}>
-                <MaterialIcons name="credit-card" size={56} color="rgba(255,255,255,0.4)" />
+                <MaterialIcons name="credit-card" size={56} color={theme.textSecondary} />
                 <Text style={{
-                  color: 'rgba(255,255,255,0.8)',
+                  color: theme.textSecondary,
                   textAlign: 'center',
                   marginTop: 16,
                   fontSize: 16,
@@ -407,9 +414,9 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
             ) : selectedMethodType === 'bank_account' ? (
               // Bank accounts are managed via Stripe Connect onboarding, not listed here.
               <View style={{ alignItems: 'center', padding: 40 }}>
-                <MaterialIcons name="account-balance" size={56} color="rgba(255,255,255,0.4)" />
+                <MaterialIcons name="account-balance" size={56} color={theme.textSecondary} />
                 <Text style={{
-                  color: 'rgba(255,255,255,0.8)',
+                  color: theme.textSecondary,
                   textAlign: 'center',
                   marginTop: 16,
                   fontSize: 16,
@@ -430,17 +437,17 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
                   <View style={{
                     flexDirection: 'row',
                     alignItems: 'center',
-                    backgroundColor: 'rgba(255,255,255,0.1)',
+                    backgroundColor: theme.surfaceSecondary,
                     borderRadius: 14,
                     padding: 18,
                     marginBottom: 14,
                     minHeight: 72, // Comfortable touch target height
                     ...theme.shadows.sm,
                   }}>
-                    <MaterialIcons name="credit-card" size={34} color="#ffffff" />
+                    <MaterialIcons name="credit-card" size={34} color={theme.text} />
                     <View style={{ flex: 1, marginLeft: 14 }}>
                       <Text style={{
-                        color: 'white',
+                        color: theme.text,
                         fontWeight: '600',
                         fontSize: 16,
                         marginBottom: 4
@@ -448,7 +455,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
                         {stripeService.formatCardDisplay(item)}
                       </Text>
                       <Text style={{
-                        color: 'rgba(255,255,255,0.75)',
+                        color: theme.textSecondary,
                         fontSize: 14,
                         letterSpacing: 0.2
                       }}>
@@ -465,7 +472,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
                         alignItems: 'center'
                       }}
                     >
-                      <MaterialIcons name="delete" size={22} color="rgba(255,255,255,0.7)" />
+                      <MaterialIcons name="delete" size={22} color={theme.textSecondary} />
                     </TouchableOpacity>
                   </View>
                 )}

@@ -17,8 +17,10 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 const mockGetOnboardingCompleteKey = jest.fn((id: string) => `@bounty_onboarding_completed:${id}`);
+const mockMarkDeviceHasSignedIn = jest.fn(() => Promise.resolve());
 jest.mock('../../../lib/storage/onboarding', () => ({
   getOnboardingCompleteKey: (id: string) => mockGetOnboardingCompleteKey(id),
+  markDeviceHasSignedIn: () => mockMarkDeviceHasSignedIn(),
 }));
 
 // Controlled auth context state — tests mutate this directly.

@@ -9,6 +9,8 @@ import { useAuthProfile } from '../hooks/useAuthProfile';
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile';
 import { useAdmin } from '../lib/admin-context';
 import { type BountyFormat, useBountyFormat } from '../lib/bounty-format-context';
+import { BOUNTY_FORMAT_OPTIONS } from '../lib/bounty-format-options';
+import { analyticsService } from '../lib/services/analytics-service';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme, ThemeMode } from '../lib/themes/types';
 import { markIntentionalSignOut } from '../lib/utils/session-handler';

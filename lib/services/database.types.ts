@@ -7,6 +7,9 @@ export type Bounty = {
   amount: number;
   is_for_honor: boolean;
   location: string;
+  // Optional ZIP code, saved as metadata so users with a matching profile
+  // ZIP can eventually be matched/notified about this bounty.
+  zip_code?: string;
   timeline: string;
   skills_required: string;
   poster_id: string;
@@ -16,6 +19,10 @@ export type Bounty = {
   distance?: number;
   // New optional fields for enhanced posting metadata
   work_type?: 'online' | 'in_person';
+  // Optional category selected by the poster at posting time (e.g. 'tech',
+  // 'design', 'writing', 'labor', 'delivery', 'other'). See
+  // lib/constants/bounty-categories.ts for the canonical list.
+  category?: string;
   is_time_sensitive?: boolean;
   deadline?: string; // ISO date string when is_time_sensitive === true
   attachments_json?: string; // JSON serialized AttachmentMeta[] (storage format)
@@ -33,6 +40,11 @@ export type Bounty = {
   stale_detected_at?: string;
   // Stripe payment fields for escrow
   payment_intent_id?: string; // Stripe PaymentIntent ID for escrow
+  // Stripe Phase 2 (per-bounty escrow via bounty_payments) routing flag — see
+  // lib/utils/payment-architecture.ts. Defaults to 1 (legacy wallet) when
+  // unset/null; set to 2 server-side by supabase/functions/bounty-payments
+  // once a Phase 2 PaymentIntent is created for this bounty.
+  payment_architecture_version?: number | null;
   // Structured schedule fields (Phase 1: time as first-class citizen)
   schedule_type?: 'asap' | 'scheduled' | 'flexible';
   start_date?: string;         // ISO 8601 timestamptz
@@ -70,12 +82,31 @@ export type Profile = {
   title?: string
   skills?: string[] // Array of skill names
   onboarding_completed?: boolean
+  // Marketplace persona picked during onboarding ('poster' | 'hunter' | 'both').
+  // Distinct from any platform authorization role.
+  primary_role?: 'poster' | 'hunter' | 'both' | null
+  // Which onboarding flow version this user completed — see
+  // lib/context/onboarding-context.tsx CURRENT_ONBOARDING_VERSION.
+  onboarding_version?: number | null
+  // Progressive profile-completion tracking, e.g. { avatar: true, bio: false }.
+  profile_completeness?: Record<string, boolean>
   // Withdrawal and cancellation tracking
   withdrawal_count?: number
   cancellation_count?: number
   // Aggregated rating stats (optional; populated by joined queries)
   averageRating?: number
   ratingCount?: number
+  // Identity verification (Stripe Identity KYC)
+  id_verification_status?: 'unverified' | 'pending' | 'verified' | 'rejected'
+  selfie_submitted_at?: string
+  // Stripe Connect payout account status. Distinct from `onboarding_completed`
+  // (app onboarding) — see supabase/migrations/20260714c_rename_onboarding_complete_to_stripe_connect.sql.
+  stripe_connect_onboarding_complete?: boolean
+  stripe_connect_charges_enabled?: boolean
+  stripe_connect_payouts_enabled?: boolean
+  // Last time the user was observed active in-app (throttled). Drives
+  // lib/moments/registry.ts's inactive_user_return moment.
+  last_session_at?: string | null
 }
 
 export type Skill = {
