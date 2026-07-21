@@ -538,9 +538,10 @@ Deno.serve(async (req: Request) => {
     // POST /payments/financial-connections-complete
     // Body: { sessionId: string, setAsDefault?: boolean }
     // Server retrieves the FC session, creates a us_bank_account PaymentMethod for
-    // each linked account, attaches it to the customer, mirrors it onto the user's
-    // Connect account as an external bank account (when present), and upserts a row
-    // in payment_methods. Idempotent on stripe_payment_method_id + fc_account_id.
+    // each linked account, attaches it to the customer, and upserts a row in
+    // payment_methods. Idempotent on stripe_payment_method_id + fc_account_id.
+    // Deposit-only — see the note above the removed mirrorFcAccountToConnect
+    // function for why this no longer mirrors onto the Connect account.
     if (req.method === 'POST' && subPath === '/financial-connections-complete') {
       let body: { sessionId?: unknown; setAsDefault?: unknown }
       try {
