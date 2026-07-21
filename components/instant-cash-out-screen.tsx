@@ -36,6 +36,27 @@ function estimateFee(amount: number): number {
 
 const BOTTOM_NAV_OFFSET = 60;
 
+// Human-readable copy for Stripe's account.requirements.disabled_reason
+// codes (https://docs.stripe.com/api/accounts/object#account_object-requirements-disabled_reason).
+// Falls back to a lightly formatted version of the raw code for any value
+// not explicitly listed, so a new/unmapped Stripe code still reads as
+// plain English instead of a blank/generic message.
+const STRIPE_DISABLED_REASON_COPY: Record<string, string> = {
+  'requirements.past_due': 'Some account information is overdue — Stripe needs it before payouts can resume.',
+  'requirements.pending_verification': 'Stripe is still verifying information you already submitted.',
+  listed: 'Stripe flagged this account for additional review.',
+  under_review: 'Stripe is reviewing this account.',
+  'rejected.fraud': 'Stripe rejected this account for suspected fraud. Contact Stripe support.',
+  'rejected.listed': 'Stripe rejected this account. Contact Stripe support.',
+  'rejected.terms_of_service': 'Stripe rejected this account for a Terms of Service violation. Contact Stripe support.',
+  'rejected.other': 'Stripe rejected this account. Contact Stripe support.',
+  'platform_paused': 'Payouts are currently paused for this account.',
+  other: 'Stripe needs more information before payouts can resume.',
+};
+function describeStripeRestriction(code: string): string {
+  return STRIPE_DISABLED_REASON_COPY[code] ?? code.replace(/[._]/g, ' ');
+}
+
 interface InstantCashOutScreenProps {
   onBack: () => void;
   /** Called after a successful (or gracefully-fallen-back) cash out so the caller can refresh balance/history. */
@@ -82,7 +103,7 @@ export function InstantCashOutScreen({
     [session?.access_token]
   );
 
-  const { debitCards, availableBalance, hasInstantEligibleCard, instantAvailableCents } = payoutMethods;
+  const { debitCards, availableBalance, hasInstantEligibleCard } = payoutMethods;
   const loading = eligibility.loading || payoutMethods.isLoading;
   const loadError = eligibility.error ?? payoutMethods.error;
 
@@ -96,16 +117,24 @@ export function InstantCashOutScreen({
 
   const parsedAmount = parseFloat(amount);
   const effectiveAvailable = availableBalance ?? balance;
-  // Stripe's instant_available balance (not the wallet balance above) is a
-  // second, independent ceiling: even with plenty of in-app balance, Stripe
-  // may not yet report enough of it as instant-payout-eligible.
-  const instantAvailable = instantAvailableCents / 100;
+  // instantAvailableCents (the connected account's PRE-transfer
+  // balance.instant_available) is deliberately NOT used as a ceiling or
+  // eligibility gate here. That figure is necessarily $0 (or residue from a
+  // previous instant payout) for any hunter who hasn't already completed a
+  // prior withdrawal — money only moves into the connected account's Stripe
+  // balance at the moment POST /connect/instant-payout runs its own
+  // transfer step, so nothing pre-funds it ahead of time. Gating on it here
+  // was the root cause of Instant Cash Out staying permanently
+  // locked/disabled for first-time users even after linking an eligible
+  // debit card (2026-07-21 audit). The real, live instant-eligibility check
+  // happens server-side at request time; if it ever genuinely fails there,
+  // the backend gracefully falls back to a standard withdrawal rather than
+  // erroring, so no client-side pre-check is needed for safety.
   const isFullyEligible =
     eligibility.connectedAccountExists &&
     eligibility.chargesEnabled &&
     eligibility.payoutsEnabled &&
-    hasInstantEligibleCard &&
-    instantAvailableCents > 0;
+    hasInstantEligibleCard;
 
   const isCashOutDisabled =
     !isFullyEligible ||
@@ -113,7 +142,6 @@ export function InstantCashOutScreen({
     isNaN(parsedAmount) ||
     parsedAmount <= 0 ||
     parsedAmount > effectiveAvailable ||
-    parsedAmount > instantAvailable ||
     !selectedCardId;
 
   const estimatedFee = estimateFee(parsedAmount || 0);
@@ -178,11 +206,18 @@ export function InstantCashOutScreen({
   // Adding a debit card can only happen in Stripe's own hosted Express
   // Dashboard — see use-payout-methods.tsx for why.
   const handleOpenPayoutDashboard = async () => {
+    console.log('[instant-cash-out-screen] Manage Payout Methods button pressed');
     if (isOpeningDashboard) return;
     setIsOpeningDashboard(true);
     try {
       const result = await payoutMethods.openPayoutDashboard();
-      if (!result.ok) Alert.alert('Error', result.error);
+      if (!result.ok) {
+        console.error('[instant-cash-out-screen] openPayoutDashboard failed', result.error);
+        Alert.alert('Error', result.error);
+      } else {
+        console.log('[instant-cash-out-screen] refreshing Connect eligibility after dashboard return');
+        await eligibility.refresh();
+      }
     } finally {
       setIsOpeningDashboard(false);
     }
@@ -217,18 +252,22 @@ export function InstantCashOutScreen({
   }
 
   // Ordered, exact-reason eligibility checklist — never a generic failure.
+  // "Payouts enabled" surfaces Stripe's own disabledReason/currently_due
+  // requirement codes when present, instead of a generic "something may
+  // need attention" — see use-connect-eligibility.tsx.
+  const payoutsEnabledHint = eligibility.disabledReason
+    ? `Stripe: ${describeStripeRestriction(eligibility.disabledReason)}`
+    : eligibility.requirementsCurrentlyDue.length > 0
+      ? `Stripe needs more information: ${eligibility.requirementsCurrentlyDue.join(', ')}`
+      : 'Review your payout details — something may need attention.';
+
   const checklist: { label: string; met: boolean; hint?: string }[] = [
     { label: 'Payout account connected', met: eligibility.connectedAccountExists, hint: 'Complete Stripe Connect onboarding from the Withdraw screen.' },
     { label: 'Identity details submitted', met: eligibility.detailsSubmitted, hint: 'Finish submitting your identity details with Stripe.' },
     { label: 'Charges enabled', met: eligibility.chargesEnabled },
-    { label: 'Payouts enabled', met: eligibility.payoutsEnabled, hint: 'Review your payout details — something may need attention.' },
+    { label: 'Payouts enabled', met: eligibility.payoutsEnabled, hint: payoutsEnabledHint },
     { label: 'Eligible debit card linked', met: hasInstantEligibleCard, hint: 'Add a debit card. Not every card supports Instant Cash Out.' },
     { label: 'Sufficient available balance', met: effectiveAvailable > 0 },
-    {
-      label: 'Instant funds available',
-      met: instantAvailableCents > 0,
-      hint: 'Some of your balance isn’t eligible for instant payout yet — this can take a little time to clear on Stripe’s side. You can still withdraw normally to your bank account.',
-    },
   ];
 
   return (

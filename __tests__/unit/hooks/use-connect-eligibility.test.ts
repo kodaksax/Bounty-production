@@ -59,6 +59,40 @@ describe('useConnectEligibility', () => {
     expect(result.current.error).toBeNull();
   });
 
+  it('maps requirementsCurrentlyDue/requirementsPendingVerification/disabledReason so the UI can surface Stripe\'s real restriction reason', async () => {
+    mockFetchOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          accountId: 'acct_123',
+          onboarded: false,
+          payoutsEnabled: false,
+          requirementsCurrentlyDue: ['individual.verification.document'],
+          requirementsPendingVerification: ['individual.id_number'],
+          disabledReason: 'requirements.past_due',
+        }),
+    });
+    const { result } = renderHook(() => useConnectEligibility());
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.requirementsCurrentlyDue).toEqual(['individual.verification.document']);
+    expect(result.current.requirementsPendingVerification).toEqual(['individual.id_number']);
+    expect(result.current.disabledReason).toBe('requirements.past_due');
+  });
+
+  it('defaults requirementsCurrentlyDue/requirementsPendingVerification to [] and disabledReason to null when absent', async () => {
+    mockFetchOnce({
+      ok: true,
+      json: () => Promise.resolve({ accountId: 'acct_123', onboarded: true, payoutsEnabled: true }),
+    });
+    const { result } = renderHook(() => useConnectEligibility());
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.requirementsCurrentlyDue).toEqual([]);
+    expect(result.current.requirementsPendingVerification).toEqual([]);
+    expect(result.current.disabledReason).toBeNull();
+  });
+
   it('treats onboarded=true but payoutsEnabled=false as NOT fully onboarded', async () => {
     mockFetchOnce({
       ok: true,

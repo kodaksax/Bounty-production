@@ -408,18 +408,6 @@ function validateInstantAmount(amount: number): InstantLimitResult {
   return { ok: true };
 }
 
-function checkInstantBalance(amountCents: number, netAvailableCents: number): InstantLimitResult {
-  if (amountCents > netAvailableCents) {
-    return {
-      ok: false,
-      error:
-        'Your Stripe balance available for Instant Cash Out is lower than this amount right now. Try a smaller amount, or use a standard bank withdrawal.',
-      code: 'insufficient_instant_balance',
-    };
-  }
-  return { ok: true };
-}
-
 function checkInstantDailyLimit(countToday: number): InstantLimitResult {
   if (countToday >= MAX_INSTANT_PAYOUTS_PER_DAY) {
     return {
@@ -613,6 +601,8 @@ Deno.serve(async (req: Request) => {
     // /debit-cards, /bank-accounts/:id, and /bank-accounts/:id/default
     // handlers below for the endpoints this replaces.
     if (req.method === 'POST' && subPath === '/login-link') {
+      console.log('[connect/login-link] request received', { userId });
+
       const { data: profile } = await supabase
         .from('profiles')
         .select('stripe_connect_account_id, stripe_connect_onboarded_at')
@@ -622,6 +612,11 @@ Deno.serve(async (req: Request) => {
       const p = profile as { stripe_connect_account_id?: string; stripe_connect_onboarded_at?: string } | null;
       const accountId = p?.stripe_connect_account_id;
       if (!accountId || !p?.stripe_connect_onboarded_at) {
+        console.warn('[connect/login-link] no onboarded connected account for user', {
+          userId,
+          hasAccountId: !!accountId,
+          onboardedAt: p?.stripe_connect_onboarded_at ?? null,
+        });
         return jsonResponse(
           {
             error: 'Complete Stripe Connect onboarding before managing payout methods.',
@@ -631,14 +626,19 @@ Deno.serve(async (req: Request) => {
         );
       }
 
+      console.log('[connect/login-link] connected account located', { userId, accountId });
+
       try {
         const loginLink = await stripe.accounts.createLoginLink(accountId);
+        console.log('[connect/login-link] login link created', { userId, accountId });
         return jsonResponse({ url: loginLink.url });
       } catch (loginLinkError) {
         console.error('[connect/login-link] failed to create login link', {
           userId,
           accountId,
           error: (loginLinkError as { message?: string })?.message,
+          type: (loginLinkError as { type?: string })?.type,
+          code: (loginLinkError as { code?: string })?.code,
         });
         return jsonResponse(
           { error: 'Could not open your payout dashboard. Please try again.', code: 'login_link_failed' },
@@ -778,6 +778,18 @@ Deno.serve(async (req: Request) => {
       const account = await stripe.accounts.retrieve(profileRow.stripe_connect_account_id);
       const onboarded = account.charges_enabled && account.payouts_enabled;
 
+      console.log('[connect/verify-onboarding] account eligibility snapshot', {
+        userId,
+        accountId: account.id,
+        chargesEnabled: account.charges_enabled,
+        payoutsEnabled: account.payouts_enabled,
+        detailsSubmitted: account.details_submitted,
+        onboarded,
+        currentlyDue: account.requirements?.currently_due ?? [],
+        pendingVerification: account.requirements?.pending_verification ?? [],
+        disabledReason: account.requirements?.disabled_reason ?? null,
+      });
+
       const profileUpdates: Record<string, unknown> = {};
 
       if (onboarded && !profileRow.stripe_connect_onboarded_at) {
@@ -814,6 +826,7 @@ Deno.serve(async (req: Request) => {
         detailsSubmitted: account.details_submitted,
         payoutFailedCleared: account.payouts_enabled && !!profileRow.payout_failed_at,
         requirementsCurrentlyDue: account.requirements?.currently_due ?? [],
+        requirementsPendingVerification: account.requirements?.pending_verification ?? [],
         disabledReason: account.requirements?.disabled_reason ?? null,
       });
     }
@@ -1601,22 +1614,55 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ error: dailyLimitCheck.error, code: dailyLimitCheck.code }, 429);
       }
 
-      // Live payout eligibility + instant-eligible card resolution + instant
-      // balance check, before touching the balance — same fail-closed
-      // discipline as /transfer.
+      // Live payout eligibility + instant-eligible card resolution, before
+      // touching the balance — same fail-closed discipline as /transfer.
+      //
+      // Deliberately NOT checked here: the connected account's pre-existing
+      // balance.instant_available. This used to be checked at this point and
+      // hard-blocked the request below Stripe's reported instant-eligible
+      // balance was too low — but that balance is necessarily $0 (or
+      // whatever residue is left over from a previous instant payout) for
+      // every hunter who hasn't already completed a prior withdrawal: this
+      // route's own Step 1 (below) is what moves money from the platform's
+      // balance INTO the connected account, and that transfer hasn't
+      // happened yet at this point in the request. Checking instant_available
+      // here was checking a pre-transfer snapshot that structurally can
+      // never reflect the money this exact request is about to move,
+      // meaning the check always failed for first-time instant cash-outs —
+      // this was the actual root cause of "Instant Payout remains
+      // locked/disabled even after adding a debit card" (2026-07-21 audit).
+      // The correct authority on instant-eligibility of the POST-transfer
+      // balance is Stripe's own stripe.payouts.create call below, which the
+      // catch block already handles gracefully by falling back to a
+      // standard payout — no separate pre-check is needed or safe to add
+      // back at this point in the flow.
       let destinationCard: InstantCardSummary;
       try {
         const account = await stripe.accounts.retrieve(p.stripe_connect_account_id);
+        console.log('[connect/instant-payout] connected account state', {
+          userId,
+          accountId: p.stripe_connect_account_id,
+          chargesEnabled: account.charges_enabled,
+          payoutsEnabled: account.payouts_enabled,
+          detailsSubmitted: account.details_submitted,
+          currentlyDue: account.requirements?.currently_due ?? [],
+          pendingVerification: account.requirements?.pending_verification ?? [],
+          disabledReason: account.requirements?.disabled_reason ?? null,
+        });
         if (!account.payouts_enabled) {
           console.warn('[connect/instant-payout] payouts disabled on connected account', {
             userId,
             accountId: p.stripe_connect_account_id,
+            disabledReason: account.requirements?.disabled_reason ?? null,
+            currentlyDue: account.requirements?.currently_due ?? [],
           });
           return jsonResponse(
             {
               error:
                 'Payouts are currently disabled on your account. Please review and update your payout details, then try again.',
               code: 'payouts_disabled',
+              disabledReason: account.requirements?.disabled_reason ?? null,
+              requirementsCurrentlyDue: account.requirements?.currently_due ?? [],
             },
             400
           );
@@ -1633,6 +1679,13 @@ Deno.serve(async (req: Request) => {
           available_payout_methods:
             (c as unknown as { available_payout_methods?: string[] }).available_payout_methods ?? null,
         }));
+        console.log('[connect/instant-payout] external cards found', {
+          userId,
+          cardCount: cards.length,
+          instantEligibleCardIds: cards
+            .filter(c => Array.isArray(c.available_payout_methods) && c.available_payout_methods.includes('instant'))
+            .map(c => c.id),
+        });
 
         const destination = resolveInstantDestination(cards, requestedCardId);
         if (!destination.ok) {
@@ -1643,23 +1696,29 @@ Deno.serve(async (req: Request) => {
           return jsonResponse({ error: destination.error, code: destination.code }, 400);
         }
         destinationCard = destination.targetCard;
+        console.log('[connect/instant-payout] destination card resolved', {
+          userId,
+          cardId: destinationCard.id,
+        });
 
-        // Use instant_available (not the plain `available` balance) — only
-        // funds Stripe reports here are actually eligible to pay out via
-        // `method: "instant"` right now. Using `available` instead is the
-        // exact wrong-field mistake called out in the integration spec this
-        // logic implements.
-        const balance = await stripe.balance.retrieve({ stripeAccount: p.stripe_connect_account_id });
-        const instantAvailableCents =
-          balance.instant_available?.find(b => b.currency === 'usd')?.net_available?.[0]?.amount ?? 0;
-        const instantBalanceCheck = checkInstantBalance(validation.amountCents, instantAvailableCents);
-        if (!instantBalanceCheck.ok) {
-          console.warn('[connect/instant-payout] insufficient instant-available balance', {
+        // Informational only (see comment above) — logged so a genuine
+        // Stripe-side "insufficient instant balance" rejection from
+        // payouts.create below can be cross-referenced against what the
+        // account reported just before the transfer, without this value
+        // ever gating the request.
+        try {
+          const preTransferBalance = await stripe.balance.retrieve({ stripeAccount: p.stripe_connect_account_id });
+          const preTransferInstantAvailableCents =
+            preTransferBalance.instant_available?.find(b => b.currency === 'usd')?.net_available?.[0]?.amount ?? 0;
+          console.log('[connect/instant-payout] pre-transfer instant_available (informational only)', {
             userId,
-            amountCents: validation.amountCents,
-            instantAvailableCents,
+            preTransferInstantAvailableCents,
           });
-          return jsonResponse({ error: instantBalanceCheck.error, code: instantBalanceCheck.code }, 400);
+        } catch (balanceLogError) {
+          console.warn('[connect/instant-payout] failed to fetch pre-transfer balance for logging', {
+            userId,
+            error: (balanceLogError as { message?: string })?.message,
+          });
         }
       } catch (accountError) {
         console.error('[connect/instant-payout] failed to verify connected account or cards', {
@@ -2014,12 +2073,20 @@ Deno.serve(async (req: Request) => {
 
     // GET /connect/debit-cards — list debit-card external accounts (Instant
     // Cash Out destinations only; never used for the standard automatic
-    // payout sweep, see the default_for_currency note on POST below). Also
-    // returns instantAvailableCents (from balance.instant_available, NOT the
-    // plain `available` balance — see checkInstantBalance() above for why)
-    // so the client can gray out the Instant option *before* the hunter ever
-    // attempts a payout, rather than only discovering insufficient instant
-    // funds after tapping Confirm.
+    // payout sweep, see the default_for_currency note on POST below).
+    //
+    // Also returns instantAvailableCents (from balance.instant_available on
+    // the CONNECTED account) — informational only, NOT used by the client to
+    // gate/lock the Instant option. That balance is necessarily $0 (or
+    // whatever residue a previous instant payout left behind) for any hunter
+    // who hasn't already completed a prior withdrawal, because money only
+    // moves into the connected account's Stripe balance at the moment
+    // POST /connect/instant-payout runs its own transfer step — nothing
+    // pre-funds it ahead of time. Gating card-eligibility UI on this figure
+    // was the root cause of Instant Cash Out staying permanently
+    // locked/disabled for first-time users even after linking an eligible
+    // debit card (2026-07-21 audit) — see the comment in the
+    // POST /connect/instant-payout handler for the full explanation.
     if (req.method === 'GET' && subPath === '/debit-cards') {
       const { data: profile } = await supabase
         .from('profiles')
@@ -2030,6 +2097,7 @@ Deno.serve(async (req: Request) => {
       const accountId = (profile as { stripe_connect_account_id?: string } | null)
         ?.stripe_connect_account_id;
       if (!accountId) {
+        console.log('[connect/debit-cards] no connected account for user', { userId });
         return jsonResponse({ debitCards: [], instantAvailableCents: 0 });
       }
 
@@ -2065,6 +2133,14 @@ Deno.serve(async (req: Request) => {
         // Non-fatal: the list of cards is still useful without this figure;
         // the client just can't pre-gate on instant balance this refresh.
       }
+
+      console.log('[connect/debit-cards] eligibility snapshot', {
+        userId,
+        accountId,
+        cardCount: debitCards.length,
+        instantEligibleCardIds: debitCards.filter(c => c.instantEligible).map(c => c.id),
+        instantAvailableCents,
+      });
 
       return jsonResponse({ debitCards, instantAvailableCents });
     }
@@ -2159,6 +2235,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    console.warn('[connect] unmatched route', { method: req.method, subPath, userId });
     return jsonResponse({ error: 'Not found' }, 404);
   } catch (error: unknown) {
     const err = error as { message?: string };

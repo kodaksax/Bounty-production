@@ -13,7 +13,7 @@
 
 import { MaterialIcons } from '@expo/vector-icons';
 import { stripeService } from '../lib/services/stripe-service';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -23,6 +23,13 @@ import {
   View,
 } from 'react-native';
 import { DEEP_LINK_SCHEME } from '../lib/config/app';
+import { useAppThemeContext } from '../lib/themes/AppThemeContext';
+import type { AppTheme } from '../lib/themes/types';
+import { withAlpha } from '../lib/utils';
+
+// Text color on top of the primary-green fill, matching the dark-on-green
+// convention used across onboarding/wallet (see add-money-screen.tsx).
+const ON_PRIMARY_TEXT = '#052e1b';
 
 // Types for the payment element wrapper
 export interface PaymentElementWrapperProps {
@@ -94,6 +101,8 @@ export function PaymentElementWrapper({
   const [stripeModule, setStripeModule] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPaymentSheetReady, setIsPaymentSheetReady] = useState(false);
+  const { theme } = useAppThemeContext();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
 
   // Load the Stripe module dynamically
   useEffect(() => {
@@ -271,7 +280,7 @@ export function PaymentElementWrapper({
     return (
       <View style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#059669" />
+          <ActivityIndicator size="large" color={theme.primary} />
           <Text style={styles.loadingText}>Preparing payment...</Text>
         </View>
       </View>
@@ -283,7 +292,7 @@ export function PaymentElementWrapper({
     return (
       <View style={styles.container}>
         <View style={styles.errorContainer}>
-          <MaterialIcons name="error-outline" size={48} color="#dc2626" />
+          <MaterialIcons name="error-outline" size={48} color={theme.error} />
           <Text style={styles.errorTitle}>Payment Not Available</Text>
           <Text style={styles.errorText}>
             {error || 'Payment service is not available on this platform.'}
@@ -297,7 +306,7 @@ export function PaymentElementWrapper({
     <View style={styles.container}>
       {/* Payment Sheet Info */}
       <View style={styles.infoContainer}>
-        <MaterialIcons name="lock" size={20} color="#059669" />
+        <MaterialIcons name="lock" size={20} color={theme.primary} />
         <Text style={styles.infoText}>
           Secure payment powered by Stripe
         </Text>
@@ -305,9 +314,9 @@ export function PaymentElementWrapper({
 
       {/* Payment Method Icons */}
       <View style={styles.methodIconsContainer}>
-        <MaterialIcons name="credit-card" size={32} color="#6b7280" />
+        <MaterialIcons name="credit-card" size={32} color={theme.textSecondary} />
         {Platform.OS === 'ios' && showApplePay && (
-          <MaterialIcons name="apple" size={32} color="#000000" style={styles.methodIcon} />
+          <MaterialIcons name="apple" size={32} color={theme.text} style={styles.methodIcon} />
         )}
         {Platform.OS === 'android' && showGooglePay && (
           <MaterialIcons name="g-mobiledata" size={32} color="#4285F4" style={styles.methodIcon} />
@@ -317,7 +326,7 @@ export function PaymentElementWrapper({
       {/* Error Display */}
       {error && (
         <View style={styles.errorBanner}>
-          <MaterialIcons name="error-outline" size={20} color="#dc2626" />
+          <MaterialIcons name="error-outline" size={20} color={theme.error} />
           <Text style={styles.errorBannerText}>{error}</Text>
         </View>
       )}
@@ -330,14 +339,15 @@ export function PaymentElementWrapper({
         ]}
         onPress={handlePayment}
         disabled={!isPaymentSheetReady || isProcessing || externalProcessing}
+        activeOpacity={0.85}
         accessibilityRole="button"
         accessibilityLabel={getButtonText()}
-        accessibilityState={{ disabled: !isPaymentSheetReady || isProcessing || externalProcessing }}
+        accessibilityState={{ disabled: !isPaymentSheetReady || isProcessing || externalProcessing, busy: isProcessing || externalProcessing }}
       >
         {(isProcessing || externalProcessing) ? (
-          <ActivityIndicator size="small" color="#ffffff" style={styles.buttonLoader} />
+          <ActivityIndicator size="small" color={ON_PRIMARY_TEXT} style={styles.buttonLoader} />
         ) : (
-          <MaterialIcons name="payment" size={24} color="#ffffff" style={styles.buttonIcon} />
+          <MaterialIcons name="payment" size={24} color={ON_PRIMARY_TEXT} style={styles.buttonIcon} />
         )}
         <Text style={styles.payButtonText}>{getButtonText()}</Text>
       </TouchableOpacity>
@@ -348,6 +358,7 @@ export function PaymentElementWrapper({
           style={styles.cancelButton}
           onPress={onCancel}
           disabled={isProcessing || externalProcessing}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           accessibilityRole="button"
           accessibilityLabel="Cancel payment"
         >
@@ -358,11 +369,11 @@ export function PaymentElementWrapper({
       {/* Trust Indicators */}
       <View style={styles.trustContainer}>
         <View style={styles.trustItem}>
-          <MaterialIcons name="verified" size={16} color="#059669" />
+          <MaterialIcons name="verified" size={16} color={theme.primary} />
           <Text style={styles.trustText}>256-bit SSL Encryption</Text>
         </View>
         <View style={styles.trustItem}>
-          <MaterialIcons name="shield" size={16} color="#059669" />
+          <MaterialIcons name="shield" size={16} color={theme.primary} />
           <Text style={styles.trustText}>PCI DSS Compliant</Text>
         </View>
       </View>
@@ -370,130 +381,135 @@ export function PaymentElementWrapper({
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    padding: 16,
-  },
-  loadingContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 48,
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#6b7280',
-  },
-  errorContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 48,
-  },
-  errorTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#dc2626',
-    marginTop: 16,
-  },
-  errorText: {
-    fontSize: 14,
-    color: '#6b7280',
-    textAlign: 'center',
-    marginTop: 8,
-    paddingHorizontal: 24,
-  },
-  infoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  infoText: {
-    fontSize: 14,
-    color: '#059669',
-    marginLeft: 8,
-  },
-  methodIconsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-    paddingVertical: 16,
-    backgroundColor: '#f9fafb',
-    borderRadius: 12,
-  },
-  methodIcon: {
-    marginLeft: 16,
-  },
-  errorBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fef2f2',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-  },
-  errorBannerText: {
-    flex: 1,
-    color: '#dc2626',
-    fontSize: 14,
-    marginLeft: 8,
-  },
-  payButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#059669',
-    borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  payButtonDisabled: {
-    backgroundColor: '#9ca3af',
-    opacity: 0.7,
-  },
-  buttonIcon: {
-    marginRight: 8,
-  },
-  buttonLoader: {
-    marginRight: 8,
-  },
-  payButtonText: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  cancelButton: {
-    alignItems: 'center',
-    paddingVertical: 16,
-    marginTop: 8,
-  },
-  cancelButtonText: {
-    color: '#6b7280',
-    fontSize: 16,
-  },
-  trustContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 24,
-    flexWrap: 'wrap',
-    gap: 16,
-  },
-  trustItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  trustText: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginLeft: 4,
-  },
-});
+function makeStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    container: {
+      backgroundColor: theme.surface,
+      borderRadius: theme.radius.xl,
+      padding: theme.spacing.lg,
+      ...theme.shadows.sm,
+    },
+    loadingContainer: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 48,
+    },
+    loadingText: {
+      marginTop: 16,
+      fontSize: 16,
+      color: theme.textSecondary,
+    },
+    errorContainer: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 48,
+    },
+    errorTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: theme.error,
+      marginTop: 16,
+    },
+    errorText: {
+      fontSize: 14,
+      color: theme.textSecondary,
+      textAlign: 'center',
+      marginTop: 8,
+      paddingHorizontal: 24,
+    },
+    infoContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 16,
+    },
+    infoText: {
+      fontSize: 14,
+      color: theme.primary,
+      marginLeft: 8,
+    },
+    methodIconsContainer: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 24,
+      paddingVertical: 16,
+      backgroundColor: theme.surfaceSecondary,
+      borderRadius: theme.radius.lg,
+    },
+    methodIcon: {
+      marginLeft: 16,
+    },
+    errorBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: withAlpha(theme.error, theme.isDark ? 0.18 : 0.1),
+      padding: 12,
+      borderRadius: theme.radius.md,
+      marginBottom: 16,
+    },
+    errorBannerText: {
+      flex: 1,
+      color: theme.error,
+      fontSize: 14,
+      marginLeft: 8,
+    },
+    payButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.primary,
+      borderRadius: theme.radius.lg,
+      paddingVertical: 16,
+      paddingHorizontal: 24,
+      minHeight: 56,
+      ...theme.shadows.brand,
+    },
+    payButtonDisabled: {
+      backgroundColor: theme.textDisabled,
+      opacity: 0.7,
+    },
+    buttonIcon: {
+      marginRight: 8,
+    },
+    buttonLoader: {
+      marginRight: 8,
+    },
+    payButtonText: {
+      color: ON_PRIMARY_TEXT,
+      fontSize: 18,
+      fontWeight: '600',
+    },
+    cancelButton: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 16,
+      marginTop: 8,
+      minHeight: 44,
+    },
+    cancelButtonText: {
+      color: theme.textSecondary,
+      fontSize: 16,
+      fontWeight: '500',
+    },
+    trustContainer: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginTop: 24,
+      flexWrap: 'wrap',
+      gap: 16,
+    },
+    trustItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    trustText: {
+      fontSize: 12,
+      color: theme.textSecondary,
+      marginLeft: 4,
+    },
+  });
+}
 
 export default PaymentElementWrapper;

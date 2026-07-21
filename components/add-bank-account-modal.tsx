@@ -4,7 +4,6 @@ import { MaterialIcons } from "@expo/vector-icons"
 import { useState } from "react"
 import {
   ActivityIndicator,
-  Alert,
   Platform,
   ScrollView,
   StyleSheet,
@@ -17,6 +16,7 @@ import { stripeService } from "../lib/services/stripe-service"
 import type { StripePaymentMethod } from "../lib/services/stripe-internal"
 import { useAppThemeContext } from "../lib/themes/AppThemeContext"
 import type { AppTheme } from "../lib/themes/types"
+import { FeedbackModal, type FeedbackVariant } from "./ui/feedback-modal"
 
 /**
  * Payload passed to the optional `onSave` callback once Financial Connections
@@ -33,10 +33,7 @@ interface AddBankAccountModalProps {
   onSave?: (bankData: BankAccountData) => void
   /**
    * When embedded is true the component renders inline (no backdrop/sheet)
-   * — used when this modal is shown inside PaymentMethodsModal, which still
-   * uses the legacy solid-green sheet (matching AddCardModal's embedded
-   * mode). Embedded content keeps the white-on-green palette so it stays
-   * readable on that host.
+   * — used when this modal is shown inside PaymentMethodsModal.
    */
   embedded?: boolean
 }
@@ -62,10 +59,11 @@ export function AddBankAccountModal({
   embedded = false,
 }: AddBankAccountModalProps) {
   const [isLoading, setIsLoading] = useState(false)
+  const [feedback, setFeedback] = useState<{ variant: FeedbackVariant; title: string; message: string; onOk?: () => void } | null>(null)
   const { session } = useAuthContext()
   const { theme } = useAppThemeContext()
   const styles = makeStyles(theme)
-  const bodyStyles = embedded ? legacyBodyStyles(theme) : styles
+  const bodyStyles = styles
 
   const handleLinkBank = async () => {
     if (isLoading) return
@@ -89,21 +87,17 @@ export function AddBankAccountModal({
       const bankName = first.us_bank_account?.bank_name ?? 'Your bank'
       const last4 = first.us_bank_account?.last4 ?? ''
 
-      Alert.alert(
-        'Bank Linked',
-        last4
+      setFeedback({
+        variant: 'success',
+        title: 'Bank Linked',
+        message: last4
           ? `${bankName} •••• ${last4} is ready for deposits.`
           : `${bankName} is ready for deposits.`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              onSave?.({ linkedBanks })
-              onBack()
-            },
-          },
-        ]
-      )
+        onOk: () => {
+          onSave?.({ linkedBanks })
+          onBack()
+        },
+      })
     } catch (error: any) {
       // Cancellations come back as `card_error` with code 'Canceled' from
       // collectFinancialConnectionsAccounts — surface them as a soft no-op.
@@ -113,16 +107,16 @@ export function AddBankAccountModal({
       }
       const message =
         error?.message ?? 'We couldn’t link your bank account. Please try again.'
-      Alert.alert('Bank Linking Failed', String(message))
+      setFeedback({ variant: 'error', title: 'Bank Linking Failed', message: String(message) })
     } finally {
       setIsLoading(false)
     }
   }
 
-  const heroIconColor = embedded ? '#fff' : theme.primary
-  const bulletIconColor = embedded ? '#6ee7b7' : theme.primary
-  const securityIconColor = embedded ? '#6ee7b7' : theme.textDisabled
-  const spinnerColor = embedded ? theme.background : '#ffffff'
+  const heroIconColor = theme.primary
+  const bulletIconColor = theme.primary
+  const securityIconColor = theme.textDisabled
+  const spinnerColor = '#ffffff'
 
   const Body = (
     <ScrollView
@@ -136,8 +130,7 @@ export function AddBankAccountModal({
       <Text style={bodyStyles.heroTitle}>Link your bank securely</Text>
       <Text style={bodyStyles.heroSubtitle}>
         We use Stripe Financial Connections so you never share routing or account
-        numbers with us. The same linked bank can be used for both deposits and
-        withdrawals.
+        numbers with us. This links a bank for Add Money deposits.
       </Text>
 
       <View style={bodyStyles.bulletList}>
@@ -153,9 +146,11 @@ export function AddBankAccountModal({
           </Text>
         </View>
         <View style={bodyStyles.bulletRow}>
-          <MaterialIcons name="sync" size={18} color={bulletIconColor} />
+          <MaterialIcons name="info-outline" size={18} color={bulletIconColor} />
           <Text style={bodyStyles.bulletText}>
-            Reusable for deposits and payouts. Link once, use forever.
+            This is for deposits only. To receive withdrawals, add a payout bank
+            account from Manage Payout Methods — Stripe may let you reuse this
+            same bank there.
           </Text>
         </View>
       </View>
@@ -188,9 +183,23 @@ export function AddBankAccountModal({
     </ScrollView>
   )
 
+  const feedbackModal = (
+    <FeedbackModal
+      visible={!!feedback}
+      variant={feedback?.variant ?? 'success'}
+      title={feedback?.title ?? ''}
+      message={feedback?.message ?? ''}
+      onDismiss={() => {
+        const onOk = feedback?.onOk
+        setFeedback(null)
+        onOk?.()
+      }}
+    />
+  )
+
   if (embedded) {
     return (
-      <View style={[embeddedStyles.container, { backgroundColor: theme.surface }]}>
+      <View style={[embeddedStyles.container, { backgroundColor: theme.background }]}>
         <View style={embeddedStyles.navBar}>
           <TouchableOpacity
             onPress={onBack}
@@ -204,13 +213,14 @@ export function AddBankAccountModal({
           <View style={{ width: 44 }} />
         </View>
         {Body}
+        {feedbackModal}
       </View>
     )
   }
 
   return (
     <View style={styles.overlayContainer}>
-      <View style={[styles.sheet, { backgroundColor: theme.surface }]}>
+      <View style={styles.sheet}>
         <View style={styles.navBar}>
           <TouchableOpacity
             accessibilityRole="button"
@@ -225,15 +235,13 @@ export function AddBankAccountModal({
         </View>
         {Body}
       </View>
+      {feedbackModal}
     </View>
   )
 }
 
-// Matches AddCardModal's embedded nav chrome — PaymentMethodsModal (the host
-// for embedded mode) still renders a solid-green sheet with white text, so
-// embedded content keeps the same white-on-green palette for contrast.
 const embeddedStyles = StyleSheet.create({
-  // Color comes from theme (backgroundColor applied inline).
+  // backgroundColor applied inline from theme.
   container: { paddingBottom: 24 },
   navBar: {
     flexDirection: 'row',
@@ -256,63 +264,6 @@ const embeddedStyles = StyleSheet.create({
     flex: 1,
   },
 })
-
-// Body styles for embedded mode — mirrors the white-on-green palette the
-// PaymentMethodsModal host still uses (same key names as makeStyles so the
-// shared Body JSX can reference either style set interchangeably).
-function legacyBodyStyles(theme: AppTheme) {
-  return StyleSheet.create({
-    contentContainer: { paddingHorizontal: 20, paddingBottom: 40 },
-    heroIconWrap: {
-      alignSelf: 'center',
-      marginTop: 8,
-      marginBottom: 16,
-      width: 80,
-      height: 80,
-      borderRadius: 40,
-      backgroundColor: 'rgba(255,255,255,0.1)',
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    heroTitle: {
-      color: '#fff',
-      fontSize: 20,
-      fontWeight: '700',
-      textAlign: 'center',
-      marginBottom: 8,
-    },
-    heroSubtitle: {
-      color: 'rgba(255,255,255,0.85)',
-      fontSize: 14,
-      lineHeight: 20,
-      textAlign: 'center',
-      marginBottom: 20,
-    },
-    bulletList: { marginBottom: 24, gap: 10 },
-    bulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-    bulletText: { color: 'rgba(255,255,255,0.85)', fontSize: 13, lineHeight: 18, flex: 1 },
-    primaryButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.text,
-      borderRadius: 14,
-      paddingVertical: 14,
-      marginBottom: 16,
-      ...theme.shadows.md,
-    },
-    primaryButtonDisabled: { opacity: 0.6 },
-    primaryButtonText: { color: theme.background, fontWeight: '700', fontSize: 16 },
-    securityNotice: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 6,
-      paddingHorizontal: 12,
-    },
-    securityText: { color: 'rgba(255,255,255,0.6)', fontSize: 11, textAlign: 'center', flex: 1 },
-  });
-}
 
 function makeStyles(t: AppTheme) {
   return StyleSheet.create({

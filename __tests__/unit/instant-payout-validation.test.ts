@@ -201,7 +201,6 @@ describe('connect edge function contract (inlined instant-payout helpers stay in
 
   test('inlines the instant-specific limit helpers and wires them into the route', () => {
     expect(indexSource).toContain('function validateInstantAmount');
-    expect(indexSource).toContain('function checkInstantBalance');
     expect(indexSource).toContain('function checkInstantDailyLimit');
     expect(indexSource).toContain(
       `readEnvNumberForInstantPayout('INSTANT_PAYOUT_MAX_USD', ${INSTANT_PAYOUT_MAX_USD})`
@@ -209,6 +208,26 @@ describe('connect edge function contract (inlined instant-payout helpers stay in
     expect(indexSource).toContain(
       `readEnvNumberForInstantPayout('MAX_INSTANT_PAYOUTS_PER_DAY', ${MAX_INSTANT_PAYOUTS_PER_DAY})`
     );
+  });
+
+  test('does NOT call checkInstantBalance (or any other) pre-check against the connected account\'s pre-transfer instant_available balance in the /instant-payout route', () => {
+    // 2026-07-21 fix: this used to be checked BEFORE this route's own
+    // platform->connected-account transfer ran, against a balance that is
+    // necessarily $0 for any hunter who hasn't already completed a prior
+    // withdrawal (money only lands in the connected account's Stripe
+    // balance via this route's own transfer step, which hadn't happened
+    // yet at the point of the old check) — permanently locking Instant Cash
+    // Out for every first-time user regardless of a valid linked card.
+    // Stripe's own stripe.payouts.create call is now the sole authority on
+    // instant-eligibility of the (correctly, post-transfer) funded balance;
+    // its existing catch block already falls back to a completed standard
+    // withdrawal on failure, so no client- or server-side pre-check is
+    // reintroduced here. checkInstantBalance() itself remains exported from
+    // instant-payout-validation.ts as a general-purpose, independently
+    // unit-tested pure helper — it is simply no longer called from index.ts.
+    expect(indexSource).not.toContain('function checkInstantBalance');
+    expect(indexSource).not.toContain('checkInstantBalance(');
+    expect(indexSource).not.toContain('insufficient_instant_balance');
   });
 
   test('checks balance.instant_available (never the plain available balance) before creating an instant payout', () => {

@@ -47,9 +47,20 @@ export interface UsePayoutMethodsResult {
   debitCards: DebitCard[];
   /** True when at least one linked card supports instant payouts, regardless of current instant-available balance. Use for "add a card" messaging. */
   hasInstantEligibleCard: boolean;
-  /** Funds Stripe currently reports as eligible to pay out via method: "instant" right now (balance.instant_available, USD, in cents) — NOT the same as availableBalance. */
+  /**
+   * The connected account's CURRENT balance.instant_available (USD, cents) —
+   * informational only, NOT a pre-flight eligibility gate. This is
+   * necessarily $0 (or residue from a previous instant payout) for any
+   * hunter who hasn't already completed a prior withdrawal: money only
+   * moves into the connected account's Stripe balance at the moment
+   * POST /connect/instant-payout runs its own transfer step, so nothing
+   * pre-funds it ahead of time. Gating UI on `> 0` here was the root cause
+   * of Instant Cash Out staying permanently locked for first-time users
+   * even after linking an eligible debit card (2026-07-21 audit) — do not
+   * reintroduce that check. Display only.
+   */
   instantAvailableCents: number;
-  /** hasInstantEligibleCard AND instantAvailableCents > 0 — the actual "can the hunter tap Instant right now" gate. */
+  /** hasInstantEligibleCard — whether Instant Cash Out is offered at all. The actual per-attempt balance check happens server-side, live, at the moment of the request (see instantAvailableCents doc above for why it can't be pre-checked here). */
   canInstantCashOut: boolean;
   minWithdrawal: number;
   maxWithdrawal: number | null;
@@ -118,6 +129,9 @@ export function usePayoutMethods(): UsePayoutMethodsResult {
   }, [refresh]);
 
   const openPayoutDashboard = useCallback(async () => {
+    console.log('[use-payout-methods] openPayoutDashboard: API request sent', {
+      url: `${API_BASE_URL}/connect/login-link`,
+    });
     try {
       const response = await fetch(`${API_BASE_URL}/connect/login-link`, {
         method: 'POST',
@@ -125,23 +139,35 @@ export function usePayoutMethods(): UsePayoutMethodsResult {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data?.url) {
+        console.error('[use-payout-methods] openPayoutDashboard: login-link request failed', {
+          status: response.status,
+          code: data?.code,
+          error: data?.error,
+        });
         return {
           ok: false as const,
           error: data?.error ?? 'Could not open your payout dashboard. Please try again.',
         };
       }
 
+      console.log('[use-payout-methods] openPayoutDashboard: login link received, opening browser');
       const browserResult = await openUrlInBrowser(data.url);
       if (!browserResult.success) {
+        console.error('[use-payout-methods] openPayoutDashboard: failed to open browser', {
+          error: browserResult.error,
+        });
         return {
           ok: false as const,
           error: browserResult.error ?? 'Could not open the browser. Please try again.',
         };
       }
 
+      console.log('[use-payout-methods] openPayoutDashboard: returned from browser, refreshing payout state');
       await refresh();
+      console.log('[use-payout-methods] openPayoutDashboard: payout state refreshed');
       return { ok: true as const };
-    } catch {
+    } catch (err) {
+      console.error('[use-payout-methods] openPayoutDashboard: unexpected error', err);
       return { ok: false as const, error: 'Could not reach the server. Please try again.' };
     }
   }, [authHeaders, refresh]);
@@ -150,7 +176,10 @@ export function usePayoutMethods(): UsePayoutMethodsResult {
     () => debitCards.some(c => c.instantEligible),
     [debitCards]
   );
-  const canInstantCashOut = hasInstantEligibleCard && instantAvailableCents > 0;
+  // NOT gated on instantAvailableCents > 0 — see the doc comment on
+  // instantAvailableCents above for why that balance is structurally $0
+  // pre-flight and must not block Instant Cash Out from being offered.
+  const canInstantCashOut = hasInstantEligibleCard;
 
   return {
     bankAccounts,

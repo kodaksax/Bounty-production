@@ -2,7 +2,7 @@
 
 import { MaterialIcons } from "@expo/vector-icons"
 import { useEffect, useState } from "react"
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAuthContext } from "../hooks/use-auth-context"
 import { stripeService } from "../lib/services/stripe-service"
@@ -10,6 +10,8 @@ import { useStripe } from "../lib/stripe-context"
 import { supabase } from "../lib/supabase"
 import { useAppThemeContext } from "../lib/themes/AppThemeContext"
 import type { AppTheme } from "../lib/themes/types"
+import { withAlpha } from "../lib/utils"
+import { FeedbackModal, type FeedbackVariant } from "./ui/feedback-modal"
 import PaymentElementWrapper from "./payment-element-wrapper"
 
 interface AddCardModalProps {
@@ -47,6 +49,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
   const [isCreatingSetupIntent, setIsCreatingSetupIntent] = useState(false)
   const [isSDKAvailable, setIsSDKAvailable] = useState<boolean>(false)
   const [paymentElementFailed, setPaymentElementFailed] = useState<boolean>(false)
+  const [feedback, setFeedback] = useState<{ variant: FeedbackVariant; title: string; message: string; onOk?: () => void } | null>(null)
 
   const { createPaymentMethod, loadPaymentMethods, error: stripeError } = useStripe()
   const { session, isAuthStale, attemptRefresh, isLoading: isAuthLoading } = useAuthContext()
@@ -129,7 +132,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
     });
     
     if (!session?.access_token) {
-      Alert.alert('Error', 'Please sign in to add a payment method')
+      setFeedback({ variant: 'error', title: 'Error', message: 'Please sign in to add a payment method' })
       return
     }
 
@@ -204,10 +207,11 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
         errorMessage.toLowerCase().includes('secret key') ||
         errorMessage.toLowerCase().includes('different modes')
 
-      Alert.alert(
-        isConfigError ? 'Payment Configuration Error' : 'Error',
-        errorMessage
-      )
+      setFeedback({
+        variant: 'error',
+        title: isConfigError ? 'Payment Configuration Error' : 'Error',
+        message: errorMessage,
+      })
 
       // Fallback to manual form if setup creation fails
       setPaymentElementFailed(true)
@@ -222,19 +226,16 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
     // Refresh payment methods after successful save
     await refreshPaymentMethodsWithRetry(3, 1000)
 
-    Alert.alert('Success', 'Payment method added successfully!', [
-      {
-        text: 'OK',
-        onPress: () => {
-          if (onSave) {
-            // Notify parent so it can trigger its own refresh and close the add-card view
-            onSave()
-          } else {
-            onBack()
-          }
-        },
+    setFeedback({
+      variant: 'success',
+      title: 'Success',
+      message: 'Payment method added successfully!',
+      onOk: () => {
+        // Notify parent so it can trigger its own refresh and close the add-card view
+        if (onSave) onSave()
+        else onBack()
       },
-    ])
+    })
   }
 
   const handlePaymentElementError = (error: any) => {
@@ -242,7 +243,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
       // User cancelled, just go back
       return
     }
-    Alert.alert('Error', error.message || 'Failed to add payment method')
+    setFeedback({ variant: 'error', title: 'Error', message: error.message || 'Failed to add payment method' })
   }
 
   const formatCardNumber = (value: string) => {
@@ -359,12 +360,10 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
       }
 
       // Show success and close modal
-      Alert.alert('Success', 'Payment method added successfully!', [
-        { text: 'OK', onPress: onBack }
-      ])
+      setFeedback({ variant: 'success', title: 'Success', message: 'Payment method added successfully!', onOk: onBack })
 
     } catch (error) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to add payment method')
+      setFeedback({ variant: 'error', title: 'Error', message: error instanceof Error ? error.message : 'Failed to add payment method' })
     } finally {
       setIsLoading(false)
     }
@@ -381,13 +380,13 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
   if (shouldUsePaymentElement && !paymentElementFailed) {
     if (isCreatingSetupIntent || !setupIntentSecret) {
       return (
-        <View style={embedded ? embeddedStyles.container : styles.overlayContainer}>
+        <View style={embedded ? [embeddedStyles.container, { backgroundColor: theme.background }] : styles.overlayContainer}>
           {embedded ? (
             <View style={embeddedStyles.navBar}>
               <TouchableOpacity onPress={onBack} style={embeddedStyles.backButton} accessibilityRole="button" accessibilityLabel="Back">
-                <MaterialIcons name="arrow-back" size={22} color="#fff" />
+                <MaterialIcons name="arrow-back" size={22} color={theme.text} />
               </TouchableOpacity>
-              <Text style={embeddedStyles.title}>Add Card</Text>
+              <Text style={[embeddedStyles.title, { color: theme.text }]}>Add Card</Text>
               <View style={{ width: 44 }} />
             </View>
           ) : (
@@ -399,7 +398,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
                   onPress={onBack}
                   style={styles.navButton}
                 >
-                  <MaterialIcons name="close" size={24} color="#fff" />
+                  <MaterialIcons name="close" size={24} color={theme.text} />
                 </TouchableOpacity>
                 <Text style={styles.navTitle}>Add Card</Text>
                 <View style={styles.navButtonPlaceholder} />
@@ -407,8 +406,8 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
             </View>
           )}
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 }}>
-            <ActivityIndicator size="large" color="#ffffff" />
-            <Text style={{ color: '#ffffff', marginTop: 16, fontSize: 16 }}>
+            <ActivityIndicator size="large" color={theme.primary} />
+            <Text style={{ color: theme.textSecondary, marginTop: 16, fontSize: 16 }}>
               Preparing secure payment form...
             </Text>
           </View>
@@ -433,12 +432,12 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
 
     if (embedded) {
       return (
-        <View style={[embeddedStyles.container, { flex: 1 }]}>
+        <View style={[embeddedStyles.container, { flex: 1, backgroundColor: theme.background }]}>
           <View style={embeddedStyles.navBar}>
             <TouchableOpacity onPress={onBack} style={embeddedStyles.backButton} accessibilityRole="button" accessibilityLabel="Back">
-              <MaterialIcons name="arrow-back" size={22} color="#fff" />
+              <MaterialIcons name="arrow-back" size={22} color={theme.text} />
             </TouchableOpacity>
-            <Text style={embeddedStyles.title}>Add Card</Text>
+            <Text style={[embeddedStyles.title, { color: theme.text }]}>Add Card</Text>
             <View style={{ width: 44 }} />
           </View>
           <ScrollView
@@ -447,10 +446,21 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <View style={{ backgroundColor: '#ffffff', margin: 16, borderRadius: 16, overflow: 'hidden' }}>
+            <View style={{ marginHorizontal: theme.spacing.lg, marginTop: theme.spacing.md }}>
               {paymentElementContent}
             </View>
           </ScrollView>
+          <FeedbackModal
+            visible={!!feedback}
+            variant={feedback?.variant ?? 'success'}
+            title={feedback?.title ?? ''}
+            message={feedback?.message ?? ''}
+            onDismiss={() => {
+              const onOk = feedback?.onOk
+              setFeedback(null)
+              onOk?.()
+            }}
+          />
         </View>
       )
     }
@@ -468,18 +478,18 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
               onPress={onBack}
               style={styles.navButton}
             >
-              <MaterialIcons name="close" size={24} color="#fff" />
+              <MaterialIcons name="close" size={24} color={theme.text} />
             </TouchableOpacity>
             <Text style={styles.navTitle}>Add Card</Text>
             <View style={styles.navButtonPlaceholder} />
           </View>
-<ScrollView
-  style={styles.contentScroll}
-  contentContainerStyle={{ paddingBottom: bottomInset }}
-  keyboardShouldPersistTaps="handled"
-  showsVerticalScrollIndicator={false}
->
-            <View style={{ backgroundColor: '#ffffff', margin: 16, borderRadius: 16, overflow: 'hidden' }}>
+          <ScrollView
+            style={styles.contentScroll}
+            contentContainerStyle={{ paddingBottom: bottomInset }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={{ marginHorizontal: theme.spacing.lg, marginTop: theme.spacing.md }}>
               {paymentElementContent}
             </View>
           </ScrollView>
@@ -491,12 +501,12 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
   if (embedded) {
     // Render inline when embedded inside another modal
     return (
-      <View style={[embeddedStyles.container, { flex: 1 }]}>
+      <View style={[embeddedStyles.container, { flex: 1, backgroundColor: theme.background }]}>
         <View style={embeddedStyles.navBar}>
           <TouchableOpacity onPress={onBack} style={embeddedStyles.backButton} accessibilityRole="button" accessibilityLabel="Back">
-            <MaterialIcons name="arrow-back" size={22} color="#fff" />
+            <MaterialIcons name="arrow-back" size={22} color={theme.text} />
           </TouchableOpacity>
-          <Text style={embeddedStyles.title}>Add Card</Text>
+          <Text style={[embeddedStyles.title, { color: theme.text }]}>Add Card</Text>
           <View style={{ width: 44 }} />
         </View>
 
@@ -530,7 +540,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
               maxLength={19}
               keyboardType="numeric"
               style={[styles.textInput, cardErrors.cardNumber && styles.textInputError]}
-              placeholderTextColor="rgba(255,255,255,0.35)"
+              placeholderTextColor={theme.textDisabled}
             />
             {cardErrors.cardNumber && <Text style={styles.errorText}>{cardErrors.cardNumber}</Text>}
           </View>
@@ -548,7 +558,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
               }}
               placeholder="Yessie"
               style={[styles.textInput, cardErrors.cardholderName && styles.textInputError]}
-              placeholderTextColor="rgba(255,255,255,0.35)"
+              placeholderTextColor={theme.textDisabled}
             />
             {cardErrors.cardholderName && <Text style={styles.errorText}>{cardErrors.cardholderName}</Text>}
           </View>
@@ -563,7 +573,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
                 maxLength={5}
                 keyboardType="numeric"
                 style={[styles.textInput, cardErrors.expiryDate && styles.textInputError]}
-                placeholderTextColor="rgba(255,255,255,0.35)"
+                placeholderTextColor={theme.textDisabled}
               />
               {cardErrors.expiryDate && <Text style={styles.errorText}>{cardErrors.expiryDate}</Text>}
             </View>
@@ -584,7 +594,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
                 secureTextEntry
                 keyboardType="numeric"
                 style={[styles.textInput, cardErrors.securityCode && styles.textInputError]}
-                placeholderTextColor="rgba(255,255,255,0.35)"
+                placeholderTextColor={theme.textDisabled}
               />
               {cardErrors.securityCode && <Text style={styles.errorText}>{cardErrors.securityCode}</Text>}
             </View>
@@ -612,6 +622,17 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
             </View>
           )}
         </ScrollView>
+        <FeedbackModal
+          visible={!!feedback}
+          variant={feedback?.variant ?? 'success'}
+          title={feedback?.title ?? ''}
+          message={feedback?.message ?? ''}
+          onDismiss={() => {
+            const onOk = feedback?.onOk
+            setFeedback(null)
+            onOk?.()
+          }}
+        />
       </View>
     )
   }
@@ -631,7 +652,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
             onPress={onBack}
             style={styles.navButton}
           >
-            <MaterialIcons name="close" size={24} color="#fff" />
+            <MaterialIcons name="close" size={24} color={theme.text} />
           </TouchableOpacity>
           <Text style={styles.navTitle}>Add Card</Text>
           <View style={styles.navButtonPlaceholder} />
@@ -671,7 +692,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
               maxLength={19}
               keyboardType="numeric"
               style={[styles.textInput, cardErrors.cardNumber && styles.textInputError]}
-              placeholderTextColor="rgba(255,255,255,0.35)"
+              placeholderTextColor={theme.textDisabled}
             />
             {cardErrors.cardNumber && <Text style={styles.errorText}>{cardErrors.cardNumber}</Text>}
           </View>
@@ -689,7 +710,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
               }}
               placeholder="Yessie"
               style={[styles.textInput, cardErrors.cardholderName && styles.textInputError]}
-              placeholderTextColor="rgba(255,255,255,0.35)"
+              placeholderTextColor={theme.textDisabled}
             />
             {cardErrors.cardholderName && <Text style={styles.errorText}>{cardErrors.cardholderName}</Text>}
           </View>
@@ -704,7 +725,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
                 maxLength={5}
                 keyboardType="numeric"
                 style={[styles.textInput, cardErrors.expiryDate && styles.textInputError]}
-                placeholderTextColor="rgba(255,255,255,0.35)"
+                placeholderTextColor={theme.textDisabled}
               />
               {cardErrors.expiryDate && <Text style={styles.errorText}>{cardErrors.expiryDate}</Text>}
             </View>
@@ -725,7 +746,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
                 secureTextEntry
                 keyboardType="numeric"
                 style={[styles.textInput, cardErrors.securityCode && styles.textInputError]}
-                placeholderTextColor="rgba(255,255,255,0.35)"
+                placeholderTextColor={theme.textDisabled}
               />
               {cardErrors.securityCode && <Text style={styles.errorText}>{cardErrors.securityCode}</Text>}
             </View>
@@ -762,7 +783,8 @@ const embeddedStyles = StyleSheet.create({
   container: { paddingBottom: 24 },
   navBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12 },
   backButton: { padding: 8, minWidth: 44, minHeight: 44, justifyContent: 'center', alignItems: 'center' },
-  title: { color: '#fff', fontSize: 18, fontWeight: '600', textAlign: 'center', flex: 1 },
+  // Color applied inline from theme at each call site.
+  title: { fontSize: 18, fontWeight: '600', textAlign: 'center', flex: 1 },
 })
 
 function makeStyles(theme: AppTheme) {
@@ -773,9 +795,9 @@ function makeStyles(theme: AppTheme) {
       justifyContent: 'flex-end',
     },
     sheet: {
-      backgroundColor: theme.primary, // intentional payment branding — matches Add Money screen
-      borderTopLeftRadius: 28,
-      borderTopRightRadius: 28,
+      backgroundColor: theme.background,
+      borderTopLeftRadius: theme.radius['2xl'],
+      borderTopRightRadius: theme.radius['2xl'],
       paddingBottom: 12,
       maxHeight: '92%',
     },
@@ -786,6 +808,8 @@ function makeStyles(theme: AppTheme) {
       paddingHorizontal: 20,
       paddingTop: Platform.OS === 'ios' ? 20 : 12,
       paddingBottom: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.border,
     },
     navButton: {
       padding: 8,
@@ -795,10 +819,10 @@ function makeStyles(theme: AppTheme) {
       alignItems: 'center',
     },
     navButtonPlaceholder: { width: 44, height: 44 },
-    navTitle: { color: '#fff', fontSize: 18, fontWeight: '600', letterSpacing: 0.5 },
+    navTitle: { color: theme.text, fontSize: 18, fontWeight: '600', letterSpacing: 0.5 },
     contentScroll: { flex: 1 },
     contentContainer: { paddingHorizontal: 20, paddingBottom: 40 },
-    instructions: { color: 'rgba(255,255,255,0.85)', fontSize: 13, marginBottom: 16 },
+    instructions: { color: theme.textSecondary, fontSize: 13, marginBottom: 16 },
     // Card-face mockup — intentionally stays a fixed dark navy regardless of app
     // theme (like the face of a physical card), so its accent text below is
     // fixed-light rather than theme-derived to guarantee contrast against it.
@@ -818,17 +842,17 @@ function makeStyles(theme: AppTheme) {
     previewMetaLabel: { color: '#6ee7b7', fontSize: 11, marginBottom: 4 },
     previewMetaValue: { color: '#fff', fontSize: 14, fontWeight: '600' },
     formFieldBlock: { marginBottom: 18 },
-    fieldLabel: { color: 'rgba(255,255,255,0.85)', fontSize: 13, marginBottom: 6, fontWeight: '500' },
+    fieldLabel: { color: theme.textSecondary, fontSize: 13, marginBottom: 6, fontWeight: '500' },
     textInput: {
-      backgroundColor: 'rgba(4,120,87,0.55)',
+      backgroundColor: theme.surfaceSecondary,
       borderRadius: 12,
       paddingHorizontal: 14,
       paddingVertical: 12,
-      color: '#fff',
+      color: theme.text,
       fontSize: 15,
     },
     textInputError: { borderWidth: 1, borderColor: theme.error },
-    errorText: { color: '#fca5a5', fontSize: 11, marginTop: 6 },
+    errorText: { color: theme.error, fontSize: 11, marginTop: 6 },
     inlineRow: { flexDirection: 'row', gap: 16 },
     inlineHalf: { flex: 1 },
     primaryButton: {
@@ -843,7 +867,7 @@ function makeStyles(theme: AppTheme) {
     },
     primaryButtonDisabled: { opacity: 0.55 },
     primaryButtonText: { color: theme.background, fontSize: 16, fontWeight: '600' },
-    inlineErrorBanner: { marginTop: 10, padding: 10, backgroundColor: '#fee2e2', borderRadius: 10 },
-    inlineErrorText: { color: '#b91c1c', textAlign: 'center', fontSize: 13 },
+    inlineErrorBanner: { marginTop: 10, padding: 10, backgroundColor: withAlpha(theme.error, theme.isDark ? 0.18 : 0.1), borderRadius: 10 },
+    inlineErrorText: { color: theme.error, textAlign: 'center', fontSize: 13 },
   });
 }

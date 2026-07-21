@@ -73,7 +73,13 @@ describe('usePayoutMethods', () => {
     expect(result.current.error).toBeNull();
   });
 
-  it('canInstantCashOut is false when a card is instant-eligible but instantAvailableCents is 0', async () => {
+  it('canInstantCashOut is true when a card is instant-eligible even when instantAvailableCents is 0 (pre-transfer balance is not a pre-flight gate)', async () => {
+    // instantAvailableCents reflects the connected account's balance BEFORE
+    // POST /connect/instant-payout has ever run its own platform->connected
+    // transfer — it is necessarily 0 for a hunter who hasn't withdrawn yet,
+    // so it must never gate canInstantCashOut (2026-07-21 fix: this used to
+    // be `false` here, which permanently locked Instant Cash Out for every
+    // first-time user regardless of a valid linked card).
     mockFetchSequence([
       { ok: true, json: () => Promise.resolve({ bankAccounts: [] }) },
       { ok: true, json: () => Promise.resolve({ debitCards: [eligibleCard], instantAvailableCents: 0 }) },
@@ -81,7 +87,7 @@ describe('usePayoutMethods', () => {
     const { result } = renderHook(() => usePayoutMethods());
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.hasInstantEligibleCard).toBe(true);
-    expect(result.current.canInstantCashOut).toBe(false);
+    expect(result.current.canInstantCashOut).toBe(true);
   });
 
   it('hasInstantEligibleCard is false when no card is instant-eligible', async () => {

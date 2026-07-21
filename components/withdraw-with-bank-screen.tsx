@@ -81,7 +81,6 @@ export function WithdrawWithBankScreen({
     minWithdrawal,
     maxWithdrawal,
     availableBalance: serverAvailableBalance,
-    hasInstantEligibleCard,
     canInstantCashOut,
     isLoading: isLoadingAccounts,
   } = payoutMethods;
@@ -387,11 +386,24 @@ export function WithdrawWithBankScreen({
   // have controller.requirement_collection === "stripe", so the platform
   // cannot write external accounts via API. See use-payout-methods.tsx.
   const handleOpenPayoutDashboard = async () => {
+    console.log('[withdraw-with-bank-screen] Manage Payout Methods button pressed');
     if (isOpeningDashboard) return;
     setIsOpeningDashboard(true);
     try {
       const result = await payoutMethods.openPayoutDashboard();
-      if (!result.ok) Alert.alert('Error', result.error);
+      if (!result.ok) {
+        console.error('[withdraw-with-bank-screen] openPayoutDashboard failed', result.error);
+        Alert.alert('Error', result.error);
+      } else {
+        // payoutMethods.openPayoutDashboard() already refreshed cards/bank
+        // accounts/instant balance; also refresh Connect eligibility
+        // (payouts_enabled/charges_enabled/requirements) since identity
+        // verification can also be completed inside the same Stripe
+        // Dashboard visit, and that state was previously only re-checked on
+        // screen mount — never after returning from the dashboard.
+        console.log('[withdraw-with-bank-screen] refreshing Connect eligibility after dashboard return');
+        await eligibility.refresh();
+      }
     } finally {
       setIsOpeningDashboard(false);
     }
@@ -506,11 +518,7 @@ export function WithdrawWithBankScreen({
               if (method === 'instant') setShowInstantCashOut(true);
             }}
             instantEligible={canInstantCashOut}
-            instantIneligibleReason={
-              hasInstantEligibleCard
-                ? 'Instant funds not available right now'
-                : 'Add a debit card to unlock'
-            }
+            instantIneligibleReason="Add a debit card to unlock"
             onAddDebitCard={handleOpenPayoutDashboard}
           />
         )}
@@ -525,14 +533,23 @@ export function WithdrawWithBankScreen({
           <Text style={s.manageMethodsLinkText}>Manage Payout Methods</Text>
         </TouchableOpacity>
 
-        {/* Connect Status — surfaced first since it blocks withdrawal entirely */}
+        {/* Connect Status — surfaced first since it blocks withdrawal entirely.
+            When an account already exists but payouts are disabled (KYC/
+            requirements issue rather than "never onboarded"), show Stripe's
+            own reason instead of the generic onboarding prompt. */}
         {!hasConnectedAccount && (
           <View style={s.warningCard}>
             <MaterialIcons name="warning" size={24} color="#fbbf24" />
             <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={s.warningTitle}>Stripe Connect Required</Text>
+              <Text style={s.warningTitle}>
+                {eligibility.connectedAccountExists ? 'Payouts Currently Disabled' : 'Stripe Connect Required'}
+              </Text>
               <Text style={s.warningText}>
-                Complete Stripe Connect onboarding to withdraw funds to your bank account.
+                {eligibility.connectedAccountExists && eligibility.disabledReason
+                  ? `Stripe: ${eligibility.disabledReason.replace(/[._]/g, ' ')}`
+                  : eligibility.connectedAccountExists && eligibility.requirementsCurrentlyDue.length > 0
+                    ? `Stripe needs more information: ${eligibility.requirementsCurrentlyDue.join(', ')}`
+                    : 'Complete Stripe Connect onboarding to withdraw funds to your bank account.'}
               </Text>
               <TouchableOpacity
                 onPress={handleConnectOnboarding}

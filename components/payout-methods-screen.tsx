@@ -45,11 +45,18 @@ export function PayoutMethodsScreen({ onBack, payoutMethods, eligibility }: Payo
   const { bankAccounts, debitCards, isLoading, openPayoutDashboard } = payoutMethods;
 
   const handleOpenDashboard = async () => {
+    console.log('[payout-methods-screen] Manage Payout Methods button pressed');
     if (isOpeningDashboard) return;
     setIsOpeningDashboard(true);
     try {
       const result = await openPayoutDashboard();
-      if (!result.ok) Alert.alert('Error', result.error);
+      if (!result.ok) {
+        console.error('[payout-methods-screen] openPayoutDashboard failed', result.error);
+        Alert.alert('Error', result.error);
+      } else {
+        console.log('[payout-methods-screen] refreshing Connect eligibility after dashboard return');
+        await eligibility.refresh();
+      }
     } finally {
       setIsOpeningDashboard(false);
     }
