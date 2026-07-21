@@ -337,21 +337,30 @@ Deno.serve(async (req: Request) => {
       }
       destinationAccount = destination.targetAccount;
 
+      // CANNOT promote via updateExternalAccount: these Connect accounts have
+      // controller.requirement_collection === "stripe", so Stripe rejects the
+      // call unconditionally — same fail-closed reasoning as /connect/transfer
+      // and /connect/retry-transfer. The admin must have the hunter set this
+      // account as default via their Stripe payout dashboard (login-link)
+      // before a force-retry to it can succeed.
       if (destination.needsDefaultUpdate) {
-        const updated = (await stripe.accounts.updateExternalAccount(
-          p.stripe_connect_account_id,
-          destinationAccount.id,
-          { default_for_currency: true } as Stripe.ExternalAccountUpdateParams
-        )) as Stripe.BankAccount;
-        if (!(updated as unknown as { default_for_currency?: boolean }).default_for_currency) {
-          logCritical('default_for_currency update did not take effect during admin retry', {
-            targetUserId, accountId: p.stripe_connect_account_id,
-          });
-          return jsonResponse(
-            { error: 'Could not confirm the payout destination — aborted before charging balance.' },
-            502
-          );
-        }
+        await logAdminAction(supabase, {
+          adminUserId: adminUser.id,
+          actionType: 'force_retry_withdrawal',
+          targetUserId,
+          targetTransactionId: transactionId,
+          reason,
+          result: 'failure',
+          metadata: { error: 'bank_account_not_default' },
+        });
+        return jsonResponse(
+          {
+            error:
+              'This bank account is not the hunter\'s default payout method. They must set it as default via their Stripe payout dashboard before this retry can succeed.',
+            code: 'bank_account_not_default',
+          },
+          400
+        );
       }
     } catch (bankAccountError) {
       console.error('[admin-withdrawals] failed to resolve destination bank account', {
