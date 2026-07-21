@@ -4,13 +4,24 @@
  * withdraw-method-select, and payout-methods-screen. Previously each screen
  * fetched GET /connect/bank-accounts and GET /connect/debit-cards
  * independently with near-identical boilerplate; this is the single source
- * of truth, including the mutation helpers (remove / set default).
+ * of truth, including `openPayoutDashboard`.
+ *
+ * Adding, removing, and setting a default external account can no longer be
+ * done via API calls (POST/DELETE /connect/bank-accounts and /debit-cards) —
+ * these Connect accounts have `controller.requirement_collection: "stripe"`,
+ * which means Stripe itself owns writes to external accounts and rejects
+ * stripe.accounts.createExternalAccount/updateExternalAccount/
+ * deleteExternalAccount with a permissions error, unconditionally. Those
+ * endpoints are now deprecated (410) server-side. The only supported way to
+ * manage payout methods is Stripe's own hosted Express Dashboard, reached via
+ * a Login Link — see openPayoutDashboard().
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuthContext } from './use-auth-context';
 import { config } from '../lib/config';
 import { API_BASE_URL } from '../lib/config/api';
 import { MIN_WITHDRAWAL_AMOUNT } from '../lib/constants';
+import { openUrlInBrowser } from '../lib/utils/browser';
 
 export interface BankAccount {
   id: string;
@@ -42,9 +53,8 @@ export interface UsePayoutMethodsResult {
   isLoading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
-  removeBankAccount: (id: string) => Promise<{ ok: true } | { ok: false; error: string }>;
-  removeDebitCard: (id: string) => Promise<{ ok: true } | { ok: false; error: string }>;
-  setDefaultBankAccount: (id: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  /** Opens the user's Stripe Express Dashboard (via a fresh Login Link) so they can add, remove, or set the default bank account/debit card. Refreshes the list on return. */
+  openPayoutDashboard: () => Promise<{ ok: true } | { ok: false; error: string }>;
 }
 
 export function usePayoutMethods(): UsePayoutMethodsResult {
@@ -100,56 +110,34 @@ export function usePayoutMethods(): UsePayoutMethodsResult {
     refresh();
   }, [refresh]);
 
-  const removeBankAccount = useCallback(
-    async (id: string) => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/connect/bank-accounts/${id}`, {
-          method: 'DELETE',
-          headers: authHeaders(),
-        });
-        if (!response.ok) return { ok: false as const, error: 'Failed to remove bank account.' };
-        await refresh();
-        return { ok: true as const };
-      } catch {
-        return { ok: false as const, error: 'Could not reach the server. Please try again.' };
+  const openPayoutDashboard = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/connect/login-link`, {
+        method: 'POST',
+        headers: authHeaders(),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data?.url) {
+        return {
+          ok: false as const,
+          error: data?.error ?? 'Could not open your payout dashboard. Please try again.',
+        };
       }
-    },
-    [authHeaders, refresh]
-  );
 
-  const removeDebitCard = useCallback(
-    async (id: string) => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/connect/debit-cards/${id}`, {
-          method: 'DELETE',
-          headers: authHeaders(),
-        });
-        if (!response.ok) return { ok: false as const, error: 'Failed to remove debit card.' };
-        await refresh();
-        return { ok: true as const };
-      } catch {
-        return { ok: false as const, error: 'Could not reach the server. Please try again.' };
+      const browserResult = await openUrlInBrowser(data.url);
+      if (!browserResult.success) {
+        return {
+          ok: false as const,
+          error: browserResult.error ?? 'Could not open the browser. Please try again.',
+        };
       }
-    },
-    [authHeaders, refresh]
-  );
 
-  const setDefaultBankAccount = useCallback(
-    async (id: string) => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/connect/bank-accounts/${id}/default`, {
-          method: 'POST',
-          headers: authHeaders(),
-        });
-        if (!response.ok) return { ok: false as const, error: 'Failed to update your default bank account.' };
-        await refresh();
-        return { ok: true as const };
-      } catch {
-        return { ok: false as const, error: 'Could not reach the server. Please try again.' };
-      }
-    },
-    [authHeaders, refresh]
-  );
+      await refresh();
+      return { ok: true as const };
+    } catch {
+      return { ok: false as const, error: 'Could not reach the server. Please try again.' };
+    }
+  }, [authHeaders, refresh]);
 
   const hasInstantEligibleCard = useMemo(
     () => debitCards.some(c => c.instantEligible),
@@ -166,8 +154,6 @@ export function usePayoutMethods(): UsePayoutMethodsResult {
     isLoading,
     error,
     refresh,
-    removeBankAccount,
-    removeDebitCard,
-    setDefaultBankAccount,
+    openPayoutDashboard,
   };
 }

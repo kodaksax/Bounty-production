@@ -273,16 +273,34 @@ describe('connect edge function contract (inlined helpers stay in sync)', () => 
   test('inlines resolveWithdrawalDestination and wires it into both transfer and retry-transfer', () => {
     expect(indexSource).toContain('function resolveWithdrawalDestination');
     // Both the primary transfer path and the retry path must call the
-    // resolver and, on success, promote a non-default selection via
-    // updateExternalAccount before ever touching the balance.
+    // resolver.
     const resolverCallCount = (indexSource.match(/resolveWithdrawalDestination\(/g) || []).length;
     expect(resolverCallCount).toBeGreaterThanOrEqual(2);
-    const updateExternalAccountCallCount = (
-      indexSource.match(/stripe\.accounts\.updateExternalAccount\(/g) || []
-    ).length;
-    // Once for the pre-existing /bank-accounts/:id/default route, twice more
-    // for the transfer + retry-transfer destination-promotion paths.
-    expect(updateExternalAccountCallCount).toBeGreaterThanOrEqual(3);
+  });
+
+  test('never calls stripe.accounts.updateExternalAccount — these Connect accounts reject it unconditionally', () => {
+    // controller.requirement_collection === "stripe" on these accounts means
+    // Stripe rejects createExternalAccount/updateExternalAccount/
+    // deleteExternalAccount from the platform side with a permissions error,
+    // always — there is no "payouts disabled" case that unblocks it. Every
+    // call site that used to attempt this (bank-accounts/:id/default,
+    // /transfer, /retry-transfer, debit-cards add/delete) must instead fail
+    // closed with an actionable error pointing at the Stripe payout
+    // dashboard (POST /connect/login-link).
+    expect(indexSource).not.toContain('stripe.accounts.updateExternalAccount(');
+    expect(indexSource).not.toContain('stripe.accounts.createExternalAccount(');
+    expect(indexSource).not.toContain('stripe.accounts.deleteExternalAccount(');
+  });
+
+  test('fails closed with bank_account_not_default instead of promoting a non-default account', () => {
+    const failClosedCount = (indexSource.match(/code: 'bank_account_not_default'/g) || []).length;
+    // Once in /transfer, once in /retry-transfer.
+    expect(failClosedCount).toBe(2);
+  });
+
+  test('exposes a login-link endpoint into the Stripe Express Dashboard', () => {
+    expect(indexSource).toContain("subPath === '/login-link'");
+    expect(indexSource).toContain('stripe.accounts.createLoginLink(');
   });
 
   test('records the resolved destination bank account on the wallet_transactions row', () => {

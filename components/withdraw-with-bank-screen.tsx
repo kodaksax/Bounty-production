@@ -22,8 +22,6 @@ import { formatCurrency } from '../lib/utils';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
 import { useWallet } from '../lib/wallet-context';
-import { AddBankAccountModal } from './add-bank-account-modal';
-import { AddDebitCardModal } from './add-debit-card-modal';
 import { InstantCashOutScreen } from './instant-cash-out-screen';
 import { PayoutMethodsScreen } from './payout-methods-screen';
 import { EmailVerificationBanner } from './ui/email-verification-banner';
@@ -59,10 +57,9 @@ export function WithdrawWithBankScreen({
   const [withdrawalAmount, setWithdrawalAmount] = useState<string>('');
   const [isOnboarding, setIsOnboarding] = useState(false);
   const [selectedBankAccount, setSelectedBankAccount] = useState<string>('');
-  const [showAddBankAccount, setShowAddBankAccount] = useState(false);
+  const [isOpeningDashboard, setIsOpeningDashboard] = useState(false);
   const [showInstantCashOut, setShowInstantCashOut] = useState(false);
   const [showPayoutMethods, setShowPayoutMethods] = useState(false);
-  const [showAddDebitCard, setShowAddDebitCard] = useState(false);
   const [showConfirmSheet, setShowConfirmSheet] = useState(false);
   const [submittedAmount, setSubmittedAmount] = useState(0);
   const [submittedDestinationLabel, setSubmittedDestinationLabel] = useState('');
@@ -245,7 +242,7 @@ export function WithdrawWithBankScreen({
     // Check bank account selection
     if (bankAccounts.length === 0) {
       Alert.alert('Bank Account Required', 'Please add a bank account to receive withdrawals.', [
-        { text: 'Add Bank Account', onPress: () => setShowAddBankAccount(true) },
+        { text: 'Add Bank Account', onPress: handleOpenPayoutDashboard },
         { text: 'Cancel', style: 'cancel' },
       ]);
       return;
@@ -381,53 +378,20 @@ export function WithdrawWithBankScreen({
     }
   };
 
-  const handleAddBankAccount = () => {
-    setShowAddBankAccount(true);
+  // Adding, removing, and setting a default bank account/debit card can only
+  // happen in Stripe's own hosted Express Dashboard — these Connect accounts
+  // have controller.requirement_collection === "stripe", so the platform
+  // cannot write external accounts via API. See use-payout-methods.tsx.
+  const handleOpenPayoutDashboard = async () => {
+    if (isOpeningDashboard) return;
+    setIsOpeningDashboard(true);
+    try {
+      const result = await payoutMethods.openPayoutDashboard();
+      if (!result.ok) Alert.alert('Error', result.error);
+    } finally {
+      setIsOpeningDashboard(false);
+    }
   };
-
-  const handleBankAccountAdded = async () => {
-    setShowAddBankAccount(false);
-    await payoutMethods.refresh();
-  };
-
-  const handleRemoveBankAccount = async (bankAccountId: string) => {
-    Alert.alert('Remove Bank Account', 'Are you sure you want to remove this bank account?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          const result = await payoutMethods.removeBankAccount(bankAccountId);
-          if (result.ok) {
-            Alert.alert('Success', 'Bank account removed successfully');
-          } else {
-            Alert.alert('Error', result.error);
-          }
-        },
-      },
-    ]);
-  };
-
-  if (showAddBankAccount) {
-    return (
-      <AddBankAccountModal
-        onBack={() => setShowAddBankAccount(false)}
-        onSave={handleBankAccountAdded}
-      />
-    );
-  }
-
-  if (showAddDebitCard) {
-    return (
-      <AddDebitCardModal
-        onBack={() => setShowAddDebitCard(false)}
-        onSave={async () => {
-          setShowAddDebitCard(false);
-          await payoutMethods.refresh();
-        }}
-      />
-    );
-  }
 
   if (showInstantCashOut) {
     return (
@@ -536,7 +500,7 @@ export function WithdrawWithBankScreen({
             }}
             instantEligible={hasInstantEligibleCard}
             instantIneligibleReason="Add a debit card to unlock"
-            onAddDebitCard={() => setShowAddDebitCard(true)}
+            onAddDebitCard={handleOpenPayoutDashboard}
           />
         )}
 
@@ -582,7 +546,8 @@ export function WithdrawWithBankScreen({
           <View style={s.sectionHeader}>
             <Text style={s.sectionTitle}>Bank Accounts</Text>
             <TouchableOpacity
-              onPress={handleAddBankAccount}
+              onPress={handleOpenPayoutDashboard}
+              disabled={isOpeningDashboard}
               style={s.addButton}
               accessibilityLabel="Add bank account"
               accessibilityRole="button"
@@ -597,7 +562,7 @@ export function WithdrawWithBankScreen({
           ) : bankAccounts.length === 0 ? (
             <TouchableOpacity
               style={s.emptyState}
-              onPress={handleAddBankAccount}
+              onPress={handleOpenPayoutDashboard}
               accessibilityLabel="Add your first bank account"
               accessibilityRole="button"
             >
@@ -645,14 +610,6 @@ export function WithdrawWithBankScreen({
                   </Text>
                   <Text style={s.bankAccountStatus}>Status: {account.status}</Text>
                 </View>
-                <TouchableOpacity
-                  onPress={() => handleRemoveBankAccount(account.id)}
-                  style={s.removeButton}
-                  accessibilityLabel={`Remove ${account.bankName || 'bank account'} ending in ${account.last4}`}
-                  accessibilityRole="button"
-                >
-                  <MaterialIcons name="close" size={20} color={theme.textDisabled} />
-                </TouchableOpacity>
               </TouchableOpacity>
             ))
           )}

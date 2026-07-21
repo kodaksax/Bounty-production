@@ -1,20 +1,30 @@
 // Supabase Edge Function: connect
 // Handles all /connect/* routes previously served by the Node/Express server.
-// Routes:
+//
+// These Connect accounts have controller.requirement_collection === "stripe"
+// (verified live against a real connected account), which means Stripe
+// itself owns writes to external accounts on them: the platform CANNOT call
+// stripe.accounts.createExternalAccount / updateExternalAccount /
+// deleteExternalAccount — Stripe rejects all three unconditionally with a
+// permissions error, regardless of payouts_enabled or any other account
+// state. Adding, removing, or setting a default bank account/debit card can
+// therefore only happen through Stripe's own hosted Express Dashboard,
+// reached via POST /connect/login-link. Routes:
 //   POST /connect/create-account-link
 //   POST /connect/create-account-session   (Stripe Connect Embedded Components)
+//   POST /connect/login-link               (Express Dashboard login link — add/remove/default payout methods)
 //   GET  /connect/embedded                 (HTML shim that mounts embedded components in a WebView)
 //   POST /connect/verify-onboarding
 //   POST /connect/transfer
 //   POST /connect/retry-transfer
 //   POST /connect/instant-payout           (Instant Cash Out to a linked debit card — flag-gated)
 //   GET  /connect/bank-accounts            (list external bank accounts on Connect account)
-//   POST /connect/bank-accounts            (add a bank account to Connect account)
-//   DELETE /connect/bank-accounts/:id      (remove a bank account)
-//   POST /connect/bank-accounts/:id/default (set a bank account as default for currency)
+//   POST /connect/bank-accounts            (410 DEPRECATED — use Financial Connections for deposits + login-link for payout accounts)
+//   DELETE /connect/bank-accounts/:id      (410 DEPRECATED — use login-link)
+//   POST /connect/bank-accounts/:id/default (410 DEPRECATED — use login-link)
 //   GET  /connect/debit-cards              (list debit-card external accounts, Instant Cash Out only)
-//   POST /connect/debit-cards              (add a debit card via a client-tokenized card token)
-//   DELETE /connect/debit-cards/:id        (remove a debit card)
+//   POST /connect/debit-cards              (410 DEPRECATED — use login-link)
+//   DELETE /connect/debit-cards/:id        (410 DEPRECATED — use login-link)
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Stripe from 'npm:stripe@14';
@@ -551,6 +561,51 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    // POST /connect/login-link — a fresh, single-use link into the user's
+    // Stripe Express Dashboard. This is the ONLY supported way for a hunter
+    // to add, remove, or set a default bank account / debit card: these
+    // Connect accounts have controller.requirement_collection === "stripe",
+    // so Stripe rejects stripe.accounts.createExternalAccount /
+    // updateExternalAccount / deleteExternalAccount from the platform side
+    // with a permissions error, unconditionally — Stripe itself owns writes
+    // to external accounts for these accounts. See the (now-deprecated)
+    // /debit-cards, /bank-accounts/:id, and /bank-accounts/:id/default
+    // handlers below for the endpoints this replaces.
+    if (req.method === 'POST' && subPath === '/login-link') {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('stripe_connect_account_id, stripe_connect_onboarded_at')
+        .eq('id', userId)
+        .single();
+
+      const p = profile as { stripe_connect_account_id?: string; stripe_connect_onboarded_at?: string } | null;
+      const accountId = p?.stripe_connect_account_id;
+      if (!accountId || !p?.stripe_connect_onboarded_at) {
+        return jsonResponse(
+          {
+            error: 'Complete Stripe Connect onboarding before managing payout methods.',
+            code: 'connect_not_onboarded',
+          },
+          400
+        );
+      }
+
+      try {
+        const loginLink = await stripe.accounts.createLoginLink(accountId);
+        return jsonResponse({ url: loginLink.url });
+      } catch (loginLinkError) {
+        console.error('[connect/login-link] failed to create login link', {
+          userId,
+          accountId,
+          error: (loginLinkError as { message?: string })?.message,
+        });
+        return jsonResponse(
+          { error: 'Could not open your payout dashboard. Please try again.', code: 'login_link_failed' },
+          502
+        );
+      }
+    }
+
     // POST /connect/create-account-session
     // Creates a Stripe Connect Account Session for Embedded Components.
     // If the user doesn't have a Connect account yet, one is created lazily
@@ -900,34 +955,31 @@ Deno.serve(async (req: Request) => {
 
         destinationAccount = destination.targetAccount;
 
+        // CANNOT promote destinationAccount to default_for_currency here:
+        // these Connect accounts have controller.requirement_collection ===
+        // "stripe", so stripe.accounts.updateExternalAccount is rejected by
+        // Stripe with a permissions error unconditionally — there is no
+        // "payouts disabled" case that unblocks it, it always fails. Fail
+        // closed immediately with a clear, actionable message instead of
+        // attempting (and always losing to) that call. The user must set
+        // their selected bank as default themselves via the Stripe payout
+        // dashboard (POST /connect/login-link) — Stripe's own automatic
+        // payout sweep pays out to whichever account is default at sweep
+        // time, so this is the only account that can correctly receive it.
         if (destination.needsDefaultUpdate) {
-          const updated = (await stripe.accounts.updateExternalAccount(
-            p.stripe_connect_account_id,
-            destinationAccount.id,
-            { default_for_currency: true } as Stripe.ExternalAccountUpdateParams
-          )) as Stripe.BankAccount;
-          if (!(updated as unknown as { default_for_currency?: boolean }).default_for_currency) {
-            // Read-back verification: Stripe accepted the call but did not
-            // actually report the account as default. Fail closed rather
-            // than proceed on an unverified assumption about where the
-            // money will end up.
-            logCritical('default_for_currency update did not take effect — refusing to proceed', {
-              userId, accountId: p.stripe_connect_account_id, bankAccountId: destinationAccount.id,
-            });
-            return jsonResponse(
-              {
-                error:
-                  'We could not confirm your selected bank account as the payout destination. Your balance has not been charged — please try again.',
-                code: 'bank_account_default_update_unconfirmed',
-              },
-              502
-            );
-          }
-          console.log('[connect/transfer] promoted selected bank account to default_for_currency', {
+          console.warn('[connect/transfer] selected bank account is not the default payout account', {
             userId,
             accountId: p.stripe_connect_account_id,
             bankAccountId: destinationAccount.id,
           });
+          return jsonResponse(
+            {
+              error:
+                'This bank account is not your default payout method. Open your payout dashboard to set it as default, then try again.',
+              code: 'bank_account_not_default',
+            },
+            400
+          );
         }
       } catch (bankAccountError) {
         console.error('[connect/transfer] failed to resolve/set destination bank account', {
@@ -1234,25 +1286,22 @@ Deno.serve(async (req: Request) => {
         }
         destinationAccount = destination.targetAccount;
 
+        // Same fail-closed reasoning as /transfer above: updateExternalAccount
+        // always fails for these accounts, so don't attempt it.
         if (destination.needsDefaultUpdate) {
-          const updated = (await stripe.accounts.updateExternalAccount(
-            p.stripe_connect_account_id,
-            destinationAccount.id,
-            { default_for_currency: true } as Stripe.ExternalAccountUpdateParams
-          )) as Stripe.BankAccount;
-          if (!(updated as unknown as { default_for_currency?: boolean }).default_for_currency) {
-            logCritical('default_for_currency update did not take effect during retry — refusing to proceed', {
-              userId, accountId: p.stripe_connect_account_id, bankAccountId: destinationAccount.id,
-            });
-            return jsonResponse(
-              {
-                error:
-                  'We could not confirm your selected bank account as the payout destination. Your balance has not been charged — please try again.',
-                code: 'bank_account_default_update_unconfirmed',
-              },
-              502
-            );
-          }
+          console.warn('[connect/retry-transfer] selected bank account is not the default payout account', {
+            userId,
+            accountId: p.stripe_connect_account_id,
+            bankAccountId: destinationAccount.id,
+          });
+          return jsonResponse(
+            {
+              error:
+                'This bank account is not your default payout method. Open your payout dashboard to set it as default, then try again.',
+              code: 'bank_account_not_default',
+            },
+            400
+          );
         }
       } catch (bankAccountError) {
         console.error('[connect] failed to resolve/set destination bank account during retry', {
@@ -1902,109 +1951,40 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ debitCards });
     }
 
-    // POST /connect/debit-cards — add a debit card as an Instant Cash Out
-    // destination. Body: { token } — a Stripe card token (tok_...) created
-    // CLIENT-SIDE via stripe-react-native's useStripe().createToken({type:
-    // 'Card'}); raw card numbers are never accepted server-side, matching the
-    // PCI posture of the (deprecated) raw-bank-entry route below.
-    //
-    // CRITICAL: never pass default_for_currency here. Stripe's automatic
-    // payout sweep — which still drives every *standard* withdrawal — always
-    // pays out to whichever external account is currently default. Promoting
-    // a card would silently redirect standard withdrawals to it instead of
-    // the hunter's bank.
+    // POST /connect/debit-cards — DEPRECATED.
+    // Adding a debit card via a client-tokenized card token
+    // (stripe.accounts.createExternalAccount) can never succeed: these
+    // Connect accounts have controller.requirement_collection === "stripe",
+    // so Stripe rejects the call with a permissions error unconditionally —
+    // this is not a "payouts disabled" condition that can be worked around.
+    // Debit cards must be added through Stripe's own hosted Express
+    // Dashboard instead. Returns 410 Gone so clients can detect the
+    // deprecation and migrate, matching the POST /bank-accounts pattern.
     if (req.method === 'POST' && subPath === '/debit-cards') {
-      const body = await req.json().catch(() => ({}));
-      const token = typeof body?.token === 'string' ? body.token.trim() : '';
-      if (!token) {
-        return jsonResponse({ error: 'A card token is required.', code: 'missing_token' }, 400);
-      }
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('stripe_connect_account_id')
-        .eq('id', userId)
-        .single();
-
-      const accountId = (profile as { stripe_connect_account_id?: string } | null)
-        ?.stripe_connect_account_id;
-      if (!accountId) {
-        return jsonResponse(
-          {
-            error: 'Complete Stripe Connect onboarding before adding a payout card.',
-            code: 'connect_not_onboarded',
-          },
-          400
-        );
-      }
-
-      try {
-        const card = (await stripe.accounts.createExternalAccount(accountId, {
-          external_account: token,
-        })) as unknown as {
-          id: string;
-          brand?: string;
-          last4?: string;
-          exp_month?: number;
-          exp_year?: number;
-          available_payout_methods?: string[];
-        };
-
-        console.log('[connect/debit-cards] added debit card external account', {
-          userId,
-          accountId,
-          cardId: card.id,
-        });
-
-        const methods = card.available_payout_methods ?? [];
-        return jsonResponse({
-          debitCard: {
-            id: card.id,
-            brand: card.brand ?? null,
-            last4: card.last4 ?? null,
-            expMonth: card.exp_month ?? null,
-            expYear: card.exp_year ?? null,
-            availablePayoutMethods: methods,
-            instantEligible: methods.includes('instant'),
-          },
-        });
-      } catch (cardError) {
-        console.error('[connect/debit-cards] failed to add debit card', {
-          userId,
-          accountId,
-          error: (cardError as { message?: string })?.message,
-        });
-        return jsonResponse(
-          {
-            error: 'We could not add this debit card. Please check the card details and try again.',
-            code: 'debit_card_add_failed',
-          },
-          400
-        );
-      }
+      return jsonResponse(
+        {
+          error:
+            'Adding a debit card here is no longer supported. Please add it securely through your Stripe payout dashboard.',
+          code: 'debit_card_add_deprecated',
+          migrate_to: '/functions/v1/connect/login-link',
+        },
+        410,
+      );
     }
 
-    // DELETE /connect/debit-cards/:debitCardId — remove a debit card
+    // DELETE /connect/debit-cards/:debitCardId — DEPRECATED, same reason as
+    // POST /debit-cards above (stripe.accounts.deleteExternalAccount is
+    // rejected unconditionally for these accounts).
     if (req.method === 'DELETE' && subPath.startsWith('/debit-cards/')) {
-      const debitCardId = subPath.slice('/debit-cards/'.length).split('/')[0];
-      if (!debitCardId) {
-        return jsonResponse({ error: 'debitCardId is required' }, 400);
-      }
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('stripe_connect_account_id')
-        .eq('id', userId)
-        .single();
-
-      const accountId = (profile as { stripe_connect_account_id?: string } | null)
-        ?.stripe_connect_account_id;
-      if (!accountId) {
-        return jsonResponse({ error: 'Stripe Connect account not found' }, 404);
-      }
-
-      await stripe.accounts.deleteExternalAccount(accountId, debitCardId);
-      return jsonResponse({ success: true });
+      return jsonResponse(
+        {
+          error:
+            'Removing a debit card here is no longer supported. Please remove it through your Stripe payout dashboard.',
+          code: 'debit_card_remove_deprecated',
+          migrate_to: '/functions/v1/connect/login-link',
+        },
+        410,
+      );
     }
 
     // POST /connect/bank-accounts — DEPRECATED.
@@ -2025,64 +2005,40 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // DELETE /connect/bank-accounts/:bankAccountId — remove a bank account
+    // DELETE /connect/bank-accounts/:bankAccountId — DEPRECATED.
+    // stripe.accounts.deleteExternalAccount is rejected unconditionally for
+    // these Connect accounts (controller.requirement_collection === "stripe").
+    // Remove bank accounts through the Stripe payout dashboard instead.
     if (req.method === 'DELETE' && subPath.startsWith('/bank-accounts/')) {
-      const bankAccountId = subPath.slice('/bank-accounts/'.length).split('/')[0];
-      if (!bankAccountId) {
-        return jsonResponse({ error: 'bankAccountId is required' }, 400);
-      }
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('stripe_connect_account_id')
-        .eq('id', userId)
-        .single();
-
-      const accountId = (profile as { stripe_connect_account_id?: string } | null)
-        ?.stripe_connect_account_id;
-      if (!accountId) {
-        return jsonResponse({ error: 'Stripe Connect account not found' }, 404);
-      }
-
-      await stripe.accounts.deleteExternalAccount(accountId, bankAccountId);
-      return jsonResponse({ success: true });
+      return jsonResponse(
+        {
+          error:
+            'Removing a bank account here is no longer supported. Please remove it through your Stripe payout dashboard.',
+          code: 'bank_account_remove_deprecated',
+          migrate_to: '/functions/v1/connect/login-link',
+        },
+        410,
+      );
     }
 
-    // POST /connect/bank-accounts/:bankAccountId/default — set as default payout account
+    // POST /connect/bank-accounts/:bankAccountId/default — DEPRECATED.
+    // stripe.accounts.updateExternalAccount is rejected unconditionally for
+    // these Connect accounts. Set the default payout account through the
+    // Stripe payout dashboard instead.
     if (
       req.method === 'POST' &&
       subPath.startsWith('/bank-accounts/') &&
       subPath.endsWith('/default')
     ) {
-      const bankAccountId = subPath.slice('/bank-accounts/'.length).replace('/default', '');
-      if (!bankAccountId) {
-        return jsonResponse({ error: 'bankAccountId is required' }, 400);
-      }
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('stripe_connect_account_id')
-        .eq('id', userId)
-        .single();
-
-      const accountId = (profile as { stripe_connect_account_id?: string } | null)
-        ?.stripe_connect_account_id;
-      if (!accountId) {
-        return jsonResponse({ error: 'Stripe Connect account not found' }, 404);
-      }
-
-      const updated = (await stripe.accounts.updateExternalAccount(accountId, bankAccountId, {
-        default_for_currency: true,
-      } as Stripe.ExternalAccountUpdateParams)) as Stripe.BankAccount;
-
-      return jsonResponse({
-        success: true,
-        bankAccount: {
-          id: updated.id,
-          last4: updated.last4,
-          isDefault: updated.default_for_currency,
+      return jsonResponse(
+        {
+          error:
+            'Setting a default bank account here is no longer supported. Please set it through your Stripe payout dashboard.',
+          code: 'bank_account_default_deprecated',
+          migrate_to: '/functions/v1/connect/login-link',
         },
-      });
+        410,
+      );
     }
 
     return jsonResponse({ error: 'Not found' }, 404);

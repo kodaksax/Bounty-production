@@ -211,102 +211,17 @@ interface LinkedBankRow {
   created: number
 }
 
-/**
- * Mirror a Financial Connections account onto the user's Stripe Connect account
- * as a payout-eligible external bank account.
- *
- * Idempotent in two ways:
- *   1. If a `payment_methods` row for this user already records a
- *      `stripe_external_account_id` for the same `fcAccountId`, we re-fetch
- *      that external account from Stripe and reuse it (no new token, no new
- *      external account created).
- *   2. Otherwise we list existing external accounts on the Connect account and
- *      look for one whose underlying FC fingerprint matches the linked FC
- *      account before creating a fresh one. This prevents orphaned payout
- *      destinations when this function is retried after a partial failure.
- *
- * Returns the external account id (ba_*) on success, or null when the user has
- * no Connect account yet (deposit-only linking is still allowed).
- */
-async function mirrorFcAccountToConnect(params: {
-  stripe: Stripe
-  supabaseAdmin: any
-  userId: string
-  connectAccountId: string | null
-  fcAccountId: string
-}): Promise<string | null> {
-  const { stripe, supabaseAdmin, userId, connectAccountId, fcAccountId } = params
-  if (!connectAccountId) return null
-
-  // (1) DB-side idempotency: reuse the previously mirrored external account
-  // when we already have one recorded for this user + FC account.
-  try {
-    const { data: existingRow } = await withDbTimeout(
-      supabaseAdmin
-        .from('payment_methods')
-        .select('stripe_external_account_id')
-        .eq('user_id', userId)
-        .eq('fc_account_id', fcAccountId)
-        .not('stripe_external_account_id', 'is', null)
-        .maybeSingle(),
-    ) as any
-    const existingId: string | null = existingRow?.stripe_external_account_id ?? null
-    if (existingId) {
-      try {
-        // Confirm it still exists on the Connect account; if so, reuse.
-        await stripe.accounts.retrieveExternalAccount(connectAccountId, existingId)
-        return existingId
-      } catch (retrieveErr: any) {
-        if (retrieveErr?.code !== 'resource_missing') {
-          throw retrieveErr
-        }
-        // Stale row — the external account was removed out-of-band. Fall through
-        // and create a new one below.
-      }
-    }
-  } catch (lookupErr) {
-    console.warn('[payments] mirrorFcAccountToConnect: DB lookup failed', { userId, lookupErr })
-  }
-
-  // (2) Stripe-side idempotency: scan existing external accounts for one
-  // already linked to this FC account so a retry doesn't double-create.
-  try {
-    const externals = await stripe.accounts.listExternalAccounts(connectAccountId, {
-      object: 'bank_account',
-      limit: 100,
-    })
-    const match = (externals.data ?? []).find((ea: any) => {
-      // Stripe stores the linked FC account on the bank_account when one was
-      // used as the source. Field name varies by API version, so check both.
-      return (
-        ea?.financial_connections_account === fcAccountId ||
-        ea?.metadata?.financial_connections_account === fcAccountId
-      )
-    })
-    if (match?.id) {
-      return match.id as string
-    }
-  } catch (listErr) {
-    console.warn('[payments] mirrorFcAccountToConnect: list external accounts failed', {
-      userId,
-      listErr,
-    })
-  }
-
-  // No existing mirror found — create one. Stripe deduplicates the underlying
-  // bank record by fingerprint so this remains safe under benign retries.
-  const token = await stripe.tokens.create({
-    bank_account: {
-      financial_connections_account: fcAccountId,
-    } as any,
-  })
-
-  const external = (await stripe.accounts.createExternalAccount(connectAccountId, {
-    external_account: token.id,
-  })) as Stripe.BankAccount
-
-  return external.id
-}
+// NOTE: this used to also mirror a Financial-Connections-linked bank onto the
+// user's Stripe Connect account as a payout-eligible external account (via
+// stripe.tokens.create + stripe.accounts.createExternalAccount). That call
+// can never succeed: these Connect accounts have
+// controller.requirement_collection === "stripe", so Stripe rejects
+// createExternalAccount unconditionally with a permissions error — it was
+// silently failing on every call (caught, logged as a warning, HTTP 200
+// still returned) and no bank linked in-app ever actually became usable for
+// withdrawals. Financial Connections linking below is deposit-only now;
+// payout bank accounts must be added through Stripe's hosted Express
+// Dashboard (POST /connect/login-link in supabase/functions/connect/index.ts).
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -669,18 +584,6 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ linkedBanks: [] })
       }
 
-      // Look up Connect account so we can mirror linked banks for payouts.
-      const { data: profileRow } = await withDbTimeout(
-        supabaseAdmin
-          .from('profiles')
-          .select('stripe_connect_account_id')
-          .eq('id', userId)
-          .maybeSingle(),
-      ) as any
-      const connectAccountId =
-        (profileRow as { stripe_connect_account_id?: string } | null)?.stripe_connect_account_id ??
-        null
-
       const linkedBanks: LinkedBankRow[] = []
 
       for (const fcAccount of accounts) {
@@ -706,24 +609,10 @@ Deno.serve(async (req: Request) => {
           continue
         }
 
-        // 2) Mirror onto Connect account as a payout-eligible external account.
-        let externalAccountId: string | null = null
-        try {
-          externalAccountId = await mirrorFcAccountToConnect({
-            stripe,
-            supabaseAdmin,
-            userId,
-            connectAccountId,
-            fcAccountId,
-          })
-        } catch (mirrorErr: any) {
-          console.warn('[payments] Failed to mirror FC account to Connect external account', {
-            userId,
-            fcAccountId,
-            mirrorErr: mirrorErr?.message ?? mirrorErr,
-          })
-          // Non-fatal: the bank can still be used for deposits.
-        }
+        // Deposit-only: no Connect-side mirroring is attempted (see the note
+        // above the removed mirrorFcAccountToConnect function). This bank is
+        // NOT usable as a withdrawal destination.
+        const externalAccountId: string | null = null
 
         // 3) Upsert into payment_methods. Use stripe_payment_method_id as the
         // unique key (the table has a UNIQUE constraint on it).
@@ -828,22 +717,6 @@ Deno.serve(async (req: Request) => {
               .eq('id', newDefault.id),
           )
           newDefault.is_default = true
-
-          // Mirror default on the Connect external account when applicable.
-          if (connectAccountId && newDefault.stripe_external_account_id) {
-            try {
-              await stripe.accounts.updateExternalAccount(
-                connectAccountId,
-                newDefault.stripe_external_account_id,
-                { default_for_currency: true } as Stripe.ExternalAccountUpdateParams,
-              )
-            } catch (defaultErr) {
-              console.warn('[payments] Failed to set default external account', {
-                userId,
-                defaultErr,
-              })
-            }
-          }
         } catch (defErr) {
           console.warn('[payments] Failed to mark default payment method', { userId, defErr })
         }

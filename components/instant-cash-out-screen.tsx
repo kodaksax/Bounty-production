@@ -2,6 +2,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -19,7 +20,6 @@ import { formatCurrency } from '../lib/utils';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
 import { useWallet } from '../lib/wallet-context';
-import { AddDebitCardModal } from './add-debit-card-modal';
 import { WithdrawalConfirmSheet } from './ui/withdrawal-confirm-sheet';
 import { WithdrawalResultScreen, type WithdrawalResultStatus } from './ui/withdrawal-result-screen';
 
@@ -54,7 +54,7 @@ export function InstantCashOutScreen({
 }: InstantCashOutScreenProps) {
   const [selectedCardId, setSelectedCardId] = useState<string>('');
   const [amount, setAmount] = useState('');
-  const [showAddCard, setShowAddCard] = useState(false);
+  const [isOpeningDashboard, setIsOpeningDashboard] = useState(false);
   const [showConfirmSheet, setShowConfirmSheet] = useState(false);
   const [cashOutResult, setCashOutResult] = useState<{
     status: WithdrawalResultStatus;
@@ -87,7 +87,7 @@ export function InstantCashOutScreen({
   const loadError = eligibility.error ?? payoutMethods.error;
 
   // Auto-select the first instant-eligible card whenever the shared card
-  // list changes (e.g. after adding one via AddDebitCardModal).
+  // list changes (e.g. after adding one via the Stripe payout dashboard).
   useEffect(() => {
     if (selectedCardId && debitCards.some(c => c.id === selectedCardId && c.instantEligible)) return;
     const eligibleCard = debitCards.find(c => c.instantEligible);
@@ -169,14 +169,18 @@ export function InstantCashOutScreen({
     }
   };
 
-  if (showAddCard) {
-    return (
-      <AddDebitCardModal
-        onBack={() => setShowAddCard(false)}
-        onSave={() => payoutMethods.refresh()}
-      />
-    );
-  }
+  // Adding a debit card can only happen in Stripe's own hosted Express
+  // Dashboard — see use-payout-methods.tsx for why.
+  const handleOpenPayoutDashboard = async () => {
+    if (isOpeningDashboard) return;
+    setIsOpeningDashboard(true);
+    try {
+      const result = await payoutMethods.openPayoutDashboard();
+      if (!result.ok) Alert.alert('Error', result.error);
+    } finally {
+      setIsOpeningDashboard(false);
+    }
+  };
 
   if (cashOutResult) {
     return (
@@ -278,13 +282,20 @@ export function InstantCashOutScreen({
 
         {!loading && (
           <TouchableOpacity
-            onPress={() => setShowAddCard(true)}
+            onPress={handleOpenPayoutDashboard}
+            disabled={isOpeningDashboard}
             style={s.addCardButton}
             accessibilityRole="button"
             accessibilityLabel="Add a debit card"
           >
-            <MaterialIcons name="add" size={18} color={theme.primary} />
-            <Text style={s.addCardButtonText}>Add a debit card</Text>
+            {isOpeningDashboard ? (
+              <ActivityIndicator size="small" color={theme.primary} />
+            ) : (
+              <>
+                <MaterialIcons name="add" size={18} color={theme.primary} />
+                <Text style={s.addCardButtonText}>Add a debit card</Text>
+              </>
+            )}
           </TouchableOpacity>
         )}
 

@@ -3,7 +3,7 @@
  * usePayoutMethods/useConnectEligibility hooks instead of its own
  * independent bank-account/debit-card fetch logic.
  */
-import { fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import type { UseConnectEligibilityResult } from '../../hooks/use-connect-eligibility';
 import type { UsePayoutMethodsResult } from '../../hooks/use-payout-methods';
 import { PayoutMethodsScreen } from '../../components/payout-methods-screen';
@@ -17,13 +17,6 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
 }));
 
-jest.mock('../../components/add-bank-account-modal', () => ({
-  AddBankAccountModal: () => null,
-}));
-jest.mock('../../components/add-debit-card-modal', () => ({
-  AddDebitCardModal: () => null,
-}));
-
 function makePayoutMethods(overrides: Partial<UsePayoutMethodsResult> = {}): UsePayoutMethodsResult {
   return {
     bankAccounts: [],
@@ -35,9 +28,7 @@ function makePayoutMethods(overrides: Partial<UsePayoutMethodsResult> = {}): Use
     isLoading: false,
     error: null,
     refresh: jest.fn(),
-    removeBankAccount: jest.fn().mockResolvedValue({ ok: true }),
-    removeDebitCard: jest.fn().mockResolvedValue({ ok: true }),
-    setDefaultBankAccount: jest.fn().mockResolvedValue({ ok: true }),
+    openPayoutDashboard: jest.fn().mockResolvedValue({ ok: true }),
     ...overrides,
   };
 }
@@ -68,7 +59,7 @@ describe('PayoutMethodsScreen', () => {
   });
 
   it('shows a linked bank account with its Default badge', () => {
-    const { getByText, queryByText } = render(
+    const { getByText } = render(
       <PayoutMethodsScreen
         onBack={jest.fn()}
         payoutMethods={makePayoutMethods({
@@ -81,25 +72,21 @@ describe('PayoutMethodsScreen', () => {
     );
     expect(getByText(/Chase/)).toBeTruthy();
     expect(getByText('Default')).toBeTruthy();
-    expect(queryByText('Make Default')).toBeNull();
   });
 
-  it('shows "Make Default" for a non-default bank account and calls setDefaultBankAccount on press', async () => {
-    const setDefaultBankAccount = jest.fn().mockResolvedValue({ ok: true });
+  it('opens the Stripe payout dashboard when "Manage Payout Methods" is pressed', async () => {
+    const openPayoutDashboard = jest.fn().mockResolvedValue({ ok: true });
     const { getByText } = render(
       <PayoutMethodsScreen
         onBack={jest.fn()}
-        payoutMethods={makePayoutMethods({
-          bankAccounts: [
-            { id: 'ba_1', bankName: 'Chase', last4: '1234', default: false, status: 'verified' },
-          ],
-          setDefaultBankAccount,
-        })}
-        eligibility={makeEligibility()}
+        payoutMethods={makePayoutMethods({ openPayoutDashboard })}
+        eligibility={makeEligibility({ connectedAccountExists: true })}
       />
     );
-    fireEvent.press(getByText('Make Default'));
-    expect(setDefaultBankAccount).toHaveBeenCalledWith('ba_1');
+    await act(async () => {
+      fireEvent.press(getByText('Manage Payout Methods'));
+    });
+    expect(openPayoutDashboard).toHaveBeenCalled();
   });
 
   it('shows instant-eligible vs not-instant-eligible badges for debit cards', () => {

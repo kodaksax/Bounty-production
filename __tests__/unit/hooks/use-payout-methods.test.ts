@@ -14,6 +14,11 @@ jest.mock('../../../lib/config/api', () => ({ API_BASE_URL: 'https://api.example
 jest.mock('../../../lib/config', () => ({ config: { supabase: { anonKey: 'test-anon-key' } } }));
 jest.mock('../../../lib/constants', () => ({ MIN_WITHDRAWAL_AMOUNT: 10 }));
 
+const openUrlInBrowser = jest.fn();
+jest.mock('../../../lib/utils/browser', () => ({
+  openUrlInBrowser: (...args: unknown[]) => openUrlInBrowser(...args),
+}));
+
 import { useAuthContext } from '../../../hooks/use-auth-context';
 import { usePayoutMethods } from '../../../hooks/use-payout-methods';
 
@@ -92,8 +97,10 @@ describe('usePayoutMethods', () => {
     expect(result.current.debitCards).toEqual([]);
   });
 
-  describe('removeBankAccount', () => {
-    it('returns ok and refreshes on success', async () => {
+  describe('openPayoutDashboard', () => {
+    beforeEach(() => openUrlInBrowser.mockReset());
+
+    it('fetches a login link, opens it in the browser, refreshes, and returns ok', async () => {
       mockFetchSequence([
         { ok: true, json: () => Promise.resolve({ bankAccounts: [bankAccount] }) },
         { ok: true, json: () => Promise.resolve({ debitCards: [] }) },
@@ -102,20 +109,21 @@ describe('usePayoutMethods', () => {
       await waitFor(() => expect(result.current.isLoading).toBe(false));
 
       mockFetchSequence([
-        { ok: true }, // DELETE
-        { ok: true, json: () => Promise.resolve({ bankAccounts: [] }) }, // refresh: bank-accounts
+        { ok: true, json: () => Promise.resolve({ url: 'https://connect.stripe.com/express/abc' }) }, // login-link
+        { ok: true, json: () => Promise.resolve({ bankAccounts: [{ ...bankAccount, default: true }] }) }, // refresh: bank-accounts
         { ok: true, json: () => Promise.resolve({ debitCards: [] }) }, // refresh: debit-cards
       ]);
+      openUrlInBrowser.mockResolvedValue({ success: true });
 
       let outcome: { ok: boolean };
       await act(async () => {
-        outcome = await result.current.removeBankAccount('ba_1');
+        outcome = await result.current.openPayoutDashboard();
       });
       expect(outcome!.ok).toBe(true);
-      await waitFor(() => expect(result.current.bankAccounts).toEqual([]));
+      expect(openUrlInBrowser).toHaveBeenCalledWith('https://connect.stripe.com/express/abc');
     });
 
-    it('returns a friendly error on failure without throwing', async () => {
+    it('returns a friendly error when the login-link request fails, without opening a browser', async () => {
       mockFetchSequence([
         { ok: true, json: () => Promise.resolve({ bankAccounts: [bankAccount] }) },
         { ok: true, json: () => Promise.resolve({ debitCards: [] }) },
@@ -123,33 +131,33 @@ describe('usePayoutMethods', () => {
       const { result } = renderHook(() => usePayoutMethods());
       await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-      mockFetchSequence([{ ok: false }]);
+      mockFetchSequence([{ ok: false, json: () => Promise.resolve({ error: 'nope' }) }]);
       let outcome: { ok: boolean; error?: string };
       await act(async () => {
-        outcome = await result.current.removeBankAccount('ba_1');
+        outcome = await result.current.openPayoutDashboard();
       });
       expect(outcome!.ok).toBe(false);
       expect(outcome!.error).toBeTruthy();
+      expect(openUrlInBrowser).not.toHaveBeenCalled();
     });
-  });
 
-  it('setDefaultBankAccount posts to the /default route and refreshes', async () => {
-    mockFetchSequence([
-      { ok: true, json: () => Promise.resolve({ bankAccounts: [bankAccount] }) },
-      { ok: true, json: () => Promise.resolve({ debitCards: [] }) },
-    ]);
-    const { result } = renderHook(() => usePayoutMethods());
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    it('returns a friendly error when the browser fails to open', async () => {
+      mockFetchSequence([
+        { ok: true, json: () => Promise.resolve({ bankAccounts: [bankAccount] }) },
+        { ok: true, json: () => Promise.resolve({ debitCards: [] }) },
+      ]);
+      const { result } = renderHook(() => usePayoutMethods());
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    mockFetchSequence([
-      { ok: true },
-      { ok: true, json: () => Promise.resolve({ bankAccounts: [{ ...bankAccount, default: true }] }) },
-      { ok: true, json: () => Promise.resolve({ debitCards: [] }) },
-    ]);
-    let outcome: { ok: boolean };
-    await act(async () => {
-      outcome = await result.current.setDefaultBankAccount('ba_1');
+      mockFetchSequence([{ ok: true, json: () => Promise.resolve({ url: 'https://connect.stripe.com/express/abc' }) }]);
+      openUrlInBrowser.mockResolvedValue({ success: false, error: 'Cannot open URL' });
+
+      let outcome: { ok: boolean; error?: string };
+      await act(async () => {
+        outcome = await result.current.openPayoutDashboard();
+      });
+      expect(outcome!.ok).toBe(false);
+      expect(outcome!.error).toBe('Cannot open URL');
     });
-    expect(outcome!.ok).toBe(true);
   });
 });

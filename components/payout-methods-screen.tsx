@@ -16,8 +16,6 @@ import type { UseConnectEligibilityResult } from '../hooks/use-connect-eligibili
 import type { UsePayoutMethodsResult } from '../hooks/use-payout-methods';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
-import { AddBankAccountModal } from './add-bank-account-modal';
-import { AddDebitCardModal } from './add-debit-card-modal';
 
 interface PayoutMethodsScreenProps {
   onBack: () => void;
@@ -28,62 +26,34 @@ interface PayoutMethodsScreenProps {
 /**
  * Payout destination management: bank accounts (standard withdrawals, one
  * can be `default` — Stripe's automatic sweep always targets whichever
- * account is default) and debit cards (Instant Cash Out only — deliberately
- * never has a "set default" affordance, since a card must never become
- * default_for_currency; see the constraint documented next to
- * resolveInstantDestination() in supabase/functions/connect/index.ts).
+ * account is default) and debit cards (Instant Cash Out only).
+ *
+ * Adding, removing, and setting a default account all happen in Stripe's own
+ * hosted Express Dashboard (opened via openPayoutDashboard) — these Connect
+ * accounts have controller.requirement_collection === "stripe", so Stripe
+ * rejects any platform-side write to external accounts unconditionally. This
+ * screen is read-only plus a single entry point into that dashboard.
  */
 export function PayoutMethodsScreen({ onBack, payoutMethods, eligibility }: PayoutMethodsScreenProps) {
-  const [showAddBank, setShowAddBank] = useState(false);
-  const [showAddCard, setShowAddCard] = useState(false);
+  const [isOpeningDashboard, setIsOpeningDashboard] = useState(false);
 
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const { bankAccounts, debitCards, isLoading, refresh, removeBankAccount, removeDebitCard, setDefaultBankAccount } =
-    payoutMethods;
+  const { bankAccounts, debitCards, isLoading, openPayoutDashboard } = payoutMethods;
 
-  const handleSetDefaultBank = async (bankAccountId: string) => {
-    const result = await setDefaultBankAccount(bankAccountId);
-    if (!result.ok) Alert.alert('Error', result.error);
+  const handleOpenDashboard = async () => {
+    if (isOpeningDashboard) return;
+    setIsOpeningDashboard(true);
+    try {
+      const result = await openPayoutDashboard();
+      if (!result.ok) Alert.alert('Error', result.error);
+    } finally {
+      setIsOpeningDashboard(false);
+    }
   };
-
-  const handleRemoveBank = (bankAccountId: string) => {
-    Alert.alert('Remove Bank Account', 'Are you sure you want to remove this bank account?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          const result = await removeBankAccount(bankAccountId);
-          if (!result.ok) Alert.alert('Error', result.error);
-        },
-      },
-    ]);
-  };
-
-  const handleRemoveCard = (debitCardId: string) => {
-    Alert.alert('Remove Debit Card', 'Are you sure you want to remove this debit card?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          const result = await removeDebitCard(debitCardId);
-          if (!result.ok) Alert.alert('Error', result.error);
-        },
-      },
-    ]);
-  };
-
-  if (showAddBank) {
-    return <AddBankAccountModal onBack={() => setShowAddBank(false)} onSave={() => refresh()} />;
-  }
-  if (showAddCard) {
-    return <AddDebitCardModal onBack={() => setShowAddCard(false)} onSave={() => refresh()} />;
-  }
 
   return (
     <View style={s.container}>
@@ -100,16 +70,32 @@ export function PayoutMethodsScreen({ onBack, payoutMethods, eligibility }: Payo
           <ActivityIndicator size="small" color={theme.primary} style={{ marginVertical: 24 }} />
         ) : (
           <>
+            {eligibility.connectedAccountExists && (
+              <TouchableOpacity
+                onPress={handleOpenDashboard}
+                disabled={isOpeningDashboard}
+                style={[s.dashboardButton, isOpeningDashboard && s.dashboardButtonDisabled]}
+                accessibilityRole="button"
+                accessibilityLabel="Manage payout methods"
+                accessibilityHint="Opens your Stripe payout dashboard to add, remove, or set a default bank account or debit card"
+              >
+                {isOpeningDashboard ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <>
+                    <MaterialIcons name="open-in-new" size={18} color="#ffffff" />
+                    <Text style={s.dashboardButtonText}>Manage Payout Methods</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+
             <View style={s.section}>
               <View style={s.sectionHeader}>
                 <View>
                   <Text style={s.sectionTitle}>Bank Account</Text>
                   <Text style={s.sectionSubtitle}>Standard withdrawals · no fee · 1-2 business days</Text>
                 </View>
-                <TouchableOpacity onPress={() => setShowAddBank(true)} style={s.addButton} accessibilityRole="button" accessibilityLabel="Add bank account">
-                  <MaterialIcons name="add" size={18} color={theme.primary} />
-                  <Text style={s.addButtonText}>Add</Text>
-                </TouchableOpacity>
               </View>
 
               {bankAccounts.length === 0 ? (
@@ -131,15 +117,7 @@ export function PayoutMethodsScreen({ onBack, payoutMethods, eligibility }: Payo
                         )}
                       </View>
                       <Text style={s.methodStatus}>Status: {account.status}</Text>
-                      {!account.default && (
-                        <TouchableOpacity onPress={() => handleSetDefaultBank(account.id)} accessibilityRole="button" accessibilityLabel="Make default">
-                          <Text style={s.setDefaultLink}>Make Default</Text>
-                        </TouchableOpacity>
-                      )}
                     </View>
-                    <TouchableOpacity onPress={() => handleRemoveBank(account.id)} style={s.removeButton} accessibilityRole="button" accessibilityLabel="Remove bank account">
-                      <MaterialIcons name="close" size={20} color={theme.textDisabled} />
-                    </TouchableOpacity>
                   </View>
                 ))
               )}
@@ -151,10 +129,6 @@ export function PayoutMethodsScreen({ onBack, payoutMethods, eligibility }: Payo
                   <Text style={s.sectionTitle}>Debit Card</Text>
                   <Text style={s.sectionSubtitle}>Instant Cash Out only · fee applies · usually minutes</Text>
                 </View>
-                <TouchableOpacity onPress={() => setShowAddCard(true)} style={s.addButton} accessibilityRole="button" accessibilityLabel="Add debit card">
-                  <MaterialIcons name="add" size={18} color={theme.primary} />
-                  <Text style={s.addButtonText}>Add</Text>
-                </TouchableOpacity>
               </View>
 
               {debitCards.length === 0 ? (
@@ -183,9 +157,6 @@ export function PayoutMethodsScreen({ onBack, payoutMethods, eligibility }: Payo
                         <Text style={s.methodStatus}>Expires {card.expMonth}/{card.expYear}</Text>
                       ) : null}
                     </View>
-                    <TouchableOpacity onPress={() => handleRemoveCard(card.id)} style={s.removeButton} accessibilityRole="button" accessibilityLabel="Remove debit card">
-                      <MaterialIcons name="close" size={20} color={theme.textDisabled} />
-                    </TouchableOpacity>
                   </View>
                 ))
               )}
@@ -223,11 +194,12 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
   sectionTitle: { fontSize: 15, fontWeight: '600', color: t.text },
   sectionSubtitle: { fontSize: 12, color: t.textSecondary, marginTop: 2 },
-  addButton: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: t.surfaceSecondary,
-    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
+  dashboardButton: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: t.primary, borderRadius: 12, paddingVertical: 14, marginBottom: 20,
   },
-  addButtonText: { fontSize: 14, fontWeight: '600', color: t.primary, marginLeft: 4 },
+  dashboardButtonDisabled: { opacity: 0.6 },
+  dashboardButtonText: { fontSize: 15, fontWeight: '600', color: '#ffffff' },
   emptyState: {
     flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: t.surfaceSecondary,
     borderRadius: 10, padding: 12,
@@ -247,8 +219,6 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
   instantBadgeText: { fontSize: 10, fontWeight: '600', color: '#22c55e' },
   ineligibleBadge: { backgroundColor: 'rgba(148,163,184,0.15)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
   ineligibleBadgeText: { fontSize: 10, fontWeight: '600', color: t.textDisabled },
-  setDefaultLink: { fontSize: 12, fontWeight: '600', color: t.primary, marginTop: 4 },
-  removeButton: { padding: 8 },
   paymentActivityLink: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: t.surface,
     borderRadius: 12, padding: 14, marginTop: 4,
