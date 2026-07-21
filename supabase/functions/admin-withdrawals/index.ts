@@ -218,7 +218,7 @@ Deno.serve(async (req: Request) => {
 
   const { action } = body;
 
-  // ─── list_log ───────────────────────────────────────────────────────────
+  // ─── list_log ────────────────────────────────────────────────────────────────
   if (action === 'list_log') {
     const limit = Math.min(Math.max(Number(body.limit) || 50, 1), 200);
     let query = supabase
@@ -237,7 +237,7 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ entries: data });
   }
 
-  // ─── force_retry ────────────────────────────────────────────────────────
+  // ─── force_retry ────────────────────────────────────────────────────────────
   if (action === 'force_retry') {
     const { transactionId, reason } = body;
     const requestedBankAccountId =
@@ -480,7 +480,7 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ success: true, transferId: transfer.id, transactionId });
   }
 
-  // ─── manual_adjustment ──────────────────────────────────────────────────
+  // ─── manual_adjustment ───────────────────────────────────────────────────────
   if (action === 'manual_adjustment') {
     const { userId, reason, relatedTransactionId } = body;
     const amount = Number(body.amount);
@@ -563,7 +563,7 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ success: true, newBalance });
   }
 
-  // ─── mark_externally_settled ────────────────────────────────────────────
+  // ─── mark_externally_settled ────────────────────────────────
   // For a withdrawal resolved outside the normal Stripe transfer/payout flow
   // (e.g. paid by another means after confirming no Stripe payout landed).
   // Requires `confirmedNoStripePayout: true` to be passed explicitly — this
@@ -707,7 +707,7 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ success: true, transactionId, newStatus: 'manually_paid', newBalance });
   }
 
-  // ─── reverse_transfer ───────────────────────────────────────────────────
+  // ─── reverse_transfer ─────────────────────────────────────────────────────────
   // Pulls a completed Transfer's funds back from the connected account's
   // Stripe balance to the platform, preventing Stripe's own automatic payout
   // schedule from later sweeping it to the hunter's bank. Deliberately
@@ -825,7 +825,7 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ success: true, transactionId, reversalId: reversal.id });
   }
 
-  // ─── run_reconciliation ─────────────────────────────────────────────────
+  // ─── run_reconciliation ───────────────────────────────────────────────
   // On-demand version of the daily pg_cron job — same underlying function,
   // safe to call anytime (read-heavy, only writes diagnostic findings rows,
   // never touches balances or Stripe). Returns the current unacknowledged
@@ -858,7 +858,7 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  // ─── compare_stripe ─────────────────────────────────────────────────────
+  // ─── compare_stripe ────────────────────────────────────────────────────
   // Read-only Stripe-vs-ledger comparison for a single transaction. Uses this
   // function's own STRIPE_SECRET_KEY (full platform access), not the
   // separately-restricted key some external tooling may be limited to — this
