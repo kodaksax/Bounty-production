@@ -123,9 +123,13 @@ export const blockingService = {
         return { success: false, error: 'User not authenticated' };
       }
 
+      // No `profiles` embed: blocked users are by definition OTHER users, and
+      // the base table's SELECT RLS is self-only (`auth.uid() = id`), so the
+      // embed resolved to null for every row. Enrich from the `public_profiles`
+      // view instead. See docs/withdrawals/08-profiles-rls-migration-strategy.md.
       const { data, error } = await supabase
         .from('blocked_users')
-        .select('*, profiles!blocked_users_blocked_id_fkey(id, username, avatar)')
+        .select('*')
         .eq('blocker_id', blockerId);
 
       if (error) {
@@ -133,7 +137,33 @@ export const blockingService = {
         return { success: false, error: error.message };
       }
 
-      return { success: true, blockedUsers: data || [] };
+      const rows = data || [];
+      const blockedIds = Array.from(
+        new Set(rows.map((r: any) => r.blocked_id).filter(Boolean))
+      );
+
+      let profileMap = new Map<string, any>();
+      if (blockedIds.length > 0) {
+        const { data: profiles, error: profilesError } = await supabase
+          .from('public_profiles')
+          .select('id, username, avatar')
+          .in('id', blockedIds);
+
+        if (profilesError) {
+          // Non-fatal: the block itself is still in effect, we just cannot
+          // render a name for it.
+          logger.warning('Could not fetch blocked-user profiles', { error: profilesError });
+        } else {
+          profileMap = new Map((profiles || []).map((p: any) => [String(p.id), p]));
+        }
+      }
+
+      const blockedUsers = rows.map((r: any) => ({
+        ...r,
+        profiles: profileMap.get(String(r.blocked_id)) ?? null,
+      }));
+
+      return { success: true, blockedUsers };
     } catch (error) {
       logger.error('Error fetching blocked users:', { error });
       return {

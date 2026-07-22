@@ -26,16 +26,22 @@ async function getWsAdapter(): Promise<WsAdapter> {
   return wsAdapterInstance;
 }
 
-// Helper: if the profiles relationship no longer exists in the DB schema, fallback
-// to fetching bounties without the join and then separately fetch profiles by poster_id
-// and attach username/avatar to the bounty objects.
+// Attach poster username/avatar to bounty rows.
+//
+// Reads `public_profiles`, NOT `profiles`. The base table's SELECT RLS only
+// permits `auth.uid() = id` (every permissive cross-user policy was dropped by
+// 20260719060100_drop_redundant_permissive_profiles_select_authenticated_policy.sql),
+// so querying `profiles` here returns only the caller's own row -- which made the
+// feed show nothing but the caller's own bounties. `public_profiles` is the
+// curated safe-columns view that intentionally bypasses base-table RLS for
+// exactly this purpose. See docs/withdrawals/08-profiles-rls-migration-strategy.md.
 async function attachProfilesToBounties(items: any[]) {
   if (!items || items.length === 0) return items;
   try {
     const ids = Array.from(new Set(items.map(i => i.poster_id).filter(Boolean)));
     if (ids.length === 0) return items;
     const { data: profiles, error } = await supabase
-      .from('profiles')
+      .from('public_profiles')
       .select('id, username, avatar')
       .in('id', ids);
 
@@ -108,63 +114,36 @@ export const bountyService = {
     try {
       // Prefer Supabase when configured; Supabase can match UUID or numeric ids depending on schema
       if (isSupabaseConfigured) {
+        // No `profiles` embed here — see the comment in `getAll`. The base
+        // table is self-only under RLS, so the embed returned a null poster for
+        // every bounty the caller didn't post. Enrich via `public_profiles`.
         const { data, error } = await supabase
           .from('bounties')
-          .select(
-            `
-            *,
-            profiles!bounties_poster_id_fkey (
-              username,
-              avatar
-            )
-          `
-          )
+          .select('*')
           .eq('id', id as any)
           .single();
 
         if (error) {
-          // Supabase returns a plain object for errors. If the relationship to
-          // profiles was removed, fallback to join-less retrieval and attach profiles.
           const msg = (error as any)?.message ?? JSON.stringify(error);
           logger.error('Supabase getById error', { error });
-          if (/Could not find a relationship between 'bounties' and 'profiles'/.test(msg)) {
-            // Fetch bounty without join, normalise id fields, then attach profile
-            const { data: raw, error: rawErr } = await supabase
-              .from('bounties')
-              .select('*')
-              .eq('id', id as any)
-              .single();
-
-            if (rawErr) throw new Error((rawErr as any)?.message ?? JSON.stringify(rawErr));
-            const normalizedRaw = {
-              ...raw,
-              poster_id: (raw as any).poster_id ?? (raw as any).user_id,
-              user_id: (raw as any).user_id ?? (raw as any).poster_id,
-            };
-            const withProfile = await attachProfilesToBounties([normalizedRaw]);
-            const item = (withProfile[0] as any) ?? null;
-            if (!item) return null;
-            return {
-              ...item,
-              poster_id: item.poster_id ?? item.user_id,
-              user_id: item.user_id ?? item.poster_id,
-              profiles: undefined,
-            } as Bounty;
-          }
           throw new Error(msg);
         }
 
-        // Transform data to flatten profile info
         if (data) {
-          const bounty = {
+          const normalizedRaw = {
             ...data,
-            poster_id: (data as any).user_id ?? (data as any).poster_id,
+            poster_id: (data as any).poster_id ?? (data as any).user_id,
             user_id: (data as any).user_id ?? (data as any).poster_id,
-            username: (data as any).profiles?.username,
-            poster_avatar: (data as any).profiles?.avatar,
-            profiles: undefined,
           };
-          return bounty as Bounty;
+          const withProfile = await attachProfilesToBounties([normalizedRaw]);
+          const item = (withProfile[0] as any) ?? null;
+          if (!item) return null;
+          return {
+            ...item,
+            poster_id: item.poster_id ?? item.user_id,
+            user_id: item.user_id ?? item.poster_id,
+            profiles: undefined,
+          } as Bounty;
         }
         return null;
       }
@@ -340,17 +319,12 @@ export const bountyService = {
         const qEscaped = escapeIlike(q);
         const qPattern = `%${qEscaped}%`;
         const qQuoted = quotePostgrestValue(qPattern);
+        // No `profiles` embed — the base table is self-only under RLS, so the
+        // embed yields a null poster for every result the caller did not post.
+        // Poster data is attached from `public_profiles` below.
         let sbQuery = supabase
           .from('bounties')
-          .select(
-            `
-            *,
-            profiles!bounties_poster_id_fkey (
-              username,
-              avatar
-            )
-          `
-          )
+          .select('*')
           .eq('status', 'open')
           .or(`title.ilike.${qQuoted},description.ilike.${qQuoted}`)
           .order('created_at', { ascending: false })
@@ -360,39 +334,16 @@ export const bountyService = {
         if (error) {
           const msg = (error as any)?.message ?? JSON.stringify(error);
           logger.error('Supabase search error', { error, query: q });
-          if (/Could not find a relationship between 'bounties' and 'profiles'/.test(msg)) {
-            // Query without join then attach profiles (normalise ids first so poster_id is present)
-            const qPatternNoJoin = `%${qEscaped}%`;
-            const qQuotedNoJoin = quotePostgrestValue(qPatternNoJoin);
-            const { data: dataNoJoin, error: rawErr } = await supabase
-              .from('bounties')
-              .select('*')
-              .eq('status', 'open')
-              .or(`title.ilike.${qQuotedNoJoin},description.ilike.${qQuotedNoJoin}`)
-              .order('created_at', { ascending: false })
-              .range(offset, offset + limit - 1);
-
-            if (rawErr) throw new Error((rawErr as any)?.message ?? JSON.stringify(rawErr));
-            const normalized = (dataNoJoin || []).map((it: any) => ({
-              ...it,
-              poster_id: it.poster_id ?? it.user_id,
-              user_id: it.user_id ?? it.poster_id,
-            }));
-            const merged = await attachProfilesToBounties(normalized);
-            return (merged || []).map((i: any) => ({ ...i, profiles: undefined })) as Bounty[];
-          }
           throw new Error(msg);
         }
 
-        // Transform data to flatten profile info
-        const bounties = (data || []).map((item: any) => ({
-          ...item,
-          poster_id: item.user_id ?? item.poster_id,
-          user_id: item.user_id ?? item.poster_id,
-          username: item.profiles?.username,
-          poster_avatar: item.profiles?.avatar,
-          profiles: undefined,
+        const normalized = (data || []).map((it: any) => ({
+          ...it,
+          poster_id: it.poster_id ?? it.user_id,
+          user_id: it.user_id ?? it.poster_id,
         }));
+        const merged = await attachProfilesToBounties(normalized);
+        const bounties = (merged || []).map((i: any) => ({ ...i, profiles: undefined }));
 
         return bounties as Bounty[];
       }
@@ -443,13 +394,9 @@ export const bountyService = {
         const limit = filters.limit ?? 20;
         const offset = filters.offset ?? 0;
 
-        let query = supabase.from('bounties').select(`
-            *,
-            profiles!bounties_poster_id_fkey (
-              username,
-              avatar
-            )
-          `);
+        // No `profiles` embed — see `search()`. Poster data is attached from
+        // `public_profiles` after the rows come back.
+        let query = supabase.from('bounties').select('*');
 
         // Apply filters
         if (filters.status && filters.status.length > 0) {
@@ -592,16 +539,13 @@ export const bountyService = {
           throw new Error(msg);
         }
 
-        const bounties = (data || []).map((item: any) => ({
+        const normalizedRows = (data || []).map((item: any) => ({
           ...item,
-          poster_id: item.user_id ?? item.poster_id,
+          poster_id: item.poster_id ?? item.user_id,
           user_id: item.user_id ?? item.poster_id,
-          username: item.profiles?.username,
-          poster_avatar: item.profiles?.avatar,
-          profiles: undefined,
         }));
-
-        return bounties as Bounty[];
+        const mergedRows = await attachProfilesToBounties(normalizedRows);
+        return (mergedRows || []).map((i: any) => ({ ...i, profiles: undefined })) as Bounty[];
       }
 
       // API fallback - construct query parameters
@@ -640,18 +584,15 @@ export const bountyService = {
     try {
       // Prefer Supabase when configured
       if (isSupabaseConfigured) {
-        // Inner join with profiles — excludes bounties whose poster profile no longer exists
-        let query = supabase
+        // Deliberately NOT a PostgREST embed of `profiles`. That embed resolves
+        // through the base table, whose SELECT RLS is now self-only
+        // (`auth.uid() = id`), so an `!inner` embed silently filtered the feed
+        // down to the caller's own bounties and a non-inner embed returned a
+        // null profile for every other poster. Fetch bounties on their own and
+        // enrich from the `public_profiles` view instead.
+        let query: any = supabase
           .from('bounties')
-          .select(
-            `
-            *,
-            profiles!bounties_poster_id_fkey!inner (
-              username,
-              avatar
-            )
-          `
-          )
+          .select('*')
           .order('created_at', { ascending: false });
 
         if (options?.status) query = query.eq('status', options.status);
@@ -667,42 +608,23 @@ export const bountyService = {
         if (error) {
           const msg = (error as any)?.message ?? JSON.stringify(error);
           logger.error('Supabase getAll error', { error, options });
-          if (/Could not find a relationship between 'bounties' and 'profiles'/.test(msg)) {
-            // Fetch without join then attach profiles
-            let qNoJoin: any = supabase
-              .from('bounties')
-              .select('*')
-              .order('created_at', { ascending: false });
-            if (options?.status) qNoJoin = qNoJoin.eq('status', options.status);
-            if (options?.userId) qNoJoin = qNoJoin.eq('poster_id', options.userId);
-            if (options?.workType) qNoJoin = qNoJoin.eq('work_type', options.workType);
-            if (!options?.includeArchived) qNoJoin = qNoJoin.neq('status', 'archived');
-            qNoJoin = qNoJoin.range(offset, offset + limit - 1);
-
-            const { data: dataNoJoin, error: rawErr } = await qNoJoin;
-            if (rawErr) throw new Error((rawErr as any)?.message ?? JSON.stringify(rawErr));
-            const normalized = (dataNoJoin || []).map((it: any) => ({
-              ...it,
-              poster_id: it.poster_id ?? it.user_id,
-              user_id: it.user_id ?? it.poster_id,
-            }));
-            const merged = await attachProfilesToBounties(normalized);
-            return (merged || []).map((i: any) => ({ ...i, profiles: undefined })) as Bounty[];
-          }
           throw new Error(msg);
         }
 
-        // Transform data to flatten profile info into bounty object
-        const bounties = (data || []).map((item: any) => ({
-          ...item,
-          poster_id: item.user_id ?? item.poster_id,
-          user_id: item.user_id ?? item.poster_id,
-          username: item.profiles?.username,
-          poster_avatar: item.profiles?.avatar,
-          profiles: undefined, // Remove nested profiles object
+        const normalized = (data || []).map((it: any) => ({
+          ...it,
+          poster_id: it.poster_id ?? it.user_id,
+          user_id: it.user_id ?? it.poster_id,
         }));
 
-        return bounties as Bounty[];
+        const merged = await attachProfilesToBounties(normalized);
+
+        // Preserves the old `!inner` semantic: a bounty whose poster profile no
+        // longer exists (deleted account) drops out of the feed rather than
+        // rendering with a blank poster.
+        return (merged || [])
+          .filter((i: any) => i.username != null)
+          .map((i: any) => ({ ...i, profiles: undefined })) as Bounty[];
       }
 
       const API_URL = `${getApiBaseUrl()}/api/bounties`;

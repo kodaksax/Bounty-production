@@ -236,20 +236,21 @@ export const userProfileService = {
         // subsequent loads.
         try {
 
-          // First try the canonical 'profiles' table (may contain sensitive fields
-          // and might only be accessible for the current user). If that fails or
-          // returns no row, fall back to 'public_profiles' which contains the
-          // public-safe fields (username, avatar, display name) for other users.
+          // Reads 'public_profiles', the curated safe-columns view. The base
+          // 'profiles' table is NOT usable here: its SELECT RLS is self-only
+          // ('auth.uid() = id'), so it returns no row for any user other than
+          // the caller — which is exactly why this path used to fall through to
+          // 'Unknown Poster'. See docs/withdrawals/08-profiles-rls-migration-strategy.md.
           let remoteData: any | null = null;
           let remoteError: any = null;
 
           try {
             // Select columns known to exist in all environments (omit 'about' — not
             // present in staging schema). The 'about' / bio field is sourced from
-            // auth-profile-service which uses select('*') and is the authoritative
-            // profile provider; this path is only a lightweight fallback for display names.
+            // auth-profile-service and is the authoritative profile provider; this
+            // path is only a lightweight fallback for display names.
             const res = await supabase
-              .from('profiles')
+              .from('public_profiles')
               .select('id,username,display_name,avatar,location')
               .eq('id', resolvedUserId)
               .single();
@@ -260,37 +261,8 @@ export const userProfileService = {
             remoteError = e;
           }
 
-          // If profiles table returned nothing or access was denied, try public_profiles.
-          // Skip silently when the table simply doesn't exist in this environment (PGRST205).
           if (!remoteData) {
-            try {
-              const pub = await supabase
-                .from('public_profiles')
-                .select('id,username,display_name,avatar,location')
-                .eq('id', resolvedUserId)
-                .single();
-              if (pub.error) {
-                const isTableMissing =
-                  pub.error?.code === 'PGRST205' ||
-                  String(pub.error?.message ?? '').includes('schema cache');
-                if (!isTableMissing) {
-                  // Unexpected error — log so it's visible but don't block.
-                  console.warn('[userProfile] public_profiles fetch error for user', resolvedUserId, {
-                    errorCode: pub.error?.code,
-                    errorMessage: pub.error?.message,
-                  });
-                }
-                // table-not-found is a normal fallback failure in staging; skip silently.
-              } else {
-                remoteData = pub.data ?? null;
-              }
-            } catch (e) {
-              console.warn('[userProfile] Error fetching from public_profiles for user', resolvedUserId, e);
-            }
-          }
-
-          if (!remoteData) {
-            console.error('[userProfile] No remote profile found (profiles/public_profiles) for user:', resolvedUserId, 'priorError=', remoteError);
+            console.error('[userProfile] No remote profile found (public_profiles) for user:', resolvedUserId, 'priorError=', remoteError);
             return null;
           }
 

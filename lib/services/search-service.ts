@@ -42,6 +42,49 @@ const COMMON_SKILLS = [
   'Social Media',
 ];
 
+/**
+ * Attach poster `username`/`avatar` to raw bounty rows from `public_profiles`.
+ *
+ * Cross-user profile display data must come from the `public_profiles` view:
+ * the base `profiles` table's SELECT RLS is self-only (`auth.uid() = id`), so
+ * both a PostgREST embed and a direct `profiles` query return nothing for any
+ * poster other than the caller.
+ * See docs/withdrawals/08-profiles-rls-migration-strategy.md.
+ */
+async function attachPosterProfiles(items: any[]): Promise<any[]> {
+  if (!items || items.length === 0) return items;
+  try {
+    const ids = Array.from(
+      new Set(items.map((i: any) => i.poster_id ?? i.user_id).filter(Boolean))
+    );
+    if (ids.length === 0) return items;
+
+    const { data: profiles, error } = await supabase
+      .from('public_profiles')
+      .select('id, username, avatar')
+      .in('id', ids);
+
+    if (error) {
+      logger.warning('attachPosterProfiles: public_profiles fetch failed', { error });
+      return items;
+    }
+
+    const map = new Map<string, any>();
+    (profiles || []).forEach((p: any) => map.set(String(p.id), p));
+    return items.map((it: any) => {
+      const p = map.get(String(it.poster_id ?? it.user_id));
+      return {
+        ...it,
+        username: p?.username ?? it.username,
+        poster_avatar: p?.avatar ?? it.poster_avatar,
+      };
+    });
+  } catch (e) {
+    logger.warning('attachPosterProfiles failed', { error: (e as any)?.message });
+    return items;
+  }
+}
+
 export const searchService = {
   /**
    * Get autocomplete suggestions based on query
@@ -116,17 +159,12 @@ export const searchService = {
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
+      // No `profiles` embed — the base table's SELECT RLS is self-only, so the
+      // embed yields a null poster for everyone but the caller. Poster display
+      // data is enriched from `public_profiles` below.
       const { data: bounties, error } = await supabase
         .from('bounties')
-        .select(
-          `
-          *,
-          profiles!bounties_poster_id_fkey (
-            username,
-            avatar
-          )
-        `
-        )
+        .select('*')
         .eq('status', 'open')
         .gte('created_at', sevenDaysAgo.toISOString())
         .order('created_at', { ascending: false })
@@ -160,7 +198,7 @@ export const searchService = {
             const filtered = (bountiesNoJoin || []).filter(
               (b: any) => !acceptedIds.has(String(b.id))
             );
-            return this.calculateTrendingScores(filtered, limit);
+            return this.calculateTrendingScores(await attachPosterProfiles(filtered), limit);
           }
         } catch (innerErr) {
           logger.warning(
@@ -169,7 +207,7 @@ export const searchService = {
           );
         }
 
-        return this.calculateTrendingScores(bountiesNoJoin || [], limit);
+        return this.calculateTrendingScores(await attachPosterProfiles(bountiesNoJoin || []), limit);
       }
 
       // Exclude any bounties that already have an accepted request (in-progress)
@@ -184,7 +222,7 @@ export const searchService = {
 
           const acceptedIds = new Set((acceptedReqs || []).map((r: any) => String(r.bounty_id)));
           const filtered = (bounties || []).filter((b: any) => !acceptedIds.has(String(b.id)));
-          return this.calculateTrendingScores(filtered, limit);
+          return this.calculateTrendingScores(await attachPosterProfiles(filtered), limit);
         }
       } catch (innerErr) {
         logger.warning('Failed to filter trending bounties by accepted requests', {
@@ -192,7 +230,7 @@ export const searchService = {
         });
       }
 
-      return this.calculateTrendingScores(bounties || [], limit);
+      return this.calculateTrendingScores(await attachPosterProfiles(bounties || []), limit);
     } catch (error) {
       logger.error('getTrendingBounties failed', { error });
       return [];

@@ -101,13 +101,25 @@ test('addAttachmentToBounty persists via Supabase when configured', async () => 
 });
 
 test('search returns flattened bounties when Supabase is configured', async () => {
-  const mockData = [
-    { user_id: 'u1', profiles: { username: 'alice', avatar: 'img1' }, title: 't1' },
-  ];
-  const builder = createBuilder({ data: mockData, error: null });
+  // Poster display data comes from the `public_profiles` view, not from a
+  // PostgREST embed of `profiles` -- the base table's SELECT RLS is self-only,
+  // so an embed returns a null poster for everyone but the caller.
+  // See docs/withdrawals/08-profiles-rls-migration-strategy.md.
+  const bountyRows = [{ user_id: 'u1', poster_id: 'u1', title: 't1' }];
+  const profileRows = [{ id: 'u1', username: 'alice', avatar: 'img1' }];
+  const tablesRead: string[] = [];
   jest.doMock('lib/supabase', () => ({
     isSupabaseConfigured: true,
-    supabase: { from: () => builder },
+    supabase: {
+      from: (table: string) => {
+        tablesRead.push(table);
+        return createBuilder(
+          table === 'public_profiles'
+            ? { data: profileRows, error: null }
+            : { data: bountyRows, error: null }
+        );
+      },
+    },
   }));
   jest.doMock('lib/utils/postgrest-utils', () => ({
     escapeIlike: (s: string) => s,
@@ -120,6 +132,8 @@ test('search returns flattened bounties when Supabase is configured', async () =
   expect(Array.isArray(results)).toBe(true);
   expect(results[0].username).toBe('alice');
   expect(results[0].poster_avatar).toBe('img1');
+  expect(tablesRead).toContain('public_profiles');
+  expect(tablesRead).not.toContain('profiles');
 });
 
 test('create queues bounty when offline', async () => {
