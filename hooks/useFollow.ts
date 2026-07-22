@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { followService } from '../lib/services/follow-service';
 
 interface UseFollowResult {
@@ -17,35 +17,52 @@ export function useFollow(userId: string, currentUserId: string = 'current-user'
   const [error, setError] = useState<string | null>(null);
   const [followerCount, setFollowerCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
+  const mountedRef = useRef(true);
+  const togglingRef = useRef(false);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const fetchFollowStatus = async () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       const [following, followers, following_] = await Promise.all([
         followService.isFollowing(currentUserId, userId),
         followService.getFollowerCount(userId),
         followService.getFollowingCount(userId),
       ]);
-      
+
+      if (!mountedRef.current) return;
       setIsFollowing(following);
       setFollowerCount(followers);
       setFollowingCount(following_);
     } catch (err) {
+      if (!mountedRef.current) return;
       setError(err instanceof Error ? err.message : 'Failed to load follow status');
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   };
 
   const toggleFollow = async () => {
+    // Guards against a rapid double-tap firing two concurrent toggles: without
+    // this, both requests race the backend and whichever resolves last wins,
+    // leaving isFollowing/followerCount out of sync with the server with no
+    // reconciliation.
+    if (togglingRef.current) return;
+    togglingRef.current = true;
+
     const previousFollowing = isFollowing;
     const previousFollowerCount = followerCount;
 
     try {
       setError(null);
-      
+
       // Optimistic update
       setIsFollowing(!isFollowing);
       setFollowerCount(prev => isFollowing ? prev - 1 : prev + 1);
@@ -54,6 +71,8 @@ export function useFollow(userId: string, currentUserId: string = 'current-user'
         ? await followService.unfollow(currentUserId, userId)
         : await followService.follow(currentUserId, userId);
 
+      if (!mountedRef.current) return;
+
       if (!result.success) {
         // Rollback on failure
         setIsFollowing(previousFollowing);
@@ -61,10 +80,13 @@ export function useFollow(userId: string, currentUserId: string = 'current-user'
         setError(result.error || 'Operation failed');
       }
     } catch (err) {
+      if (!mountedRef.current) return;
       // Rollback on error
       setIsFollowing(previousFollowing);
       setFollowerCount(previousFollowerCount);
       setError(err instanceof Error ? err.message : 'Failed to update follow status');
+    } finally {
+      togglingRef.current = false;
     }
   };
 

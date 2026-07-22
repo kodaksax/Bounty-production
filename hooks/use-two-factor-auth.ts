@@ -8,7 +8,7 @@
  * (stored as cents: 10000) are encouraged to enable 2FA.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
 /** Wallet balance threshold (in cents) above which 2FA is strongly recommended. */
@@ -50,6 +50,18 @@ export function useTwoFactorAuth(walletBalanceCents: number = 0): TwoFactorAuthS
 
   const isHighValueAccount = walletBalanceCents >= HIGH_VALUE_ACCOUNT_THRESHOLD_CENTS;
 
+  // Guards every setState below: enrollment/challenge screens are commonly
+  // navigated away from while a request is in flight (user backs out during
+  // an MFA challenge), and none of these five async calls previously checked
+  // whether the hook was still mounted before writing state.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   const refresh = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -59,18 +71,20 @@ export function useTwoFactorAuth(walletBalanceCents: number = 0): TwoFactorAuthS
       // listFactors().totp only contains verified TOTP factors
       const firstFactor = totpFactors[0] ?? null;
 
+      if (!mountedRef.current) return;
       setIsEnrolled(totpFactors.length > 0);
       setFactorId(firstFactor?.id ?? null);
 
       // Check whether current session needs AAL2 upgrade
       const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (!mountedRef.current) return;
       setIsMfaChallengeRequired(
         Boolean(aal && aal.nextLevel === 'aal2' && aal.currentLevel !== 'aal2')
       );
     } catch (err) {
       console.error('[use-two-factor-auth] refresh error:', err);
     } finally {
-      setIsLoading(false);
+      if (mountedRef.current) setIsLoading(false);
     }
   }, []);
 
@@ -99,7 +113,7 @@ export function useTwoFactorAuth(walletBalanceCents: number = 0): TwoFactorAuthS
         code,
       });
       if (error) throw error;
-      if (data) {
+      if (data && mountedRef.current) {
         setIsEnrolled(true);
         setFactorId(enrollFactorId);
         setIsMfaChallengeRequired(false);
@@ -121,7 +135,7 @@ export function useTwoFactorAuth(walletBalanceCents: number = 0): TwoFactorAuthS
         code,
       });
       if (error) throw error;
-      if (data) {
+      if (data && mountedRef.current) {
         setIsMfaChallengeRequired(false);
       }
       return { success: true };
@@ -138,8 +152,10 @@ export function useTwoFactorAuth(walletBalanceCents: number = 0): TwoFactorAuthS
     try {
       const { error } = await supabase.auth.mfa.unenroll({ factorId });
       if (error) throw error;
-      setIsEnrolled(false);
-      setFactorId(null);
+      if (mountedRef.current) {
+        setIsEnrolled(false);
+        setFactorId(null);
+      }
       return { success: true };
     } catch (err: any) {
       console.error('[use-two-factor-auth] unenroll error:', err);

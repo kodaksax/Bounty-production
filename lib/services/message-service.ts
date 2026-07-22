@@ -382,11 +382,60 @@ export const messageService = {
     }
   },
 
+  /**
+   * Process a queued message (called by offline queue service).
+   *
+   * Guards against the offline queue's retry-with-backoff wrapper creating a
+   * duplicate message when a previous attempt's insert actually succeeded
+   * server-side but the client never saw the response (dropped connection,
+   * app killed mid-request) — the queue item then stays 'pending' and gets
+   * retried with the identical payload. Mirrors the same guard already
+   * applied to processQueuedBounty() in bounty-service.ts. Since this method
+   * has no other caller besides the queue's own retry loop, it's safe to
+   * treat "an identical message from this sender in this conversation was
+   * created moments ago" as "this is that same attempt" rather than a
+   * deliberate resend.
+   */
   processQueuedMessage: async (
     conversationId: string,
     text: string,
     senderId: string
   ): Promise<Message> => {
+    try {
+      const dedupeCutoff = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+      const { data: recent } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('conversation_id', conversationId)
+        .eq('sender_id', senderId)
+        .gte('created_at', dedupeCutoff)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      const match = (recent || []).find((row: any) => {
+        const rowText = row.text ?? row.body ?? row.message ?? row.content ?? '';
+        return rowText === text;
+      });
+
+      if (match) {
+        logClientInfo('Skipped re-sending queued message — an identical one from this sender was created within the last 2 minutes (likely a retry of an attempt whose response was lost)', {
+          conversationId,
+          messageId: match.id,
+        });
+        return {
+          id: match.id,
+          conversationId: match.conversation_id,
+          senderId: match.sender_id,
+          text,
+          createdAt: match.created_at,
+          status: 'sent',
+        } as Message;
+      }
+    } catch (dedupeCheckError) {
+      // If the dedupe check itself fails (network, RLS, etc.), fall through
+      // to the normal send rather than blocking queue processing entirely.
+    }
+
     return messagingService.sendMessage(conversationId, text, senderId);
   },
 

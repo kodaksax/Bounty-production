@@ -102,7 +102,7 @@ export function useBounties(options: UseBountiesOptions = {}): BountiesState & B
   }, [fetchError]);
 
   // Store for optimistic updates rollback
-  const [optimisticUpdatesMap] = useState<Map<number, Bounty>>(new Map());
+  const [optimisticUpdatesMap] = useState<Map<string, Bounty>>(new Map());
 
   /**
    * Refresh bounties (public API)
@@ -122,8 +122,7 @@ export function useBounties(options: UseBountiesOptions = {}): BountiesState & B
    * Remove a bounty from the local state
    */
   const removeBounty = useCallback((id: string | number) => {
-    const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
-    setBounties((prev) => prev.filter((b) => String(b.id) !== String(numericId)));
+    setBounties((prev) => prev.filter((b) => String(b.id) !== String(id)));
   }, []);
 
   /**
@@ -136,27 +135,30 @@ export function useBounties(options: UseBountiesOptions = {}): BountiesState & B
         return;
       }
 
-      // Normalize id to number for consistent comparisons
-      const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
+      // Bounty ids are UUID strings; compare/store by their string form
+      // throughout (previously this coerced via parseInt(), which turns any
+      // UUID into NaN and makes every subsequent lookup, optimistic update,
+      // and rollback silently no-op).
+      const idKey = String(id);
       let previousBounty: Bounty | undefined;
 
       if (optimisticUpdates) {
         // Store previous state for rollback
-        previousBounty = bounties.find((b) => String(b.id) === String(numericId));
+        previousBounty = bounties.find((b) => String(b.id) === idKey);
         if (previousBounty) {
-          optimisticUpdatesMap.set(Number(String(numericId)), previousBounty);
+          optimisticUpdatesMap.set(idKey, previousBounty);
         }
 
         // Optimistically update UI
         setBounties((prev) =>
-          prev.map((b) => (String(b.id) === String(numericId) ? { ...b, status: newStatus } : b))
+          prev.map((b) => (String(b.id) === idKey ? { ...b, status: newStatus } : b))
         );
       }
 
       try {
         // Make the actual API call
         const updated = await bountyService.updateStatus(
-          numericId,
+          id,
           newStatus
         );
 
@@ -165,11 +167,11 @@ export function useBounties(options: UseBountiesOptions = {}): BountiesState & B
         }
 
         // Clear optimistic update cache on success
-        optimisticUpdatesMap.delete(Number(String(numericId)));
+        optimisticUpdatesMap.delete(idKey);
 
         // Update with the actual response data
         setBounties((prev) =>
-          prev.map((b) => (String(b.id) === String(numericId) ? updated : b))
+          prev.map((b) => (String(b.id) === idKey ? updated : b))
         );
       } catch (err) {
         logger.error('Error updating bounty status', { id, newStatus, error: err });
@@ -177,12 +179,12 @@ export function useBounties(options: UseBountiesOptions = {}): BountiesState & B
         // Rollback optimistic update on failure
         if (optimisticUpdates && previousBounty) {
           setBounties((prev) =>
-            prev.map((b) => (String(b.id) === String(numericId) ? previousBounty : b))
+            prev.map((b) => (String(b.id) === idKey ? previousBounty : b))
           );
         }
 
         // Clear from cache
-        optimisticUpdatesMap.delete(Number(String(numericId)));
+        optimisticUpdatesMap.delete(idKey);
 
         throw err;
       }

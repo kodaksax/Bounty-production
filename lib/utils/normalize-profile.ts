@@ -52,6 +52,20 @@ export function normalizeAuthProfile(p: AuthProfile | null): NormalizedProfile |
   };
 }
 
+export function authProfileToUserProfile(p: AuthProfile): UserProfile {
+  return {
+    id: p.id,
+    username: p.username,
+    name: p.display_name,
+    avatar: p.avatar,
+    title: p.title,
+    skills: p.skills,
+    bio: p.about,
+    location: p.location,
+    joinDate: p.created_at || new Date().toISOString(),
+  };
+}
+
 export function normalizeUserProfile(p: UserProfile | null): NormalizedProfile | null {
   if (!p) return null;
   return {

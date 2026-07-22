@@ -402,7 +402,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     }
   }, [categories, activeCategory])
 
-  const keyExtractor = useCallback((item: Bounty) => item.id.toString(), [])
+  const keyExtractor = useCallback((item: Bounty, index: number) => (item.id != null ? item.id.toString() : `bounty-${index}`), [])
 
   const renderBountyItem = useCallback(({ item }: { item: Bounty }) => {
     const distance = bountyDistances.get(String(item.id)) ?? calculateDistance(item.location || '')

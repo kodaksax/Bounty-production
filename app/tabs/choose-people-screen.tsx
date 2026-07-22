@@ -12,7 +12,9 @@ import type { AppTheme } from '../../lib/themes/types'
 import { followService } from '../../lib/services/follow-service'
 import { messageService } from '../../lib/services/message-service'
 import { navigationIntent } from '../../lib/services/navigation-intent'
-import { userProfileService } from '../../lib/services/user-profile-service'
+import { authProfileService } from '../../lib/services/auth-profile-service'
+import { authProfileToUserProfile } from '../../lib/utils/normalize-profile'
+import { getCurrentUserId } from '../../lib/utils/data-utils'
 
 export default function ChoosePeopleScreen() {
   const insets = useSafeAreaInsets()
@@ -30,8 +32,9 @@ export default function ChoosePeopleScreen() {
       setLoading(true)
       try {
         // Get followers and following for current user
-        const followers = await followService.getFollowers('current-user')
-        const following = await followService.getFollowing('current-user')
+        const currentUserId = getCurrentUserId()
+        const followers = await followService.getFollowers(currentUserId)
+        const following = await followService.getFollowing(currentUserId)
 
         const followerIds = new Set(followers.map(f => f.followerId))
         const followingIds = new Set(following.map(f => f.followingId))
@@ -40,8 +43,8 @@ export default function ChoosePeopleScreen() {
         const mutualIds = Array.from(followerIds).filter(id => followingIds.has(id))
 
         // Fetch profiles for mutual ids
-        const profiles = await Promise.all(mutualIds.map(id => userProfileService.getProfile(id)))
-        const list = profiles.filter(Boolean) as any[]
+        const profiles = await Promise.all(mutualIds.map(id => authProfileService.getProfileById(id)))
+        const list = profiles.filter((p): p is NonNullable<typeof p> => p !== null).map(authProfileToUserProfile)
         if (!mounted) return
         setMutuals(list)
       } catch (err) {

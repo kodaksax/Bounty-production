@@ -242,6 +242,22 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Re-register the push token whenever the signed-in user changes while the
+  // app stays foregrounded (e.g. sign out then sign back in as a different
+  // account without backgrounding). The mount-time and foreground-resume
+  // registrations above miss this case entirely — NotificationProvider lives
+  // at the app root and never remounts on account switch — so without this,
+  // a device's push token can stay associated with the previous user (or
+  // never get associated with the new one) until the app is restarted.
+  useEffect(() => {
+    if (!userId) return;
+    notificationService.requestPermissionsAndRegisterToken().catch((error) => {
+      if (__DEV__) {
+        console.warn('[NotificationContext] re-registration on user change failed:', error);
+      }
+    });
+  }, [userId]);
+
   // Realtime subscription to notifications table so unread count and list
   // update immediately when a new notification is inserted for this user.
   // Rebuilds whenever `userId` changes so a sign-out/sign-in without a full

@@ -37,8 +37,18 @@ export async function performLogout(deps: LogoutDeps = {}) {
     // ignore
   }
 
-  // Deregister push token before invalidating the session (best-effort, non-blocking)
-  void deregisterPushToken().catch(() => undefined);
+  // Deregister push token before invalidating the session. deregisterPushToken()
+  // needs a live session (it reads the access token via supabase.auth.getSession())
+  // to authorize its delete call, so it must resolve before signOut() below —
+  // previously this fired fire-and-forget in parallel with signOut(), and
+  // signOut() usually won the race, invalidating the session before the token
+  // read happened and silently leaving the device's push token registered to
+  // the now-logged-out user. Bounded by a short timeout so a slow/hung network
+  // call can't delay logout.
+  await Promise.race([
+    deregisterPushToken().catch(() => undefined),
+    new Promise((resolve) => setTimeout(resolve, 2000)),
+  ]);
 
   // Try a full sign-out and wait for it (short timeout), fall back to local sign-out
   // Track whether sign-out ultimately failed so we only retry in background when needed

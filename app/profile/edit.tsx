@@ -2,7 +2,6 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useAuthProfile } from "hooks/useAuthProfile";
 import { useNormalizedProfile } from "hooks/useNormalizedProfile";
-import { useProfile } from "hooks/useProfile";
 import { AuthProfile } from "lib/services/auth-profile-service";
 import { getCurrentUserId } from "lib/utils/data-utils";
 import React, { useRef, useState, useMemo } from 'react';
@@ -64,9 +63,8 @@ export default function EditProfileScreen() {
   // Do NOT use a static or cached userId - it must be derived from the active session
   const currentUserId = session?.user?.id || getCurrentUserId();
 
-  // Use normalized profile for display and both services for update operations
+  // Use normalized profile for display and the auth-backed service for updates
   const { profile, loading, error } = useNormalizedProfile(currentUserId);
-  const { updateProfile: updateLocalProfile } = useProfile(currentUserId);
   const { updateProfile: updateAuthProfile } = useAuthProfile();
 
   // Initialize state with empty values - will be populated by useEffect when profile loads
@@ -267,10 +265,18 @@ export default function EditProfileScreen() {
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
 
-      // Update auth profile (primary source of truth)
+      // Update auth profile (primary source of truth). display_name,
+      // location, and skills are real, persisted columns on `profiles` —
+      // they used to only be written to a local in-memory mock
+      // (userProfileService) that is never seeded from Supabase and resets
+      // on every app relaunch, so edits to these fields were silently lost.
+      // Route them through the same real write as username/about/avatar.
       const authUpdateData: Partial<Omit<AuthProfile, 'id' | 'created_at'>> = {
         username: formData.username,
         about: formData.bio,
+        display_name: formData.name,
+        location: formData.location,
+        skills: skillsets,
       };
       if (avatarUrl) {
         authUpdateData.avatar = avatarUrl;
@@ -282,18 +288,12 @@ export default function EditProfileScreen() {
         throw new Error("Failed to update profile");
       }
 
-      // Also update local profile for backward compatibility
-      await updateLocalProfile({
-        name: formData.name,
-        username: formData.username,
-        bio: formData.bio,
-        location: formData.location,
-        portfolio: formData.portfolio,
-        skills: skillsets,
-        avatar: avatarUrl || undefined,
-      }).catch(e => {
-        console.error('[EditProfile] local profile update failed (non-critical):', e);
-      });
+      // `portfolio` has no backing column on `profiles` yet (pre-existing
+      // gap, not fixed here) — it's kept in local form/session state only,
+      // so it displays correctly until the app is relaunched. Note:
+      // updateLocalProfile is no longer called here since it now writes
+      // through the same real profiles-table update as updateAuthProfile
+      // above; calling both would just be a redundant duplicate write.
 
       // Update initial data after successful save
       setInitialData(formData);

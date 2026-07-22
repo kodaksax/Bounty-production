@@ -110,6 +110,25 @@ class OfflineQueueService {
       const stored = await AsyncStorage.getItem(QUEUE_KEY);
       if (stored) {
         this.queue = JSON.parse(stored);
+
+        // An item persisted as 'processing' means the app was killed (or
+        // crashed) mid-request on a previous run — nothing can still be
+        // in flight for it now. processQueue() only ever picks up 'pending'
+        // items, so without this reset such an item would stay stuck at
+        // 'processing' forever: never retried, never surfaced as 'failed',
+        // and invisible to any retry UI.
+        let recoveredStuckItems = false;
+        this.queue = this.queue.map(item => {
+          if (item.status === 'processing') {
+            recoveredStuckItems = true;
+            return { ...item, status: 'pending' as const };
+          }
+          return item;
+        });
+        if (recoveredStuckItems) {
+          await this.saveQueue();
+        }
+
   logger.info(`Loaded ${this.queue.length} items from offline queue`);
         // Debug: inspect queued bounty items for attachments_json presence
         try {

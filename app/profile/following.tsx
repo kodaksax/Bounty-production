@@ -1,9 +1,9 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { followService } from "lib/services/follow-service";
-import { userProfileService } from "lib/services/user-profile-service";
+import { authProfileService, type AuthProfile } from "lib/services/auth-profile-service";
 import type { UserProfile } from "lib/types";
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppThemeContext } from "../../lib/themes/AppThemeContext";
 import type { AppTheme } from "../../lib/themes/types";
+import { authProfileToUserProfile as toUserProfile } from "../../lib/utils/normalize-profile";
 
 export default function FollowingScreen() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
@@ -26,6 +27,13 @@ export default function FollowingScreen() {
   const [following, setFollowing] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     loadFollowing();
@@ -40,14 +48,18 @@ export default function FollowingScreen() {
 
       // Fetch profiles for all following
       const followingProfiles = await Promise.all(
-        followRelations.map((f) => userProfileService.getProfile(f.followingId))
+        followRelations.map((f) => authProfileService.getProfileById(f.followingId))
       );
 
-      setFollowing(followingProfiles.filter((p) => p !== null) as UserProfile[]);
+      if (!mountedRef.current) return;
+      setFollowing(
+        followingProfiles.filter((p): p is AuthProfile => p !== null).map(toUserProfile)
+      );
     } catch (err) {
+      if (!mountedRef.current) return;
       setError(err instanceof Error ? err.message : "Failed to load following");
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   };
 
@@ -62,7 +74,7 @@ export default function FollowingScreen() {
     >
       <View style={styles.avatar}>
         <Text style={styles.avatarText}>
-          {item.name?.[0]?.toUpperCase() || item.username[1]?.toUpperCase() || "U"}
+          {item.name?.[0]?.toUpperCase() || item.username?.[0]?.toUpperCase() || "U"}
         </Text>
       </View>
       <View style={styles.followingInfo}>

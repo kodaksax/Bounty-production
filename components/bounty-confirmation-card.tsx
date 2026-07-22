@@ -2,6 +2,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons'
 import React, { useEffect, useRef, useState } from "react"
 import {
     Dimensions,
+    PanResponder,
     Text,
     View
 } from "react-native"
@@ -22,11 +23,11 @@ interface BountyConfirmationCardProps {
 }
 
 export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: BountyConfirmationCardProps) {
-  const [isDragging, setIsDragging] = useState(false)
   const [dragProgress, setDragProgress] = useState(0)
   const [isConfirming, setIsConfirming] = useState(false)
   const dragConstraintsRef = useRef(null)
   const [windowHeight, setWindowHeight] = useState(Dimensions.get("window").height)
+  const isConfirmingRef = useRef(false)
 
   // Get window dimensions on mount and listen for changes
   useEffect(() => {
@@ -39,31 +40,42 @@ export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: Boun
     }
   }, [])
 
-  // Handle drag end
-  const handleDragEnd = async (event: any, info: any) => {
-    setIsDragging(false)
-
-    // If dragged up more than 40% of the height, confirm the bounty
-    if (dragProgress > 0.4) {
-      setIsConfirming(true)
-      // Call the confirm function
+  const confirm = async () => {
+    if (isConfirmingRef.current) return
+    isConfirmingRef.current = true
+    setIsConfirming(true)
+    try {
       await onConfirm()
-    } else {
-      // Reset position with spring animation
-      setDragProgress(0)
-      setDragProgress(0)
+    } finally {
+      isConfirmingRef.current = false
     }
   }
 
-  // Handle drag
-  const handleDrag = (event: any, info: any) => {
-    setIsDragging(true)
-
-    // Calculate drag progress (negative because we're dragging upward)
-    const maxDrag = -windowHeight * 0.3 // Proportional to screen height
-    const progress = Math.min(Math.max((info.offset.y / maxDrag) * -1, 0), 1)
-    setDragProgress(progress)
-  }
+  // Swipe-up-to-confirm gesture, backed by PanResponder so it actually receives touches on RN.
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => !isConfirmingRef.current,
+      onMoveShouldSetPanResponder: (_evt, gestureState) =>
+        !isConfirmingRef.current && Math.abs(gestureState.dy) > 4,
+      onPanResponderMove: (_evt, gestureState) => {
+        const maxDrag = -windowHeight * 0.3 // Proportional to screen height
+        const progress = Math.min(Math.max((gestureState.dy / maxDrag) * -1, 0), 1)
+        setDragProgress(progress)
+      },
+      onPanResponderRelease: (_evt, gestureState) => {
+        const maxDrag = -windowHeight * 0.3
+        const progress = Math.min(Math.max((gestureState.dy / maxDrag) * -1, 0), 1)
+        if (progress > 0.4) {
+          void confirm()
+        } else {
+          setDragProgress(0)
+        }
+      },
+      onPanResponderTerminate: () => {
+        setDragProgress(0)
+      },
+    })
+  ).current
 
   // Cancel with escape key (not supported in React Native, so this is omitted)
   // If you want to handle hardware back button on Android, use BackHandler from 'react-native'.
@@ -105,7 +117,7 @@ export function BountyConfirmationCard({ bountyData, onConfirm, onCancel }: Boun
             </View>
 
             {/* Swipe indicator */}
-              <View className="mt-8 flex flex-col items-center">
+              <View className="mt-8 flex flex-col items-center" {...panResponder.panHandlers}>
                 <View style={{ opacity: isConfirming ? 0 : 1 }} className="text-center text-[#9CA3AF] font-medium mb-3">
                   <Text className="text-center text-[#9CA3AF] font-medium">
                     {dragProgress > 0.4 ? "Release to confirm" : "Swipe up to confirm"}

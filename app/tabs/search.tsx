@@ -57,6 +57,10 @@ export default function EnhancedSearchScreen() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autocompleteRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const filtersPersistRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Sequence token so a slower, earlier search response can't overwrite a
+  // faster, later one's results (e.g. filters change shortly after typing,
+  // firing two overlapping requests).
+  const searchRequestIdRef = useRef(0);
   const [trendingBounties, setTrendingBounties] = useState<TrendingBounty[]>([])
   const [isLoadingTrending, setIsLoadingTrending] = useState(true)
 
@@ -201,6 +205,7 @@ export default function EnhancedSearchScreen() {
 
   const performBountySearch = useCallback(
     async (searchQuery: string, searchFilters: BountySearchFilters) => {
+      const requestId = ++searchRequestIdRef.current;
       setIsSearching(true);
       setError(null);
       try {
@@ -209,6 +214,7 @@ export default function EnhancedSearchScreen() {
           ...searchFilters,
           limit: 50,
         });
+        if (requestId !== searchRequestIdRef.current) return; // superseded by a newer search
         setBountyResults(results.map(mapBounty));
 
         // Save to recent searches if query exists
@@ -217,15 +223,17 @@ export default function EnhancedSearchScreen() {
           await loadRecentSearches();
         }
       } catch (e: any) {
+        if (requestId !== searchRequestIdRef.current) return;
         setError(e?.message || 'Search failed');
       } finally {
-        setIsSearching(false);
+        if (requestId === searchRequestIdRef.current) setIsSearching(false);
       }
     },
     [mapBounty]
   );
 
   const performUserSearch = useCallback(async (searchQuery: string) => {
+    const requestId = ++searchRequestIdRef.current;
     setIsSearching(true);
     setError(null);
     try {
@@ -233,6 +241,7 @@ export default function EnhancedSearchScreen() {
         keywords: searchQuery.trim() || undefined,
         limit: 50,
       });
+      if (requestId !== searchRequestIdRef.current) return; // superseded by a newer search
       setUserResults(result.results);
 
       // Save to recent searches if query exists
@@ -241,9 +250,10 @@ export default function EnhancedSearchScreen() {
         await loadRecentSearches();
       }
     } catch (e: any) {
+      if (requestId !== searchRequestIdRef.current) return;
       setError(e?.message || 'Search failed');
     } finally {
-      setIsSearching(false);
+      if (requestId === searchRequestIdRef.current) setIsSearching(false);
     }
   }, []);
 
