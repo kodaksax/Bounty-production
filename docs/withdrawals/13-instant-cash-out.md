@@ -1,6 +1,8 @@
 # Instant Cash Out — Design, Implementation, and Rollout
 
 > Written 2026-07-22, alongside the implementation itself. This is the 13th doc in the set — `01-12` describe the pre-existing standard-withdrawal system, all independently re-verified live earlier in this session (edge functions `connect` v32 / `webhooks` v36 byte-identical to git; 0 of 89 profiles `payouts_enabled`; total ledger balance $19.65). This doc describes what Instant Cash Out adds on top of that system, not a replacement for it.
+>
+> **Stale as of 2026-07-21 (`1fbf24ea`):** `POST`/`DELETE /connect/debit-cards` (line 23 below) and `components/add-debit-card-modal.tsx` (line 34) were removed — Stripe unconditionally rejects `createExternalAccount`/`deleteExternalAccount` for these Express accounts once onboarding completes, so direct API writes never actually worked. Card management is now Stripe-hosted only, via `POST /connect/login-link` (Express Dashboard), same as bank accounts. See [15-instant-payout-deploy-drift-fix-2026-07-21.md](15-instant-payout-deploy-drift-fix-2026-07-21.md).
 
 ## What changed, in one paragraph
 

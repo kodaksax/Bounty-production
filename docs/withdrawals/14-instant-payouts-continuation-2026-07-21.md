@@ -1,6 +1,8 @@
 # Instant Payouts — Continuation Session, Express Compatibility Audit, and Live Verification
 
 > Written 2026-07-21. Picks up where [13-instant-cash-out.md](13-instant-cash-out.md) left off. Between that doc and this session, three more commits (`1fbf24ea`, `3a08b585`, `6defe3f8`) already landed the bulk of what this session was asked to build — this doc audits, deploys, and live-verifies that work rather than reimplementing it, and fixes one real bug found along the way.
+>
+> **Correction (see [15-instant-payout-deploy-drift-fix-2026-07-21.md](15-instant-payout-deploy-drift-fix-2026-07-21.md)):** Question 3 below claims the `instant_available` pre-check "correctly implements" Stripe's requirements and cites `connect/index.ts:1652-1655` as verified-good. That check was in fact the root cause of Instant Cash Out staying permanently locked for first-time users (it gates on a pre-transfer balance that is structurally always $0), and was removed by commit `c8920178` the same day this doc was written — the two changes landed together without this doc's narrative being reconciled against the final code. Treat Question 3's "Verified" claims about the eligibility gate as superseded; see the linked doc for the real fix and its deploy history.
 
 ## What this session actually did
 
