@@ -103,7 +103,7 @@ export function InstantCashOutScreen({
     [session?.access_token]
   );
 
-  const { debitCards, availableBalance, hasInstantEligibleCard } = payoutMethods;
+  const { debitCards, availableBalance, hasInstantEligibleCard, instantCashOutEnabled } = payoutMethods;
   const loading = eligibility.loading || payoutMethods.isLoading;
   const loadError = eligibility.error ?? payoutMethods.error;
 
@@ -131,6 +131,7 @@ export function InstantCashOutScreen({
   // the backend gracefully falls back to a standard withdrawal rather than
   // erroring, so no client-side pre-check is needed for safety.
   const isFullyEligible =
+    instantCashOutEnabled &&
     eligibility.connectedAccountExists &&
     eligibility.chargesEnabled &&
     eligibility.payoutsEnabled &&
@@ -262,6 +263,7 @@ export function InstantCashOutScreen({
       : 'Review your payout details — something may need attention.';
 
   const checklist: { label: string; met: boolean; hint?: string }[] = [
+    { label: 'Instant Cash Out available', met: instantCashOutEnabled, hint: 'Instant Cash Out is temporarily unavailable. Please use a standard withdrawal.' },
     { label: 'Payout account connected', met: eligibility.connectedAccountExists, hint: 'Complete Stripe Connect onboarding from the Withdraw screen.' },
     { label: 'Identity details submitted', met: eligibility.detailsSubmitted, hint: 'Finish submitting your identity details with Stripe.' },
     { label: 'Charges enabled', met: eligibility.chargesEnabled },

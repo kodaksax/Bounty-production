@@ -60,7 +60,9 @@ export interface UsePayoutMethodsResult {
    * reintroduce that check. Display only.
    */
   instantAvailableCents: number;
-  /** hasInstantEligibleCard — whether Instant Cash Out is offered at all. The actual per-attempt balance check happens server-side, live, at the moment of the request (see instantAvailableCents doc above for why it can't be pre-checked here). */
+  /** Server-side INSTANT_CASHOUT_ENABLED flag (from GET /connect/debit-cards). When false, Instant Cash Out is off platform-wide regardless of card eligibility — surface this distinctly from "no eligible card" so users get an accurate reason. */
+  instantCashOutEnabled: boolean;
+  /** hasInstantEligibleCard && instantCashOutEnabled. The actual per-attempt balance check happens server-side, live, at the moment of the request (see instantAvailableCents doc above for why it can't be pre-checked here). */
   canInstantCashOut: boolean;
   minWithdrawal: number;
   maxWithdrawal: number | null;
@@ -78,6 +80,7 @@ export function usePayoutMethods(): UsePayoutMethodsResult {
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [debitCards, setDebitCards] = useState<DebitCard[]>([]);
   const [instantAvailableCents, setInstantAvailableCents] = useState<number>(0);
+  const [instantCashOutEnabled, setInstantCashOutEnabled] = useState<boolean>(true);
   const [minWithdrawal, setMinWithdrawal] = useState<number>(MIN_WITHDRAWAL_AMOUNT);
   const [maxWithdrawal, setMaxWithdrawal] = useState<number | null>(null);
   const [availableBalance, setAvailableBalance] = useState<number | null>(null);
@@ -109,6 +112,7 @@ export function usePayoutMethods(): UsePayoutMethodsResult {
       setBankAccounts(bankData.bankAccounts ?? []);
       setDebitCards(cardData.debitCards ?? []);
       setInstantAvailableCents(typeof cardData.instantAvailableCents === 'number' ? cardData.instantAvailableCents : 0);
+      if (typeof cardData.instantCashOutEnabled === 'boolean') setInstantCashOutEnabled(cardData.instantCashOutEnabled);
       if (typeof bankData.minWithdrawal === 'number') setMinWithdrawal(bankData.minWithdrawal);
       if (typeof bankData.maxWithdrawal === 'number') setMaxWithdrawal(bankData.maxWithdrawal);
       if (typeof bankData.availableBalance === 'number') setAvailableBalance(bankData.availableBalance);
@@ -179,13 +183,14 @@ export function usePayoutMethods(): UsePayoutMethodsResult {
   // NOT gated on instantAvailableCents > 0 — see the doc comment on
   // instantAvailableCents above for why that balance is structurally $0
   // pre-flight and must not block Instant Cash Out from being offered.
-  const canInstantCashOut = hasInstantEligibleCard;
+  const canInstantCashOut = hasInstantEligibleCard && instantCashOutEnabled;
 
   return {
     bankAccounts,
     debitCards,
     hasInstantEligibleCard,
     instantAvailableCents,
+    instantCashOutEnabled,
     canInstantCashOut,
     minWithdrawal,
     maxWithdrawal,

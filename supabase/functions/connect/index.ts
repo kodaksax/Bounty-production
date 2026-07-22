@@ -2098,7 +2098,7 @@ Deno.serve(async (req: Request) => {
         ?.stripe_connect_account_id;
       if (!accountId) {
         console.log('[connect/debit-cards] no connected account for user', { userId });
-        return jsonResponse({ debitCards: [], instantAvailableCents: 0 });
+        return jsonResponse({ debitCards: [], instantAvailableCents: 0, instantCashOutEnabled: INSTANT_CASHOUT_ENABLED });
       }
 
       const cards = await stripe.accounts.listExternalAccounts(accountId, {
@@ -2142,7 +2142,7 @@ Deno.serve(async (req: Request) => {
         instantAvailableCents,
       });
 
-      return jsonResponse({ debitCards, instantAvailableCents });
+      return jsonResponse({ debitCards, instantAvailableCents, instantCashOutEnabled: INSTANT_CASHOUT_ENABLED });
     }
 
     // POST /connect/debit-cards — DEPRECATED.
