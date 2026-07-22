@@ -22,6 +22,7 @@ import { bountyService } from '../lib/services/bounty-service'
 import type { Bounty } from '../lib/services/database.types'
 import { locationService } from '../lib/services/location-service'
 import { storage } from '../lib/storage'
+import { supabase } from '../lib/supabase'
 import { isBountyDeadlinePassed } from '../lib/utils/schedule-utils'
 import type { TrendingBounty } from '../lib/types'
 import { logger } from '../lib/utils/error-logger'
@@ -56,6 +57,12 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   const [loadError, setLoadError] = useState<Error | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [activeCategory, setActiveCategory] = useState<string | 'all'>('all')
+  // Count of newly-posted open bounties observed via realtime since the last
+  // load/refresh. Not injected directly into `bounties` — this feed is
+  // paginated (PAGE_SIZE/offsetRef), so splicing a live INSERT into the
+  // middle of that would corrupt pagination offsets. Surfaced instead as a
+  // "New bounties" pill the user taps to pull a fresh page.
+  const [newBountiesCount, setNewBountiesCount] = useState(0)
 
   const { theme } = useAppThemeContext()
   const { bountyFormat } = useBountyFormat()
@@ -262,6 +269,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     try {
       offsetRef.current = 0
       setHasMore(true)
+      setNewBountiesCount(0)
       await Promise.all([
         loadBounties({ reset: true }),
         loadUserApplications().catch(err => console.error('Failed to refresh user applications:', err)),
@@ -272,6 +280,57 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       setRefreshing(false)
     }
   }, [loadBounties, loadUserApplications])
+
+  // Realtime: patch/remove already-loaded bounties in place (safe regardless
+  // of pagination), and surface new open-bounty INSERTs as a count rather
+  // than splicing them into the paginated list.
+  useEffect(() => {
+    const channel = supabase
+      .channel('bounty-feed:bounties')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'bounties', filter: 'status=eq.open' },
+        () => {
+          setNewBountiesCount(prev => prev + 1)
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'bounties' },
+        (payload) => {
+          const updated = payload.new as Bounty
+          setBounties(prev => {
+            const exists = prev.some(b => String(b.id) === String(updated.id))
+            if (!exists) return prev
+            // A bounty that's no longer open (accepted/cancelled/expired) should
+            // drop out of the open-bounties feed rather than linger with a
+            // stale status.
+            if (updated.status !== 'open') {
+              return prev.filter(b => String(b.id) !== String(updated.id))
+            }
+            return prev.map(b => (String(b.id) === String(updated.id) ? { ...b, ...updated } : b))
+          })
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'bounties' },
+        (payload) => {
+          const deletedId = (payload.old as Partial<Bounty>)?.id
+          if (deletedId == null) return
+          setBounties(prev => prev.filter(b => String(b.id) !== String(deletedId)))
+        }
+      )
+      .subscribe()
+
+    return () => {
+      try {
+        supabase.removeChannel(channel)
+      } catch {
+        // best-effort cleanup
+      }
+    }
+  }, [])
 
   useImperativeHandle(ref, () => ({
     refresh: () => {
@@ -494,6 +553,26 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       {/* Filter chips — outside FlatList for non-grid; grid gets them inside listHeader */}
       {bountyFormat !== 'grid' && renderChips()}
 
+      {/* New-bounties pill — surfaces realtime INSERTs without splicing them into
+          the paginated list mid-scroll. Sits above the list so it works across
+          all three feed layouts (grid/list/compact). */}
+      {newBountiesCount > 0 && (
+        <TouchableOpacity
+          style={s.newBountiesPill}
+          onPress={() => {
+            bountyListRef.current?.scrollToOffset?.({ offset: 0, animated: true })
+            onRefresh()
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={`${newBountiesCount} new bounty${newBountiesCount === 1 ? '' : 'ies'} available, tap to refresh`}
+        >
+          <MaterialIcons name="arrow-upward" size={16} color="#ffffff" style={{ marginRight: 6 }} />
+          <Text style={s.newBountiesPillText}>
+            {newBountiesCount} new bount{newBountiesCount === 1 ? 'y' : 'ies'}
+          </Text>
+        </TouchableOpacity>
+      )}
+
       {/* List area */}
       {bountyFormat === 'grid' ? (
         <View style={{ flex: 1, marginTop: -(insets.top + 8) }}>
@@ -672,6 +751,25 @@ function makeStyles(t: AppTheme) {
     },
     chipLabelActive: {
       color: t.primaryLight,
+    },
+
+    // ── New-bounties pill ────────────────────────────────────────────────────
+    newBountiesPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'center',
+      backgroundColor: t.primary,
+      paddingHorizontal: 16,
+      height: 36,
+      borderRadius: 999,
+      marginBottom: SPACING.COMPACT_GAP,
+      minHeight: SIZING.MIN_TOUCH_TARGET,
+      zIndex: 10,
+    },
+    newBountiesPillText: {
+      color: '#ffffff',
+      fontSize: TYPOGRAPHY.SIZE_SMALL,
+      fontWeight: '700',
     },
 
     // ── Bottom fade ───────────────────────────────────────────────────────────

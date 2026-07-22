@@ -104,6 +104,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [transactions, setTransactions] = useState<WalletTransactionRecord[]>([]);
   const [payoutFailed, setPayoutFailed] = useState<boolean>(false);
   const [payoutFailureCode, setPayoutFailureCode] = useState<string | null>(null);
+  // Tracks the signed-in user id so the realtime balance subscription below
+  // can be scoped to the right row and rebuilt on sign-out/sign-in.
+  const [userId, setUserId] = useState<string | null>(null);
   const lastOptimisticDepositRef = useRef<number | null>(null);
   // Tracks whether the WalletProvider is still mounted so async callbacks
   // (refresh, refreshFromApi) can skip setState calls after unmount.
@@ -469,6 +472,60 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     };
   }, []); // run once on mount; uses refreshFromApiRef to invoke the latest implementation
+
+  // Track the signed-in user id, independently of the sign-out/sign-in data
+  // clearing effect above, so the realtime balance subscription below can be
+  // scoped correctly and rebuilt when the user changes.
+  useEffect(() => {
+    let cancelled = false;
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!cancelled) setUserId(session?.user?.id ?? null);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        setUserId(null);
+      } else if (session?.user?.id) {
+        setUserId(session.user.id);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  // Realtime subscription on profiles.balance so the displayed balance updates
+  // immediately when the server processes a deposit, withdrawal, escrow, or
+  // release for this user — without waiting for the next mount/auth event.
+  // refreshFromApi's existing OPTIMISTIC_WINDOW_MS guard prevents this from
+  // clobbering a just-made optimistic deposit with a stale server value.
+  useEffect(() => {
+    if (!userId) return;
+
+    const channel = supabase
+      .channel(`wallet-balance:${userId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
+        () => {
+          getAccessToken().then(token => {
+            if (token) refreshFromApiRef.current?.(token);
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      try {
+        supabase.removeChannel(channel);
+      } catch {
+        // best-effort cleanup
+      }
+    };
+  }, [userId, getAccessToken]);
 
   const logTransaction = useCallback(
     async (tx: Omit<WalletTransactionRecord, 'id' | 'date'> & { date?: Date }) => {

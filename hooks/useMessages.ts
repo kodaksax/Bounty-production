@@ -1,4 +1,3 @@
-import { RealtimeChannel } from '@supabase/supabase-js';
 import * as Clipboard from 'expo-clipboard';
 import { useCallback, useEffect, useState } from 'react';
 import { messageService } from '../lib/services/message-service';
@@ -183,14 +182,16 @@ export function useMessages(conversationId: string): UseMessagesResult {
   }, [fetchMessages]);
 
   useEffect(() => {
-    let subscription: RealtimeChannel | null = null;
+    let unsubscribe: (() => void) | null = null;
 
     const init = async () => {
       // Initial fetch
       await fetchMessages();
 
-      // Subscribe to Realtime updates
-      subscription = supabaseMessaging.subscribeToMessages(conversationId, newMessage => {
+      // Subscribe to Realtime updates. The returned function is scoped to
+      // this listener alone — it won't tear down the shared channel out from
+      // under another mounted screen subscribed to the same conversation.
+      unsubscribe = supabaseMessaging.subscribeToMessages(conversationId, newMessage => {
         if (newMessage) {
           // Add new message if it's not from current user (avoid duplicates from optimistic updates)
           if (newMessage.senderId !== currentUserId) {
@@ -212,10 +213,7 @@ export function useMessages(conversationId: string): UseMessagesResult {
     init();
 
     return () => {
-      // Cleanup subscription
-      if (subscription) {
-        supabaseMessaging.unsubscribe(`messages:${conversationId}`);
-      }
+      unsubscribe?.();
     };
   }, [conversationId, currentUserId, fetchMessages]);
 

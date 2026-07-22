@@ -1,4 +1,3 @@
-import { RealtimeChannel } from '@supabase/supabase-js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CACHE_KEYS } from '../lib/services/cached-data-service';
 import * as supabaseMessaging from '../lib/services/supabase-messaging';
@@ -103,7 +102,7 @@ export function useConversations(): UseConversationsResult {
   };
 
   useEffect(() => {
-    let subscription: RealtimeChannel | null = null;
+    let unsubscribe: (() => void) | null = null;
 
     // Check if we have a valid authenticated user (not the fallback ID)
     const isValidUser = currentUserId && currentUserId !== '00000000-0000-0000-0000-000000000001';
@@ -115,8 +114,10 @@ export function useConversations(): UseConversationsResult {
         return;
       }
 
-      // Subscribe to Realtime updates
-      subscription = supabaseMessaging.subscribeToConversations(currentUserId, () => {
+      // Subscribe to Realtime updates. The returned function is scoped to this
+      // listener alone — it won't tear down the shared channel out from under
+      // another mounted screen subscribed to the same user's conversations.
+      unsubscribe = supabaseMessaging.subscribeToConversations(currentUserId, () => {
         // Refetch conversations on any update (SWR will update UI)
         refetch().catch(err =>
           logger.error('Error refetching conversations on notification', { error: err })
@@ -127,10 +128,7 @@ export function useConversations(): UseConversationsResult {
     init();
 
     return () => {
-      // Cleanup subscription
-      if (subscription) {
-        supabaseMessaging.unsubscribe(`conversations:${currentUserId}`);
-      }
+      unsubscribe?.();
     };
   }, [currentUserId, refetch]); // Only depend on currentUserId and refetch
 

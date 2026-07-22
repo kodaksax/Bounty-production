@@ -14,7 +14,7 @@ jest.mock('../../../lib/utils/data-utils', () => ({
 jest.mock('../../../lib/services/supabase-messaging', () => ({
   fetchMessages: jest.fn().mockResolvedValue([]),
   sendMessage: jest.fn(),
-  subscribeToMessages: jest.fn().mockReturnValue({}),
+  subscribeToMessages: jest.fn().mockReturnValue(() => {}),
   unsubscribe: jest.fn(),
 }));
 

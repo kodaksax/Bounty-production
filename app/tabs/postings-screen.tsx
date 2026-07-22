@@ -26,6 +26,7 @@ import { BountyConfirmationCard } from "../../components/bounty-confirmation-car
 import { EditPostingModal } from "../../components/edit-posting-modal"
 import { useValidUserId } from '../../hooks/useValidUserId'
 import { ROUTES } from '../../lib/routes'
+import { supabase } from '../../lib/supabase'
 // Render In Progress tab using the same expandable card as My Postings
 import { MyPostingExpandable } from "../../components/my-posting-expandable"
 import { OfflineStatusBadge } from '../../components/offline-status-badge'
@@ -336,9 +337,44 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
     loadInProgress()
   }, [postSuccess, loadMyBounties, loadInProgress, currentUserId]) // Re-fetch after a successful post
 
-  // ANNOTATION: The Supabase real-time subscriptions have been removed.
-  // To re-implement real-time updates, use WebSockets or Server-Sent Events (SSE).
-  // The component now fetches data when it loads or after a new bounty is posted.
+  // Realtime applicant counts: a single list-level subscription (not one per
+  // row — see MyPostingExpandable's completion-status subscriptions for why
+  // that doesn't scale) covering bounty_requests for all of this poster's
+  // currently-open bounties. Rebuilds only when the actual set of open
+  // bounty ids changes, not on every myBounties re-render.
+  const myBountiesRef = useRef<Bounty[]>(myBounties)
+  useEffect(() => {
+    myBountiesRef.current = myBounties
+  }, [myBounties])
+
+  const openBountyIdsKey = React.useMemo(
+    () => myBounties.filter((b) => b.status === 'open').map((b) => String(b.id)).sort().join(','),
+    [myBounties]
+  )
+
+  useEffect(() => {
+    const ids = openBountyIdsKey ? openBountyIdsKey.split(',') : []
+    if (!currentUserId || ids.length === 0) return
+
+    const channel = supabase
+      .channel(`postings-requests:${currentUserId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'bounty_requests', filter: `bounty_id=in.(${ids.join(',')})` },
+        () => {
+          loadRequestsForMyBounties(myBountiesRef.current)
+        }
+      )
+      .subscribe()
+
+    return () => {
+      try {
+        supabase.removeChannel(channel)
+      } catch {
+        // best-effort cleanup
+      }
+    }
+  }, [openBountyIdsKey, currentUserId, loadRequestsForMyBounties])
 
   // ---- Accept/Reject request handlers (extracted to hooks) ----
   const { handleAcceptRequest } = useAcceptRequest({

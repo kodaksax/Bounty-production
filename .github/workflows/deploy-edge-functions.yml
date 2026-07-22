@@ -1,0 +1,167 @@
+name: Deploy Supabase Edge Functions
+
+# Root cause this closes (docs/withdrawals/11-final-hardening-session-2026-07-19.md
+# §6d, docs/withdrawals/12-comprehensive-audit-2026-07-18.md §11 item 3): there
+# was no automated deploy path for Edge Functions at all — every deploy was a
+# manual, per-function CLI call. That gap directly caused two real incidents
+# (payments/apple-pay silently drifting for months, and the 2026-07-17 connect
+# regression that produced a stuck withdrawal). This workflow makes "what's on
+# main" and "what's live" the same thing by construction, with a post-deploy
+# verification step that fails loudly instead of requiring another manual
+# audit session to notice drift.
+#
+# Scope: only the function directories that live in this repo
+# (supabase/functions/*, excluding _shared and non-directories). The four
+# functions with no git history (workflow-tracker, signed-image-proxy,
+# stripe-setup, stripe-worker — see docs/withdrawals project memory on
+# "shadow edge functions") are deliberately untouched by this workflow, same
+# as by scripts/deploy-functions.js today.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/**'
+  workflow_dispatch:
+    inputs:
+      functions:
+        description: 'Space-separated function slugs to redeploy (blank = all changed/all functions)'
+        required: false
+        default: ''
+
+concurrency:
+  group: deploy-edge-functions-production
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Type-check and lint every function
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      functions: ${{ steps.discover.outputs.functions }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v1.x
+
+      - name: Discover function directories
+        id: discover
+        run: |
+          cd supabase/functions
+          FUNCS=$(find . -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | grep -v '^_' | sort | tr '\n' ' ')
+          echo "Discovered: $FUNCS"
+          echo "functions=$FUNCS" >> "$GITHUB_OUTPUT"
+
+      - name: deno check every discovered function's entrypoint
+        run: |
+          for fn in ${{ steps.discover.outputs.functions }}; do
+            entry="supabase/functions/$fn/index.ts"
+            if [ -f "$entry" ]; then
+              echo "::group::deno check $fn"
+              deno check "$entry"
+              echo "::endgroup::"
+            else
+              echo "::warning::$fn has no index.ts entrypoint, skipping deno check"
+            fi
+          done
+
+      - name: deno lint every discovered function
+        run: |
+          for fn in ${{ steps.discover.outputs.functions }}; do
+            echo "::group::deno lint $fn"
+            deno lint "supabase/functions/$fn"
+            echo "::endgroup::"
+          done
+
+  deploy:
+    name: Deploy to production
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROJECT_REF: xwlwqzzphmmhghiqvkeu
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Determine which functions to deploy
+        id: targets
+        run: |
+          if [ -n "${{ github.event.inputs.functions }}" ]; then
+            TARGETS="${{ github.event.inputs.functions }}"
+            echo "Manual dispatch: deploying explicitly requested functions: $TARGETS"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TARGETS="${{ needs.verify.outputs.functions }}"
+            echo "Manual dispatch with no function list: deploying all discovered functions: $TARGETS"
+          else
+            # push event: only redeploy functions whose directory actually changed,
+            # so an unrelated function's version doesn't bump on every merge.
+            CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} -- 'supabase/functions/*' \
+              | grep -v '^supabase/functions/_' \
+              | sed -E 's#^supabase/functions/([^/]+)/.*#\1#' \
+              | sort -u | tr '\n' ' ')
+            TARGETS="$CHANGED"
+            echo "Push event: redeploying changed functions: $TARGETS"
+          fi
+          if [ -z "$TARGETS" ]; then
+            echo "No functions to deploy — exiting cleanly."
+          fi
+          echo "targets=$TARGETS" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy each target function
+        if: steps.targets.outputs.targets != ''
+        run: |
+          for fn in ${{ steps.targets.outputs.targets }}; do
+            echo "::group::Deploying $fn"
+            supabase functions deploy "$fn" --project-ref "$PROJECT_REF"
+            echo "::endgroup::"
+          done
+
+      - name: Post-deploy verification — deployed source must match this commit
+        if: steps.targets.outputs.targets != ''
+        run: |
+          FAILED=0
+          for fn in ${{ steps.targets.outputs.targets }}; do
+            echo "::group::Verifying $fn"
+            RESPONSE=$(curl -s -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+              "https://api.supabase.com/v1/projects/$PROJECT_REF/functions/$fn/body")
+            # The API returns the deployed source as a JSON array of {name, content}.
+            # Compare the entrypoint's content against the git blob this workflow
+            # just deployed — any mismatch means the deploy silently didn't take,
+            # which is exactly the failure mode that caused the historical
+            # payments/apple-pay and 2026-07-17 connect incidents.
+            DEPLOYED=$(echo "$RESPONSE" | node -e "
+              const data = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+              const entry = (Array.isArray(data) ? data : data.files || [])
+                .find(f => f.name.endsWith('$fn/index.ts') || f.name === 'index.ts');
+              process.stdout.write(entry ? entry.content : '');
+            ")
+            LOCAL=$(cat "supabase/functions/$fn/index.ts")
+            if [ "$(echo "$DEPLOYED" | tr -d '\r')" != "$(echo "$LOCAL" | tr -d '\r')" ]; then
+              echo "::error::$fn: deployed source does NOT match git commit ${{ github.sha }} — deploy did not take effect as expected"
+              FAILED=1
+            else
+              echo "$fn: verified — deployed source matches this commit"
+            fi
+            echo "::endgroup::"
+          done
+          if [ "$FAILED" -eq 1 ]; then
+            echo "::error::One or more functions failed post-deploy verification — investigate before assuming this deploy is live."
+            exit 1
+          fi

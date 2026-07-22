@@ -36,7 +36,7 @@ describe('useConversations', () => {
 
     (dataUtils.getCurrentUserId as jest.Mock).mockReturnValue(mockUserId);
     (supabaseMessaging.fetchConversations as jest.Mock).mockResolvedValue(mockConversations);
-    (supabaseMessaging.subscribeToConversations as jest.Mock).mockReturnValue({});
+    (supabaseMessaging.subscribeToConversations as jest.Mock).mockReturnValue(() => {});
 
     const { result } = renderHook(() => useConversations());
 
@@ -59,7 +59,7 @@ describe('useConversations', () => {
 
     (dataUtils.getCurrentUserId as jest.Mock).mockReturnValue(mockUserId);
     (supabaseMessaging.fetchConversations as jest.Mock).mockRejectedValue(mockError);
-    (supabaseMessaging.subscribeToConversations as jest.Mock).mockReturnValue({});
+    (supabaseMessaging.subscribeToConversations as jest.Mock).mockReturnValue(() => {});
 
     const { result } = renderHook(() => useConversations());
 

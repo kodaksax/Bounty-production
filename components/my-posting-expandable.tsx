@@ -574,9 +574,13 @@ export function MyPostingExpandable({
     }
   }, [isOwner, bounty.status, reviewExpanded, startTime]);
 
-  // Subscribe to ready-state realtime updates so poster's card unlocks immediately
+  // Subscribe to ready-state realtime updates so poster's card unlocks immediately.
+  // Gated to in-progress bounties only: completed/cancelled/disputed postings can
+  // never produce a new ready/submission record, so subscribing for every posting
+  // a user has ever had (including years of history) would open channels that can
+  // never fire. This is the difference between N-postings-ever and N-active-now.
   useEffect(() => {
-    if (!bounty.id) return;
+    if (!bounty.id || bounty.status !== 'in_progress') return;
     let unsub: (() => void) | undefined;
     try {
       unsub = completionService.subscribeReady(String(bounty.id), rec => {
@@ -594,11 +598,12 @@ export function MyPostingExpandable({
         unsub && unsub();
       } catch {}
     };
-  }, [bounty.id, variant]);
+  }, [bounty.id, bounty.status, variant]);
 
-  // Subscribe to submission updates so hunter gets pushed back to WIP if poster requests revision
+  // Subscribe to submission updates so hunter gets pushed back to WIP if poster requests revision.
+  // Same in-progress-only gate as the ready-state subscription above.
   useEffect(() => {
-    if (!bounty.id) return;
+    if (!bounty.id || bounty.status !== 'in_progress') return;
     let unsub: (() => void) | undefined;
     try {
       unsub = completionService.subscribeSubmission(String(bounty.id), submission => {
@@ -650,7 +655,7 @@ export function MyPostingExpandable({
         unsub && unsub();
       } catch {}
     };
-  }, [bounty.id, isOwner]);
+  }, [bounty.id, bounty.status, isOwner]);
 
   const currentStage: 'apply_work' | 'working_progress' | 'review_verify' | 'payout' =
     useMemo(() => {

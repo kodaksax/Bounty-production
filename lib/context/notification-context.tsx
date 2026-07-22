@@ -35,6 +35,15 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const isMountedRef = useRef(true);
+  // Tracks the signed-in user id so the realtime subscription below can
+  // rebuild itself when the user changes (sign-out/sign-in without a full
+  // app remount, e.g. on a shared device) instead of staying subscribed
+  // to — or filtered on — the previous user.
+  const [userId, setUserId] = useState<string | null>(null);
+  // Whether the notifications realtime channel is currently SUBSCRIBED, so
+  // the polling fallback below can skip redundant network calls once
+  // realtime is actually delivering events.
+  const realtimeConnectedRef = useRef(false);
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -210,65 +219,83 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     };
   }, [fetchNotifications, refreshUnreadCount, handleNotificationTap, checkInitialNotification]);
 
+  // Track the signed-in user id so the realtime subscription effect below
+  // can rebuild when it changes.
+  useEffect(() => {
+    let cancelled = false;
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!cancelled) setUserId(session?.user?.id ?? null);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        setUserId(null);
+      } else if (session?.user?.id) {
+        setUserId(session.user.id);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
+  }, []);
+
   // Realtime subscription to notifications table so unread count and list
   // update immediately when a new notification is inserted for this user.
+  // Rebuilds whenever `userId` changes so a sign-out/sign-in without a full
+  // app remount doesn't leave the channel filtered on the previous user.
   useEffect(() => {
-    let cleanupFn: (() => void) | undefined;
+    realtimeConnectedRef.current = false;
+    if (!userId) return;
 
-    (async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const userId = session?.user?.id;
-        if (!userId) return;
-
-        // Prefer channel API when available (supabase-js v2+)
-        // @ts-ignore
-        if (typeof (supabase as any).channel === 'function') {
-          // @ts-ignore
-          const channel = (supabase as any).channel(`notifications:${userId}`)
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, (payload: any) => {
-              // Refresh notifications immediately
-              try { fetchNotifications(); refreshUnreadCount(); } catch (e) { console.error('notif realtime fetch failed', e) }
-            })
-            .subscribe();
-
-          cleanupFn = () => { try { (supabase as any).removeChannel(channel) } catch {} };
-          return;
+    const channel = supabase
+      .channel(`notifications:${userId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
+        () => {
+          try {
+            fetchNotifications();
+            refreshUnreadCount();
+          } catch (e) {
+            console.error('notif realtime fetch failed', e);
+          }
         }
+      )
+      .subscribe((status) => {
+        realtimeConnectedRef.current = status === 'SUBSCRIBED';
+      });
 
-        // Fallback: classic .from().on() subscription
-        // @ts-ignore
-        const sub = supabase.from(`notifications:user_id=eq.${userId}`).on('INSERT', (payload: any) => {
-          try { fetchNotifications(); refreshUnreadCount(); } catch (e) { console.error('notif realtime fetch failed', e) }
-        }).subscribe();
-
-        cleanupFn = () => { try { supabase.removeChannel && supabase.removeChannel(sub) } catch {} };
-        return;
-      } catch (e) {
-        // Non-fatal: we'll still poll every 30s as a fallback
-        console.error('Failed to setup realtime notifications subscription', e);
+    return () => {
+      realtimeConnectedRef.current = false;
+      try {
+        supabase.removeChannel(channel);
+      } catch {
+        // best-effort cleanup
       }
-    })();
-
-    return () => { try { cleanupFn && cleanupFn(); } catch {} }
-  }, [fetchNotifications, refreshUnreadCount]);
+    };
+  }, [userId, fetchNotifications, refreshUnreadCount]);
 
   // Track mounted state to prevent setState after unmount
   useEffect(() => {
     return () => { isMountedRef.current = false; };
   }, []);
 
-  // Poll for new notifications every 30 seconds when app is active
+  // Fallback poll for unread count. Now that the realtime channel above is
+  // actually wired to a published table, this should rarely fire — it skips
+  // the network call entirely whenever the realtime channel is SUBSCRIBED,
+  // and pauses while the app is backgrounded. It only does real work when
+  // realtime hasn't (yet) connected.
   useEffect(() => {
-    // TODO (Post-Launch): Optimize by using app state listener to pause when backgrounded
-    // import { AppState } from 'react-native';
-    // const subscription = AppState.addEventListener('change', nextAppState => {
-    //   if (nextAppState === 'active') refreshUnreadCount();
-    // });
-    
-    const interval = setInterval(() => {
+    const tick = () => {
+      if (realtimeConnectedRef.current) return;
+      if (AppState.currentState !== 'active') return;
       refreshUnreadCount();
-    }, 30000); // 30 seconds
+    };
+
+    const interval = setInterval(tick, 30000); // 30 seconds
 
     // Register interval for test cleanup
     if (process.env.NODE_ENV === 'test') {
@@ -282,7 +309,6 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
     return () => {
       clearInterval(interval);
-      // subscription?.remove();
     };
   }, [refreshUnreadCount]);
 

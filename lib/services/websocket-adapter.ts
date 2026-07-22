@@ -22,10 +22,16 @@ const CONVERSATION_CHANNEL_PREFIX = 'realtime:typing:';
 /** Delay in ms before attempting to reconnect after an unexpected channel closure. */
 const RECONNECT_DELAY_MS = 3000;
 
+/** A shared conversation channel plus how many callers currently hold it. */
+interface ConversationChannelEntry {
+  channel: RealtimeChannel;
+  refCount: number;
+}
+
 class WebSocketAdapter {
   private appChannel: RealtimeChannel | null = null;
   private connecting: boolean = false;
-  private conversationChannels: Map<string, RealtimeChannel> = new Map();
+  private conversationChannels: Map<string, ConversationChannelEntry> = new Map();
   private listeners: Map<string, EventHandler[]> = new Map();
   private connected: boolean = false;
   private intentionalDisconnect: boolean = false;
@@ -127,8 +133,8 @@ class WebSocketAdapter {
     }
 
     // Tear down all per-conversation channels.
-    for (const [, ch] of this.conversationChannels) {
-      supabase.removeChannel(ch).catch((err) => {
+    for (const [, entry] of this.conversationChannels) {
+      supabase.removeChannel(entry.channel).catch((err) => {
         if (__DEV__) console.warn('[wsAdapter] removeChannel failed:', err);
       });
     }
@@ -151,9 +157,18 @@ class WebSocketAdapter {
       .catch(() => {});
   }
 
-  /** Subscribe to a per-conversation typing channel. */
+  /**
+   * Subscribe to a per-conversation typing channel. Reference-counted: multiple
+   * callers (e.g. two mounted screens showing the same conversation) can each
+   * join/leave independently without one's cleanup tearing down the channel
+   * out from under the other.
+   */
   joinConversation(conversationId: string): void {
-    if (this.conversationChannels.has(conversationId)) return;
+    const existing = this.conversationChannels.get(conversationId);
+    if (existing) {
+      existing.refCount += 1;
+      return;
+    }
 
     const channelName = `${CONVERSATION_CHANNEL_PREFIX}${conversationId}`;
     const channel = supabase.channel(channelName, {
@@ -171,27 +186,30 @@ class WebSocketAdapter {
       })
       .subscribe();
 
-    this.conversationChannels.set(conversationId, channel);
+    this.conversationChannels.set(conversationId, { channel, refCount: 1 });
   }
 
-  /** Unsubscribe from a per-conversation typing channel. */
+  /** Release one reference to a per-conversation typing channel; only removes it once the last caller leaves. */
   leaveConversation(conversationId: string): void {
-    const channel = this.conversationChannels.get(conversationId);
-    if (channel) {
-      supabase.removeChannel(channel).catch((err) => {
-        if (__DEV__) console.warn('[wsAdapter] removeChannel failed:', err);
-      });
-      this.conversationChannels.delete(conversationId);
-    }
+    const entry = this.conversationChannels.get(conversationId);
+    if (!entry) return;
+
+    entry.refCount -= 1;
+    if (entry.refCount > 0) return;
+
+    supabase.removeChannel(entry.channel).catch((err) => {
+      if (__DEV__) console.warn('[wsAdapter] removeChannel failed:', err);
+    });
+    this.conversationChannels.delete(conversationId);
   }
 
   /** Broadcast a typing indicator to other participants in a conversation. */
   sendTyping(conversationId: string, isTyping: boolean): void {
-    const channel = this.conversationChannels.get(conversationId);
-    if (!channel) return;
+    const entry = this.conversationChannels.get(conversationId);
+    if (!entry) return;
 
     const event = isTyping ? 'typing.start' : 'typing.stop';
-    channel
+    entry.channel
       .send({
         type: 'broadcast',
         event,

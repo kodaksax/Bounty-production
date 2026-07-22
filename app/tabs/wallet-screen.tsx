@@ -4,7 +4,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AddMoneyScreen } from "../../components/add-money-screen";
 import { ConnectionStatus } from "../../components/connection-status";
@@ -16,6 +16,7 @@ import { PayoutFailedBanner } from "../../components/ui/PayoutFailedBanner";
 import { PaymentMethodSkeleton } from "../../components/ui/skeleton-loaders";
 import { WithdrawWithBankScreen } from "../../components/withdraw-with-bank-screen";
 import { useAuthContext } from '../../hooks/use-auth-context';
+import { useForegroundRefresh } from '../../hooks/useForegroundRefresh';
 import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility';
 import { useHapticFeedback } from '../../lib/haptic-feedback';
 import { StripePaymentMethod, stripeService } from '../../lib/services/stripe-service';
@@ -67,18 +68,36 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   const router = useRouter();
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const hasValidSession = !!(session?.access_token && session?.user?.id &&
+    session.user.id !== '00000000-0000-0000-0000-000000000001');
 
   // Refresh wallet data from API when user is authenticated
   useEffect(() => {
-    // Only refresh if we have a valid session with an access token
-    // and the user ID is not the fallback ID
-    const hasValidSession = session?.access_token && session?.user?.id &&
-      session.user.id !== '00000000-0000-0000-0000-000000000001';
-
     if (hasValidSession) {
-      refreshFromApi(session.access_token);
+      refreshFromApi(session!.access_token);
     }
-  }, [session, refreshFromApi]);
+  }, [session, hasValidSession, refreshFromApi]);
+
+  // Safety net alongside the realtime balance subscription in WalletProvider:
+  // re-sync if the app was backgrounded long enough that a realtime event
+  // could plausibly have been missed (e.g. socket dropped while backgrounded).
+  useForegroundRefresh(() => {
+    if (hasValidSession) {
+      refreshFromApi(session!.access_token);
+    }
+  });
+
+  const onRefresh = useCallback(async () => {
+    if (!hasValidSession) return;
+    setRefreshing(true);
+    try {
+      await refreshFromApi(session!.access_token);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [hasValidSession, session, refreshFromApi]);
 
   const handleAddMoney = async (amount: number) => {
     // AddMoneyScreen now handles Stripe integration internally
@@ -154,6 +173,9 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
         maxToRenderPerBatch={5}
         windowSize={5}
         initialNumToRender={3}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />
+        }
         ListHeaderComponent={() => (
           <>
             {/* Header */}

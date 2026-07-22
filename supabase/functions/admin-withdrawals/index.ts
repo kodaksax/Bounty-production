@@ -247,27 +247,50 @@ async function comparePlatformBalance(
   let findingId: string | null = null;
   if (Math.abs(driftCents) > DRIFT_THRESHOLD_CENTS) {
     const severity = driftCents < 0 ? 'critical' : 'warning';
-    const { data: finding, error: findingError } = await supabase
+
+    // Dedup against an already-open finding of the same type — without this,
+    // an unresolved drift re-inserts an identical row every single hour
+    // forever (confirmed live: 30 of 31 unacknowledged findings at audit
+    // time were hourly repeats of ~5 underlying conditions). Trend history
+    // is preserved regardless via the stripe_balance_snapshots insert below,
+    // which always runs.
+    const { data: openFinding, error: openFindingError } = await supabase
       .from('reconciliation_findings')
-      .insert({
-        finding_type: 'platform_balance_drift',
-        severity,
-        user_id: null,
-        details: { stripe_available_cents: stripeAvailableCents, stripe_pending_cents: stripePendingCents, ledger_cents: ledgerCents, drift_cents: driftCents },
-      })
       .select('id')
+      .eq('finding_type', 'platform_balance_drift')
+      .is('acknowledged_at', null)
+      .order('run_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
-    if (findingError) {
-      console.error('[admin-withdrawals] comparePlatformBalance: failed to insert finding', { error: findingError });
-    } else {
-      findingId = (finding as { id: string } | null)?.id ?? null;
-      if (severity === 'critical') {
-        logCritical('platform Stripe balance is below the ledger total', {
-          stripeAvailableCents, stripePendingCents, ledgerCents, driftCents,
-        });
-      }
+    if (openFindingError) {
+      console.error('[admin-withdrawals] comparePlatformBalance: failed to check for an open finding', { error: openFindingError });
     }
-    await postHogCapture('stripe_balance_drift_detected', { scope: 'platform', severity, drift_cents: driftCents });
+
+    if (openFinding) {
+      findingId = (openFinding as { id: string }).id;
+    } else {
+      const { data: finding, error: findingError } = await supabase
+        .from('reconciliation_findings')
+        .insert({
+          finding_type: 'platform_balance_drift',
+          severity,
+          user_id: null,
+          details: { stripe_available_cents: stripeAvailableCents, stripe_pending_cents: stripePendingCents, ledger_cents: ledgerCents, drift_cents: driftCents },
+        })
+        .select('id')
+        .maybeSingle();
+      if (findingError) {
+        console.error('[admin-withdrawals] comparePlatformBalance: failed to insert finding', { error: findingError });
+      } else {
+        findingId = (finding as { id: string } | null)?.id ?? null;
+        if (severity === 'critical') {
+          logCritical('platform Stripe balance is below the ledger total', {
+            stripeAvailableCents, stripePendingCents, ledgerCents, driftCents,
+          });
+        }
+      }
+      await postHogCapture('stripe_balance_drift_detected', { scope: 'platform', severity, drift_cents: driftCents });
+    }
   }
 
   await supabase.from('stripe_balance_snapshots').insert({
@@ -324,22 +347,43 @@ async function compareConnectAccountBalance(
   let findingId: string | null = null;
   if (Math.abs(driftCents) > DRIFT_THRESHOLD_CENTS) {
     const severity = driftCents > 0 ? 'warning' : 'info';
-    const { data: finding, error: findingError } = await supabase
+
+    // Dedup against an already-open finding for this same user — see the
+    // matching comment in comparePlatformBalance(). Without this, the same
+    // per-user condition re-inserts every hour forever.
+    const { data: openFinding, error: openFindingError } = await supabase
       .from('reconciliation_findings')
-      .insert({
-        finding_type: 'connect_account_balance_drift',
-        severity,
-        user_id: userId,
-        details: { stripe_account_id: accountId, stripe_available_cents: stripeAvailableCents, stripe_pending_cents: stripePendingCents, ledger_cents: ledgerCents, drift_cents: driftCents },
-      })
       .select('id')
+      .eq('finding_type', 'connect_account_balance_drift')
+      .eq('user_id', userId)
+      .is('acknowledged_at', null)
+      .order('run_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
-    if (findingError) {
-      console.error('[admin-withdrawals] compareConnectAccountBalance: failed to insert finding', { error: findingError });
-    } else {
-      findingId = (finding as { id: string } | null)?.id ?? null;
+    if (openFindingError) {
+      console.error('[admin-withdrawals] compareConnectAccountBalance: failed to check for an open finding', { userId, error: openFindingError });
     }
-    await postHogCapture('stripe_balance_drift_detected', { scope: 'connect_account', severity, drift_cents: driftCents });
+
+    if (openFinding) {
+      findingId = (openFinding as { id: string }).id;
+    } else {
+      const { data: finding, error: findingError } = await supabase
+        .from('reconciliation_findings')
+        .insert({
+          finding_type: 'connect_account_balance_drift',
+          severity,
+          user_id: userId,
+          details: { stripe_account_id: accountId, stripe_available_cents: stripeAvailableCents, stripe_pending_cents: stripePendingCents, ledger_cents: ledgerCents, drift_cents: driftCents },
+        })
+        .select('id')
+        .maybeSingle();
+      if (findingError) {
+        console.error('[admin-withdrawals] compareConnectAccountBalance: failed to insert finding', { error: findingError });
+      } else {
+        findingId = (finding as { id: string } | null)?.id ?? null;
+      }
+      await postHogCapture('stripe_balance_drift_detected', { scope: 'connect_account', severity, drift_cents: driftCents });
+    }
   }
 
   await supabase.from('stripe_balance_snapshots').insert({

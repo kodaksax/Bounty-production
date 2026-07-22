@@ -233,79 +233,76 @@ export const completionService = {
     bountyId: string,
     onUpdate: (submission: CompletionSubmission | null) => void
   ) {
+    let mounted = true;
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    // Polling is a true fallback now: it only runs before the realtime channel
+    // confirms SUBSCRIBED, and resumes if the channel later drops/errors.
+    const startPolling = () => {
+      if (pollInterval || !mounted) return;
+      pollInterval = (globalThis as any).setInterval(async () => {
+        if (!mounted) return;
+        const rec = await (completionService as any).getSubmission(bountyId);
+        onUpdate(rec);
+      }, 3000);
+
+      if (process.env.NODE_ENV === 'test') {
+        const _i = pollInterval as any;
+        if (typeof _i?.unref === 'function') {
+          try {
+            _i.unref();
+          } catch {
+            /* ignore */
+          }
+        }
+        (globalThis as any).__BACKGROUND_INTERVALS = (globalThis as any).__BACKGROUND_INTERVALS || [];
+        (globalThis as any).__BACKGROUND_INTERVALS.push(pollInterval);
+      }
+    };
+
+    const stopPolling = () => {
+      if (pollInterval) {
+        (globalThis as any).clearInterval(pollInterval);
+        pollInterval = null;
+      }
+    };
+
     if (isSupabaseConfigured) {
       try {
-        // Prefer channel API when available
-        // @ts-ignore
-        if (typeof (supabase as any).channel === 'function') {
-          // @ts-ignore
-          const channel = (supabase as any)
-            .channel(`completion_submissions:${bountyId}`)
-            .on(
-              'postgres_changes',
-              {
-                event: '*',
-                schema: 'public',
-                table: 'completion_submissions',
-                filter: `bounty_id=eq.${bountyId}`,
-              },
-              async (payload: any) => {
-                const latest = await (completionService as any).getSubmission(bountyId);
-                onUpdate(latest);
-              }
-            )
-            .subscribe();
-
-          return () => {
-            try {
-              (supabase as any).removeChannel(channel);
-            } catch {}
-          };
-        }
-
-        // Fallback classic subscription
-        // @ts-ignore
-        const sub = (supabase as any)
-          .from(`completion_submissions:bounty_id=eq.${bountyId}`)
-          .on('*', async (payload: any) => {
-            const latest = await (completionService as any).getSubmission(bountyId);
-            onUpdate(latest);
-          })
-          .subscribe();
-
-        return () => {
-          try {
-            supabase.removeChannel && supabase.removeChannel(sub);
-          } catch {}
-        };
+        channel = supabase
+          .channel(`completion_submissions:${bountyId}`)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'completion_submissions',
+              filter: `bounty_id=eq.${bountyId}`,
+            },
+            async () => {
+              const latest = await (completionService as any).getSubmission(bountyId);
+              onUpdate(latest);
+            }
+          )
+          .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+              stopPolling();
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+              startPolling();
+            }
+          });
+        // Safety net until the SUBSCRIBED confirmation above arrives.
+        startPolling();
       } catch (e) {
         logger.warning('Realtime submission subscription failed, falling back to polling', {
           bountyId,
           error: (e as any)?.message,
         });
+        startPolling();
       }
-    }
-
-    // Polling fallback
-    let mounted = true;
-    const interval = (globalThis as any).setInterval(async () => {
-      if (!mounted) return;
-      const rec = await (completionService as any).getSubmission(bountyId);
-      onUpdate(rec);
-    }, 3000);
-
-    // Register interval for test cleanup
-    if (process.env.NODE_ENV === 'test') {
-      const _i = interval as any;
-      if (typeof _i?.unref === 'function') {
-        try {
-          _i.unref();
-        } catch {
-          /* ignore */
-        }
-      }
-      (globalThis as any).__BACKGROUND_INTERVALS = (globalThis as any).__BACKGROUND_INTERVALS || [];
-      (globalThis as any).__BACKGROUND_INTERVALS.push(interval);
+    } else {
+      startPolling();
     }
 
     // initial fetch
@@ -316,7 +313,14 @@ export const completionService = {
 
     return () => {
       mounted = false;
-      (globalThis as any).clearInterval(interval);
+      stopPolling();
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch {
+          /* ignore */
+        }
+      }
     };
   },
 
@@ -552,85 +556,75 @@ export const completionService = {
     bountyId: string,
     onUpdate: (record: { bounty_id: string; hunter_id: string; ready_at: string } | null) => void
   ) {
-    if (isSupabaseConfigured) {
-      try {
-        // Attempt realtime subscription via Postgres changes
-        // Use the table-level subscription; if the client's supabase SDK doesn't support channel API,
-        // fall back to from(...).on(...).subscribe() pattern.
-        // Prefer supabase.channel if available (supabase-js v2+)
-        // @ts-ignore
-        if (typeof (supabase as any).channel === 'function') {
-          // @ts-ignore
-          const channel = (supabase as any)
-            .channel(`completion_ready:${bountyId}`)
-            .on(
-              'postgres_changes',
-              {
-                event: '*',
-                schema: 'public',
-                table: 'completion_ready',
-                filter: `bounty_id=eq.${bountyId}`,
-              },
-              (payload: any) => {
-                onUpdate(payload.new || null);
-              }
-            )
-            .subscribe();
+    let mounted = true;
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
 
-          return () => {
-            try {
-              (supabase as any).removeChannel(channel);
-            } catch {
-              /* ignore */
-            }
-          };
-        }
+    // Polling is a true fallback now: it only runs before the realtime channel
+    // confirms SUBSCRIBED, and resumes if the channel later drops/errors.
+    const startPolling = () => {
+      if (pollInterval || !mounted) return;
+      pollInterval = (globalThis as any).setInterval(async () => {
+        if (!mounted) return;
+        const record = await (completionService as any).getReady(bountyId);
+        onUpdate(record);
+      }, 3000);
 
-        // Fallback: classic subscription
-        // @ts-ignore
-        const sub = (supabase as any)
-          .from(`completion_ready:bounty_id=eq.${bountyId}`)
-          .on('*', (payload: any) => {
-            onUpdate(payload.new || null);
-          })
-          .subscribe();
-
-        return () => {
+      if (process.env.NODE_ENV === 'test') {
+        const _i = pollInterval as any;
+        if (typeof _i?.unref === 'function') {
           try {
-            supabase.removeChannel && supabase.removeChannel(sub);
+            _i.unref();
           } catch {
             /* ignore */
           }
-        };
+        }
+        (globalThis as any).__BACKGROUND_INTERVALS = (globalThis as any).__BACKGROUND_INTERVALS || [];
+        (globalThis as any).__BACKGROUND_INTERVALS.push(pollInterval);
+      }
+    };
+
+    const stopPolling = () => {
+      if (pollInterval) {
+        (globalThis as any).clearInterval(pollInterval);
+        pollInterval = null;
+      }
+    };
+
+    if (isSupabaseConfigured) {
+      try {
+        channel = supabase
+          .channel(`completion_ready:${bountyId}`)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'completion_ready',
+              filter: `bounty_id=eq.${bountyId}`,
+            },
+            (payload: any) => {
+              onUpdate(payload.new || null);
+            }
+          )
+          .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+              stopPolling();
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+              startPolling();
+            }
+          });
+        // Safety net until the SUBSCRIBED confirmation above arrives.
+        startPolling();
       } catch (e) {
         logger.warning('Realtime subscription failed, falling back to polling', {
           bountyId,
           error: (e as any)?.message,
         });
+        startPolling();
       }
-    }
-
-    // Polling fallback
-    let mounted = true;
-    const interval = (globalThis as any).setInterval(async () => {
-      if (!mounted) return;
-      // Use any-cast to avoid circular-typing issues inside the object literal
-      const record = await (completionService as any).getReady(bountyId);
-      onUpdate(record);
-    }, 3000);
-
-    // Register interval for test cleanup
-    if (process.env.NODE_ENV === 'test') {
-      const _i = interval as any;
-      if (typeof _i?.unref === 'function') {
-        try {
-          _i.unref();
-        } catch {
-          /* ignore */
-        }
-      }
-      (globalThis as any).__BACKGROUND_INTERVALS = (globalThis as any).__BACKGROUND_INTERVALS || [];
-      (globalThis as any).__BACKGROUND_INTERVALS.push(interval);
+    } else {
+      startPolling();
     }
 
     // Initial fetch
@@ -641,7 +635,14 @@ export const completionService = {
 
     return () => {
       mounted = false;
-      (globalThis as any).clearInterval(interval);
+      stopPolling();
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch {
+          /* ignore */
+        }
+      }
     };
   },
 

@@ -56,8 +56,21 @@ function cleanupLegacyConversationCaches(): Promise<void> {
 const emitter = new EventEmitter();
 emitter.setMaxListeners(50); // Increase limit for multiple subscriptions
 
-// Active Realtime subscriptions
-const subscriptions: Map<string, RealtimeChannel> = new Map();
+/**
+ * A shared realtime channel plus every caller's onUpdate callback. Reference-
+ * counted (via listeners.size) so that e.g. two mounted screens subscribed to
+ * the same conversation/messages channel don't have one's unmount tear down
+ * the channel — and lose events — for the other still-mounted caller.
+ */
+interface SubscriptionEntry {
+  channel: RealtimeChannel;
+  listeners: Set<(...args: any[]) => void>;
+}
+
+// Active Realtime subscriptions, reference-counted so that e.g. two mounted
+// screens subscribed to the same conversation/messages channel don't have
+// one's unmount tear down the channel out from under the other.
+const subscriptions: Map<string, SubscriptionEntry> = new Map();
 
 /**
  * Cache conversations locally for fast boot. Scoped per-user to prevent
@@ -670,113 +683,143 @@ export async function markAsRead(conversationId: string, userId: string): Promis
 }
 
 /**
- * Subscribe to realtime updates for conversations
+ * Subscribe to realtime updates for conversations.
+ *
+ * Reference-counted: if another caller is already subscribed to this user's
+ * conversations channel, this joins the existing channel rather than creating
+ * a duplicate, and every listener (not just the first) is notified on update.
+ * Returns an unsubscribe function scoped to this specific listener — the
+ * underlying channel is only torn down once every listener has unsubscribed.
  */
-export function subscribeToConversations(userId: string, onUpdate: () => void): RealtimeChannel {
+export function subscribeToConversations(userId: string, onUpdate: () => void): () => void {
   const channelName = `conversations:${userId}`;
 
-  // Check if already subscribed
-  if (subscriptions.has(channelName)) {
-    const existing = subscriptions.get(channelName);
-    if (existing) return existing;
+  let entry = subscriptions.get(channelName);
+  if (!entry) {
+    const listeners = new Set<() => void>();
+    const notify = () => listeners.forEach(fn => fn());
+
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'conversation_participants',
+          filter: `user_id=eq.${userId}`,
+        },
+        notify
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'conversations',
+        },
+        notify
+      )
+      .subscribe();
+
+    entry = { channel, listeners };
+    subscriptions.set(channelName, entry);
   }
 
-  const channel = supabase
-    .channel(channelName)
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'conversation_participants',
-        filter: `user_id=eq.${userId}`,
-      },
-      () => {
-        onUpdate();
-      }
-    )
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'conversations',
-      },
-      () => {
-        onUpdate();
-      }
-    )
-    .subscribe();
+  entry.listeners.add(onUpdate);
 
-  subscriptions.set(channelName, channel);
-  return channel;
+  return () => {
+    const current = subscriptions.get(channelName);
+    if (!current) return;
+    current.listeners.delete(onUpdate);
+    if (current.listeners.size === 0) {
+      supabase.removeChannel(current.channel).catch(() => {});
+      subscriptions.delete(channelName);
+    }
+  };
 }
 
 /**
- * Subscribe to realtime updates for messages in a conversation
+ * Subscribe to realtime updates for messages in a conversation.
+ *
+ * Reference-counted like {@link subscribeToConversations} — see there for
+ * details. Returns an unsubscribe function scoped to this specific listener.
  */
 export function subscribeToMessages(
   conversationId: string,
   onUpdate: (message?: Message) => void
-): RealtimeChannel {
+): () => void {
   const channelName = `messages:${conversationId}`;
 
-  // Check if already subscribed
-  if (subscriptions.has(channelName)) {
-    const existing = subscriptions.get(channelName);
-    if (existing) return existing;
+  let entry = subscriptions.get(channelName);
+  if (!entry) {
+    const listeners = new Set<(message?: Message) => void>();
+
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        payload => {
+          const message: Message = {
+            id: payload.new.id,
+            conversationId: payload.new.conversation_id,
+            senderId: payload.new.sender_id,
+            text: payload.new.text,
+            createdAt: payload.new.created_at,
+            status: 'sent',
+            mediaUrl: payload.new.media_url,
+            replyTo: payload.new.reply_to,
+            isPinned: payload.new.is_pinned,
+          };
+          listeners.forEach(fn => fn(message));
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        () => {
+          listeners.forEach(fn => fn());
+        }
+      )
+      .subscribe();
+
+    entry = { channel, listeners: listeners as Set<(...args: any[]) => void> };
+    subscriptions.set(channelName, entry);
   }
 
-  const channel = supabase
-    .channel(channelName)
-    .on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-        filter: `conversation_id=eq.${conversationId}`,
-      },
-      payload => {
-        const message: Message = {
-          id: payload.new.id,
-          conversationId: payload.new.conversation_id,
-          senderId: payload.new.sender_id,
-          text: payload.new.text,
-          createdAt: payload.new.created_at,
-          status: 'sent',
-          mediaUrl: payload.new.media_url,
-          replyTo: payload.new.reply_to,
-          isPinned: payload.new.is_pinned,
-        };
-        onUpdate(message);
-      }
-    )
-    .on(
-      'postgres_changes',
-      {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'messages',
-        filter: `conversation_id=eq.${conversationId}`,
-      },
-      () => {
-        onUpdate();
-      }
-    )
-    .subscribe();
+  (entry.listeners as Set<(message?: Message) => void>).add(onUpdate);
 
-  subscriptions.set(channelName, channel);
-  return channel;
+  return () => {
+    const current = subscriptions.get(channelName);
+    if (!current) return;
+    current.listeners.delete(onUpdate);
+    if (current.listeners.size === 0) {
+      supabase.removeChannel(current.channel).catch(() => {});
+      subscriptions.delete(channelName);
+    }
+  };
 }
 
 /**
- * Unsubscribe from a channel
+ * Force-remove a channel and all of its listeners by name, regardless of
+ * refcount. Prefer the unsubscribe function returned by subscribeToX for
+ * normal cleanup — this is for full teardown (e.g. sign-out).
  */
 export async function unsubscribe(channelNameOrId: string): Promise<void> {
-  const channel = subscriptions.get(channelNameOrId);
-  if (channel) {
-    await supabase.removeChannel(channel);
+  const entry = subscriptions.get(channelNameOrId);
+  if (entry) {
+    await supabase.removeChannel(entry.channel);
     subscriptions.delete(channelNameOrId);
   }
 }
@@ -785,8 +828,8 @@ export async function unsubscribe(channelNameOrId: string): Promise<void> {
  * Unsubscribe from all channels
  */
 export async function unsubscribeAll(): Promise<void> {
-  for (const [name, channel] of subscriptions.entries()) {
-    await supabase.removeChannel(channel);
+  for (const [name, entry] of subscriptions.entries()) {
+    await supabase.removeChannel(entry.channel);
     subscriptions.delete(name);
   }
 }
