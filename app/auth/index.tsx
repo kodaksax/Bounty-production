@@ -12,7 +12,7 @@
 
 import type { Href } from 'expo-router';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
@@ -24,7 +24,7 @@ export default function AuthIndex() {
   // Guard so we only redirect once, even if params reference changes on re-renders.
   const redirected = useRef(false);
   const { theme } = useAppThemeContext();
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
 
   useEffect(() => {
     if (redirected.current) return;

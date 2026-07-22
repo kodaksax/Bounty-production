@@ -167,3 +167,15 @@ verify_jwt = false
 # and gates on the admin role claim.
 [functions.admin-review-id]
 verify_jwt = false
+
+# share-bounty / share-profile / share-og-image: public link-unfurling +
+# smart-redirect pages hit directly by browsers, messaging-app crawlers, and
+# <img> requests — none of these can attach a Supabase JWT.
+[functions.share-bounty]
+verify_jwt = false
+
+[functions.share-profile]
+verify_jwt = false
+
+[functions.share-og-image]
+verify_jwt = false

@@ -7,7 +7,7 @@
  * this component just shows content.spec and calls accept()/dismiss().
  */
 import { MaterialIcons } from '@expo/vector-icons';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { AccessibilityInfo, Animated, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMoments } from '../../providers/moments-provider';
@@ -18,7 +18,7 @@ export function MomentSheet() {
   const { activeMoment, activeContent, accept, dismiss } = useMoments();
   const { theme } = useAppThemeContext();
   const insets = useSafeAreaInsets();
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const translateY = useRef(new Animated.Value(300)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 

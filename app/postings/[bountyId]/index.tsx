@@ -64,12 +64,19 @@ export default function BountyDashboard() {
     return raw && String(raw).trim().length > 0 ? String(raw) : null
   }, [bountyId])
 
+  // Tracks the most recently requested bounty id so a slower, stale response
+  // for a previous id (fast back-and-forth navigation between two bounty
+  // dashboards) can't overwrite state with the wrong bounty's data after a
+  // newer request has already resolved.
+  const latestRequestedIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (!routeBountyId) {
       setError('Invalid bounty id')
       setIsLoading(false)
       return
     }
+    latestRequestedIdRef.current = routeBountyId;
     // Ensure the app-level safe area color matches this screen's dark background
     pushColor(theme.background);
     loadBounty(routeBountyId)
@@ -98,7 +105,8 @@ export default function BountyDashboard() {
       setIsLoading(true);
       setError(null);
       const data = await bountyService.getById(id);
-      
+      if (latestRequestedIdRef.current !== id) return;
+
       if (!data) {
         throw new Error('Bounty not found');
       }
@@ -122,16 +130,20 @@ export default function BountyDashboard() {
         setCurrentStage('payout');
       }
     } catch (err) {
+      if (latestRequestedIdRef.current !== id) return;
       console.error('Error loading bounty:', err);
       setError(err instanceof Error ? err.message : 'Failed to load bounty');
     } finally {
-      setIsLoading(false);
+      if (latestRequestedIdRef.current === id) {
+        setIsLoading(false);
+      }
     }
   };
 
   const loadConversation = async (idStr: string) => {
     try {
       const conversations = await messageService.getConversations();
+      if (latestRequestedIdRef.current !== idStr) return;
       const bountyConv = conversations.find((c) => String(c.bountyId) === idStr);
       setConversation(bountyConv || null);
     } catch (err) {

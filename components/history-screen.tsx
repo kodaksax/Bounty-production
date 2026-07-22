@@ -1,5 +1,5 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   FlatList,
   RefreshControl,
@@ -27,7 +27,7 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
   const [refreshing, setRefreshing] = useState(false);
   const { transactions } = useWallet();
   const { theme } = useAppThemeContext();
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const currentUserId = getCurrentUserId();
 
   const loadHistory = async () => {

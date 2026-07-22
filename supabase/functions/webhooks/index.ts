@@ -763,6 +763,271 @@ async function handleAccountDeauthorized(
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Stripe <-> wallet balance reconciliation
+//
+// The rest of this file reacts to specific money-movement events. These
+// helpers instead answer a different question: "does Stripe's own balance
+// agree with what the ledger believes right now?" — catching drift from
+// manual Stripe Dashboard actions, silently-missed webhook deliveries, or any
+// other divergence the event-specific handlers above didn't anticipate.
+//
+// Deliberately read/insert-only: on drift, these write a
+// stripe_balance_snapshots row (always) and a reconciliation_findings row
+// (only when drift exceeds DRIFT_THRESHOLD_CENTS) and stop — they never
+// mutate profiles.balance directly. Narrow, evidence-based repair (replaying
+// a specific missed webhook's own idempotent effect) is intentionally
+// confined to the periodic sweep in admin-withdrawals's
+// `run_stripe_balance_sync` action, not the real-time path here — a single
+// `balance.available` event carries an aggregate number, not enough
+// transaction-level evidence to safely decide what to replay. See
+// docs/withdrawals/15-stripe-balance-sync.md.
+// (Duplicated into admin-withdrawals/index.ts — local imports aren't
+// supported by the deploy bundler, same constraint as logCritical/
+// mapStripeTransferError elsewhere in this codebase.)
+// ═══════════════════════════════════════════════════════════════════════════
+
+const DRIFT_THRESHOLD_CENTS = 100; // $1 — below this, treat as float/timing noise, not a finding
+
+function sumStripeBalanceCents(entries: Array<{ amount: number; currency: string }>): number {
+  return entries.filter(e => e.currency === 'usd').reduce((sum, e) => sum + e.amount, 0);
+}
+
+/**
+ * Best-effort PostHog server-side capture — plain fetch, no SDK (Deno edge
+ * runtime + this project's bundler don't carry the posthog-node dependency).
+ * Reuses the existing project API key (EXPO_PUBLIC_POSTHOG_KEY is a public,
+ * non-secret project identifier — safe to reuse server-side) but reads it
+ * from this function's own env, which requires it to be set as an Edge
+ * Function secret separately from the app's bundled env — see deploy notes.
+ * Never throws: analytics must never fail a webhook delivery.
+ */
+async function postHogCapture(
+  eventName: string,
+  properties: Record<string, unknown>,
+  distinctId = 'stripe-balance-reconciliation'
+): Promise<void> {
+  const apiKey = Deno.env.get('POSTHOG_PROJECT_API_KEY');
+  if (!apiKey) return; // Not configured — skip silently, this is optional observability.
+  const host = Deno.env.get('POSTHOG_HOST') ?? 'https://us.i.posthog.com';
+  try {
+    await fetch(`${host}/capture/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        api_key: apiKey,
+        event: eventName,
+        distinct_id: distinctId,
+        properties: { ...properties, source: 'stripe-balance-reconciliation' },
+        timestamp: new Date().toISOString(),
+      }),
+    });
+  } catch (err) {
+    console.warn('[webhooks] PostHog capture failed (non-fatal)', {
+      eventName,
+      error: (err as { message?: string })?.message,
+    });
+  }
+}
+
+/** Maps a Stripe Connect account id back to the Bounty user_id it belongs to. */
+async function findUserIdByConnectAccountId(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  accountId: string
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('stripe_connect_account_id', accountId)
+    .maybeSingle();
+  if (error) {
+    console.error('[webhooks] findUserIdByConnectAccountId lookup failed', { accountId, error });
+    return null;
+  }
+  return (data as { id: string } | null)?.id ?? null;
+}
+
+/**
+ * Platform-level check: the platform Stripe account's available+pending
+ * balance should always be >= the sum of every profiles.balance (everything
+ * the DB has promised users that hasn't left the platform yet). Less-than
+ * means the platform cannot currently honor every withdrawal on the books —
+ * critical. More-than is a lower-urgency surplus (fees, topups, uncredited
+ * deposits) worth investigating but not immediately dangerous.
+ */
+async function comparePlatformBalance(
+  stripe: Stripe,
+  // deno-lint-ignore no-explicit-any
+  supabase: any
+): Promise<void> {
+  const [balance, ledgerResult] = await Promise.all([
+    stripe.balance.retrieve(),
+    supabase.rpc('get_platform_ledger_balance_cents'),
+  ]);
+
+  if (ledgerResult.error) {
+    console.error('[webhooks] comparePlatformBalance: failed to read ledger total', {
+      error: ledgerResult.error,
+    });
+    return;
+  }
+
+  const stripeAvailableCents = sumStripeBalanceCents(balance.available);
+  const stripePendingCents = sumStripeBalanceCents(balance.pending);
+  const ledgerCents = Number(ledgerResult.data ?? 0);
+  const driftCents = stripeAvailableCents + stripePendingCents - ledgerCents;
+
+  let findingId: string | null = null;
+  if (Math.abs(driftCents) > DRIFT_THRESHOLD_CENTS) {
+    const severity = driftCents < 0 ? 'critical' : 'warning';
+    const { data: finding, error: findingError } = await supabase
+      .from('reconciliation_findings')
+      .insert({
+        finding_type: 'platform_balance_drift',
+        severity,
+        user_id: null,
+        details: {
+          stripe_available_cents: stripeAvailableCents,
+          stripe_pending_cents: stripePendingCents,
+          ledger_cents: ledgerCents,
+          drift_cents: driftCents,
+        },
+      })
+      .select('id')
+      .maybeSingle();
+    if (findingError) {
+      console.error('[webhooks] comparePlatformBalance: failed to insert finding', { error: findingError });
+    } else {
+      findingId = (finding as { id: string } | null)?.id ?? null;
+      if (severity === 'critical') {
+        logCritical('platform Stripe balance is below the ledger total — cannot currently honor every withdrawal on the books', {
+          stripeAvailableCents, stripePendingCents, ledgerCents, driftCents,
+        });
+      }
+    }
+    await postHogCapture('stripe_balance_drift_detected', {
+      scope: 'platform', severity, drift_cents: driftCents,
+    });
+  }
+
+  const { error: snapshotError } = await supabase.from('stripe_balance_snapshots').insert({
+    scope: 'platform',
+    user_id: null,
+    stripe_account_id: null,
+    stripe_available_cents: stripeAvailableCents,
+    stripe_pending_cents: stripePendingCents,
+    ledger_reference_cents: ledgerCents,
+    drift_cents: driftCents,
+    reconciliation_finding_id: findingId,
+  });
+  if (snapshotError) {
+    console.error('[webhooks] comparePlatformBalance: failed to insert snapshot', { error: snapshotError });
+  }
+}
+
+/**
+ * Per-connected-account check: a connected account's Stripe balance
+ * represents Transfers already sent to that user but not yet paid out to
+ * their bank. There is no exact DB-derived expectation for this number
+ * (Stripe controls the payout schedule, not this app), so the "ledger
+ * reference" here is an approximation — the sum of that user's own
+ * unresolved withdrawal rows (still pending, or completed within the last 7
+ * days without a confirmed terminal payout) — used only to decide whether a
+ * nonzero Stripe balance has a plausible in-app explanation, not to assert an
+ * exact expected value.
+ */
+async function compareConnectAccountBalance(
+  stripe: Stripe,
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  userId: string,
+  accountId: string
+): Promise<void> {
+  let balance: Stripe.Balance;
+  try {
+    balance = await stripe.balance.retrieve({ stripeAccount: accountId });
+  } catch (err) {
+    console.warn('[webhooks] compareConnectAccountBalance: Stripe balance retrieve failed (non-fatal)', {
+      userId, accountId, error: (err as { message?: string })?.message,
+    });
+    return;
+  }
+
+  const stripeAvailableCents = sumStripeBalanceCents(balance.available);
+  const stripePendingCents = sumStripeBalanceCents(balance.pending);
+
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: unresolvedRows, error: unresolvedError } = await supabase
+    .from('wallet_transactions')
+    .select('amount, status, stripe_payout_id, created_at')
+    .eq('user_id', userId)
+    .eq('type', 'withdrawal')
+    .or(`status.eq.pending,and(status.eq.completed,created_at.gte.${sevenDaysAgo},stripe_payout_id.is.null)`);
+
+  if (unresolvedError) {
+    console.error('[webhooks] compareConnectAccountBalance: failed to read unresolved withdrawals', {
+      userId, error: unresolvedError,
+    });
+    return;
+  }
+
+  const ledgerCents = Math.round(
+    ((unresolvedRows as Array<{ amount: number }> | null) ?? []).reduce(
+      (sum, row) => sum + Math.abs(row.amount), 0
+    ) * 100
+  );
+  const driftCents = stripeAvailableCents + stripePendingCents - ledgerCents;
+
+  let findingId: string | null = null;
+  if (Math.abs(driftCents) > DRIFT_THRESHOLD_CENTS) {
+    // Unexplained surplus (drift > 0) is the actionable case — money sitting
+    // on the connected account with no matching in-app withdrawal activity
+    // to explain it (manual Dashboard transfer, disabled payouts, etc.).
+    // A shortfall (drift < 0) usually just means a payout already arrived at
+    // the bank before this app's records caught up — informational only.
+    const severity = driftCents > 0 ? 'warning' : 'info';
+    const { data: finding, error: findingError } = await supabase
+      .from('reconciliation_findings')
+      .insert({
+        finding_type: 'connect_account_balance_drift',
+        severity,
+        user_id: userId,
+        details: {
+          stripe_account_id: accountId,
+          stripe_available_cents: stripeAvailableCents,
+          stripe_pending_cents: stripePendingCents,
+          ledger_cents: ledgerCents,
+          drift_cents: driftCents,
+        },
+      })
+      .select('id')
+      .maybeSingle();
+    if (findingError) {
+      console.error('[webhooks] compareConnectAccountBalance: failed to insert finding', { error: findingError });
+    } else {
+      findingId = (finding as { id: string } | null)?.id ?? null;
+    }
+    await postHogCapture('stripe_balance_drift_detected', {
+      scope: 'connect_account', severity, drift_cents: driftCents,
+    });
+  }
+
+  const { error: snapshotError } = await supabase.from('stripe_balance_snapshots').insert({
+    scope: 'connect_account',
+    user_id: userId,
+    stripe_account_id: accountId,
+    stripe_available_cents: stripeAvailableCents,
+    stripe_pending_cents: stripePendingCents,
+    ledger_reference_cents: ledgerCents,
+    drift_cents: driftCents,
+    reconciliation_finding_id: findingId,
+  });
+  if (snapshotError) {
+    console.error('[webhooks] compareConnectAccountBalance: failed to insert snapshot', { error: snapshotError });
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -2285,6 +2550,255 @@ Deno.serve(async (req: Request) => {
         break;
       }
 
+      case 'balance.available': {
+        // Fires per-account. Connect-scoped deliveries carry a top-level
+        // `event.account`; the platform's own balance.available does not —
+        // that's the only signal distinguishing which Stripe balance changed.
+        const accountId = (event as any).account as string | undefined;
+        if (accountId) {
+          const ownerUserId = await findUserIdByConnectAccountId(supabase, accountId);
+          if (ownerUserId) {
+            await compareConnectAccountBalance(stripe, supabase, ownerUserId, accountId);
+          } else {
+            console.warn(`[webhooks] balance.available: no profile found for Connect account ${accountId}`);
+          }
+        } else {
+          await comparePlatformBalance(stripe, supabase);
+        }
+        break;
+      }
+
+      case 'charge.dispute.updated': {
+        // Status/evidence-deadline sync only — no balance effect. The actual
+        // hold (created) and settlement (closed) are handled by their own
+        // events above; this just keeps bounty_disputes current in between.
+        const updatedDispute = event.data.object as Stripe.Dispute;
+        const { error: updateDisputeErr } = await supabase
+          .from('bounty_disputes')
+          .update({
+            reason: `Stripe chargeback dispute (${updatedDispute.status}): ${updatedDispute.id}`,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('stripe_dispute_id', updatedDispute.id);
+        if (updateDisputeErr) {
+          console.error('[webhooks] charge.dispute.updated: failed to update bounty_disputes', {
+            dispute_id: updatedDispute.id,
+            error: updateDisputeErr,
+          });
+          throw updateDisputeErr;
+        }
+        console.log(`[webhooks] charge.dispute.updated: dispute ${updatedDispute.id} → ${updatedDispute.status}`);
+        break;
+      }
+
+      case 'charge.dispute.funds_withdrawn':
+      case 'charge.dispute.funds_reinstated': {
+        // These mark the ACTUAL platform-balance movement for a dispute —
+        // distinct from dispute.created (in-app hold, no real balance change
+        // yet) and dispute.closed (this app's own win/loss ledger
+        // settlement). No ledger mutation here (dispute.closed already owns
+        // that); this exists so the platform-balance reconciliation
+        // (comparePlatformBalance) has a recorded, expected explanation for
+        // the resulting Stripe balance change instead of flagging it as
+        // unexplained drift.
+        const fundsDispute = event.data.object as Stripe.Dispute;
+        const fundsEventKind = event.type === 'charge.dispute.funds_withdrawn' ? 'withdrawn' : 'reinstated';
+        console.log(
+          `[webhooks] charge.dispute.${fundsEventKind}: dispute=${fundsDispute.id} amount=$${fundsDispute.amount / 100}`
+        );
+        const { error: fundsFindingErr } = await supabase.from('reconciliation_findings').insert({
+          finding_type: 'dispute_funds_movement',
+          severity: 'info',
+          user_id: null,
+          details: {
+            stripe_dispute_id: fundsDispute.id,
+            direction: fundsEventKind,
+            amount_cents: fundsDispute.amount,
+          },
+        });
+        if (fundsFindingErr) {
+          console.error(`[webhooks] charge.dispute.${fundsEventKind}: failed to record finding`, {
+            dispute_id: fundsDispute.id,
+            error: fundsFindingErr,
+          });
+        }
+        break;
+      }
+
+      case 'refund.created':
+      case 'refund.updated': {
+        // The Refund-object events, distinct from the already-handled
+        // `charge.refunded` (which owns the actual apply_refund ledger
+        // mutation, keyed idempotently on stripe_refund_id). These fire for
+        // the same underlying refund and are handled here as observability-
+        // only — logging confirms Stripe's Refund object reached this state,
+        // with no duplicate ledger write.
+        const refundObj = event.data.object as Stripe.Refund;
+        console.log(
+          `[webhooks] ${event.type}: refund=${refundObj.id} status=${refundObj.status} amount=$${refundObj.amount / 100}`
+        );
+        break;
+      }
+
+      case 'refund.failed': {
+        // The refund attempt did NOT return money to the customer — if a
+        // bounty_payments row was optimistically moved to 'refund_pending' in
+        // anticipation (see the charge.refunded handler's fallback path),
+        // revert it back to 'captured' since the funds never actually left.
+        const failedRefund = event.data.object as Stripe.Refund;
+        const failedRefundPI =
+          typeof failedRefund.payment_intent === 'string'
+            ? failedRefund.payment_intent
+            : (failedRefund.payment_intent as Stripe.PaymentIntent | null)?.id ?? null;
+
+        logCritical('Stripe refund failed — funds did not return to the customer', {
+          refundId: failedRefund.id,
+          paymentIntentId: failedRefundPI,
+          amountCents: failedRefund.amount,
+          failureReason: (failedRefund as unknown as { failure_reason?: string }).failure_reason ?? null,
+        });
+
+        if (failedRefundPI) {
+          const { data: revertedBp, error: revertErr } = await supabase
+            .from('bounty_payments')
+            .update({ status: 'captured', updated_at: new Date().toISOString() })
+            .eq('stripe_payment_intent_id', failedRefundPI)
+            .eq('status', 'refund_pending')
+            .select('id')
+            .maybeSingle();
+          if (revertErr) {
+            console.error('[webhooks] refund.failed: failed to revert bounty_payments status', {
+              paymentIntentId: failedRefundPI,
+              error: revertErr,
+            });
+            throw revertErr;
+          }
+          if (revertedBp) {
+            console.log(`[webhooks] refund.failed: reverted bounty_payment ${(revertedBp as any).id} to 'captured'`);
+          }
+        }
+        break;
+      }
+
+      case 'topup.created':
+      case 'topup.succeeded':
+      case 'topup.failed': {
+        // Platform-level treasury events — manually adding funds to the
+        // platform Stripe balance from an external bank account, not tied to
+        // any single user. No ledger mutation; recorded so
+        // comparePlatformBalance has an explanation for the resulting
+        // balance change instead of flagging it as unexplained drift.
+        const topup = event.data.object as Stripe.Topup;
+        console.log(`[webhooks] ${event.type}: topup=${topup.id} amount=$${topup.amount / 100} status=${topup.status}`);
+        const { error: topupFindingErr } = await supabase.from('reconciliation_findings').insert({
+          finding_type: 'stripe_topup',
+          severity: 'info',
+          user_id: null,
+          details: { stripe_topup_id: topup.id, amount_cents: topup.amount, status: topup.status, event_type: event.type },
+        });
+        if (topupFindingErr) {
+          console.error('[webhooks] topup event: failed to record finding', { topup_id: topup.id, error: topupFindingErr });
+        }
+        break;
+      }
+
+      case 'external_account.created':
+      case 'external_account.updated':
+      case 'external_account.deleted':
+      case 'account.external_account.created':
+      case 'account.external_account.updated':
+      case 'account.external_account.deleted': {
+        // A connected account's linked bank account/debit card changed —
+        // either via /connect's own bank-accounts/debit-cards routes (in
+        // which case this is a confirming echo) or directly in the Stripe
+        // Dashboard (in which case this is the ONLY signal the app gets).
+        // Whichever Connect API-version event family this project's webhook
+        // endpoint is actually configured for, both share the same
+        // Account/ExternalAccount payload shape, so one handler covers both.
+        const externalAccountEventAccountId = (event as any).account as string | undefined;
+        // Deliberately untyped as a specific Stripe object union — this
+        // payload is either a BankAccount or a Card depending on the payout
+        // method, and only `id`/`object` are actually used below.
+        const externalAccount = event.data.object as unknown as { id: string; object: string };
+        const changeKind = event.type.endsWith('.created')
+          ? 'added'
+          : event.type.endsWith('.deleted')
+            ? 'removed'
+            : 'updated';
+
+        if (!externalAccountEventAccountId) {
+          console.warn(`[webhooks] ${event.type}: no event.account present — skipping`);
+          break;
+        }
+        const eaOwnerUserId = await findUserIdByConnectAccountId(supabase, externalAccountEventAccountId);
+        if (!eaOwnerUserId) {
+          console.warn(`[webhooks] ${event.type}: no profile found for Connect account ${externalAccountEventAccountId}`);
+          break;
+        }
+
+        const { error: eaFindingErr } = await supabase.from('reconciliation_findings').insert({
+          finding_type: 'external_account_change',
+          severity: 'info',
+          user_id: eaOwnerUserId,
+          details: {
+            stripe_account_id: externalAccountEventAccountId,
+            external_account_id: externalAccount.id,
+            object: externalAccount.object,
+            change: changeKind,
+          },
+        });
+        if (eaFindingErr) {
+          console.error(`[webhooks] ${event.type}: failed to record finding`, { error: eaFindingErr });
+        }
+
+        // A removed debit card invalidates any cached Instant Payout
+        // eligibility for that method — /connect's own GET /debit-cards
+        // route re-derives eligibility live from Stripe on every call, so
+        // there is no cache to explicitly bust here; this notification is
+        // the only user-facing action needed.
+        const eaNotifBody =
+          changeKind === 'removed'
+            ? "A bank account or card was removed from your payout method outside the app. If this wasn't you, please review your payout settings."
+            : `Your payout method was ${changeKind} outside the app.`;
+        const { error: eaNotifErr } = await supabase.from('notifications').insert({
+          user_id: eaOwnerUserId,
+          type: 'payment',
+          title: 'Payout Method Changed',
+          body: eaNotifBody,
+          data: { stripeAccountId: externalAccountEventAccountId, change: changeKind },
+        });
+        if (eaNotifErr) {
+          console.error(`[webhooks] ${event.type}: failed to insert notification`, { error: eaNotifErr });
+          // Non-fatal — the audit finding above is the load-bearing write.
+        }
+        break;
+      }
+
+      case 'person.updated': {
+        // A Connect account's KYC "Person" record changed (e.g. a
+        // requirement was satisfied or newly imposed). The Person payload
+        // itself doesn't carry the account's charges_enabled/payouts_enabled/
+        // requirements — re-fetch the Account and reuse the same sync path as
+        // the existing capability.updated handler.
+        const personAccountId = (event as any).account as string | undefined;
+        if (!personAccountId) {
+          console.warn('[webhooks] person.updated: no event.account present — skipping');
+          break;
+        }
+        try {
+          const refreshedAccount = await stripe.accounts.retrieve(personAccountId);
+          await syncConnectAccountToProfile(supabase, refreshedAccount);
+          console.log(`[webhooks] person.updated: re-synced account ${personAccountId}`);
+        } catch (personErr) {
+          console.error('[webhooks] person.updated: failed to refresh/sync account', {
+            accountId: personAccountId,
+            error: (personErr as { message?: string })?.message,
+          });
+          throw personErr;
+        }
+        break;
+      }
+
       default:
         console.log(`[webhooks] Unhandled event type: ${event.type}`);
     }
@@ -2292,13 +2806,29 @@ Deno.serve(async (req: Request) => {
     // Mark event as processed
     await supabase
       .from('stripe_events')
-      .update({ processed: true, processed_at: new Date().toISOString() })
+      .update({ processed: true, processed_at: new Date().toISOString(), status: 'processed' })
       .eq('stripe_event_id', event.id);
 
     return jsonResponse({ received: true });
   } catch (error: unknown) {
     const err = error as { message?: string };
     console.error('[webhooks] Error processing event:', err);
+
+    // Record the failure on stripe_events for the failed-webhook admin
+    // dashboard/replay tooling — these columns (retry_count/last_error/
+    // status) have existed since 20260115_enhance_webhook_tracking.sql but
+    // were never actually written to until now. Best-effort: a failure here
+    // must not mask the original processing error already being returned to
+    // Stripe (which is what actually triggers Stripe's own retry).
+    try {
+      await supabase.rpc('record_stripe_event_failure', {
+        p_stripe_event_id: event!.id,
+        p_error_message: err?.message ?? String(error),
+      });
+    } catch (dlqErr) {
+      console.error('[webhooks] Failed to record DLQ failure state (non-fatal)', { dlqErr });
+    }
+
     return jsonResponse({ error: 'Webhook processing failed' }, 500);
   }
 });

@@ -6,7 +6,7 @@
 
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -35,7 +35,7 @@ export default function PhoneScreen() {
   const { data: onboardingData, updateData: updateOnboardingData } = useOnboarding();
 
   const { theme } = useAppThemeContext();
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const [phone, setPhone] = useState(onboardingData.phone);
   const [saving, setSaving] = useState(false);
 

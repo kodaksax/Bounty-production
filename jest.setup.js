@@ -300,19 +300,6 @@ jest.mock('@sentry/react-native', () => ({
   configureScope: jest.fn(callback => callback({ setTag: jest.fn(), setExtra: jest.fn() })),
 }));
 
-// Mock mixpanel-react-native
-jest.mock('mixpanel-react-native', () => ({
-  Mixpanel: {
-    init: jest.fn().mockResolvedValue(undefined),
-    track: jest.fn(),
-    identify: jest.fn(),
-    setProfile: jest.fn(),
-    timeEvent: jest.fn(),
-    flush: jest.fn(),
-    reset: jest.fn(),
-  },
-}));
-
 // Mock expo-modules-core
 jest.mock(
   'expo-modules-core',

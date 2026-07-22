@@ -13,12 +13,19 @@
 // regardless of success or failure, so there is always a durable record of
 // who did what, to whom, for how much, and why.
 //
-// POST body: { action: 'force_retry' | 'manual_adjustment' | 'mark_externally_settled' | 'reverse_transfer' | 'list_log', ... }
+// POST body: { action: 'force_retry' | 'manual_adjustment' | 'mark_externally_settled' | 'reverse_transfer' | 'list_log' | 'compare_stripe' | 'run_stripe_balance_sync' | 'list_balance_findings' | 'acknowledge_finding', ... }
 //   force_retry:              { transactionId, reason, bankAccountId? }
 //   manual_adjustment:        { userId, amount, reason, relatedTransactionId? }
 //   mark_externally_settled:  { transactionId, reason, confirmedNoStripePayout, note?, balanceAdjustment? }
 //   reverse_transfer:         { transactionId, reason }
 //   list_log:                 { userId?, limit? }
+//   compare_stripe:           { transactionId }
+//   run_stripe_balance_sync:  {}  — also callable by the hourly pg_cron job via a dedicated
+//                                  bearer secret (RECONCILIATION_CRON_SECRET), see the
+//                                  system-triggered branch below; admin-JWT auth is skipped
+//                                  in that case only.
+//   list_balance_findings:    { limit? }
+//   acknowledge_finding:      { findingId, resolution? }
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Stripe from 'npm:stripe@14';
@@ -132,7 +139,9 @@ async function logAdminAction(
       | 'force_retry_withdrawal'
       | 'manual_balance_adjustment'
       | 'mark_externally_settled_withdrawal'
-      | 'reverse_stripe_transfer';
+      | 'reverse_stripe_transfer'
+      | 'run_stripe_balance_sync'
+      | 'acknowledge_reconciliation_finding';
     targetUserId: string;
     targetTransactionId?: string | null;
     amount?: number | null;
@@ -158,6 +167,369 @@ async function logAdminAction(
   }
 }
 
+function safeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let res = 0;
+  for (let i = 0; i < a.length; i++) {
+    res |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return res === 0;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Stripe <-> wallet balance reconciliation — duplicated from
+// supabase/functions/webhooks/index.ts (local imports are not supported by
+// the deploy bundler, same constraint as logCritical/mapStripeTransferError
+// above). Keep both copies in sync when changing the comparison logic.
+//
+// comparePlatformBalance/compareConnectAccountBalance are identical to the
+// webhooks copies (detect + record drift, never mutate balance). This file
+// additionally owns attemptRecoverableRepair and runStripeBalanceSync — the
+// periodic-sweep-only repair path is deliberately not duplicated into
+// webhooks/index.ts (see that file's reconciliation-section comment for why).
+// ═══════════════════════════════════════════════════════════════════════════
+
+const DRIFT_THRESHOLD_CENTS = 100; // $1 — below this, treat as float/timing noise, not a finding
+
+function sumStripeBalanceCents(entries: Array<{ amount: number; currency: string }>): number {
+  return entries.filter(e => e.currency === 'usd').reduce((sum, e) => sum + e.amount, 0);
+}
+
+async function postHogCapture(
+  eventName: string,
+  properties: Record<string, unknown>,
+  distinctId = 'stripe-balance-reconciliation'
+): Promise<void> {
+  const apiKey = Deno.env.get('POSTHOG_PROJECT_API_KEY');
+  if (!apiKey) return;
+  const host = Deno.env.get('POSTHOG_HOST') ?? 'https://us.i.posthog.com';
+  try {
+    await fetch(`${host}/capture/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        api_key: apiKey,
+        event: eventName,
+        distinct_id: distinctId,
+        properties: { ...properties, source: 'stripe-balance-reconciliation' },
+        timestamp: new Date().toISOString(),
+      }),
+    });
+  } catch (err) {
+    console.warn('[admin-withdrawals] PostHog capture failed (non-fatal)', {
+      eventName,
+      error: (err as { message?: string })?.message,
+    });
+  }
+}
+
+async function comparePlatformBalance(
+  stripe: Stripe,
+  // deno-lint-ignore no-explicit-any
+  supabase: any
+): Promise<void> {
+  const [balance, ledgerResult] = await Promise.all([
+    stripe.balance.retrieve(),
+    supabase.rpc('get_platform_ledger_balance_cents'),
+  ]);
+  if (ledgerResult.error) {
+    console.error('[admin-withdrawals] comparePlatformBalance: failed to read ledger total', {
+      error: ledgerResult.error,
+    });
+    return;
+  }
+
+  const stripeAvailableCents = sumStripeBalanceCents(balance.available);
+  const stripePendingCents = sumStripeBalanceCents(balance.pending);
+  const ledgerCents = Number(ledgerResult.data ?? 0);
+  const driftCents = stripeAvailableCents + stripePendingCents - ledgerCents;
+
+  let findingId: string | null = null;
+  if (Math.abs(driftCents) > DRIFT_THRESHOLD_CENTS) {
+    const severity = driftCents < 0 ? 'critical' : 'warning';
+    const { data: finding, error: findingError } = await supabase
+      .from('reconciliation_findings')
+      .insert({
+        finding_type: 'platform_balance_drift',
+        severity,
+        user_id: null,
+        details: { stripe_available_cents: stripeAvailableCents, stripe_pending_cents: stripePendingCents, ledger_cents: ledgerCents, drift_cents: driftCents },
+      })
+      .select('id')
+      .maybeSingle();
+    if (findingError) {
+      console.error('[admin-withdrawals] comparePlatformBalance: failed to insert finding', { error: findingError });
+    } else {
+      findingId = (finding as { id: string } | null)?.id ?? null;
+      if (severity === 'critical') {
+        logCritical('platform Stripe balance is below the ledger total', {
+          stripeAvailableCents, stripePendingCents, ledgerCents, driftCents,
+        });
+      }
+    }
+    await postHogCapture('stripe_balance_drift_detected', { scope: 'platform', severity, drift_cents: driftCents });
+  }
+
+  await supabase.from('stripe_balance_snapshots').insert({
+    scope: 'platform',
+    user_id: null,
+    stripe_account_id: null,
+    stripe_available_cents: stripeAvailableCents,
+    stripe_pending_cents: stripePendingCents,
+    ledger_reference_cents: ledgerCents,
+    drift_cents: driftCents,
+    reconciliation_finding_id: findingId,
+  });
+}
+
+async function compareConnectAccountBalance(
+  stripe: Stripe,
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  userId: string,
+  accountId: string
+): Promise<void> {
+  let balance: Stripe.Balance;
+  try {
+    balance = await stripe.balance.retrieve({ stripeAccount: accountId });
+  } catch (err) {
+    console.warn('[admin-withdrawals] compareConnectAccountBalance: Stripe balance retrieve failed (non-fatal)', {
+      userId, accountId, error: (err as { message?: string })?.message,
+    });
+    return;
+  }
+
+  const stripeAvailableCents = sumStripeBalanceCents(balance.available);
+  const stripePendingCents = sumStripeBalanceCents(balance.pending);
+
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: unresolvedRows, error: unresolvedError } = await supabase
+    .from('wallet_transactions')
+    .select('amount, status, stripe_payout_id, created_at')
+    .eq('user_id', userId)
+    .eq('type', 'withdrawal')
+    .or(`status.eq.pending,and(status.eq.completed,created_at.gte.${sevenDaysAgo},stripe_payout_id.is.null)`);
+  if (unresolvedError) {
+    console.error('[admin-withdrawals] compareConnectAccountBalance: failed to read unresolved withdrawals', {
+      userId, error: unresolvedError,
+    });
+    return;
+  }
+
+  const ledgerCents = Math.round(
+    ((unresolvedRows as Array<{ amount: number }> | null) ?? []).reduce((sum, row) => sum + Math.abs(row.amount), 0) * 100
+  );
+  const driftCents = stripeAvailableCents + stripePendingCents - ledgerCents;
+
+  let findingId: string | null = null;
+  if (Math.abs(driftCents) > DRIFT_THRESHOLD_CENTS) {
+    const severity = driftCents > 0 ? 'warning' : 'info';
+    const { data: finding, error: findingError } = await supabase
+      .from('reconciliation_findings')
+      .insert({
+        finding_type: 'connect_account_balance_drift',
+        severity,
+        user_id: userId,
+        details: { stripe_account_id: accountId, stripe_available_cents: stripeAvailableCents, stripe_pending_cents: stripePendingCents, ledger_cents: ledgerCents, drift_cents: driftCents },
+      })
+      .select('id')
+      .maybeSingle();
+    if (findingError) {
+      console.error('[admin-withdrawals] compareConnectAccountBalance: failed to insert finding', { error: findingError });
+    } else {
+      findingId = (finding as { id: string } | null)?.id ?? null;
+    }
+    await postHogCapture('stripe_balance_drift_detected', { scope: 'connect_account', severity, drift_cents: driftCents });
+  }
+
+  await supabase.from('stripe_balance_snapshots').insert({
+    scope: 'connect_account',
+    user_id: userId,
+    stripe_account_id: accountId,
+    stripe_available_cents: stripeAvailableCents,
+    stripe_pending_cents: stripePendingCents,
+    ledger_reference_cents: ledgerCents,
+    drift_cents: driftCents,
+    reconciliation_finding_id: findingId,
+  });
+}
+
+/**
+ * The ONLY repair path in this system that mutates a balance without a human
+ * clicking a button — deliberately narrow. It replays a specific missed
+ * webhook's own idempotent effect (the exact same update_balance() refund
+ * call handleTransferSetback/handleUndeliveredPayout in webhooks/index.ts
+ * would have made) when Stripe's Transfer/Payout object shows an unambiguous
+ * terminal failure state that a stuck-`pending` wallet_transactions row never
+ * recorded. It NEVER touches a bare balance-number mismatch with no
+ * corresponding Stripe object evidence — those are always left in
+ * reconciliation_findings for human review (docs/withdrawals/
+ * 04-automation-handler-guide.md's existing rule). Guarded by the same
+ * `.eq('status', 'pending')` optimistic-lock pattern used everywhere else in
+ * this codebase, so it is safe even if the real webhook arrives later.
+ */
+async function attemptRecoverableRepair(
+  stripe: Stripe,
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  userId: string,
+  accountId: string
+): Promise<{ repaired: number }> {
+  const { data: stuckRows, error } = await supabase
+    .from('wallet_transactions')
+    .select('id, amount, status, stripe_transfer_id, stripe_payout_id, metadata, created_at')
+    .eq('user_id', userId)
+    .eq('type', 'withdrawal')
+    .eq('status', 'pending')
+    .lt('created_at', new Date(Date.now() - 15 * 60 * 1000).toISOString());
+
+  if (error || !stuckRows || stuckRows.length === 0) return { repaired: 0 };
+
+  let repaired = 0;
+  for (const row of stuckRows as Array<WalletTransaction & { stripe_transfer_id?: string | null; stripe_payout_id?: string | null }>) {
+    let terminalOutcome: 'reversed' | 'failed' | 'canceled' | null = null;
+
+    if (row.stripe_transfer_id) {
+      try {
+        const transfer = await stripe.transfers.retrieve(row.stripe_transfer_id);
+        if (transfer.reversed) terminalOutcome = 'reversed';
+      } catch (e) {
+        console.warn('[admin-withdrawals] attemptRecoverableRepair: transfer lookup failed', {
+          transactionId: row.id, error: (e as { message?: string })?.message,
+        });
+      }
+    }
+    if (!terminalOutcome && row.stripe_payout_id) {
+      try {
+        const payout = await stripe.payouts.retrieve(row.stripe_payout_id, { stripeAccount: accountId });
+        if (payout.status === 'failed') terminalOutcome = 'failed';
+        else if (payout.status === 'canceled') terminalOutcome = 'canceled';
+      } catch (e) {
+        console.warn('[admin-withdrawals] attemptRecoverableRepair: payout lookup failed', {
+          transactionId: row.id, error: (e as { message?: string })?.message,
+        });
+      }
+    }
+    if (!terminalOutcome) continue;
+
+    const metadata = (row.metadata as Record<string, unknown> | null) ?? {};
+    if (metadata.payout_status === terminalOutcome) continue; // already handled by a prior run/webhook
+
+    const { data: updatedTx, error: updErr } = await supabase
+      .from('wallet_transactions')
+      .update({ status: 'failed', metadata: { ...metadata, payout_status: terminalOutcome, repaired_by: 'stripe_balance_sync' } })
+      .eq('id', row.id)
+      .eq('status', 'pending') // optimistic lock — no-ops if a concurrent webhook already resolved this row
+      .select()
+      .maybeSingle();
+    if (updErr || !updatedTx) continue;
+
+    const refundAmount = Math.abs(row.amount);
+    const { error: rpcErr } = await supabase.rpc('update_balance', { p_user_id: userId, p_amount: refundAmount });
+    if (rpcErr) {
+      logCritical('missed-webhook replay: update_balance failed after wallet_transactions row was already marked failed', {
+        transactionId: row.id, userId, refundAmount, error: rpcErr,
+      });
+      continue;
+    }
+
+    const { data: finding } = await supabase
+      .from('reconciliation_findings')
+      .insert({
+        finding_type: 'missed_webhook_replayed',
+        severity: 'warning',
+        user_id: userId,
+        details: { transaction_id: row.id, transfer_id: row.stripe_transfer_id ?? null, payout_id: row.stripe_payout_id ?? null, outcome: terminalOutcome, amount: refundAmount },
+        auto_repaired: true,
+        repair_wallet_transaction_id: row.id,
+        resolution: `Replayed missed ${terminalOutcome} effect during hourly Stripe balance sync — Stripe object showed a terminal state this row never recorded.`,
+        resolved_at: new Date().toISOString(),
+      })
+      .select('id')
+      .maybeSingle();
+
+    await postHogCapture('stripe_balance_auto_repaired', { outcome: terminalOutcome, amount_cents: Math.round(refundAmount * 100) });
+    console.log(`[admin-withdrawals] attemptRecoverableRepair: replayed ${terminalOutcome} for transaction ${row.id} (finding ${finding?.id})`);
+    repaired++;
+  }
+
+  return { repaired };
+}
+
+/**
+ * Entry point for both the hourly pg_cron sweep and an admin's manual
+ * "run now" from the balance-reconciliation screen. Iterates every profile
+ * with a Connect account, comparing + attempting repair per account, then
+ * checks the platform account once.
+ */
+async function runStripeBalanceSync(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  triggeredByAdminId: string | null
+): Promise<Record<string, unknown>> {
+  const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
+  if (!stripeKey) return { success: false, error: 'Stripe not configured' };
+  const stripe = new Stripe(stripeKey, { apiVersion: '2023-10-16', httpClient: Stripe.createFetchHttpClient() });
+
+  const startedAt = new Date().toISOString();
+  let accountsChecked = 0;
+  let repairsApplied = 0;
+  const errors: string[] = [];
+
+  const PAGE_SIZE = 200;
+  let from = 0;
+  for (;;) {
+    const { data: pageProfiles, error: pageErr } = await supabase
+      .from('profiles')
+      .select('id, stripe_connect_account_id')
+      .not('stripe_connect_account_id', 'is', null)
+      .range(from, from + PAGE_SIZE - 1);
+    if (pageErr) {
+      errors.push(pageErr.message ?? 'failed to page profiles');
+      break;
+    }
+    if (!pageProfiles || pageProfiles.length === 0) break;
+
+    for (const p of pageProfiles as Array<{ id: string; stripe_connect_account_id: string }>) {
+      try {
+        await compareConnectAccountBalance(stripe, supabase, p.id, p.stripe_connect_account_id);
+        const { repaired } = await attemptRecoverableRepair(stripe, supabase, p.id, p.stripe_connect_account_id);
+        repairsApplied += repaired;
+        accountsChecked++;
+      } catch (e) {
+        errors.push(`user ${p.id}: ${(e as { message?: string })?.message ?? String(e)}`);
+      }
+    }
+
+    if (pageProfiles.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+
+  try {
+    await comparePlatformBalance(stripe, supabase);
+  } catch (e) {
+    errors.push(`platform: ${(e as { message?: string })?.message ?? String(e)}`);
+  }
+
+  const finishedAt = new Date().toISOString();
+  console.log(
+    `[admin-withdrawals] run_stripe_balance_sync: checked ${accountsChecked} accounts, ${repairsApplied} auto-repairs, ${errors.length} errors`
+  );
+
+  if (triggeredByAdminId) {
+    await logAdminAction(supabase, {
+      adminUserId: triggeredByAdminId,
+      actionType: 'run_stripe_balance_sync',
+      targetUserId: triggeredByAdminId, // sweep has no single target — logged against the triggering admin
+      reason: 'Manual on-demand Stripe balance reconciliation sweep',
+      result: errors.length === 0 ? 'success' : 'failure',
+      metadata: { accountsChecked, repairsApplied, errorCount: errors.length, startedAt, finishedAt },
+    });
+  }
+
+  return { success: true, accountsChecked, repairsApplied, errorCount: errors.length, errors: errors.slice(0, 20), startedAt, finishedAt };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -172,8 +544,49 @@ Deno.serve(async (req: Request) => {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  // Authenticate caller and verify admin role — identical to admin-review-id.
+  let body: {
+    action?: string;
+    transactionId?: string;
+    userId?: string;
+    amount?: number;
+    reason?: string;
+    bankAccountId?: string;
+    relatedTransactionId?: string;
+    limit?: number;
+    confirmedNoStripePayout?: boolean;
+    note?: string;
+    balanceAdjustment?: number;
+    dryRun?: boolean;
+    findingId?: string;
+    resolution?: string;
+  };
+  try {
+    body = await req.json();
+  } catch {
+    return jsonResponse({ error: 'Invalid JSON body' }, 400);
+  }
+
+  const { action } = body;
   const authHeader = req.headers.get('Authorization');
+
+  // ─── System-triggered reconciliation sweep (pg_cron via net.http_post) ────
+  // Authenticated with a dedicated secret, not a user JWT — the hourly job
+  // has no human admin session to present. Checked before the admin-JWT path
+  // below; every other action always requires a real admin login.
+  if (action === 'run_stripe_balance_sync') {
+    const cronSecret = Deno.env.get('RECONCILIATION_CRON_SECRET');
+    const providedToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+    if (cronSecret && providedToken && safeCompare(providedToken, cronSecret)) {
+      const result = await runStripeBalanceSync(supabase, null);
+      return jsonResponse(result);
+    }
+    // Not a valid cron call — fall through to the normal admin-JWT path
+    // below, so an admin can also trigger the same sweep manually from the
+    // balance-reconciliation admin screen (and have it logged under their
+    // identity in admin_action_log).
+  }
+
+  // Authenticate caller and verify admin role — identical to admin-review-id.
   if (!authHeader?.startsWith('Bearer ')) {
     return jsonResponse({ error: 'Missing or invalid authorization header' }, 401);
   }
@@ -196,27 +609,10 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: 'Forbidden: admin access required' }, 403);
   }
 
-  let body: {
-    action?: string;
-    transactionId?: string;
-    userId?: string;
-    amount?: number;
-    reason?: string;
-    bankAccountId?: string;
-    relatedTransactionId?: string;
-    limit?: number;
-    confirmedNoStripePayout?: boolean;
-    note?: string;
-    balanceAdjustment?: number;
-    dryRun?: boolean;
-  };
-  try {
-    body = await req.json();
-  } catch {
-    return jsonResponse({ error: 'Invalid JSON body' }, 400);
+  if (action === 'run_stripe_balance_sync') {
+    const result = await runStripeBalanceSync(supabase, adminUser.id);
+    return jsonResponse(result);
   }
-
-  const { action } = body;
 
   // ─── list_log ────────────────────────────────────────────────────────────────
   if (action === 'list_log') {
@@ -963,6 +1359,95 @@ Deno.serve(async (req: Request) => {
     }
 
     return jsonResponse(result);
+  }
+
+  // ─── list_balance_findings ──────────────────────────────────────────────────
+  // Backs the balance-reconciliation admin screen: unacknowledged findings
+  // first, plus the most recent snapshots for the trend view.
+  if (action === 'list_balance_findings') {
+    const limit = Math.min(Math.max(Number(body.limit) || 50, 1), 200);
+    const { data: findings, error: findingsErr } = await supabase
+      .from('reconciliation_findings')
+      .select('*')
+      .in('finding_type', [
+        'platform_balance_drift',
+        'connect_account_balance_drift',
+        'missed_webhook_replayed',
+        'dispute_funds_movement',
+        'stripe_topup',
+        'external_account_change',
+      ])
+      .order('acknowledged_at', { ascending: true, nullsFirst: true })
+      .order('run_at', { ascending: false })
+      .limit(limit);
+    if (findingsErr) {
+      console.error('[admin-withdrawals] Failed to list balance findings', { error: findingsErr });
+      return jsonResponse({ error: 'Failed to list findings' }, 500);
+    }
+
+    const { data: snapshots, error: snapshotsErr } = await supabase
+      .from('stripe_balance_snapshots')
+      .select('*')
+      .order('captured_at', { ascending: false })
+      .limit(50);
+    if (snapshotsErr) {
+      console.error('[admin-withdrawals] Failed to list balance snapshots', { error: snapshotsErr });
+    }
+
+    const { data: failedEvents, error: failedEventsErr } = await supabase
+      .from('stripe_events')
+      .select('id, stripe_event_id, event_type, status, last_error, retry_count, last_retry_at, created_at')
+      .eq('status', 'failed')
+      .order('last_retry_at', { ascending: false })
+      .limit(50);
+    if (failedEventsErr) {
+      console.error('[admin-withdrawals] Failed to list failed webhook events', { error: failedEventsErr });
+    }
+
+    return jsonResponse({
+      findings: findings ?? [],
+      snapshots: snapshots ?? [],
+      failedWebhookEvents: failedEvents ?? [],
+    });
+  }
+
+  // ─── acknowledge_finding ─────────────────────────────────────────────────────
+  // Read-only-safe per the automation-authorization doctrine — acknowledging a
+  // finding records that a human reviewed it, it never moves money.
+  if (action === 'acknowledge_finding') {
+    const { findingId, resolution } = body;
+    if (!findingId) {
+      return jsonResponse({ error: 'findingId is required' }, 400);
+    }
+    const { data: updated, error: ackErr } = await supabase
+      .from('reconciliation_findings')
+      .update({
+        acknowledged_at: new Date().toISOString(),
+        acknowledged_by: adminUser.id,
+        resolution: resolution ?? null,
+        resolved_at: new Date().toISOString(),
+        resolved_by: adminUser.id,
+      })
+      .eq('id', findingId)
+      .select()
+      .maybeSingle();
+    if (ackErr) {
+      console.error('[admin-withdrawals] Failed to acknowledge finding', { findingId, error: ackErr });
+      return jsonResponse({ error: 'Failed to acknowledge finding' }, 500);
+    }
+    if (!updated) {
+      return jsonResponse({ error: 'Finding not found' }, 404);
+    }
+    await logAdminAction(supabase, {
+      adminUserId: adminUser.id,
+      actionType: 'acknowledge_reconciliation_finding',
+      targetUserId: (updated as { user_id?: string }).user_id ?? adminUser.id,
+      targetTransactionId: null,
+      reason: resolution || 'Acknowledged without a written resolution',
+      result: 'success',
+      metadata: { findingId, findingType: (updated as { finding_type?: string }).finding_type },
+    });
+    return jsonResponse({ success: true, finding: updated });
   }
 
   return jsonResponse({ error: 'Unknown action' }, 400);

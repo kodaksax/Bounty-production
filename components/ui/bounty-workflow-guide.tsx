@@ -2,7 +2,7 @@
 // Dismissible step-by-step workflow guide for poster and hunter bounty card interactions.
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
@@ -134,7 +134,7 @@ interface BountyWorkflowGuideProps {
  */
 export function BountyWorkflowGuide({ variant }: BountyWorkflowGuideProps) {
   const { theme } = useAppThemeContext();
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   // `null` means "loading from storage" so we can avoid flashing the guide
   const [dismissed, setDismissed] = useState<boolean | null>(null);
   const [collapsed, setCollapsed] = useState<boolean | null>(null);

@@ -8,7 +8,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
 import type { Href } from 'expo-router';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import {
     ActivityIndicator,
     ScrollView,
@@ -32,7 +32,7 @@ export default function AuthCallbackScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
   const { theme } = useAppThemeContext();
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
 
   const [status, setStatus] = useState<CallbackStatus>('loading');
   const [message, setMessage] = useState('Processing your request...');

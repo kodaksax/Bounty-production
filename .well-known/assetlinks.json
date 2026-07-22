@@ -5,7 +5,7 @@
       "namespace": "android_app",
       "package_name": "app.bountyfinder.BOUNTYExpo",
       "sha256_cert_fingerprints": [
-        "REPLACE_WITH_YOUR_RELEASE_KEY_SHA256",
+        "B1:12:38:A8:46:46:7E:B1:AD:58:51:00:F2:83:04:C1:C8:66:5F:52:0F:35:D1:B0:7C:BB:BF:C8:06:E9:75:48",
         "REPLACE_WITH_YOUR_DEBUG_KEY_SHA256"
       ]
     }

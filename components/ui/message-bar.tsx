@@ -1,5 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -32,7 +32,7 @@ export function MessageBar({
   const [messageText, setMessageText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const { theme } = useAppThemeContext();
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
 
   const handleSend = async () => {
     const trimmed = messageText.trim();

@@ -93,9 +93,14 @@ export function useMessages(conversationId: string): UseMessagesResult {
           return;
         } catch (err) {
           setError(err instanceof Error ? err.message : 'Failed to send message (local)');
+          // Keep the message in the list marked as failed (instead of removing
+          // it) so the user's typed text isn't lost and MessageBubble's retry
+          // affordance (which only renders when status === 'failed') appears.
           if (tempMessage) {
             const tempId = tempMessage.id;
-            setMessages(prev => prev.filter(m => m.id !== tempId));
+            setMessages(prev =>
+              prev.map(m => (m.id === tempId ? { ...m, status: 'failed' } : m))
+            );
           }
           return;
         }
@@ -113,22 +118,34 @@ export function useMessages(conversationId: string): UseMessagesResult {
       setMessages(prev => prev.map(m => (m.id === tempMessage!.id ? message : m)));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send message');
-      // Remove only the specific failed temp message, not all pending ones
+      // Mark the specific temp message as failed rather than deleting it, so
+      // the user's typed text is preserved and the retry button can appear.
       if (tempMessage) {
         const tempId = tempMessage.id;
-        setMessages(prev => prev.filter(m => m.id !== tempId));
+        setMessages(prev =>
+          prev.map(m => (m.id === tempId ? { ...m, status: 'failed' } : m))
+        );
       }
     }
   }, [conversationId, currentUserId]);
 
   const retryMessage = useCallback(async (messageId: string) => {
-    try {
-      // For now, just refetch messages
-      await fetchMessages();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to retry message');
+    // Actually resend the failed message's original content, rather than
+    // merely refetching (which cannot recover text that never reached the
+    // server). Falls back to a plain refetch if the message isn't a known
+    // failed local entry (e.g. already gone from state).
+    const failedMessage = messages.find(m => m.id === messageId);
+    if (!failedMessage || failedMessage.status !== 'failed') {
+      try {
+        await fetchMessages();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to retry message');
+      }
+      return;
     }
-  }, [fetchMessages]);
+    setMessages(prev => prev.filter(m => m.id !== messageId));
+    await sendMessage(failedMessage.text, failedMessage.mediaUrl ?? null);
+  }, [messages, fetchMessages, sendMessage]);
 
   const pinMessage = useCallback(async (messageId: string) => {
     // Pin/unpin is not implemented in Supabase service yet

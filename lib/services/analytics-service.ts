@@ -128,6 +128,18 @@ export type AnalyticsEvent =
   // Profile events
   | 'profile_viewed'
   | 'profile_updated'
+  // Sharing events (bounty + profile) — see lib/utils/share-utils.ts.
+  // Funnel per share attempt: {bounty,profile}_shared (share sheet opened)
+  // -> exactly one of share_completed/share_cancelled/share_link_copied.
+  // deep_link_opened fires app-side when a bountyfinder.app/bounty|profile
+  // link (or its custom-scheme equivalent) opens the app, independent of
+  // whether that open originated from a share.
+  | 'bounty_shared'
+  | 'profile_shared'
+  | 'share_completed'
+  | 'share_cancelled'
+  | 'share_link_copied'
+  | 'deep_link_opened'
   // Dispute events
   | 'dispute_opened'
   | 'dispute_resolved'

@@ -5,7 +5,7 @@ import { useNormalizedProfile } from "hooks/useNormalizedProfile";
 import { useProfile } from "hooks/useProfile";
 import { AuthProfile } from "lib/services/auth-profile-service";
 import { getCurrentUserId } from "lib/utils/data-utils";
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useMemo } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -58,7 +58,7 @@ export default function EditProfileScreen() {
   const insets = useSafeAreaInsets();
   const { session } = useAuthContext();
   const { theme } = useAppThemeContext();
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
 
   // IMPORTANT: Always get the current user ID from session to prevent data leaks
   // Do NOT use a static or cached userId - it must be derived from the active session

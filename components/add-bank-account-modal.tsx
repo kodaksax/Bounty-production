@@ -1,7 +1,7 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import {
   ActivityIndicator,
   Platform,
@@ -62,7 +62,7 @@ export function AddBankAccountModal({
   const [feedback, setFeedback] = useState<{ variant: FeedbackVariant; title: string; message: string; onOk?: () => void } | null>(null)
   const { session } = useAuthContext()
   const { theme } = useAppThemeContext()
-  const styles = makeStyles(theme)
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const bodyStyles = styles
 
   const handleLinkBank = async () => {

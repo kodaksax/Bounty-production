@@ -6,7 +6,7 @@
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Animated, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ConfettiAnimation, SuccessAnimation } from '../../components/ui/success-animation';
@@ -23,7 +23,7 @@ import type { AppTheme } from '../../lib/themes/types';
 export default function BountyPostedScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useAppThemeContext();
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const { data: onboardingData } = useOnboarding();
   const { complete, isLoading } = useCompleteOnboarding(ROUTES.TABS.BOUNTY_APP);
 

@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import type { AppTheme } from 'lib/themes/types';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export interface SettingsRowProps {
@@ -42,7 +42,7 @@ export const SettingsRow: React.FC<SettingsRowProps> = ({
   tone = 'default',
 }) => {
   const { theme } = useAppThemeContext();
-  const s = makeStyles(theme);
+  const s = useMemo(() => makeStyles(theme), [theme]);
   const isDisabled = disabled || loading;
   const isDestructive = tone === 'destructive';
 

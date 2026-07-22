@@ -2,6 +2,7 @@ import { ThemeProvider } from "components/theme-provider";
 import { AppThemeProvider, useAppThemeContext } from '../lib/themes/AppThemeContext';
 import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
+import * as Linking from 'expo-linking';
 import { Slot } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { PostHogProvider } from 'posthog-react-native';
@@ -154,6 +155,7 @@ const LayoutContent = () => {
       >
         <NetworkProvider>
           <AuthProvider>
+              <DeepLinkAnalyticsGate />
               <SessionMonitorGate />
               <AdminProvider>
                 <StripeProvider>
@@ -335,6 +337,45 @@ function RootLayout({ children }: { children: React.ReactNode }) {
     </PostHogProvider>
   );
 }
+
+// Shareable-link paths that should be tracked as deep-link opens (see
+// lib/utils/share-utils.ts, which builds links as bountyfinder.app/bounty/:id
+// and bountyfinder.app/profile/:id). Expo Router already handles the actual
+// navigation via `scheme`/associatedDomains in app.json — this is analytics
+// only, so it can't navigate anywhere or throw on an unrecognized URL.
+const DEEP_LINK_CONTENT_TYPES: Record<string, 'bounty' | 'profile'> = {
+  bounty: 'bounty',
+  profile: 'profile',
+};
+
+function trackDeepLinkOpen(url: string | null) {
+  if (!url) return;
+  try {
+    const { path } = Linking.parse(url);
+    if (!path) return;
+    const [first, second] = path.split('/').filter(Boolean);
+    const contentType = first ? DEEP_LINK_CONTENT_TYPES[first] : undefined;
+    if (!contentType || !second) return;
+    analyticsService.trackEvent('deep_link_opened', {
+      content_type: contentType,
+      content_id: second,
+    });
+  } catch {
+    // Malformed/unexpected URL — nothing to track.
+  }
+}
+
+// Mounts once at the root to capture both a cold-start deep link
+// (getInitialURL) and any link opened while the app is already running.
+const DeepLinkAnalyticsGate = () => {
+  useEffect(() => {
+    Linking.getInitialURL().then(trackDeepLinkOpen).catch(() => {});
+    const subscription = Linking.addEventListener('url', ({ url }) => trackDeepLinkOpen(url));
+    return () => subscription.remove();
+  }, []);
+
+  return null;
+};
 
 // Lightweight gate component that mounts the session monitor once auth context is available
 const SessionMonitorGate = () => {

@@ -3,10 +3,12 @@
     "apps": [],
     "details": [
       {
-        "appID": "TEAMID.com.bounty.BOUNTYExpo",
+        "appID": "TGTDD8D225.com.bounty.BOUNTYExpo",
         "paths": [
           "/auth/callback",
-          "/auth/*"
+          "/auth/*",
+          "/bounty/*",
+          "/profile/*"
         ]
       }
     ]

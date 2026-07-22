@@ -5,7 +5,7 @@
  * lightweight structural placeholders (not real bounty data) sized to match
  * each format's real layout shape in components/bounty-feed.tsx.
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 import { useAccessibleAnimation, useFadeAnimation } from '../../hooks/use-accessible-animation';
 import type { AppTheme } from '../../lib/themes/types';
@@ -43,7 +43,7 @@ export function BountyFormatPreview({ format, theme }: BountyFormatPreviewProps)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [format]);
 
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
 
   return (
     <View

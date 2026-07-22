@@ -13,12 +13,13 @@ import { VerificationBadgeChips } from "components/ui/verification-badge-chips";
 import { bountyRequestService } from "lib/services/bounty-request-service";
 import { bountyService } from "lib/services/bounty-service";
 import { CURRENT_USER_ID } from "lib/utils/data-utils";
+import { shareProfile as shareProfileLink } from "lib/utils/share-utils";
 // Remove static CURRENT_USER_ID usage; we'll derive from authenticated session
 // import { CURRENT_USER_ID } from "lib/utils/data-utils";
 import { useFocusEffect, useRouter } from "expo-router";
 import * as React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Platform, RefreshControl, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SettingsScreen } from "../../components/settings-screen";
 import { SkillsetEditScreen } from "../../components/skillset-edit-screen";
 import { useAuthContext } from '../../hooks/use-auth-context';
@@ -248,21 +249,16 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
     }
   }
 
-  // Share the user's profile (name, about, skills and a shareable link)
-  // NOTE: profileUrl is a placeholder. Replace with your real public profile URL scheme.
-  const shareProfile = async () => {
-    try {
-      const skillsText = skills.length > 0 ? skills.map(s => s.text + (s.credentialUrl ? ` (${s.credentialUrl.split('/').pop()})` : '')).join(', ') : 'No skills listed'
-      const profileUrl = authUserId ? `https://example.com/u/${authUserId}` : 'https://example.com'
-      const message = `${profileData.name}\n\n${profileData.about}\n\nSkills: ${skillsText}\n\nView profile: ${profileUrl}`
-
-      await Share.share({
-        title: `${profileData.name} on Bounty`,
-        message,
-      })
-    } catch (err) {
-      console.error('Error sharing profile:', err)
-    }
+  // Share the user's own profile via the shared bountyfinder.app link + rich
+  // preview (see lib/utils/share-utils.ts) rather than a bare message.
+  const handleShareProfile = async () => {
+    if (!authUserId) return
+    await shareProfileLink({
+      id: authUserId,
+      name: userProfile?.name || authProfile?.display_name || undefined,
+      username: authProfile?.username || userProfile?.username || undefined,
+      about: authProfile?.about || profileData.about || undefined,
+    })
   }
 
   // Removed test simulation functions for activity
@@ -302,7 +298,7 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
         <View className="flex-row items-center">
           <TouchableOpacity
             className="p-2"
-            onPress={shareProfile}
+            onPress={handleShareProfile}
             accessibilityRole="button"
             accessibilityLabel="Share profile"
             accessibilityHint="Share your profile via social media or messaging apps"

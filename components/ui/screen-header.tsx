@@ -1,6 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
@@ -17,7 +17,7 @@ interface ScreenHeaderProps {
 export function ScreenHeader({ title, showBack, onBack, rightNode, centerNode, transparent }: ScreenHeaderProps) {
     const router = useRouter();
     const { theme } = useAppThemeContext();
-    const styles = makeStyles(theme);
+    const styles = useMemo(() => makeStyles(theme), [theme]);
 
     const handleBack = () => {
         if (onBack) {

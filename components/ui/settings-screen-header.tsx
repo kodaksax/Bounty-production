@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import type { AppTheme } from 'lib/themes/types';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScreenHeader } from './screen-header';
@@ -21,7 +21,7 @@ interface SettingsScreenHeaderProps {
 export function SettingsScreenHeader({ icon, title, onBack, rightNode }: SettingsScreenHeaderProps) {
   const { theme } = useAppThemeContext();
   const insets = useSafeAreaInsets();
-  const s = makeStyles(theme);
+  const s = useMemo(() => makeStyles(theme), [theme]);
 
   return (
     <View style={[s.wrapper, { paddingTop: insets.top }]}>

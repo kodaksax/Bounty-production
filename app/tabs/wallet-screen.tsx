@@ -3,7 +3,7 @@
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AddMoneyScreen } from "../../components/add-money-screen";
@@ -27,6 +27,32 @@ import { useWallet, type WalletTransactionRecord } from '../../lib/wallet-contex
 
 interface WalletScreenProps {
   onBack?: () => void
+}
+
+// Pure function of its argument — hoisted out of the component so the
+// transaction FlatList's renderItem (below) doesn't need to recreate it (and
+// isn't forced to list it as a render-time dependency) on every render.
+function getTransactionLabel(tx: WalletTransactionRecord): string {
+  switch (tx.type) {
+    case 'deposit':
+      return `Deposit${tx.details.method ? ` via ${tx.details.method}` : ''}`;
+    case 'withdrawal':
+      return `Withdrawal${tx.details.method ? ` to ${tx.details.method}` : ''}`;
+    case 'bounty_posted':
+      return `Posted${tx.details.title ? ` · ${tx.details.title}` : ''}`;
+    case 'bounty_completed':
+      return `Completed${tx.details.title ? ` · ${tx.details.title}` : ''}`;
+    case 'bounty_received':
+      return `Received${tx.details.title ? ` · ${tx.details.title}` : ''}`;
+    case 'escrow':
+      return `Escrow${tx.details.title ? ` · ${tx.details.title}` : ''}`;
+    case 'release':
+      return `Released${tx.details.title ? ` · ${tx.details.title}` : ''}`;
+    case 'refund':
+      return `Refund${tx.details.title ? ` · ${tx.details.title}` : ''}`;
+    default:
+      return 'Transaction';
+  }
 }
 
 export function WalletScreen({ onBack }: WalletScreenProps = {}) {
@@ -67,29 +93,37 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
 
   const insets = useSafeAreaInsets();
 
-  // Helper function to get transaction label
-  const getTransactionLabel = (tx: WalletTransactionRecord): string => {
-    switch (tx.type) {
-      case 'deposit':
-        return `Deposit${tx.details.method ? ` via ${tx.details.method}` : ''}`;
-      case 'withdrawal':
-        return `Withdrawal${tx.details.method ? ` to ${tx.details.method}` : ''}`;
-      case 'bounty_posted':
-        return `Posted${tx.details.title ? ` · ${tx.details.title}` : ''}`;
-      case 'bounty_completed':
-        return `Completed${tx.details.title ? ` · ${tx.details.title}` : ''}`;
-      case 'bounty_received':
-        return `Received${tx.details.title ? ` · ${tx.details.title}` : ''}`;
-      case 'escrow':
-        return `Escrow${tx.details.title ? ` · ${tx.details.title}` : ''}`;
-      case 'release':
-        return `Released${tx.details.title ? ` · ${tx.details.title}` : ''}`;
-      case 'refund':
-        return `Refund${tx.details.title ? ` · ${tx.details.title}` : ''}`;
-      default:
-        return 'Transaction';
-    }
-  };
+  const renderEmptyTransactions = useCallback(
+    () => (
+      <View style={[s.sectionPad, { flex: 1 }]}>
+        <View style={{ minHeight: 200 }}>
+          <EmptyState
+            icon="receipt-long"
+            title="No Transactions Yet"
+            description="Your transaction history will appear here. Start by posting a bounty or completing work to see your activity."
+            actionLabel="Browse Bounties"
+            onAction={() => router.push('/tabs/bounty-app')}
+            style={{ paddingVertical: 40 }}
+          />
+        </View>
+      </View>
+    ),
+    [s, router]
+  );
+
+  const renderTransactionItem = useCallback(
+    ({ item: tx }: { item: WalletTransactionRecord }) => (
+      <View style={[s.sectionPad, { marginTop: 8 }]}>
+        <View style={{ minHeight: 64 }}>
+          <View style={s.bountyCard}>
+            <Text style={s.bountyName}>{getTransactionLabel(tx)}</Text>
+            <Text style={[s.bountyAmount, { color: tx.amount > 0 ? theme.primaryLight : '#fca5a5' }]}>{tx.amount > 0 ? '+' : ''}${Math.abs(tx.amount).toFixed(2)}</Text>
+          </View>
+        </View>
+      </View>
+    ),
+    [s, theme.primaryLight]
+  );
 
   if (showWithdraw) {
     return <WithdrawWithBankScreen onBack={() => setShowWithdraw(false)} balance={balance} />;
@@ -270,30 +304,8 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
             </View>
           </>
         )}
-        ListEmptyComponent={() => (
-          <View style={[s.sectionPad, { flex: 1 }]}>
-            <View style={{ minHeight: 200 }}>
-              <EmptyState
-                icon="receipt-long"
-                title="No Transactions Yet"
-                description="Your transaction history will appear here. Start by posting a bounty or completing work to see your activity."
-                actionLabel="Browse Bounties"
-                onAction={() => router.push('/tabs/bounty-app')}
-                style={{ paddingVertical: 40 }}
-              />
-            </View>
-          </View>
-        )}
-        renderItem={({ item: tx }: { item: WalletTransactionRecord }) => (
-          <View style={[s.sectionPad, { marginTop: 8 }]}>
-            <View style={{ minHeight: 64 }}>
-              <View style={s.bountyCard}>
-                <Text style={s.bountyName}>{getTransactionLabel(tx)}</Text>
-                <Text style={[s.bountyAmount, { color: tx.amount > 0 ? theme.primaryLight : '#fca5a5' }]}>{tx.amount > 0 ? '+' : ''}${Math.abs(tx.amount).toFixed(2)}</Text>
-              </View>
-            </View>
-          </View>
-        )}
+        ListEmptyComponent={renderEmptyTransactions}
+        renderItem={renderTransactionItem}
       />
 
       {/* Modals should be rendered outside the main ScrollView to avoid nesting VirtualizedLists */}

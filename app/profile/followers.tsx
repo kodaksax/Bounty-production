@@ -3,7 +3,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { followService } from "lib/services/follow-service";
 import { userProfileService } from "lib/services/user-profile-service";
 import type { UserProfile } from "lib/types";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -21,7 +21,7 @@ export default function FollowersScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useAppThemeContext();
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
 
   const [followers, setFollowers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);

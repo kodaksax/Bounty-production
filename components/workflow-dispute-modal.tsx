@@ -1,5 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -56,7 +56,7 @@ export function WorkflowDisputeModal({
 }: Props) {
   const insets = useSafeAreaInsets()
   const { theme } = useAppThemeContext()
-  const styles = makeStyles(theme)
+  const styles = useMemo(() => makeStyles(theme), [theme]);
 
   const [currentStep, setCurrentStep] = useState<Step>('info')
   const [selectedReason, setSelectedReason] = useState<string | null>(null)

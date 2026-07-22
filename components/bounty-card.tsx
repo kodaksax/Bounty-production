@@ -1,4 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import { Image as ExpoImage } from 'expo-image';
 import { useRouter } from 'expo-router';
 import type { Bounty } from 'lib/services/database.types';
 import { theme as legacyTheme } from 'lib/theme';
@@ -7,7 +8,7 @@ import type { AppTheme } from 'lib/themes/types';
 import { isBountyDeadlinePassed } from 'lib/utils/schedule-utils';
 import { shareBounty } from 'lib/utils/share-utils';
 import { useMemo } from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface BountyCardProps {
   bounty: Bounty;
@@ -76,10 +77,14 @@ export function BountyCard({
 
   const handleShare = async () => {
     await shareBounty({
-      title: bounty.title,
-      price: bounty.amount, // bounty.amount is used in BountyCard, not price
       id: bounty.id,
+      title: bounty.title,
+      amount: bounty.amount,
+      isForHonor: bounty.is_for_honor,
       description: bounty.description,
+      category: bounty.category,
+      location: bounty.location,
+      posterName: bounty.username ? `@${bounty.username}` : undefined,
     });
   };
 
@@ -146,9 +151,10 @@ export function BountyCard({
             }}
             accessibilityRole="button"
           >
-            <Image
+            <ExpoImage
               source={{ uri: otherPartyAvatar }}
               style={styles.avatar}
+              recyclingKey={otherPartyAvatar}
               accessibilityLabel={`${otherPartyName || 'User'} profile picture`}
             />
           </TouchableOpacity>

@@ -1,5 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { AccessibilityInfo, Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SIZING, SPACING, TYPOGRAPHY } from '../lib/constants/accessibility';
 import { useHapticFeedback } from '../lib/haptic-feedback';
@@ -31,7 +31,7 @@ export function ErrorBanner({
 }: ErrorBannerProps) {
   const { triggerHaptic } = useHapticFeedback();
   const { theme } = useAppThemeContext();
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const slideAnim = React.useRef(new Animated.Value(-100)).current;
   const opacityAnim = React.useRef(new Animated.Value(0)).current;
   const [prefersReducedMotion, setPrefersReducedMotion] = React.useState(false);

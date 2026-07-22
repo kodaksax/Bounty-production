@@ -8,7 +8,7 @@
 
 import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { OnboardingProgressDots } from '../../components/onboarding/OnboardingProgressDots';
@@ -76,7 +76,7 @@ export default function UsernameScreen() {
   const { theme } = useAppThemeContext();
   const { isLoggedIn } = useAuthContext();
   const { data: onboardingData } = useOnboarding();
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const {
     isGoogleConfigured,
     googleRequest,

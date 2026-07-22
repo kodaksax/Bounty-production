@@ -2,7 +2,7 @@
 // This screen determines the user's role (poster or hunter) and redirects appropriately
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     StyleSheet,
@@ -30,13 +30,21 @@ export default function BountyDetailRouter() {
     return raw && String(raw).trim().length > 0 ? String(raw) : null;
   }, [id]);
 
+  // Tracks the most recently requested bounty id so a slower, stale response
+  // for a previous id (e.g. fast back-and-forth navigation between two bounty
+  // detail screens) can't clobber state or redirect based on the wrong id
+  // after a newer request has already resolved.
+  const latestRequestedIdRef = useRef<string | null>(null);
+
   const determineBountyRole = useCallback(async (bountyId: string) => {
+    latestRequestedIdRef.current = bountyId;
     try {
       setIsLoading(true);
       setError(null);
 
       // Load bounty
       const bounty = await bountyService.getById(bountyId);
+      if (latestRequestedIdRef.current !== bountyId) return;
       if (!bounty) {
         setError('Bounty not found');
         return;
@@ -62,6 +70,7 @@ export default function BountyDetailRouter() {
           bountyId,
           userId: currentUserId,
         });
+        if (latestRequestedIdRef.current !== bountyId) return;
 
         if (requests.length > 0) {
           // User is a hunter with a request - redirect to hunter flow
@@ -81,10 +90,13 @@ export default function BountyDetailRouter() {
         params: { bountyId },
       });
     } catch (err) {
+      if (latestRequestedIdRef.current !== bountyId) return;
       console.error('Error determining bounty role:', err);
       setError('Failed to load bounty details');
     } finally {
-      setIsLoading(false);
+      if (latestRequestedIdRef.current === bountyId) {
+        setIsLoading(false);
+      }
     }
   }, [currentUserId, router]);
 

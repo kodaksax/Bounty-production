@@ -1,6 +1,6 @@
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import type { AppTheme } from 'lib/themes/types';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, Text, View, ViewStyle } from 'react-native';
 
 interface SettingsSectionProps {
@@ -23,7 +23,7 @@ interface SettingsSectionProps {
  */
 export function SettingsSection({ title, description, footer, headerRight, children, style }: SettingsSectionProps) {
   const { theme } = useAppThemeContext();
-  const s = makeStyles(theme);
+  const s = useMemo(() => makeStyles(theme), [theme]);
   const items = React.Children.toArray(children).filter(Boolean);
 
   if (items.length === 0) return null;

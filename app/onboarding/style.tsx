@@ -8,7 +8,7 @@
  * for the matching step-count logic.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import {
   LayoutChangeEvent,
@@ -51,7 +51,7 @@ export default function StyleScreen() {
   const { data: onboardingData } = useOnboarding();
   const { bountyFormat, setBountyFormat } = useBountyFormat();
   const { prefersReducedMotion } = useAccessibleAnimation();
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const scrollRef = useRef<ScrollView>(null);
   const [pageWidth, setPageWidth] = useState(0);
   // Set right before a chip-tap-triggered scrollTo, so the resulting

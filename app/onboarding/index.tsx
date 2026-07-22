@@ -4,7 +4,7 @@
  */
 
 import { useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useOnboarding } from '../../lib/context/onboarding-context';
@@ -25,7 +25,7 @@ export default function OnboardingIndex() {
   const { profile, loading, profileFetchError, refreshProfile } = useAuthProfile();
   const { data: onboardingData, loading: onboardingLoading } = useOnboarding();
   const { theme } = useAppThemeContext();
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const retryCountRef = useRef(0);
   const [showRetryError, setShowRetryError] = useState(false);
   const [retrying, setRetrying] = useState(false);

@@ -502,11 +502,12 @@ export function MyPostingExpandable({
           dispatchDraft({ type: 'setReadyRecord', record: ready });
         } catch {}
 
-        // Check for cancellation request
+        // Check for cancellation request. Fetched once and reused below by the
+        // dispute-fallback check (previously refetched identical data with a
+        // second, redundant call to the same service/args within this effect).
+        let cancellation: Awaited<ReturnType<typeof cancellationService.getCancellationByBountyId>> | null = null;
         try {
-          const cancellation = await cancellationService.getCancellationByBountyId(
-            String(bounty.id)
-          );
+          cancellation = await cancellationService.getCancellationByBountyId(String(bounty.id));
           if (!mounted) return;
           if (cancellation && cancellation.status === 'pending') {
             dispatchUi({ type: 'set', key: 'hasCancellationRequest', value: true });
@@ -529,21 +530,15 @@ export function MyPostingExpandable({
           ) {
             dispatchUi({ type: 'set', key: 'hasDispute', value: true });
             dispatchUi({ type: 'set', key: 'activeDisputeId', value: workflowDispute.id });
-          } else {
+          } else if (cancellation?.id) {
             // Fallback: check cancellation-based disputes (looked up by cancellation id)
-            const cancellation = await cancellationService.getCancellationByBountyId(
-              String(bounty.id)
+            const dispute = await disputeService.getDisputeByCancellationId(
+              String(cancellation.id)
             );
             if (!mounted) return;
-            if (cancellation?.id) {
-              const dispute = await disputeService.getDisputeByCancellationId(
-                String(cancellation.id)
-              );
-              if (!mounted) return;
-              if (dispute && (dispute.status === 'open' || dispute.status === 'under_review')) {
-                dispatchUi({ type: 'set', key: 'hasDispute', value: true });
-                dispatchUi({ type: 'set', key: 'activeDisputeId', value: dispute.id });
-              }
+            if (dispute && (dispute.status === 'open' || dispute.status === 'under_review')) {
+              dispatchUi({ type: 'set', key: 'hasDispute', value: true });
+              dispatchUi({ type: 'set', key: 'activeDisputeId', value: dispute.id });
             }
           }
         } catch {}

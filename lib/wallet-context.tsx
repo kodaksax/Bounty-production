@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { config } from './config';
 import { FINANCIAL_API_BASE_URL } from './config/api';
 import { API_TIMEOUTS } from './config/network';
@@ -1015,33 +1015,60 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setPayoutFailureCode(null);
   }, []);
 
-  const value: WalletContextValue = {
-    balance,
-    isLoading,
-    secureStoreAvailable,
-    payoutFailed,
-    payoutFailureCode,
-    // Expose an explicit API to allow callers to clear the payout failure flag
-    // when they have independently verified onboarding (prevents transient
-    // network failures from leaving the banner visible after the user fixes
-    // their payment details).
-    clearPayoutFailure,
-    deposit,
-    withdraw,
-    setBalance: (amt: number) => {
+  const setBalanceAndPersist = useCallback(
+    (amt: number) => {
       setBalance(amt);
       persist(amt);
     },
-    refresh,
-    refreshFromApi,
-    transactions,
-    logTransaction,
-    clearAllTransactions,
-    updateDisputeStatus,
-    createEscrow,
-    releaseFunds,
-    refundEscrow,
-  };
+    [persist]
+  );
+
+  const value: WalletContextValue = useMemo(
+    () => ({
+      balance,
+      isLoading,
+      secureStoreAvailable,
+      payoutFailed,
+      payoutFailureCode,
+      // Expose an explicit API to allow callers to clear the payout failure flag
+      // when they have independently verified onboarding (prevents transient
+      // network failures from leaving the banner visible after the user fixes
+      // their payment details).
+      clearPayoutFailure,
+      deposit,
+      withdraw,
+      setBalance: setBalanceAndPersist,
+      refresh,
+      refreshFromApi,
+      transactions,
+      logTransaction,
+      clearAllTransactions,
+      updateDisputeStatus,
+      createEscrow,
+      releaseFunds,
+      refundEscrow,
+    }),
+    [
+      balance,
+      isLoading,
+      secureStoreAvailable,
+      payoutFailed,
+      payoutFailureCode,
+      clearPayoutFailure,
+      deposit,
+      withdraw,
+      setBalanceAndPersist,
+      refresh,
+      refreshFromApi,
+      transactions,
+      logTransaction,
+      clearAllTransactions,
+      updateDisputeStatus,
+      createEscrow,
+      releaseFunds,
+      refundEscrow,
+    ]
+  );
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
 };

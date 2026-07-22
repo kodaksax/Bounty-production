@@ -1,6 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import type { ComponentProps } from 'react';
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useHapticFeedback } from '../../lib/haptic-feedback';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
@@ -82,7 +82,7 @@ export function TrustBadges({
   compact = false,
 }: TrustBadgesProps) {
   const { theme } = useAppThemeContext();
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const [selectedBadge, setSelectedBadge] = useState<TrustBadge | null>(null);
   const { triggerHaptic } = useHapticFeedback();
   

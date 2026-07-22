@@ -1,7 +1,7 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAuthContext } from "../hooks/use-auth-context"
@@ -54,7 +54,7 @@ export function AddCardModal({ onBack, onSave, embedded = false, usePaymentEleme
   const { createPaymentMethod, loadPaymentMethods, error: stripeError } = useStripe()
   const { session, isAuthStale, attemptRefresh, isLoading: isAuthLoading } = useAuthContext()
   const { theme } = useAppThemeContext()
-  const styles = makeStyles(theme)
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const insets = useSafeAreaInsets()
   // Guarantee the action button / form bottom clears the home indicator and
   // the rounded sheet edge on larger devices (e.g. iPad), where the modal is

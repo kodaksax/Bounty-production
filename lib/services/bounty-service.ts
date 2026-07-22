@@ -1115,10 +1115,13 @@ export const bountyService = {
   },
 
   /**
-   * Get bounties by user ID
+   * Get bounties by user ID.
+   * Defaults to a higher limit than getAll's own default (20) since callers
+   * use this to render a user's full postings history/tabs, where silently
+   * truncating at 20 would hide older bounties rather than just slow a feed.
    */
-  async getByUserId(userId: string): Promise<Bounty[]> {
-    return this.getAll({ userId });
+  async getByUserId(userId: string, options?: { limit?: number; includeArchived?: boolean }): Promise<Bounty[]> {
+    return this.getAll({ userId, limit: options?.limit ?? 200, includeArchived: options?.includeArchived });
   },
 
   /**

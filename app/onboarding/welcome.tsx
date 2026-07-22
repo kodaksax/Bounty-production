@@ -5,7 +5,7 @@
 
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
@@ -20,7 +20,7 @@ export default function OnboardingWelcome() {
   const insets = useSafeAreaInsets();
   const { theme } = useAppThemeContext();
   const { updateData } = useOnboarding();
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {

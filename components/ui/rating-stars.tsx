@@ -1,4 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
@@ -28,7 +29,7 @@ export function RatingStars({
 }: RatingStarsProps) {
   const starSize = size === 'small' ? 16 : size === 'large' ? 32 : 24;
   const { theme } = useAppThemeContext();
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
 
   const unfilledStarColor = theme.isDark ? 'rgba(251, 191, 36, 0.3)' : 'rgba(180, 120, 0, 0.35)';
 

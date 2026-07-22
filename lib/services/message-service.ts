@@ -37,10 +37,30 @@ function tryParseEncryptedPayload(text: string): EncryptedMessage | null {
   return null;
 }
 
+// Short-lived de-dupe cache for getConversations(). List screens that render
+// one row per item (e.g. my-posting-expandable.tsx, one row per bounty) each
+// independently call getConversations() on mount, which otherwise triggers N
+// redundant AsyncStorage reads + JSON.parse of the same data within a single
+// render pass. Coalescing calls within a short window into one underlying
+// fetch removes that redundant work without changing data freshness in any
+// way a user would notice (conversations rarely change within 2s).
+const CONVERSATIONS_CACHE_TTL_MS = 2000;
+let conversationsCache: { userId: string; promise: Promise<Conversation[]>; timestamp: number } | null = null;
+
 export const messageService = {
   getConversations: async (): Promise<Conversation[]> => {
     const userId = getCurrentUserId();
-    return messagingService.listConversations(userId);
+    const now = Date.now();
+    if (
+      conversationsCache &&
+      conversationsCache.userId === userId &&
+      now - conversationsCache.timestamp < CONVERSATIONS_CACHE_TTL_MS
+    ) {
+      return conversationsCache.promise;
+    }
+    const promise = messagingService.listConversations(userId);
+    conversationsCache = { userId, promise, timestamp: now };
+    return promise;
   },
 
   getConversation: async (id: string): Promise<Conversation | null> => {

@@ -51,6 +51,7 @@ export const ROUTES = {
     // Financial & Transactions
     TRANSACTIONS: '/(admin)/transactions',
     WITHDRAWAL_RECOVERY: '/(admin)/withdrawal-recovery',
+    BALANCE_RECONCILIATION: '/(admin)/balance-reconciliation',
     
     // Analytics & Reporting
     ANALYTICS: '/(admin)/analytics',

@@ -1,9 +1,10 @@
 "use client"
 
 import { MaterialIcons } from "@expo/vector-icons"
+import { Image as ExpoImage } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Animated, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { Animated, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
 import { useHapticFeedback } from '../lib/haptic-feedback'
 import type { AttachmentMeta } from '../lib/services/database.types'
@@ -114,7 +115,7 @@ function BountyFeaturedItemComponent({
         >
           {/* Cover — image or gradient placeholder */}
           {firstImageUri ? (
-            <Image source={{ uri: firstImageUri }} style={s.cover} resizeMode="cover" />
+            <ExpoImage source={{ uri: firstImageUri }} style={s.cover} contentFit="cover" recyclingKey={firstImageUri} />
           ) : (
             <LinearGradient
               colors={[categoryColor + 'cc', categoryColor + '66', '#064e3b']}

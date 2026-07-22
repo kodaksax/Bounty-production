@@ -12,7 +12,7 @@ import { resendVerification } from "lib/services/auth-service";
 import { supabase } from "lib/supabase";
 import { getCurrentUserId } from "lib/utils/data-utils";
 import { shareProfile } from "lib/utils/share-utils";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -46,7 +46,7 @@ export default function UserProfileScreen() {
   const currentUserId = getCurrentUserId();
   const { session } = useAuthContext();
   const { theme } = useAppThemeContext();
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
 
   const { profile, loading, error } = useNormalizedProfile(userId);
   const {
@@ -270,10 +270,11 @@ export default function UserProfileScreen() {
 
   const handleShare = async () => {
     await shareProfile({
-      name: profile?.name || undefined,
-      username: profile?.username || undefined,
       id: userId as string,
-      // about: profile?.about // 'about' does not exist on NormalizedProfile
+      name: profile?.name || profile?.display_name || undefined,
+      username: profile?.username || undefined,
+      about: profile?.bio || undefined,
+      completedCount: stats.jobsCompleted,
     });
   };
 

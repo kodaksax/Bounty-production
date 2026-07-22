@@ -1,6 +1,6 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import type { Bounty } from "lib/services/database.types";
-import React, { useState } from "react";
+import React, { useState, useMemo } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -32,7 +32,7 @@ export function EditPostingModal({
 }: EditPostingModalProps) {
   const insets = useSafeAreaInsets();
   const { theme } = useAppThemeContext();
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
 
   const [formData, setFormData] = useState({
     title: bounty.title || "",

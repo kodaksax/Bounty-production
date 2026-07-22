@@ -5,6 +5,7 @@
  * later without re-deriving the styling/behavior from scratch.
  */
 
+import { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
@@ -15,7 +16,7 @@ type SkipAuthLinkProps = {
 
 export function SkipAuthLink({ onPress }: SkipAuthLinkProps) {
   const { theme } = useAppThemeContext();
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
 
   return (
     <TouchableOpacity

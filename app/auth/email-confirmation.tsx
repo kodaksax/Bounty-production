@@ -6,7 +6,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import type { Href } from 'expo-router';
 import { useRouter } from 'expo-router';
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
     Animated,
     ScrollView,
@@ -28,7 +28,7 @@ export default function EmailConfirmationScreen() {
   const pulseAnim = React.useRef(new Animated.Value(1)).current;
   const { session } = useAuthContext();
   const { theme } = useAppThemeContext();
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
 
   // Auto-navigate to onboarding when the session is established
   // (e.g. after the user clicks the confirmation link in their email)

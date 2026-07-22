@@ -1,5 +1,5 @@
 import { MaterialIcons } from "@expo/vector-icons";
-import React from "react";
+import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from "react-native";
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
@@ -21,7 +21,7 @@ interface SkillsetChipsProps {
  */
 export function SkillsetChips({ skills }: SkillsetChipsProps) {
   const { theme } = useAppThemeContext();
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const alias: Record<string, string> = { heart: "favorite", target: "gps-fixed", globe: "public" };
   const getIconComponent = (iconName: string) => {
     const mappedName = alias[iconName] || iconName;

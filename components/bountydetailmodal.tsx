@@ -6,7 +6,7 @@ import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 import type { AppTheme } from '../lib/themes/types'
 import { formatCategoryLabel } from 'lib/utils/data-utils'
 import { shareBounty } from "lib/utils/share-utils"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
   Alert,
@@ -76,7 +76,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   const currentUserId = session?.user?.id ?? null
   const { triggerHaptic } = useHapticFeedback()
   const { theme } = useAppThemeContext()
-  const styles = makeStyles(theme)
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState("")
   const [isClosing, setIsClosing] = useState(false)
@@ -256,10 +256,13 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   // Handle Share button
   const handleShare = async () => {
     await shareBounty({
-      title: bounty.title,
-      price: bounty.price,
       id: bounty.id,
+      title: bounty.title,
+      amount: bounty.price,
+      isForHonor: bounty.is_for_honor,
       description: bounty.description,
+      location: bounty.location,
+      posterName: bounty.username ? `@${bounty.username}` : undefined,
     });
   };
 

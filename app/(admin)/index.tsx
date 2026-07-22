@@ -23,6 +23,7 @@ export default function AdminDashboard() {
     { id: 'disputes', title: 'Disputes', icon: 'gavel', route: ROUTES.ADMIN.DISPUTES },
     { id: 'transactions', title: 'Transactions', icon: 'account-balance', route: ROUTES.ADMIN.TRANSACTIONS },
     { id: 'withdrawal-recovery', title: 'Withdrawal Recovery', icon: 'build-circle', route: ROUTES.ADMIN.WITHDRAWAL_RECOVERY },
+    { id: 'balance-reconciliation', title: 'Balance Sync', icon: 'sync-alt', route: ROUTES.ADMIN.BALANCE_RECONCILIATION },
     { id: 'reports', title: 'Reports', icon: 'report', route: ROUTES.ADMIN.REPORTS },
     { id: 'blocked', title: 'Blocked Users', icon: 'block', route: ROUTES.ADMIN.BLOCKED_USERS },
     { id: 'settings', title: 'Settings', icon: 'settings', route: ROUTES.ADMIN.SETTINGS.INDEX },

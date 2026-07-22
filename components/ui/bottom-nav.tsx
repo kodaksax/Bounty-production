@@ -1,6 +1,6 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { useHapticFeedback } from "lib/haptic-feedback";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useMemo } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { A11Y, SIZING } from "../../lib/constants/accessibility";
 import { theme as legacyTheme } from "../../lib/theme";
@@ -27,7 +27,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
   const centerButtonRotation = useRef(new Animated.Value(0)).current;
   const { triggerHaptic } = useHapticFeedback();
   const { theme } = useAppThemeContext();
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
 
   const handleNavigate = React.useCallback((screen: ScreenKey) => {
     // If tapping the bounty button while already on bounty screen, trigger scroll-to-top + refresh

@@ -6,7 +6,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Alert,
   Image,
@@ -35,7 +35,7 @@ export default function UploadIDScreen() {
   const insets = useSafeAreaInsets();
   const { session } = useAuthContext();
   const { theme } = useAppThemeContext();
-  const styles = makeStyles(theme);
+  const styles = useMemo(() => makeStyles(theme), [theme]);
 
   const [selectedDocType, setSelectedDocType] = useState<DocumentType>('driversLicense');
   const [frontImage, setFrontImage] = useState<string | null>(null);
