@@ -31,9 +31,12 @@ import { storage } from '../../lib/storage';
 import { hasLocalOnboardingFlag } from '../../lib/storage/onboarding';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import { emitAuthLoginSuccess, runAuthStageWithTimeout } from '../../lib/utils/auth-diagnostics';
 import {
+    AUTH_RETRY_CONFIG,
     generateCorrelationId,
     getAuthErrorMessage,
+    isTimeoutError,
     parseAuthError,
 } from '../../lib/utils/auth-errors';
 import { suggestEmailCorrection, validateEmail } from '../../lib/utils/auth-validation';
@@ -48,6 +51,30 @@ export default function SignInRoute() {
 }
 
 export function SignInForm() {
+  const AUTH_STAGE_TIMEOUTS_MS = {
+    signIn: AUTH_RETRY_CONFIG.AUTH_TIMEOUT,
+    socialSignIn: AUTH_RETRY_CONFIG.SOCIAL_AUTH_TIMEOUT,
+    mfaCheck: 10000,
+    profileCheck: AUTH_RETRY_CONFIG.PROFILE_TIMEOUT,
+    localOnboardingCheck: 2000,
+  } as const;
+
+  const runStageWithTimeout = async <T,>(
+    stage: keyof typeof AUTH_STAGE_TIMEOUTS_MS,
+    promiseFactory: () => PromiseLike<T>,
+    correlationId: string
+  ): Promise<T> => {
+    return runAuthStageWithTimeout({
+      correlationId,
+      stage: `sign-in:${stage}`,
+      timeoutMs: AUTH_STAGE_TIMEOUTS_MS[stage],
+      run: promiseFactory,
+      metadata: {
+        surface: 'sign-in-form',
+      },
+    });
+  };
+
   const { theme, isDark } = useAppThemeContext();
   // set status/safe-area color to match screen background
   useScreenBackground(theme.background);
@@ -69,6 +96,7 @@ export function SignInForm() {
   const captchaRequired = loginAttempts >= CAPTCHA_THRESHOLD && !isLockoutActive;
   const [socialAuthLoading, setSocialAuthLoading] = useState(false);
   const [socialAuthError, setSocialAuthError] = useState<string | null>(null);
+  const socialLoginStartMsRef = useRef<number | null>(null);
 
   // Use form submission hook with rate limiting
   const {
@@ -78,6 +106,7 @@ export function SignInForm() {
     reset: resetError,
   } = useFormSubmission(
     async () => {
+      const loginStartMs = Date.now();
       // Generate correlation ID for tracking this auth attempt
       const correlationId = generateCorrelationId('signin');
       console.log('[sign-in] Starting sign-in process', { correlationId });
@@ -135,10 +164,15 @@ export function SignInForm() {
         // See SIGN_IN_SIMPLIFICATION_SUMMARY.md for detailed rationale
         console.log(`[sign-in] Calling supabase.auth.signInWithPassword...`, { correlationId });
 
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: identifier.trim().toLowerCase(),
-          password,
-        });
+        const { data, error } = await runStageWithTimeout(
+          'signIn',
+          () =>
+            supabase.auth.signInWithPassword({
+              email: identifier.trim().toLowerCase(),
+              password,
+            }),
+          correlationId
+        );
 
         console.log(`[sign-in] Auth response received:`, {
           correlationId,
@@ -212,7 +246,11 @@ export function SignInForm() {
           // MFA CHECK: If the user has 2FA enrolled, they must complete a TOTP challenge
           // before accessing the app (elevating from AAL1 to AAL2).
           try {
-            const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+            const { data: aal } = await runStageWithTimeout(
+              'mfaCheck',
+              () => supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
+              correlationId
+            );
             if (aal?.nextLevel === 'aal2' && aal?.currentLevel !== 'aal2') {
               console.log('[sign-in] MFA challenge required, redirecting to MFA screen', {
                 correlationId,
@@ -242,11 +280,16 @@ export function SignInForm() {
           try {
             // Profile check to determine onboarding status
             // Let Supabase SDK handle network timeouts and retry logic
-            const { data: profile, error: profileError } = await supabase
-              .from('profiles')
-              .select('username, onboarding_completed')
-              .eq('id', data.session.user.id)
-              .single();
+            const { data: profile, error: profileError } = await runStageWithTimeout(
+              'profileCheck',
+              () =>
+                supabase
+                  .from('profiles')
+                  .select('username, onboarding_completed')
+                  .eq('id', data.session.user.id)
+                  .single(),
+              correlationId
+            );
 
             if (profileError) {
               // If profile doesn't exist (PGRST116), user needs onboarding
@@ -266,6 +309,14 @@ export function SignInForm() {
                 profileError.message,
                 { correlationId }
               );
+              await emitAuthLoginSuccess({
+                correlationId,
+                userId: data.session.user.id,
+                totalDurationMs: Date.now() - loginStartMs,
+                method: 'email',
+                destination: ROUTES.TABS.BOUNTY_APP,
+                metadata: { reason: 'profile_error_fallback' },
+              });
               router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } });
               return;
             }
@@ -280,11 +331,26 @@ export function SignInForm() {
               // The Supabase write may have failed on a prior session; the local flag
               // is the only reliable signal that onboarding was actually completed.
               // Only trust the flag when a username exists (i.e. the username step ran).
-              if (profile?.username && (await hasLocalOnboardingFlag(data.session.user.id))) {
+              if (
+                profile?.username &&
+                (await runStageWithTimeout(
+                  'localOnboardingCheck',
+                  () => hasLocalOnboardingFlag(data.session.user.id),
+                  correlationId
+                ))
+              ) {
                 console.log(
                   '[sign-in] Supabase flag missing but local flag set — skipping onboarding',
                   { correlationId }
                 );
+                await emitAuthLoginSuccess({
+                  correlationId,
+                  userId: data.session.user.id,
+                  totalDurationMs: Date.now() - loginStartMs,
+                  method: 'email',
+                  destination: ROUTES.TABS.BOUNTY_APP,
+                  metadata: { reason: 'local_onboarding_flag' },
+                });
                 router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } });
                 try {
                   markInitialNavigationDone();
@@ -299,6 +365,14 @@ export function SignInForm() {
                     onboardingCompleted: profile?.onboarding_completed,
                   }
                 );
+                await emitAuthLoginSuccess({
+                  correlationId,
+                  userId: data.session.user.id,
+                  totalDurationMs: Date.now() - loginStartMs,
+                  method: 'email',
+                  destination: '/onboarding',
+                  metadata: { reason: 'profile_incomplete' },
+                });
                 router.replace('/onboarding');
                 try {
                   markInitialNavigationDone();
@@ -307,6 +381,14 @@ export function SignInForm() {
             } else {
               // User has completed onboarding, go to app
               console.log('[sign-in] Profile complete, redirecting to app', { correlationId });
+              await emitAuthLoginSuccess({
+                correlationId,
+                userId: data.session.user.id,
+                totalDurationMs: Date.now() - loginStartMs,
+                method: 'email',
+                destination: ROUTES.TABS.BOUNTY_APP,
+                metadata: { reason: 'profile_complete' },
+              });
               router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } });
               try {
                 markInitialNavigationDone();
@@ -319,6 +401,14 @@ export function SignInForm() {
               '[sign-in] Profile check error, proceeding to app. AuthProvider will sync.',
               { correlationId }
             );
+            await emitAuthLoginSuccess({
+              correlationId,
+              userId: data.session.user.id,
+              totalDurationMs: Date.now() - loginStartMs,
+              method: 'email',
+              destination: ROUTES.TABS.BOUNTY_APP,
+              metadata: { reason: 'profile_check_exception_fallback' },
+            });
             router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } });
           }
         } else {
@@ -332,6 +422,11 @@ export function SignInForm() {
         // re-throw it directly.  Calling parseAuthError on an already-processed
         // message would incorrectly map it to "An unexpected error occurred."
         if (err instanceof Error) {
+          if (isTimeoutError(err) || (err as any)?.code === 'AUTH_STAGE_TIMEOUT') {
+            throw new Error(
+              'Sign-in is taking longer than expected. Please check your connection and try again.'
+            );
+          }
           throw err;
         }
 
@@ -457,10 +552,17 @@ export function SignInForm() {
 
         // Simplified: Let Supabase handle its own timeout
         // See SIGN_IN_SIMPLIFICATION_SUMMARY.md for rationale
-        const { data, error } = await supabase.auth.signInWithIdToken({
-          provider: 'google',
-          token: idToken,
-        });
+        const socialCorrelationId = generateCorrelationId('signin_google');
+        const socialLoginStartMs = socialLoginStartMsRef.current ?? Date.now();
+        const { data, error } = await runStageWithTimeout(
+          'socialSignIn',
+          () =>
+            supabase.auth.signInWithIdToken({
+              provider: 'google',
+              token: idToken,
+            }),
+          socialCorrelationId
+        );
 
         if (error) throw error;
         if (data.session) {
@@ -469,11 +571,16 @@ export function SignInForm() {
           // Profile check to determine onboarding status
           // Let Supabase SDK handle network timeouts and retry logic
           try {
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('username, onboarding_completed')
-              .eq('id', data.session.user.id)
-              .single();
+            const { data: profile } = await runStageWithTimeout(
+              'profileCheck',
+              () =>
+                supabase
+                  .from('profiles')
+                  .select('username, onboarding_completed')
+                  .eq('id', data.session.user.id)
+                  .single(),
+              socialCorrelationId
+            );
 
             // Check if user needs to complete onboarding
             // User needs onboarding if:
@@ -482,10 +589,25 @@ export function SignInForm() {
             // 3. Profile exists but onboarding_completed is not true (handles false, null, undefined)
             if (!profile || !profile.username || profile.onboarding_completed !== true) {
               // Before redirecting, check the per-user AsyncStorage flag as a fallback.
-              if (profile?.username && (await hasLocalOnboardingFlag(data.session.user.id))) {
+              if (
+                profile?.username &&
+                (await runStageWithTimeout(
+                  'localOnboardingCheck',
+                  () => hasLocalOnboardingFlag(data.session.user.id),
+                  socialCorrelationId
+                ))
+              ) {
                 console.log(
                   '[google] Supabase flag missing but local flag set — skipping onboarding'
                 );
+                await emitAuthLoginSuccess({
+                  correlationId: socialCorrelationId,
+                  userId: data.session.user.id,
+                  totalDurationMs: Date.now() - socialLoginStartMs,
+                  method: 'google',
+                  destination: ROUTES.TABS.BOUNTY_APP,
+                  metadata: { reason: 'local_onboarding_flag' },
+                });
                 router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } });
                 try {
                   markInitialNavigationDone();
@@ -499,6 +621,14 @@ export function SignInForm() {
                     onboardingCompleted: profile?.onboarding_completed,
                   }
                 );
+                await emitAuthLoginSuccess({
+                  correlationId: socialCorrelationId,
+                  userId: data.session.user.id,
+                  totalDurationMs: Date.now() - socialLoginStartMs,
+                  method: 'google',
+                  destination: '/onboarding',
+                  metadata: { reason: 'profile_incomplete' },
+                });
                 router.replace('/onboarding');
                 try {
                   markInitialNavigationDone();
@@ -506,6 +636,14 @@ export function SignInForm() {
               }
             } else {
               // User has completed onboarding, go to app
+              await emitAuthLoginSuccess({
+                correlationId: socialCorrelationId,
+                userId: data.session.user.id,
+                totalDurationMs: Date.now() - socialLoginStartMs,
+                method: 'google',
+                destination: ROUTES.TABS.BOUNTY_APP,
+                metadata: { reason: 'profile_complete' },
+              });
               router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } });
               try {
                 markInitialNavigationDone();
@@ -516,6 +654,14 @@ export function SignInForm() {
               '[google] Profile check failed, proceeding to app. AuthProvider will sync.'
             );
             // On error, proceed to app - AuthProvider will handle profile sync
+            await emitAuthLoginSuccess({
+              correlationId: socialCorrelationId,
+              userId: data.session.user.id,
+              totalDurationMs: Date.now() - socialLoginStartMs,
+              method: 'google',
+              destination: ROUTES.TABS.BOUNTY_APP,
+              metadata: { reason: 'profile_check_exception_fallback' },
+            });
             router.replace({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'bounty' } });
             try {
               markInitialNavigationDone();
@@ -694,11 +840,7 @@ export function SignInForm() {
                 </View>
               )}
 
-              <Button
-                onPress={handleSubmit}
-                loading={isSubmitting}
-                accessibilityLabel="Sign in"
-              >
+              <Button onPress={handleSubmit} loading={isSubmitting} accessibilityLabel="Sign in">
                 Sign In
               </Button>
 
@@ -712,6 +854,7 @@ export function SignInForm() {
                     onPress={async () => {
                       setSocialAuthError(null);
                       setSocialAuthLoading(true);
+                      socialLoginStartMsRef.current = Date.now();
                       try {
                         console.log('[apple] Starting Apple sign-in');
                         const credential = await AppleAuthentication.signInAsync({
@@ -720,20 +863,29 @@ export function SignInForm() {
                             AppleAuthentication.AppleAuthenticationScope.EMAIL,
                           ],
                         });
-                        if (!credential.identityToken) {
-                          setSocialAuthError('No Apple identity token received');
-                          return;
-                        }
                         if (!isSupabaseConfigured) {
                           setSocialAuthError('Authentication service is not configured.');
                           return;
                         }
 
                         console.log('[apple] Exchanging token with Supabase');
-                        const { data, error } = await supabase.auth.signInWithIdToken({
-                          provider: 'apple',
-                          token: credential.identityToken,
-                        });
+                        const socialCorrelationId = generateCorrelationId('signin_apple');
+                        const socialLoginStartMs = socialLoginStartMsRef.current ?? Date.now();
+                        const identityToken = credential.identityToken;
+                        if (!identityToken) {
+                          setSocialAuthError('No Apple identity token received');
+                          return;
+                        }
+
+                        const { data, error } = await runStageWithTimeout(
+                          'socialSignIn',
+                          () =>
+                            supabase.auth.signInWithIdToken({
+                              provider: 'apple',
+                              token: identityToken,
+                            }),
+                          socialCorrelationId
+                        );
 
                         if (error) throw error;
                         if (data.session) {
@@ -742,11 +894,16 @@ export function SignInForm() {
                           // Profile check to determine onboarding status
                           // Let Supabase SDK handle network timeouts and retry logic
                           try {
-                            const { data: profile } = await supabase
-                              .from('profiles')
-                              .select('username, onboarding_completed')
-                              .eq('id', data.session.user.id)
-                              .single();
+                            const { data: profile } = await runStageWithTimeout(
+                              'profileCheck',
+                              () =>
+                                supabase
+                                  .from('profiles')
+                                  .select('username, onboarding_completed')
+                                  .eq('id', data.session.user.id)
+                                  .single(),
+                              socialCorrelationId
+                            );
 
                             // Check if user needs to complete onboarding
                             // User needs onboarding if:
@@ -761,11 +918,23 @@ export function SignInForm() {
                               // Before redirecting, check the per-user AsyncStorage flag as a fallback.
                               if (
                                 profile?.username &&
-                                (await hasLocalOnboardingFlag(data.session.user.id))
+                                (await runStageWithTimeout(
+                                  'localOnboardingCheck',
+                                  () => hasLocalOnboardingFlag(data.session.user.id),
+                                  socialCorrelationId
+                                ))
                               ) {
                                 console.log(
                                   '[apple] Supabase flag missing but local flag set — skipping onboarding'
                                 );
+                                await emitAuthLoginSuccess({
+                                  correlationId: socialCorrelationId,
+                                  userId: data.session.user.id,
+                                  totalDurationMs: Date.now() - socialLoginStartMs,
+                                  method: 'apple',
+                                  destination: ROUTES.TABS.BOUNTY_APP,
+                                  metadata: { reason: 'local_onboarding_flag' },
+                                });
                                 router.replace({
                                   pathname: ROUTES.TABS.BOUNTY_APP,
                                   params: { screen: 'bounty' },
@@ -781,12 +950,28 @@ export function SignInForm() {
                                     onboardingCompleted: profile?.onboarding_completed,
                                   }
                                 );
+                                await emitAuthLoginSuccess({
+                                  correlationId: socialCorrelationId,
+                                  userId: data.session.user.id,
+                                  totalDurationMs: Date.now() - socialLoginStartMs,
+                                  method: 'apple',
+                                  destination: '/onboarding',
+                                  metadata: { reason: 'profile_incomplete' },
+                                });
                                 router.replace('/onboarding');
                                 try {
                                   markInitialNavigationDone();
                                 } catch {}
                               }
                             } else {
+                              await emitAuthLoginSuccess({
+                                correlationId: socialCorrelationId,
+                                userId: data.session.user.id,
+                                totalDurationMs: Date.now() - socialLoginStartMs,
+                                method: 'apple',
+                                destination: ROUTES.TABS.BOUNTY_APP,
+                                metadata: { reason: 'profile_complete' },
+                              });
                               router.replace({
                                 pathname: ROUTES.TABS.BOUNTY_APP,
                                 params: { screen: 'bounty' },
@@ -800,6 +985,14 @@ export function SignInForm() {
                               '[apple] Profile check failed, proceeding to app. AuthProvider will sync.'
                             );
                             // On error, proceed to app - AuthProvider will handle profile sync
+                            await emitAuthLoginSuccess({
+                              correlationId: socialCorrelationId,
+                              userId: data.session.user.id,
+                              totalDurationMs: Date.now() - socialLoginStartMs,
+                              method: 'apple',
+                              destination: ROUTES.TABS.BOUNTY_APP,
+                              metadata: { reason: 'profile_check_exception_fallback' },
+                            });
                             router.replace({
                               pathname: ROUTES.TABS.BOUNTY_APP,
                               params: { screen: 'bounty' },
@@ -833,6 +1026,7 @@ export function SignInForm() {
                 onPress={() => {
                   setSocialAuthError(null);
                   setSocialAuthLoading(true);
+                  socialLoginStartMsRef.current = Date.now();
                   promptAsync();
                 }}
                 className={`w-full rounded py-3 items-center flex-row justify-center mt-2 ${isGoogleConfigured ? 'bg-white' : 'bg-white/40'}`}

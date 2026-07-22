@@ -10,6 +10,8 @@ import React, {
     useState,
 } from 'react';
 import { isSupabaseConfigured, supabase } from './supabase';
+import { logAuthLifecycleEvent, runAuthStageWithTimeout } from './utils/auth-diagnostics';
+import { generateCorrelationId } from './utils/auth-errors';
 import {
     resolveSupabaseAuthSubscription,
     safeUnsubscribe,
@@ -72,7 +74,13 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       const {
         data: { session },
         error: sessionError,
-      } = await supabase.auth.getSession();
+      } = await runAuthStageWithTimeout({
+        correlationId: generateCorrelationId('admin_verify'),
+        stage: 'admin:getSession',
+        timeoutMs: 12000,
+        run: () => supabase.auth.getSession(),
+        metadata: { surface: 'admin-context', reason: 'verify-admin-status' },
+      });
 
       if (sessionError || !session) {
         await setIsAdmin(false);
@@ -151,23 +159,65 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
     let cleanupRequested = false;
     let authSubscription: SupabaseAuthSubscription | undefined;
 
-    const ret = supabase.auth.onAuthStateChange(async (event, _session) => {
-      try {
-        if (event === 'SIGNED_OUT') {
-          await setIsAdminRef.current(false);
-          // Reset admin tab visibility preference on sign out for all users.
-          // This ensures the admin tab is hidden on the next sign in (initial login behavior).
-          await setAdminTabEnabledRef.current(false);
-        } else if (event === 'SIGNED_IN') {
-          await setAdminTabEnabledRef.current(false);
-          await verifyAdminStatusRef.current();
+    const ret = supabase.auth.onAuthStateChange((event, session) => {
+      const correlationId = generateCorrelationId(`admin_event_${String(event).toLowerCase()}`);
+      const startedAtMs = Date.now();
+      const startedAt = new Date(startedAtMs).toISOString();
+
+      logAuthLifecycleEvent({
+        correlationId,
+        stage: 'admin:onAuthStateChange',
+        status: 'started',
+        startedAt,
+        metadata: {
+          event,
+          hasSession: !!session,
+          userId: session?.user?.id ?? null,
+        },
+      });
+
+      // Keep callback lock-safe: do not await Supabase calls or long async work here.
+      // Supabase dispatches auth events while holding its internal auth lock; awaiting
+      // lock-reentrant calls (e.g., getSession) can deadlock startup/sign-in.
+      if (event === 'SIGNED_OUT') {
+        void setIsAdminRef.current(false).catch(e => {
+          console.error('[AdminContext] Error clearing admin status on sign-out:', e);
+        });
+        void setAdminTabEnabledRef.current(false).catch(e => {
+          console.error('[AdminContext] Error resetting admin tab on sign-out:', e);
+        });
+      } else if (event === 'SIGNED_IN') {
+        void setAdminTabEnabledRef.current(false).catch(e => {
+          console.error('[AdminContext] Error resetting admin tab on sign-in:', e);
+        });
+
+        // Fast-path: derive admin role from the event session immediately.
+        if (session?.user) {
+          const isAdminUser = session.user?.app_metadata?.role === 'admin';
+          void setIsAdminRef.current(isAdminUser).catch(e => {
+            console.error('[AdminContext] Error applying admin status from event session:', e);
+          });
         }
-        // TOKEN_REFRESHED is intentionally NOT handled here. Token refresh does
-        // not change admin role, and handling it caused a TypeError crash after
-        // the first token expiry (~1 hour) due to stale closures in the callback.
-      } catch (e) {
-        console.error('[AdminContext] Error handling auth state change:', e);
+
+        // Background verify in a macrotask to run after the auth lock is released.
+        setTimeout(() => {
+          void verifyAdminStatusRef.current().catch(e => {
+            console.error('[AdminContext] Deferred admin status verification failed:', e);
+          });
+        }, 0);
       }
+
+      logAuthLifecycleEvent({
+        correlationId,
+        stage: 'admin:onAuthStateChange',
+        status: 'success',
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        elapsedMs: Date.now() - startedAtMs,
+        metadata: { event },
+        outcome: 'event_handled',
+      });
+      // TOKEN_REFRESHED is intentionally not handled here: admin role doesn't change.
     });
 
     resolveSupabaseAuthSubscription(

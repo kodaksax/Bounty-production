@@ -20,6 +20,8 @@ import { analyticsService } from '../lib/services/analytics-service';
 import { authProfileService } from '../lib/services/auth-profile-service';
 import { getSentry } from '../lib/services/sentry-init';
 import { isSupabaseConfigured, PROJECT_STORAGE_KEY, supabase } from '../lib/supabase';
+import { logAuthLifecycleEvent, runAuthStageWithTimeout } from '../lib/utils/auth-diagnostics';
+import { AUTH_RETRY_CONFIG, generateCorrelationId, isTimeoutError } from '../lib/utils/auth-errors';
 import {
     resolveSupabaseAuthSubscription,
     safeUnsubscribe,
@@ -279,8 +281,19 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     profileFetchCompletedRef.current = false;
 
     const fetchSession = async () => {
+      const correlationId = generateCorrelationId('auth_provider_init');
+      const startedAt = new Date().toISOString();
+      const startedAtMs = Date.now();
       setIsLoading(true);
       let sessionFound = false;
+
+      logAuthLifecycleEvent({
+        correlationId,
+        stage: 'auth-provider:fetchSession',
+        status: 'started',
+        startedAt,
+        metadata: { isSupabaseConfigured },
+      });
 
       // If Supabase isn't configured (e.g. running in a test or local dev without envs),
       // avoid calling the client which may resolve to a stub/proxy and produce
@@ -316,7 +329,13 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         const {
           data: { session },
           error,
-        } = await supabase.auth.getSession();
+        } = await runAuthStageWithTimeout({
+          correlationId,
+          stage: 'auth-provider:getSession',
+          timeoutMs: AUTH_RETRY_CONFIG.AUTH_TIMEOUT,
+          run: () => supabase.auth.getSession(),
+          metadata: { surface: 'auth-provider', reason: 'startup-session-restore' },
+        });
 
         if (!isMountedRef.current) return;
 
@@ -407,6 +426,11 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         }
       } catch (error) {
         reportError(error, '[AuthProvider] Unexpected error fetching session:');
+        if (isTimeoutError(error)) {
+          reportWarning(
+            '[AuthProvider] Session initialization timed out; falling back to signed-out state'
+          );
+        }
         if (!isMountedRef.current) return;
         setSession(null);
         try {
@@ -417,6 +441,19 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           reportWarning('[AuthProvider] Profile service unavailable during session clear:', e);
         }
       } finally {
+        logAuthLifecycleEvent({
+          correlationId,
+          stage: 'auth-provider:fetchSession',
+          status: 'success',
+          startedAt,
+          finishedAt: new Date().toISOString(),
+          elapsedMs: Date.now() - startedAtMs,
+          metadata: {
+            sessionFound,
+            isInitializing: isInitializingRef.current,
+          },
+          outcome: sessionFound ? 'session_restored' : 'signed_out_state',
+        });
         if (isMountedRef.current) {
           // Only set isLoading to false if there's no session
           // If there is a session, wait for the profile to load via subscription
@@ -435,6 +472,24 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     try {
       const maybeSub = supabase.auth.onAuthStateChange(
         async (_event: string, session: Session | null) => {
+          const eventCorrelationId = generateCorrelationId(
+            `auth_event_${String(_event).toLowerCase()}`
+          );
+          const eventStartedAt = new Date().toISOString();
+          const eventStartedAtMs = Date.now();
+
+          logAuthLifecycleEvent({
+            correlationId: eventCorrelationId,
+            stage: 'auth-provider:onAuthStateChange',
+            status: 'started',
+            startedAt: eventStartedAt,
+            metadata: {
+              event: _event,
+              hasSession: !!session,
+              userId: session?.user?.id ?? null,
+            },
+          });
+
           // Process auth state changes even during initialization to avoid missing SIGNED_IN
           // events that occur while the initial session fetch is in progress.
           // We rely on the subsequent logic (profile sync + timers) to be idempotent.
@@ -687,6 +742,17 @@ export default function AuthProvider({ children }: PropsWithChildren) {
               reportWarning('[AuthProvider] Error checking deferred push registration flag:', e);
             }
           }
+
+          logAuthLifecycleEvent({
+            correlationId: eventCorrelationId,
+            stage: 'auth-provider:onAuthStateChange',
+            status: 'success',
+            startedAt: eventStartedAt,
+            finishedAt: new Date().toISOString(),
+            elapsedMs: Date.now() - eventStartedAtMs,
+            metadata: { event: _event },
+            outcome: 'event_processed',
+          });
         }
       );
 

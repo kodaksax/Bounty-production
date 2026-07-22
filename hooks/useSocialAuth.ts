@@ -13,7 +13,12 @@ import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
-import { getAuthErrorMessage } from '../lib/utils/auth-errors';
+import { runAuthStageWithTimeout } from '../lib/utils/auth-diagnostics';
+import {
+    AUTH_RETRY_CONFIG,
+    generateCorrelationId,
+    getAuthErrorMessage,
+} from '../lib/utils/auth-errors';
 
 // Required so the browser-based Google OAuth redirect resolves back into the
 // app. app/auth/sign-in-form.tsx also calls this at module scope; doing so
@@ -69,9 +74,17 @@ export function useSocialAuth() {
         return;
       }
       try {
-        const { error: authError } = await supabase.auth.signInWithIdToken({
-          provider: 'google',
-          token: idToken,
+        const correlationId = generateCorrelationId('social_google');
+        const { error: authError } = await runAuthStageWithTimeout({
+          correlationId,
+          stage: 'social-auth:google-signInWithIdToken',
+          timeoutMs: AUTH_RETRY_CONFIG.SOCIAL_AUTH_TIMEOUT,
+          run: () =>
+            supabase.auth.signInWithIdToken({
+              provider: 'google',
+              token: idToken,
+            }),
+          metadata: { surface: 'useSocialAuth' },
         });
         if (authError) throw authError;
         setGoogleSessionReady(true);
@@ -103,9 +116,18 @@ export function useSocialAuth() {
         setError('Apple did not return an identity token');
         return false;
       }
-      const { error: authError } = await supabase.auth.signInWithIdToken({
-        provider: 'apple',
-        token: credential.identityToken,
+      const identityToken = credential.identityToken;
+      const correlationId = generateCorrelationId('social_apple');
+      const { error: authError } = await runAuthStageWithTimeout({
+        correlationId,
+        stage: 'social-auth:apple-signInWithIdToken',
+        timeoutMs: AUTH_RETRY_CONFIG.SOCIAL_AUTH_TIMEOUT,
+        run: () =>
+          supabase.auth.signInWithIdToken({
+            provider: 'apple',
+            token: identityToken,
+          }),
+        metadata: { surface: 'useSocialAuth' },
       });
       if (authError) throw authError;
       return true;

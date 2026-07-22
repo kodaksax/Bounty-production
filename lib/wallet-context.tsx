@@ -437,40 +437,45 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     let cleanupRequested = false;
     let authSubscription: SupabaseAuthSubscription | undefined;
 
-    const ret = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_OUT') {
-        // Persist the cleared state first so that if a new user signs in before
-        // the component re-initialises, SecureStore reflects the blank slate.
-        try {
-          await Promise.all([
-            setSecureJSON(SecureKeys.WALLET_BALANCE, INITIAL_BALANCE),
-            setSecureJSON(SecureKeys.WALLET_TRANSACTIONS, []),
-            setSecureJSON(SecureKeys.WALLET_LAST_DEPOSIT_TS, null),
-          ]);
-        } catch (err) {
-          console.error('[wallet] Error clearing data on sign-out:', err);
-        }
-        lastOptimisticDepositRef.current = null;
-        setBalance(INITIAL_BALANCE);
-        setTransactions([]);
-      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        // Re-fetch authoritative balance from the server whenever the user
-        // signs in (or their token is silently refreshed). This is the primary
-        // recovery path after session expiry: SIGNED_OUT wipes local state →
-        // user re-authenticates → SIGNED_IN triggers this sync so the real
-        // server-side balance is restored without requiring a manual navigation
-        // to the Wallet screen.
-        const token = session?.access_token;
-        if (token) {
-          try {
-            // Call the latest memoized implementation via ref so we don't
-            // force the effect to re-run when the function identity changes.
-            await refreshFromApiRef.current?.(token);
-          } catch (err) {
-            console.error('[wallet] Error syncing balance after sign-in:', err);
+    const ret = supabase.auth.onAuthStateChange((event, session) => {
+      // Keep auth callback lock-safe: defer all async storage/network work.
+      setTimeout(() => {
+        void (async () => {
+          if (event === 'SIGNED_OUT') {
+            // Persist the cleared state first so that if a new user signs in before
+            // the component re-initialises, SecureStore reflects the blank slate.
+            try {
+              await Promise.all([
+                setSecureJSON(SecureKeys.WALLET_BALANCE, INITIAL_BALANCE),
+                setSecureJSON(SecureKeys.WALLET_TRANSACTIONS, []),
+                setSecureJSON(SecureKeys.WALLET_LAST_DEPOSIT_TS, null),
+              ]);
+            } catch (err) {
+              console.error('[wallet] Error clearing data on sign-out:', err);
+            }
+            lastOptimisticDepositRef.current = null;
+            setBalance(INITIAL_BALANCE);
+            setTransactions([]);
+          } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+            // Re-fetch authoritative balance from the server whenever the user
+            // signs in (or their token is silently refreshed). This is the primary
+            // recovery path after session expiry: SIGNED_OUT wipes local state →
+            // user re-authenticates → SIGNED_IN triggers this sync so the real
+            // server-side balance is restored without requiring a manual navigation
+            // to the Wallet screen.
+            const token = session?.access_token;
+            if (token) {
+              try {
+                // Call the latest memoized implementation via ref so we don't
+                // force the effect to re-run when the function identity changes.
+                await refreshFromApiRef.current?.(token);
+              } catch (err) {
+                console.error('[wallet] Error syncing balance after sign-in:', err);
+              }
+            }
           }
-        }
-      }
+        })();
+      }, 0);
     });
 
     resolveSupabaseAuthSubscription(

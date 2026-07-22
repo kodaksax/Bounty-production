@@ -25,50 +25,96 @@
  *   back to "loading" and triggers a fresh resolution cycle.
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage'
-import { useEffect, useRef, useState } from 'react'
-import { getOnboardingCompleteKey, markDeviceHasSignedIn } from '../lib/storage/onboarding'
-import { useAuthContext } from './use-auth-context'
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useEffect, useRef, useState } from 'react';
+import { getOnboardingCompleteKey, markDeviceHasSignedIn } from '../lib/storage/onboarding';
+import { logAuthLifecycleEvent } from '../lib/utils/auth-diagnostics';
+import { generateCorrelationId } from '../lib/utils/auth-errors';
+import { useAuthContext } from './use-auth-context';
 
 export type AppBootstrapState =
   | { status: 'loading' }
   | { status: 'unauthenticated' }
-  | { status: 'authenticated'; onboardingComplete: boolean }
+  | { status: 'authenticated'; onboardingComplete: boolean };
 
 export function useAppBootstrap(): AppBootstrapState {
-  const { session, isLoading, profile } = useAuthContext()
-  const [state, setState] = useState<AppBootstrapState>({ status: 'loading' })
+  const { session, isLoading, profile } = useAuthContext();
+  const [state, setState] = useState<AppBootstrapState>({ status: 'loading' });
+  const bootstrapCorrelationRef = useRef<string>(generateCorrelationId('bootstrap'));
 
   // Which user ID we last fully resolved for.
   // undefined = never resolved; null = resolved while logged-out.
-  const resolvedForRef = useRef<string | null | undefined>(undefined)
+  const resolvedForRef = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {
+    const correlationId = bootstrapCorrelationRef.current;
+    const startedAt = new Date().toISOString();
+    const startedAtMs = Date.now();
+
+    logAuthLifecycleEvent({
+      correlationId,
+      stage: 'bootstrap:state-evaluation',
+      status: 'started',
+      startedAt,
+      metadata: {
+        authLoading: isLoading,
+        hasSession: !!session,
+        hasProfile: !!profile,
+      },
+    });
+
     // ── Auth provider still loading ───────────────────────────────────────
     if (isLoading) {
-      resolvedForRef.current = undefined
-      setState({ status: 'loading' })
-      return
+      resolvedForRef.current = undefined;
+      setState({ status: 'loading' });
+      logAuthLifecycleEvent({
+        correlationId,
+        stage: 'bootstrap:state-evaluation',
+        status: 'success',
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        elapsedMs: Date.now() - startedAtMs,
+        outcome: 'auth_loading',
+      });
+      return;
     }
 
-    const userId = session?.user?.id ?? null
+    const userId = session?.user?.id ?? null;
 
     // ── Already resolved for this session – nothing to do ─────────────────
     if (resolvedForRef.current !== undefined && resolvedForRef.current === userId) {
-      return
+      logAuthLifecycleEvent({
+        correlationId,
+        stage: 'bootstrap:state-evaluation',
+        status: 'success',
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        elapsedMs: Date.now() - startedAtMs,
+        outcome: 'already_resolved',
+      });
+      return;
     }
 
     // ── Session changed (sign-out / switch account) – reset ───────────────
     if (resolvedForRef.current !== undefined) {
-      resolvedForRef.current = undefined
-      setState({ status: 'loading' })
+      resolvedForRef.current = undefined;
+      setState({ status: 'loading' });
     }
 
     // ── No active session ─────────────────────────────────────────────────
     if (!userId) {
-      resolvedForRef.current = null
-      setState({ status: 'unauthenticated' })
-      return
+      resolvedForRef.current = null;
+      setState({ status: 'unauthenticated' });
+      logAuthLifecycleEvent({
+        correlationId,
+        stage: 'bootstrap:state-evaluation',
+        status: 'success',
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        elapsedMs: Date.now() - startedAtMs,
+        outcome: 'unauthenticated',
+      });
+      return;
     }
 
     // ── Authenticated ─────────────────────────────────────────────────────
@@ -76,14 +122,23 @@ export function useAppBootstrap(): AppBootstrapState {
     // Any resolved session means this device has completed a sign-in/sign-up
     // at least once — mark it so a future logout shows the log-in form
     // instead of the first-time onboarding welcome screen.
-    markDeviceHasSignedIn()
+    markDeviceHasSignedIn();
 
     // Fast path: profile already says onboarding is complete.
     // Avoid the async round-trip to AsyncStorage entirely.
     if (profile?.onboarding_completed === true && !profile?.needs_onboarding) {
-      resolvedForRef.current = userId
-      setState({ status: 'authenticated', onboardingComplete: true })
-      return
+      resolvedForRef.current = userId;
+      setState({ status: 'authenticated', onboardingComplete: true });
+      logAuthLifecycleEvent({
+        correlationId,
+        stage: 'bootstrap:state-evaluation',
+        status: 'success',
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        elapsedMs: Date.now() - startedAtMs,
+        outcome: 'authenticated_profile_complete',
+      });
+      return;
     }
 
     // Slow path: profile says incomplete, is null (fetch failed), or the DB
@@ -91,13 +146,13 @@ export function useAppBootstrap(): AppBootstrapState {
     // Fall back to the per-user AsyncStorage flag and trust it here so
     // bootstrap isn't blocked by a network call. Profile existence verification
     // happens later in bounty-app.tsx with its own safety timeout.
-    let cancelled = false
+    let cancelled = false;
 
-    ;(async () => {
-      let onboardingComplete = false
+    (async () => {
+      let onboardingComplete = false;
 
       try {
-        const stored = await AsyncStorage.getItem(getOnboardingCompleteKey(userId))
+        const stored = await AsyncStorage.getItem(getOnboardingCompleteKey(userId));
         if (stored === 'true') {
           // Trust the per-user AsyncStorage flag directly — making an uncached
           // Supabase network call here blocks bootstrap indefinitely when the
@@ -105,23 +160,46 @@ export function useAppBootstrap(): AppBootstrapState {
           // Profile row existence is verified by bounty-app.tsx which has its
           // own safety timeout; stale flags (deleted profile rows) are handled
           // there by redirecting the user back through onboarding.
-          onboardingComplete = true
+          onboardingComplete = true;
         }
       } catch {
         // AsyncStorage unavailable — default to onboarding (safe fallback).
-        onboardingComplete = false
+        onboardingComplete = false;
       }
 
       if (!cancelled) {
-        resolvedForRef.current = userId
-        setState({ status: 'authenticated', onboardingComplete })
+        resolvedForRef.current = userId;
+        setState({ status: 'authenticated', onboardingComplete });
+        logAuthLifecycleEvent({
+          correlationId,
+          stage: 'bootstrap:onboarding-fallback-check',
+          status: 'success',
+          startedAt,
+          finishedAt: new Date().toISOString(),
+          elapsedMs: Date.now() - startedAtMs,
+          outcome: onboardingComplete
+            ? 'authenticated_onboarding_complete_local'
+            : 'authenticated_onboarding_incomplete',
+          metadata: { userId },
+        });
       }
-    })()
+    })();
 
     return () => {
-      cancelled = true
-    }
-  }, [session, isLoading, profile])
+      cancelled = true;
+      logAuthLifecycleEvent({
+        correlationId,
+        stage: 'bootstrap:onboarding-fallback-check',
+        status: 'cancelled',
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        elapsedMs: Date.now() - startedAtMs,
+        cancelled: true,
+        outcome: 'effect_cleanup',
+        metadata: { userId },
+      });
+    };
+  }, [session, isLoading, profile]);
 
-  return state
+  return state;
 }

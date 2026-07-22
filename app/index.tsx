@@ -1,13 +1,15 @@
-import type { Href } from "expo-router";
-import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import type { Href } from 'expo-router';
+import { useRouter } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import 'react-native-get-random-values'; // must run before using tweetnacl
-import { useAuthContext } from "../hooks/use-auth-context";
-import { useAppBootstrap } from "../hooks/useAppBootstrap";
-import { ROUTES } from "../lib/routes";
-import { hasDeviceSignedInBefore } from "../lib/storage/onboarding";
-import { SignInForm } from "./auth/sign-in-form";
+import { useAuthContext } from '../hooks/use-auth-context';
+import { useAppBootstrap } from '../hooks/useAppBootstrap';
+import { ROUTES } from '../lib/routes';
+import { hasDeviceSignedInBefore } from '../lib/storage/onboarding';
+import { logAuthLifecycleEvent } from '../lib/utils/auth-diagnostics';
+import { generateCorrelationId } from '../lib/utils/auth-errors';
+import { SignInForm } from './auth/sign-in-form';
 import { markInitialNavigationDone } from './initial-navigation/initialNavigation';
 
 /**
@@ -28,93 +30,153 @@ import { markInitialNavigationDone } from './initial-navigation/initialNavigatio
  * special override that should always take precedence.
  */
 export default function Index() {
-  const bootstrap = useAppBootstrap()
-  const { isPasswordRecovery } = useAuthContext()
-  const router = useRouter()
-  const hasNavigatedRef = useRef(false)
+  const bootstrap = useAppBootstrap();
+  const { isPasswordRecovery } = useAuthContext();
+  const router = useRouter();
+  const authGateCorrelationRef = useRef(generateCorrelationId('root_auth_gate'));
+  const hasNavigatedRef = useRef(false);
   // Tracks whether we've confirmed this is a *returning* user (device has
   // signed in before) — until this is true, an unauthenticated visitor might
   // still be a first-timer who should see onboarding instead of the log-in
   // form, so we hold on the loading spinner rather than flashing sign-in.
-  const [confirmedReturningUser, setConfirmedReturningUser] = useState(false)
+  const [confirmedReturningUser, setConfirmedReturningUser] = useState(false);
 
   // Debug logging on mount (development only)
   useEffect(() => {
     if (__DEV__) {
-      console.log('[index] Component mounted')
+      console.log('[index] Component mounted');
     }
-  }, [])
+  }, []);
 
   // Reset navigation guard on unmount so a remount starts fresh.
   useEffect(() => {
     return () => {
-      hasNavigatedRef.current = false
-    }
-  }, [])
+      hasNavigatedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
+    const correlationId = authGateCorrelationRef.current;
+    const startedAt = new Date().toISOString();
+    const startedAtMs = Date.now();
+
+    logAuthLifecycleEvent({
+      correlationId,
+      stage: 'root-auth-gate:evaluate',
+      status: 'started',
+      startedAt,
+      metadata: {
+        bootstrapStatus: bootstrap.status,
+        isPasswordRecovery,
+        confirmedReturningUser,
+      },
+    });
+
     // Prevent double-navigation across re-renders.
-    if (hasNavigatedRef.current) return
+    if (hasNavigatedRef.current) return;
 
     // Still resolving auth or onboarding state — do nothing yet.
-    if (bootstrap.status === 'loading') return
+    if (bootstrap.status === 'loading') return;
 
     // Password recovery takes precedence over all routing decisions.
     if (isPasswordRecovery) {
-      hasNavigatedRef.current = true
+      hasNavigatedRef.current = true;
       if (__DEV__) {
-        console.log('[index] Password recovery mode — routing to update-password')
+        console.log('[index] Password recovery mode — routing to update-password');
       }
-      router.replace(ROUTES.AUTH.UPDATE_PASSWORD as Href)
-      try { markInitialNavigationDone() } catch {}
-      return
+      router.replace(ROUTES.AUTH.UPDATE_PASSWORD as Href);
+      try {
+        markInitialNavigationDone();
+      } catch {}
+      logAuthLifecycleEvent({
+        correlationId,
+        stage: 'root-auth-gate:navigation',
+        status: 'success',
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        elapsedMs: Date.now() - startedAtMs,
+        outcome: 'password_recovery',
+      });
+      return;
     }
 
     // Unauthenticated — determine whether this is a genuine first-time
     // visitor (never signed in on this device) or a returning user who is
     // simply logged out right now.
     if (bootstrap.status === 'unauthenticated') {
-      if (confirmedReturningUser) return
+      if (confirmedReturningUser) return;
 
-      let cancelled = false
-      ;(async () => {
-        const returning = await hasDeviceSignedInBefore()
-        if (cancelled || hasNavigatedRef.current) return
+      let cancelled = false;
+      (async () => {
+        const returning = await hasDeviceSignedInBefore();
+        if (cancelled || hasNavigatedRef.current) return;
 
         if (!returning) {
-          hasNavigatedRef.current = true
+          hasNavigatedRef.current = true;
           if (__DEV__) {
-            console.log('[index] First-time device — routing to onboarding welcome')
+            console.log('[index] First-time device — routing to onboarding welcome');
           }
-          router.replace('/onboarding/welcome' as Href)
-          try { markInitialNavigationDone() } catch {}
+          router.replace('/onboarding/welcome' as Href);
+          try {
+            markInitialNavigationDone();
+          } catch {}
+          logAuthLifecycleEvent({
+            correlationId,
+            stage: 'root-auth-gate:navigation',
+            status: 'success',
+            startedAt,
+            finishedAt: new Date().toISOString(),
+            elapsedMs: Date.now() - startedAtMs,
+            outcome: 'first_time_onboarding_welcome',
+          });
         } else {
-          setConfirmedReturningUser(true)
+          setConfirmedReturningUser(true);
+          logAuthLifecycleEvent({
+            correlationId,
+            stage: 'root-auth-gate:returning-user-check',
+            status: 'success',
+            startedAt,
+            finishedAt: new Date().toISOString(),
+            elapsedMs: Date.now() - startedAtMs,
+            outcome: 'show_sign_in',
+          });
         }
-      })()
+      })();
 
       return () => {
-        cancelled = true
-      }
+        cancelled = true;
+      };
     }
 
     // Authenticated — onboardingComplete is already known (resolved by the
     // hook), so this navigation is synchronous with no further async work.
-    hasNavigatedRef.current = true
-    const dest = bootstrap.onboardingComplete
-      ? ROUTES.TABS.BOUNTY_APP
-      : '/onboarding'
+    hasNavigatedRef.current = true;
+    const dest = bootstrap.onboardingComplete ? ROUTES.TABS.BOUNTY_APP : '/onboarding';
 
     if (__DEV__) {
       console.log('[index] Routing decision:', {
         onboardingComplete: bootstrap.onboardingComplete,
         dest,
-      })
+      });
     }
 
-    router.replace(dest as Href)
-    try { markInitialNavigationDone() } catch {}
-  }, [bootstrap, isPasswordRecovery, router, confirmedReturningUser])
+    router.replace(dest as Href);
+    try {
+      markInitialNavigationDone();
+    } catch {}
+    logAuthLifecycleEvent({
+      correlationId,
+      stage: 'root-auth-gate:navigation',
+      status: 'success',
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      elapsedMs: Date.now() - startedAtMs,
+      outcome: dest,
+      metadata: {
+        onboardingComplete: bootstrap.onboardingComplete,
+      },
+    });
+  }, [bootstrap, isPasswordRecovery, router, confirmedReturningUser]);
 
   // Loading, authenticated (redirecting), or an unauthenticated visitor whose
   // first-time-device check hasn't resolved yet — show spinner, never the
@@ -127,7 +189,7 @@ export default function Index() {
     (bootstrap.status === 'unauthenticated' && !confirmedReturningUser)
   ) {
     if (__DEV__) {
-      console.log('[index] Rendering loading/redirecting state:', bootstrap.status)
+      console.log('[index] Rendering loading/redirecting state:', bootstrap.status);
     }
     return (
       <View style={indexStyles.loadingContainer}>
@@ -136,14 +198,14 @@ export default function Index() {
           {bootstrap.status === 'authenticated' ? 'Redirecting...' : 'Loading...'}
         </Text>
       </View>
-    )
+    );
   }
 
   // Unauthenticated returning user — show sign-in form.
   if (__DEV__) {
-    console.log('[index] Rendering sign-in form')
+    console.log('[index] Rendering sign-in form');
   }
-  return <SignInForm />
+  return <SignInForm />;
 }
 
 const indexStyles = StyleSheet.create({
