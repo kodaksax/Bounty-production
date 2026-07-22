@@ -10,7 +10,15 @@
  */
 
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
-import React, { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import React, {
+    createContext,
+    ReactNode,
+    useCallback,
+    useContext,
+    useEffect,
+    useRef,
+    useState,
+} from 'react';
 
 export interface NetworkContextValue {
   /** Whether the device has a network connection */
@@ -33,9 +41,11 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
   const [connectionType, setConnectionType] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(false);
   const prevConnectedRef = useRef(true);
+  const mountedRef = useRef(true);
 
   // Apply state from a NetInfo snapshot
   const applyNetState = useCallback((state: NetInfoState) => {
+    if (!mountedRef.current) return;
     const connected = !!state.isConnected;
     const reachable = state.isInternetReachable ?? null;
     const type = state.type ?? null;
@@ -48,21 +58,29 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
 
   // Subscribe once on mount
   useEffect(() => {
+    mountedRef.current = true;
+
     // Fetch initial state
-    NetInfo.fetch().then(applyNetState).catch(() => {
-      // If initial fetch fails, assume connected to avoid blocking
-    });
+    NetInfo.fetch()
+      .then(applyNetState)
+      .catch(() => {
+        // If initial fetch fails, assume connected to avoid blocking
+      });
 
     // Subscribe to ongoing changes
     const unsubscribe = NetInfo.addEventListener(applyNetState);
 
     return () => {
-      unsubscribe();
+      mountedRef.current = false;
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
     };
   }, [applyNetState]);
 
   // Manual connectivity check
   const checkConnection = useCallback(async () => {
+    if (!mountedRef.current) return;
     setIsChecking(true);
     try {
       const state = await NetInfo.fetch();
@@ -70,7 +88,9 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('[NetworkProvider] Failed to check connection:', error);
     } finally {
-      setIsChecking(false);
+      if (mountedRef.current) {
+        setIsChecking(false);
+      }
     }
   }, [applyNetState]);
 
@@ -82,14 +102,10 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
       isChecking,
       checkConnection,
     }),
-    [isConnected, isInternetReachable, connectionType, isChecking, checkConnection],
+    [isConnected, isInternetReachable, connectionType, isChecking, checkConnection]
   );
 
-  return (
-    <NetworkContext.Provider value={value}>
-      {children}
-    </NetworkContext.Provider>
-  );
+  return <NetworkContext.Provider value={value}>{children}</NetworkContext.Provider>;
 }
 
 /**

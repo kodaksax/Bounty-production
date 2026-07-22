@@ -1,7 +1,20 @@
 // lib/admin-context.tsx - Admin authentication and role management context
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 import { isSupabaseConfigured, supabase } from './supabase';
+import {
+    resolveSupabaseAuthSubscription,
+    safeUnsubscribe,
+    SupabaseAuthSubscription,
+} from './utils/supabase-subscription';
 
 interface AdminContextValue {
   isAdmin: boolean;
@@ -56,7 +69,10 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
 
       if (sessionError || !session) {
         await setIsAdmin(false);
@@ -72,7 +88,6 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
 
       await setIsAdmin(isAdminUser);
       return isAdminUser;
-
     } catch (error) {
       console.error('[AdminContext] Error verifying admin status:', error);
       await setIsAdmin(false);
@@ -120,7 +135,6 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
 
         // Verify with backend if cache expired or not found
         await verifyAdminStatusRef.current();
-
       } catch (error) {
         console.error('[AdminContext] Error loading admin status:', error);
       } finally {
@@ -133,6 +147,9 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   // Listen for auth state changes
   useEffect(() => {
     if (!isSupabaseConfigured) return;
+
+    let cleanupRequested = false;
+    let authSubscription: SupabaseAuthSubscription | undefined;
 
     const ret = supabase.auth.onAuthStateChange(async (event, _session) => {
       try {
@@ -153,29 +170,38 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    // Support different return shapes from Supabase SDK across versions
-    const maybeSub = ret as any;
-    const subscription = (maybeSub && maybeSub.data && maybeSub.data.subscription) || maybeSub.subscription || undefined;
+    resolveSupabaseAuthSubscription(
+      ret,
+      resolvedSubscription => {
+        authSubscription = resolvedSubscription;
+        if (cleanupRequested) {
+          safeUnsubscribe(authSubscription);
+        }
+      },
+      error => {
+        console.error('[AdminContext] Failed to register auth listener:', error);
+      }
+    );
 
     return () => {
-      try {
-        subscription?.unsubscribe?.();
-      } catch (e) {
-        // Swallow unsubscribe errors - best effort cleanup
-      }
+      cleanupRequested = true;
+      safeUnsubscribe(authSubscription);
     };
   }, [isSupabaseConfigured]);
 
   const value = useMemo(
-    () => ({ isAdmin, isAdminTabEnabled, isLoading, setIsAdmin, setAdminTabEnabled, verifyAdminStatus }),
+    () => ({
+      isAdmin,
+      isAdminTabEnabled,
+      isLoading,
+      setIsAdmin,
+      setAdminTabEnabled,
+      verifyAdminStatus,
+    }),
     [isAdmin, isAdminTabEnabled, isLoading, setIsAdmin, setAdminTabEnabled, verifyAdminStatus]
   );
 
-  return (
-    <AdminContext.Provider value={value}>
-      {children}
-    </AdminContext.Provider>
-  );
+  return <AdminContext.Provider value={value}>{children}</AdminContext.Provider>;
 }
 
 export function useAdmin() {

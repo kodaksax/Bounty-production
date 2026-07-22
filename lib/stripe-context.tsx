@@ -1,6 +1,11 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { useAuthContext } from '../hooks/use-auth-context';
-import { CreatePaymentMethodData, StripePaymentMethod, StripeSetupIntent, stripeService } from './services/stripe-service';
+import {
+    CreatePaymentMethodData,
+    StripePaymentMethod,
+    StripeSetupIntent,
+    stripeService,
+} from './services/stripe-service';
 import { logger } from './utils/error-logger';
 import { getNetworkErrorMessage } from './utils/network-connectivity';
 
@@ -9,7 +14,7 @@ interface StripeContextType {
   isLoading: boolean;
   error: string | null;
   paymentMethods: StripePaymentMethod[];
-  
+
   // Actions
   initialize: () => Promise<void>;
   createPaymentMethod: (cardData: CreatePaymentMethodData) => Promise<StripePaymentMethod>;
@@ -18,7 +23,10 @@ interface StripeContextType {
   /**
    * @deprecated Use processPaymentSecure() to ensure idempotent payment intent creation.
    */
-  processPayment: (amount: number, paymentMethodId?: string) => Promise<{ success: boolean; paymentIntentId?: string; error?: string }>;
+  processPayment: (
+    amount: number,
+    paymentMethodId?: string
+  ) => Promise<{ success: boolean; paymentIntentId?: string; error?: string }>;
   processPaymentSecure: (
     amount: number,
     options?: { userId?: string; purpose?: string; paymentMethodId?: string }
@@ -47,9 +55,47 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
   const [error, setError] = useState<string | null>(null);
   const [paymentMethods, setPaymentMethods] = useState<StripePaymentMethod[]>([]);
   const { session, isLoading: isAuthLoading, isAuthStale, attemptRefresh } = useAuthContext();
+  const mountedRef = useRef(true);
+  const initPromiseRef = useRef<Promise<void> | null>(null);
+
+  const setLoadingSafe = useCallback((value: boolean) => {
+    if (mountedRef.current) {
+      setIsLoading(value);
+    }
+  }, []);
+
+  const setErrorSafe = useCallback((value: string | null) => {
+    if (mountedRef.current) {
+      setError(value);
+    }
+  }, []);
+
+  const setInitializedSafe = useCallback((value: boolean) => {
+    if (mountedRef.current) {
+      setIsInitialized(value);
+    }
+  }, []);
+
+  const setPaymentMethodsSafe = useCallback((value: StripePaymentMethod[]) => {
+    if (mountedRef.current) {
+      setPaymentMethods(value);
+    }
+  }, []);
+
+  const appendPaymentMethodSafe = useCallback((paymentMethod: StripePaymentMethod) => {
+    if (mountedRef.current) {
+      setPaymentMethods(prev => [paymentMethod, ...prev]);
+    }
+  }, []);
+
+  const removePaymentMethodSafe = useCallback((paymentMethodId: string) => {
+    if (mountedRef.current) {
+      setPaymentMethods(prev => prev.filter(pm => pm.id !== paymentMethodId));
+    }
+  }, []);
 
   const clearError = () => {
-    setError(null);
+    setErrorSafe(null);
     // Reset the consecutive-401 counter so that a user-initiated retry (e.g.
     // opening PaymentMethodsModal, pressing Retry) gets a fresh attempt.
     // This is safe because clearError() is only called from explicit UI actions,
@@ -59,40 +105,49 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
 
   const initialize = async () => {
     if (isInitialized) return;
-    
-    try {
-      setIsLoading(true);
-      await stripeService.initialize();
-      setIsInitialized(true);
-      // Payment methods are loaded by the token-change effect once auth resolves.
-      // Do NOT call loadPaymentMethods() here — session.access_token may be an
-      // expired cached token at mount time, which would cause a 401 "Invalid JWT".
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to initialize payment service';
-      setError(errorMessage);
-      logger.error('Stripe initialization error:', { error: err });
-    } finally {
-      setIsLoading(false);
-    }
+    if (initPromiseRef.current) return initPromiseRef.current;
+
+    initPromiseRef.current = (async () => {
+      try {
+        setLoadingSafe(true);
+        await stripeService.initialize();
+        setInitializedSafe(true);
+        // Payment methods are loaded by the token-change effect once auth resolves.
+        // Do NOT call loadPaymentMethods() here — session.access_token may be an
+        // expired cached token at mount time, which would cause a 401 "Invalid JWT".
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : 'Failed to initialize payment service';
+        setErrorSafe(errorMessage);
+        logger.error('Stripe initialization error:', { error: err });
+      } finally {
+        setLoadingSafe(false);
+        initPromiseRef.current = null;
+      }
+    })();
+
+    return initPromiseRef.current;
   };
 
-  const createPaymentMethod = async (cardData: CreatePaymentMethodData): Promise<StripePaymentMethod> => {
+  const createPaymentMethod = async (
+    cardData: CreatePaymentMethodData
+  ): Promise<StripePaymentMethod> => {
     try {
-      setIsLoading(true);
+      setLoadingSafe(true);
       clearError();
-      
+
       const paymentMethod = await stripeService.createPaymentMethod(cardData);
-      
+
       // Add to local state
-      setPaymentMethods(prev => [paymentMethod, ...prev]);
-      
+      appendPaymentMethodSafe(paymentMethod);
+
       return paymentMethod;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to add payment method';
-      setError(errorMessage);
+      setErrorSafe(errorMessage);
       throw err;
     } finally {
-      setIsLoading(false);
+      setLoadingSafe(false);
     }
   };
 
@@ -107,7 +162,7 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
     if (consecutiveJwtFailuresRef.current > 2) return;
 
     try {
-      setIsLoading(true);
+      setLoadingSafe(true);
       // Clear the displayed error but do NOT reset the 401 counter here.
       // clearError() resets consecutiveJwtFailuresRef which would make the
       // "more than 2 consecutive 401s" guard unreachable — every call would
@@ -115,11 +170,11 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
       // The counter is intentionally only reset on success (below) or by
       // explicit user actions that call clearError() (e.g. opening the
       // PaymentMethodsModal, pressing Retry).
-      setError(null);
+      setErrorSafe(null);
 
       const methods = await stripeService.listPaymentMethods(session?.access_token);
       consecutiveJwtFailuresRef.current = 0; // reset on success
-      setPaymentMethods(methods);
+      setPaymentMethodsSafe(methods);
     } catch (err: unknown) {
       // Any 401 ("Invalid JWT" from the Supabase gateway, or "Authentication
       // required" from the edge function's auth.getUser() check) that reaches
@@ -128,17 +183,20 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
       // genuinely expired or revoked.
       const errObj = err as Record<string, unknown>;
       const is401AuthError =
-        errObj?.code === '401' ||
-        String(errObj?.message ?? '').includes('(401)');
+        errObj?.code === '401' || String(errObj?.message ?? '').includes('(401)');
       if (is401AuthError) {
         consecutiveJwtFailuresRef.current += 1;
         if (consecutiveJwtFailuresRef.current > 2) {
           // Three 401 failures even across token refreshes — the session is
           // permanently invalid. Surface an actionable error and stop retrying.
-          logger.warning('[StripeContext] Repeated 401s — session may be permanently invalid.', { error: err });
-          setError('Session error loading payment methods. Please sign out and sign in again.');
+          logger.warning('[StripeContext] Repeated 401s — session may be permanently invalid.', {
+            error: err,
+          });
+          setErrorSafe('Session error loading payment methods. Please sign out and sign in again.');
         } else {
-          console.warn('[StripeContext] 401 loading payment methods — will retry on next token refresh.');
+          console.warn(
+            '[StripeContext] 401 loading payment methods — will retry on next token refresh.'
+          );
         }
         // Always throw on 401 so callers with retry logic (e.g.
         // refreshPaymentMethodsWithRetry) know the call failed and can
@@ -147,30 +205,30 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
       }
       // Improve error messaging for network issues using centralized utility
       const errorMessage = getNetworkErrorMessage(err);
-      setError(errorMessage);
+      setErrorSafe(errorMessage);
       logger.error('Error loading payment methods:', { error: err });
       // Rethrow so callers (who may implement retry logic) can detect failures
       throw err;
     } finally {
-      setIsLoading(false);
+      setLoadingSafe(false);
     }
   };
 
   const removePaymentMethod = async (paymentMethodId: string) => {
     try {
-      setIsLoading(true);
+      setLoadingSafe(true);
       clearError();
 
       await stripeService.detachPaymentMethod(paymentMethodId, session?.access_token || undefined);
-      
+
       // Remove from local state
-      setPaymentMethods(prev => prev.filter(pm => pm.id !== paymentMethodId));
+      removePaymentMethodSafe(paymentMethodId);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to remove payment method';
-      setError(errorMessage);
+      setErrorSafe(errorMessage);
       throw err;
     } finally {
-      setIsLoading(false);
+      setLoadingSafe(false);
     }
   };
 
@@ -189,74 +247,74 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
   };
 
   const processPaymentSecure = async (
-    amount: number, 
+    amount: number,
     options?: { userId?: string; purpose?: string; paymentMethodId?: string }
   ): Promise<{ success: boolean; paymentIntentId?: string; error?: string }> => {
     try {
-      setIsLoading(true);
+      setLoadingSafe(true);
       clearError();
 
       // Ensure user is authenticated before attempting to create a payment intent
       if (!session?.access_token) {
         const errorMessage = 'Not authenticated. Please sign in again.';
-        setError(errorMessage);
+        setErrorSafe(errorMessage);
         return { success: false, error: errorMessage };
       }
 
       // Create payment intent with duplicate protection - pass auth token to authenticate with backend
       const paymentIntent = await stripeService.createPaymentIntentSecure(
-        amount, 
-        'usd', 
-        session.access_token, 
+        amount,
+        'usd',
+        session.access_token,
         options
       );
-      
+
       // Use provided payment method or default payment method
       const pmId = options?.paymentMethodId || paymentMethods[0]?.id;
-      
+
       if (!pmId) {
         throw new Error('No payment method available. Please add a payment method first.');
       }
 
       // Confirm payment with enhanced error handling
       const confirmedIntent = await stripeService.confirmPaymentSecure(
-        paymentIntent.client_secret, 
-        pmId, 
+        paymentIntent.client_secret,
+        pmId,
         undefined,
         { userId: options?.userId }
       );
-      
+
       if (confirmedIntent.status === 'succeeded') {
         return { success: true, paymentIntentId: paymentIntent.id };
       } else {
-        return { 
-          success: false, 
-          error: 'Payment was not completed. Please try again.' 
+        return {
+          success: false,
+          error: 'Payment was not completed. Please try again.',
         };
       }
     } catch (err: any) {
       const errorMessage = err instanceof Error ? err.message : 'Payment processing failed';
-      setError(errorMessage);
-      return { 
-        success: false, 
-        error: errorMessage 
+      setErrorSafe(errorMessage);
+      return {
+        success: false,
+        error: errorMessage,
       };
     } finally {
-      setIsLoading(false);
+      setLoadingSafe(false);
     }
   };
 
   const createSetupIntent = async (): Promise<StripeSetupIntent | null> => {
     try {
-      setIsLoading(true);
+      setLoadingSafe(true);
       clearError();
       return await stripeService.createSetupIntent(session?.access_token || undefined);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to create setup intent';
-      setError(errorMessage);
+      setErrorSafe(errorMessage);
       return null;
     } finally {
-      setIsLoading(false);
+      setLoadingSafe(false);
     }
   };
 
@@ -270,7 +328,11 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
 
   // Initialize on mount
   useEffect(() => {
+    mountedRef.current = true;
     initialize();
+    return () => {
+      mountedRef.current = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -339,9 +401,5 @@ export const StripeProvider: React.FC<StripeProviderProps> = ({ children }) => {
     clearError,
   };
 
-  return (
-    <StripeContext.Provider value={contextValue}>
-      {children}
-    </StripeContext.Provider>
-  );
+  return <StripeContext.Provider value={contextValue}>{children}</StripeContext.Provider>;
 };

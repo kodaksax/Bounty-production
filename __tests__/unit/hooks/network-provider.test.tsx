@@ -2,10 +2,13 @@
  * Unit tests for NetworkProvider
  */
 
-import React from 'react';
-import { render, act } from '@testing-library/react-native';
+import { act, render } from '@testing-library/react-native';
 import { Text } from 'react-native';
-import { NetworkProvider, useNetworkContext, useOptionalNetworkContext } from '../../../providers/network-provider';
+import {
+    NetworkProvider,
+    useNetworkContext,
+    useOptionalNetworkContext,
+} from '../../../providers/network-provider';
 
 // Mock @react-native-community/netinfo
 jest.mock('@react-native-community/netinfo', () => ({
@@ -92,6 +95,18 @@ describe('NetworkProvider', () => {
 
     unmount();
     expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not throw when NetInfo listener returns a non-function handle', () => {
+    NetInfo.addEventListener.mockReturnValueOnce({});
+
+    const { unmount } = render(
+      <NetworkProvider>
+        <NetworkConsumer />
+      </NetworkProvider>
+    );
+
+    expect(() => unmount()).not.toThrow();
   });
 
   it('should update state when NetInfo listener fires', async () => {

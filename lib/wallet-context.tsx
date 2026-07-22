@@ -1,4 +1,12 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 import { config } from './config';
 import { FINANCIAL_API_BASE_URL } from './config/api';
 import { API_TIMEOUTS } from './config/network';
@@ -13,6 +21,11 @@ import {
     SecureKeys,
     setSecureJSON,
 } from './utils/secure-storage';
+import {
+    resolveSupabaseAuthSubscription,
+    safeUnsubscribe,
+    SupabaseAuthSubscription,
+} from './utils/supabase-subscription';
 
 // Platform fee configuration
 // Service fees are deducted during bounty completion (when funds are released to hunter)
@@ -421,6 +434,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Re-fetch authoritative balance when the user signs back in (covers the case
   // where the session expired, SIGNED_OUT wiped local data, and the user re-auths).
   useEffect(() => {
+    let cleanupRequested = false;
+    let authSubscription: SupabaseAuthSubscription | undefined;
+
     const ret = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT') {
         // Persist the cleared state first so that if a new user signs in before
@@ -457,19 +473,22 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     });
 
-    // Support different return shapes from Supabase SDK across versions
-    const maybeSub = ret as any;
-    const subscription =
-      (maybeSub && maybeSub.data && maybeSub.data.subscription) ||
-      maybeSub.subscription ||
-      undefined;
+    resolveSupabaseAuthSubscription(
+      ret,
+      resolvedSubscription => {
+        authSubscription = resolvedSubscription;
+        if (cleanupRequested) {
+          safeUnsubscribe(authSubscription);
+        }
+      },
+      error => {
+        console.error('[wallet] Failed to register auth listener:', error);
+      }
+    );
 
     return () => {
-      try {
-        subscription?.unsubscribe?.();
-      } catch (e) {
-        // Swallow unsubscribe errors - best effort cleanup
-      }
+      cleanupRequested = true;
+      safeUnsubscribe(authSubscription);
     };
   }, []); // run once on mount; uses refreshFromApiRef to invoke the latest implementation
 
@@ -478,12 +497,14 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // scoped correctly and rebuilt when the user changes.
   useEffect(() => {
     let cancelled = false;
+    let cleanupRequested = false;
+    let authSubscription: SupabaseAuthSubscription | undefined;
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!cancelled) setUserId(session?.user?.id ?? null);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const ret = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
         setUserId(null);
       } else if (session?.user?.id) {
@@ -491,9 +512,23 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     });
 
+    resolveSupabaseAuthSubscription(
+      ret,
+      resolvedSubscription => {
+        authSubscription = resolvedSubscription;
+        if (cleanupRequested) {
+          safeUnsubscribe(authSubscription);
+        }
+      },
+      error => {
+        console.error('[wallet] Failed to register user-id auth listener:', error);
+      }
+    );
+
     return () => {
       cancelled = true;
-      subscription.unsubscribe();
+      cleanupRequested = true;
+      safeUnsubscribe(authSubscription);
     };
   }, []);
 
@@ -519,11 +554,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       .subscribe();
 
     return () => {
-      try {
-        supabase.removeChannel(channel);
-      } catch {
+      void supabase.removeChannel(channel).catch(() => {
         // best-effort cleanup
-      }
+      });
     };
   }, [userId, getAccessToken]);
 

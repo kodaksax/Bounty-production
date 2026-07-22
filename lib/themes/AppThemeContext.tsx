@@ -36,7 +36,7 @@ export function AppThemeProvider({ children, defaultMode = 'dark' }: AppThemePro
   // Restore persisted preference on mount
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY)
-      .then((saved) => {
+      .then(saved => {
         if (saved === 'dark' || saved === 'light' || saved === 'system') {
           setModeState(saved);
         }
@@ -49,7 +49,7 @@ export function AppThemeProvider({ children, defaultMode = 'dark' }: AppThemePro
     const sub = Appearance.addChangeListener(({ colorScheme }) => {
       setSystemScheme(colorScheme);
     });
-    return () => sub.remove();
+    return () => sub?.remove?.();
   }, []);
 
   const setTheme = useCallback((newMode: ThemeMode) => {
@@ -73,11 +73,7 @@ export function AppThemeProvider({ children, defaultMode = 'dark' }: AppThemePro
     [theme, mode, toggleTheme, setTheme]
   );
 
-  return (
-    <ThemeContext.Provider value={value}>
-      {children}
-    </ThemeContext.Provider>
-  );
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
 export function useAppThemeContext(): ThemeContextValue {

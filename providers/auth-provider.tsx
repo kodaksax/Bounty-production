@@ -1,82 +1,95 @@
-import AsyncStorage from '@react-native-async-storage/async-storage'
-import type { Session } from '@supabase/supabase-js'
-import { AuthContext } from 'hooks/use-auth-context'
-import { DEFERRED_PUSH_REGISTRATION_KEY } from 'lib/constants'
-import { cachedDataService } from 'lib/services/cached-data-service'
-import { notificationService } from 'lib/services/notification-service'
-import { AppState, AppStateStatus } from 'react-native'
-import { PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { clearBountyDraftForUser } from '../app/hooks/useBountyDraft'
-import { clearAllSessionData } from '../lib/auth-session-storage'
-import { analyticsService } from '../lib/services/analytics-service'
-import { authProfileService } from '../lib/services/auth-profile-service'
-import { getSentry } from '../lib/services/sentry-init'
-import { isSupabaseConfigured, PROJECT_STORAGE_KEY, supabase } from '../lib/supabase'
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { Session } from '@supabase/supabase-js';
+import { AuthContext } from 'hooks/use-auth-context';
+import { DEFERRED_PUSH_REGISTRATION_KEY } from 'lib/constants';
+import { cachedDataService } from 'lib/services/cached-data-service';
+import { notificationService } from 'lib/services/notification-service';
+import {
+    PropsWithChildren,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
+import { AppState, AppStateStatus } from 'react-native';
+import { clearBountyDraftForUser } from '../app/hooks/useBountyDraft';
+import { clearAllSessionData } from '../lib/auth-session-storage';
+import { analyticsService } from '../lib/services/analytics-service';
+import { authProfileService } from '../lib/services/auth-profile-service';
+import { getSentry } from '../lib/services/sentry-init';
+import { isSupabaseConfigured, PROJECT_STORAGE_KEY, supabase } from '../lib/supabase';
+import {
+    resolveSupabaseAuthSubscription,
+    safeUnsubscribe,
+    SupabaseAuthSubscription,
+} from '../lib/utils/supabase-subscription';
 
 type AuthData = {
-  session: Session | null | undefined
-  isLoading: boolean
-  profile: any
-  isLoggedIn: boolean
-}
+  session: Session | null | undefined;
+  isLoading: boolean;
+  profile: any;
+  isLoggedIn: boolean;
+};
 
 /**
  * Token refresh threshold in milliseconds (5 minutes before expiration)
  * Proactively refresh the token when it's close to expiring
  */
-const TOKEN_REFRESH_THRESHOLD_MS = 5 * 60 * 1000
+const TOKEN_REFRESH_THRESHOLD_MS = 5 * 60 * 1000;
 
 export default function AuthProvider({ children }: PropsWithChildren) {
   const __DEV__flag = typeof __DEV__ !== 'undefined' && __DEV__;
   // Centralized logging helpers
   const devLog = (...args: any[]) => {
-    if (__DEV__flag) console.log(...args)
-  }
+    if (__DEV__flag) console.log(...args);
+  };
 
   const reportWarning = (message: any, extra?: any) => {
     try {
       const Sentry = getSentry?.();
       if (Sentry && typeof (Sentry as any).captureMessage === 'function') {
-        ;(Sentry as any).captureMessage(String(message), { level: 'warning', extra })
+        (Sentry as any).captureMessage(String(message), { level: 'warning', extra });
       }
     } catch (_) {}
-    if (__DEV__flag) console.warn(message, extra)
-  }
+    if (__DEV__flag) console.warn(message, extra);
+  };
 
   const reportError = (err: any, context?: any) => {
     try {
       const Sentry = getSentry?.();
       if (Sentry) {
         if (err instanceof Error && typeof (Sentry as any).captureException === 'function') {
-          ;(Sentry as any).captureException(err)
+          (Sentry as any).captureException(err);
         } else if (typeof (Sentry as any).captureMessage === 'function') {
-          ;(Sentry as any).captureMessage(String(context ?? err), { level: 'error', extra: err })
+          (Sentry as any).captureMessage(String(context ?? err), { level: 'error', extra: err });
         }
       }
     } catch (_) {}
-    if (__DEV__flag) console.error(context ?? '', err)
-  }
-  const [session, setSession] = useState<Session | undefined | null>()
-  const [profile, setProfile] = useState<any>()
-  const [isLoading, setIsLoading] = useState<boolean>(true)
-  const [isEmailVerified, setIsEmailVerified] = useState<boolean>(false)
-  const [isAuthStale, setIsAuthStale] = useState<boolean>(false)
-  const [isPasswordRecovery, setIsPasswordRecovery] = useState<boolean>(false)
-  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const isRefreshingRef = useRef<boolean>(false)
-  const refreshPromiseRef = useRef<Promise<void> | null>(null) // Store in-flight promise
-  const isMountedRef = useRef<boolean>(true)
-  const isInitializingRef = useRef<boolean>(true)
-  const profileFetchCompletedRef = useRef<boolean>(false)
-  const sessionIdRef = useRef<string | null>(null)
-  const lastProfileLogRef = useRef<string | null>(null)
+    if (__DEV__flag) console.error(context ?? '', err);
+  };
+  const [session, setSession] = useState<Session | undefined | null>();
+  const [profile, setProfile] = useState<any>();
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isEmailVerified, setIsEmailVerified] = useState<boolean>(false);
+  const [isAuthStale, setIsAuthStale] = useState<boolean>(false);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState<boolean>(false);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isRefreshingRef = useRef<boolean>(false);
+  const refreshPromiseRef = useRef<Promise<void> | null>(null); // Store in-flight promise
+  const isMountedRef = useRef<boolean>(true);
+  const isInitializingRef = useRef<boolean>(true);
+  const profileFetchCompletedRef = useRef<boolean>(false);
+  const sessionIdRef = useRef<string | null>(null);
+  const lastProfileLogRef = useRef<string | null>(null);
   // Track previous user ID so we can clear their data when they sign out or switch
-  const previousUserIdRef = useRef<string | null>(null)
+  const previousUserIdRef = useRef<string | null>(null);
   // AppState refresh-control refs – declared here (not inside useEffect) so the
   // values survive across re-renders and are guaranteed to be the same closure
   // instance used by the listener callback.
-  const appStateOpInFlightRef = useRef<boolean>(false)
-  const pendingAppStateRef = useRef<AppStateStatus | null>(null)
+  const appStateOpInFlightRef = useRef<boolean>(false);
+  const pendingAppStateRef = useRef<AppStateStatus | null>(null);
 
   /**
    * Manually refresh the session token with promise-based queueing
@@ -85,113 +98,117 @@ export default function AuthProvider({ children }: PropsWithChildren) {
   const refreshTokenNow = async () => {
     // If refresh is in progress, wait for it instead of returning early
     if (refreshPromiseRef.current) {
-      devLog('[AuthProvider] Refresh already in progress, waiting for completion')
-      return refreshPromiseRef.current
+      devLog('[AuthProvider] Refresh already in progress, waiting for completion');
+      return refreshPromiseRef.current;
     }
 
     // Check if component is still mounted
     if (!isMountedRef.current) {
-      devLog('[AuthProvider] Component unmounted, skipping refresh')
-      return
+      devLog('[AuthProvider] Component unmounted, skipping refresh');
+      return;
     }
 
     // Create and store the refresh promise
     refreshPromiseRef.current = (async () => {
-      isRefreshingRef.current = true
+      isRefreshingRef.current = true;
 
       try {
-        devLog('[AuthProvider] Attempting to refresh token...')
-        const { data, error } = await supabase.auth.refreshSession()
-        
+        devLog('[AuthProvider] Attempting to refresh token...');
+        const { data, error } = await supabase.auth.refreshSession();
+
         if (error) {
-          reportError(error, '[AuthProvider] Token refresh failed:')
-          
+          reportError(error, '[AuthProvider] Token refresh failed:');
+
           // Distinguish between network errors and auth errors
-          const isNetworkError = error.message?.includes('network') || 
-                                 error.message?.includes('fetch') ||
-                                 error.status === 503 ||
-                                 error.status === 504
-          
+          const isNetworkError =
+            error.message?.includes('network') ||
+            error.message?.includes('fetch') ||
+            error.status === 503 ||
+            error.status === 504;
+
           if (isNetworkError) {
-            devLog('[AuthProvider] Network error during refresh, will retry')
+            devLog('[AuthProvider] Network error during refresh, will retry');
             // If the token is already expired, mark the auth as stale so UIs can show offline fallback
             try {
-              const currentSession = session
-              const now = Date.now()
-              if (!currentSession || (currentSession.expires_at && currentSession.expires_at * 1000 <= now)) {
-                setIsAuthStale(true)
+              const currentSession = session;
+              const now = Date.now();
+              if (
+                !currentSession ||
+                (currentSession.expires_at && currentSession.expires_at * 1000 <= now)
+              ) {
+                setIsAuthStale(true);
               }
             } catch {}
             // Don't clear session on transient network errors, let it be retried
-            return
+            return;
           }
-          
+
           // On permanent auth failure, clear session and let user re-authenticate
           if (isMountedRef.current) {
-            setSession(null)
+            setSession(null);
             try {
-              await authProfileService.setSession(null)
+              await authProfileService.setSession(null);
             } catch (e) {
               // Profile service errors shouldn't block auth flow
               // These can occur when service is unavailable or during tests
-              reportWarning('[AuthProvider] Profile service unavailable during session clear:', e)
+              reportWarning('[AuthProvider] Profile service unavailable during session clear:', e);
             }
           }
-          return
+          return;
         }
 
         if (data.session) {
-          devLog('[AuthProvider] Token refreshed successfully')
+          devLog('[AuthProvider] Token refreshed successfully');
           // Clear stale flag on success
-          setIsAuthStale(false)
+          setIsAuthStale(false);
           if (isMountedRef.current) {
-            setSession(data.session)
+            setSession(data.session);
             try {
-              await authProfileService.setSession(data.session)
+              await authProfileService.setSession(data.session);
             } catch (e) {
               // Profile service errors shouldn't block auth flow
               // These can occur when service is unavailable or during tests
-              reportWarning('[AuthProvider] Profile service unavailable during session update:', e)
+              reportWarning('[AuthProvider] Profile service unavailable during session update:', e);
             }
-            
+
             // Schedule next refresh
-            scheduleTokenRefresh(data.session)
+            scheduleTokenRefresh(data.session);
           }
         } else {
-          reportWarning('[AuthProvider] Token refresh returned no session')
+          reportWarning('[AuthProvider] Token refresh returned no session');
           if (isMountedRef.current) {
-            setSession(null)
-            setIsAuthStale(false)
+            setSession(null);
+            setIsAuthStale(false);
             try {
-              await authProfileService.setSession(null)
+              await authProfileService.setSession(null);
             } catch (e) {
               // Profile service errors shouldn't block auth flow
               // These can occur when service is unavailable or during tests
-              reportWarning('[AuthProvider] Profile service unavailable during session clear:', e)
+              reportWarning('[AuthProvider] Profile service unavailable during session clear:', e);
             }
           }
         }
       } catch (error) {
-        reportError(error, '[AuthProvider] Unexpected error refreshing token:')
+        reportError(error, '[AuthProvider] Unexpected error refreshing token:');
         if (isMountedRef.current) {
-          setSession(null)
-          setIsAuthStale(false)
+          setSession(null);
+          setIsAuthStale(false);
           try {
-            await authProfileService.setSession(null)
+            await authProfileService.setSession(null);
           } catch (e) {
             // Profile service errors shouldn't block auth flow
             // These can occur when service is unavailable or during tests
-            reportWarning('[AuthProvider] Profile service unavailable during session clear:', e)
+            reportWarning('[AuthProvider] Profile service unavailable during session clear:', e);
           }
         }
       } finally {
-        isRefreshingRef.current = false
-        refreshPromiseRef.current = null // Clear promise after completion
+        isRefreshingRef.current = false;
+        refreshPromiseRef.current = null; // Clear promise after completion
       }
-    })()
+    })();
 
-    return refreshPromiseRef.current
-  }
+    return refreshPromiseRef.current;
+  };
 
   // Ref indirection so `attemptRefresh` (exposed on context) can have a
   // permanently stable identity via useCallback([]) while still always
@@ -199,16 +216,16 @@ export default function AuthProvider({ children }: PropsWithChildren) {
   // `session` state). Updated on every render — no effect needed since a
   // plain assignment during render is enough to keep it current before
   // attemptRefresh could possibly be called.
-  const refreshTokenNowRef = useRef(refreshTokenNow)
-  refreshTokenNowRef.current = refreshTokenNow
+  const refreshTokenNowRef = useRef(refreshTokenNow);
+  refreshTokenNowRef.current = refreshTokenNow;
 
   const attemptRefresh = useCallback(async () => {
     try {
-      await refreshTokenNowRef.current()
+      await refreshTokenNowRef.current();
     } catch (e) {
-      reportWarning('[AuthProvider] attemptRefresh failed', e)
+      reportWarning('[AuthProvider] attemptRefresh failed', e);
     }
-  }, [])
+  }, []);
 
   /**
    * Schedule automatic token refresh before expiration
@@ -217,77 +234,81 @@ export default function AuthProvider({ children }: PropsWithChildren) {
   const scheduleTokenRefresh = (session: Session | null) => {
     // Clear any existing timer
     if (refreshTimerRef.current) {
-      clearTimeout(refreshTimerRef.current)
-      refreshTimerRef.current = null
+      clearTimeout(refreshTimerRef.current);
+      refreshTimerRef.current = null;
     }
 
     // If no session or no expiration timestamp, nothing to refresh
     if (!session?.expires_at) {
-      return
+      return;
     }
 
     // Check if component is still mounted
     if (!isMountedRef.current) {
-      return
+      return;
     }
 
     // Supabase returns expires_at as Unix timestamp in seconds, convert to milliseconds
-    const expiresAt = session.expires_at * 1000
-    const now = Date.now()
-    const timeUntilExpiry = expiresAt - now
+    const expiresAt = session.expires_at * 1000;
+    const now = Date.now();
+    const timeUntilExpiry = expiresAt - now;
 
     // If already expired, refresh immediately
     if (timeUntilExpiry <= 0) {
-      devLog('[AuthProvider] Token expired, refreshing immediately')
-      refreshTokenNow()
-      return
+      devLog('[AuthProvider] Token expired, refreshing immediately');
+      refreshTokenNow();
+      return;
     }
 
     // Schedule refresh 5 minutes before expiration
     // If token expires sooner than threshold, refreshIn will be 0 (immediate refresh)
-    const refreshIn = Math.max(0, timeUntilExpiry - TOKEN_REFRESH_THRESHOLD_MS)
-    
-    devLog('[AuthProvider] Scheduling token refresh in', Math.floor(refreshIn / 1000), 'seconds')
-    
+    const refreshIn = Math.max(0, timeUntilExpiry - TOKEN_REFRESH_THRESHOLD_MS);
+
+    devLog('[AuthProvider] Scheduling token refresh in', Math.floor(refreshIn / 1000), 'seconds');
+
     refreshTimerRef.current = setTimeout(() => {
-      devLog('[AuthProvider] Proactive token refresh triggered')
-      refreshTokenNow()
-    }, refreshIn)
-  }
+      devLog('[AuthProvider] Proactive token refresh triggered');
+      refreshTokenNow();
+    }, refreshIn);
+  };
 
   // Fetch the session once, and subscribe to auth state changes
   useEffect(() => {
-    isMountedRef.current = true
-    isInitializingRef.current = true
-    profileFetchCompletedRef.current = false
+    isMountedRef.current = true;
+    isInitializingRef.current = true;
+    profileFetchCompletedRef.current = false;
 
     const fetchSession = async () => {
-      setIsLoading(true)
-      let sessionFound = false
+      setIsLoading(true);
+      let sessionFound = false;
 
       // If Supabase isn't configured (e.g. running in a test or local dev without envs),
       // avoid calling the client which may resolve to a stub/proxy and produce
       // confusing errors like a primitive 'http://localhost' being reported.
       if (!isSupabaseConfigured) {
-        reportWarning('[AuthProvider] Supabase not configured - skipping session fetch')
-        setSession(null)
+        reportWarning('[AuthProvider] Supabase not configured - skipping session fetch');
+        setSession(null);
         try {
-          await authProfileService.setSession(null)
+          await authProfileService.setSession(null);
         } catch (e) {
-          reportWarning('[AuthProvider] Profile service unavailable during session clear:', e)
+          reportWarning('[AuthProvider] Profile service unavailable during session clear:', e);
         }
-        setIsLoading(false)
-        return
+        setIsLoading(false);
+        return;
       }
 
       try {
-        devLog('[AuthProvider] fetchSession START')
+        devLog('[AuthProvider] fetchSession START');
         try {
           // Add breadcrumb for Sentry to capture device occurrences of session fetch
           // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
           const Sentry = require('@sentry/react-native');
           if (Sentry && typeof Sentry.addBreadcrumb === 'function') {
-            Sentry.addBreadcrumb({ category: 'auth', message: 'fetchSession start', level: 'info' });
+            Sentry.addBreadcrumb({
+              category: 'auth',
+              message: 'fetchSession start',
+              level: 'info',
+            });
           }
         } catch (e) {
           // ignore if Sentry not available
@@ -295,57 +316,62 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         const {
           data: { session },
           error,
-        } = await supabase.auth.getSession()
+        } = await supabase.auth.getSession();
 
-        if (!isMountedRef.current) return
+        if (!isMountedRef.current) return;
 
         if (error) {
-          reportError(error, '[AuthProvider] Error fetching session:')
-          setSession(null)
+          reportError(error, '[AuthProvider] Error fetching session:');
+          setSession(null);
           try {
-            await authProfileService.setSession(null)
+            await authProfileService.setSession(null);
           } catch (e) {
             // Profile service errors shouldn't block auth flow
             // These can occur when service is unavailable or during tests
-            reportWarning('[AuthProvider] Profile service unavailable during session clear:', e)
+            reportWarning('[AuthProvider] Profile service unavailable during session clear:', e);
           }
         } else if (session) {
-          devLog('[AuthProvider] fetchSession: session exists, syncing profile')
+          devLog('[AuthProvider] fetchSession: session exists, syncing profile');
           try {
             const Sentry = getSentry?.();
             if (Sentry && typeof Sentry.addBreadcrumb === 'function') {
-              Sentry.addBreadcrumb({ category: 'auth', message: 'session found on startup', level: 'info', data: { userId: session.user.id } });
+              Sentry.addBreadcrumb({
+                category: 'auth',
+                message: 'session found on startup',
+                level: 'info',
+                data: { userId: session.user.id },
+              });
             }
           } catch (_) {}
           // Valid session found
-          sessionFound = true
-          devLog('[AuthProvider] Session loaded: authenticated')
-          setSession(session)
-          sessionIdRef.current = session.user.id
-          previousUserIdRef.current = session.user.id
-          
+          sessionFound = true;
+          devLog('[AuthProvider] Session loaded: authenticated');
+          setSession(session);
+          sessionIdRef.current = session.user.id;
+          previousUserIdRef.current = session.user.id;
+
           // Sync session with auth profile service.
           // Race against a timeout so a slow/unavailable network on app restore
           // never blocks setIsLoading(false) indefinitely. setSession continues
           // in the background and notifies listeners when the profile arrives.
-          let sessionSyncTimeout: ReturnType<typeof setTimeout> | undefined
+          let sessionSyncTimeout: ReturnType<typeof setTimeout> | undefined;
           try {
             await Promise.race([
               authProfileService.setSession(session),
               new Promise<void>(resolve => {
-                sessionSyncTimeout = setTimeout(resolve, 8_000)
+                sessionSyncTimeout = setTimeout(resolve, 8_000);
               }),
-            ])
-            profileFetchCompletedRef.current = true
+            ]);
+            profileFetchCompletedRef.current = true;
           } catch (e) {
             // Profile service errors shouldn't block auth flow
             // These can occur when service is unavailable or during tests
-            reportWarning('[AuthProvider] Profile service unavailable during session sync:', e)
+            reportWarning('[AuthProvider] Profile service unavailable during session sync:', e);
             // Even on error, mark as completed to avoid blocking
-            profileFetchCompletedRef.current = true
+            profileFetchCompletedRef.current = true;
           } finally {
             if (sessionSyncTimeout) {
-              clearTimeout(sessionSyncTimeout)
+              clearTimeout(sessionSyncTimeout);
             }
           }
 
@@ -355,315 +381,331 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           // on its own. Forcing it here ensures we never get stuck in a
           // loading state waiting for a notification that won't come.
           if (isMountedRef.current) {
-            setIsLoading(false)
+            setIsLoading(false);
           }
-          
+
           // Email verification gate: Check if email is verified
           // Priority: session.user?.email_confirmed_at > profile.email_verified > false
-          const verified = Boolean(
-            session.user?.email_confirmed_at ||
-            session.user?.confirmed_at
-          )
-          setIsEmailVerified(verified)
+          const verified = Boolean(session.user?.email_confirmed_at || session.user?.confirmed_at);
+          setIsEmailVerified(verified);
 
           // Schedule automatic token refresh
           if (isMountedRef.current) {
-            scheduleTokenRefresh(session)
+            scheduleTokenRefresh(session);
           }
         } else {
           // No error but also no session (user not logged in)
-          devLog('[AuthProvider] Session loaded: not authenticated')
-          setSession(null)
+          devLog('[AuthProvider] Session loaded: not authenticated');
+          setSession(null);
           try {
-            await authProfileService.setSession(null)
+            await authProfileService.setSession(null);
           } catch (e) {
             // Profile service errors shouldn't block auth flow
             // These can occur when service is unavailable or during tests
-            reportWarning('[AuthProvider] Profile service unavailable during session clear:', e)
+            reportWarning('[AuthProvider] Profile service unavailable during session clear:', e);
           }
         }
       } catch (error) {
-        reportError(error, '[AuthProvider] Unexpected error fetching session:')
-        if (!isMountedRef.current) return
-        setSession(null)
+        reportError(error, '[AuthProvider] Unexpected error fetching session:');
+        if (!isMountedRef.current) return;
+        setSession(null);
         try {
-          await authProfileService.setSession(null)
+          await authProfileService.setSession(null);
         } catch (e) {
           // Profile service errors shouldn't block auth flow
           // These can occur when service is unavailable or during tests
-          reportWarning('[AuthProvider] Profile service unavailable during session clear:', e)
+          reportWarning('[AuthProvider] Profile service unavailable during session clear:', e);
         }
       } finally {
         if (isMountedRef.current) {
           // Only set isLoading to false if there's no session
           // If there is a session, wait for the profile to load via subscription
           if (!sessionFound) {
-            setIsLoading(false)
+            setIsLoading(false);
           }
-          isInitializingRef.current = false
+          isInitializingRef.current = false;
         }
       }
-    }
+    };
 
-    fetchSession()
+    fetchSession();
 
-    let subscription: { unsubscribe?: () => void } | undefined
+    let cleanupRequested = false;
+    let subscription: SupabaseAuthSubscription | undefined;
     try {
-      const maybeSub = supabase.auth.onAuthStateChange(async (_event: string, session: Session | null) => {
-      // Process auth state changes even during initialization to avoid missing SIGNED_IN
-      // events that occur while the initial session fetch is in progress.
-      // We rely on the subsequent logic (profile sync + timers) to be idempotent.
+      const maybeSub = supabase.auth.onAuthStateChange(
+        async (_event: string, session: Session | null) => {
+          // Process auth state changes even during initialization to avoid missing SIGNED_IN
+          // events that occur while the initial session fetch is in progress.
+          // We rely on the subsequent logic (profile sync + timers) to be idempotent.
 
-      // devLog('[AuthProvider] Auth state changed:', { event: _event, session: session ? 'present' : 'null' })
-      
-      if (!isMountedRef.current) return
-      
-      // Determine incoming/outgoing user IDs first. If this is a sign-in
-      // that switches users, ensure we clear the previous user's persisted
-      // data before we update the app auth state (which could cause UI to
-      // read from AsyncStorage). This prevents cross-user leaks.
-      const incomingUserId = session?.user?.id || null
-      const outgoingUserId = sessionIdRef.current
+          // devLog('[AuthProvider] Auth state changed:', { event: _event, session: session ? 'present' : 'null' })
 
-      // If a different user is signing in, clear previous user's persisted data
-      if (_event === 'SIGNED_IN' && incomingUserId) {
-        if (__DEV__flag) console.log('[AuthProvider] SIGNED_IN detected, running user cleanup');
-        const prevUser = previousUserIdRef.current ?? outgoingUserId
-        if (prevUser && prevUser !== incomingUserId) {
-          try {
-            // Await cleanup to ensure AsyncStorage entries are removed
-            // before the new session is applied and components read cache.
-            await Promise.all([
-              clearBountyDraftForUser(prevUser),
-              cachedDataService.clearAll(),
-            ])
-          } catch (e) {
-            // Non-critical: log but continue with sign-in flow
-            reportError(e, '[AuthProvider] Data cleanup on user switch failed (non-critical)')
-          }
-        }
-        // Record the new user after cleanup
-        previousUserIdRef.current = incomingUserId
-      }
+          if (!isMountedRef.current) return;
 
-      // If the authenticated user is changing (sign-in, user switch, or sign-out),
-      // re-arm the loading gate so downstream consumers like `useAppBootstrap`
-      // remain in their "loading" state until the profile fetch below completes.
-      // Without this, there is a render window where `session` is the new user
-      // but `profile` is still null/stale, which causes the root navigator to
-      // make a routing decision (e.g. into onboarding) before the profile has
-      // been hydrated — producing a visible onboarding flash for returning users.
-      // The `isMountedRef.current` guard mirrors every other setState in this
-      // handler and avoids "setState on unmounted component" warnings if the
-      // listener fires after teardown. Sign-out is also a user change
-      // (incomingUserId=null !== outgoingUserId) and benefits from the same
-      // gate: useAppBootstrap moves loading → unauthenticated cleanly.
-      const isUserChange = incomingUserId !== outgoingUserId
-      if (isUserChange && isMountedRef.current) {
-        setIsLoading(true)
-      }
+          // Determine incoming/outgoing user IDs first. If this is a sign-in
+          // that switches users, ensure we clear the previous user's persisted
+          // data before we update the app auth state (which could cause UI to
+          // read from AsyncStorage). This prevents cross-user leaks.
+          const incomingUserId = session?.user?.id || null;
+          const outgoingUserId = sessionIdRef.current;
 
-      // Now update the session in state (after cleanup if applicable)
-      setSession(session)
-      sessionIdRef.current = incomingUserId
-      
-      // Reset profile fetch flag for events that trigger profile fetch
-      profileFetchCompletedRef.current = false
-      
-      // Sync session with auth profile service — DEFERRED off gotrue's auth lock.
-      //
-      // This callback runs *synchronously inside* the Supabase auth storage lock
-      // (gotrue's `_acquireLock`). `authProfileService.setSession()` hydrates the
-      // profile by issuing `supabase.from(...)` queries, and every such query
-      // internally calls `auth.getSession()` which re-acquires that same lock.
-      // Awaiting the query here therefore DEADLOCKS: the query waits for the lock
-      // to release, but the lock cannot release until this callback (and its
-      // awaited work) returns. This is exactly the "dead-lock by using await on a
-      // call to another method of the Supabase library" hazard documented on
-      // onAuthStateChange.
-      //
-      // It surfaced on cold start with "remember me": the restored session is
-      // expired, so getSession() refreshes it and fires TOKEN_REFRESHED *inside*
-      // the lock. The deadlocked profile query left the profile null and every
-      // subsequent data query hung — the bounty feed loaded forever and returning
-      // users were forced back through onboarding.
-      //
-      // Scheduling the sync on a macrotask lets the current lock release first so
-      // the profile queries run unobstructed. State that must stay in lock-step
-      // with the event (session, isLoading re-arm, recovery/analytics below)
-      // remains synchronous.
-      setTimeout(() => {
-        let sessionSyncTimeout: ReturnType<typeof setTimeout> | undefined
-        ;(async () => {
-          try {
-            await Promise.race([
-              authProfileService.setSession(session),
-              new Promise<void>(resolve => {
-                sessionSyncTimeout = setTimeout(resolve, 8_000)
-              }),
-            ])
-            profileFetchCompletedRef.current = true
-          } catch (e) {
-            // Profile service errors shouldn't block auth flow
-            // These can occur when service is unavailable or during tests
-            reportWarning('[AuthProvider] Profile service unavailable during session sync:', e)
-            // Mark as completed even on error to avoid blocking
-            profileFetchCompletedRef.current = true
-          } finally {
-            if (sessionSyncTimeout) {
-              clearTimeout(sessionSyncTimeout)
+          // If a different user is signing in, clear previous user's persisted data
+          if (_event === 'SIGNED_IN' && incomingUserId) {
+            if (__DEV__flag) console.log('[AuthProvider] SIGNED_IN detected, running user cleanup');
+            const prevUser = previousUserIdRef.current ?? outgoingUserId;
+            if (prevUser && prevUser !== incomingUserId) {
+              try {
+                // Await cleanup to ensure AsyncStorage entries are removed
+                // before the new session is applied and components read cache.
+                await Promise.all([
+                  clearBountyDraftForUser(prevUser),
+                  cachedDataService.clearAll(),
+                ]);
+              } catch (e) {
+                // Non-critical: log but continue with sign-in flow
+                reportError(e, '[AuthProvider] Data cleanup on user switch failed (non-critical)');
+              }
             }
-            // Explicitly clear loading now that profile fetch is complete (or timed
-            // out). The profile subscription fires during setSession() while
-            // profileFetchCompletedRef is still false, so it cannot clear loading
-            // on its own. Forcing it here ensures we never get stuck in a loading
-            // state waiting for a notification that won't come.
+            // Record the new user after cleanup
+            previousUserIdRef.current = incomingUserId;
+          }
+
+          // If the authenticated user is changing (sign-in, user switch, or sign-out),
+          // re-arm the loading gate so downstream consumers like `useAppBootstrap`
+          // remain in their "loading" state until the profile fetch below completes.
+          // Without this, there is a render window where `session` is the new user
+          // but `profile` is still null/stale, which causes the root navigator to
+          // make a routing decision (e.g. into onboarding) before the profile has
+          // been hydrated — producing a visible onboarding flash for returning users.
+          // The `isMountedRef.current` guard mirrors every other setState in this
+          // handler and avoids "setState on unmounted component" warnings if the
+          // listener fires after teardown. Sign-out is also a user change
+          // (incomingUserId=null !== outgoingUserId) and benefits from the same
+          // gate: useAppBootstrap moves loading → unauthenticated cleanly.
+          const isUserChange = incomingUserId !== outgoingUserId;
+          if (isUserChange && isMountedRef.current) {
+            setIsLoading(true);
+          }
+
+          // Now update the session in state (after cleanup if applicable)
+          setSession(session);
+          sessionIdRef.current = incomingUserId;
+
+          // Reset profile fetch flag for events that trigger profile fetch
+          profileFetchCompletedRef.current = false;
+
+          // Sync session with auth profile service — DEFERRED off gotrue's auth lock.
+          //
+          // This callback runs *synchronously inside* the Supabase auth storage lock
+          // (gotrue's `_acquireLock`). `authProfileService.setSession()` hydrates the
+          // profile by issuing `supabase.from(...)` queries, and every such query
+          // internally calls `auth.getSession()` which re-acquires that same lock.
+          // Awaiting the query here therefore DEADLOCKS: the query waits for the lock
+          // to release, but the lock cannot release until this callback (and its
+          // awaited work) returns. This is exactly the "dead-lock by using await on a
+          // call to another method of the Supabase library" hazard documented on
+          // onAuthStateChange.
+          //
+          // It surfaced on cold start with "remember me": the restored session is
+          // expired, so getSession() refreshes it and fires TOKEN_REFRESHED *inside*
+          // the lock. The deadlocked profile query left the profile null and every
+          // subsequent data query hung — the bounty feed loaded forever and returning
+          // users were forced back through onboarding.
+          //
+          // Scheduling the sync on a macrotask lets the current lock release first so
+          // the profile queries run unobstructed. State that must stay in lock-step
+          // with the event (session, isLoading re-arm, recovery/analytics below)
+          // remains synchronous.
+          setTimeout(() => {
+            let sessionSyncTimeout: ReturnType<typeof setTimeout> | undefined;
+            (async () => {
+              try {
+                await Promise.race([
+                  authProfileService.setSession(session),
+                  new Promise<void>(resolve => {
+                    sessionSyncTimeout = setTimeout(resolve, 8_000);
+                  }),
+                ]);
+                profileFetchCompletedRef.current = true;
+              } catch (e) {
+                // Profile service errors shouldn't block auth flow
+                // These can occur when service is unavailable or during tests
+                reportWarning('[AuthProvider] Profile service unavailable during session sync:', e);
+                // Mark as completed even on error to avoid blocking
+                profileFetchCompletedRef.current = true;
+              } finally {
+                if (sessionSyncTimeout) {
+                  clearTimeout(sessionSyncTimeout);
+                }
+                // Explicitly clear loading now that profile fetch is complete (or timed
+                // out). The profile subscription fires during setSession() while
+                // profileFetchCompletedRef is still false, so it cannot clear loading
+                // on its own. Forcing it here ensures we never get stuck in a loading
+                // state waiting for a notification that won't come.
+                if (isMountedRef.current) {
+                  setIsLoading(false);
+                }
+              }
+            })();
+          }, 0);
+
+          // Email verification gate: Check if email is verified
+          const verified = Boolean(
+            session?.user?.email_confirmed_at || session?.user?.confirmed_at
+          );
+          setIsEmailVerified(verified);
+
+          // Schedule token refresh for new session
+          if (_event === 'SIGNED_IN' || _event === 'TOKEN_REFRESHED') {
             if (isMountedRef.current) {
-              setIsLoading(false)
+              scheduleTokenRefresh(session);
             }
-          }
-        })()
-      }, 0)
-      
-      // Email verification gate: Check if email is verified
-      const verified = Boolean(
-        session?.user?.email_confirmed_at ||
-        session?.user?.confirmed_at
-      )
-      setIsEmailVerified(verified)
-      
-      // Schedule token refresh for new session
-      if (_event === 'SIGNED_IN' || _event === 'TOKEN_REFRESHED') {
-        if (isMountedRef.current) {
-          scheduleTokenRefresh(session)
-        }
-        // Track user switches: if a different user signs in, clear the previous user's data.
-        // Note: outgoingUserId is used as fallback in case previousUserIdRef was cleared
-        // by a prior SIGNED_OUT event (which already ran its own cleanup).
-        if (_event === 'SIGNED_IN' && incomingUserId) {
-          const prevUser = previousUserIdRef.current ?? outgoingUserId;
-          if (prevUser && prevUser !== incomingUserId) {
+            // Track user switches: if a different user signs in, clear the previous user's data.
+            // Note: outgoingUserId is used as fallback in case previousUserIdRef was cleared
+            // by a prior SIGNED_OUT event (which already ran its own cleanup).
+            if (_event === 'SIGNED_IN' && incomingUserId) {
+              const prevUser = previousUserIdRef.current ?? outgoingUserId;
+              if (prevUser && prevUser !== incomingUserId) {
+                void Promise.all([
+                  clearBountyDraftForUser(prevUser),
+                  cachedDataService.clearAll(),
+                ]).catch(e => {
+                  reportError(
+                    e,
+                    '[AuthProvider] Data cleanup on user switch failed (non-critical)'
+                  );
+                });
+              }
+              previousUserIdRef.current = incomingUserId;
+            }
+          } else if (_event === 'PASSWORD_RECOVERY') {
+            // User clicked a password reset link — flag recovery mode so the
+            // app routes them to the update-password screen instead of the main app
+            if (isMountedRef.current) {
+              setIsPasswordRecovery(true);
+            }
+          } else if (_event === 'SIGNED_OUT') {
+            // Clear refresh timer and recovery mode on sign out
+            if (refreshTimerRef.current) {
+              clearTimeout(refreshTimerRef.current);
+              refreshTimerRef.current = null;
+            }
+            if (isMountedRef.current) {
+              setIsPasswordRecovery(false);
+            }
+            // Clear user-specific persisted data to prevent data leaks between users
             void Promise.all([
-              clearBountyDraftForUser(prevUser),
+              clearBountyDraftForUser(outgoingUserId ?? undefined),
               cachedDataService.clearAll(),
             ]).catch(e => {
-              reportError(e, '[AuthProvider] Data cleanup on user switch failed (non-critical)')
-            })
+              reportError(e, '[AuthProvider] Data cleanup on sign-out failed (non-critical)');
+            });
+            // Belt-and-suspenders: wipe the project-scoped session key (and the
+            // legacy shared key) from SecureStore and in-memory cache. The Supabase
+            // client calls storage.removeItem on signOut, but this handles edge
+            // cases such as sim data clears without a proper signOut.
+            void clearAllSessionData(PROJECT_STORAGE_KEY).catch(e => {
+              reportError(
+                e,
+                '[AuthProvider] Session storage cleanup on sign-out failed (non-critical)'
+              );
+            });
+            previousUserIdRef.current = null;
           }
-          previousUserIdRef.current = incomingUserId
-        }
-      } else if (_event === 'PASSWORD_RECOVERY') {
-        // User clicked a password reset link — flag recovery mode so the
-        // app routes them to the update-password screen instead of the main app
-        if (isMountedRef.current) {
-          setIsPasswordRecovery(true)
-        }
-      } else if (_event === 'SIGNED_OUT') {
-        // Clear refresh timer and recovery mode on sign out
-        if (refreshTimerRef.current) {
-          clearTimeout(refreshTimerRef.current)
-          refreshTimerRef.current = null
-        }
-        if (isMountedRef.current) {
-          setIsPasswordRecovery(false)
-        }
-        // Clear user-specific persisted data to prevent data leaks between users
-        void Promise.all([
-          clearBountyDraftForUser(outgoingUserId ?? undefined),
-          cachedDataService.clearAll(),
-        ]).catch(e => {
-          reportError(e, '[AuthProvider] Data cleanup on sign-out failed (non-critical)')
-        })
-        // Belt-and-suspenders: wipe the project-scoped session key (and the
-        // legacy shared key) from SecureStore and in-memory cache. The Supabase
-        // client calls storage.removeItem on signOut, but this handles edge
-        // cases such as sim data clears without a proper signOut.
-        void clearAllSessionData(PROJECT_STORAGE_KEY).catch(e => {
-          reportError(e, '[AuthProvider] Session storage cleanup on sign-out failed (non-critical)')
-        })
-        previousUserIdRef.current = null
-      }
-      
-      // Track authentication events
-      if (_event === 'SIGNED_IN' && session?.user) {
-        await analyticsService.identifyUser(session.user.id, {
-          email: session.user.email,
-        })
-        await analyticsService.trackEvent('user_logged_in', {
-          method: session.user.app_metadata?.provider || 'email',
-        })
-        try {
-          const Sentry = getSentry?.();
-          if (Sentry && typeof Sentry.setUser === 'function') {
-            Sentry.setUser({
-              id: session.user.id,
+
+          // Track authentication events
+          if (_event === 'SIGNED_IN' && session?.user) {
+            await analyticsService.identifyUser(session.user.id, {
               email: session.user.email,
             });
+            await analyticsService.trackEvent('user_logged_in', {
+              method: session.user.app_metadata?.provider || 'email',
+            });
+            try {
+              const Sentry = getSentry?.();
+              if (Sentry && typeof Sentry.setUser === 'function') {
+                Sentry.setUser({
+                  id: session.user.id,
+                  email: session.user.email,
+                });
+              }
+            } catch (e) {
+              /* ignore */
+            }
+          } else if (_event === 'SIGNED_OUT') {
+            // OPTIMIZATION: Run analytics cleanup in background (non-blocking)
+            // User is already signed out, analytics tracking shouldn't delay the experience
+            // Using void to explicitly indicate fire-and-forget behavior
+            void Promise.all([
+              analyticsService.trackEvent('user_logged_out'),
+              analyticsService.reset(),
+            ]).catch(e => {
+              reportError(e, '[AuthProvider] Analytics cleanup failed (non-critical)');
+            });
+            // Sentry user clear is synchronous and fast
+            try {
+              const Sentry = getSentry?.();
+              if (Sentry && typeof Sentry.setUser === 'function') {
+                Sentry.setUser(null);
+              }
+            } catch (e) {
+              /* ignore */
+            }
+          } else if (_event === 'USER_UPDATED' && session?.user) {
+            // Password change via recovery flow triggers USER_UPDATED — clear the
+            // recovery flag so the app no longer forces /auth/update-password.
+            // Any USER_UPDATED event means the user has completed their intended action
+            // and should be considered out of recovery mode. In the update-password screen
+            // the user cannot trigger unrelated profile updates, so this is safe.
+            if (isMountedRef.current) {
+              setIsPasswordRecovery(false);
+            }
+            if (verified) {
+              await analyticsService.trackEvent('email_verified', {
+                userId: session.user.id,
+              });
+            }
+          } else if (_event === 'TOKEN_REFRESHED') {
+            devLog('[AuthProvider] Token refreshed by Supabase');
           }
-        } catch (e) {
-          /* ignore */
-        }
-      } else if (_event === 'SIGNED_OUT') {
-        // OPTIMIZATION: Run analytics cleanup in background (non-blocking)
-        // User is already signed out, analytics tracking shouldn't delay the experience
-        // Using void to explicitly indicate fire-and-forget behavior
-        void Promise.all([
-          analyticsService.trackEvent('user_logged_out'),
-          analyticsService.reset(),
-        ]).catch(e => {
-          reportError(e, '[AuthProvider] Analytics cleanup failed (non-critical)')
-        });
-        // Sentry user clear is synchronous and fast
-        try {
-          const Sentry = getSentry?.();
-          if (Sentry && typeof Sentry.setUser === 'function') {
-            Sentry.setUser(null);
+          // If deferred push registration was requested earlier, run it now.
+          // Also run on INITIAL_SESSION to cover cold starts where the auth session
+          // restores after notification permission/token retrieval already happened.
+          if (_event === 'SIGNED_IN' || _event === 'INITIAL_SESSION') {
+            try {
+              const deferred = await AsyncStorage.getItem(DEFERRED_PUSH_REGISTRATION_KEY);
+              if (deferred && session?.user) {
+                // Clear the flag and attempt registration (best-effort, fire-and-forget)
+                await AsyncStorage.removeItem(DEFERRED_PUSH_REGISTRATION_KEY);
+                void notificationService.requestPermissionsAndRegisterToken().catch(e => {
+                  reportWarning('[AuthProvider] Deferred push registration failed:', e);
+                });
+              }
+            } catch (e) {
+              // Non-fatal
+              reportWarning('[AuthProvider] Error checking deferred push registration flag:', e);
+            }
           }
-        } catch (e) {
-          /* ignore */
         }
-      } else if (_event === 'USER_UPDATED' && session?.user) {
-        // Password change via recovery flow triggers USER_UPDATED — clear the
-        // recovery flag so the app no longer forces /auth/update-password.
-        // Any USER_UPDATED event means the user has completed their intended action
-        // and should be considered out of recovery mode. In the update-password screen
-        // the user cannot trigger unrelated profile updates, so this is safe.
-        if (isMountedRef.current) {
-          setIsPasswordRecovery(false)
-        }
-        if (verified) {
-          await analyticsService.trackEvent('email_verified', {
-            userId: session.user.id,
-          })
-        }
-      } else if (_event === 'TOKEN_REFRESHED') {
-        devLog('[AuthProvider] Token refreshed by Supabase')
-      }
-      // If deferred push registration was requested earlier, run it now.
-      // Also run on INITIAL_SESSION to cover cold starts where the auth session
-      // restores after notification permission/token retrieval already happened.
-      if (_event === 'SIGNED_IN' || _event === 'INITIAL_SESSION') {
-        try {
-          const deferred = await AsyncStorage.getItem(DEFERRED_PUSH_REGISTRATION_KEY)
-          if (deferred && session?.user) {
-            // Clear the flag and attempt registration (best-effort, fire-and-forget)
-            await AsyncStorage.removeItem(DEFERRED_PUSH_REGISTRATION_KEY)
-            void notificationService.requestPermissionsAndRegisterToken().catch((e) => {
-              reportWarning('[AuthProvider] Deferred push registration failed:', e)
-            })
+      );
+
+      resolveSupabaseAuthSubscription(
+        maybeSub,
+        resolvedSubscription => {
+          subscription = resolvedSubscription;
+          if (cleanupRequested) {
+            safeUnsubscribe(subscription);
           }
-        } catch (e) {
-          // Non-fatal
-          reportWarning('[AuthProvider] Error checking deferred push registration flag:', e)
+        },
+        error => {
+          reportError(error, '[AuthProvider] onAuthStateChange registration resolve failed:');
         }
-      }
-    })
-      // Attempt to extract subscription from known sync shape
-      subscription = (maybeSub && (maybeSub as any).data && (maybeSub as any).data.subscription) || (maybeSub as any).subscription || undefined
+      );
     } catch (e) {
-      reportError(e, '[AuthProvider] onAuthStateChange registration failed:')
+      reportError(e, '[AuthProvider] onAuthStateChange registration failed:');
     }
-    devLog('[AuthProvider] mounted')
+    devLog('[AuthProvider] mounted');
 
     // AppState listener: restart Supabase token auto-refresh when the app
     // returns to the foreground. On React Native, JS timers are paused while
@@ -680,13 +722,13 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     // in-flight operation completes (loop, not recursion).
 
     const handleAppStateChange = (nextState: AppStateStatus) => {
-      devLog('[AuthProvider] AppState changed:', nextState)
+      devLog('[AuthProvider] AppState changed:', nextState);
 
       // If an operation is already in flight, record the latest desired state so
       // it is applied once the current operation finishes.
       if (appStateOpInFlightRef.current) {
-        pendingAppStateRef.current = nextState
-        return
+        pendingAppStateRef.current = nextState;
+        return;
       }
 
       // Drain the queue: process `nextState` then any state that arrived while
@@ -694,98 +736,97 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       // follow: each await keeps appStateOpInFlightRef true so arriving events
       // only update pendingAppStateRef instead of starting a second chain.
       const drain = async (state: AppStateStatus) => {
-        appStateOpInFlightRef.current = true
-        let current: AppStateStatus = state
+        appStateOpInFlightRef.current = true;
+        let current: AppStateStatus = state;
         // eslint-disable-next-line no-constant-condition
         while (true) {
           try {
             if (current === 'active') {
-              devLog('[AuthProvider] App foregrounded – restarting Supabase auto-refresh')
+              devLog('[AuthProvider] App foregrounded – restarting Supabase auto-refresh');
               try {
-                await supabase.auth.startAutoRefresh()
+                await supabase.auth.startAutoRefresh();
               } catch (e) {
-                reportWarning('[AuthProvider] startAutoRefresh failed on foreground:', e)
+                reportWarning('[AuthProvider] startAutoRefresh failed on foreground:', e);
               }
             } else if (current === 'background' || current === 'inactive') {
-              devLog('[AuthProvider] App backgrounded – stopping Supabase auto-refresh')
+              devLog('[AuthProvider] App backgrounded – stopping Supabase auto-refresh');
               try {
-                await supabase.auth.stopAutoRefresh()
+                await supabase.auth.stopAutoRefresh();
               } catch (e) {
-                devLog('[AuthProvider] stopAutoRefresh failed (non-critical):', e)
+                devLog('[AuthProvider] stopAutoRefresh failed (non-critical):', e);
               }
             }
           } finally {
             // Check for a state that arrived while we were awaiting.
             if (pendingAppStateRef.current !== null) {
-              current = pendingAppStateRef.current
-              pendingAppStateRef.current = null
+              current = pendingAppStateRef.current;
+              pendingAppStateRef.current = null;
               // continue the while loop with the new state
             } else {
-              appStateOpInFlightRef.current = false
-              break
+              appStateOpInFlightRef.current = false;
+              break;
             }
           }
         }
-      }
+      };
 
-      drain(nextState)
-    }
+      drain(nextState);
+    };
 
-    let appStateSubscription: { remove?: () => void } | null = null
+    let appStateSubscription: { remove?: () => void } | null = null;
     try {
       if (AppState?.addEventListener) {
-        appStateSubscription = AppState.addEventListener('change', handleAppStateChange)
+        appStateSubscription = AppState.addEventListener('change', handleAppStateChange);
       }
     } catch (e) {
-      devLog('[AuthProvider] AppState listener unavailable; skipping auto-refresh app-state hooks', e)
+      devLog(
+        '[AuthProvider] AppState listener unavailable; skipping auto-refresh app-state hooks',
+        e
+      );
     }
 
     // Cleanup subscription and timer on unmount
     return () => {
-      isMountedRef.current = false
-      try {
-        subscription?.unsubscribe?.()
-      } catch (e) {
-        // swallow unsubscribe errors
-      }
+      isMountedRef.current = false;
+      cleanupRequested = true;
+      safeUnsubscribe(subscription);
       if (refreshTimerRef.current) {
-        clearTimeout(refreshTimerRef.current)
-        refreshTimerRef.current = null
+        clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = null;
       }
       try {
-        appStateSubscription?.remove?.()
+        appStateSubscription?.remove?.();
       } catch (e) {
         // swallow AppState cleanup errors
-        devLog('[AuthProvider] AppState cleanup failed (non-critical):', e)
+        devLog('[AuthProvider] AppState cleanup failed (non-critical):', e);
       }
-    }
-    
-  }, [])
+    };
+  }, []);
 
   // Subscribe to profile updates from auth profile service
   useEffect(() => {
-    const unsubscribe = authProfileService.subscribe((authProfile) => {
-      setProfile(authProfile)
+    const unsubscribe = authProfileService.subscribe(authProfile => {
+      setProfile(authProfile);
 
       // Only set isLoading to false if:
       // 1. No session exists (immediate subscription callback with null), OR
       // 2. Profile fetch has completed (after setSession finishes)
-      const currentSessionId = sessionIdRef.current
-      const shouldSetLoadingFalse = !currentSessionId || profileFetchCompletedRef.current
+      const currentSessionId = sessionIdRef.current;
+      const shouldSetLoadingFalse = !currentSessionId || profileFetchCompletedRef.current;
 
       // Only log profile updates in development and only when the username changes
       try {
-        const username = authProfile?.username ?? null
+        const username = authProfile?.username ?? null;
         if (__DEV__flag && lastProfileLogRef.current !== username) {
-          lastProfileLogRef.current = username
+          lastProfileLogRef.current = username;
           if (shouldSetLoadingFalse) {
             devLog('[AuthProvider] Profile update received, setting isLoading to false:', {
               hasSession: Boolean(currentSessionId),
               hasProfile: Boolean(authProfile),
               username,
-            })
+            });
           } else {
-            devLog('[AuthProvider] Profile update received but waiting for fetch to complete')
+            devLog('[AuthProvider] Profile update received but waiting for fetch to complete');
           }
         }
       } catch (e) {
@@ -793,35 +834,38 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       }
 
       if (shouldSetLoadingFalse) {
-        setIsLoading(false)
+        setIsLoading(false);
       }
-      
+
       // Email verification gate: Also check profile for email_verified flag (some profile shapes include this field)
-      if (authProfile && (('email_verified' in authProfile) || (authProfile as any).email_verified !== undefined)) {
-        setIsEmailVerified((authProfile as any).email_verified)
+      if (
+        authProfile &&
+        ('email_verified' in authProfile || (authProfile as any).email_verified !== undefined)
+      ) {
+        setIsEmailVerified((authProfile as any).email_verified);
       }
-    })
+    });
 
     // Safety timeout: ensure isLoading is cleared after max 10 seconds
     // This prevents perpetual skeleton screens if profile fetch hangs
     // Use setState with callback to access current value, avoiding stale closure
     const safetyTimeout = setTimeout(() => {
-            if (isMountedRef.current) {
-        setIsLoading((currentLoading) => {
+      if (isMountedRef.current) {
+        setIsLoading(currentLoading => {
           if (currentLoading) {
-            reportWarning('[AuthProvider] Safety timeout: forcing isLoading = false after 10s')
-            return false
+            reportWarning('[AuthProvider] Safety timeout: forcing isLoading = false after 10s');
+            return false;
           }
-          return currentLoading
-        })
+          return currentLoading;
+        });
       }
-    }, 10000)
+    }, 10000);
 
     return () => {
-      unsubscribe()
-      clearTimeout(safetyTimeout)
-    }
-  }, [])
+      unsubscribe();
+      clearTimeout(safetyTimeout);
+    };
+  }, []);
 
   // Memoized so consumers (35+ screens/components) only re-render when a
   // value they actually read changes, instead of on every AuthProvider
@@ -840,9 +884,9 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       attemptRefresh,
     }),
     [session, isLoading, profile, isEmailVerified, isPasswordRecovery, isAuthStale, attemptRefresh]
-  )
+  );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export const useAuth = () => useContext(AuthContext);

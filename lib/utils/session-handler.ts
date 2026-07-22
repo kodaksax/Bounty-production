@@ -6,6 +6,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../supabase';
 import { logger } from './error-logger';
+import {
+    resolveSupabaseAuthSubscription,
+    safeUnsubscribe,
+    SupabaseAuthSubscription,
+} from './supabase-subscription';
 
 const SESSION_CHECK_KEY = 'last_session_check';
 const SESSION_CHECK_INTERVAL = 5 * 60 * 1000; // Check every 5 minutes
@@ -63,25 +68,28 @@ export function onSessionExpiration(callback: () => void) {
  */
 export async function checkSessionExpiration(): Promise<SessionState> {
   try {
-    const { data: { session }, error } = await supabase.auth.getSession();
-    
+    const {
+      data: { session },
+      error,
+    } = await supabase.auth.getSession();
+
     if (error) {
       logger.error('Error checking session', { error });
       return { isExpired: false, expiresAt: null, needsRefresh: false };
     }
-    
+
     if (!session) {
       return { isExpired: true, expiresAt: null, needsRefresh: false };
     }
-    
+
     const expiresAt = session.expires_at ? session.expires_at * 1000 : null;
     const now = Date.now();
-    
+
     // Consider expired if less than 5 minutes remaining
     const bufferMs = 5 * 60 * 1000;
     const isExpired = expiresAt ? expiresAt - now < 0 : false;
     const needsRefresh = expiresAt ? expiresAt - now < bufferMs : false;
-    
+
     return {
       isExpired,
       expiresAt,
@@ -148,16 +156,16 @@ export async function refreshSession(): Promise<RefreshSessionResult> {
 export async function handleSessionExpiration(): Promise<void> {
   try {
     logger.info('Handling session expiration');
-    
+
     // Sign out from Supabase
     // This will trigger the SIGNED_OUT event in setupAuthStateListener.
     // Since handleSessionExpiration is only called by session monitoring (not user action),
     // isIntentionalSignOut will be false, so the callback will be triggered by the listener.
     await supabase.auth.signOut();
-    
+
     // Clear any local session data
     await AsyncStorage.removeItem(SESSION_CHECK_KEY);
-    
+
     // Note: We don't call sessionExpirationCallback directly here.
     // The auth state listener handles it based on the isIntentionalSignOut flag.
   } catch (error) {
@@ -170,7 +178,7 @@ export async function handleSessionExpiration(): Promise<void> {
  */
 export function startSessionMonitoring(): () => void {
   let intervalId: ReturnType<typeof setInterval>;
-  
+
   const checkAndRefresh = async () => {
     const state = await checkSessionExpiration();
 
@@ -192,23 +200,27 @@ export function startSessionMonitoring(): () => void {
     // Update last check time
     await AsyncStorage.setItem(SESSION_CHECK_KEY, Date.now().toString());
   };
-  
+
   // Check immediately
   checkAndRefresh();
-  
+
   // Then check periodically
   intervalId = setInterval(checkAndRefresh, SESSION_CHECK_INTERVAL);
 
   // Register interval for test cleanup
   if (process.env.NODE_ENV === 'test') {
-    const _i = intervalId as any
+    const _i = intervalId as any;
     if (typeof _i?.unref === 'function') {
-      try { _i.unref(); } catch { /* ignore */ }
+      try {
+        _i.unref();
+      } catch {
+        /* ignore */
+      }
     }
-    ;(globalThis as any).__BACKGROUND_INTERVALS = (globalThis as any).__BACKGROUND_INTERVALS || []
-    ;(globalThis as any).__BACKGROUND_INTERVALS.push(intervalId)
+    (globalThis as any).__BACKGROUND_INTERVALS = (globalThis as any).__BACKGROUND_INTERVALS || [];
+    (globalThis as any).__BACKGROUND_INTERVALS.push(intervalId);
   }
-  
+
   // Return cleanup function
   return () => {
     if (intervalId) {
@@ -221,34 +233,42 @@ export function startSessionMonitoring(): () => void {
  * Listen to Supabase auth state changes
  */
 export function setupAuthStateListener(): () => void {
-  const ret = supabase.auth.onAuthStateChange(
-    async (event, session) => {
-      logger.info('Auth state changed', { event });
+  let cleanupRequested = false;
+  let subscription: SupabaseAuthSubscription | undefined;
 
-      if (event === 'SIGNED_OUT') {
-        // Only trigger session expiration callback if this was NOT an intentional sign-out
-        // Intentional sign-outs (user clicking "Log Out") handle their own notification
-        if (!isIntentionalSignOut && sessionExpirationCallback) {
-          sessionExpirationCallback();
-        }
-        // Clear the flag after processing
-        clearIntentionalSignOut();
-      }
+  const ret = supabase.auth.onAuthStateChange(async (event, session) => {
+    logger.info('Auth state changed', { event });
 
-      if (event === 'TOKEN_REFRESHED' && session) {
-        logger.info('Token refreshed automatically');
+    if (event === 'SIGNED_OUT') {
+      // Only trigger session expiration callback if this was NOT an intentional sign-out
+      // Intentional sign-outs (user clicking "Log Out") handle their own notification
+      if (!isIntentionalSignOut && sessionExpirationCallback) {
+        sessionExpirationCallback();
       }
+      // Clear the flag after processing
+      clearIntentionalSignOut();
+    }
+
+    if (event === 'TOKEN_REFRESHED' && session) {
+      logger.info('Token refreshed automatically');
+    }
+  });
+
+  resolveSupabaseAuthSubscription(
+    ret,
+    resolvedSubscription => {
+      subscription = resolvedSubscription;
+      if (cleanupRequested) {
+        safeUnsubscribe(subscription);
+      }
+    },
+    error => {
+      logger.error('Failed to resolve auth state listener subscription', { error });
     }
   );
 
-  const maybeSub = ret as any;
-  const subscription = (maybeSub && maybeSub.data && maybeSub.data.subscription) || maybeSub.subscription || undefined;
-
   return () => {
-    try {
-      subscription?.unsubscribe?.();
-    } catch (e) {
-      // Swallow unsubscribe errors
-    }
+    cleanupRequested = true;
+    safeUnsubscribe(subscription);
   };
 }

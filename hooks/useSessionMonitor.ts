@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert } from 'react-native';
+import { safeCleanup } from '../lib/utils/lifecycle';
 import {
     checkSessionExpiration,
     onSessionExpiration,
@@ -37,11 +38,17 @@ export function useSessionMonitor(options: SessionMonitorOptions = {}) {
     let isActive = true;
 
     // Check session state immediately
-    checkSessionExpiration().then((state) => {
-      if (isActive) {
-        setSessionState(state);
-      }
-    });
+    checkSessionExpiration()
+      .then(state => {
+        if (isActive) {
+          setSessionState(state);
+        }
+      })
+      .catch(error => {
+        if (__DEV__) {
+          console.warn('[useSessionMonitor] initial session check failed:', error);
+        }
+      });
 
     // Set up session expiration callback
     const unsubscribeExpiration = onSessionExpiration(() => {
@@ -76,9 +83,9 @@ export function useSessionMonitor(options: SessionMonitorOptions = {}) {
     // Cleanup
     return () => {
       isActive = false;
-      unsubscribeExpiration();
-      stopMonitoring();
-      unsubscribeAuthState();
+      safeCleanup(unsubscribeExpiration);
+      safeCleanup(stopMonitoring);
+      safeCleanup(unsubscribeAuthState);
     };
     // router is intentionally excluded from deps: it is used only inside the
     // onSessionExpiration callback which fires asynchronously on session expiry.

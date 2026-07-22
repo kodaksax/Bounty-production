@@ -1,12 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
-import { Platform } from 'react-native';
 import { API_BASE_URL } from 'lib/config/api';
-import { DEFERRED_PUSH_REGISTRATION_KEY } from 'lib/constants';
 import { ERROR_LOG_THROTTLE } from 'lib/config/network';
+import { DEFERRED_PUSH_REGISTRATION_KEY } from 'lib/constants';
 import { LOG_KEYS, shouldLog } from 'lib/utils/log-throttle';
+import { Platform } from 'react-native';
 import { supabase } from '../supabase';
 import type { Notification } from '../types';
+import { safeCleanup } from '../utils/lifecycle';
 // Lazily require expo-notifications to avoid importing native modules at module init
 let Notifications: any = null;
 try {
@@ -25,13 +26,13 @@ const PENDING_PUSH_TOKENS_KEY = 'notifications:pending_tokens';
 async function safeReadResponseText(response: Response): Promise<string> {
   try {
     // clone the response so reading here doesn't consume it for callers
-    const text = await response.clone().text()
-    return text
+    const text = await response.clone().text();
+    return text;
   } catch (e) {
     try {
-      return JSON.stringify(e)
+      return JSON.stringify(e);
     } catch {
-      return String(e)
+      return String(e);
     }
   }
 }
@@ -41,35 +42,36 @@ async function safeReadResponseText(response: Response): Promise<string> {
 // by prefixing the path with `/api` and retrying once. Accepts either relative
 // paths (preferred) or absolute URLs without double-prefixing the API base.
 async function fetchWithApiFallback(path: string, init?: RequestInit): Promise<Response> {
-  const isAbsolute = /^https?:\/\//i.test(path)
-  const normalizedPath = isAbsolute ? path : `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
+  const isAbsolute = /^https?:\/\//i.test(path);
+  const normalizedPath = isAbsolute
+    ? path
+    : `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
 
   try {
-    const res = await fetch(normalizedPath, init)
+    const res = await fetch(normalizedPath, init);
 
     // If primary returned 404 with an HTML body like "Cannot GET /..." it's likely
     // the wrong server. In that case, try the /api prefixed path as a fallback.
     if (!isAbsolute && res.status === 404) {
-      const text = await safeReadResponseText(res)
+      const text = await safeReadResponseText(res);
       if (typeof text === 'string' && /<html|Cannot GET|Cannot POST/i.test(text)) {
-        const fallback = `${API_BASE_URL}/api${path.startsWith('/') ? path : `/${path}`}`
+        const fallback = `${API_BASE_URL}/api${path.startsWith('/') ? path : `/${path}`}`;
         try {
-          const res2 = await fetch(fallback, init)
+          const res2 = await fetch(fallback, init);
           // Return the fallback response regardless of status so callers can handle it
-          return res2
+          return res2;
         } catch (e) {
           // If fallback failed, return original response so original error is preserved
-          return res
+          return res;
         }
       }
     }
-    return res
+    return res;
   } catch (e) {
     // network-level failure; rethrow so callers can handle
-    throw e
+    throw e;
   }
 }
-
 
 // Configure how notifications should be handled when the app is in the foreground
 // Only configure if the native module is available in this runtime.
@@ -107,7 +109,11 @@ export class NotificationService {
   /** Lazily load expo-notifications if not already loaded */
   private ensureNotificationsModule(): void {
     if (!Notifications) {
-      try { Notifications = require('expo-notifications'); } catch { /* ignore */ }
+      try {
+        Notifications = require('expo-notifications');
+      } catch {
+        /* ignore */
+      }
     }
   }
 
@@ -116,8 +122,8 @@ export class NotificationService {
    */
   private normalizePermissionStatus(status: string | null): 'granted' | 'denied' | 'undetermined' {
     const validStatuses = ['granted', 'denied', 'undetermined'] as const;
-    if (status && validStatuses.includes(status as typeof validStatuses[number])) {
-      return status as typeof validStatuses[number];
+    if (status && validStatuses.includes(status as (typeof validStatuses)[number])) {
+      return status as (typeof validStatuses)[number];
     }
     // Map unexpected values (like 'restricted' on iOS) to 'undetermined'
     return 'undetermined';
@@ -129,7 +135,9 @@ export class NotificationService {
   async getPermissionStatus(): Promise<'granted' | 'denied' | 'undetermined'> {
     try {
       this.ensureNotificationsModule();
-      const { status } = Notifications ? await Notifications.getPermissionsAsync() : { status: 'undetermined' };
+      const { status } = Notifications
+        ? await Notifications.getPermissionsAsync()
+        : { status: 'undetermined' };
       // Store the status for offline access
       await AsyncStorage.setItem(PERMISSION_STATUS_KEY, status);
       return this.normalizePermissionStatus(status);
@@ -164,11 +172,15 @@ export class NotificationService {
   async requestPermissionsAndRegisterToken(): Promise<string | null> {
     try {
       this.ensureNotificationsModule();
-      const { status: existingStatus } = Notifications ? await Notifications.getPermissionsAsync() : { status: 'undetermined' };
+      const { status: existingStatus } = Notifications
+        ? await Notifications.getPermissionsAsync()
+        : { status: 'undetermined' };
       let finalStatus = existingStatus;
 
       if (existingStatus !== 'granted') {
-        const { status } = Notifications ? await Notifications.requestPermissionsAsync() : { status: 'undetermined' };
+        const { status } = Notifications
+          ? await Notifications.requestPermissionsAsync()
+          : { status: 'undetermined' };
         finalStatus = status;
       }
 
@@ -181,13 +193,17 @@ export class NotificationService {
 
       // Get the Expo push token (projectId is required for Expo SDK 48+)
       const projectId = Constants.expoConfig?.extra?.eas?.projectId as string | undefined;
-      const token = Notifications ? (await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined)).data : null;
-      
+      const token = Notifications
+        ? (await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined)).data
+        : null;
+
       // Register token with backend
       await this.registerPushToken(token);
 
       // Also try to flush any tokens we cached from previous failed attempts
-      try { await this.flushPendingPushTokens(); } catch {}
+      try {
+        await this.flushPendingPushTokens();
+      } catch {}
 
       return token;
     } catch (error) {
@@ -201,25 +217,30 @@ export class NotificationService {
    */
   async registerPushToken(token: string, deviceId?: string): Promise<void> {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session?.access_token) {
         try {
-          const pendingStr = await AsyncStorage.getItem(PENDING_PUSH_TOKENS_KEY)
-          let parsed: { token: string, deviceId?: string }[] = []
+          const pendingStr = await AsyncStorage.getItem(PENDING_PUSH_TOKENS_KEY);
+          let parsed: { token: string; deviceId?: string }[] = [];
           if (pendingStr) {
             try {
-              const candidate = JSON.parse(pendingStr)
-              parsed = this.parsePendingPushTokens(candidate)
+              const candidate = JSON.parse(pendingStr);
+              parsed = this.parsePendingPushTokens(candidate);
             } catch {
-              parsed = []
+              parsed = [];
             }
           }
-          parsed.push({ token, deviceId })
-          await AsyncStorage.setItem(PENDING_PUSH_TOKENS_KEY, JSON.stringify(parsed))
-          await AsyncStorage.setItem(DEFERRED_PUSH_REGISTRATION_KEY, 'true')
+          parsed.push({ token, deviceId });
+          await AsyncStorage.setItem(PENDING_PUSH_TOKENS_KEY, JSON.stringify(parsed));
+          await AsyncStorage.setItem(DEFERRED_PUSH_REGISTRATION_KEY, 'true');
         } catch (e) {
           if (__DEV__) {
-            console.warn('[NotificationService] Failed to persist deferred push token registration', e)
+            console.warn(
+              '[NotificationService] Failed to persist deferred push token registration',
+              e
+            );
           }
         }
         if (__DEV__) {
@@ -228,46 +249,53 @@ export class NotificationService {
         return;
       }
 
-      const url = `${API_BASE_URL}/notifications/register-token`
+      const url = `${API_BASE_URL}/notifications/register-token`;
       const response = await fetchWithApiFallback(url.replace(API_BASE_URL, ''), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({ token, deviceId }),
         // Let network stack handle timeouts naturally
       });
 
       if (!response.ok) {
-        const text = await safeReadResponseText(response)
-        
+        const text = await safeReadResponseText(response);
+
         // Log different levels based on status code
         if (response.status === 404) {
           // User profile doesn't exist yet - retained for backward compatibility with older backend versions
           // With the current backend fix, this should not occur as profiles are auto-created
           if (__DEV__) {
-            console.log(`[NotificationService] User profile not yet created. Backend will create it on next attempt.`)
+            console.log(
+              `[NotificationService] User profile not yet created. Backend will create it on next attempt.`
+            );
           }
         } else if (response.status === 409) {
           // Conflict - token already registered, which is fine
           if (__DEV__) {
-            console.log(`[NotificationService] Push token already registered (${response.status}).`)
+            console.log(
+              `[NotificationService] Push token already registered (${response.status}).`
+            );
           }
           return; // Don't throw for 409, it means the token is already registered
         } else if (response.status >= 500) {
-          console.error(`Failed to register push token. URL=${url} status=${response.status} body=${text}`)
+          console.error(
+            `Failed to register push token. URL=${url} status=${response.status} body=${text}`
+          );
         } else {
-          console.warn(`Failed to register push token. URL=${url} status=${response.status} body=${text}`)
+          console.warn(
+            `Failed to register push token. URL=${url} status=${response.status} body=${text}`
+          );
         }
-        
-        throw new Error(`Failed to register push token (${response.status})`)
+
+        throw new Error(`Failed to register push token (${response.status})`);
       } else {
         if (__DEV__) {
           console.log('[NotificationService] Successfully registered push token with backend');
         }
       }
-
     } catch (error) {
       // Only log actual errors (not expected failures like missing profile)
       // Prefer structured status information on the error object over parsing strings
@@ -287,13 +315,13 @@ export class NotificationService {
           statusCode = parseInt(statusMatch[1], 10);
         }
       }
-      
+
       const isExpectedError = statusCode === 404 || statusCode === 409;
-      
+
       if (!isExpectedError) {
         console.error('Error registering push token:', error);
       }
-      
+
       // Fallback: save the token directly via Supabase. In production builds the
       // app talks to Supabase Edge Functions, where no `/notifications/register-token`
       // route exists, so the REST call above 404s and this is the only path that
@@ -302,29 +330,33 @@ export class NotificationService {
       // changes) processed by the `process-notification` edge function find no
       // token to push to.
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const userId = session?.user?.id
-        if (userId && await this.savePushTokenViaSupabase(userId, token, deviceId)) {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const userId = session?.user?.id;
+        if (userId && (await this.savePushTokenViaSupabase(userId, token, deviceId))) {
           if (__DEV__) {
-            console.log('[NotificationService] Successfully registered push token via Supabase fallback');
+            console.log(
+              '[NotificationService] Successfully registered push token via Supabase fallback'
+            );
           }
-          return
+          return;
         }
       } catch {}
       // As a last resort, cache and retry later so the user isn't blocked
       try {
-        const pendingStr = await AsyncStorage.getItem(PENDING_PUSH_TOKENS_KEY)
-        let pending: { token: string, deviceId?: string }[] = []
+        const pendingStr = await AsyncStorage.getItem(PENDING_PUSH_TOKENS_KEY);
+        let pending: { token: string; deviceId?: string }[] = [];
         if (pendingStr) {
           try {
-            const candidate = JSON.parse(pendingStr)
-            pending = this.parsePendingPushTokens(candidate)
+            const candidate = JSON.parse(pendingStr);
+            pending = this.parsePendingPushTokens(candidate);
           } catch {
-            pending = []
+            pending = [];
           }
         }
-        pending.push({ token, deviceId })
-        await AsyncStorage.setItem(PENDING_PUSH_TOKENS_KEY, JSON.stringify(pending))
+        pending.push({ token, deviceId });
+        await AsyncStorage.setItem(PENDING_PUSH_TOKENS_KEY, JSON.stringify(pending));
         if (__DEV__) {
           console.log('[NotificationService] Cached push token for later registration');
         }
@@ -363,7 +395,11 @@ export class NotificationService {
    * Returns true when the token was persisted, false otherwise so the caller
    * can cache it for a later retry.
    */
-  private async savePushTokenViaSupabase(userId: string, token: string, deviceId?: string): Promise<boolean> {
+  private async savePushTokenViaSupabase(
+    userId: string,
+    token: string,
+    deviceId?: string
+  ): Promise<boolean> {
     const platform = Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : undefined;
     const ownerColumns: Array<'profile_id' | 'user_id'> = ['profile_id', 'user_id'];
     for (const ownerColumn of ownerColumns) {
@@ -376,9 +412,7 @@ export class NotificationService {
         };
         if (platform) row.platform = platform;
 
-        const { error } = await supabase
-          .from('push_tokens')
-          .upsert(row, { onConflict: 'token' });
+        const { error } = await supabase.from('push_tokens').upsert(row, { onConflict: 'token' });
 
         if (!error) return true;
         // If this owner column does not exist in the current schema, try the next candidate.
@@ -394,7 +428,9 @@ export class NotificationService {
 
   async fetchNotifications(limit: number = 50, offset: number = 0): Promise<Notification[]> {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session?.access_token) {
         return [];
       }
@@ -409,10 +445,13 @@ export class NotificationService {
             .eq('user_id', userId)
             .order('created_at', { ascending: false })
             .range(offset, offset + limit - 1);
-          
+
           if (!sbErr && data) {
             this.cachedNotifications = data as any;
-            await AsyncStorage.setItem(NOTIFICATION_CACHE_KEY, JSON.stringify(this.cachedNotifications));
+            await AsyncStorage.setItem(
+              NOTIFICATION_CACHE_KEY,
+              JSON.stringify(this.cachedNotifications)
+            );
             await AsyncStorage.setItem(LAST_FETCH_KEY, new Date().toISOString());
             return this.cachedNotifications;
           }
@@ -429,7 +468,7 @@ export class NotificationService {
       const response = await fetchWithApiFallback(url.replace(API_BASE_URL, ''), {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${session.access_token}`,
         },
         // Let network stack handle timeouts naturally
       });
@@ -442,7 +481,9 @@ export class NotificationService {
           }
         } else {
           const text = await safeReadResponseText(response);
-          console.error(`Failed to fetch notifications. URL=${url} status=${response.status} body=${text}`);
+          console.error(
+            `Failed to fetch notifications. URL=${url} status=${response.status} body=${text}`
+          );
         }
         // Return cached notifications instead of throwing
         return this.getCachedNotifications();
@@ -450,7 +491,7 @@ export class NotificationService {
 
       const data = await response.json();
       this.cachedNotifications = data.notifications || [];
-      
+
       // Cache notifications locally
       await AsyncStorage.setItem(NOTIFICATION_CACHE_KEY, JSON.stringify(this.cachedNotifications));
       await AsyncStorage.setItem(LAST_FETCH_KEY, new Date().toISOString());
@@ -492,7 +533,9 @@ export class NotificationService {
    */
   async getUnreadCount(): Promise<number> {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session?.access_token) {
         return 0;
       }
@@ -506,7 +549,7 @@ export class NotificationService {
             .select('*', { count: 'exact', head: true })
             .eq('user_id', userId)
             .eq('read', false);
-          
+
           if (!sbErr && typeof count === 'number') {
             this.unreadCount = count;
             return this.unreadCount;
@@ -524,7 +567,7 @@ export class NotificationService {
       const response = await fetchWithApiFallback(url.replace(API_BASE_URL, ''), {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${session.access_token}`,
         },
         // Let network stack handle timeouts naturally
       });
@@ -537,7 +580,9 @@ export class NotificationService {
           }
         } else {
           const text = await safeReadResponseText(response);
-          console.error(`Failed to fetch unread count. URL=${url} status=${response.status} body=${text}`);
+          console.error(
+            `Failed to fetch unread count. URL=${url} status=${response.status} body=${text}`
+          );
         }
         return this.unreadCount; // Return cached value instead of throwing
       }
@@ -563,25 +608,29 @@ export class NotificationService {
    */
   async markAsRead(notificationIds: string[]): Promise<void> {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session?.access_token) {
         return;
       }
 
-      const url = `${API_BASE_URL}/notifications/mark-read`
+      const url = `${API_BASE_URL}/notifications/mark-read`;
       const response = await fetchWithApiFallback(url.replace(API_BASE_URL, ''), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({ notificationIds }),
       });
 
       if (!response.ok) {
-        const text = await safeReadResponseText(response)
-        console.error(`Failed to mark notifications as read. URL=${url} status=${response.status} body=${text}`)
-        throw new Error('Failed to mark notifications as read')
+        const text = await safeReadResponseText(response);
+        console.error(
+          `Failed to mark notifications as read. URL=${url} status=${response.status} body=${text}`
+        );
+        throw new Error('Failed to mark notifications as read');
       }
 
       // Update local cache
@@ -602,24 +651,28 @@ export class NotificationService {
    */
   async markAllAsRead(): Promise<void> {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session?.access_token) {
         return;
       }
 
-      const url = `${API_BASE_URL}/notifications/mark-all-read`
+      const url = `${API_BASE_URL}/notifications/mark-all-read`;
       const response = await fetchWithApiFallback(url.replace(API_BASE_URL, ''), {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${session.access_token}`,
         },
         // Let network stack handle timeouts naturally
       });
 
       if (!response.ok) {
-        const text = await safeReadResponseText(response)
-        console.error(`Failed to mark all notifications as read. URL=${url} status=${response.status} body=${text}`)
-        throw new Error('Failed to mark all notifications as read')
+        const text = await safeReadResponseText(response);
+        console.error(
+          `Failed to mark all notifications as read. URL=${url} status=${response.status} body=${text}`
+        );
+        throw new Error('Failed to mark all notifications as read');
       }
 
       // Update local cache
@@ -633,13 +686,22 @@ export class NotificationService {
       console.error('Error marking all notifications as read:', error);
       // Best-effort Supabase fallback
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const userId = session?.user?.id
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const userId = session?.user?.id;
         if (userId) {
-          await supabase.from('notifications').update({ read: true }).eq('user_id', userId).eq('read', false)
-          this.cachedNotifications = this.cachedNotifications.map(n => ({ ...n, read: true }))
-          await AsyncStorage.setItem(NOTIFICATION_CACHE_KEY, JSON.stringify(this.cachedNotifications));
-          this.unreadCount = 0
+          await supabase
+            .from('notifications')
+            .update({ read: true })
+            .eq('user_id', userId)
+            .eq('read', false);
+          this.cachedNotifications = this.cachedNotifications.map(n => ({ ...n, read: true }));
+          await AsyncStorage.setItem(
+            NOTIFICATION_CACHE_KEY,
+            JSON.stringify(this.cachedNotifications)
+          );
+          this.unreadCount = 0;
         }
       } catch {}
     }
@@ -656,32 +718,40 @@ export class NotificationService {
 
     // If still unavailable (web or simulator), return a no-op subscription
     if (!Notifications || typeof Notifications.addNotificationReceivedListener !== 'function') {
-      return { receivedSubscription: NOOP_SUBSCRIPTION, responseSubscription: NOOP_SUBSCRIPTION, remove: () => {} };
+      return {
+        receivedSubscription: NOOP_SUBSCRIPTION,
+        responseSubscription: NOOP_SUBSCRIPTION,
+        remove: () => {},
+      };
     }
 
     // Listener for notifications received while app is in foreground
-    const receivedSubscription = Notifications.addNotificationReceivedListener((notification: any) => {
-      if (onNotificationReceived) {
-        onNotificationReceived(notification);
+    const receivedSubscription = Notifications.addNotificationReceivedListener(
+      (notification: any) => {
+        if (onNotificationReceived) {
+          onNotificationReceived(notification);
+        }
+        // Refresh notifications and sync badge count
+        this.fetchNotifications();
+        this.syncBadgeCount();
       }
-      // Refresh notifications and sync badge count
-      this.fetchNotifications();
-      this.syncBadgeCount();
-    });
+    );
 
     // Listener for when user taps on a notification
-    const responseSubscription = Notifications.addNotificationResponseReceivedListener((response: any) => {
-      if (onNotificationTapped) {
-        onNotificationTapped(response);
+    const responseSubscription = Notifications.addNotificationResponseReceivedListener(
+      (response: any) => {
+        if (onNotificationTapped) {
+          onNotificationTapped(response);
+        }
       }
-    });
+    );
 
     return {
       receivedSubscription,
       responseSubscription,
       remove: () => {
-        receivedSubscription.remove();
-        responseSubscription.remove();
+        safeCleanup(receivedSubscription);
+        safeCleanup(responseSubscription);
       },
     };
   }
@@ -735,13 +805,16 @@ export class NotificationService {
       let token: string | null = null;
       try {
         const projectId = Constants.expoConfig?.extra?.eas?.projectId as string | undefined;
-        token = (await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined)).data;
+        token = (await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined))
+          .data;
       } catch {
         return;
       }
       if (!token) return;
 
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session?.access_token) return;
 
       const url = `${API_BASE_URL}/notifications/token`;
@@ -750,7 +823,7 @@ export class NotificationService {
           method: 'DELETE',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
+            Authorization: `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({ token }),
         });
@@ -779,23 +852,25 @@ export class NotificationService {
    */
   private async flushPendingPushTokens() {
     try {
-      const str = await AsyncStorage.getItem(PENDING_PUSH_TOKENS_KEY)
-      if (!str) return
-      let pending: { token: string, deviceId?: string }[] = []
+      const str = await AsyncStorage.getItem(PENDING_PUSH_TOKENS_KEY);
+      if (!str) return;
+      let pending: { token: string; deviceId?: string }[] = [];
       try {
-        const candidate = JSON.parse(str)
+        const candidate = JSON.parse(str);
         if (!Array.isArray(candidate)) {
-          await AsyncStorage.removeItem(PENDING_PUSH_TOKENS_KEY)
-          return
+          await AsyncStorage.removeItem(PENDING_PUSH_TOKENS_KEY);
+          return;
         }
-        pending = this.parsePendingPushTokens(candidate)
+        pending = this.parsePendingPushTokens(candidate);
       } catch {
-        await AsyncStorage.removeItem(PENDING_PUSH_TOKENS_KEY)
-        return
+        await AsyncStorage.removeItem(PENDING_PUSH_TOKENS_KEY);
+        return;
       }
-      await AsyncStorage.removeItem(PENDING_PUSH_TOKENS_KEY)
+      await AsyncStorage.removeItem(PENDING_PUSH_TOKENS_KEY);
       for (const p of pending) {
-        try { await this.registerPushToken(p.token, p.deviceId) } catch {}
+        try {
+          await this.registerPushToken(p.token, p.deviceId);
+        } catch {}
       }
     } catch {}
   }
@@ -804,18 +879,18 @@ export class NotificationService {
    * Parse and validate cached pending push token entries from AsyncStorage.
    * Keeps only records with a non-empty token and an optional string deviceId.
    */
-  private parsePendingPushTokens(value: unknown): { token: string, deviceId?: string }[] {
-    if (!Array.isArray(value)) return []
-    return value.filter((item): item is { token: string, deviceId?: string } => {
-      if (!item || typeof item !== 'object') return false
-      const tokenValue = (item as any).token
-      const deviceIdValue = (item as any).deviceId
+  private parsePendingPushTokens(value: unknown): { token: string; deviceId?: string }[] {
+    if (!Array.isArray(value)) return [];
+    return value.filter((item): item is { token: string; deviceId?: string } => {
+      if (!item || typeof item !== 'object') return false;
+      const tokenValue = (item as any).token;
+      const deviceIdValue = (item as any).deviceId;
       return (
         typeof tokenValue === 'string' &&
         tokenValue.length > 0 &&
         (deviceIdValue === undefined || typeof deviceIdValue === 'string')
-      )
-    })
+      );
+    });
   }
 
   /**
@@ -841,9 +916,7 @@ export class NotificationService {
       };
 
       // Insert notification directly into Supabase
-      const { error } = await supabase
-        .from('notifications')
-        .insert(notification);
+      const { error } = await supabase.from('notifications').insert(notification);
 
       if (error) {
         console.error('Error creating cancellation request notification:', error);
@@ -881,9 +954,7 @@ export class NotificationService {
       };
 
       // Insert notification directly into Supabase
-      const { error } = await supabase
-        .from('notifications')
-        .insert(notification);
+      const { error } = await supabase.from('notifications').insert(notification);
 
       if (error) {
         console.error('Error creating cancellation accepted notification:', error);
@@ -920,9 +991,7 @@ export class NotificationService {
       };
 
       // Insert notification directly into Supabase
-      const { error } = await supabase
-        .from('notifications')
-        .insert(notification);
+      const { error } = await supabase.from('notifications').insert(notification);
 
       if (error) {
         console.error('Error creating cancellation rejected notification:', error);

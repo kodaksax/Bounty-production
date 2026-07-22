@@ -1,11 +1,26 @@
 // Lazily require expo-notifications to avoid native import at module evaluation time
 import { useRouter } from 'expo-router';
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import {
+    createContext,
+    ReactNode,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { navigationIntent } from '../services/navigation-intent';
 import { notificationService } from '../services/notification-service';
 import { supabase } from '../supabase';
 import type { Notification } from '../types';
+import { safeCleanup } from '../utils/lifecycle';
+import {
+    resolveSupabaseAuthSubscription,
+    safeUnsubscribe,
+    SupabaseAuthSubscription,
+} from '../utils/supabase-subscription';
 let Notifications: any = null;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
@@ -51,7 +66,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       const fetchedNotifications = await notificationService.fetchNotifications();
       if (!isMountedRef.current) return;
       setNotifications(fetchedNotifications);
-      
+
       // Update unread count
       const count = fetchedNotifications.filter(n => !n.read).length;
       setUnreadCount(count);
@@ -77,15 +92,13 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const markAsRead = useCallback(async (notificationIds: string[]) => {
     try {
       await notificationService.markAsRead(notificationIds);
-      
+
       // Update local state
       if (!isMountedRef.current) return;
       setNotifications(prev =>
-        prev.map(notif =>
-          notificationIds.includes(notif.id) ? { ...notif, read: true } : notif
-        )
+        prev.map(notif => (notificationIds.includes(notif.id) ? { ...notif, read: true } : notif))
       );
-      
+
       // Update unread count
       setUnreadCount(prev => Math.max(0, prev - notificationIds.length));
     } catch (error) {
@@ -96,7 +109,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const markAllAsRead = useCallback(async () => {
     try {
       await notificationService.markAllAsRead();
-      
+
       if (!isMountedRef.current) return;
       // Update local state
       setNotifications(prev => prev.map(notif => ({ ...notif, read: true })));
@@ -107,22 +120,25 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Handle notification tap navigation
-  const handleNotificationTap = useCallback(async (response: any) => {
-    const data = response.notification.request.content.data;
-    
-    // Navigate based on notification type and data
-    if (data.bountyId) {
-      router.push(`/bounty/${data.bountyId}`);
-    } else if (data.conversationId && typeof data.conversationId === 'string') {
-      // Use navigation intent to pass the conversation ID to the messenger screen
-      await navigationIntent.setPendingConversationId(data.conversationId);
-      router.push('/tabs/bounty-app?screen=messages');
-    } else if (data.senderId) {
-      router.push(`/profile/${data.senderId}`);
-    } else if (data.followerId) {
-      router.push(`/profile/${data.followerId}`);
-    }
-  }, [router]);
+  const handleNotificationTap = useCallback(
+    async (response: any) => {
+      const data = response.notification.request.content.data;
+
+      // Navigate based on notification type and data
+      if (data.bountyId) {
+        router.push(`/bounty/${data.bountyId}`);
+      } else if (data.conversationId && typeof data.conversationId === 'string') {
+        // Use navigation intent to pass the conversation ID to the messenger screen
+        await navigationIntent.setPendingConversationId(data.conversationId);
+        router.push('/tabs/bounty-app?screen=messages');
+      } else if (data.senderId) {
+        router.push(`/profile/${data.senderId}`);
+      } else if (data.followerId) {
+        router.push(`/profile/${data.followerId}`);
+      }
+    },
+    [router]
+  );
 
   // Track whether initial notification has been handled to prevent duplicate navigation
   const initialNotificationHandled = useRef(false);
@@ -131,13 +147,19 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const checkInitialNotification = useCallback(async () => {
     // Prevent duplicate handling
     if (initialNotificationHandled.current) return;
-    
+
     try {
       if (!Notifications) {
         // try to require at runtime if not already loaded
-        try { Notifications = require('expo-notifications'); } catch { /* ignore */ }
+        try {
+          Notifications = require('expo-notifications');
+        } catch {
+          /* ignore */
+        }
       }
-      const response = Notifications ? await Notifications.getLastNotificationResponseAsync() : null;
+      const response = Notifications
+        ? await Notifications.getLastNotificationResponseAsync()
+        : null;
       if (response) {
         initialNotificationHandled.current = true;
         // Small delay to ensure router is ready
@@ -161,42 +183,58 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
     const handleAppStateChange = (nextState: AppStateStatus) => {
       if (lastAppState !== 'active' && nextState === 'active') {
-        notificationService.requestPermissionsAndRegisterToken().then((token) => {
-          if (__DEV__) {
-            console.log('[NotificationContext] foreground re-registration result:', token ?? 'no token (permissions denied or session missing)');
-          }
-        }).catch((error) => {
-          if (__DEV__) {
-            console.warn('[NotificationContext] foreground re-registration failed:', error);
-          }
-        });
+        notificationService
+          .requestPermissionsAndRegisterToken()
+          .then(token => {
+            if (__DEV__) {
+              console.log(
+                '[NotificationContext] foreground re-registration result:',
+                token ?? 'no token (permissions denied or session missing)'
+              );
+            }
+          })
+          .catch(error => {
+            if (__DEV__) {
+              console.warn('[NotificationContext] foreground re-registration failed:', error);
+            }
+          });
       }
       lastAppState = nextState;
     };
 
     const sub = AppState.addEventListener('change', handleAppStateChange);
-    return () => sub.remove();
+    return () => safeCleanup(sub);
   }, []);
 
   // Setup notification listeners and request permissions on mount
   useEffect(() => {
     // Request permissions and register token
-    notificationService.requestPermissionsAndRegisterToken().then((token) => {
-      if (__DEV__) {
-        console.log('[NotificationContext] mount registration result:', token ?? 'no token (permissions denied or session missing)');
-      }
-    }).catch((error) => {
-      if (__DEV__) {
-        console.warn('[NotificationContext] mount registration failed:', error);
-      }
-    });
+    notificationService
+      .requestPermissionsAndRegisterToken()
+      .then(token => {
+        if (__DEV__) {
+          console.log(
+            '[NotificationContext] mount registration result:',
+            token ?? 'no token (permissions denied or session missing)'
+          );
+        }
+      })
+      .catch(error => {
+        if (__DEV__) {
+          console.warn('[NotificationContext] mount registration failed:', error);
+        }
+      });
 
     // Check if app was opened from a notification
     checkInitialNotification();
 
     // Ensure Notifications is available when setting up listeners
     if (!Notifications) {
-      try { Notifications = require('expo-notifications'); } catch { /* ignore */ }
+      try {
+        Notifications = require('expo-notifications');
+      } catch {
+        /* ignore */
+      }
     }
 
     // Setup listeners
@@ -215,7 +253,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     fetchNotifications();
 
     return () => {
-      listeners.remove();
+      safeCleanup(listeners);
     };
   }, [fetchNotifications, refreshUnreadCount, handleNotificationTap, checkInitialNotification]);
 
@@ -223,12 +261,14 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   // can rebuild when it changes.
   useEffect(() => {
     let cancelled = false;
+    let cleanupRequested = false;
+    let authSubscription: SupabaseAuthSubscription | undefined;
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!cancelled) setUserId(session?.user?.id ?? null);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const ret = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
         setUserId(null);
       } else if (session?.user?.id) {
@@ -236,9 +276,23 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       }
     });
 
+    resolveSupabaseAuthSubscription(
+      ret,
+      resolvedSubscription => {
+        authSubscription = resolvedSubscription;
+        if (cleanupRequested) {
+          safeUnsubscribe(authSubscription);
+        }
+      },
+      error => {
+        console.error('[NotificationContext] Failed to register auth listener:', error);
+      }
+    );
+
     return () => {
       cancelled = true;
-      subscription.unsubscribe();
+      cleanupRequested = true;
+      safeUnsubscribe(authSubscription);
     };
   }, []);
 
@@ -251,7 +305,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   // never get associated with the new one) until the app is restarted.
   useEffect(() => {
     if (!userId) return;
-    notificationService.requestPermissionsAndRegisterToken().catch((error) => {
+    notificationService.requestPermissionsAndRegisterToken().catch(error => {
       if (__DEV__) {
         console.warn('[NotificationContext] re-registration on user change failed:', error);
       }
@@ -270,7 +324,12 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       .channel(`notifications:${userId}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${userId}`,
+        },
         () => {
           try {
             fetchNotifications();
@@ -280,23 +339,23 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           }
         }
       )
-      .subscribe((status) => {
+      .subscribe(status => {
         realtimeConnectedRef.current = status === 'SUBSCRIBED';
       });
 
     return () => {
       realtimeConnectedRef.current = false;
-      try {
-        supabase.removeChannel(channel);
-      } catch {
+      void supabase.removeChannel(channel).catch(() => {
         // best-effort cleanup
-      }
+      });
     };
   }, [userId, fetchNotifications, refreshUnreadCount]);
 
   // Track mounted state to prevent setState after unmount
   useEffect(() => {
-    return () => { isMountedRef.current = false; };
+    return () => {
+      isMountedRef.current = false;
+    };
   }, []);
 
   // Fallback poll for unread count. Now that the realtime channel above is
@@ -315,12 +374,16 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
     // Register interval for test cleanup
     if (process.env.NODE_ENV === 'test') {
-      const _i = interval as any
+      const _i = interval as any;
       if (typeof _i?.unref === 'function') {
-        try { _i.unref(); } catch { /* ignore */ }
+        try {
+          _i.unref();
+        } catch {
+          /* ignore */
+        }
       }
-      ;(globalThis as any).__BACKGROUND_INTERVALS = (globalThis as any).__BACKGROUND_INTERVALS || []
-      ;(globalThis as any).__BACKGROUND_INTERVALS.push(interval)
+      (globalThis as any).__BACKGROUND_INTERVALS = (globalThis as any).__BACKGROUND_INTERVALS || [];
+      (globalThis as any).__BACKGROUND_INTERVALS.push(interval);
     }
 
     return () => {
@@ -343,14 +406,18 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       markAllAsRead,
       refreshUnreadCount,
     }),
-    [notifications, unreadCount, loading, fetchNotifications, markAsRead, markAllAsRead, refreshUnreadCount]
+    [
+      notifications,
+      unreadCount,
+      loading,
+      fetchNotifications,
+      markAsRead,
+      markAllAsRead,
+      refreshUnreadCount,
+    ]
   );
 
-  return (
-    <NotificationContext.Provider value={value}>
-      {children}
-    </NotificationContext.Provider>
-  );
+  return <NotificationContext.Provider value={value}>{children}</NotificationContext.Provider>;
 }
 
 export function useNotifications() {

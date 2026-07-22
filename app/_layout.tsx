@@ -1,5 +1,4 @@
-import { ThemeProvider } from "components/theme-provider";
-import { AppThemeProvider, useAppThemeContext } from '../lib/themes/AppThemeContext';
+import { ThemeProvider } from 'components/theme-provider';
 import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
 import * as Linking from 'expo-linking';
@@ -13,17 +12,20 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import '../global.css';
 import { useAuthContext } from '../hooks/use-auth-context';
 import { useSessionMonitor } from '../hooks/useSessionMonitor';
-import { AdminProvider } from '../lib/admin-context'
+import { AdminProvider } from '../lib/admin-context';
 import { BountyFormatProvider } from '../lib/bounty-format-context';
-import { COLORS } from "../lib/constants/accessibility";
+import { COLORS } from '../lib/constants/accessibility';
 import { BackgroundColorProvider, useBackgroundColor } from '../lib/context/BackgroundColorContext';
 import { NotificationProvider } from '../lib/context/notification-context';
 import { ErrorBoundary } from '../lib/error-boundary';
 import { analyticsService } from '../lib/services/analytics-service';
 import { StripeProvider } from '../lib/stripe-context';
+import { AppThemeProvider, useAppThemeContext } from '../lib/themes/AppThemeContext';
 import { WalletProvider } from '../lib/wallet-context';
+import { AppRuntimeProvider } from '../providers/app-runtime-provider';
 import AuthProvider from '../providers/auth-provider';
 import { NetworkProvider } from '../providers/network-provider';
+import { RuntimeReporters } from '../providers/runtime-reporters';
 import { WebSocketProvider } from '../providers/websocket-provider';
 import { hideNativeSplashSafely, showNativeSplash } from './auth/splash';
 import {
@@ -36,6 +38,7 @@ import { getSentry as getSentryFromInit, initializeSentry } from '../lib/service
 // Initialize our global JS error handlers that log to device console (captured by Xcode/TestFlight)
 import { initGlobalErrorHandlers } from '../lib/error-handling';
 import posthog, { capture as posthogCapture } from '../lib/posthog';
+import { safeCleanup } from '../lib/utils/lifecycle';
 
 import { registerDeviceSession } from '../lib/services/auth-service';
 
@@ -94,7 +97,13 @@ const ThemeSyncer = () => {
   return null;
 };
 
-const RootFrame = ({ children, bgColor = COLORS.EMERALD_500 }: { children: React.ReactNode; bgColor?: string }) => {
+const RootFrame = ({
+  children,
+  bgColor = COLORS.EMERALD_500,
+}: {
+  children: React.ReactNode;
+  bgColor?: string;
+}) => {
   const insets = useSafeAreaInsets();
   const barStyle = getBarStyleForHex(bgColor);
 
@@ -153,8 +162,9 @@ const LayoutContent = () => {
           }
         }}
       >
-        <NetworkProvider>
-          <AuthProvider>
+        <AppRuntimeProvider>
+          <NetworkProvider>
+            <AuthProvider>
               <DeepLinkAnalyticsGate />
               <SessionMonitorGate />
               <AdminProvider>
@@ -162,6 +172,7 @@ const LayoutContent = () => {
                   <WalletProvider>
                     <NotificationProvider>
                       <WebSocketProvider>
+                        <RuntimeReporters />
                         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
                           <ThemeSyncer />
                           <View style={styles.inner}>
@@ -174,7 +185,8 @@ const LayoutContent = () => {
                 </StripeProvider>
               </AdminProvider>
             </AuthProvider>
-        </NetworkProvider>
+          </NetworkProvider>
+        </AppRuntimeProvider>
       </ErrorBoundary>
     </RootFrame>
   );
@@ -369,9 +381,11 @@ function trackDeepLinkOpen(url: string | null) {
 // (getInitialURL) and any link opened while the app is already running.
 const DeepLinkAnalyticsGate = () => {
   useEffect(() => {
-    Linking.getInitialURL().then(trackDeepLinkOpen).catch(() => {});
+    Linking.getInitialURL()
+      .then(trackDeepLinkOpen)
+      .catch(() => {});
     const subscription = Linking.addEventListener('url', ({ url }) => trackDeepLinkOpen(url));
-    return () => subscription.remove();
+    return () => safeCleanup(subscription);
   }, []);
 
   return null;
@@ -385,7 +399,11 @@ const SessionMonitorGate = () => {
   // Register device when logged in
   useEffect(() => {
     if (isLoggedIn) {
-      registerDeviceSession();
+      void registerDeviceSession().catch(error => {
+        if (__DEV__) {
+          console.warn('[SessionMonitorGate] registerDeviceSession failed:', error);
+        }
+      });
     }
   }, [isLoggedIn]);
 

@@ -11,7 +11,15 @@
  * event-triggered moments (see registry.ts).
  */
 import { useRouter } from 'expo-router';
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import {
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import { useAuthContext } from '../hooks/use-auth-context';
 import { useAuthProfile } from '../hooks/useAuthProfile';
@@ -22,17 +30,17 @@ import { momentsService } from '../lib/moments/momentsService';
 import { referralService } from '../lib/moments/referral-service';
 import { MOMENT_REGISTRY } from '../lib/moments/registry';
 import {
-  evaluateReturningUser,
-  getSessionCount,
-  incrementSessionCount,
-  shouldRecordSession,
+    evaluateReturningUser,
+    getSessionCount,
+    incrementSessionCount,
+    shouldRecordSession,
 } from '../lib/moments/sessionTracking';
 import type {
-  MomentContent,
-  MomentContext as MomentCtx,
-  MomentDefinition,
-  MomentState,
-  MomentType,
+    MomentContent,
+    MomentContext as MomentCtx,
+    MomentDefinition,
+    MomentState,
+    MomentType,
 } from '../lib/moments/types';
 import { analyticsService } from '../lib/services/analytics-service';
 import { locationService } from '../lib/services/location-service';
@@ -88,8 +96,12 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
   const userId = session?.user?.id ?? null;
 
   const [states, setStates] = useState<Map<MomentType, MomentState>>(new Map());
-  const [notifPermission, setNotifPermission] = useState<'granted' | 'denied' | 'undetermined'>('undetermined');
-  const [locPermission, setLocPermission] = useState<'granted' | 'denied' | 'undetermined'>('undetermined');
+  const [notifPermission, setNotifPermission] = useState<'granted' | 'denied' | 'undetermined'>(
+    'undetermined'
+  );
+  const [locPermission, setLocPermission] = useState<'granted' | 'denied' | 'undetermined'>(
+    'undetermined'
+  );
   const [sessionCount, setSessionCount] = useState(0);
   const [activeMoment, setActiveMoment] = useState<MomentDefinition | null>(null);
   const [activeContent, setActiveContent] = useState<MomentContent | null>(null);
@@ -177,8 +189,11 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
    * actually stays resolved for the rest of the session.
    */
   const patchState = useCallback(
-    (momentType: MomentType, patch: Partial<MomentState> | ((existing: MomentState) => Partial<MomentState>)) => {
-      setStates((prev) => {
+    (
+      momentType: MomentType,
+      patch: Partial<MomentState> | ((existing: MomentState) => Partial<MomentState>)
+    ) => {
+      setStates(prev => {
         const next = new Map(prev);
         const existing: MomentState = next.get(momentType) ?? {
           momentType,
@@ -206,7 +221,7 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
     const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
       if (next === 'active') refresh();
     });
-    return () => sub.remove();
+    return () => sub?.remove?.();
   }, [refresh]);
 
   const buildContext = useCallback((): MomentCtx | null => {
@@ -251,13 +266,20 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
         // after having dismissed/snoozed the prompt. Keeps the persisted
         // status an accurate "completed" rather than stuck on whatever it
         // last was.
-        if (state && state.status !== 'completed' && state.status !== 'expired' && def.checkCompleted?.(ctx)) {
+        if (
+          state &&
+          state.status !== 'completed' &&
+          state.status !== 'expired' &&
+          def.checkCompleted?.(ctx)
+        ) {
           await momentsService.markCompleted(userId, def.type);
           patchState(def.type, { status: 'completed', completedAt: new Date().toISOString() });
           analyticsService.trackEvent('moment_completed', {
             momentType: def.type,
             source: 'auto_detected',
-            msSinceShown: state.lastShownAt ? Date.now() - new Date(state.lastShownAt).getTime() : undefined,
+            msSinceShown: state.lastShownAt
+              ? Date.now() - new Date(state.lastShownAt).getTime()
+              : undefined,
           });
           continue;
         }
@@ -292,10 +314,13 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
     }
 
     const next = evaluateNextMoment(ctx, states);
-    setActiveMoment((prev) => {
+    setActiveMoment(prev => {
       if (prev?.type === next?.type) return prev;
       if (next) {
-        analyticsService.trackEvent('moment_queued', { momentType: next.type, priority: next.priority });
+        analyticsService.trackEvent('moment_queued', {
+          momentType: next.type,
+          priority: next.priority,
+        });
         setActiveContent(next.content(ctx));
       } else {
         setActiveContent(null);
@@ -309,7 +334,7 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
     if (!activeMoment || !userId) return;
     shownAtRef.current = Date.now();
     const now = new Date().toISOString();
-    patchState(activeMoment.type, (existing) => ({
+    patchState(activeMoment.type, existing => ({
       status: 'shown',
       shownCount: existing.shownCount + 1,
       firstShownAt: existing.firstShownAt ?? now,
@@ -368,7 +393,7 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
       // (not just 'shown'), so finishing the flow still resolves it early.
       const startedAt = new Date().toISOString();
       const snoozedUntil = new Date(Date.now() + def.cooldownHours * 60 * 60 * 1000).toISOString();
-      patchState(def.type, (existing) => ({
+      patchState(def.type, existing => ({
         status: 'snoozed',
         snoozedUntil,
         metadata: { ...existing.metadata, startedAt: existing.metadata?.startedAt ?? startedAt },
@@ -390,7 +415,10 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
         msSinceShown: shownAtRef.current ? Date.now() - shownAtRef.current : undefined,
       });
     } else {
-      analyticsService.trackEvent('moment_skipped', { momentType: def.type, reason: 'inline_action_failed' });
+      analyticsService.trackEvent('moment_skipped', {
+        momentType: def.type,
+        reason: 'inline_action_failed',
+      });
     }
     await refresh();
   }, [activeMoment, userId, router, refresh, patchState]);

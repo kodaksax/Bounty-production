@@ -1,6 +1,7 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
-import { Animated, AccessibilityInfo, Easing } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, Animated, Easing } from 'react-native';
 import { A11Y } from '../lib/constants/accessibility';
+import { safeCleanup } from '../lib/utils/lifecycle';
 
 /**
  * Hook that provides animation utilities that respect reduced motion preferences.
@@ -22,63 +23,68 @@ export function useAccessibleAnimation() {
 
     const subscription = AccessibilityInfo.addEventListener(
       'reduceMotionChanged',
-      (reduceMotionEnabled) => {
+      reduceMotionEnabled => {
         setPrefersReducedMotion(reduceMotionEnabled);
       }
     );
 
     return () => {
-      subscription?.remove();
+      safeCleanup(subscription);
     };
   }, []);
 
   /**
    * Get animation duration that respects reduced motion preference
    */
-  const getAnimationDuration = useCallback((duration: number): number => {
-    return prefersReducedMotion ? 0 : duration;
-  }, [prefersReducedMotion]);
+  const getAnimationDuration = useCallback(
+    (duration: number): number => {
+      return prefersReducedMotion ? 0 : duration;
+    },
+    [prefersReducedMotion]
+  );
 
   /**
    * Create a timing animation with reduced motion support
    */
-  const createTiming = useCallback((
-    value: Animated.Value,
-    toValue: number,
-    duration: number = A11Y.ANIMATION_NORMAL,
-    easing: (value: number) => number = Easing.inOut(Easing.ease)
-  ) => {
-    return Animated.timing(value, {
-      toValue,
-      duration: getAnimationDuration(duration),
-      easing,
-      useNativeDriver: true,
-    });
-  }, [getAnimationDuration]);
+  const createTiming = useCallback(
+    (
+      value: Animated.Value,
+      toValue: number,
+      duration: number = A11Y.ANIMATION_NORMAL,
+      easing: (value: number) => number = Easing.inOut(Easing.ease)
+    ) => {
+      return Animated.timing(value, {
+        toValue,
+        duration: getAnimationDuration(duration),
+        easing,
+        useNativeDriver: true,
+      });
+    },
+    [getAnimationDuration]
+  );
 
   /**
    * Create a spring animation with reduced motion support
    */
-  const createSpring = useCallback((
-    value: Animated.Value,
-    toValue: number,
-    config?: Partial<Animated.SpringAnimationConfig>
-  ) => {
-    if (prefersReducedMotion) {
-      return Animated.timing(value, {
+  const createSpring = useCallback(
+    (value: Animated.Value, toValue: number, config?: Partial<Animated.SpringAnimationConfig>) => {
+      if (prefersReducedMotion) {
+        return Animated.timing(value, {
+          toValue,
+          duration: 0,
+          useNativeDriver: true,
+        });
+      }
+      return Animated.spring(value, {
         toValue,
-        duration: 0,
         useNativeDriver: true,
+        tension: 300,
+        friction: 20,
+        ...config,
       });
-    }
-    return Animated.spring(value, {
-      toValue,
-      useNativeDriver: true,
-      tension: 300,
-      friction: 20,
-      ...config,
-    });
-  }, [prefersReducedMotion]);
+    },
+    [prefersReducedMotion]
+  );
 
   return {
     prefersReducedMotion,
@@ -120,17 +126,23 @@ export function useFadeAnimation(initialValue: number = 0) {
   const fadeValue = useRef(new Animated.Value(initialValue)).current;
   const { createTiming } = useAccessibleAnimation();
 
-  const fadeIn = useCallback((duration: number = A11Y.ANIMATION_NORMAL) => {
-    return new Promise<void>((resolve) => {
-      createTiming(fadeValue, 1, duration).start(() => resolve());
-    });
-  }, [fadeValue, createTiming]);
+  const fadeIn = useCallback(
+    (duration: number = A11Y.ANIMATION_NORMAL) => {
+      return new Promise<void>(resolve => {
+        createTiming(fadeValue, 1, duration).start(() => resolve());
+      });
+    },
+    [fadeValue, createTiming]
+  );
 
-  const fadeOut = useCallback((duration: number = A11Y.ANIMATION_NORMAL) => {
-    return new Promise<void>((resolve) => {
-      createTiming(fadeValue, 0, duration).start(() => resolve());
-    });
-  }, [fadeValue, createTiming]);
+  const fadeOut = useCallback(
+    (duration: number = A11Y.ANIMATION_NORMAL) => {
+      return new Promise<void>(resolve => {
+        createTiming(fadeValue, 0, duration).start(() => resolve());
+      });
+    },
+    [fadeValue, createTiming]
+  );
 
   return {
     fadeValue,
@@ -150,25 +162,31 @@ export function useSlideAnimation(
   const slideValue = useRef(new Animated.Value(distance)).current;
   const { createTiming, prefersReducedMotion } = useAccessibleAnimation();
 
-  const slideIn = useCallback((duration: number = A11Y.ANIMATION_NORMAL) => {
-    if (prefersReducedMotion) {
-      slideValue.setValue(0);
-      return Promise.resolve();
-    }
-    return new Promise<void>((resolve) => {
-      createTiming(slideValue, 0, duration).start(() => resolve());
-    });
-  }, [slideValue, createTiming, prefersReducedMotion]);
+  const slideIn = useCallback(
+    (duration: number = A11Y.ANIMATION_NORMAL) => {
+      if (prefersReducedMotion) {
+        slideValue.setValue(0);
+        return Promise.resolve();
+      }
+      return new Promise<void>(resolve => {
+        createTiming(slideValue, 0, duration).start(() => resolve());
+      });
+    },
+    [slideValue, createTiming, prefersReducedMotion]
+  );
 
-  const slideOut = useCallback((duration: number = A11Y.ANIMATION_NORMAL) => {
-    if (prefersReducedMotion) {
-      slideValue.setValue(distance);
-      return Promise.resolve();
-    }
-    return new Promise<void>((resolve) => {
-      createTiming(slideValue, distance, duration).start(() => resolve());
-    });
-  }, [slideValue, createTiming, distance, direction, prefersReducedMotion]);
+  const slideOut = useCallback(
+    (duration: number = A11Y.ANIMATION_NORMAL) => {
+      if (prefersReducedMotion) {
+        slideValue.setValue(distance);
+        return Promise.resolve();
+      }
+      return new Promise<void>(resolve => {
+        createTiming(slideValue, distance, duration).start(() => resolve());
+      });
+    },
+    [slideValue, createTiming, distance, direction, prefersReducedMotion]
+  );
 
   const getTransformStyle = useCallback(() => {
     switch (direction) {
@@ -196,41 +214,44 @@ export function useSlideAnimation(
 /**
  * Hook for combined fade + slide animations (common for list items)
  */
-export function useFadeSlideAnimation(
-  direction: 'up' | 'down' = 'up',
-  distance: number = 10
-) {
+export function useFadeSlideAnimation(direction: 'up' | 'down' = 'up', distance: number = 10) {
   const fadeValue = useRef(new Animated.Value(0)).current;
   const slideValue = useRef(new Animated.Value(distance)).current;
   const { createTiming, prefersReducedMotion } = useAccessibleAnimation();
 
-  const animateIn = useCallback((duration: number = A11Y.ANIMATION_NORMAL) => {
-    if (prefersReducedMotion) {
-      fadeValue.setValue(1);
-      slideValue.setValue(0);
-      return Promise.resolve();
-    }
-    return new Promise<void>((resolve) => {
-      Animated.parallel([
-        createTiming(fadeValue, 1, duration),
-        createTiming(slideValue, 0, duration),
-      ]).start(() => resolve());
-    });
-  }, [fadeValue, slideValue, createTiming, prefersReducedMotion]);
+  const animateIn = useCallback(
+    (duration: number = A11Y.ANIMATION_NORMAL) => {
+      if (prefersReducedMotion) {
+        fadeValue.setValue(1);
+        slideValue.setValue(0);
+        return Promise.resolve();
+      }
+      return new Promise<void>(resolve => {
+        Animated.parallel([
+          createTiming(fadeValue, 1, duration),
+          createTiming(slideValue, 0, duration),
+        ]).start(() => resolve());
+      });
+    },
+    [fadeValue, slideValue, createTiming, prefersReducedMotion]
+  );
 
-  const animateOut = useCallback((duration: number = A11Y.ANIMATION_FAST) => {
-    if (prefersReducedMotion) {
-      fadeValue.setValue(0);
-      slideValue.setValue(distance);
-      return Promise.resolve();
-    }
-    return new Promise<void>((resolve) => {
-      Animated.parallel([
-        createTiming(fadeValue, 0, duration),
-        createTiming(slideValue, distance, duration),
-      ]).start(() => resolve());
-    });
-  }, [fadeValue, slideValue, createTiming, distance, prefersReducedMotion]);
+  const animateOut = useCallback(
+    (duration: number = A11Y.ANIMATION_FAST) => {
+      if (prefersReducedMotion) {
+        fadeValue.setValue(0);
+        slideValue.setValue(distance);
+        return Promise.resolve();
+      }
+      return new Promise<void>(resolve => {
+        Animated.parallel([
+          createTiming(fadeValue, 0, duration),
+          createTiming(slideValue, distance, duration),
+        ]).start(() => resolve());
+      });
+    },
+    [fadeValue, slideValue, createTiming, distance, prefersReducedMotion]
+  );
 
   return {
     fadeValue,
@@ -246,3 +267,4 @@ export function useFadeSlideAnimation(
 
 // Re-export constants for convenience
 export { A11Y };
+

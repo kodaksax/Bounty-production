@@ -1,10 +1,11 @@
 import NetInfo from '@react-native-community/netinfo';
 import { Session } from '@supabase/supabase-js';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { logClientError, logClientInfo } from '../lib/services/monitoring';
 import { wsAdapter } from '../lib/services/websocket-adapter';
 import { supabase } from '../lib/supabase';
+import { safeCleanup } from '../lib/utils/lifecycle';
 import { waitForAuthEvent as waitForAuthEventShared } from '../lib/utils/supabase-auth';
 
 export interface WebSocketState {
@@ -15,7 +16,7 @@ export interface WebSocketState {
 
 /**
  * Hook to manage WebSocket connection lifecycle
- * 
+ *
  * Features:
  * - Auto-connect on mount (when authenticated)
  * - Auto-reconnect on network changes
@@ -23,6 +24,7 @@ export interface WebSocketState {
  * - Clean disconnect on unmount
  */
 export function useWebSocket() {
+  const mountedRef = useRef(true);
   const [state, setState] = useState<WebSocketState>({
     isConnected: false,
     connectionState: 'CLOSED',
@@ -30,6 +32,7 @@ export function useWebSocket() {
   });
 
   const updateState = useCallback(() => {
+    if (!mountedRef.current) return;
     setState({
       isConnected: wsAdapter.isConnected(),
       connectionState: wsAdapter.getConnectionState(),
@@ -78,6 +81,8 @@ export function useWebSocket() {
   }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
+
     // Set up event listeners
     const verboseClient = process.env.EXPO_PUBLIC_LOG_CLIENT_VERBOSE === '1';
     const unsubscribeConnect = wsAdapter.on('connect', () => {
@@ -90,7 +95,7 @@ export function useWebSocket() {
       updateState();
     });
 
-    const unsubscribeError = wsAdapter.on('error', (error) => {
+    const unsubscribeError = wsAdapter.on('error', error => {
       // Don't spam error logs in development when backend is unreachable
       if (!__DEV__ || verboseClient) {
         logClientError('WebSocket error', { error });
@@ -117,7 +122,7 @@ export function useWebSocket() {
     const appStateSubscription = AppState.addEventListener('change', handleAppStateChange);
 
     // Handle network state changes
-    const unsubscribeNetInfo = NetInfo.addEventListener((state) => {
+    const unsubscribeNetInfo = NetInfo.addEventListener(state => {
       if (state.isConnected && !wsAdapter.isConnected()) {
         logClientInfo('Network reconnected, reconnecting WebSocket');
         connect();
@@ -128,11 +133,12 @@ export function useWebSocket() {
 
     // Cleanup on unmount
     return () => {
+      mountedRef.current = false;
       unsubscribeConnect();
       unsubscribeDisconnect();
       unsubscribeError();
-      appStateSubscription.remove();
-      unsubscribeNetInfo();
+      safeCleanup(appStateSubscription);
+      safeCleanup(unsubscribeNetInfo);
       disconnect();
     };
   }, [connect, disconnect, updateState]);
@@ -148,12 +154,12 @@ export function useWebSocket() {
 // Helper to wait for auth state change that provides a session.
 // Exported for unit testing the timing-dependent behavior.
 export async function waitForAuthEvent(timeoutMs = 5000): Promise<Session | null> {
-  return waitForAuthEventShared(timeoutMs)
+  return waitForAuthEventShared(timeoutMs);
 }
 
 /**
  * Hook to listen for specific WebSocket events
- * 
+ *
  * Example:
  * ```
  * useWebSocketEvent('message.new', (data) => {
@@ -170,7 +176,7 @@ export function useWebSocketEvent(event: string, handler: (data: any) => void) {
 
 /**
  * Hook to manage conversation subscriptions
- * 
+ *
  * Automatically joins conversations and handles typing indicators
  */
 export function useConversationWebSocket(conversationId: string | null) {
@@ -183,15 +189,15 @@ export function useConversationWebSocket(conversationId: string | null) {
     wsAdapter.joinConversation(conversationId);
 
     // Listen for typing events
-    const unsubscribeTypingStart = wsAdapter.on('typing.start', (data) => {
+    const unsubscribeTypingStart = wsAdapter.on('typing.start', data => {
       if (data.conversationId === conversationId) {
-        setIsTyping((prev) => ({ ...prev, [data.senderId]: true }));
+        setIsTyping(prev => ({ ...prev, [data.senderId]: true }));
       }
     });
 
-    const unsubscribeTypingStop = wsAdapter.on('typing.stop', (data) => {
+    const unsubscribeTypingStop = wsAdapter.on('typing.stop', data => {
       if (data.conversationId === conversationId) {
-        setIsTyping((prev) => ({ ...prev, [data.senderId]: false }));
+        setIsTyping(prev => ({ ...prev, [data.senderId]: false }));
       }
     });
 

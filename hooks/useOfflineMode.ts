@@ -8,32 +8,33 @@
  * back to its own NetInfo subscription when used outside a provider.
  */
 
-import { useEffect, useState, useCallback } from 'react';
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { offlineQueueService } from '../lib/services/offline-queue-service';
-import { useOptionalNetworkContext, isDeviceOnline } from '../providers/network-provider';
+import { safeCleanup } from '../lib/utils/lifecycle';
+import { isDeviceOnline, useOptionalNetworkContext } from '../providers/network-provider';
 
 export interface OfflineMode {
   /**
    * Current online/offline status
    */
   isOnline: boolean;
-  
+
   /**
    * Whether we're currently checking connectivity
    */
   isChecking: boolean;
-  
+
   /**
    * Number of items queued for when we come back online
    */
   queuedItemsCount: number;
-  
+
   /**
    * Manually trigger a connectivity check
    */
   checkConnection: () => Promise<void>;
-  
+
   /**
    * Force process the offline queue
    */
@@ -42,16 +43,16 @@ export interface OfflineMode {
 
 /**
  * Hook to detect and manage offline mode
- * 
+ *
  * Features:
  * - Real-time online/offline detection
  * - Queue status monitoring
  * - Manual connectivity checks
- * 
+ *
  * @example
  * ```tsx
  * const { isOnline, queuedItemsCount } = useOfflineMode();
- * 
+ *
  * if (!isOnline) {
  *   return <OfflineBanner queuedItems={queuedItemsCount} />;
  * }
@@ -62,13 +63,19 @@ export function useOfflineMode(): OfflineMode {
   const [localIsOnline, setLocalIsOnline] = useState(true);
   const [isChecking, setIsChecking] = useState(false);
   const [queuedItemsCount, setQueuedItemsCount] = useState(0);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   // Derive online status from provider when available, otherwise use local state.
   // isDeviceOnline() treats isInternetReachable === false as offline (captive portals)
   // while treating null/unknown optimistically as online.
-  const isOnline = networkCtx
-    ? isDeviceOnline(networkCtx)
-    : localIsOnline;
+  const isOnline = networkCtx ? isDeviceOnline(networkCtx) : localIsOnline;
 
   // Update queued items count
   const updateQueueCount = useCallback(() => {
@@ -82,19 +89,25 @@ export function useOfflineMode(): OfflineMode {
   // Listen for network state changes — only subscribe when no provider is present
   useEffect(() => {
     if (networkCtx) return; // Provider handles subscriptions centrally
+    let isMounted = true;
 
     // Initial state check
     NetInfo.fetch().then((state: NetInfoState) => {
-      setLocalIsOnline(!!state.isConnected);
+      if (isMounted) {
+        setLocalIsOnline(!!state.isConnected);
+      }
     });
 
     // Subscribe to network state changes
     const unsubscribe = NetInfo.addEventListener((state: NetInfoState) => {
-      setLocalIsOnline(!!state.isConnected);
+      if (isMounted) {
+        setLocalIsOnline(!!state.isConnected);
+      }
     });
 
     return () => {
-      unsubscribe();
+      isMounted = false;
+      safeCleanup(unsubscribe);
     };
   }, [networkCtx]);
 
@@ -109,11 +122,7 @@ export function useOfflineMode(): OfflineMode {
     });
 
     return () => {
-      try {
-        unsubscribe();
-      } catch (error) {
-        // Ignore unsubscribe errors
-      }
+      safeCleanup(unsubscribe);
     };
   }, [updateQueueCount]);
 
@@ -130,8 +139,10 @@ export function useOfflineMode(): OfflineMode {
     setIsChecking(true);
     try {
       const state = await NetInfo.fetch();
-      setLocalIsOnline(!!state.isConnected);
-      
+      if (mountedRef.current) {
+        setLocalIsOnline(!!state.isConnected);
+      }
+
       // If online, try to process the queue
       if (state.isConnected) {
         offlineQueueService.processQueue();
@@ -139,7 +150,9 @@ export function useOfflineMode(): OfflineMode {
     } catch (error) {
       console.error('[useOfflineMode] Failed to check connection:', error);
     } finally {
-      setIsChecking(false);
+      if (mountedRef.current) {
+        setIsChecking(false);
+      }
     }
   }, [networkCtx]);
 
@@ -170,23 +183,27 @@ export function useIsOnline(): boolean {
 
   useEffect(() => {
     if (networkCtx) return; // Provider handles subscriptions centrally
+    let isMounted = true;
 
     // Initial state
     NetInfo.fetch().then((state: NetInfoState) => {
-      setLocalIsOnline(!!state.isConnected);
+      if (isMounted) {
+        setLocalIsOnline(!!state.isConnected);
+      }
     });
 
     // Subscribe to changes
     const unsubscribe = NetInfo.addEventListener((state: NetInfoState) => {
-      setLocalIsOnline(!!state.isConnected);
+      if (isMounted) {
+        setLocalIsOnline(!!state.isConnected);
+      }
     });
 
     return () => {
-      unsubscribe();
+      isMounted = false;
+      safeCleanup(unsubscribe);
     };
   }, [networkCtx]);
 
-  return networkCtx
-    ? isDeviceOnline(networkCtx)
-    : localIsOnline;
+  return networkCtx ? isDeviceOnline(networkCtx) : localIsOnline;
 }

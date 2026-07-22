@@ -15,63 +15,60 @@
  * the AppState listener is only registered once per mount.
  */
 
-import { useEffect, useRef } from 'react'
-import { AppState, AppStateStatus } from 'react-native'
+import { useEffect, useRef } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
+import { safeCleanup } from '../lib/utils/lifecycle';
 
 /** Default minimum time (ms) the app must be backgrounded before a refresh fires. */
-export const DEFAULT_MIN_BACKGROUND_MS = 30_000
+export const DEFAULT_MIN_BACKGROUND_MS = 30_000;
 
 export function useForegroundRefresh(
   onForeground: () => void,
   { minBackgroundMs = DEFAULT_MIN_BACKGROUND_MS }: { minBackgroundMs?: number } = {}
 ) {
-  const callbackRef = useRef(onForeground)
-  callbackRef.current = onForeground
+  const callbackRef = useRef(onForeground);
+  callbackRef.current = onForeground;
 
-  const minBackgroundMsRef = useRef(minBackgroundMs)
-  minBackgroundMsRef.current = minBackgroundMs
+  const minBackgroundMsRef = useRef(minBackgroundMs);
+  minBackgroundMsRef.current = minBackgroundMs;
 
   useEffect(() => {
-    let lastState: AppStateStatus = AppState?.currentState ?? 'active'
-    let backgroundedAt: number | null = null
+    let lastState: AppStateStatus = AppState?.currentState ?? 'active';
+    let backgroundedAt: number | null = null;
 
     const handleChange = (nextState: AppStateStatus) => {
       if (nextState === 'background' || nextState === 'inactive') {
         // Record when the app first left the foreground; 'inactive' → 'background'
         // transitions must not reset the timestamp.
         if (backgroundedAt === null) {
-          backgroundedAt = Date.now()
+          backgroundedAt = Date.now();
         }
       } else if (nextState === 'active' && lastState !== 'active') {
-        const elapsed = backgroundedAt === null ? 0 : Date.now() - backgroundedAt
-        backgroundedAt = null
+        const elapsed = backgroundedAt === null ? 0 : Date.now() - backgroundedAt;
+        backgroundedAt = null;
         if (elapsed >= minBackgroundMsRef.current) {
           try {
-            callbackRef.current()
+            callbackRef.current();
           } catch (e) {
             // Refresh callbacks are best-effort; never crash on foreground.
-            console.warn('[useForegroundRefresh] onForeground callback threw:', e)
+            console.warn('[useForegroundRefresh] onForeground callback threw:', e);
           }
         }
       }
-      lastState = nextState
-    }
+      lastState = nextState;
+    };
 
-    let subscription: { remove?: () => void } | null = null
+    let subscription: { remove?: () => void } | null = null;
     try {
       if (AppState?.addEventListener) {
-        subscription = AppState.addEventListener('change', handleChange)
+        subscription = AppState.addEventListener('change', handleChange);
       }
     } catch {
       // AppState may be unavailable in some test environments; skip gracefully.
     }
 
     return () => {
-      try {
-        subscription?.remove?.()
-      } catch {
-        // swallow cleanup errors
-      }
-    }
-  }, [])
+      safeCleanup(subscription);
+    };
+  }, []);
 }
