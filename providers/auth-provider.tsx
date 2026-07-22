@@ -426,10 +426,21 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         }
       } catch (error) {
         reportError(error, '[AuthProvider] Unexpected error fetching session:');
-        if (isTimeoutError(error)) {
+        if (isTimeoutError(error) || (error as any)?.code === 'AUTH_STAGE_TIMEOUT') {
           reportWarning(
             '[AuthProvider] Session initialization timed out; falling back to signed-out state'
           );
+          // Purge the stored session that we just failed to restore. It is
+          // almost always an expired session whose refresh stalled, and leaving
+          // it on disk means the next cold start replays the exact same doomed
+          // refresh — the user gets stuck in a loop of timeouts and can never
+          // reach a working sign-in. Dropping it makes the next launch a clean
+          // signed-out boot with no network work on the critical path.
+          try {
+            await clearAllSessionData(PROJECT_STORAGE_KEY);
+          } catch (e) {
+            reportWarning('[AuthProvider] Failed to clear stalled session after timeout:', e);
+          }
         }
         if (!isMountedRef.current) return;
         setSession(null);
