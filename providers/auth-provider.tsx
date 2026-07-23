@@ -510,17 +510,20 @@ export default function AuthProvider({ children }: PropsWithChildren) {
             if (__DEV__flag) console.log('[AuthProvider] SIGNED_IN detected, running user cleanup');
             const prevUser = previousUserIdRef.current ?? outgoingUserId;
             if (prevUser && prevUser !== incomingUserId) {
-              try {
-                // Await cleanup to ensure AsyncStorage entries are removed
-                // before the new session is applied and components read cache.
-                await Promise.all([
-                  clearBountyDraftForUser(prevUser),
-                  cachedDataService.clearAll(),
-                ]);
-              } catch (e) {
-                // Non-critical: log but continue with sign-in flow
+              // Fire-and-forget: this callback runs synchronously INSIDE gotrue's
+              // auth lock, and signInWithPassword() awaits every onAuthStateChange
+              // callback (via _notifyAllSubscribers) before it resolves. Awaiting
+              // AsyncStorage cleanup here holds the lock open and stalls sign-in
+              // (surfacing as the 15s "Sign-in is taking longer than expected."
+              // timeout). The cleared data is only read after the deferred profile
+              // sync below, so a fire-and-forget clear is safe against cross-user
+              // leaks.
+              void Promise.all([
+                clearBountyDraftForUser(prevUser),
+                cachedDataService.clearAll(),
+              ]).catch(e => {
                 reportError(e, '[AuthProvider] Data cleanup on user switch failed (non-critical)');
-              }
+              });
             }
             // Record the new user after cleanup
             previousUserIdRef.current = incomingUserId;
@@ -669,14 +672,26 @@ export default function AuthProvider({ children }: PropsWithChildren) {
             previousUserIdRef.current = null;
           }
 
-          // Track authentication events
+          // Track authentication events. Fire-and-forget: never await analytics
+          // inside the auth-lock callback (see cross-user cleanup note above).
+          // Route through Promise.resolve().then() so a synchronous throw or a
+          // non-promise return can't break this lock-critical callback.
           if (_event === 'SIGNED_IN' && session?.user) {
-            await analyticsService.identifyUser(session.user.id, {
-              email: session.user.email,
-            });
-            await analyticsService.trackEvent('user_logged_in', {
-              method: session.user.app_metadata?.provider || 'email',
-            });
+            const authedUser = session.user;
+            void Promise.resolve()
+              .then(() =>
+                analyticsService.identifyUser(authedUser.id, {
+                  email: authedUser.email,
+                })
+              )
+              .catch(() => {});
+            void Promise.resolve()
+              .then(() =>
+                analyticsService.trackEvent('user_logged_in', {
+                  method: authedUser.app_metadata?.provider || 'email',
+                })
+              )
+              .catch(() => {});
             try {
               const Sentry = getSentry?.();
               if (Sentry && typeof Sentry.setUser === 'function') {
@@ -717,9 +732,14 @@ export default function AuthProvider({ children }: PropsWithChildren) {
               setIsPasswordRecovery(false);
             }
             if (verified) {
-              await analyticsService.trackEvent('email_verified', {
-                userId: session.user.id,
-              });
+              const verifiedUser = session.user;
+              void Promise.resolve()
+                .then(() =>
+                  analyticsService.trackEvent('email_verified', {
+                    userId: verifiedUser.id,
+                  })
+                )
+                .catch(() => {});
             }
           } else if (_event === 'TOKEN_REFRESHED') {
             devLog('[AuthProvider] Token refreshed by Supabase');
@@ -728,19 +748,24 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           // Also run on INITIAL_SESSION to cover cold starts where the auth session
           // restores after notification permission/token retrieval already happened.
           if (_event === 'SIGNED_IN' || _event === 'INITIAL_SESSION') {
-            try {
-              const deferred = await AsyncStorage.getItem(DEFERRED_PUSH_REGISTRATION_KEY);
-              if (deferred && session?.user) {
-                // Clear the flag and attempt registration (best-effort, fire-and-forget)
-                await AsyncStorage.removeItem(DEFERRED_PUSH_REGISTRATION_KEY);
-                void notificationService.requestPermissionsAndRegisterToken().catch(e => {
-                  reportWarning('[AuthProvider] Deferred push registration failed:', e);
-                });
+            const sessionForPush = session;
+            // Deferred off the auth lock: AsyncStorage reads must not be awaited
+            // inline in this callback (see cross-user cleanup note above).
+            void (async () => {
+              try {
+                const deferred = await AsyncStorage.getItem(DEFERRED_PUSH_REGISTRATION_KEY);
+                if (deferred && sessionForPush?.user) {
+                  // Clear the flag and attempt registration (best-effort, fire-and-forget)
+                  await AsyncStorage.removeItem(DEFERRED_PUSH_REGISTRATION_KEY);
+                  void notificationService.requestPermissionsAndRegisterToken().catch(e => {
+                    reportWarning('[AuthProvider] Deferred push registration failed:', e);
+                  });
+                }
+              } catch (e) {
+                // Non-fatal
+                reportWarning('[AuthProvider] Error checking deferred push registration flag:', e);
               }
-            } catch (e) {
-              // Non-fatal
-              reportWarning('[AuthProvider] Error checking deferred push registration flag:', e);
-            }
+            })();
           }
 
           logAuthLifecycleEvent({
