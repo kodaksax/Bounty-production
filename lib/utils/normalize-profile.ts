@@ -9,6 +9,7 @@ export type NormalizedProfile = {
   title?: string;
   bio?: string;
   location?: string;
+  zipCode?: string;
   portfolio?: string;
   languages?: string[];
   skills?: string[];
@@ -37,6 +38,8 @@ export function normalizeAuthProfile(p: AuthProfile | null): NormalizedProfile |
     name: p.username, // AuthProfile may not have name field
     avatar: p.avatar || (p as any).avatar_url || undefined,
     bio: p.about,
+    location: p.location,
+    zipCode: p.zip_code,
     joinDate: p.created_at,
     created_at: p.created_at,
     verificationStatus: (p as any).verificationStatus as string | undefined,
@@ -76,6 +79,7 @@ export function normalizeUserProfile(p: UserProfile | null): NormalizedProfile |
     title: p.title,
     bio: p.bio,
     location: p.location,
+    zipCode: (p as any).zip_code,
     portfolio: p.portfolio,
     languages: p.languages,
     skills: p.skills,
@@ -105,6 +109,7 @@ export function mergeNormalized(primary: NormalizedProfile | null, fallback: Nor
     title: primary.title || fallback.title,
     bio: primary.bio || fallback.bio,
     location: primary.location || fallback.location,
+    zipCode: primary.zipCode || fallback.zipCode,
     portfolio: primary.portfolio || fallback.portfolio,
     languages: primary.languages || fallback.languages,
     skills: primary.skills || fallback.skills,

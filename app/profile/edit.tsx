@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import { useAuthProfile } from "hooks/useAuthProfile";
 import { useNormalizedProfile } from "hooks/useNormalizedProfile";
 import { AuthProfile } from "lib/services/auth-profile-service";
+import { locationService } from "lib/services/location-service";
 import { getCurrentUserId } from "lib/utils/data-utils";
 import React, { useRef, useState, useMemo } from 'react';
 import {
@@ -30,6 +31,7 @@ type EditProfileFormData = {
   username: string;
   bio: string;
   location: string;
+  zipCode: string;
   portfolio: string;
   skillsets: string;
 };
@@ -39,6 +41,7 @@ const EMPTY_FORM_DATA: EditProfileFormData = {
   username: "",
   bio: "",
   location: "",
+  zipCode: "",
   portfolio: "",
   skillsets: "",
 };
@@ -48,6 +51,7 @@ const isSameFormData = (a: EditProfileFormData, b: EditProfileFormData): boolean
   a.username === b.username &&
   a.bio === b.bio &&
   a.location === b.location &&
+  a.zipCode === b.zipCode &&
   a.portfolio === b.portfolio &&
   a.skillsets === b.skillsets
 );
@@ -81,6 +85,7 @@ export default function EditProfileScreen() {
   const usernameRef = useRef<TextInput>(null);
   const bioRef = useRef<TextInput>(null);
   const locationRef = useRef<TextInput>(null);
+  const zipRef = useRef<TextInput>(null);
   const portfolioRef = useRef<TextInput>(null);
   const skillsetsRef = useRef<TextInput>(null);
   // Track whether the user has made manual edits to the form to avoid
@@ -139,6 +144,7 @@ export default function EditProfileScreen() {
       username: profile.username || "",
       bio: profile.bio || "",
       location: profile.location || "",
+      zipCode: profile.zipCode || "",
       portfolio: profile.portfolio || "",
       skillsets: normalizedSkillsets,
     };
@@ -276,8 +282,31 @@ export default function EditProfileScreen() {
         about: formData.bio,
         display_name: formData.name,
         location: formData.location,
+        zip_code: formData.zipCode,
         skills: skillsets,
       };
+
+      // Derive the ZIP centroid coordinates from the entered ZIP so the profile
+      // can participate in proximity/radius bounty matching (a DB trigger turns
+      // these into profiles.geom). These are the ZIP centroid, not the user's
+      // precise location. If the ZIP is cleared, null the coordinates so a stale
+      // location can't linger; if geocoding fails (e.g. offline), leave the
+      // coordinates untouched rather than blocking the save on the rest.
+      const trimmedZip = formData.zipCode.trim();
+      if (trimmedZip.length === 0) {
+        authUpdateData.latitude = null as unknown as number;
+        authUpdateData.longitude = null as unknown as number;
+      } else if (/^\d{5}$/.test(trimmedZip)) {
+        try {
+          const coords = await locationService.geocodeAddress(trimmedZip);
+          if (coords) {
+            authUpdateData.latitude = coords.latitude;
+            authUpdateData.longitude = coords.longitude;
+          }
+        } catch (geoErr) {
+          console.warn('[EditProfile] ZIP geocode failed; saving without coordinates', geoErr);
+        }
+      }
       if (avatarUrl) {
         authUpdateData.avatar = avatarUrl;
       }
@@ -528,6 +557,26 @@ export default function EditProfileScreen() {
                 placeholderTextColor={theme.textDisabled}
                 accessibilityLabel="Location"
                 accessibilityHint="Enter your city and country"
+                returnKeyType="next"
+                blurOnSubmit={false}
+                onSubmitEditing={() => zipRef.current?.focus()}
+              />
+            </View>
+
+            <View style={[styles.fieldContainer, focusedField === 'zipCode' && styles.fieldContainerFocused]}>
+              <Text style={styles.label}>Zip Code</Text>
+              <TextInput
+                ref={zipRef}
+                style={styles.input}
+                value={formData.zipCode}
+                onChangeText={(text) => setFormData((prev) => { userEditedRef.current = true; return { ...prev, zipCode: text }; })}
+                onFocus={() => setFocusedField('zipCode')}
+                onBlur={() => setFocusedField(null)}
+                placeholder="e.g., 94103"
+                placeholderTextColor={theme.textDisabled}
+                keyboardType="number-pad"
+                accessibilityLabel="Zip code"
+                accessibilityHint="Enter your postal or zip code"
                 returnKeyType="next"
                 blurOnSubmit={false}
                 onSubmitEditing={() => portfolioRef.current?.focus()}

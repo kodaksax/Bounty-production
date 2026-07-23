@@ -10,6 +10,11 @@ export type Bounty = {
   // Optional ZIP code, saved as metadata so users with a matching profile
   // ZIP can eventually be matched/notified about this bounty.
   zip_code?: string;
+  // Coordinates of the bounty's in-person address. A DB trigger
+  // (fn_bounties_sync_geom) derives the PostGIS `geom` column from these for
+  // proximity/radius matching; the client only ever writes these two numbers.
+  latitude?: number;
+  longitude?: number;
   timeline: string;
   skills_required: string;
   poster_id: string;

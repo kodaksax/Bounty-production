@@ -72,6 +72,15 @@ jest.mock('../../lib/utils/data-utils', () => ({
   getCurrentUserId: jest.fn(() => 'test-user-123'),
 }));
 
+// edit.tsx imports location-service (to geocode the ZIP into centroid
+// coordinates on save), which pulls in the untransformed expo-location native
+// module. Mock it so the screen can be rendered under Jest.
+jest.mock('../../lib/services/location-service', () => ({
+  locationService: {
+    geocodeAddress: jest.fn(async () => null),
+  },
+}));
+
 // Import component after mocks
 import EditProfileScreen from '../../app/profile/edit';
 

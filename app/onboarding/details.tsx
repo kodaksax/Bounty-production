@@ -511,9 +511,16 @@ export default function DetailsScreen() {
 
       setLocation(zip);
       // Save as user metadata (only now that it's confirmed a real ZIP) so
-      // they can be matched to bounties posted in the same ZIP later.
+      // they can be matched to bounties posted in the same ZIP later. Persist
+      // the ZIP centroid coordinates (already resolved above) alongside it — a
+      // DB trigger derives profiles.geom from these for radius-based matching.
+      // These are the ZIP centroid, not the user's precise location.
       try {
-        await updateAuthProfile({ zip_code: zip });
+        await updateAuthProfile({
+          zip_code: zip,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        });
       } catch (err) {
         console.error('[Onboarding] Failed to save zip code to profile:', err);
       }

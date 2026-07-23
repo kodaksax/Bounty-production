@@ -43,7 +43,7 @@ BEGIN
   VALUES (
     v_recipients,
     'New Bounty Near You',
-    '"' || NEW.title || '" was just posted in your ZIP code (' || NEW.zip_code || ').',
+    '"' || NEW.title || '" was just posted near you.',
     jsonb_build_object('bounty_id', NEW.id, 'type', 'bounty_nearby', 'zip_code', NEW.zip_code),
     NEW.id::text
   );

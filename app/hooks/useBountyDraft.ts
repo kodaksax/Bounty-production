@@ -30,6 +30,13 @@ export interface BountyDraft {
   // Optional ZIP code, saved as metadata so users in the same ZIP can be
   // matched to this bounty later (e.g. for a future notification feature).
   zipCode?: string;
+  // Coordinates of the selected in-person address (from Google Places).
+  // Persisted to bounties.latitude/longitude, from which a DB trigger derives
+  // bounties.geom for proximity/radius matching. Populated only when the user
+  // picks an autocomplete suggestion; cleared if they hand-edit the address
+  // text (since free text no longer corresponds to these coordinates).
+  latitude?: number;
+  longitude?: number;
   workType: 'online' | 'in_person';
   timeline?: string;
   skills?: string;
@@ -51,6 +58,8 @@ const defaultDraft: BountyDraft = {
   isForHonor: false,
   location: '',
   zipCode: '',
+  latitude: undefined,
+  longitude: undefined,
   workType: 'in_person',
   timeline: '',
   skills: '',

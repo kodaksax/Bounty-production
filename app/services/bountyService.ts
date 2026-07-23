@@ -159,6 +159,11 @@ export const bountyService = {
         is_for_honor: draft.isForHonor,
         location: draft.workType === 'in_person' ? draft.location : '',
         zip_code: draft.zipCode || undefined,
+        // Only in-person bounties carry coordinates; the DB trigger derives geom
+        // from these for proximity matching. Undefined for online bounties (and
+        // for in-person addresses typed without picking a Places suggestion).
+        latitude: draft.workType === 'in_person' ? draft.latitude : undefined,
+        longitude: draft.workType === 'in_person' ? draft.longitude : undefined,
         work_type: draft.workType,
         category: draft.category || undefined,
         timeline: draft.timeline || '',

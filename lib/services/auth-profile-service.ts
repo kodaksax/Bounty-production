@@ -33,6 +33,12 @@ export interface AuthProfile {
   // ZIP" step). Used to match users to bounties posted in the same ZIP for a
   // future notification feature — not consumed anywhere yet.
   zip_code?: string;
+  // Centroid coordinates of the user's zip_code (NOT precise device/home
+  // location) used for proximity/radius bounty matching. A DB trigger derives
+  // profiles.geom from these. PRIVATE: self-only RLS, never exposed via
+  // public_profiles. Written whenever the ZIP is set (onboarding / profile edit).
+  latitude?: number;
+  longitude?: number;
   age_verified?: boolean;
   age_verified_at?: string; // ISO timestamp for audit purposes
   balance: number;

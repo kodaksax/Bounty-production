@@ -52,9 +52,13 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
   };
 
   const handleLocationChange = (value: string) => {
-    onUpdate({ location: value });
+    // Hand-editing the address invalidates any coordinates captured from a
+    // previously selected Places suggestion — the free text no longer
+    // corresponds to those lat/lng, so clear them. They're re-populated only
+    // when the user picks a suggestion in handleSelectAddress.
+    onUpdate({ location: value, latitude: undefined, longitude: undefined });
     setTouched({ ...touched, location: true });
-    
+
     // Validate on change if already touched
     if (touched.location) {
       const error = validateLocation(value, draft.workType);
@@ -103,13 +107,18 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
           [{ text: 'OK' }]
         );
         const sanitizedDescription = sanitizeAddressText(suggestion.description);
-        onUpdate({ location: sanitizedDescription });
+        // No coordinates available on the error path — clear any stale ones.
+        onUpdate({ location: sanitizedDescription, latitude: undefined, longitude: undefined });
         setTouched({ ...touched, location: true });
       } else {
-        // Successfully got place details
+        // Successfully got place details — persist the coordinates alongside the
+        // address so the DB can derive geom for proximity matching. Places may
+        // omit geometry for some results, so guard against undefined.
         const sanitizedAddress = sanitizeAddressText(response.formattedAddress);
-        onUpdate({ 
+        onUpdate({
           location: sanitizedAddress,
+          latitude: response.latitude,
+          longitude: response.longitude,
         });
         setTouched({ ...touched, location: true });
       }
@@ -121,9 +130,9 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
         'Could not fetch detailed address information. Using basic address.',
         [{ text: 'OK' }]
       );
-      // Fallback to using the sanitized description
+      // Fallback to using the sanitized description; no coordinates available.
       const sanitizedDescription = sanitizeAddressText(suggestion.description);
-      onUpdate({ location: sanitizedDescription });
+      onUpdate({ location: sanitizedDescription, latitude: undefined, longitude: undefined });
       setTouched({ ...touched, location: true });
     }
   };
