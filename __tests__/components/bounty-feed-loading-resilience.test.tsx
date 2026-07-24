@@ -19,15 +19,29 @@
 const PREV_API_TIMEOUT = process.env.API_TIMEOUT;
 process.env.API_TIMEOUT = '150';
 
-import { render, waitFor } from '@testing-library/react-native';
+import { cleanup, render, waitFor } from '@testing-library/react-native';
 import React from 'react';
+
+const mockRealtimeChannel = {
+  on: jest.fn(),
+  subscribe: jest.fn(),
+};
+mockRealtimeChannel.on.mockReturnValue(mockRealtimeChannel);
+mockRealtimeChannel.subscribe.mockReturnValue(mockRealtimeChannel);
+
+const mockSupabase = {
+  channel: jest.fn(() => mockRealtimeChannel),
+  removeChannel: jest.fn(),
+};
 
 // --- Rich react-native mock (the global jest.setup mock lacks Animated.FlatList
 // / RefreshControl / Animated.event that this component relies on). ---
 jest.mock('react-native', () => {
   const ReactMock = require('react');
-  const passthrough = (name: string) =>
-    ({ children, ...props }: any) => ReactMock.createElement(name, props, children);
+  const passthrough =
+    (name: string) =>
+    ({ children, ...props }: any) =>
+      ReactMock.createElement(name, props, children);
 
   // Minimal FlatList that exercises ListEmptyComponent / renderItem so tests can
   // observe skeleton vs empty vs error states.
@@ -42,19 +56,23 @@ jest.mock('react-native', () => {
     } = props;
     const header = ListHeaderComponent
       ? ReactMock.createElement(
-          typeof ListHeaderComponent === 'function' ? ListHeaderComponent : () => ListHeaderComponent,
+          typeof ListHeaderComponent === 'function'
+            ? ListHeaderComponent
+            : () => ListHeaderComponent
         )
       : null;
     const footer = ListFooterComponent
       ? ReactMock.createElement(
-          typeof ListFooterComponent === 'function' ? ListFooterComponent : () => ListFooterComponent,
+          typeof ListFooterComponent === 'function'
+            ? ListFooterComponent
+            : () => ListFooterComponent
         )
       : null;
     let body: any;
     if (!data || data.length === 0) {
       body = ListEmptyComponent
         ? ReactMock.createElement(
-            typeof ListEmptyComponent === 'function' ? ListEmptyComponent : () => ListEmptyComponent,
+            typeof ListEmptyComponent === 'function' ? ListEmptyComponent : () => ListEmptyComponent
           )
         : null;
     } else {
@@ -62,8 +80,8 @@ jest.mock('react-native', () => {
         ReactMock.createElement(
           ReactMock.Fragment,
           { key: keyExtractor ? keyExtractor(item, index) : index },
-          renderItem ? renderItem({ item, index }) : null,
-        ),
+          renderItem ? renderItem({ item, index }) : null
+        )
       );
     }
     return ReactMock.createElement('FlatList', {}, header, body, footer);
@@ -119,8 +137,8 @@ jest.mock('../../components/bounty-grid-feed', () => ({
       'View',
       {},
       bounties.map((b: any) =>
-        require('react').createElement('Text', { key: b.id, testID: 'bounty-item' }, b.title),
-      ),
+        require('react').createElement('Text', { key: b.id, testID: 'bounty-item' }, b.title)
+      )
     ),
 }));
 jest.mock('../../components/bounty-list-item', () => ({
@@ -128,8 +146,7 @@ jest.mock('../../components/bounty-list-item', () => ({
     require('react').createElement('Text', { testID: 'bounty-item' }, title),
 }));
 jest.mock('../../components/ui/skeleton-loaders', () => ({
-  PostingsListSkeleton: () =>
-    require('react').createElement('View', { testID: 'skeleton' }),
+  PostingsListSkeleton: () => require('react').createElement('View', { testID: 'skeleton' }),
 }));
 jest.mock('../../components/ui/empty-state', () => ({
   EmptyState: ({ title }: any) =>
@@ -140,14 +157,17 @@ jest.mock('../../hooks/useValidUserId', () => ({ useValidUserId: () => 'user-123
 jest.mock(
   'app/hooks/useLocation',
   () => ({ useLocation: () => ({ location: null, permission: { granted: false } }) }),
-  { virtual: true },
+  { virtual: true }
 );
 
 jest.mock('../../lib/services/location-service', () => ({
   locationService: { calculateDistance: jest.fn().mockReturnValue(1) },
 }));
 jest.mock('../../lib/storage', () => ({
-  storage: { getItem: jest.fn().mockResolvedValue(null), setItem: jest.fn().mockResolvedValue(undefined) },
+  storage: {
+    getItem: jest.fn().mockResolvedValue(null),
+    setItem: jest.fn().mockResolvedValue(undefined),
+  },
 }));
 jest.mock('../../lib/services/search-service', () => ({
   searchService: { getTrendingBounties: jest.fn().mockResolvedValue([]) },
@@ -157,6 +177,9 @@ jest.mock('../../lib/services/bounty-service', () => ({
 }));
 jest.mock('../../lib/services/bounty-request-service', () => ({
   bountyRequestService: { getAll: jest.fn() },
+}));
+jest.mock('../../lib/supabase', () => ({
+  supabase: mockSupabase,
 }));
 
 // Lazily required after env + mocks are in place.
@@ -172,7 +195,7 @@ const renderFeed = () =>
       activeScreen: 'bounty',
       setActiveScreen: jest.fn(),
       currentUserId: 'user-123',
-    }),
+    })
   );
 
 describe('BountyFeed loading resilience', () => {
@@ -184,6 +207,10 @@ describe('BountyFeed loading resilience', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   afterAll(() => {
@@ -233,7 +260,7 @@ describe('BountyFeed loading resilience', () => {
       () => {
         expect(getByTestId('empty-state')).toBeTruthy();
       },
-      { timeout: 3000 },
+      { timeout: 3000 }
     );
     expect(queryByTestId('skeleton')).toBeNull();
   });
@@ -249,7 +276,7 @@ describe('BountyFeed loading resilience', () => {
         // EmptyState mock renders its `title`; the error title is distinct.
         expect(getByTestId('empty-state').props.children).toBe('Unable to load bounties');
       },
-      { timeout: 3000 },
+      { timeout: 3000 }
     );
     expect(queryByTestId('skeleton')).toBeNull();
   });
@@ -266,7 +293,7 @@ describe('BountyFeed loading resilience', () => {
       () => {
         expect(getByTestId('empty-state').props.children).toBe('Unable to load bounties');
       },
-      { timeout: 3000 },
+      { timeout: 3000 }
     );
     expect(queryByTestId('skeleton')).toBeNull();
   });
