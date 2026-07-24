@@ -1,6 +1,23 @@
+import Constants from 'expo-constants';
 import { API_BASE_URL } from 'lib/config/api';
+import { analyticsService } from 'lib/services/analytics-service';
+import { stripeSdk } from 'lib/services/stripe-sdk';
 import { supabase } from 'lib/supabase';
+import { logger } from 'lib/utils/error-logger';
 import { Platform } from 'react-native';
+
+/** Non-sensitive diagnostic snapshot attached to Apple Pay telemetry — never includes keys/tokens. */
+function getDiagnosticContext(): Record<string, string | number | boolean | undefined> {
+  return {
+    platform: Platform.OS,
+    appVersion: Constants.nativeAppVersion || Constants.expoConfig?.version || 'unknown',
+    bundleIdentifier: (Constants.expoConfig as any)?.ios?.bundleIdentifier || 'unknown',
+    // Whether initStripe() itself ran without throwing — does not by itself
+    // confirm Apple Pay is usable, only that the native module loaded.
+    sdkAvailable: stripeSdk.isSDKAvailable(),
+    sdkInitError: stripeSdk.getApplePayInitError() ?? undefined,
+  };
+}
 
 export interface ApplePayPaymentRequest {
   amount: number; // in dollars
@@ -31,12 +48,23 @@ class ApplePayService {
       // Use `any` to avoid depending on the static TypeScript types from the installed SDK.
       const stripe: any = await import('@stripe/stripe-react-native');
       const isApplePaySupported = stripe?.isApplePaySupported ?? stripe?.ApplePay?.isApplePaySupported;
-      if (typeof isApplePaySupported === 'function') {
-        return await isApplePaySupported();
+      if (typeof isApplePaySupported !== 'function') {
+        logger.warning('[ApplePay] isApplePaySupported not exported by installed SDK', getDiagnosticContext());
+        return false;
       }
-      return false;
+      const supported = await isApplePaySupported();
+      if (!supported) {
+        // Device-capable-but-unsupported is expected on iPads/simulators; log
+        // at warning (not error) so this doesn't page anyone, but keep it
+        // visible for correlating against a spike in tap-time failures.
+        logger.warning('[ApplePay] isApplePaySupported() returned false', getDiagnosticContext());
+      }
+      return supported;
     } catch (error) {
-      console.error('Error checking Apple Pay availability:', error);
+      logger.error('[ApplePay] Error checking Apple Pay availability', {
+        error: error instanceof Error ? error.message : String(error),
+        ...getDiagnosticContext(),
+      });
       return false;
     }
   }
@@ -92,8 +120,18 @@ class ApplePayService {
    */
   async processPayment(request: ApplePayPaymentRequest, authToken?: string): Promise<ApplePayResult> {
     try {
+      await analyticsService.trackEvent('payment_initiated', {
+        method: 'apple_pay',
+        amount: request.amount,
+        ...getDiagnosticContext(),
+      });
+    } catch {
+      /* analytics is best-effort */
+    }
+
+    try {
       const idempotencyKey = this.generateIdempotencyKey(request);
-      
+
       // Step 1: Create PaymentIntent on backend (with retry)
       const { clientSecret, paymentIntentId } = await this.retryRequest(async () => {
         const endpoint = `${API_BASE_URL}/apple-pay/payment-intent`
@@ -142,8 +180,8 @@ class ApplePayService {
       });
 
       if (presentError) {
-        console.error('Apple Pay presentation error:', presentError);
-        
+        logger.error('[ApplePay] Presentation error', { error: presentError, ...getDiagnosticContext() });
+
         // Handle user cancellation separately
         // The SDK may return different casing for cancellation codes; handle common variants.
         const cancelCodes = ['Canceled', 'canceled', 'USER_CANCELLED', 'user_cancelled'];
@@ -153,6 +191,17 @@ class ApplePayService {
             error: 'Payment cancelled by user',
             errorCode: 'cancelled',
           };
+        }
+
+        try {
+          await analyticsService.trackEvent('payment_failed', {
+            method: 'apple_pay',
+            stage: 'present',
+            errorCode: presentError.code,
+            ...getDiagnosticContext(),
+          });
+        } catch {
+          /* analytics is best-effort */
         }
 
         return {
@@ -172,7 +221,17 @@ class ApplePayService {
       const { error: confirmError } = await confirmApplePayPayment(clientSecret);
 
       if (confirmError) {
-        console.error('Apple Pay confirmation error:', confirmError);
+        logger.error('[ApplePay] Confirmation error', { error: confirmError, ...getDiagnosticContext() });
+        try {
+          await analyticsService.trackEvent('payment_failed', {
+            method: 'apple_pay',
+            stage: 'confirm',
+            errorCode: confirmError.code,
+            ...getDiagnosticContext(),
+          });
+        } catch {
+          /* analytics is best-effort */
+        }
         return {
           success: false,
           error: confirmError.message,
@@ -204,11 +263,29 @@ class ApplePayService {
       }, 3, 1000);
 
       if (confirmResult.success) {
+        try {
+          await analyticsService.trackEvent('payment_completed', {
+            method: 'apple_pay',
+            amount: request.amount,
+            ...getDiagnosticContext(),
+          });
+        } catch {
+          /* analytics is best-effort */
+        }
         return {
           success: true,
           paymentIntentId,
         };
       } else {
+        try {
+          await analyticsService.trackEvent('payment_failed', {
+            method: 'apple_pay',
+            stage: 'backend_confirm',
+            ...getDiagnosticContext(),
+          });
+        } catch {
+          /* analytics is best-effort */
+        }
         return {
           success: false,
           error: confirmResult.error || 'Payment confirmation failed',
@@ -216,7 +293,19 @@ class ApplePayService {
       }
 
     } catch (error) {
-      console.error('Apple Pay payment error:', error);
+      logger.error('[ApplePay] Payment error', {
+        error: error instanceof Error ? error.message : String(error),
+        ...getDiagnosticContext(),
+      });
+      try {
+        await analyticsService.trackEvent('payment_error', {
+          method: 'apple_pay',
+          stage: 'unhandled',
+          ...getDiagnosticContext(),
+        });
+      } catch {
+        /* analytics is best-effort */
+      }
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',

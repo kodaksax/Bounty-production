@@ -1,0 +1,4 @@
+{
+  "_comment": "Single source of truth for the Apple Pay merchant identifier. Must exactly match the com.apple.developer.in-app-payments entitlement baked into the signed iOS binary, or PassKit will silently refuse to authorize Apple Pay for the wrong merchant ID — no error surfaces to JS, no backend call is ever made. app.config.js injects this into ios.entitlements and the @stripe/stripe-react-native plugin config (overriding any stale copy in app.json); lib/services/stripe-sdk.ts uses it as the initStripe() fallback and to detect drift if EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID is set to something else.",
+  "merchantId": "merchant.com.bountyexpo-workspace"
+}

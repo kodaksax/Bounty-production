@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Alert } from 'react-native'
+import { Alert, Platform } from 'react-native'
 import { useAuthContext } from './use-auth-context'
 import { config } from '../lib/config'
 import { API_BASE_URL } from '../lib/config/api'
+import { analyticsService } from '../lib/services/analytics-service'
 import { applePayService } from '../lib/services/apple-pay-service'
 import { getPaymentErrorMessage } from '../lib/utils/error-messages'
 import { useStripe } from '../lib/stripe-context'
@@ -186,6 +187,18 @@ export function useWalletDeposit() {
       setIsApplePayAvailable(available)
     }
     if (!available) {
+      // This dead-ends before any backend call, so without an explicit event
+      // it's invisible in analytics — it can look identical to a genuine
+      // "no card in Wallet" case even when it's actually a config/entitlement
+      // problem (see docs/payments/APPLE_PAY_PRODUCTION_FAILURE_REPORT.md).
+      try {
+        await analyticsService.trackEvent('apple_pay_unavailable', {
+          platform: Platform.OS,
+          screen: 'wallet_deposit',
+        })
+      } catch {
+        /* analytics is best-effort */
+      }
       Alert.alert(
         'Apple Pay Not Set Up',
         'Apple Pay isn’t set up on this device. Open the Wallet app and add a card to pay with Apple Pay, or use a linked card or bank account below.',

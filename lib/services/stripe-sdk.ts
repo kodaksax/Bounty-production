@@ -8,11 +8,14 @@
  * without duplicating init logic.
  */
 import { logger } from '../utils/error-logger';
+import { merchantId as APPLE_PAY_MERCHANT_ID } from '../config/apple-pay.json';
 
 class StripeSdkManager {
   private publishableKey: string = '';
   private initPromise: Promise<void> | null = null;
   private stripeSDK: any = null;
+  private applePayMerchantId: string = APPLE_PAY_MERCHANT_ID;
+  private applePayInitError: string | null = null;
 
   constructor() {
     // Read from Expo public env (must be prefixed EXPO_PUBLIC_ to reach client bundle)
@@ -44,9 +47,23 @@ class StripeSdkManager {
         const stripeModule = rawModule?.default ?? rawModule;
         const initStripe = stripeModule?.initStripe ?? rawModule?.initStripe;
         if (initStripe && this.publishableKey) {
-          // merchantIdentifier should match your Apple Pay Merchant ID from Apple Developer portal
-          const merchantId =
-            process.env.EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID || 'com.bounty0.BOUNTYExpo';
+          // merchantIdentifier must exactly match the com.apple.developer.in-app-payments
+          // entitlement baked into this build (see lib/config/apple-pay.json — the single
+          // source of truth app.config.js uses to generate that entitlement). A mismatch
+          // here makes Apple Pay fail silently at the native layer, before any network
+          // call, with no JS-visible error — see docs/payments/APPLE_PAY_PRODUCTION_FAILURE_REPORT.md.
+          const envMerchantId = process.env.EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID;
+          const merchantId = envMerchantId || this.applePayMerchantId;
+          if (envMerchantId && envMerchantId !== this.applePayMerchantId) {
+            // app.config.js already fails production builds on this drift; this is a
+            // defense-in-depth log in case a build shipped before that guard existed.
+            logger.error(
+              '[StripeSdk] EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID does not match the entitled ' +
+                'Apple Pay merchant ID — Apple Pay will fail silently.',
+              { envMerchantId, entitledMerchantId: this.applePayMerchantId }
+            );
+          }
+          this.applePayMerchantId = merchantId;
           // Use centralized deep link scheme constant
           const { DEEP_LINK_SCHEME } = await import('../config/app');
           await initStripe({
@@ -57,6 +74,7 @@ class StripeSdkManager {
           this.stripeSDK = stripeModule;
         }
       } catch (sdkError) {
+        this.applePayInitError = sdkError instanceof Error ? sdkError.message : String(sdkError);
         // SDK initialization may fail in non-native environments (e.g., web, Node)
         if (__DEV__) {
           logger.error(
@@ -82,6 +100,16 @@ class StripeSdkManager {
 
   getPublishableKey(): string {
     return this.publishableKey;
+  }
+
+  /** Merchant ID actually passed to initStripe() — for diagnostics/telemetry only, never logged with secrets. */
+  getApplePayMerchantId(): string {
+    return this.applePayMerchantId;
+  }
+
+  /** Set when the native SDK import/initStripe() call itself threw. Null on a clean init (does not imply Apple Pay is usable). */
+  getApplePayInitError(): string | null {
+    return this.applePayInitError;
   }
 
   /**

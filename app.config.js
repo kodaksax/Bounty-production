@@ -103,6 +103,28 @@ if (APP_ENV === 'production') {
   }
 }
 
+// Guard against the Apple Pay JS-runtime merchant identifier drifting from the
+// merchant ID actually baked into the iOS entitlements (see lib/config/apple-pay.json
+// for the incident this is guarding against — a mismatch here causes Apple Pay to
+// fail silently on-device, before any network call, with no error surfaced to JS).
+const { merchantId: APPLE_PAY_MERCHANT_ID } = require('./lib/config/apple-pay.json');
+{
+  const overrideMerchantId = process.env.EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID;
+  if (overrideMerchantId && overrideMerchantId !== APPLE_PAY_MERCHANT_ID) {
+    const message =
+      `[apple-pay-guard] EXPO_PUBLIC_APPLE_PAY_MERCHANT_ID="${overrideMerchantId}" does not match ` +
+      `the merchant ID entitled in app.json/lib/config/apple-pay.json ("${APPLE_PAY_MERCHANT_ID}"). ` +
+      `The native app is only entitled for the latter, so Apple Pay will silently fail. ` +
+      `Fix the EAS environment variable (or update lib/config/apple-pay.json + re-register the ` +
+      `Merchant ID with Apple/Stripe if the override is actually the intended value).`;
+    if (APP_ENV === 'production') {
+      throw new Error(`[FATAL] ${message}`);
+    } else {
+      console.warn(`[build-time warning] ${message}`);
+    }
+  }
+}
+
 // Per-environment icon overrides.
 // Save the corresponding PNG to assets/images/ before building.
 const ENV_ICONS = {
@@ -129,6 +151,14 @@ function resolvePlugins(plugins = []) {
 
   return plugins.flatMap((plugin) => {
     const pluginName = Array.isArray(plugin) ? plugin[0] : plugin;
+
+    if (pluginName === '@stripe/stripe-react-native') {
+      // Force the plugin's merchantIdentifier to the single source of truth
+      // so the entitlement app.config.js generates (see APPLE_PAY_MERCHANT_ID
+      // above) always matches what Xcode signs into the binary.
+      const existingPluginConfig = Array.isArray(plugin) ? plugin[1] || {} : {};
+      return [[pluginName, { ...existingPluginConfig, merchantIdentifier: APPLE_PAY_MERCHANT_ID }]];
+    }
 
     if (pluginName !== '@react-native-google-signin/google-signin') {
       return [plugin];
@@ -160,6 +190,17 @@ module.exports = ({ config }) => {
     // Expo Go / dev environments. Allow override via `EXPO_SCHEME` env var
     // or an existing `config.scheme` / `config.slug` / `config.name`.
     scheme: process.env.EXPO_SCHEME || config.scheme || config.slug || config.name || 'bountyexpo',
+    ios: {
+      ...(config.ios || {}),
+      // Force the Apple Pay entitlement to the single source of truth
+      // (lib/config/apple-pay.json) regardless of what's hand-edited in
+      // app.json, so the native build can never silently diverge from the
+      // merchant ID the JS runtime initializes Stripe with.
+      entitlements: {
+        ...((config.ios && config.ios.entitlements) || {}),
+        'com.apple.developer.in-app-payments': [APPLE_PAY_MERCHANT_ID],
+      },
+    },
     android: {
       ...(config.android || {}),
       // Allow EAS file secret to provide google-services.json.

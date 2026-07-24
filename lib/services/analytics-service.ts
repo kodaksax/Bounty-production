@@ -98,6 +98,10 @@ export type AnalyticsEvent =
   | 'payment_sca_required'
   | 'payment_method_removed'
   | 'payment_method_saved'
+  // Fired when the Apple Pay button is tapped but isApplePaySupported()/the
+  // native SDK reports Apple Pay as unusable, so the tap dead-ends before any
+  // backend call — otherwise invisible in analytics (see hooks/use-wallet-deposit.ts).
+  | 'apple_pay_unavailable'
   | 'escrow_funded'
   | 'escrow_released'
   | 'escrow_refunded'
