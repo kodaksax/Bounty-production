@@ -124,6 +124,13 @@ function emitAuthTelemetry(event: AuthLifecycleEvent): void {
   }
 }
 
+const NETWORK_SNAPSHOT_TIMEOUT_MS = 1500;
+const UNKNOWN_NETWORK_SNAPSHOT: AuthNetworkSnapshot = {
+  isConnected: null,
+  isInternetReachable: null,
+  type: 'unknown',
+};
+
 export async function getNetworkSnapshot(): Promise<AuthNetworkSnapshot> {
   try {
     // Lazy require keeps startup resilient in environments where NetInfo is unavailable.
@@ -131,16 +138,35 @@ export async function getNetworkSnapshot(): Promise<AuthNetworkSnapshot> {
     const netInfoModule = require('@react-native-community/netinfo');
     const netInfo = netInfoModule?.default ?? netInfoModule;
     if (!netInfo || typeof netInfo.fetch !== 'function') {
-      return { isConnected: null, isInternetReachable: null, type: 'unknown' };
+      return { ...UNKNOWN_NETWORK_SNAPSHOT };
     }
-    const state = await netInfo.fetch();
-    return {
-      isConnected: state?.isConnected ?? null,
-      isInternetReachable: state?.isInternetReachable ?? null,
-      type: state?.type ?? 'unknown',
-    };
+    // NetInfo.fetch() performs a reachability probe that can hang on flaky or
+    // captive networks. This snapshot is diagnostic only and is awaited before
+    // every auth stage, so an unbounded call would add its latency to sign-in.
+    // Race it against a short timeout and fall back to an "unknown" snapshot.
+    let snapshotTimeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const state = await Promise.race([
+        netInfo.fetch(),
+        new Promise<null>(resolve => {
+          snapshotTimeout = setTimeout(() => resolve(null), NETWORK_SNAPSHOT_TIMEOUT_MS);
+        }),
+      ]);
+      if (!state) {
+        return { ...UNKNOWN_NETWORK_SNAPSHOT };
+      }
+      return {
+        isConnected: state?.isConnected ?? null,
+        isInternetReachable: state?.isInternetReachable ?? null,
+        type: state?.type ?? 'unknown',
+      };
+    } finally {
+      if (snapshotTimeout) {
+        clearTimeout(snapshotTimeout);
+      }
+    }
   } catch {
-    return { isConnected: null, isInternetReachable: null, type: 'unknown' };
+    return { ...UNKNOWN_NETWORK_SNAPSHOT };
   }
 }
 
