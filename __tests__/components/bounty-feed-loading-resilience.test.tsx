@@ -178,9 +178,20 @@ jest.mock('../../lib/services/bounty-service', () => ({
 jest.mock('../../lib/services/bounty-request-service', () => ({
   bountyRequestService: { getAll: jest.fn() },
 }));
-jest.mock('../../lib/supabase', () => ({
-  supabase: mockSupabase,
-}));
+jest.mock('../../lib/supabase', () => {
+  const channel = {
+    on: jest.fn().mockReturnThis(),
+    subscribe: jest.fn().mockReturnThis(),
+    unsubscribe: jest.fn(),
+  };
+
+  return {
+    supabase: {
+      channel: jest.fn(() => channel),
+      removeChannel: jest.fn(() => channel),
+    },
+  };
+});
 
 // Lazily required after env + mocks are in place.
 let BountyFeed: any;

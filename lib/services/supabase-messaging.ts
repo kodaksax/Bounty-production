@@ -240,8 +240,14 @@ export async function fetchConversations(userId: string): Promise<Conversation[]
       // against an older local/staging database, make sure that migration has
       // been applied before debugging missing names here; pre-migration rows may
       // still have data in `full_name` only until the schema/data migration is run.
+      // Reads `public_profiles`, NOT `profiles`. These are always OTHER users'
+      // rows, and the base table's SELECT RLS is self-only (`auth.uid() = id`),
+      // so querying it here returned zero rows and every conversation fell
+      // through to the 'Unknown' display-name default. `public_profiles` is the
+      // curated safe-columns view intended for exactly this cross-user read.
+      // See docs/withdrawals/08-profiles-rls-migration-strategy.md.
       const { data, error: profilesError } = await supabase
-        .from('profiles')
+        .from('public_profiles')
         .select('id, username, display_name, avatar')
         .in('id', Array.from(otherUserIds));
 
@@ -546,14 +552,17 @@ export async function createConversation(
     let avatar: string | undefined;
 
     if (!isGroup && participantIds.length === 2) {
+      // `public_profiles`, not `profiles` — the base table is self-only under
+      // RLS, which made this return just the creator's own row (naming the
+      // conversation after yourself) or nothing at all.
       const { data: profiles } = await supabase
-        .from('profiles')
+        .from('public_profiles')
         .select('id, username, display_name, avatar')
         .in('id', participantIds);
 
       if (profiles && profiles.length > 0) {
-        // Get the first profile (could be either user)
-        const profile = profiles[0];
+        // Name the conversation after the OTHER participant, never the creator.
+        const profile = profiles.find(p => p.id !== resolvedCreatorId) ?? profiles[0];
         name = profile.username || profile.display_name || 'Unknown';
         avatar = getProfileAvatarUrl(profile.avatar);
       }

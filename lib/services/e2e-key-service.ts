@@ -101,8 +101,13 @@ export const e2eKeyService = {
     }
 
     try {
+      // `public_profiles`, not `profiles`. This looks up ANOTHER user's key and
+      // the base table's SELECT RLS is self-only (`auth.uid() = id`), so
+      // querying it returned no row for every recipient but the caller.
+      // `e2e_public_key` is the public half of the keypair and is exposed on the
+      // view by design (20260722120000_add_e2e_public_key_to_public_profiles.sql).
       const { data, error } = await supabase
-        .from('profiles')
+        .from('public_profiles')
         .select('e2e_public_key')
         .eq('id', userId)
         .single();

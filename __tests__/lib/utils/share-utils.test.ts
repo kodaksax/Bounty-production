@@ -188,9 +188,32 @@ describe('share-utils', () => {
 
     it('on web, copies the link instead of invoking the native share sheet', async () => {
       mockPlatformOS = 'web';
-      const writeText = installClipboardMock();
+      const writeText = jest.fn().mockResolvedValue(undefined);
 
-      await shareProfile({ id: 'user1', name: 'Alex Doe' });
+      if (!global.navigator) {
+        Object.defineProperty(global, 'navigator', {
+          value: {},
+          writable: true,
+          configurable: true,
+        });
+      }
+
+      const previousClipboard = Object.getOwnPropertyDescriptor(global.navigator, 'clipboard');
+      Object.defineProperty(global.navigator, 'clipboard', {
+        value: { writeText },
+        writable: true,
+        configurable: true,
+      });
+
+      try {
+        await shareProfile({ id: 'user1', name: 'Alex Doe' });
+      } finally {
+        if (previousClipboard) {
+          Object.defineProperty(global.navigator, 'clipboard', previousClipboard);
+        } else {
+          delete (global.navigator as { clipboard?: { writeText: typeof writeText } }).clipboard;
+        }
+      }
 
       expect(writeText).toHaveBeenCalledWith('https://bountyfinder.app/profile/user1');
       expect(mockShare).not.toHaveBeenCalled();

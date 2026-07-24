@@ -1093,9 +1093,14 @@ export const disputeService = {
         throw new Error('Supabase not configured');
       }
 
+      // No `profiles` embed: comment authors are other participants/admins, and
+      // the base table's SELECT RLS is self-only (`auth.uid() = id`), so the
+      // embed resolved to null for every comment the caller did not write.
+      // Author display data comes from `public_profiles`.
+      // See docs/withdrawals/08-profiles-rls-migration-strategy.md.
       let query = supabase
         .from('dispute_comments')
-        .select('*, profiles:user_id(username, avatar)')
+        .select('*')
         .eq('dispute_id', disputeId);
 
       if (!includeInternal) {
@@ -1109,7 +1114,31 @@ export const disputeService = {
         return [];
       }
 
-      return data || [];
+      const comments = data || [];
+      const authorIds = Array.from(
+        new Set(comments.map((c: any) => c.user_id).filter(Boolean))
+      );
+      if (authorIds.length === 0) return comments;
+
+      const { data: profiles, error: profilesError } = await supabase
+        .from('public_profiles')
+        .select('id, username, avatar')
+        .in('id', authorIds);
+
+      if (profilesError) {
+        // Non-fatal — return the comments unenriched rather than losing them.
+        logger.warning('Could not fetch dispute comment author profiles', {
+          error: profilesError,
+          disputeId,
+        });
+        return comments;
+      }
+
+      const profileMap = new Map((profiles || []).map((p: any) => [String(p.id), p]));
+      return comments.map((c: any) => ({
+        ...c,
+        profiles: profileMap.get(String(c.user_id)) ?? null,
+      }));
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error');
       logger.error('Error in getDisputeComments', { disputeId, error: { message: error.message } });

@@ -28,7 +28,7 @@ export const userSearchService = {
       // arbitrary other users). See
       // docs/withdrawals/08-profiles-rls-migration-strategy.md.
       let query = supabase
-        .from('profiles')
+        .from('public_profiles')
         .select('id, username, display_name, avatar, about, created_at', { count: 'exact' });
 
       // Apply keyword search on username, name, bio. Deliberately does NOT
@@ -135,7 +135,7 @@ export const userSearchService = {
       const cleanUsername = username.startsWith('@') ? username.slice(1) : username;
 
       const { data, error } = await supabase
-        .from('profiles')
+        .from('public_profiles')
         .select('id, username, display_name, avatar, about, created_at')
         .or(`username.eq.${cleanUsername},username.eq.@${cleanUsername}`)
         .single();

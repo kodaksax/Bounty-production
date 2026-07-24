@@ -40,68 +40,81 @@ describe('bountyService', () => {
     }
   });
 
-  it('getById returns flattened bounty when Supabase returns join', async () => {
-    // supabase.from('bounties').select(...).eq(...).single() -> data
-    supabase.from.mockImplementationOnce(() => ({
-      select: jest.fn(() => ({
-        eq: jest.fn(() => ({
-          single: jest.fn(() =>
-            Promise.resolve({
-              data: { id: 1, user_id: 'u1', profiles: { username: 'bob', avatar: 'pic' } },
-              error: null,
-            })
-          ),
-        })),
-      })),
-    }));
+  it('getById enriches the bounty with poster info from public_profiles', async () => {
+    const fromCalls: string[] = [];
+
+    // 1st call: plain bounty fetch (no `profiles` embed -- the embed resolves
+    // through the base table, whose SELECT RLS is self-only, so it returned a
+    // null poster for every bounty the caller did not post).
+    supabase.from
+      .mockImplementationOnce((table: string) => {
+        fromCalls.push(table);
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              single: jest.fn(() =>
+                Promise.resolve({ data: { id: 1, user_id: 'u1' }, error: null })
+              ),
+            })),
+          })),
+        };
+      })
+      // 2nd call: poster enrichment from the public_profiles view
+      .mockImplementationOnce((table: string) => {
+        fromCalls.push(table);
+        return {
+          select: jest.fn(() => ({
+            in: jest.fn(() =>
+              Promise.resolve({ data: [{ id: 'u1', username: 'bob', avatar: 'pic' }], error: null })
+            ),
+          })),
+        };
+      });
 
     const res = await bountyService.getById(1);
     expect(res).not.toBeNull();
     expect(res.username).toBe('bob');
     expect(res.poster_avatar).toBe('pic');
     expect(res.user_id).toBe('u1');
+
+    // Regression guard: poster enrichment must read `public_profiles`, never the
+    // base `profiles` table. Reading `profiles` here returns only the caller's
+    // own row, which is what made every other poster render blank.
+    expect(fromCalls).toEqual(['bounties', 'public_profiles']);
+    expect(fromCalls).not.toContain('profiles');
   });
 
-  it('getById falls back when profiles relationship missing and attaches profile', async () => {
-    // 1st call: initial select with join -> returns relationship error
+  it('getById reads another users poster info from public_profiles, not profiles', async () => {
+    const fromCalls: string[] = [];
+
     supabase.from
-      .mockImplementationOnce(() => ({
-        select: jest.fn(() => ({
-          eq: jest.fn(() => ({
-            single: jest.fn(() =>
-              Promise.resolve({
-                data: null,
-                error: {
-                  message: "Could not find a relationship between 'bounties' and 'profiles'",
-                },
-              })
+      .mockImplementationOnce((table: string) => {
+        fromCalls.push(table);
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              single: jest.fn(() =>
+                Promise.resolve({ data: { id: 2, poster_id: 'p1' }, error: null })
+              ),
+            })),
+          })),
+        };
+      })
+      .mockImplementationOnce((table: string) => {
+        fromCalls.push(table);
+        return {
+          select: jest.fn(() => ({
+            in: jest.fn(() =>
+              Promise.resolve({ data: [{ id: 'p1', username: 'alice', avatar: 'av' }], error: null })
             ),
           })),
-        })),
-      }))
-      // 2nd call: raw bounty fetch (no join)
-      .mockImplementationOnce(() => ({
-        select: jest.fn(() => ({
-          eq: jest.fn(() => ({
-            single: jest.fn(() =>
-              Promise.resolve({ data: { id: 2, poster_id: 'p1' }, error: null })
-            ),
-          })),
-        })),
-      }))
-      // 3rd call: profiles fetch
-      .mockImplementationOnce(() => ({
-        select: jest.fn(() => ({
-          in: jest.fn(() =>
-            Promise.resolve({ data: [{ id: 'p1', username: 'alice', avatar: 'av' }], error: null })
-          ),
-        })),
-      }));
+        };
+      });
 
     const res = await bountyService.getById(2);
     expect(res).not.toBeNull();
     expect(res.username).toBe('alice');
-    expect(res.poster_avatar).toBe('av');
+    expect(fromCalls[1]).toBe('public_profiles');
   });
 
   it('addAttachmentToBounty merges attachments and updates via Supabase', async () => {
@@ -172,78 +185,47 @@ describe('bountyService', () => {
     expect(res).toEqual([]);
   });
 
-  it('search returns flattened bounties when Supabase returns data with profiles', async () => {
-    supabase.from.mockImplementationOnce(() => ({
-      select: jest.fn(() => ({
-        eq: jest.fn(() => ({
-          or: jest.fn(() => ({
-            order: jest.fn(() => ({
-              range: jest.fn(() =>
-                Promise.resolve({
-                  data: [{ id: 7, user_id: 'u7', profiles: { username: 'sam', avatar: 'a' } }],
-                  error: null,
-                })
-              ),
+  it('search enriches results with poster info from public_profiles', async () => {
+    const fromCalls: string[] = [];
+
+    supabase.from
+      // 1st call: plain bounty search (no `profiles` embed)
+      .mockImplementationOnce((table: string) => {
+        fromCalls.push(table);
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              or: jest.fn(() => ({
+                order: jest.fn(() => ({
+                  range: jest.fn(() =>
+                    Promise.resolve({ data: [{ id: 7, poster_id: 'u7' }], error: null })
+                  ),
+                })),
+              })),
             })),
           })),
-        })),
-      })),
-    }));
+        };
+      })
+      // 2nd call: poster enrichment from the public_profiles view
+      .mockImplementationOnce((table: string) => {
+        fromCalls.push(table);
+        return {
+          select: jest.fn(() => ({
+            in: jest.fn(() =>
+              Promise.resolve({ data: [{ id: 'u7', username: 'sam', avatar: 'a' }], error: null })
+            ),
+          })),
+        };
+      });
 
     const results = await bountyService.search('term');
     expect(results).toHaveLength(1);
     expect(results[0].username).toBe('sam');
     expect(results[0].poster_avatar).toBe('a');
-  });
 
-  it('search falls back and attaches profiles when join missing', async () => {
-    // 1st call: initial select with join -> relationship error
-    supabase.from
-      .mockImplementationOnce(() => ({
-        select: jest.fn(() => ({
-          eq: jest.fn(() => ({
-            or: jest.fn(() => ({
-              order: jest.fn(() => ({
-                range: jest.fn(() =>
-                  Promise.resolve({
-                    data: null,
-                    error: {
-                      message: "Could not find a relationship between 'bounties' and 'profiles'",
-                    },
-                  })
-                ),
-              })),
-            })),
-          })),
-        })),
-      }))
-      // 2nd call: raw bounty fetch (no join)
-      .mockImplementationOnce(() => ({
-        select: jest.fn(() => ({
-          eq: jest.fn(() => ({
-            or: jest.fn(() => ({
-              order: jest.fn(() => ({
-                range: jest.fn(() =>
-                  Promise.resolve({ data: [{ id: 8, poster_id: 'p2' }], error: null })
-                ),
-              })),
-            })),
-          })),
-        })),
-      }))
-      // 3rd call: profiles fetch
-      .mockImplementationOnce(() => ({
-        select: jest.fn(() => ({
-          in: jest.fn(() =>
-            Promise.resolve({ data: [{ id: 'p2', username: 'z', avatar: 'zz' }], error: null })
-          ),
-        })),
-      }));
-
-    const res = await bountyService.search('x');
-    expect(res).toHaveLength(1);
-    expect(res[0].username).toBe('z');
-    expect(res[0].poster_avatar).toBe('zz');
+    // Regression guard: search must read `public_profiles`, never the base
+    // `profiles` table, which is self-only under RLS.
+    expect(fromCalls).toEqual(['bounties', 'public_profiles']);
   });
 
   it('addAttachmentToBounty falls back to API when Supabase update fails', async () => {
