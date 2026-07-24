@@ -15,7 +15,7 @@ import {
 } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { clearBountyDraftForUser } from '../app/hooks/useBountyDraft';
-import { clearAllSessionData } from '../lib/auth-session-storage';
+import { clearAllSessionData, incrementStartupTimeoutCount, resetStartupTimeoutCount } from '../lib/auth-session-storage';
 import { analyticsService } from '../lib/services/analytics-service';
 import { authProfileService } from '../lib/services/auth-profile-service';
 import { getSentry } from '../lib/services/sentry-init';
@@ -40,6 +40,14 @@ type AuthData = {
  * Proactively refresh the token when it's close to expiring
  */
 const TOKEN_REFRESH_THRESHOLD_MS = 5 * 60 * 1000;
+
+/**
+ * Number of consecutive startup session-restore timeouts before the stored
+ * session is purged. One timeout may be a transient network stall; a repeated
+ * failure loop (the production bug) warrants clearing the session so the next
+ * launch starts clean.
+ */
+const STARTUP_TIMEOUT_PURGE_THRESHOLD = 2;
 
 export default function AuthProvider({ children }: PropsWithChildren) {
   const __DEV__flag = typeof __DEV__ !== 'undefined' && __DEV__;
@@ -365,6 +373,10 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           // Valid session found
           sessionFound = true;
           devLog('[AuthProvider] Session loaded: authenticated');
+          // Successful startup session restore — clear any accumulated timeout count.
+          void resetStartupTimeoutCount().catch((e) => {
+            reportWarning('[AuthProvider] Failed to reset startup timeout count:', e);
+          });
           setSession(session);
           sessionIdRef.current = session.user.id;
           previousUserIdRef.current = session.user.id;
@@ -415,6 +427,10 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         } else {
           // No error but also no session (user not logged in)
           devLog('[AuthProvider] Session loaded: not authenticated');
+          // Successful startup completion (signed out state) — clear any accumulated timeout count.
+          void resetStartupTimeoutCount().catch((e) => {
+            reportWarning('[AuthProvider] Failed to reset startup timeout count:', e);
+          });
           setSession(null);
           try {
             await authProfileService.setSession(null);
@@ -430,16 +446,25 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           reportWarning(
             '[AuthProvider] Session initialization timed out; falling back to signed-out state'
           );
-          // Purge the stored session that we just failed to restore. It is
-          // almost always an expired session whose refresh stalled, and leaving
-          // it on disk means the next cold start replays the exact same doomed
-          // refresh — the user gets stuck in a loop of timeouts and can never
-          // reach a working sign-in. Dropping it makes the next launch a clean
-          // signed-out boot with no network work on the critical path.
+          // Increment the consecutive startup-timeout counter. Only purge the
+          // stored session after STARTUP_TIMEOUT_PURGE_THRESHOLD consecutive
+          // timeouts. One bad launch (transient network stall) doesn't force a
+          // re-login; a repeating loop (the production bug: expired session →
+          // stalled refresh → timeout → next launch replays the same refresh)
+          // does get cleaned up. The counter is reset whenever a startup
+          // session restore succeeds (see resetStartupTimeoutCount above).
           try {
-            await clearAllSessionData(PROJECT_STORAGE_KEY);
+            const count = await incrementStartupTimeoutCount();
+            reportWarning(
+              `[AuthProvider] Startup timeout count: ${count} (purge threshold: ${STARTUP_TIMEOUT_PURGE_THRESHOLD})`
+            );
+            if (count >= STARTUP_TIMEOUT_PURGE_THRESHOLD) {
+              await clearAllSessionData(PROJECT_STORAGE_KEY);
+              await resetStartupTimeoutCount();
+              reportWarning('[AuthProvider] Purged stalled session after consecutive timeouts');
+            }
           } catch (e) {
-            reportWarning('[AuthProvider] Failed to clear stalled session after timeout:', e);
+            reportWarning('[AuthProvider] Failed to handle startup timeout count:', e);
           }
         }
         if (!isMountedRef.current) return;
@@ -521,17 +546,20 @@ export default function AuthProvider({ children }: PropsWithChildren) {
             if (__DEV__flag) console.log('[AuthProvider] SIGNED_IN detected, running user cleanup');
             const prevUser = previousUserIdRef.current ?? outgoingUserId;
             if (prevUser && prevUser !== incomingUserId) {
-              try {
-                // Await cleanup to ensure AsyncStorage entries are removed
-                // before the new session is applied and components read cache.
-                await Promise.all([
-                  clearBountyDraftForUser(prevUser),
-                  cachedDataService.clearAll(),
-                ]);
-              } catch (e) {
-                // Non-critical: log but continue with sign-in flow
+              // Fire-and-forget: this callback runs synchronously INSIDE gotrue's
+              // auth lock, and signInWithPassword() awaits every onAuthStateChange
+              // callback (via _notifyAllSubscribers) before it resolves. Awaiting
+              // AsyncStorage cleanup here holds the lock open and stalls sign-in
+              // (surfacing as the 15s "Sign-in is taking longer than expected."
+              // timeout). The cleared data is only read after the deferred profile
+              // sync below, so a fire-and-forget clear is safe against cross-user
+              // leaks.
+              void Promise.all([
+                clearBountyDraftForUser(prevUser),
+                cachedDataService.clearAll(),
+              ]).catch(e => {
                 reportError(e, '[AuthProvider] Data cleanup on user switch failed (non-critical)');
-              }
+              });
             }
             // Record the new user after cleanup
             previousUserIdRef.current = incomingUserId;
@@ -680,14 +708,26 @@ export default function AuthProvider({ children }: PropsWithChildren) {
             previousUserIdRef.current = null;
           }
 
-          // Track authentication events
+          // Track authentication events. Fire-and-forget: never await analytics
+          // inside the auth-lock callback (see cross-user cleanup note above).
+          // Route through Promise.resolve().then() so a synchronous throw or a
+          // non-promise return can't break this lock-critical callback.
           if (_event === 'SIGNED_IN' && session?.user) {
-            await analyticsService.identifyUser(session.user.id, {
-              email: session.user.email,
-            });
-            await analyticsService.trackEvent('user_logged_in', {
-              method: session.user.app_metadata?.provider || 'email',
-            });
+            const authedUser = session.user;
+            void Promise.resolve()
+              .then(() =>
+                analyticsService.identifyUser(authedUser.id, {
+                  email: authedUser.email,
+                })
+              )
+              .catch(() => {});
+            void Promise.resolve()
+              .then(() =>
+                analyticsService.trackEvent('user_logged_in', {
+                  method: authedUser.app_metadata?.provider || 'email',
+                })
+              )
+              .catch(() => {});
             try {
               const Sentry = getSentry?.();
               if (Sentry && typeof Sentry.setUser === 'function') {
@@ -728,9 +768,14 @@ export default function AuthProvider({ children }: PropsWithChildren) {
               setIsPasswordRecovery(false);
             }
             if (verified) {
-              await analyticsService.trackEvent('email_verified', {
-                userId: session.user.id,
-              });
+              const verifiedUser = session.user;
+              void Promise.resolve()
+                .then(() =>
+                  analyticsService.trackEvent('email_verified', {
+                    userId: verifiedUser.id,
+                  })
+                )
+                .catch(() => {});
             }
           } else if (_event === 'TOKEN_REFRESHED') {
             devLog('[AuthProvider] Token refreshed by Supabase');
@@ -739,19 +784,24 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           // Also run on INITIAL_SESSION to cover cold starts where the auth session
           // restores after notification permission/token retrieval already happened.
           if (_event === 'SIGNED_IN' || _event === 'INITIAL_SESSION') {
-            try {
-              const deferred = await AsyncStorage.getItem(DEFERRED_PUSH_REGISTRATION_KEY);
-              if (deferred && session?.user) {
-                // Clear the flag and attempt registration (best-effort, fire-and-forget)
-                await AsyncStorage.removeItem(DEFERRED_PUSH_REGISTRATION_KEY);
-                void notificationService.requestPermissionsAndRegisterToken().catch(e => {
-                  reportWarning('[AuthProvider] Deferred push registration failed:', e);
-                });
+            const sessionForPush = session;
+            // Deferred off the auth lock: AsyncStorage reads must not be awaited
+            // inline in this callback (see cross-user cleanup note above).
+            void (async () => {
+              try {
+                const deferred = await AsyncStorage.getItem(DEFERRED_PUSH_REGISTRATION_KEY);
+                if (deferred && sessionForPush?.user) {
+                  // Clear the flag and attempt registration (best-effort, fire-and-forget)
+                  await AsyncStorage.removeItem(DEFERRED_PUSH_REGISTRATION_KEY);
+                  void notificationService.requestPermissionsAndRegisterToken().catch(e => {
+                    reportWarning('[AuthProvider] Deferred push registration failed:', e);
+                  });
+                }
+              } catch (e) {
+                // Non-fatal
+                reportWarning('[AuthProvider] Error checking deferred push registration flag:', e);
               }
-            } catch (e) {
-              // Non-fatal
-              reportWarning('[AuthProvider] Error checking deferred push registration flag:', e);
-            }
+            })();
           }
 
           logAuthLifecycleEvent({

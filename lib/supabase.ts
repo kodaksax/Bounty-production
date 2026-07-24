@@ -3,6 +3,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { createAuthSessionStorageAdapter } from './auth-session-storage';
 import { config } from './config';
 import { checkEnvironmentIntegrity } from './config/env-guard';
+import { authFetchWithTimeout } from './utils/auth-fetch';
 
 // Use centralized frontend config for env access
 const supabaseUrl = config.supabase.url;
@@ -49,49 +50,8 @@ function validateSupabaseShape(obj: any): obj is SupabaseClient {
   }
 }
 
-// Per-request timeout applied to GoTrue (/auth/v1/*) calls.
-//
-// auth-js issues token refreshes from inside `getSession()` with NO fetch
-// timeout of its own, and retries them with exponential backoff for up to
-// AUTO_REFRESH_TICK_DURATION_MS (30s). React Native's default fetch timeout is
-// ~60s on top of that. Meanwhile auth-js holds `lockAcquired`, so every other
-// auth call — including the user's next signInWithPassword — queues behind the
-// stalled refresh in `_acquireLock`. The result in production was a cold start
-// blowing past AUTH_TIMEOUT ("auth-provider:getSession timed out after
-// 15000ms"), dropping the user on the sign-in screen, where their sign-in then
-// sat in that same queue and timed out too.
-//
-// 8s leaves room for auth-js's internal 200/400/800ms backoff retries to finish
-// inside our 15s AUTH_TIMEOUT budget, and — critically — lets the refresh fail
-// fast so the auth lock is released instead of squatting for a minute.
-const AUTH_REQUEST_TIMEOUT_MS = 8_000;
-
-// Only GoTrue traffic is bounded. PostgREST/Storage requests keep the platform
-// default: a hard 8s cap would break legitimately long operations like image
-// uploads, and they don't hold the auth lock.
-function fetchWithTimeout(input: any, init: any = {}): Promise<Response> {
-  const url = typeof input === 'string' ? input : input?.url;
-  if (typeof url !== 'string' || !url.includes('/auth/v1/')) {
-    return fetch(input, init);
-  }
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), AUTH_REQUEST_TIMEOUT_MS);
-
-  // Respect a caller-supplied signal (auth-js passes one for some operations)
-  // by forwarding its abort to ours, so neither cancellation path is lost.
-  const callerSignal: AbortSignal | undefined = init?.signal;
-  const onCallerAbort = () => controller.abort();
-  if (callerSignal) {
-    if (callerSignal.aborted) controller.abort();
-    else callerSignal.addEventListener?.('abort', onCallerAbort);
-  }
-
-  return fetch(input, { ...init, signal: controller.signal }).finally(() => {
-    clearTimeout(timeoutId);
-    callerSignal?.removeEventListener?.('abort', onCallerAbort);
-  });
-}
+// authFetchWithTimeout is imported from lib/utils/auth-fetch.ts.
+// See that module for full design documentation.
 
 async function initSupabase(): Promise<void> {
   if (realSupabase || !isSupabaseConfigured) return;
@@ -169,7 +129,7 @@ async function initSupabase(): Promise<void> {
           detectSessionInUrl: false,
         };
       })(),
-      global: { fetch: fetchWithTimeout },
+      global: { fetch: authFetchWithTimeout },
     });
   } catch (e) {
     // Defensive: if the Supabase client throws (e.g., invalid URL), fall back

@@ -13,6 +13,7 @@
  * on the feature this replaced.
  */
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
@@ -31,6 +32,61 @@ const SECURE_OPTS: SecureStore.SecureStoreOptions | undefined =
 // Chunking configuration for large session objects
 const CHUNK_SIZE = 1900;
 const CHUNK_META_SUFFIX = '__chunkCount';
+
+// Hard ceiling for any single native SecureStore/Keychain call. On some
+// production (release) builds the underlying iOS Keychain / Android KeyStore
+// operation can block indefinitely — e.g. when the keychain-access-group
+// entitlement differs from the development provisioning profile, or when the
+// KeyStore is under contention. Because Supabase's `_saveSession()` awaits our
+// `setItem()` *inside gotrue's auth lock*, a single hung write would stall
+// `signInWithPassword()` forever (surfacing to the user as the 15s
+// "Sign-in is taking longer than expected." timeout). Racing every native call
+// against this ceiling guarantees the auth flow can never hang on storage.
+const SECURE_STORE_OP_TIMEOUT_MS = 4000;
+
+/**
+ * Race a single SecureStore operation against a hard timeout so a hung native
+ * keychain call can never block the auth flow. On timeout the provided fallback
+ * value is returned and a diagnostic is logged (best-effort Sentry breadcrumb).
+ */
+async function withSecureStoreTimeout<T>(
+  op: () => Promise<T>,
+  opName: string,
+  fallback: T
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race<T>([
+      op(),
+      new Promise<T>(resolve => {
+        timer = setTimeout(() => {
+          console.error(
+            `[AuthSessionStorage] SecureStore ${opName} exceeded ${SECURE_STORE_OP_TIMEOUT_MS}ms — ` +
+              `returning fallback to avoid blocking authentication`
+          );
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+            const Sentry = require('@sentry/react-native');
+            if (Sentry && typeof Sentry.captureMessage === 'function') {
+              Sentry.addBreadcrumb?.({
+                category: 'auth',
+                level: 'error',
+                message: `SecureStore ${opName} timed out`,
+                data: { platform: Platform.OS, timeoutMs: SECURE_STORE_OP_TIMEOUT_MS },
+              });
+              Sentry.captureMessage(`[auth-storage] SecureStore ${opName} timed out`, 'error');
+            }
+          } catch {
+            // Sentry unavailable (e.g. Expo Go) — ignore.
+          }
+          resolve(fallback);
+        }, SECURE_STORE_OP_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 // Read-through in-memory cache so repeated getItem calls within the same app
 // session don't re-hit SecureStore on every access. Purely a performance
@@ -80,6 +136,63 @@ export async function clearAllSessionData(projectStorageKey?: string): Promise<v
   }
 }
 
+// ---------------------------------------------------------------------------
+// Consecutive startup-timeout counter
+// ---------------------------------------------------------------------------
+//
+// Session purging on a single timeout is aggressive — a user on a genuinely
+// slow connection will lose their session on a transient stall. Tracking
+// consecutive startup timeouts lets us apply a grace threshold (default: 2)
+// so one bad launch doesn't force a re-login, but a repeating failure loop
+// (the production bug) still gets cleaned up.
+//
+// AsyncStorage is used (not SecureStore) because the counter is non-sensitive
+// and must be readable even when SecureStore is unavailable or locked.
+
+const STARTUP_TIMEOUT_COUNT_KEY = 'auth.startup_timeout_count';
+
+/**
+ * Increments the consecutive startup-timeout counter.
+ * @returns The new count after incrementing.
+ */
+export async function incrementStartupTimeoutCount(): Promise<number> {
+  try {
+    const raw = await AsyncStorage.getItem(STARTUP_TIMEOUT_COUNT_KEY);
+    const next = (parseInt(raw ?? '0', 10) || 0) + 1;
+    await AsyncStorage.setItem(STARTUP_TIMEOUT_COUNT_KEY, String(next));
+    return next;
+  } catch {
+    // Storage failures must never affect the auth flow.
+    return 1;
+  }
+}
+
+/**
+ * Resets the consecutive startup-timeout counter to zero.
+ * Call this whenever a startup session restore succeeds or the user is
+ * already known to be signed out (so the counter only reflects genuine
+ * stalls, not normal signed-out launches).
+ */
+export async function resetStartupTimeoutCount(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(STARTUP_TIMEOUT_COUNT_KEY);
+  } catch {
+    // Best-effort only.
+  }
+}
+
+/**
+ * Returns the current consecutive startup-timeout count without modifying it.
+ */
+export async function getStartupTimeoutCount(): Promise<number> {
+  try {
+    const raw = await AsyncStorage.getItem(STARTUP_TIMEOUT_COUNT_KEY);
+    return parseInt(raw ?? '0', 10) || 0;
+  } catch {
+    return 0;
+  }
+}
+
 /**
  * Storage adapter for Supabase — always persists to secure storage.
  *
@@ -93,12 +206,17 @@ export async function clearAllSessionData(projectStorageKey?: string): Promise<v
  *   by sign-out to make the loss of session permanent and immediate.
  */
 export const createAuthSessionStorageAdapter = () => {
-  console.log('[AuthSessionStorage] createAuthSessionStorageAdapter called')
+  console.log('[AuthSessionStorage] createAuthSessionStorageAdapter called');
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
     const Sentry = require('@sentry/react-native');
     if (Sentry && typeof Sentry.addBreadcrumb === 'function') {
-      Sentry.addBreadcrumb({ category: 'auth', message: 'createAuthSessionStorageAdapter called', level: 'info', data: { platform: Platform.OS } });
+      Sentry.addBreadcrumb({
+        category: 'auth',
+        message: 'createAuthSessionStorageAdapter called',
+        level: 'info',
+        data: { platform: Platform.OS },
+      });
     }
   } catch (e) {
     // Sentry not available in this runtime (e.g., Expo Go) - ignore
@@ -112,16 +230,29 @@ export const createAuthSessionStorageAdapter = () => {
           return cached;
         }
 
-        // Cache miss, read from secure storage
-        const val = await SecureStore.getItemAsync(key);
+        // Cache miss, read from secure storage (bounded so a hung keychain
+        // read can never block session restoration / auth).
+        const val = await withSecureStoreTimeout(
+          () => SecureStore.getItemAsync(key),
+          `getItemAsync(${key})`,
+          null
+        );
 
         // Handle chunked storage
         if (val === '__chunked__') {
-          const countStr = await SecureStore.getItemAsync(key + CHUNK_META_SUFFIX);
+          const countStr = await withSecureStoreTimeout(
+            () => SecureStore.getItemAsync(key + CHUNK_META_SUFFIX),
+            `getItemAsync(${key}${CHUNK_META_SUFFIX})`,
+            null
+          );
           const count = parseInt(countStr || '0', 10);
           let out = '';
           for (let i = 0; i < count; i++) {
-            const part = await SecureStore.getItemAsync(`${key}__${i}`);
+            const part = await withSecureStoreTimeout(
+              () => SecureStore.getItemAsync(`${key}__${i}`),
+              `getItemAsync(${key}__${i})`,
+              null
+            );
             out += part ?? '';
           }
 
@@ -145,49 +276,86 @@ export const createAuthSessionStorageAdapter = () => {
     },
 
     setItem: async (key: string, value: string): Promise<void> => {
+      if (typeof value !== 'string') value = String(value);
+
+      // Update the in-memory cache FIRST so the freshly-issued session is
+      // immediately usable for the remainder of this app run, independent of
+      // whether the native keychain write succeeds. This is what allows
+      // sign-in to complete even if secure storage is slow or unavailable.
+      inMemorySessionCache.set(key, value);
+
+      // Persist to secure storage best-effort. Every native call is bounded by
+      // withSecureStoreTimeout, and we deliberately DO NOT rethrow: Supabase's
+      // `_saveSession()` awaits this method inside gotrue's auth lock, so a
+      // thrown/rejected persistence error would fail (or a hung call would
+      // block) the entire sign-in. Persistence failures only affect survival
+      // across a cold restart, which is logged/reported rather than fatal.
       try {
-        if (typeof value !== 'string') value = String(value);
+        if (value.length <= CHUNK_SIZE) {
+          await withSecureStoreTimeout(
+            () => SecureStore.setItemAsync(key, value, SECURE_OPTS),
+            `setItemAsync(${key})`,
+            undefined
+          );
 
-        try {
-          // If value fits in one item, store directly
-          if (value.length <= CHUNK_SIZE) {
-            await SecureStore.setItemAsync(key, value, SECURE_OPTS);
-
-            // Clean up any old chunks
-            const prevCountStr = await SecureStore.getItemAsync(key + CHUNK_META_SUFFIX);
-            if (prevCountStr) {
-              const prevCount = parseInt(prevCountStr, 10) || 0;
-              for (let i = 0; i < prevCount; i++) {
-                await SecureStore.deleteItemAsync(`${key}__${i}`);
-              }
-              await SecureStore.deleteItemAsync(key + CHUNK_META_SUFFIX);
+          // Clean up any old chunks from a previous larger session
+          const prevCountStr = await withSecureStoreTimeout(
+            () => SecureStore.getItemAsync(key + CHUNK_META_SUFFIX),
+            `getItemAsync(${key}${CHUNK_META_SUFFIX})`,
+            null
+          );
+          if (prevCountStr) {
+            const prevCount = parseInt(prevCountStr, 10) || 0;
+            for (let i = 0; i < prevCount; i++) {
+              await withSecureStoreTimeout(
+                () => SecureStore.deleteItemAsync(`${key}__${i}`),
+                `deleteItemAsync(${key}__${i})`,
+                undefined
+              );
             }
-          } else {
-            // Chunk the value
-            const chunks = Math.ceil(value.length / CHUNK_SIZE);
-            for (let i = 0; i < chunks; i++) {
-              const part = value.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
-              await SecureStore.setItemAsync(`${key}__${i}`, part, SECURE_OPTS);
-            }
-
-            // Write marker and metadata
-            await SecureStore.setItemAsync(key, '__chunked__', SECURE_OPTS);
-            await SecureStore.setItemAsync(key + CHUNK_META_SUFFIX, String(chunks), SECURE_OPTS);
+            await withSecureStoreTimeout(
+              () => SecureStore.deleteItemAsync(key + CHUNK_META_SUFFIX),
+              `deleteItemAsync(${key}${CHUNK_META_SUFFIX})`,
+              undefined
+            );
+          }
+        } else {
+          // Chunk the value
+          const chunks = Math.ceil(value.length / CHUNK_SIZE);
+          for (let i = 0; i < chunks; i++) {
+            const part = value.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+            await withSecureStoreTimeout(
+              () => SecureStore.setItemAsync(`${key}__${i}`, part, SECURE_OPTS),
+              `setItemAsync(${key}__${i})`,
+              undefined
+            );
           }
 
-          // Only cache in memory after successful secure storage write
-          // This ensures consistency between cache and storage
-          inMemorySessionCache.set(key, value);
-        } catch (storageError) {
-          // If secure storage fails, clear the cache to maintain consistency
-          // User will need to re-authenticate, but we won't have stale cached data
-          inMemorySessionCache.delete(key);
-          console.error('[AuthSessionStorage] Secure storage failed, cache cleared to maintain consistency:', storageError);
-          throw storageError;
+          // Write marker and metadata
+          await withSecureStoreTimeout(
+            () => SecureStore.setItemAsync(key, '__chunked__', SECURE_OPTS),
+            `setItemAsync(${key})`,
+            undefined
+          );
+          await withSecureStoreTimeout(
+            () => SecureStore.setItemAsync(key + CHUNK_META_SUFFIX, String(chunks), SECURE_OPTS),
+            `setItemAsync(${key}${CHUNK_META_SUFFIX})`,
+            undefined
+          );
         }
-      } catch (e) {
-        console.error('[AuthSessionStorage] Error setting item:', e);
-        throw e;
+      } catch (storageError) {
+        // Non-fatal: the session lives in the in-memory cache for this run.
+        console.error(
+          '[AuthSessionStorage] Secure storage write failed (session kept in memory for this run):',
+          storageError
+        );
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+          const Sentry = require('@sentry/react-native');
+          Sentry?.captureException?.(storageError);
+        } catch {
+          // ignore
+        }
       }
     },
 
@@ -196,18 +364,43 @@ export const createAuthSessionStorageAdapter = () => {
         // Clear from in-memory cache
         inMemorySessionCache.delete(key);
 
-        // Always remove from secure storage (if it exists)
-        const val = await SecureStore.getItemAsync(key);
+        // Always remove from secure storage (if it exists). Bounded so a hung
+        // keychain call during sign-out can never block the flow.
+        const val = await withSecureStoreTimeout(
+          () => SecureStore.getItemAsync(key),
+          `getItemAsync(${key})`,
+          null
+        );
         if (val === '__chunked__') {
-          const countStr = await SecureStore.getItemAsync(key + CHUNK_META_SUFFIX);
+          const countStr = await withSecureStoreTimeout(
+            () => SecureStore.getItemAsync(key + CHUNK_META_SUFFIX),
+            `getItemAsync(${key}${CHUNK_META_SUFFIX})`,
+            null
+          );
           const count = parseInt(countStr || '0', 10);
           for (let i = 0; i < count; i++) {
-            await SecureStore.deleteItemAsync(`${key}__${i}`);
+            await withSecureStoreTimeout(
+              () => SecureStore.deleteItemAsync(`${key}__${i}`),
+              `deleteItemAsync(${key}__${i})`,
+              undefined
+            );
           }
-          await SecureStore.deleteItemAsync(key + CHUNK_META_SUFFIX);
-          await SecureStore.deleteItemAsync(key);
+          await withSecureStoreTimeout(
+            () => SecureStore.deleteItemAsync(key + CHUNK_META_SUFFIX),
+            `deleteItemAsync(${key}${CHUNK_META_SUFFIX})`,
+            undefined
+          );
+          await withSecureStoreTimeout(
+            () => SecureStore.deleteItemAsync(key),
+            `deleteItemAsync(${key})`,
+            undefined
+          );
         } else if (val !== null) {
-          await SecureStore.deleteItemAsync(key);
+          await withSecureStoreTimeout(
+            () => SecureStore.deleteItemAsync(key),
+            `deleteItemAsync(${key})`,
+            undefined
+          );
         }
 
         console.log('[AuthSessionStorage] Session removed from secure storage and in-memory cache');

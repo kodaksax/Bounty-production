@@ -30,11 +30,57 @@ jest.mock('react-native', () => ({
 
 import { shareBounty, shareProfile } from '../../../lib/utils/share-utils';
 
+const originalNavigatorDescriptor = Object.getOwnPropertyDescriptor(global, 'navigator');
+const originalClipboardDescriptor =
+  typeof global.navigator !== 'undefined'
+    ? Object.getOwnPropertyDescriptor(global.navigator, 'clipboard')
+    : undefined;
+
+function installClipboardMock() {
+  const writeText = jest.fn().mockResolvedValue(undefined);
+
+  if (typeof global.navigator === 'undefined') {
+    Object.defineProperty(global, 'navigator', {
+      value: {},
+      writable: true,
+      configurable: true,
+    });
+  }
+
+  Object.defineProperty(global.navigator, 'clipboard', {
+    value: { writeText },
+    writable: true,
+    configurable: true,
+  });
+
+  return writeText;
+}
+
+function restoreNavigator() {
+  if (typeof global.navigator !== 'undefined') {
+    if (originalClipboardDescriptor) {
+      Object.defineProperty(global.navigator, 'clipboard', originalClipboardDescriptor);
+    } else {
+      delete (global.navigator as typeof global.navigator & { clipboard?: Clipboard }).clipboard;
+    }
+  }
+
+  if (originalNavigatorDescriptor) {
+    Object.defineProperty(global, 'navigator', originalNavigatorDescriptor);
+  } else {
+    delete (global as typeof globalThis & { navigator?: Navigator }).navigator;
+  }
+}
+
 describe('share-utils', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockPlatformOS = 'ios';
     mockShare.mockResolvedValue({ action: 'sharedAction' });
+  });
+
+  afterEach(() => {
+    restoreNavigator();
   });
 
   describe('shareBounty', () => {

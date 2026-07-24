@@ -19,8 +19,20 @@
 const PREV_API_TIMEOUT = process.env.API_TIMEOUT;
 process.env.API_TIMEOUT = '150';
 
-import { render, waitFor } from '@testing-library/react-native';
+import { cleanup, render, waitFor } from '@testing-library/react-native';
 import React from 'react';
+
+const mockRealtimeChannel = {
+  on: jest.fn(),
+  subscribe: jest.fn(),
+};
+mockRealtimeChannel.on.mockReturnValue(mockRealtimeChannel);
+mockRealtimeChannel.subscribe.mockReturnValue(mockRealtimeChannel);
+
+const mockSupabase = {
+  channel: jest.fn(() => mockRealtimeChannel),
+  removeChannel: jest.fn(),
+};
 
 // --- Rich react-native mock (the global jest.setup mock lacks Animated.FlatList
 // / RefreshControl / Animated.event that this component relies on). ---
@@ -206,6 +218,10 @@ describe('BountyFeed loading resilience', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   afterAll(() => {
