@@ -13,6 +13,7 @@
  * on the feature this replaced.
  */
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
@@ -77,6 +78,63 @@ export async function clearAllSessionData(projectStorageKey?: string): Promise<v
     console.log('[AuthSessionStorage] All session data cleared from secure storage and memory');
   } catch (e) {
     console.error('[AuthSessionStorage] Error clearing session data:', e);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Consecutive startup-timeout counter
+// ---------------------------------------------------------------------------
+//
+// Session purging on a single timeout is aggressive — a user on a genuinely
+// slow connection will lose their session on a transient stall. Tracking
+// consecutive startup timeouts lets us apply a grace threshold (default: 2)
+// so one bad launch doesn't force a re-login, but a repeating failure loop
+// (the production bug) still gets cleaned up.
+//
+// AsyncStorage is used (not SecureStore) because the counter is non-sensitive
+// and must be readable even when SecureStore is unavailable or locked.
+
+const STARTUP_TIMEOUT_COUNT_KEY = 'auth.startup_timeout_count';
+
+/**
+ * Increments the consecutive startup-timeout counter.
+ * @returns The new count after incrementing.
+ */
+export async function incrementStartupTimeoutCount(): Promise<number> {
+  try {
+    const raw = await AsyncStorage.getItem(STARTUP_TIMEOUT_COUNT_KEY);
+    const next = (parseInt(raw ?? '0', 10) || 0) + 1;
+    await AsyncStorage.setItem(STARTUP_TIMEOUT_COUNT_KEY, String(next));
+    return next;
+  } catch {
+    // Storage failures must never affect the auth flow.
+    return 1;
+  }
+}
+
+/**
+ * Resets the consecutive startup-timeout counter to zero.
+ * Call this whenever a startup session restore succeeds or the user is
+ * already known to be signed out (so the counter only reflects genuine
+ * stalls, not normal signed-out launches).
+ */
+export async function resetStartupTimeoutCount(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(STARTUP_TIMEOUT_COUNT_KEY);
+  } catch {
+    // Best-effort only.
+  }
+}
+
+/**
+ * Returns the current consecutive startup-timeout count without modifying it.
+ */
+export async function getStartupTimeoutCount(): Promise<number> {
+  try {
+    const raw = await AsyncStorage.getItem(STARTUP_TIMEOUT_COUNT_KEY);
+    return parseInt(raw ?? '0', 10) || 0;
+  } catch {
+    return 0;
   }
 }
 

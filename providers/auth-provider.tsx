@@ -15,7 +15,7 @@ import {
 } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { clearBountyDraftForUser } from '../app/hooks/useBountyDraft';
-import { clearAllSessionData } from '../lib/auth-session-storage';
+import { clearAllSessionData, incrementStartupTimeoutCount, resetStartupTimeoutCount } from '../lib/auth-session-storage';
 import { analyticsService } from '../lib/services/analytics-service';
 import { authProfileService } from '../lib/services/auth-profile-service';
 import { getSentry } from '../lib/services/sentry-init';
@@ -365,6 +365,8 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           // Valid session found
           sessionFound = true;
           devLog('[AuthProvider] Session loaded: authenticated');
+          // Successful startup session restore — clear any accumulated timeout count.
+          void resetStartupTimeoutCount().catch(() => {});
           setSession(session);
           sessionIdRef.current = session.user.id;
           previousUserIdRef.current = session.user.id;
@@ -415,6 +417,8 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         } else {
           // No error but also no session (user not logged in)
           devLog('[AuthProvider] Session loaded: not authenticated');
+          // Successful startup completion (signed out state) — clear any accumulated timeout count.
+          void resetStartupTimeoutCount().catch(() => {});
           setSession(null);
           try {
             await authProfileService.setSession(null);
@@ -430,16 +434,26 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           reportWarning(
             '[AuthProvider] Session initialization timed out; falling back to signed-out state'
           );
-          // Purge the stored session that we just failed to restore. It is
-          // almost always an expired session whose refresh stalled, and leaving
-          // it on disk means the next cold start replays the exact same doomed
-          // refresh — the user gets stuck in a loop of timeouts and can never
-          // reach a working sign-in. Dropping it makes the next launch a clean
-          // signed-out boot with no network work on the critical path.
+          // Increment the consecutive startup-timeout counter. Only purge the
+          // stored session after STARTUP_TIMEOUT_PURGE_THRESHOLD consecutive
+          // timeouts. One bad launch (transient network stall) doesn't force a
+          // re-login; a repeating loop (the production bug: expired session →
+          // stalled refresh → timeout → next launch replays the same refresh)
+          // does get cleaned up. The counter is reset whenever a startup
+          // session restore succeeds (see resetStartupTimeoutCount below).
+          const STARTUP_TIMEOUT_PURGE_THRESHOLD = 2;
           try {
-            await clearAllSessionData(PROJECT_STORAGE_KEY);
+            const count = await incrementStartupTimeoutCount();
+            reportWarning(
+              `[AuthProvider] Startup timeout count: ${count} (purge threshold: ${STARTUP_TIMEOUT_PURGE_THRESHOLD})`
+            );
+            if (count >= STARTUP_TIMEOUT_PURGE_THRESHOLD) {
+              await clearAllSessionData(PROJECT_STORAGE_KEY);
+              await resetStartupTimeoutCount();
+              reportWarning('[AuthProvider] Purged stalled session after consecutive timeouts');
+            }
           } catch (e) {
-            reportWarning('[AuthProvider] Failed to clear stalled session after timeout:', e);
+            reportWarning('[AuthProvider] Failed to handle startup timeout count:', e);
           }
         }
         if (!isMountedRef.current) return;
