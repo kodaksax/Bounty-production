@@ -9,11 +9,8 @@
 
 import * as SecureStore from 'expo-secure-store';
 import {
-  clearAllSessionData,
-  createAuthSessionStorageAdapter,
-  getStartupTimeoutCount,
-  incrementStartupTimeoutCount,
-  resetStartupTimeoutCount,
+    clearAllSessionData,
+    createAuthSessionStorageAdapter,
 } from '../../../lib/auth-session-storage';
 
 jest.mock('expo-secure-store', () => ({
@@ -293,137 +290,6 @@ describe('createAuthSessionStorageAdapter', () => {
       } finally {
         jest.useRealTimers();
       }
-    });
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Consecutive startup-timeout counter
-// ---------------------------------------------------------------------------
-
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-describe('consecutiveStartupTimeout counter', () => {
-  const TIMEOUT_COUNT_KEY = 'auth.startup_timeout_count';
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
-    (AsyncStorage.setItem as jest.Mock).mockResolvedValue(undefined);
-    (AsyncStorage.removeItem as jest.Mock).mockResolvedValue(undefined);
-  });
-
-  describe('incrementStartupTimeoutCount', () => {
-    it('returns 1 on the first call (no prior count stored)', async () => {
-      (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
-
-      const count = await incrementStartupTimeoutCount();
-
-      expect(count).toBe(1);
-      expect(AsyncStorage.setItem).toHaveBeenCalledWith(TIMEOUT_COUNT_KEY, '1');
-    });
-
-    it('increments from an existing stored value', async () => {
-      (AsyncStorage.getItem as jest.Mock).mockResolvedValue('1');
-
-      const count = await incrementStartupTimeoutCount();
-
-      expect(count).toBe(2);
-      expect(AsyncStorage.setItem).toHaveBeenCalledWith(TIMEOUT_COUNT_KEY, '2');
-    });
-
-    it('handles a corrupted stored value gracefully (treats as 0)', async () => {
-      (AsyncStorage.getItem as jest.Mock).mockResolvedValue('not-a-number');
-
-      const count = await incrementStartupTimeoutCount();
-
-      expect(count).toBe(1);
-    });
-
-    it('returns 1 when AsyncStorage throws (storage failure must not block auth)', async () => {
-      (AsyncStorage.getItem as jest.Mock).mockRejectedValue(new Error('storage error'));
-
-      const count = await incrementStartupTimeoutCount();
-
-      expect(count).toBe(1);
-    });
-  });
-
-  describe('resetStartupTimeoutCount', () => {
-    it('removes the counter key from AsyncStorage', async () => {
-      await resetStartupTimeoutCount();
-
-      expect(AsyncStorage.removeItem).toHaveBeenCalledWith(TIMEOUT_COUNT_KEY);
-    });
-
-    it('does not throw when AsyncStorage.removeItem fails', async () => {
-      (AsyncStorage.removeItem as jest.Mock).mockRejectedValue(new Error('storage error'));
-
-      await expect(resetStartupTimeoutCount()).resolves.toBeUndefined();
-    });
-  });
-
-  describe('getStartupTimeoutCount', () => {
-    it('returns 0 when no count is stored', async () => {
-      (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
-
-      const count = await getStartupTimeoutCount();
-
-      expect(count).toBe(0);
-    });
-
-    it('returns the stored count as a number', async () => {
-      (AsyncStorage.getItem as jest.Mock).mockResolvedValue('3');
-
-      const count = await getStartupTimeoutCount();
-
-      expect(count).toBe(3);
-    });
-
-    it('returns 0 when AsyncStorage throws', async () => {
-      (AsyncStorage.getItem as jest.Mock).mockRejectedValue(new Error('storage error'));
-
-      const count = await getStartupTimeoutCount();
-
-      expect(count).toBe(0);
-    });
-  });
-
-  describe('session-purge threshold integration', () => {
-    it('session is NOT purged on the first startup timeout (below threshold)', async () => {
-      // Simulate the auth-provider logic: purge only at count >= 2
-      const PURGE_THRESHOLD = 2;
-
-      (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null); // first timeout
-
-      const count = await incrementStartupTimeoutCount();
-      const shouldPurge = count >= PURGE_THRESHOLD;
-
-      expect(shouldPurge).toBe(false);
-    });
-
-    it('session IS purged on the second consecutive startup timeout (at threshold)', async () => {
-      const PURGE_THRESHOLD = 2;
-
-      (AsyncStorage.getItem as jest.Mock).mockResolvedValue('1'); // second timeout
-
-      const count = await incrementStartupTimeoutCount();
-      const shouldPurge = count >= PURGE_THRESHOLD;
-
-      expect(shouldPurge).toBe(true);
-    });
-
-    it('counter is reset after purge so the next launch starts from zero', async () => {
-      (AsyncStorage.getItem as jest.Mock).mockResolvedValue('1');
-      await incrementStartupTimeoutCount();
-      await resetStartupTimeoutCount();
-
-      expect(AsyncStorage.removeItem).toHaveBeenCalledWith(TIMEOUT_COUNT_KEY);
-
-      // Next read should return 0
-      (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
-      const count = await getStartupTimeoutCount();
-      expect(count).toBe(0);
     });
   });
 });

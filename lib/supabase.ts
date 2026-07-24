@@ -3,7 +3,6 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { createAuthSessionStorageAdapter } from './auth-session-storage';
 import { config } from './config';
 import { checkEnvironmentIntegrity } from './config/env-guard';
-import { authFetchWithTimeout } from './utils/auth-fetch';
 
 // Use centralized frontend config for env access
 const supabaseUrl = config.supabase.url;
@@ -49,9 +48,6 @@ function validateSupabaseShape(obj: any): obj is SupabaseClient {
     return false;
   }
 }
-
-// authFetchWithTimeout is imported from lib/utils/auth-fetch.ts.
-// See that module for full design documentation.
 
 async function initSupabase(): Promise<void> {
   if (realSupabase || !isSupabaseConfigured) return;
@@ -129,7 +125,6 @@ async function initSupabase(): Promise<void> {
           detectSessionInUrl: false,
         };
       })(),
-      global: { fetch: authFetchWithTimeout },
     });
   } catch (e) {
     // Defensive: if the Supabase client throws (e.g., invalid URL), fall back

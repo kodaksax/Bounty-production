@@ -30,57 +30,11 @@ jest.mock('react-native', () => ({
 
 import { shareBounty, shareProfile } from '../../../lib/utils/share-utils';
 
-const originalNavigatorDescriptor = Object.getOwnPropertyDescriptor(global, 'navigator');
-const originalClipboardDescriptor =
-  typeof global.navigator !== 'undefined'
-    ? Object.getOwnPropertyDescriptor(global.navigator, 'clipboard')
-    : undefined;
-
-function installClipboardMock() {
-  const writeText = jest.fn().mockResolvedValue(undefined);
-
-  if (typeof global.navigator === 'undefined') {
-    Object.defineProperty(global, 'navigator', {
-      value: {},
-      writable: true,
-      configurable: true,
-    });
-  }
-
-  Object.defineProperty(global.navigator, 'clipboard', {
-    value: { writeText },
-    writable: true,
-    configurable: true,
-  });
-
-  return writeText;
-}
-
-function restoreNavigator() {
-  if (typeof global.navigator !== 'undefined') {
-    if (originalClipboardDescriptor) {
-      Object.defineProperty(global.navigator, 'clipboard', originalClipboardDescriptor);
-    } else {
-      delete (global.navigator as typeof global.navigator & { clipboard?: Clipboard }).clipboard;
-    }
-  }
-
-  if (originalNavigatorDescriptor) {
-    Object.defineProperty(global, 'navigator', originalNavigatorDescriptor);
-  } else {
-    delete (global as typeof globalThis & { navigator?: Navigator }).navigator;
-  }
-}
-
 describe('share-utils', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockPlatformOS = 'ios';
     mockShare.mockResolvedValue({ action: 'sharedAction' });
-  });
-
-  afterEach(() => {
-    restoreNavigator();
   });
 
   describe('shareBounty', () => {
@@ -139,23 +93,14 @@ describe('share-utils', () => {
 
     it('tracks bounty_shared before presenting the share sheet, then share_completed on success', async () => {
       await shareBounty({ id: '1', title: 'Task', amount: 10 });
-      expect(mockTrackEvent).toHaveBeenCalledWith(
-        'bounty_shared',
-        expect.objectContaining({ content_id: '1' })
-      );
-      expect(mockTrackEvent).toHaveBeenCalledWith(
-        'share_completed',
-        expect.objectContaining({ content_id: '1' })
-      );
+      expect(mockTrackEvent).toHaveBeenCalledWith('bounty_shared', expect.objectContaining({ content_id: '1' }));
+      expect(mockTrackEvent).toHaveBeenCalledWith('share_completed', expect.objectContaining({ content_id: '1' }));
     });
 
     it('tracks share_cancelled when the user dismisses the share sheet', async () => {
       mockShare.mockResolvedValue({ action: 'dismissedAction' });
       await shareBounty({ id: '1', title: 'Task', amount: 10 });
-      expect(mockTrackEvent).toHaveBeenCalledWith(
-        'share_cancelled',
-        expect.objectContaining({ content_id: '1' })
-      );
+      expect(mockTrackEvent).toHaveBeenCalledWith('share_cancelled', expect.objectContaining({ content_id: '1' }));
       expect(mockTrackEvent).not.toHaveBeenCalledWith('share_completed', expect.anything());
     });
   });
@@ -168,13 +113,7 @@ describe('share-utils', () => {
     });
 
     it('includes rating and completed-bounty stats when provided', async () => {
-      await shareProfile({
-        id: 'user1',
-        name: 'Alex Doe',
-        averageRating: 4.8,
-        ratingCount: 32,
-        completedCount: 12,
-      });
+      await shareProfile({ id: 'user1', name: 'Alex Doe', averageRating: 4.8, ratingCount: 32, completedCount: 12 });
       const [content] = mockShare.mock.calls[0];
       expect(content.message).toContain('⭐ 4.8 (32)');
       expect(content.message).toContain('12 bounties completed');
@@ -188,16 +127,15 @@ describe('share-utils', () => {
 
     it('on web, copies the link instead of invoking the native share sheet', async () => {
       mockPlatformOS = 'web';
-      const writeText = installClipboardMock();
+      const writeText = jest.fn().mockResolvedValue(undefined);
+      // @ts-expect-error test shim for the web clipboard API
+      global.navigator.clipboard = { writeText };
 
       await shareProfile({ id: 'user1', name: 'Alex Doe' });
 
       expect(writeText).toHaveBeenCalledWith('https://bountyfinder.app/profile/user1');
       expect(mockShare).not.toHaveBeenCalled();
-      expect(mockTrackEvent).toHaveBeenCalledWith(
-        'share_link_copied',
-        expect.objectContaining({ content_id: 'user1' })
-      );
+      expect(mockTrackEvent).toHaveBeenCalledWith('share_link_copied', expect.objectContaining({ content_id: 'user1' }));
     });
   });
 });

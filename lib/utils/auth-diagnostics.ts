@@ -231,14 +231,7 @@ interface RunAuthStageOptions<T> {
   correlationId: string;
   stage: string;
   timeoutMs: number;
-  /**
-   * The work to race against `timeoutMs`. Receives an AbortSignal that fires
-   * when the stage times out — pass it through to anything cancellable so the
-   * underlying request is actually torn down rather than left running. Stages
-   * that call into the Supabase SDK (which owns its own request lifecycle)
-   * can ignore it; see the note on the race below.
-   */
-  run: (signal: AbortSignal) => PromiseLike<T>;
+  run: () => PromiseLike<T>;
   retry?: number;
   metadata?: Record<string, unknown>;
 }
@@ -261,16 +254,10 @@ export async function runAuthStageWithTimeout<T>(options: RunAuthStageOptions<T>
   });
 
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  // Losing a Promise.race does not cancel the loser. Without this signal a
-  // timed-out stage leaves its request running, and for Supabase auth calls
-  // that stranded request keeps `lockAcquired` held so every subsequent auth
-  // call queues behind it — one slow refresh would cascade into every later
-  // sign-in attempt timing out too.
-  const abortController = new AbortController();
 
   try {
     const result = await Promise.race<T>([
-      run(abortController.signal),
+      run(),
       new Promise<never>((_, reject) => {
         timeoutId = setTimeout(() => {
           const timeoutError = new Error(
@@ -279,7 +266,6 @@ export async function runAuthStageWithTimeout<T>(options: RunAuthStageOptions<T>
           timeoutError.code = 'AUTH_STAGE_TIMEOUT';
           timeoutError.stage = stage;
           timeoutError.status = 408;
-          abortController.abort();
           reject(timeoutError);
         }, timeoutMs);
       }),
