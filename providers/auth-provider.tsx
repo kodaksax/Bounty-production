@@ -41,6 +41,14 @@ type AuthData = {
  */
 const TOKEN_REFRESH_THRESHOLD_MS = 5 * 60 * 1000;
 
+/**
+ * Number of consecutive startup session-restore timeouts before the stored
+ * session is purged. One timeout may be a transient network stall; a repeated
+ * failure loop (the production bug) warrants clearing the session so the next
+ * launch starts clean.
+ */
+const STARTUP_TIMEOUT_PURGE_THRESHOLD = 2;
+
 export default function AuthProvider({ children }: PropsWithChildren) {
   const __DEV__flag = typeof __DEV__ !== 'undefined' && __DEV__;
   // Centralized logging helpers
@@ -366,7 +374,9 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           sessionFound = true;
           devLog('[AuthProvider] Session loaded: authenticated');
           // Successful startup session restore — clear any accumulated timeout count.
-          void resetStartupTimeoutCount().catch(() => {});
+          void resetStartupTimeoutCount().catch((e) => {
+            reportWarning('[AuthProvider] Failed to reset startup timeout count:', e);
+          });
           setSession(session);
           sessionIdRef.current = session.user.id;
           previousUserIdRef.current = session.user.id;
@@ -418,7 +428,9 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           // No error but also no session (user not logged in)
           devLog('[AuthProvider] Session loaded: not authenticated');
           // Successful startup completion (signed out state) — clear any accumulated timeout count.
-          void resetStartupTimeoutCount().catch(() => {});
+          void resetStartupTimeoutCount().catch((e) => {
+            reportWarning('[AuthProvider] Failed to reset startup timeout count:', e);
+          });
           setSession(null);
           try {
             await authProfileService.setSession(null);
@@ -440,8 +452,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           // re-login; a repeating loop (the production bug: expired session →
           // stalled refresh → timeout → next launch replays the same refresh)
           // does get cleaned up. The counter is reset whenever a startup
-          // session restore succeeds (see resetStartupTimeoutCount below).
-          const STARTUP_TIMEOUT_PURGE_THRESHOLD = 2;
+          // session restore succeeds (see resetStartupTimeoutCount above).
           try {
             const count = await incrementStartupTimeoutCount();
             reportWarning(

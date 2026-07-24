@@ -25,6 +25,12 @@
 
 jest.useFakeTimers();
 
+// Mock posthog before importing auth-fetch so the direct import doesn't blow up
+// in the test environment (PostHog requires a network key and native SDKs).
+jest.mock('../../../lib/posthog', () => ({
+  capture: jest.fn(),
+}));
+
 import { authFetchWithTimeout, AUTH_FETCH_TIMEOUT_MS, isAuthUrl } from '../../../lib/utils/auth-fetch';
 
 // ---------------------------------------------------------------------------
