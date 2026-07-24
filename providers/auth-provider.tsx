@@ -15,7 +15,7 @@ import {
 } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { clearBountyDraftForUser } from '../app/hooks/useBountyDraft';
-import { clearAllSessionData } from '../lib/auth-session-storage';
+import { clearAllSessionData, incrementStartupTimeoutCount, resetStartupTimeoutCount } from '../lib/auth-session-storage';
 import { analyticsService } from '../lib/services/analytics-service';
 import { authProfileService } from '../lib/services/auth-profile-service';
 import { getSentry } from '../lib/services/sentry-init';
@@ -40,6 +40,14 @@ type AuthData = {
  * Proactively refresh the token when it's close to expiring
  */
 const TOKEN_REFRESH_THRESHOLD_MS = 5 * 60 * 1000;
+
+/**
+ * Number of consecutive startup session-restore timeouts before the stored
+ * session is purged. One timeout may be a transient network stall; a repeated
+ * failure loop (the production bug) warrants clearing the session so the next
+ * launch starts clean.
+ */
+const STARTUP_TIMEOUT_PURGE_THRESHOLD = 2;
 
 export default function AuthProvider({ children }: PropsWithChildren) {
   const __DEV__flag = typeof __DEV__ !== 'undefined' && __DEV__;
@@ -365,6 +373,10 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           // Valid session found
           sessionFound = true;
           devLog('[AuthProvider] Session loaded: authenticated');
+          // Successful startup session restore — clear any accumulated timeout count.
+          void resetStartupTimeoutCount().catch((e) => {
+            reportWarning('[AuthProvider] Failed to reset startup timeout count:', e);
+          });
           setSession(session);
           sessionIdRef.current = session.user.id;
           previousUserIdRef.current = session.user.id;
@@ -415,6 +427,10 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         } else {
           // No error but also no session (user not logged in)
           devLog('[AuthProvider] Session loaded: not authenticated');
+          // Successful startup completion (signed out state) — clear any accumulated timeout count.
+          void resetStartupTimeoutCount().catch((e) => {
+            reportWarning('[AuthProvider] Failed to reset startup timeout count:', e);
+          });
           setSession(null);
           try {
             await authProfileService.setSession(null);
@@ -426,10 +442,30 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         }
       } catch (error) {
         reportError(error, '[AuthProvider] Unexpected error fetching session:');
-        if (isTimeoutError(error)) {
+        if (isTimeoutError(error) || (error as any)?.code === 'AUTH_STAGE_TIMEOUT') {
           reportWarning(
             '[AuthProvider] Session initialization timed out; falling back to signed-out state'
           );
+          // Increment the consecutive startup-timeout counter. Only purge the
+          // stored session after STARTUP_TIMEOUT_PURGE_THRESHOLD consecutive
+          // timeouts. One bad launch (transient network stall) doesn't force a
+          // re-login; a repeating loop (the production bug: expired session →
+          // stalled refresh → timeout → next launch replays the same refresh)
+          // does get cleaned up. The counter is reset whenever a startup
+          // session restore succeeds (see resetStartupTimeoutCount above).
+          try {
+            const count = await incrementStartupTimeoutCount();
+            reportWarning(
+              `[AuthProvider] Startup timeout count: ${count} (purge threshold: ${STARTUP_TIMEOUT_PURGE_THRESHOLD})`
+            );
+            if (count >= STARTUP_TIMEOUT_PURGE_THRESHOLD) {
+              await clearAllSessionData(PROJECT_STORAGE_KEY);
+              await resetStartupTimeoutCount();
+              reportWarning('[AuthProvider] Purged stalled session after consecutive timeouts');
+            }
+          } catch (e) {
+            reportWarning('[AuthProvider] Failed to handle startup timeout count:', e);
+          }
         }
         if (!isMountedRef.current) return;
         setSession(null);
