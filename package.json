@@ -79,6 +79,7 @@
     "audit:deps": "npx depcheck || true",
     "bundle:visualize": "react-native-bundle-visualizer",
     "bundle:size-check": "node ./scripts/check-bundle-size.js",
+    "verify:bundle": "node ./scripts/verify-bundle.js",
     "upgrade:tooling": "npx npm-check-updates && npm install"
   },
   "dependencies": {

@@ -54,14 +54,22 @@ function validateSupabaseShape(obj: any): obj is SupabaseClient {
 // See that module for full design documentation.
 
 async function initSupabase(): Promise<void> {
-  if (realSupabase || !isSupabaseConfigured) return;
+  if (realSupabase) return;
 
-  // HARD ENVIRONMENT GUARD — runs before any real client is created.
-  // The immutable build channel (baked into the native binary) is the source of
-  // truth for which environment this binary belongs to. If an OTA update shipped
-  // a bundle whose Supabase URL doesn't match the channel, refuse to create the
-  // real client and fall back to the inert stub. This is the safety net that
-  // would have prevented prod balances/transactions leaking into the dev project.
+  // HARD ENVIRONMENT GUARD — runs before any real client is created AND before
+  // the "not configured" short-circuit below, so a production/staging binary
+  // that received an OTA bundle pointing at the WRONG Supabase project (or one
+  // that is MISSING its env entirely) fails LOUDLY instead of silently
+  // degrading to a signed-out stub that hangs on getSession().
+  //
+  // The immutable build channel (baked into the native binary at BUILD time) is
+  // the source of truth for which environment this binary belongs to. An OTA
+  // update can replace the JS bundle (and its EXPO_PUBLIC_SUPABASE_URL) but
+  // cannot change the channel, so a channel↔ref mismatch unambiguously means
+  // "wrong environment shipped." When that happens we THROW — the app refuses
+  // to start against the wrong project, surfacing a fatal Sentry event that
+  // forces a corrected `eas update` republish, instead of stranding users in a
+  // silent signed-out state.
   const integrity = checkEnvironmentIntegrity(supabaseUrl);
   if (!integrity.ok) {
     // eslint-disable-next-line no-console
@@ -85,9 +93,20 @@ async function initSupabase(): Promise<void> {
       // ignore if Sentry isn't available at startup
     }
     try { (supabaseEnv as any).mismatch = true; } catch {}
-    realSupabase = makeStubClient();
-    return;
+    // Fail fast. Do NOT fall back to a stub: a silent stub is exactly what let
+    // a wrong-project bundle ship unnoticed. Callers awaiting `supabase` receive
+    // this rejection so the failure is visible instead of a 15s hang.
+    throw new Error(
+      `[env-guard] ${integrity.reason} ` +
+        `Rebuild/republish with the correct EXPO_PUBLIC_SUPABASE_URL ` +
+        `(eas update --branch <env> --environment <env>).`
+    );
   }
+
+  // Reaching here means the environment guard passed. If the app is genuinely
+  // unconfigured (local dev / test with intentionally-absent env and no build
+  // channel), keep the inert stub without throwing so those flows still work.
+  if (!isSupabaseConfigured) return;
 
   // Add safe, non-secret context to Sentry (best-effort) so errors during
   // early startup include whether Supabase envs were present.
@@ -254,6 +273,10 @@ export function makeDeferredProxy<T extends object>(
   path: string = 'supabase'
 ): T {
   let resolvedTarget: T | null = null;
+  // Set when getRealTarget() rejects (e.g. the environment guard threw). Once
+  // failed, queued and future calls must NOT wait for a resolution that will
+  // never come — they re-invoke getRealTarget() and reject to their caller.
+  let initFailed = false;
   const taskQueue: Array<() => void> = [];
   const propertyCache = new Map<string | symbol, any>();
 
@@ -263,6 +286,21 @@ export function makeDeferredProxy<T extends object>(
     if (__DEV__) console.log(`[supabase] Proxy at "${path}" resolved to real target`);
     
     // Process any tasks that were queued while we were initializing
+    while (taskQueue.length > 0) {
+      const task = taskQueue.shift();
+      if (task) task();
+    }
+  }).catch((err) => {
+    // The environment guard (or another fatal init error) rejected. Swallow the
+    // rejection HERE so it doesn't surface as an unhandledRejection, but leave
+    // `resolvedTarget` null and flag the failure so callers get a loud rejection
+    // at the call site instead of a silent stub OR an infinite hang.
+    initFailed = true;
+    // eslint-disable-next-line no-console
+    console.error(`[supabase] deferred proxy at "${path}" failed to initialize:`, err);
+    // Drain any calls queued before the failure — each re-invokes getRealTarget()
+    // (which rejects) and forwards the error to its awaiting caller. Without this
+    // they would wait forever because the success handler above never runs.
     while (taskQueue.length > 0) {
       const task = taskQueue.shift();
       if (task) task();
@@ -366,6 +404,11 @@ export function makeDeferredProxy<T extends object>(
 
         if (resolvedTarget) {
           executeCall();
+        } else if (initFailed) {
+          // Initialization already rejected — don't queue (nothing will drain
+          // it). Run immediately so getRealTarget() rejects and the caller sees
+          // the fatal env-guard error instead of hanging.
+          executeCall();
         } else {
           taskQueue.push(executeCall);
         }
@@ -389,12 +432,22 @@ if (isSupabaseConfigured) {
 } else {
   // eslint-disable-next-line no-console
   console.warn('[supabase] Not configured: missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY');
-  
+
   const isDev = typeof __DEV__ !== 'undefined' ? __DEV__ : false;
   if (!isDev) {
     // eslint-disable-next-line no-console
     console.error('CRITICAL: Supabase is not configured in a production build. Environment variables were likely not injected during the build process.');
   }
+
+  // Even when env is absent, run the environment guard at startup. On a real
+  // build channel (production/staging/beta) a missing/unparseable Supabase URL
+  // is a fatal mis-configuration and initSupabase() will throw — surfacing it
+  // immediately via Sentry instead of only on first `supabase` access. With no
+  // channel (local dev / Expo Go) the guard passes and the inert stub is kept.
+  ensureInit().catch((e) => {
+    // eslint-disable-next-line no-console
+    console.error('[supabase] environment guard failed at startup:', e);
+  });
 }
 
 export default supabase;

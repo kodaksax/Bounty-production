@@ -100,16 +100,12 @@ async function loadSupabaseModule(
   // Import the freshly-mocked module
   const mod = await import('../../../lib/supabase');
 
-  // Wait for initSupabase() to settle.
-  // We CANNOT `await mod.supabase` directly: when checkEnvironmentIntegrity
-  // returns ok:false the real client is replaced with the inert stub, and the
-  // stub proxy exposes a `.then` property (to be chainable), which causes JS
-  // Promise resolution to enter infinite thenable recursion and never settle.
-  //
-  // `initSupabase` in the mismatch path has no explicit awaits (all the work
-  // is synchronous), so the async function's micro-task body settles after a
-  // small number of Promise.resolve() ticks.  We use setTimeout(0) to flush
-  // both the microtask and macrotask queues, which is always sufficient.
+  // Wait for initSupabase() to settle (resolve OR reject).
+  // On the mismatch path initSupabase() now throws; the module-level
+  // ensureInit().catch() and the deferred proxy's own .catch() absorb that
+  // rejection so it never surfaces as an unhandledRejection. The body is
+  // otherwise synchronous, so flushing the microtask + macrotask queues via
+  // setTimeout(0) is sufficient for the module to reach a stable state.
   await new Promise<void>(resolve => setTimeout(resolve, 0));
 
   return { mod, createClientImpl };
@@ -150,9 +146,12 @@ describe('(1) matching channel and URL — real client is initialized', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Scenario 2: mismatch → stub used, createClient NOT called, mismatch flagged
+// Scenario 2: mismatch → hard failure. createClient is NOT called, mismatch is
+// flagged, and initialization REJECTS (fail-fast) instead of silently stubbing.
+// A silent stub is exactly what let a wrong-project bundle ship unnoticed, so
+// the guard now throws to surface the misconfiguration loudly.
 // ---------------------------------------------------------------------------
-describe('(2) mismatched channel/URL — stub client path, mismatch flag set', () => {
+describe('(2) mismatched channel/URL — hard failure, mismatch flag set', () => {
   it('does NOT call createClient when the integrity check fails', async () => {
     const { createClientImpl } = await loadSupabaseModule({
       supabaseUrl: DEV_URL,
@@ -183,7 +182,7 @@ describe('(2) mismatched channel/URL — stub client path, mismatch flag set', (
     expect(mod.supabaseEnv.mismatch).toBe(true);
   });
 
-  it('exported supabase proxy is still defined and its stub auth responds synchronously', async () => {
+  it('exported supabase proxy is still defined but access REJECTS (fail-fast, no silent stub)', async () => {
     const { mod, createClientImpl } = await loadSupabaseModule({
       supabaseUrl: DEV_URL,
       integrityResult: {
@@ -198,18 +197,17 @@ describe('(2) mismatched channel/URL — stub client path, mismatch flag set', (
     // The real client was never created
     expect(createClientImpl).not.toHaveBeenCalled();
 
-    // The proxy is exported and not null — the app does not crash at startup
+    // The proxy is exported and not null — the module still loads without a
+    // synchronous crash at import time.
     expect(mod.supabase).toBeDefined();
 
-    // The stub's auth sub-object is directly accessible and returns a thenable
-    // for getSession (callers get a safe no-op rather than an unhandled exception).
-    // We intentionally do NOT await through the deferred proxy here: the stub
-    // proxy is itself thenable (its `then` trap returns a callable stub), which
-    // makes nested awaits recurse infinitely.  The synchronous check below is
-    // sufficient to prove the stub path was taken.
+    // But awaiting through the proxy now REJECTS with the env-guard error rather
+    // than resolving to a signed-out stub. Callers therefore see a loud failure
+    // instead of a silent 15s hang / signed-out limbo.
     const sessionCall = (mod.supabase as any).auth?.getSession?.();
     expect(sessionCall).toBeDefined();
     expect(typeof sessionCall?.then).toBe('function');
+    await expect(sessionCall).rejects.toThrow(/env-guard/i);
   });
 });
 
