@@ -12,7 +12,6 @@ import {
   Alert,
   Dimensions,
   Image,
-  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -31,6 +30,7 @@ import { storageService } from '../lib/services/storage-service'
 import type { Message } from '../lib/types'
 import { AttachmentViewerModal } from './attachment-viewer-modal'
 import { ReportModal } from "./ReportModal"
+import { AppModal } from './ui/app-modal'
 
 // Alert defer delay to allow React to process state updates before showing alert
 const ALERT_DEFER_DELAY = 100;
@@ -79,7 +79,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState("")
-  const [isClosing, setIsClosing] = useState(false)
+  const [visible, setVisible] = useState(true)
   const [isApplying, setIsApplying] = useState(false)
   const [hasApplied, setHasApplied] = useState(false)
   const [showReportModal, setShowReportModal] = useState(false)
@@ -302,12 +302,11 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
     }
   };
 
-  // Handle close animation
+  // Plays the shared close animation; the actual `onClose` (which tells the
+  // parent to unmount this component) only fires once that animation has
+  // finished, via AppModal's `onClosed` — see handleClose below.
   const handleClose = () => {
-    setIsClosing(true)
-    setTimeout(() => {
-      onClose()
-    }, 300)
+    setVisible(false)
   }
 
   // Check if user has already applied
@@ -480,14 +479,13 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   const { width, height } = Dimensions.get('window')
 
   return (
-    <Modal
-      visible={true}
-      animationType="slide"
-      presentationStyle="overFullScreen"
-      transparent
+    <AppModal
+      visible={visible}
       onRequestClose={handleClose}
+      onClosed={onClose}
+      variant="dialog"
     >
-      <View style={styles.overlay}>
+      <>
         {/* Shadow wrapper (no overflow) */}
         <View
           style={[
@@ -768,9 +766,8 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
             </View>
           </View>
         </View>
-      </View>
 
-      {/* Attachment viewer (in-app) */}
+        {/* Attachment viewer (in-app) */}
       <AttachmentViewerModal
         visible={viewerVisible}
         attachment={viewerAttachment ? {
@@ -796,19 +793,13 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
         contentId={String(bounty.id)}
         contentTitle={bounty.title}
       />
-    </Modal>
+      </>
+    </AppModal>
   )
 }
 
 function makeStyles(theme: AppTheme) {
   return StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
-  },
   cardShadow: {
     borderRadius: 24,
     shadowColor: '#000000',

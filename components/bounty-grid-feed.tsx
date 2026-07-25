@@ -142,6 +142,7 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
                   username={b.username}
                   price={Number(b.amount)}
                   distance={bountyDistances.get(String(b.id)) ?? null}
+                  location={b.location}
                   description={b.description}
                   isForHonor={Boolean(b.is_for_honor)}
                   user_id={b.user_id}
@@ -173,6 +174,7 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
             username={left.username}
             price={Number(left.amount)}
             distance={bountyDistances.get(String(left.id)) ?? null}
+            location={left.location}
             description={left.description}
             isForHonor={Boolean(left.is_for_honor)}
             user_id={left.user_id}
@@ -189,6 +191,7 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
               username={right.username}
               price={Number(right.amount)}
               distance={bountyDistances.get(String(right.id)) ?? null}
+              location={right.location}
               description={right.description}
               isForHonor={Boolean(right.is_for_honor)}
               user_id={right.user_id}

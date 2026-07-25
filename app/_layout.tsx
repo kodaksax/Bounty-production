@@ -17,6 +17,7 @@ import { BountyFormatProvider } from '../lib/bounty-format-context';
 import { COLORS } from '../lib/constants/accessibility';
 import { BackgroundColorProvider, useBackgroundColor } from '../lib/context/BackgroundColorContext';
 import { NotificationProvider } from '../lib/context/notification-context';
+import { ProfileImageViewerProvider } from '../lib/context/ProfileImageViewerContext';
 import { ErrorBoundary } from '../lib/error-boundary';
 import { analyticsService } from '../lib/services/analytics-service';
 import { StripeProvider } from '../lib/stripe-context';
@@ -175,9 +176,11 @@ const LayoutContent = () => {
                         <RuntimeReporters />
                         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
                           <ThemeSyncer />
-                          <View style={styles.inner}>
-                            <Slot />
-                          </View>
+                          <ProfileImageViewerProvider>
+                            <View style={styles.inner}>
+                              <Slot />
+                            </View>
+                          </ProfileImageViewerProvider>
                         </ThemeProvider>
                       </WebSocketProvider>
                     </NotificationProvider>

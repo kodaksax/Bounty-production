@@ -99,9 +99,9 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         }
       }
     }
-    const seed = bountyLocation.length
-    const hash = bountyLocation.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
-    return 1 + ((hash % seed) % 15)
+    // No real coordinates to compare against — don't fabricate a number.
+    // Callers fall back to showing the bounty's actual location text instead.
+    return null
   }, [userLocation, permission])
 
   const bountyDistances = useMemo(() => {
@@ -412,6 +412,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       username: item.username,
       price: Number(item.amount),
       distance,
+      location: item.location,
       description: item.description,
       isForHonor: Boolean(item.is_for_honor),
       user_id: item.user_id,

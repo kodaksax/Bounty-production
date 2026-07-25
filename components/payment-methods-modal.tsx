@@ -149,6 +149,19 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
     )
   }
 
+  // Shared close path so every dismissal (drag-past-threshold, backdrop tap,
+  // header X) plays the same slide-down + fade-out before telling the parent
+  // to unmount us — previously only the drag gesture animated out, while
+  // tapping the X or backdrop vanished the sheet instantly.
+  const animateCloseThenCall = (callback: () => void) => {
+    Animated.parallel([
+      Animated.timing(overlayOpacity, { toValue: 0, duration: 180, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+      Animated.timing(animatedTranslateY, { toValue: Dimensions.get('window').height, duration: 180, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+    ]).start(({ finished }) => {
+      if (finished) callback()
+    })
+  }
+
   // React Native/Expo Go: Use PanResponder for drag gestures and drive Animated value
   const panResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => true,
@@ -167,12 +180,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
       setIsDragging(false)
       const offset = gestureState.moveY - initialY
       if (offset > 120 || gestureState.vy > 0.8) {
-        Animated.timing(animatedTranslateY, {
-          toValue: Dimensions.get('window').height,
-          duration: 180,
-          easing: Easing.out(Easing.quad),
-          useNativeDriver: true,
-        }).start(() => onClose())
+        animateCloseThenCall(onClose)
       } else {
         Animated.spring(animatedTranslateY, {
           toValue: 0,
@@ -207,11 +215,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
   }, [isOpen])
 
   const handleBackdropPress = () => {
-    if (onBackdropPress) {
-      onBackdropPress()
-    } else {
-      onClose()
-    }
+    animateCloseThenCall(onBackdropPress || onClose)
   }
 
   const cardMethods = useMemo(() => paymentMethods.filter(pm => pm.type === 'card'), [paymentMethods])
@@ -272,7 +276,7 @@ export function PaymentMethodsModal({ isOpen, onClose, onBackdropPress, preferre
           {/* Header */}
           <View style={s.header}>
             <TouchableOpacity
-              onPress={onClose}
+              onPress={() => animateCloseThenCall(onClose)}
               style={s.closeButton}
               accessibilityRole="button"
               accessibilityLabel="Close payment methods"

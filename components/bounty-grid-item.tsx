@@ -23,6 +23,7 @@ export interface BountyGridItemProps {
   username?: string;
   price: number;
   distance: number | null;
+  location?: string | null;
   description?: string;
   isForHonor?: boolean;
   user_id?: string | null;
@@ -40,6 +41,7 @@ function BountyGridItemComponent({
   username,
   price,
   distance,
+  location,
   description,
   isForHonor,
   user_id,
@@ -157,6 +159,8 @@ function BountyGridItemComponent({
                       <MaterialIcons name="wifi" size={10} color={theme.primaryLight} />
                       <Text style={s.workChipText}>Remote</Text>
                     </View>
+                  ) : location ? (
+                    <Text style={s.distanceText} numberOfLines={1}>{location}</Text>
                   ) : distance !== null ? (
                     <Text style={s.distanceText}>{distance} mi</Text>
                   ) : (
@@ -207,6 +211,7 @@ function BountyGridItemComponent({
             title,
             price,
             distance,
+            location: location ?? undefined,
             description,
             user_id,
             work_type,
@@ -227,6 +232,7 @@ export const BountyGridItem = React.memo(
     prev.title === next.title &&
     prev.price === next.price &&
     prev.distance === next.distance &&
+    prev.location === next.location &&
     prev.user_id === next.user_id &&
     prev.work_type === next.work_type &&
     prev.poster_avatar === next.poster_avatar &&
@@ -314,6 +320,7 @@ function makeStyles(t: AppTheme) {
     distanceText: {
       fontSize: 10,
       color: t.textSecondary,
+      flexShrink: 1,
     },
     countdownBadge: {
       marginBottom: 8,

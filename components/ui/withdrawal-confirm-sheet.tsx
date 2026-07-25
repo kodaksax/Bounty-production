@@ -8,10 +8,11 @@
  * the task's "polished confirmation screens" requirement calls for.
  */
 import { useMemo } from 'react';
-import { ActivityIndicator, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 import { formatCurrency } from '../../lib/utils';
+import { AppModal } from './app-modal';
 
 export interface WithdrawalConfirmSheetProps {
   visible: boolean;
@@ -44,21 +45,12 @@ export function WithdrawalConfirmSheet({
   const isInstant = method === 'instant';
 
   return (
-    <Modal
+    <AppModal
       visible={visible}
-      transparent
-      animationType="slide"
       onRequestClose={() => { if (!isSubmitting) onCancel(); }}
-      accessibilityViewIsModal
+      variant="sheet"
+      dismissable={!isSubmitting}
     >
-      <View style={s.scrim}>
-        <TouchableOpacity
-          style={StyleSheet.absoluteFill}
-          activeOpacity={1}
-          onPress={() => { if (!isSubmitting) onCancel(); }}
-          accessibilityLabel="Dismiss"
-          accessibilityRole="button"
-        />
         <View style={s.sheet}>
           <View style={s.handle} />
           <Text style={s.title}>{isInstant ? 'Confirm Instant Cash Out' : 'Confirm Withdrawal'}</Text>
@@ -117,13 +109,11 @@ export function WithdrawalConfirmSheet({
             <Text style={s.cancelButtonText}>Cancel</Text>
           </TouchableOpacity>
         </View>
-      </View>
-    </Modal>
+    </AppModal>
   );
 }
 
 function makeStyles(t: AppTheme) { return StyleSheet.create({
-  scrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: t.background, borderTopLeftRadius: 24, borderTopRightRadius: 24,
     paddingHorizontal: 24, paddingTop: 12, paddingBottom: 32, alignItems: 'center',

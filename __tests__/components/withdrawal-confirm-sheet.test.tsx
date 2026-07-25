@@ -7,8 +7,8 @@ import { fireEvent, render } from '@testing-library/react-native';
 import { WithdrawalConfirmSheet } from '../../components/ui/withdrawal-confirm-sheet';
 
 describe('WithdrawalConfirmSheet', () => {
-  it('passes the visible prop through to the underlying Modal', () => {
-    const { UNSAFE_getByProps } = render(
+  it('renders nothing until visible (AppModal mount-on-open lifecycle)', () => {
+    const { toJSON } = render(
       <WithdrawalConfirmSheet
         visible={false}
         method="standard"
@@ -20,7 +20,7 @@ describe('WithdrawalConfirmSheet', () => {
         onCancel={jest.fn()}
       />
     );
-    expect(UNSAFE_getByProps({ visible: false })).toBeTruthy();
+    expect(toJSON()).toBeNull();
   });
 
   it('shows standard withdrawal copy: amount, destination, and no fee row', () => {

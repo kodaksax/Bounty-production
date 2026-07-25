@@ -15,7 +15,6 @@ import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import type { AppTheme } from 'lib/themes/types';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -24,6 +23,7 @@ import {
 } from 'react-native';
 import { SvgXml } from 'react-native-svg';
 import { ThemedButton } from '../themed/ThemedButton';
+import { AppModal } from './app-modal';
 
 interface TotpEnrollmentModalProps {
   visible: boolean;
@@ -131,14 +131,7 @@ export function TotpEnrollmentModal({
   };
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={handleRequestClose}
-      accessibilityViewIsModal
-    >
-      <View style={s.scrim}>
+    <AppModal visible={visible} onRequestClose={handleRequestClose} variant="dialog">
         <View style={s.card}>
           <ScrollView
             contentContainerStyle={s.cardContent}
@@ -219,20 +212,12 @@ export function TotpEnrollmentModal({
             </View>
           </ScrollView>
         </View>
-      </View>
-    </Modal>
+    </AppModal>
   );
 }
 
 function makeStyles(t: AppTheme) {
   return StyleSheet.create({
-    scrim: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      backgroundColor: 'rgba(0,0,0,0.7)',
-      padding: 16,
-    },
     card: {
       width: '100%',
       maxWidth: 420,

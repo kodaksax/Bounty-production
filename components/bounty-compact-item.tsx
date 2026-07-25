@@ -18,6 +18,7 @@ export interface BountyCompactItemProps {
   username?: string
   price: number
   distance: number | null
+  location?: string | null
   description?: string
   isForHonor?: boolean
   user_id?: string | null
@@ -26,7 +27,7 @@ export interface BountyCompactItemProps {
 }
 
 function BountyCompactItemComponent({
-  id, title, username, price, distance, description,
+  id, title, username, price, distance, location, description,
   isForHonor, user_id, work_type, poster_avatar
 }: BountyCompactItemProps) {
   const { theme } = useAppThemeContext()
@@ -56,7 +57,7 @@ function BountyCompactItemComponent({
     setShowDetail(true)
   }, [triggerHaptic])
 
-  const accessibilityLabel = `Bounty: ${title} by ${resolvedUsername}${isForHonor ? ', for honor' : `, $${price}`}${work_type === 'online' ? ', online work' : distance !== null ? `, ${distance} miles away` : ', location to be determined'}`
+  const accessibilityLabel = `Bounty: ${title} by ${resolvedUsername}${isForHonor ? ', for honor' : `, $${price}`}${work_type === 'online' ? ', online work' : location ? `, ${location}` : distance !== null ? `, ${distance} miles away` : ', location to be determined'}`
 
   return (
     <>
@@ -97,6 +98,8 @@ function BountyCompactItemComponent({
                 <MaterialIcons name="wifi" size={10} color={theme.primary} />
                 <Text style={s.onlineText}>Online</Text>
               </View>
+            ) : location ? (
+              <Text style={s.distance} numberOfLines={1}>{location}</Text>
             ) : distance === null ? (
               <Text style={s.distance}>Location TBD</Text>
             ) : (
@@ -121,7 +124,7 @@ function BountyCompactItemComponent({
 
       {showDetail && (
         <BountyDetailModal
-          bounty={{ id, username: resolvedUsername, title, price, distance, description, user_id, work_type, poster_avatar, is_for_honor: isForHonor }}
+          bounty={{ id, username: resolvedUsername, title, price, distance, location: location ?? undefined, description, user_id, work_type, poster_avatar, is_for_honor: isForHonor }}
           onClose={() => setShowDetail(false)}
         />
       )}
@@ -135,6 +138,7 @@ export const BountyCompactItem = React.memo(BountyCompactItemComponent, (prev, n
   prev.username === next.username &&
   prev.price === next.price &&
   prev.distance === next.distance &&
+  prev.location === next.location &&
   prev.description === next.description &&
   prev.isForHonor === next.isForHonor &&
   prev.user_id === next.user_id &&
@@ -195,6 +199,7 @@ function makeStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
+      flexShrink: 1,
     },
     username: {
       color: t.isDark ? '#a7f3d0' : t.primary,
@@ -211,6 +216,7 @@ function makeStyles(t: AppTheme) {
     distance: {
       color: t.textSecondary,
       fontSize: TYPOGRAPHY.SIZE_XSMALL,
+      flexShrink: 1,
     },
     onlineBadge: {
       flexDirection: 'row',

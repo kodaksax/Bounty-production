@@ -7,6 +7,7 @@ import { useAuthProfile } from 'hooks/useAuthProfile';
 import { useFollow } from 'hooks/useFollow';
 import { useNormalizedProfile } from 'hooks/useNormalizedProfile';
 import { usePortfolio } from 'hooks/usePortfolio';
+import { useProfileImageViewer } from 'hooks/useProfileImageViewer';
 import { useRatings } from 'hooks/useRatings';
 import { OptimizedImage } from 'lib/components/OptimizedImage';
 import { blockingService } from 'lib/services/blocking-service';
@@ -133,6 +134,7 @@ export function EnhancedProfileSection({
   };
 
   const { theme } = useAppThemeContext();
+  const { open: openProfilePhoto } = useProfileImageViewer();
   const currentUserId = authProfileFromHook?.id;
   const showMessageButton =
     !isOwnProfile &&
@@ -308,22 +310,37 @@ export function EnhancedProfileSection({
         <View className="flex-row items-start justify-between">
           <View className="flex-row items-center flex-1">
             <View className="relative">
-              <View className="h-16 w-16 rounded-full overflow-hidden items-center justify-center" style={{ backgroundColor: theme.surfaceSecondary, borderWidth: 1, borderColor: theme.border }}>
-                {effectiveProfile.avatar ? (
-                  <OptimizedImage
-                    source={{ uri: effectiveProfile.avatar }}
-                    width={64}
-                    height={64}
-                    style={{ width: 64, height: 64, borderRadius: 32 }}
-                    resizeMode="cover"
-                    useThumbnail
-                    priority="low"
-                    alt="Profile avatar"
-                  />
-                ) : (
+              {effectiveProfile.avatar ? (
+                <Pressable
+                  onPress={() =>
+                    openProfilePhoto(
+                      effectiveProfile.avatar,
+                      effectiveProfile.display_name || effectiveProfile.name || effectiveProfile.username
+                    )
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel={`View ${effectiveProfile.display_name || effectiveProfile.username || 'profile'} photo`}
+                  accessibilityHint="Opens the profile photo in full screen"
+                  hitSlop={8}
+                >
+                  <View className="h-16 w-16 rounded-full overflow-hidden items-center justify-center" style={{ backgroundColor: theme.surfaceSecondary, borderWidth: 1, borderColor: theme.border }}>
+                    <OptimizedImage
+                      source={{ uri: effectiveProfile.avatar }}
+                      width={64}
+                      height={64}
+                      style={{ width: 64, height: 64, borderRadius: 32 }}
+                      resizeMode="cover"
+                      useThumbnail
+                      priority="low"
+                      alt="Profile avatar"
+                    />
+                  </View>
+                </Pressable>
+              ) : (
+                <View className="h-16 w-16 rounded-full overflow-hidden items-center justify-center" style={{ backgroundColor: theme.surfaceSecondary, borderWidth: 1, borderColor: theme.border }}>
                   <MaterialIcons name="person" size={32} color="#059669" />
-                )}
-              </View>
+                </View>
+              )}
               {renderVerificationBadge()}
             </View>
             <View className="ml-4 flex-1">

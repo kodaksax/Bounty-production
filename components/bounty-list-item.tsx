@@ -21,6 +21,7 @@ export interface BountyListItemProps {
   username?: string;
   price: number;
   distance: number | null;
+  location?: string | null;
   description?: string;
   isForHonor?: boolean;
   user_id?: string | null;
@@ -40,6 +41,7 @@ function BountyListItemComponent({
   username,
   price,
   distance,
+  location,
   description,
   isForHonor,
   user_id,
@@ -165,12 +167,14 @@ function BountyListItemComponent({
               size={14}
               color={theme.textDisabled}
             />
-            <Text style={s.locationText}>
+            <Text style={s.locationText} numberOfLines={1}>
               {work_type === 'online'
                 ? 'Remote work'
-                : distance !== null
-                  ? `${distance} miles away`
-                  : 'Location TBD'}
+                : location
+                  ? location
+                  : distance !== null
+                    ? `${distance} miles away`
+                    : 'Location TBD'}
             </Text>
             {scheduleChip && (
               <View
@@ -225,6 +229,7 @@ function BountyListItemComponent({
             title,
             price,
             distance,
+            location: location ?? undefined,
             description,
             user_id,
             work_type,
@@ -246,6 +251,7 @@ export const BountyListItem = React.memo(
     prev.username === next.username &&
     prev.price === next.price &&
     prev.distance === next.distance &&
+    prev.location === next.location &&
     prev.description === next.description &&
     prev.isForHonor === next.isForHonor &&
     prev.user_id === next.user_id &&

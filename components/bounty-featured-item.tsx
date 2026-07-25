@@ -23,6 +23,7 @@ export interface BountyFeaturedItemProps {
   username?: string
   price: number
   distance: number | null
+  location?: string | null
   description?: string
   isForHonor?: boolean
   user_id?: string | null
@@ -40,7 +41,7 @@ export interface BountyFeaturedItemProps {
 }
 
 function BountyFeaturedItemComponent({
-  id, title, username, price, distance, description,
+  id, title, username, price, distance, location, description,
   isForHonor, user_id, work_type, poster_avatar,
   categoryColor, categoryLabel, attachments_json,
   schedule_type, start_date, end_date, duration_minutes, is_time_sensitive,
@@ -163,6 +164,9 @@ function BountyFeaturedItemComponent({
             {description ? (
               <Text style={s.description} numberOfLines={1}>{description}</Text>
             ) : null}
+            <Text style={s.location} numberOfLines={1}>
+              {work_type === 'online' ? 'Remote' : location || 'In Person'}
+            </Text>
             <View style={s.metaRow}>
               {isForHonor ? (
                 <View style={s.honorBadge}>
@@ -181,7 +185,7 @@ function BountyFeaturedItemComponent({
       {showDetail && (
         <BountyDetailModal
           bounty={{
-            id, username: resolvedUsername, title, price, distance,
+            id, username: resolvedUsername, title, price, distance, location: location ?? undefined,
             description, user_id, work_type, poster_avatar, is_for_honor: isForHonor,
           }}
           onClose={() => setShowDetail(false)}
@@ -195,6 +199,7 @@ export const BountyFeaturedItem = React.memo(BountyFeaturedItemComponent, (prev,
   prev.id === next.id &&
   prev.title === next.title &&
   prev.price === next.price &&
+  prev.location === next.location &&
   prev.user_id === next.user_id &&
   prev.categoryColor === next.categoryColor &&
   prev.attachments_json === next.attachments_json &&
@@ -274,6 +279,11 @@ function makeStyles(t: AppTheme) {
       fontSize: 12,
       color: 'rgba(255,255,255,0.72)',
       lineHeight: 17,
+    },
+    location: {
+      fontSize: 11,
+      color: 'rgba(255,255,255,0.60)',
+      marginTop: 1,
     },
     metaRow: {
       flexDirection: 'row',

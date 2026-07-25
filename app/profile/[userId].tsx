@@ -23,6 +23,7 @@ import {
     TouchableOpacity,
     View
 } from "react-native";
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AchievementsGrid } from "../../components/achievements-grid";
 import { EnhancedProfileSection, PortfolioSection } from "../../components/enhanced-profile-section";
@@ -38,6 +39,55 @@ import { bountyService } from "../../lib/services/bounty-service";
 import { messageService } from "../../lib/services/message-service";
 import { navigationIntent } from "../../lib/services/navigation-intent";
 ;
+
+// Same open/close timing as the app-wide AppModal primitive (see
+// components/ui/app-modal.tsx) — this "more options" menu is a lightweight
+// anchored popover rather than a full-screen modal, so it doesn't go through
+// AppModal itself, but it shouldn't feel like a different animation system.
+const MENU_OPEN_DURATION = 220;
+const MENU_CLOSE_DURATION = 180;
+const MENU_EASE_OUT = Easing.out(Easing.cubic);
+
+function MoreMenuPopover({ visible, onDismiss, children, style }: {
+  visible: boolean;
+  onDismiss: () => void;
+  children: React.ReactNode;
+  style: any;
+}) {
+  const [mounted, setMounted] = useState(visible);
+  const progress = useSharedValue(visible ? 1 : 0);
+
+  useEffect(() => {
+    if (visible) {
+      setMounted(true);
+      progress.value = withTiming(1, { duration: MENU_OPEN_DURATION, easing: MENU_EASE_OUT });
+    } else {
+      progress.value = withTiming(0, { duration: MENU_CLOSE_DURATION, easing: MENU_EASE_OUT }, (finished) => {
+        if (finished) runOnJS(setMounted)(false);
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
+  const animStyle = useAnimatedStyle(() => ({
+    opacity: progress.value,
+    transform: [{ scale: 0.96 + progress.value * 0.04 }],
+  }));
+
+  if (!mounted) return null;
+
+  return (
+    <Pressable style={popoverStyles.wrapper} onPress={onDismiss}>
+      <View style={popoverStyles.backdrop} />
+      <Animated.View style={[style, animStyle]}>{children}</Animated.View>
+    </Pressable>
+  );
+}
+
+const popoverStyles = StyleSheet.create({
+  wrapper: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 90 },
+  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'transparent' },
+});
 
 export default function UserProfileScreen() {
   const { userId, referrer } = useLocalSearchParams<{ userId: string; referrer?: string }>();
@@ -449,24 +499,25 @@ export default function UserProfileScreen() {
       {/* (offline banner removed) */}
 
       {/* More Menu Dropdown with backdrop to dismiss when tapping outside */}
-      {showMoreMenu && !isOwnProfile && (
-        <Pressable style={styles.moreMenuWrapper} onPress={() => setShowMoreMenu(false)}>
-          <View style={styles.moreMenuBackdrop} />
-          <View style={[styles.moreMenuContainer, { top: 48 }]}>
-            <TouchableOpacity style={styles.moreMenuItem} onPress={handleShare}>
-              <MaterialIcons name="share" size={20} color="#9CA3AF" />
-              <Text style={styles.moreMenuText}>Share Profile</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.moreMenuItem} onPress={handleReport}>
-              <MaterialIcons name="report" size={20} color="#fbbf24" />
-              <Text style={styles.moreMenuText}>Report</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.moreMenuItem} onPress={handleBlock}>
-              <MaterialIcons name="block" size={20} color="#ef4444" />
-              <Text style={styles.moreMenuText}>Block</Text>
-            </TouchableOpacity>
-          </View>
-        </Pressable>
+      {!isOwnProfile && (
+        <MoreMenuPopover
+          visible={showMoreMenu}
+          onDismiss={() => setShowMoreMenu(false)}
+          style={[styles.moreMenuContainer, { top: 48 }]}
+        >
+          <TouchableOpacity style={styles.moreMenuItem} onPress={handleShare}>
+            <MaterialIcons name="share" size={20} color="#9CA3AF" />
+            <Text style={styles.moreMenuText}>Share Profile</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.moreMenuItem} onPress={handleReport}>
+            <MaterialIcons name="report" size={20} color="#fbbf24" />
+            <Text style={styles.moreMenuText}>Report</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.moreMenuItem} onPress={handleBlock}>
+            <MaterialIcons name="block" size={20} color="#ef4444" />
+            <Text style={styles.moreMenuText}>Block</Text>
+          </TouchableOpacity>
+        </MoreMenuPopover>
       )}
 
       {/* Error Banner */}
@@ -648,22 +699,6 @@ function makeStyles(theme: AppTheme) {
       shadowRadius: 8,
       elevation: 8,
       zIndex: 100,
-    },
-    moreMenuWrapper: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      zIndex: 90,
-    },
-    moreMenuBackdrop: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: 'transparent',
     },
     moreMenuItem: {
       flexDirection: "row",

@@ -7,55 +7,36 @@
  * this component just shows content.spec and calls accept()/dismiss().
  */
 import { MaterialIcons } from '@expo/vector-icons';
-import { useEffect, useRef, useMemo } from 'react';
-import { AccessibilityInfo, Animated, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMoments } from '../../providers/moments-provider';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
+import { AppModal } from '../ui/app-modal';
 
 export function MomentSheet() {
   const { activeMoment, activeContent, accept, dismiss } = useMoments();
   const { theme } = useAppThemeContext();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(theme), [theme]);
-  const translateY = useRef(new Animated.Value(300)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
+  const visible = !!activeMoment && !!activeContent;
 
+  // Keep rendering the last moment's content while the sheet plays its close
+  // animation — `activeContent` goes null the instant the moment is
+  // dismissed/accepted, which would otherwise blank the sheet mid-transition.
+  const [displayContent, setDisplayContent] = useState(activeContent);
   useEffect(() => {
-    if (!activeMoment) return;
-    let reduceMotion = false;
-    AccessibilityInfo.isReduceMotionEnabled?.().then((v) => {
-      reduceMotion = !!v;
-      Animated.parallel([
-        Animated.timing(translateY, { toValue: 0, duration: reduceMotion ? 0 : 260, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 1, duration: reduceMotion ? 0 : 260, useNativeDriver: true }),
-      ]).start();
-    });
-    return () => {
-      translateY.setValue(300);
-      opacity.setValue(0);
-    };
-  }, [activeMoment, translateY, opacity]);
+    if (activeContent) setDisplayContent(activeContent);
+  }, [activeContent]);
 
-  if (!activeMoment || !activeContent) return null;
-  const content = activeContent;
+  if (!displayContent) return null;
+  const content = displayContent;
 
   return (
-    <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={dismiss}>
-      <View style={styles.overlay}>
-        <TouchableOpacity
-          style={StyleSheet.absoluteFill}
-          activeOpacity={1}
-          onPress={dismiss}
-          accessibilityLabel="Dismiss"
-          accessibilityRole="button"
-        />
-        <Animated.View
-          style={[
-            styles.sheet,
-            { paddingBottom: insets.bottom + 20, opacity, transform: [{ translateY }] },
-          ]}
+    <AppModal visible={visible} onRequestClose={dismiss} variant="sheet">
+        <View
+          style={[styles.sheet, { paddingBottom: insets.bottom + 20 }]}
           accessibilityViewIsModal
         >
           {content.icon && (
@@ -104,19 +85,13 @@ export function MomentSheet() {
               <Text style={styles.secondaryButtonText}>{content.secondaryLabel}</Text>
             </TouchableOpacity>
           )}
-        </Animated.View>
-      </View>
-    </Modal>
+        </View>
+    </AppModal>
   );
 }
 
 function makeStyles(theme: AppTheme) {
   return StyleSheet.create({
-    overlay: {
-      flex: 1,
-      justifyContent: 'flex-end',
-      backgroundColor: 'rgba(0,0,0,0.55)',
-    },
     sheet: {
       backgroundColor: theme.surface,
       borderTopLeftRadius: 24,

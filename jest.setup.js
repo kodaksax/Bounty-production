@@ -179,6 +179,7 @@ jest.mock('react-native', () => {
     NativeEventEmitter: EventEmitter,
     View: 'View',
     Text: 'Text',
+    Pressable: 'Pressable',
     TouchableOpacity: 'TouchableOpacity',
     TextInput: 'TextInput',
     ScrollView: 'ScrollView',
@@ -190,6 +191,69 @@ jest.mock('react-native', () => {
     },
     Modal: 'Modal',
     Image: 'Image',
+  };
+});
+
+// Mock react-native-reanimated. The real package ships an ESM build that
+// this project's ts-jest-only transform pipeline can't parse (no babel
+// transform is configured for plain .js node_modules files), so every
+// component that touches it — including the shared AppModal presentation
+// primitive (components/ui/app-modal.tsx) — needs it mocked. Individual
+// test files can still override this with their own `jest.mock(...)` call
+// (as success-animation.test.tsx does) since a test file's own mock takes
+// precedence over this global one.
+jest.mock('react-native-reanimated', () => {
+  const React = require('react');
+  const RN = require('react-native');
+  const identity = value => value;
+  const passthroughStyle = () => ({});
+  const createAnimatedComponent = Component => Component;
+  return {
+    __esModule: true,
+    default: {
+      View: RN.View,
+      Text: RN.Text,
+      Image: RN.Image,
+      ScrollView: RN.ScrollView,
+      createAnimatedComponent,
+    },
+    View: RN.View,
+    Text: RN.Text,
+    Image: RN.Image,
+    ScrollView: RN.ScrollView,
+    createAnimatedComponent,
+    useSharedValue: initial => ({ value: initial }),
+    useAnimatedStyle: passthroughStyle,
+    useAnimatedRef: () => React.createRef(),
+    useAnimatedScrollHandler: () => () => {},
+    useDerivedValue: fn => ({ value: typeof fn === 'function' ? fn() : fn }),
+    withTiming: (value, _config, callback) => {
+      if (callback) callback(true);
+      return value;
+    },
+    withSpring: (value, _config, callback) => {
+      if (callback) callback(true);
+      return value;
+    },
+    withSequence: (...args) => args[0],
+    withDelay: (_delay, animation) => animation,
+    withRepeat: animation => animation,
+    interpolate: identity,
+    Extrapolation: { CLAMP: 'clamp', EXTEND: 'extend', IDENTITY: 'identity' },
+    Extrapolate: { CLAMP: 'clamp', EXTEND: 'extend', IDENTITY: 'identity' },
+    Easing: {
+      ease: t => t,
+      linear: t => t,
+      inOut: fn => fn || (t => t),
+      in: fn => fn || (t => t),
+      out: fn => fn || (t => t),
+      quad: t => t,
+      cubic: t => t,
+      bezier: () => (t => t),
+    },
+    runOnJS: fn => fn,
+    runOnUI: fn => fn,
+    cancelAnimation: jest.fn(),
   };
 });
 

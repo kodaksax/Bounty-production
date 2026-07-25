@@ -1,9 +1,10 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import * as React from 'react';
-import { Animated, Modal, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { hapticFeedback } from '../../lib/haptic-feedback';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
+import { AppModal } from './app-modal';
 import { Button } from './button';
 
 export type FeedbackVariant = 'success' | 'error' | 'warning' | 'info';
@@ -62,64 +63,44 @@ export function FeedbackModal({ visible, variant, title, message, actionLabel = 
   const { theme } = useAppThemeContext();
   const styles = React.useMemo(() => makeStyles(theme), [theme]);
   const color = variantColor(theme, variant);
-  const scaleAnim = React.useRef(new Animated.Value(0)).current;
 
   React.useEffect(() => {
-    if (!visible) {
-      scaleAnim.setValue(0);
-      return;
-    }
+    if (!visible) return;
     variantHaptic(variant)();
-    Animated.spring(scaleAnim, { toValue: 1, tension: 50, friction: 7, useNativeDriver: true }).start();
     // Re-trigger only when a fresh modal is shown, not on every theme/variant re-render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onDismiss}
-      statusBarTranslucent
-    >
-      <View style={styles.overlay}>
-        <View
-          style={styles.card}
-          accessible
-          accessibilityRole="alert"
-          accessibilityLiveRegion="assertive"
-        >
-          <Animated.View style={[styles.iconCircle, { borderColor: color, transform: [{ scale: scaleAnim }] }]}>
-            <MaterialIcons name={VARIANT_ICON[variant]} size={40} color={color} />
-          </Animated.View>
-
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.message}>{message}</Text>
-
-          <Button
-            variant={variant === 'error' ? 'destructive' : 'default'}
-            onPress={onDismiss}
-            accessibilityLabel={actionLabel}
-            style={styles.actionButton}
-          >
-            {actionLabel}
-          </Button>
+    <AppModal visible={visible} onRequestClose={onDismiss} variant="dialog" dismissable={false}>
+      <View
+        style={styles.card}
+        accessible
+        accessibilityRole="alert"
+        accessibilityLiveRegion="assertive"
+      >
+        <View style={[styles.iconCircle, { borderColor: color }]}>
+          <MaterialIcons name={VARIANT_ICON[variant]} size={40} color={color} />
         </View>
+
+        <Text style={styles.title}>{title}</Text>
+        <Text style={styles.message}>{message}</Text>
+
+        <Button
+          variant={variant === 'error' ? 'destructive' : 'default'}
+          onPress={onDismiss}
+          accessibilityLabel={actionLabel}
+          style={styles.actionButton}
+        >
+          {actionLabel}
+        </Button>
       </View>
-    </Modal>
+    </AppModal>
   );
 }
 
 function makeStyles(theme: AppTheme) {
   return StyleSheet.create({
-    overlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.55)',
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: 24,
-    },
     card: {
       width: '100%',
       maxWidth: 400,

@@ -82,8 +82,6 @@ const TooltipContent = React.forwardRef<View, TooltipContentProps>(
     const { theme } = useAppThemeContext()
     const styles = React.useMemo(() => makeStyles(theme), [theme])
 
-    if (!isOpen) return null
-
     return (
       <Modal
         visible={isOpen}

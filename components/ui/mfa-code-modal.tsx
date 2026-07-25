@@ -9,13 +9,13 @@ import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import type { AppTheme } from 'lib/themes/types';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Modal,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import { ThemedButton } from '../themed/ThemedButton';
+import { AppModal } from './app-modal';
 
 interface MfaCodeModalProps {
   visible: boolean;
@@ -67,72 +67,58 @@ export function MfaCodeModal({
   };
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onCancel}
-      accessibilityViewIsModal
-    >
-      <View style={s.scrim}>
-        <View style={s.card}>
-          <Text style={s.title}>{title}</Text>
-          <Text style={s.subtitle}>{subtitle}</Text>
+    <AppModal visible={visible} onRequestClose={onCancel} variant="dialog">
+      <View style={s.card}>
+        <Text style={s.title}>{title}</Text>
+        <Text style={s.subtitle}>{subtitle}</Text>
 
-          <TextInput
-            ref={inputRef}
-            value={code}
-            onChangeText={text => setCode(text.replace(/\D/g, '').slice(0, 6))}
-            placeholder="000000"
-            placeholderTextColor={theme.textDisabled}
-            keyboardType="number-pad"
-            maxLength={6}
-            editable={!isLoading}
-            onSubmitEditing={handleVerify}
-            style={[s.codeInput, error ? s.codeInputError : null]}
-            accessibilityLabel="Enter your 2FA verification code"
-            accessibilityHint="6-digit code from your authenticator app"
+        <TextInput
+          ref={inputRef}
+          value={code}
+          onChangeText={text => setCode(text.replace(/\D/g, '').slice(0, 6))}
+          placeholder="000000"
+          placeholderTextColor={theme.textDisabled}
+          keyboardType="number-pad"
+          maxLength={6}
+          editable={!isLoading}
+          onSubmitEditing={handleVerify}
+          style={[s.codeInput, error ? s.codeInputError : null]}
+          accessibilityLabel="Enter your 2FA verification code"
+          accessibilityHint="6-digit code from your authenticator app"
+        />
+
+        {error ? (
+          <Text style={s.errorText}>{error}</Text>
+        ) : (
+          <View style={{ height: 16 }} />
+        )}
+
+        <View style={s.actionsRow}>
+          <ThemedButton
+            variant="secondary"
+            label="Cancel"
+            onPress={onCancel}
+            disabled={isLoading}
+            style={s.actionButton}
+            accessibilityLabel="Cancel"
           />
-
-          {error ? (
-            <Text style={s.errorText}>{error}</Text>
-          ) : (
-            <View style={{ height: 16 }} />
-          )}
-
-          <View style={s.actionsRow}>
-            <ThemedButton
-              variant="secondary"
-              label="Cancel"
-              onPress={onCancel}
-              disabled={isLoading}
-              style={s.actionButton}
-              accessibilityLabel="Cancel"
-            />
-            <ThemedButton
-              variant="primary"
-              label="Verify"
-              onPress={handleVerify}
-              disabled={isLoading || code.length !== 6}
-              loading={isLoading}
-              style={s.actionButton}
-              accessibilityLabel="Verify code"
-            />
-          </View>
+          <ThemedButton
+            variant="primary"
+            label="Verify"
+            onPress={handleVerify}
+            disabled={isLoading || code.length !== 6}
+            loading={isLoading}
+            style={s.actionButton}
+            accessibilityLabel="Verify code"
+          />
         </View>
       </View>
-    </Modal>
+    </AppModal>
   );
 }
 
 function makeStyles(t: AppTheme) {
   return StyleSheet.create({
-    scrim: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      backgroundColor: 'rgba(0,0,0,0.6)',
-    },
     card: {
       width: '85%',
       backgroundColor: t.surface,
