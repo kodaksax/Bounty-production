@@ -17,6 +17,7 @@ import {
     View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { VerificationBadge, type VerificationLevel } from './ui/verification-badge';
 import { useHapticFeedback } from '../lib/haptic-feedback';
 import { approveAndRelease } from '../lib/services/completion-approval';
 import { completionService, type CompletionSubmission, type ProofItem } from '../lib/services/completion-service';
@@ -599,7 +600,17 @@ export function PosterReviewModal({
                   </AvatarFallback>
                 </Avatar>
                 <View style={s.hunterDetails}>
-                  <Text style={s.hunterName}>{hunterProfile?.username || displayHunterName}</Text>
+                  <View style={s.hunterNameRow}>
+                    <Text style={s.hunterName}>{hunterProfile?.username || displayHunterName}</Text>
+                    {hunterProfile?.verificationStatus && hunterProfile.verificationStatus !== 'unverified' && (
+                      <VerificationBadge
+                        status={hunterProfile.verificationStatus as VerificationLevel}
+                        size="small"
+                        showLabel={false}
+                        showExplanation={false}
+                      />
+                    )}
+                  </View>
                   <Text style={s.submittedText}>
                     Submitted {new Date(submission.submitted_at!).toLocaleDateString()}
                   </Text>
@@ -797,6 +808,11 @@ function makeStyles(t: AppTheme) {
     },
     hunterDetails: {
       flex: 1,
+    },
+    hunterNameRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
     },
     hunterName: {
       color: t.text,

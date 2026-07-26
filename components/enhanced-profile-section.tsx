@@ -268,7 +268,13 @@ export function EnhancedProfileSection({
     if (status === 'unverified') return null;
     return (
       <View className="mt-2">
-        <VerificationBadge status={status} size="small" showLabel={true} showExplanation={true} />
+        <VerificationBadge
+          status={status}
+          size="small"
+          showLabel={true}
+          showExplanation={true}
+          rejectionReason={effectiveProfile?.id_verification_rejection_reason}
+        />
       </View>
     );
   };

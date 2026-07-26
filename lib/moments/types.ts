@@ -82,6 +82,7 @@ export interface MomentContext {
     hasLocation: boolean;
     hasSkills: boolean;
     idVerificationStatus: 'unverified' | 'pending' | 'verified' | 'rejected' | null;
+    stripeIdentityStatus?: 'unstarted' | 'requires_input' | 'processing' | 'verified' | 'canceled' | null;
     stripeConnectChargesEnabled: boolean;
     stripeConnectPayoutsEnabled: boolean;
     primaryRole: 'poster' | 'hunter' | 'both' | null;

@@ -237,6 +237,7 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
         hasLocation: !!profile.location,
         hasSkills: !!(profile.skills && profile.skills.length > 0),
         idVerificationStatus: profile.id_verification_status ?? null,
+        stripeIdentityStatus: profile.stripe_identity_status ?? null,
         stripeConnectChargesEnabled: !!profile.stripe_connect_charges_enabled,
         stripeConnectPayoutsEnabled: !!profile.stripe_connect_payouts_enabled,
         primaryRole: profile.primary_role ?? null,

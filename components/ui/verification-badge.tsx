@@ -5,17 +5,19 @@ import { useHapticFeedback } from '../../lib/haptic-feedback';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 
-export type VerificationLevel = 'unverified' | 'pending' | 'verified';
+export type VerificationLevel = 'unverified' | 'pending' | 'verified' | 'rejected';
 
 interface VerificationBadgeProps {
   status: VerificationLevel;
   size?: 'small' | 'medium' | 'large';
   showLabel?: boolean;
   showExplanation?: boolean;
+  /** Actionable reason shown in the modal when status is 'rejected'. */
+  rejectionReason?: string;
 }
 
 interface VerificationConfig {
-  icon: 'verified' | 'schedule' | 'help-outline';
+  icon: 'verified' | 'schedule' | 'help-outline' | 'error-outline';
   color: string;
   label: string;
   title: string;
@@ -44,11 +46,19 @@ const VERIFICATION_CONFIGS: Record<VerificationLevel, VerificationConfig> = {
     title: 'Not Yet Verified',
     description: 'This user has not yet completed the verification process. Consider asking for additional proof of identity before engaging in transactions.',
   },
+  rejected: {
+    icon: 'error-outline',
+    color: '#ef4444',
+    label: 'Rejected',
+    title: 'Verification Not Approved',
+    description: 'This user’s last verification attempt wasn’t approved. They can resubmit at any time.',
+  },
 };
 
 function getBadgeBg(status: VerificationLevel, isDark: boolean): string {
   if (status === 'verified') return isDark ? 'rgba(255,255,255,0.05)' : 'rgba(5,150,105,0.1)';
   if (status === 'pending') return 'rgba(251,191,36,0.15)';
+  if (status === 'rejected') return 'rgba(239,68,68,0.12)';
   return isDark ? 'rgba(156,163,175,0.15)' : 'rgba(156,163,175,0.12)';
 }
 
@@ -57,6 +67,7 @@ export function VerificationBadge({
   size = 'medium',
   showLabel = true,
   showExplanation = true,
+  rejectionReason,
 }: VerificationBadgeProps) {
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -149,6 +160,13 @@ export function VerificationBadge({
                 <Text style={s.tipText}>
                   Tip: Verified users complete transactions 3x faster and have higher trust ratings.
                 </Text>
+              </View>
+            )}
+
+            {status === 'rejected' && rejectionReason && (
+              <View style={s.tipBox}>
+                <MaterialIcons name="info-outline" size={16} color="#ef4444" />
+                <Text style={s.tipText}>{rejectionReason}</Text>
               </View>
             )}
 

@@ -11,11 +11,18 @@ import {
 import type { Bounty } from "lib/services/database.types";
 import type { WalletTransaction } from "lib/types";
 import { bountyService } from "lib/services/bounty-service";
+import { userProfileService } from "lib/services/userProfile";
 import { getCurrentUserId } from "lib/utils/data-utils";
 import { useWallet } from "lib/wallet-context";
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
 import { PostingsListSkeleton } from './ui/skeleton-loaders';
+import { VerificationBadge, type VerificationLevel } from './ui/verification-badge';
+
+interface CounterpartyInfo {
+  name: string;
+  verificationStatus?: 'unverified' | 'pending' | 'verified' | 'rejected';
+}
 
 interface HistoryScreenProps {
   onBack: () => void;
@@ -25,6 +32,7 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
   const [bounties, setBounties] = useState<Bounty[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [counterparties, setCounterparties] = useState<Record<string, CounterpartyInfo>>({});
   const { transactions } = useWallet();
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -39,9 +47,33 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
         bountyService.getAll({ userId: currentUserId, status: "archived" }),
         bountyService.getAll({ userId: currentUserId, status: "deleted" }),
       ]);
-      setBounties([...completed, ...archived, ...deleted].sort((a, b) => 
+      const all = [...completed, ...archived, ...deleted].sort((a, b) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      ));
+      );
+      setBounties(all);
+
+      // Fetch counterparty (whichever of poster/hunter isn't the current
+      // user) profiles once up front so renderBountyItem can stay
+      // synchronous — same userProfileService.getProfile pattern used in
+      // my-posting-expandable.tsx.
+      const counterpartyIds = Array.from(
+        new Set(
+          all
+            .map((b) => (b.poster_id === currentUserId ? b.accepted_by : b.poster_id))
+            .filter((id): id is string => !!id)
+        )
+      );
+      const profiles = await Promise.all(
+        counterpartyIds.map(async (id) => {
+          try {
+            const p = await userProfileService.getProfile(id);
+            return [id, { name: p?.username || 'User', verificationStatus: p?.verificationStatus }] as const;
+          } catch {
+            return [id, { name: 'User' }] as const;
+          }
+        })
+      );
+      setCounterparties(Object.fromEntries(profiles));
     } catch (error) {
       console.error("Failed to load history:", error);
     } finally {
@@ -91,6 +123,28 @@ export function HistoryScreen({ onBack }: HistoryScreenProps) {
       <Text style={styles.itemTitle} numberOfLines={2}>
         {item.title}
       </Text>
+
+      {(() => {
+        const counterpartyId = item.poster_id === currentUserId ? item.accepted_by : item.poster_id;
+        const counterparty = counterpartyId ? counterparties[counterpartyId] : undefined;
+        if (!counterparty) return null;
+        return (
+          <View style={styles.counterpartyRow}>
+            <Text style={styles.counterpartyText}>
+              {item.poster_id === currentUserId ? 'Hunter: ' : 'Poster: '}
+              {counterparty.name}
+            </Text>
+            {counterparty.verificationStatus && counterparty.verificationStatus !== 'unverified' && (
+              <VerificationBadge
+                status={counterparty.verificationStatus as VerificationLevel}
+                size="small"
+                showLabel={false}
+                showExplanation={false}
+              />
+            )}
+          </View>
+        );
+      })()}
 
       <Text style={styles.itemDescription} numberOfLines={2}>
         {item.description}
@@ -249,6 +303,16 @@ function makeStyles(theme: AppTheme) {
       fontWeight: "700",
       color: theme.text,
       marginBottom: 6,
+    },
+    counterpartyRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      marginBottom: 6,
+    },
+    counterpartyText: {
+      fontSize: 13,
+      color: theme.textSecondary,
     },
     itemDescription: {
       fontSize: 14,

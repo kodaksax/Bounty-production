@@ -19,7 +19,11 @@ export default function AdminDashboard() {
     { id: 'analytics', title: 'Analytics', icon: 'analytics', route: ROUTES.ADMIN.ANALYTICS },
     { id: 'bounties', title: 'Bounties', icon: 'work', route: ROUTES.ADMIN.BOUNTIES },
     { id: 'users', title: 'Users', icon: 'people', route: ROUTES.ADMIN.USERS },
-    { id: 'verifications', title: 'Verifications', icon: 'verified-user', route: ROUTES.ADMIN.VERIFICATIONS },
+    // 'Verifications' quick link removed: ID review is now handled by Stripe
+    // Identity's own async pipeline instead of this manual queue. The route
+    // and app/(admin)/verifications.tsx are kept as a dormant rollback path
+    // for one release cycle rather than deleted outright — see
+    // supabase/migrations/20260725000000_add_stripe_identity_columns.sql.
     { id: 'disputes', title: 'Disputes', icon: 'gavel', route: ROUTES.ADMIN.DISPUTES },
     { id: 'transactions', title: 'Transactions', icon: 'account-balance', route: ROUTES.ADMIN.TRANSACTIONS },
     { id: 'withdrawal-recovery', title: 'Withdrawal Recovery', icon: 'build-circle', route: ROUTES.ADMIN.WITHDRAWAL_RECOVERY },

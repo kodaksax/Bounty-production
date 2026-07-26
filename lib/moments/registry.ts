@@ -185,15 +185,16 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
     // shown to a brand-new user in their very first session. Absent a
     // strong reason, this waits for a later session like every other
     // passive activation prompt (MIN_SESSIONS_FOR_ACTIVATION_PROMPT).
-    // 'rejected' is included alongside 'unverified'/null so a resubmission
-    // nudge follows the same cooldown/suppression rules instead of nagging
-    // unboundedly — matching the resubmit entry point already on the
-    // profile screen.
+    // 'rejected' (legacy) / 'requires_input' (Stripe Identity) are included
+    // alongside 'unverified'/null so a resubmission nudge follows the same
+    // cooldown/suppression rules instead of nagging unboundedly — matching
+    // the resubmit entry point already on the profile screen.
     isEligible: (ctx) => {
       const needsVerification =
-        ctx.profile.idVerificationStatus === 'unverified' ||
-        ctx.profile.idVerificationStatus === null ||
-        ctx.profile.idVerificationStatus === 'rejected';
+        ctx.profile.stripeIdentityStatus !== 'verified' &&
+        ctx.profile.idVerificationStatus !== 'verified' &&
+        ctx.profile.stripeIdentityStatus !== 'processing' &&
+        ctx.profile.idVerificationStatus !== 'pending';
       if (!needsVerification) return false;
 
       const hasStrongReason =
@@ -203,9 +204,13 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
 
       return ctx.sessionCount >= MIN_SESSIONS_FOR_ACTIVATION_PROMPT;
     },
-    checkCompleted: (ctx) => ctx.profile.idVerificationStatus === 'pending' || ctx.profile.idVerificationStatus === 'verified',
+    checkCompleted: (ctx) =>
+      ctx.profile.stripeIdentityStatus === 'processing' ||
+      ctx.profile.stripeIdentityStatus === 'verified' ||
+      ctx.profile.idVerificationStatus === 'pending' ||
+      ctx.profile.idVerificationStatus === 'verified',
     content: (ctx) =>
-      ctx.profile.idVerificationStatus === 'rejected'
+      ctx.profile.stripeIdentityStatus === 'requires_input' || ctx.profile.idVerificationStatus === 'rejected'
         ? {
             icon: 'verified-user',
             title: 'Resubmit your ID verification',
@@ -217,7 +222,7 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
         : {
             icon: 'verified-user',
             title: 'Verify your identity',
-            body: 'A quick ID check builds trust with other users and unlocks higher limits. It takes about 2 minutes, and you can always do it later from your profile.',
+            body: 'A quick ID and selfie check (powered by Stripe) builds trust with other users and unlocks higher limits. It takes about 2 minutes. This is separate from any bank details you’ve added for payouts — it verifies who you are, not how you get paid, and you can always do it later from your profile.',
             benefits: [
               'Verified badge on your profile',
               'Higher transaction limits',
@@ -228,7 +233,7 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
             secondaryLabel: 'Later',
             estimatedMinutes: 2,
           },
-    action: { type: 'navigate', route: '/verification/upload-id' },
+    action: { type: 'navigate', route: '/verification/onboarding-explainer' },
   },
   {
     type: 'stripe_connect_onboarding',
@@ -261,7 +266,7 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
     content: () => ({
       icon: 'account-balance',
       title: 'Set up payouts',
-      body: 'Connect a bank account so you can get paid the moment a bounty you complete is approved. Setup takes about 5 minutes through Stripe, our payments partner.',
+      body: 'Connect a bank account so you can get paid the moment a bounty you complete is approved. Setup takes about 5 minutes through Stripe, our payments partner. This is separate from identity verification (the trust badge on your profile) — this step is only about where your money goes.',
       benefits: [
         'Get paid directly to your bank',
         'No manual withdrawal requests',

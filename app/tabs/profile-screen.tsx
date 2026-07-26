@@ -388,45 +388,47 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
               id_verification_status: authProfile?.id_verification_status,
               selfie_submitted_at: authProfile?.selfie_submitted_at,
               age_verified: authProfile?.age_verified,
+              stripe_identity_status: authProfile?.stripe_identity_status,
               username: authProfile?.username,
               display_name: authProfile?.display_name,
               avatar_url: authProfile?.avatar,
               bio: authProfile?.about,
             }}
           />
-          {/* Entry point for users who skipped or were rejected during onboarding to
-              complete ID verification later. Hidden once status is pending/verified. */}
-          {isOwnProfile && (
-            authProfile?.id_verification_status === undefined ||
-            authProfile?.id_verification_status === 'unverified' ||
-            authProfile?.id_verification_status === 'rejected'
-          ) && (
-            <TouchableOpacity
-              style={styles.verifyIdentityRow}
-              onPress={() => router.push('/verification/upload-id')}
-              accessibilityRole="button"
-              accessibilityLabel={
-                authProfile?.id_verification_status === 'rejected'
-                  ? 'Resubmit ID verification'
-                  : 'Verify your identity'
-              }
-            >
-              <MaterialIcons name="verified-user" size={20} color={theme.textSecondary} />
-              <View style={styles.verifyIdentityTextWrap}>
-                <Text style={styles.verifyIdentityTitle}>
-                  {authProfile?.id_verification_status === 'rejected'
-                    ? 'Resubmit ID verification'
-                    : 'Verify your identity'}
-                </Text>
-                <Text style={styles.verifyIdentitySubtitle}>
-                  {authProfile?.id_verification_status === 'rejected'
-                    ? 'Your previous submission was rejected. Tap to try again.'
-                    : 'Unlock trust badges and faster payouts.'}
-                </Text>
-              </View>
-              <MaterialIcons name="chevron-right" size={20} color={theme.textSecondary} />
-            </TouchableOpacity>
-          )}
+          {/* Entry point for users who skipped or were rejected to complete ID
+              verification later. Hidden once status is processing/verified. */}
+          {isOwnProfile && (() => {
+            const needsVerification =
+              authProfile?.stripe_identity_status !== 'verified' &&
+              authProfile?.id_verification_status !== 'verified' &&
+              authProfile?.stripe_identity_status !== 'processing' &&
+              authProfile?.id_verification_status !== 'pending';
+            if (!needsVerification) return null;
+            const isRejected =
+              authProfile?.stripe_identity_status === 'requires_input' ||
+              authProfile?.id_verification_status === 'rejected';
+            return (
+              <TouchableOpacity
+                style={styles.verifyIdentityRow}
+                onPress={() => router.push('/verification/onboarding-explainer')}
+                accessibilityRole="button"
+                accessibilityLabel={isRejected ? 'Resubmit ID verification' : 'Verify your identity'}
+              >
+                <MaterialIcons name="verified-user" size={20} color={theme.textSecondary} />
+                <View style={styles.verifyIdentityTextWrap}>
+                  <Text style={styles.verifyIdentityTitle}>
+                    {isRejected ? 'Resubmit ID verification' : 'Verify your identity'}
+                  </Text>
+                  <Text style={styles.verifyIdentitySubtitle}>
+                    {isRejected
+                      ? 'Your previous submission was rejected. Tap to try again.'
+                      : 'Unlock trust badges and faster payouts.'}
+                  </Text>
+                </View>
+                <MaterialIcons name="chevron-right" size={20} color={theme.textSecondary} />
+              </TouchableOpacity>
+            );
+          })()}
         </View>
 
         {/* Platform Security & Trust Badges */}

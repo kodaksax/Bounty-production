@@ -6,6 +6,7 @@ import { Text, TouchableOpacity, View } from "react-native"
 import { MaterialIcons } from "@expo/vector-icons"
 import { Avatar, AvatarFallback, AvatarImage } from "components/ui/avatar"
 import { BrandingLogo } from "components/ui/branding-logo"
+import { VerificationBadge, type VerificationLevel } from "components/ui/verification-badge"
 import { useRouter } from "expo-router"
 import type { Conversation } from "lib/types"
 import { getCurrentUserId } from "lib/utils/data-utils"
@@ -201,8 +202,17 @@ export function ChatDetailScreen({
               </AvatarFallback>
             </Avatar>
             <View>
-              <Text className="font-medium">{displayName}</Text>
-              
+              <View className="flex-row items-center gap-1">
+                <Text className="font-medium">{displayName}</Text>
+                {!conversation.isGroup && otherUserProfile?.verificationStatus && (
+                  <VerificationBadge
+                    status={otherUserProfile.verificationStatus as VerificationLevel}
+                    size="small"
+                    showLabel={false}
+                    showExplanation={false}
+                  />
+                )}
+              </View>
             </View>
           </TouchableOpacity>
         </View>

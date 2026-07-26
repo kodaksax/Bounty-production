@@ -19,6 +19,11 @@ export interface VerificationBadgeInput {
   id_verification_status?: 'unverified' | 'pending' | 'verified' | 'rejected';
   selfie_submitted_at?: string | null;
   age_verified?: boolean;
+  // Stripe Identity status -- new source of truth for id_verified. Legacy
+  // id_verification_status is still checked as a fallback for profiles
+  // verified before the Stripe Identity migration (backfilled, never had a
+  // real VerificationSession created for them).
+  stripe_identity_status?: 'unstarted' | 'requires_input' | 'processing' | 'verified' | 'canceled';
   // Profile completeness fields (aligned with checkProfileCompleteness)
   username?: string | null;
   display_name?: string | null;
@@ -48,7 +53,7 @@ export interface VerificationBadge {
 export function getVerificationBadges(input: VerificationBadgeInput): VerificationBadge[] {
   const emailEarned = input.email_confirmed === true;
   const phoneEarned = input.phone_verified === true;
-  const idEarned = input.id_verification_status === 'verified';
+  const idEarned = input.stripe_identity_status === 'verified' || input.id_verification_status === 'verified';
   const ageEarned = input.age_verified === true;
   const profileEarned =
     !!input.username?.trim() &&
@@ -116,7 +121,7 @@ export function deriveVerificationStatus(
   const idVerified = badges.find((b) => b.id === 'id_verified');
   if (idVerified?.earned) return 'verified';
 
-  if (input.id_verification_status === 'pending') return 'pending';
+  if (input.stripe_identity_status === 'processing' || input.id_verification_status === 'pending') return 'pending';
 
   return 'unverified';
 }

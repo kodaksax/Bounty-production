@@ -127,7 +127,7 @@ export interface UserProfile {
   bio?: string;
   location?: string;
   portfolio?: string;
-  verificationStatus?: 'unverified' | 'pending' | 'verified' | 'trusted';
+  verificationStatus?: 'unverified' | 'pending' | 'verified' | 'rejected' | 'trusted';
   followerCount?: number;
   followingCount?: number;
   // Phase 1 verification fields
@@ -136,6 +136,10 @@ export interface UserProfile {
   selfie_submitted_at?: string;
   age_verified?: boolean;
   email_confirmed?: boolean;
+  // Stripe Identity fields
+  stripe_identity_status?: 'unstarted' | 'requires_input' | 'processing' | 'verified' | 'canceled';
+  id_verification_rejection_reason?: string;
+  verified_since?: string;
   display_name?: string;
 }
 

@@ -45,6 +45,10 @@ export interface AuthProfile {
   phone_verified?: boolean;
   id_verification_status?: 'unverified' | 'pending' | 'verified' | 'rejected';
   selfie_submitted_at?: string;
+  // Stripe Identity fields
+  stripe_identity_status?: 'unstarted' | 'requires_input' | 'processing' | 'verified' | 'canceled';
+  id_verification_rejection_reason?: string;
+  verified_since?: string;
   display_name?: string;
   // Activation-related fields, natively exposed here so callers (e.g.
   // providers/moments-provider.tsx) don't need a separate ad-hoc query
@@ -144,7 +148,7 @@ export class AuthProfileService {
           .from('public_profiles')
           // PostgREST aliasing uses `alias:column` — alias the snake_case DB column
           // to a camelCase property so the app can read `displayName` safely.
-          .select('id,username,displayName:display_name,avatar,location')
+          .select('id,username,displayName:display_name,avatar,location,stripe_identity_status,verified_since')
           .eq('id', userId)
           .maybeSingle();
         if (typeof __DEV__ !== 'undefined' && __DEV__) {
@@ -177,9 +181,10 @@ export class AuthProfileService {
       }
 
       // Map the public_profiles row into AuthProfile shape. Fields not present
-      // in the safe-columns view (email, phone, balance, verification/Stripe
-      // state, etc.) are intentionally absent here -- this is another user's
-      // profile, not the caller's own.
+      // in the safe-columns view (email, phone, balance, legacy id_verification_status,
+      // etc.) are intentionally absent here -- this is another user's profile,
+      // not the caller's own. stripe_identity_status/verified_since ARE exposed
+      // (see public_profiles view) since cross-user verification badges need them.
       const profile: AuthProfile = {
         id: data.id,
         username: data.username,
@@ -203,6 +208,9 @@ export class AuthProfileService {
         phone_verified: typeof data.phone_verified === 'boolean' ? data.phone_verified : undefined,
         id_verification_status: data.id_verification_status || undefined,
         selfie_submitted_at: data.selfie_submitted_at || undefined,
+        stripe_identity_status: data.stripe_identity_status || undefined,
+        id_verification_rejection_reason: data.id_verification_rejection_reason || undefined,
+        verified_since: data.verified_since || undefined,
         display_name: data.display_name || undefined,
         primary_role: data.primary_role || undefined,
         stripe_connect_charges_enabled: typeof data.stripe_connect_charges_enabled === 'boolean' ? data.stripe_connect_charges_enabled : undefined,
@@ -416,6 +424,9 @@ export class AuthProfileService {
           phone_verified: typeof data.phone_verified === 'boolean' ? data.phone_verified : undefined,
           id_verification_status: data.id_verification_status || undefined,
           selfie_submitted_at: data.selfie_submitted_at || undefined,
+          stripe_identity_status: data.stripe_identity_status || undefined,
+          id_verification_rejection_reason: data.id_verification_rejection_reason || undefined,
+          verified_since: data.verified_since || undefined,
           display_name: data.display_name || undefined,
           primary_role: data.primary_role || undefined,
           stripe_connect_charges_enabled: typeof data.stripe_connect_charges_enabled === 'boolean' ? data.stripe_connect_charges_enabled : undefined,
@@ -552,6 +563,9 @@ export class AuthProfileService {
           phone_verified: typeof data.phone_verified === 'boolean' ? data.phone_verified : undefined,
           id_verification_status: data.id_verification_status || undefined,
           selfie_submitted_at: data.selfie_submitted_at || undefined,
+          stripe_identity_status: data.stripe_identity_status || undefined,
+          id_verification_rejection_reason: data.id_verification_rejection_reason || undefined,
+          verified_since: data.verified_since || undefined,
           display_name: data.display_name || undefined,
           primary_role: data.primary_role || undefined,
           stripe_connect_charges_enabled: typeof data.stripe_connect_charges_enabled === 'boolean' ? data.stripe_connect_charges_enabled : undefined,

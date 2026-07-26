@@ -20,6 +20,8 @@ interface ProfileData {
   location?: string;
   phone?: string; // Private - never displayed
   skills?: string[];
+  verificationStatus?: 'unverified' | 'pending' | 'verified' | 'rejected';
+  verifiedSince?: string;
 }
 
 export interface ProfileCompleteness {
@@ -251,7 +253,7 @@ export const userProfileService = {
             // path is only a lightweight fallback for display names.
             const res = await supabase
               .from('public_profiles')
-              .select('id,username,display_name,avatar,location')
+              .select('id,username,display_name,avatar,location,stripe_identity_status,verified_since')
               .eq('id', resolvedUserId)
               .single();
             remoteData = res.data ?? null;
@@ -266,13 +268,27 @@ export const userProfileService = {
             return null;
           }
 
-          // Normalize field names to our ProfileData shape
+          // Normalize field names to our ProfileData shape. verificationStatus
+          // is derived from Stripe Identity status here (this fallback path
+          // has no access to the legacy id_verification_status column, which
+          // isn't exposed on public_profiles -- see 20260725000000_add_stripe_identity_columns.sql).
+          const verificationStatus: ProfileData['verificationStatus'] =
+            remoteData.stripe_identity_status === 'verified'
+              ? 'verified'
+              : remoteData.stripe_identity_status === 'processing'
+                ? 'pending'
+                : remoteData.stripe_identity_status === 'requires_input'
+                  ? 'rejected'
+                  : 'unverified';
+
           const normalized = {
             username: remoteData.username || '',
             displayName: remoteData.display_name || remoteData.displayName || undefined,
             avatar: remoteData.avatar || undefined,
             location: remoteData.location || undefined,
             bio: remoteData.about || remoteData.bio || undefined,
+            verificationStatus,
+            verifiedSince: remoteData.verified_since || undefined,
           } as ProfileData;
 
           // Cache locally under the per-user key so future reads are fast
