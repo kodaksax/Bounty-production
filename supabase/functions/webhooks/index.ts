@@ -31,6 +31,42 @@ function logCritical(event: string, context: Record<string, unknown>) {
 }
 
 /**
+ * Notification redesign (2026-07-25): this webhook handler historically wrote
+ * Payments notifications straight into `public.notifications` (see the
+ * insert-then-update-on-conflict blocks below, kept as-is — they're the
+ * idempotency source of truth, keyed on stripe_payout_id/transferId/dispute
+ * id), which meant Payments notifications never went through
+ * notifications_outbox and so never got push, email, preference, or
+ * quiet-hours treatment. This helper enqueues a companion outbox row with
+ * `data.skipInApp: true` so process-notification (picked up within ~1 minute
+ * by the `drain-notifications-outbox` pg_cron job) handles push/email fan-out
+ * for the *same* notification without inserting a second, duplicate bell row.
+ * Best-effort: a failure here must never fail Stripe webhook processing.
+ */
+async function enqueuePushEmailFanout(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  params: { userId: string; type: string; title: string; body: string; data: Record<string, unknown> }
+): Promise<void> {
+  try {
+    const { error } = await supabase.from('notifications_outbox').insert({
+      recipients: [params.userId],
+      title: params.title,
+      body: params.body,
+      data: { ...params.data, type: params.type, skipInApp: true },
+      status: 'pending',
+    });
+    if (error) {
+      console.error('[webhooks] enqueuePushEmailFanout: outbox insert failed (non-fatal)', {
+        userId: params.userId, type: params.type, error,
+      });
+    }
+  } catch (e) {
+    console.error('[webhooks] enqueuePushEmailFanout: unexpected error (non-fatal)', e);
+  }
+}
+
+/**
  * Syncs a Stripe Connect `Account` snapshot into `profiles`. Writes the
  * current capability booleans and requirements payload on every call, but
  * preserves `stripe_connect_onboarded_at`: it is set exactly once on the
@@ -382,6 +418,14 @@ async function handleUndeliveredPayout(
     console.log(`[webhooks] Notified hunter ${profile.id} of payout.${outcome}`);
   }
 
+  await enqueuePushEmailFanout(supabase, {
+    userId: profile.id,
+    type: outcome === 'canceled' ? 'payout_canceled' : 'payout_failed',
+    title: notifTitle,
+    body: notifBody,
+    data: notifRow.data,
+  });
+
   // Flag the profile so support can follow up (reuses the existing
   // payout_failed_at / PayoutFailedBanner mechanism for both outcomes —
   // both mean "the hunter's payout did not arrive and may need attention").
@@ -582,12 +626,13 @@ async function handleTransferSetback(
     }
 
     if (!existingNotification) {
+      const notifData = { transferId: transfer.id, retry_count: currentRetries, outcome };
       const { error: notifError } = await supabase.from('notifications').insert({
         user_id: txUserId,
         type: 'payment',
         title: notifTitle,
         body: notifBody,
-        data: { transferId: transfer.id, retry_count: currentRetries, outcome },
+        data: notifData,
       });
       if (notifError) {
         console.error(`[webhooks] Failed to insert ${outcome} notification`, {
@@ -597,6 +642,13 @@ async function handleTransferSetback(
         });
         throw notifError;
       }
+      await enqueuePushEmailFanout(supabase, {
+        userId: txUserId,
+        type: 'withdrawal_reversed',
+        title: notifTitle,
+        body: notifBody,
+        data: notifData,
+      });
     } else {
       console.log(
         `[webhooks] Skipping duplicate ${outcome} notification for transfer ${transfer.id} and user ${txUserId}`
@@ -744,11 +796,13 @@ async function handleAccountDeauthorized(
     throw updateError;
   }
 
+  const deauthTitle = 'Bank Connection Disconnected';
+  const deauthBody = 'Your Stripe payout connection was disconnected. Please reconnect your account to withdraw funds.';
   const { error: notifError } = await supabase.from('notifications').insert({
     user_id: profile.id,
     type: 'payment',
-    title: 'Bank Connection Disconnected',
-    body: 'Your Stripe payout connection was disconnected. Please reconnect your account to withdraw funds.',
+    title: deauthTitle,
+    body: deauthBody,
     data: { accountId },
   });
   if (notifError) {
@@ -760,6 +814,14 @@ async function handleAccountDeauthorized(
     // Non-fatal — the capability flags are already updated, which is the
     // load-bearing part; a missed notification isn't worth retrying the
     // whole webhook delivery for.
+  } else {
+    await enqueuePushEmailFanout(supabase, {
+      userId: profile.id,
+      type: 'bank_disconnected',
+      title: deauthTitle,
+      body: deauthBody,
+      data: { accountId },
+    });
   }
 }
 
@@ -2041,6 +2103,14 @@ Deno.serve(async (req: Request) => {
               console.log(`[webhooks] Notified hunter ${paidProfile.id} of payout.paid`);
             }
 
+            await enqueuePushEmailFanout(supabase, {
+              userId: paidProfile.id,
+              type: 'payout_paid',
+              title: notifRow.title,
+              body: notifRow.body,
+              data: notifRow.data,
+            });
+
             // Best-effort: backfill stripe_payout_id (useful for standard
             // rows, where this is the first time Bounty learns the payout
             // id) and reconcile the instant-payout fee against the
@@ -2243,12 +2313,17 @@ Deno.serve(async (req: Request) => {
           throw freezeError;
         }
 
-        // Notify the poster
+        // Notify the poster. type: 'dispute_created' (security category) —
+        // this is a Stripe chargeback, distinct from the bounty-completion
+        // "workflow" disputes elsewhere in the app, but shares the same
+        // account-integrity urgency semantics (always bypasses quiet hours).
+        const disputeOpenedTitle = 'Payment Dispute Opened';
+        const disputeOpenedBody = 'A payment dispute has been opened on your account. Your wallet has been temporarily frozen.';
         const { error: notifError } = await supabase.from('notifications').insert({
           user_id: disputeUserId,
-          type: 'payment',
-          title: 'Payment Dispute Opened',
-          body: 'A payment dispute has been opened on your account. Your wallet has been temporarily frozen.',
+          type: 'dispute_created',
+          title: disputeOpenedTitle,
+          body: disputeOpenedBody,
           data: { stripeDisputeId: dispute.id },
         });
         if (notifError) {
@@ -2257,6 +2332,14 @@ Deno.serve(async (req: Request) => {
             error: notifError,
           });
           // Non-fatal — do not rethrow; dispute row and freeze are the critical ops
+        } else {
+          await enqueuePushEmailFanout(supabase, {
+            userId: disputeUserId,
+            type: 'dispute_created',
+            title: disputeOpenedTitle,
+            body: disputeOpenedBody,
+            data: { stripeDisputeId: dispute.id },
+          });
         }
 
         console.log(
@@ -2573,10 +2656,11 @@ Deno.serve(async (req: Request) => {
           }
         }
 
+        const closedNotifTitle = disputeWon ? 'Dispute Resolved — Won' : 'Dispute Resolved — Lost';
         const { error: closedNotifError } = await supabase.from('notifications').insert({
           user_id: closedUserId,
-          type: 'payment',
-          title: disputeWon ? 'Dispute Resolved — Won' : 'Dispute Resolved — Lost',
+          type: 'dispute_resolved',
+          title: closedNotifTitle,
           body: outcomeMsg,
           data: { stripeDisputeId: closedDispute.id },
         });
@@ -2586,6 +2670,14 @@ Deno.serve(async (req: Request) => {
             error: closedNotifError,
           });
           // Non-fatal
+        } else {
+          await enqueuePushEmailFanout(supabase, {
+            userId: closedUserId,
+            type: 'dispute_resolved',
+            title: closedNotifTitle,
+            body: outcomeMsg,
+            data: { stripeDisputeId: closedDispute.id },
+          });
         }
 
         console.log(
@@ -2804,16 +2896,25 @@ Deno.serve(async (req: Request) => {
           changeKind === 'removed'
             ? "A bank account or card was removed from your payout method outside the app. If this wasn't you, please review your payout settings."
             : `Your payout method was ${changeKind} outside the app.`;
+        const eaNotifData = { stripeAccountId: externalAccountEventAccountId, change: changeKind };
         const { error: eaNotifErr } = await supabase.from('notifications').insert({
           user_id: eaOwnerUserId,
-          type: 'payment',
+          type: 'payout_method_changed',
           title: 'Payout Method Changed',
           body: eaNotifBody,
-          data: { stripeAccountId: externalAccountEventAccountId, change: changeKind },
+          data: eaNotifData,
         });
         if (eaNotifErr) {
           console.error(`[webhooks] ${event.type}: failed to insert notification`, { error: eaNotifErr });
           // Non-fatal — the audit finding above is the load-bearing write.
+        } else {
+          await enqueuePushEmailFanout(supabase, {
+            userId: eaOwnerUserId,
+            type: 'payout_method_changed',
+            title: 'Payout Method Changed',
+            body: eaNotifBody,
+            data: eaNotifData,
+          });
         }
         break;
       }

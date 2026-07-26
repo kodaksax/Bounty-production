@@ -609,9 +609,44 @@ export type NotificationType =
   | 'dispute_created'
   | 'dispute_resolved'
   | 'workflow_dispute_created'
+  | 'dispute_escalated'
   | 'stale_bounty'
   | 'stale_bounty_cancelled'
-  | 'stale_bounty_reposted';
+  | 'stale_bounty_reposted'
+  | 'update'
+  | 'review_needed'
+  | 'balance_update'
+  | 'bounty_nearby'
+  | 'bounty_expiry'
+  | 'account_warning'
+  | 'account_restricted'
+  | 'payout_paid'
+  | 'payout_failed'
+  | 'payout_canceled'
+  | 'withdrawal_reversed'
+  | 'bank_disconnected'
+  | 'payout_method_changed'
+  | 'verification_submitted'
+  | 'verification_verified'
+  | 'verification_rejected'
+  | 'verification_canceled'
+  | 'marketing_promo';
+
+/**
+ * Notification category — the redesigned notification system's top-level
+ * grouping, used for per-category channel preferences, Notification Center
+ * filters, and quiet-hours/urgency rules. See lib/config/notification-taxonomy.ts
+ * for the NotificationType -> NotificationCategory mapping (mirrored by hand in
+ * supabase/functions/process-notification/index.ts, which can't import from lib/).
+ */
+export type NotificationCategory =
+  | 'marketplace'
+  | 'messages'
+  | 'payments'
+  | 'security'
+  | 'verification'
+  | 'followers'
+  | 'marketing';
 
 /**
  * User notification
@@ -653,6 +688,7 @@ export interface Notification {
   id: string;
   user_id: string;
   type: NotificationType;
+  category?: NotificationCategory;
   title: string;
   body: string;
   data?: {
@@ -664,9 +700,16 @@ export interface Notification {
     followerId?: string;
     amount?: number;
     cancellationId?: string;
+    requestId?: string;
+    conversationId?: string;
+    stripeDisputeId?: string;
+    deepLinkPath?: string;
     [key: string]: any;
   };
   read: boolean;
+  /** Bundle count — >1 means this row represents multiple merged events (e.g. "3 people applied"). */
+  count?: number;
+  archived?: boolean;
   created_at: string;
 }
 

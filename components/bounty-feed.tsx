@@ -3,6 +3,7 @@ import { useLocation } from 'app/hooks/useLocation'
 import { BountyCompactItem } from 'components/bounty-compact-item'
 import { BountyGridFeed } from 'components/bounty-grid-feed'
 import { BountyListItem } from 'components/bounty-list-item'
+import { NotificationBell } from 'components/notifications/notification-bell'
 import { EmptyState } from 'components/ui/empty-state'
 import { PostingsListSkeleton } from 'components/ui/skeleton-loaders'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -649,16 +650,17 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     <View style={s.dashboardArea}>
       {/* Search bar — non-grid only (grid has it inside the banner block below) */}
       {bountyFormat !== 'grid' && (
-        <View style={s.searchWrapper}>
+        <View style={[s.searchWrapper, s.searchRow]}>
           <TouchableOpacity
             accessibilityRole="button"
             accessibilityLabel="Open search"
             onPress={() => router.push('/tabs/search')}
-            style={s.searchButton}
+            style={[s.searchButton, s.searchButtonFlex]}
           >
             <MaterialIcons name="search" size={20} color={theme.textDisabled} style={s.searchIcon} />
             <Text style={s.searchText}>Search bounties or users...</Text>
           </TouchableOpacity>
+          <NotificationBell />
         </View>
       )}
 
@@ -813,6 +815,14 @@ function makeStyles(t: AppTheme) {
       paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
       marginBottom: SPACING.COMPACT_GAP,
       marginTop: 30,
+    },
+    searchRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: SPACING.COMPACT_GAP,
+    },
+    searchButtonFlex: {
+      flex: 1,
     },
     searchButton: {
       flexDirection: 'row',

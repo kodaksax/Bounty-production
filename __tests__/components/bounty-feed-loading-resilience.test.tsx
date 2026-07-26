@@ -124,7 +124,7 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
 }));
 
-jest.mock('../../components/notifications-bell', () => ({ NotificationsBell: () => null }));
+jest.mock('../../components/notifications/notification-bell', () => ({ NotificationBell: () => null }));
 jest.mock('../../components/ui/branding-logo', () => ({ BrandingLogo: () => null }));
 jest.mock('../../components/ui/wallet-balance-button', () => ({ WalletBalanceButton: () => null }));
 jest.mock('../../components/bounty-compact-item', () => ({

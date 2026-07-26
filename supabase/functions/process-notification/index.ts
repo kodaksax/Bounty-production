@@ -1,5 +1,13 @@
 // Supabase Edge Function: process-notification
 // POST { id: '<outbox-uuid>' }
+//
+// Notification redesign (2026-07-25): channel decisions now come from
+// notification_channel_preferences (category x channel) instead of the
+// drifted notification_preferences table; quiet hours are checked before the
+// push (and email) sends; email fan-out is dispatched via the dedicated
+// send-notification-email function. See lib/config/notification-taxonomy.ts
+// for the client-side mirror of TYPE_CATEGORY/URGENT_TYPES below — keep both
+// in sync by hand, since Deno's bundler can't import from lib/.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -47,41 +55,112 @@ function normalizeRecipients(raw: any): string[] {
   return recipients
 }
 
-// Inlined from ./preferences (local imports are not supported by the bundler)
-function mapTypeToPreferenceKey(type: unknown): string | null {
-  switch (type) {
-    case 'message': return 'messages'
-    case 'application': return 'applications'
-    case 'acceptance': return 'acceptances'
-    case 'review_needed':
-    case 'completion': return 'completions'
-    case 'payment': return 'payments'
-    case 'follow': return 'follows'
-    case 'dispute': return 'disputes'
-    case 'bounty_expiry': return 'updates'
-    default: return null
+// ---------------------------------------------------------------------------
+// Category taxonomy (mirror of lib/config/notification-taxonomy.ts)
+// ---------------------------------------------------------------------------
+type Category = 'marketplace' | 'messages' | 'payments' | 'security' | 'verification' | 'followers' | 'marketing'
+
+const TYPE_CATEGORY: Record<string, Category> = {
+  application: 'marketplace', acceptance: 'marketplace', completion: 'marketplace',
+  cancellation_request: 'marketplace', cancellation_accepted: 'marketplace', cancellation_rejected: 'marketplace',
+  stale_bounty: 'marketplace', stale_bounty_cancelled: 'marketplace', stale_bounty_reposted: 'marketplace',
+  update: 'marketplace', bounty_nearby: 'marketplace', bounty_expiry: 'marketplace', review_needed: 'marketplace',
+  message: 'messages',
+  payment: 'payments', payout_paid: 'payments', payout_failed: 'payments', payout_canceled: 'payments',
+  withdrawal_reversed: 'payments', bank_disconnected: 'payments', payout_method_changed: 'payments',
+  balance_update: 'payments',
+  dispute_created: 'security', dispute_resolved: 'security', workflow_dispute_created: 'security',
+  dispute_escalated: 'security', account_warning: 'security', account_restricted: 'security',
+  verification_submitted: 'verification', verification_verified: 'verification',
+  verification_rejected: 'verification', verification_canceled: 'verification',
+  follow: 'followers',
+  marketing_promo: 'marketing',
+}
+
+function categoryForType(type: string): Category {
+  return TYPE_CATEGORY[type] ?? 'marketplace'
+}
+
+// Types that bypass quiet hours (see notification-taxonomy.ts urgency table).
+const URGENT_TYPES = new Set<string>([
+  'dispute_created', 'dispute_resolved', 'workflow_dispute_created', 'dispute_escalated',
+  'account_warning', 'account_restricted',
+  'payout_failed', 'payout_canceled', 'withdrawal_reversed', 'bank_disconnected',
+  'verification_rejected',
+])
+
+function isUrgent(type: string): boolean {
+  // Every security-category type is urgent, even ones not individually listed above.
+  return categoryForType(type) === 'security' || URGENT_TYPES.has(type)
+}
+
+// security/verification: push + in-app cannot be disabled by the user (account
+// integrity notifications always deliver on those two channels; email stays
+// user-controllable).
+function isForcedChannel(category: Category, channel: string): boolean {
+  return (category === 'security' || category === 'verification') && (channel === 'push' || channel === 'in_app')
+}
+
+function isChannelEnabled(
+  prefMap: Map<string, boolean>,
+  userId: string,
+  channel: 'push' | 'email' | 'in_app',
+  category: Category
+): boolean {
+  if (isForcedChannel(category, channel)) return true
+  const key = `${userId}:${channel}`
+  if (prefMap.has(key)) return prefMap.get(key) as boolean
+  return true // row-absent = allow (fail open)
+}
+
+// Minutes-since-midnight comparison in the user's IANA timezone. Returns false
+// (never blocks) if quiet hours aren't configured or the timezone is invalid —
+// fail open rather than silently swallowing a notification because we don't
+// know the user's local time.
+function isInQuietHours(quietStart: number | null, quietEnd: number | null, tz: string | null): boolean {
+  if (quietStart == null || quietEnd == null || !tz || quietStart === quietEnd) return false
+  try {
+    const fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, hour12: false, hourCycle: 'h23', hour: '2-digit', minute: '2-digit',
+    })
+    const parts = fmt.formatToParts(new Date())
+    const hour = Number(parts.find(p => p.type === 'hour')?.value ?? '0')
+    const minute = Number(parts.find(p => p.type === 'minute')?.value ?? '0')
+    const minutesNow = hour * 60 + minute
+    if (quietStart < quietEnd) return minutesNow >= quietStart && minutesNow < quietEnd
+    return minutesNow >= quietStart || minutesNow < quietEnd // wraps midnight
+  } catch (_e) {
+    return false
   }
 }
 
-function readToggle(prefs: Record<string, unknown> | null | undefined, base: string): boolean | undefined {
-  if (!prefs) return undefined
-  const bare = prefs[base]
-  const enabled = prefs[`${base}_enabled`]
-  const value = bare ?? enabled
-  if (value === null || value === undefined) return undefined
-  return Boolean(value)
+// Data-key normalization: the DB trigger functions (handle_new_message_notification,
+// handle_bounty_request_notification, etc.) write snake_case keys into
+// notifications_outbox.data (bounty_id, sender_id, conversation_id, hunter_id...),
+// but every application-code notification producer (webhooks/index.ts,
+// dispute-service.ts's send_system_notification calls) and the ENTIRE client-side
+// notification-tap/deep-link logic (lib/services/notification-deep-links.ts,
+// lib/types.ts's Notification.data) use camelCase. This meant notification taps
+// for messages/applications/acceptances — the highest-volume notification types —
+// never actually matched any deep-link case and silently went nowhere. Fixing this
+// once here (rather than in every trigger) covers every current and future producer.
+// Additive only: original snake_case keys are preserved alongside the alias.
+const SNAKE_TO_CAMEL_DATA_KEYS: Record<string, string> = {
+  bounty_id: 'bountyId',
+  sender_id: 'senderId',
+  conversation_id: 'conversationId',
+  hunter_id: 'hunterId',
+  follower_id: 'followerId',
+  message_id: 'messageId',
+  cancellation_id: 'cancellationId',
+  request_id: 'requestId',
 }
-
-function decideChannels(prefs: Record<string, unknown> | null | undefined, type: unknown): { inApp: boolean; push: boolean } {
-  if (!prefs) return { inApp: true, push: true }
-  const key = mapTypeToPreferenceKey(type)
-  if (key !== null) {
-    const typeEnabled = readToggle(prefs, key)
-    if (typeEnabled === false) return { inApp: false, push: false }
+function normalizeDataKeys(data: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...data }
+  for (const [snake, camel] of Object.entries(SNAKE_TO_CAMEL_DATA_KEYS)) {
+    if (out[snake] !== undefined && out[camel] === undefined) out[camel] = out[snake]
   }
-  const inApp = prefs.in_app_enabled === false ? false : true
-  const push = prefs.push_enabled === false ? false : true
-  return { inApp, push }
+  return out
 }
 
 // Inlined from ./push-receipts
@@ -143,9 +222,9 @@ Deno.serve(async (req: Request) => {
     if (req.method !== 'POST') return jsonResponse({ error: 'Invalid method' }, 405)
 
     let payload: any
-    try { 
+    try {
       payload = await req.json();
-    } catch (e) { 
+    } catch (e) {
       return jsonResponse({ error: 'Invalid JSON' }, 400);
     }
 
@@ -196,56 +275,106 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ message: 'No recipients, marked sent' })
     }
 
-    // Determine the notification type from the outbox payload so we can honor
-    // per-type user preferences and stamp the in-app `notifications` row.
-    const outboxData: Record<string, unknown> = (rows.data && typeof rows.data === 'object') ? rows.data : {}
+    // Determine the notification type/category from the outbox payload so we
+    // can honor per-category-per-channel preferences and stamp the in-app row.
+    const rawOutboxData: Record<string, unknown> = (rows.data && typeof rows.data === 'object') ? rows.data : {}
+    const outboxData = normalizeDataKeys(rawOutboxData)
     const notificationType = typeof outboxData.type === 'string' ? outboxData.type : 'system'
+    const category = categoryForType(notificationType)
+    const urgent = isUrgent(notificationType)
+    const bundleCount = typeof rows.count === 'number' && rows.count > 0 ? rows.count : 1
+    // Set by callers (e.g. the Stripe webhook handler) that already inserted
+    // the in-app `notifications` row themselves via their own idempotent
+    // insert-then-update-on-conflict logic (keyed on stripe_payout_id etc.) —
+    // this outbox row exists purely to trigger push/email fan-out without
+    // creating a duplicate bell entry.
+    const skipInApp = outboxData.skipInApp === true
 
-    // Load notification preferences for all recipients in a single query.
-    // Missing rows / columns default to "allow" inside decideChannels().
-    const prefsByUser = new Map<string, Record<string, unknown>>()
+    // Load channel preferences + quiet-hours settings for all recipients in
+    // two batched queries. Missing rows default to "allow" / "no quiet hours".
+    const prefMap = new Map<string, boolean>() // `${userId}:${channel}` -> enabled
     try {
-      const { data: prefsRows } = await supabaseAdmin
-        .from('notification_preferences')
-        .select('*')
+      const { data: prefRows } = await supabaseAdmin
+        .from('notification_channel_preferences')
+        .select('user_id, channel, enabled')
         .in('user_id', recipients)
-      for (const p of ((prefsRows || []) as Record<string, unknown>[])) {
-        const userId = p?.user_id
-        if (typeof userId === 'string') {
-          prefsByUser.set(userId, p)
-        }
+        .eq('category', category)
+      for (const p of ((prefRows || []) as { user_id: string; channel: string; enabled: boolean }[])) {
+        prefMap.set(`${p.user_id}:${p.channel}`, p.enabled)
       }
     } catch (e) {
-      // Non-fatal: without preferences we fall back to delivering to everyone.
-      console.error('[process-notification] preferences lookup failed (continuing with defaults)', e)
+      console.error('[process-notification] channel preference lookup failed (continuing with defaults)', e)
     }
 
-    // Split recipients into those who should receive an in-app bell entry and
-    // those who should receive a push, based on their preferences.
+    const quietHoursByUser = new Map<string, { start: number | null; end: number | null; tz: string | null }>()
+    try {
+      const { data: profileRows } = await supabaseAdmin
+        .from('profiles')
+        .select('id, quiet_hours_start, quiet_hours_end, notification_timezone')
+        .in('id', recipients)
+      for (const p of ((profileRows || []) as any[])) {
+        quietHoursByUser.set(p.id, { start: p.quiet_hours_start, end: p.quiet_hours_end, tz: p.notification_timezone })
+      }
+    } catch (e) {
+      console.error('[process-notification] quiet-hours lookup failed (continuing with quiet hours disabled)', e)
+    }
+
+    // Split recipients by channel based on preferences + (for push) quiet hours.
     const inAppRecipients: string[] = []
     const pushRecipients: string[] = []
+    const emailRecipients: string[] = []
     for (const userId of recipients) {
-      const decision = decideChannels(prefsByUser.get(userId), notificationType)
-      if (decision.inApp) inAppRecipients.push(userId)
-      if (decision.push) pushRecipients.push(userId)
+      if (isChannelEnabled(prefMap, userId, 'in_app', category)) inAppRecipients.push(userId)
+
+      if (isChannelEnabled(prefMap, userId, 'push', category)) {
+        const qh = quietHoursByUser.get(userId)
+        const blocked = !urgent && qh ? isInQuietHours(qh.start, qh.end, qh.tz) : false
+        if (!blocked) pushRecipients.push(userId)
+      }
+
+      if (isChannelEnabled(prefMap, userId, 'email', category)) emailRecipients.push(userId)
     }
 
     // Persist in-app notifications so the feed bell badge + list update for
     // every outbox-driven event (messages, applications, acceptances, etc.).
     // Guard on 'pending' so a retry of a previously-'failed' row does not
     // create duplicate bell entries (the rows were inserted on the first pass).
-    if (rows.status === 'pending' && inAppRecipients.length > 0) {
+    if (!skipInApp && rows.status === 'pending' && inAppRecipients.length > 0) {
       const notificationRows = inAppRecipients.map((userId) => ({
         user_id: userId,
         type: notificationType,
+        category,
+        count: bundleCount,
         title: rows.title || '',
         body: rows.body || '',
-        data: rows.data || {},
+        data: outboxData,
       }))
       const { error: insertErr } = await supabaseAdmin.from('notifications').insert(notificationRows)
       if (insertErr) {
-        // Non-fatal for push delivery, but surface it for observability.
+        // Non-fatal for push delivery, but surface it for observability. As of
+        // the 2026-07-25 CHECK-constraint migration this should no longer
+        // silently drop known outbox types the way it previously did.
         console.error('[process-notification] failed to insert in-app notifications', insertErr)
+      }
+    }
+
+    // Fire email fan-out (best-effort, does not block push delivery below).
+    if (emailRecipients.length > 0) {
+      try {
+        await fetch(`${supabaseUrl}/functions/v1/send-notification-email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceRoleKey}` },
+          body: JSON.stringify({
+            userIds: emailRecipients,
+            category,
+            type: notificationType,
+            title: rows.title || '',
+            body: rows.body || '',
+            data: outboxData,
+          }),
+        })
+      } catch (e) {
+        console.error('[process-notification] email fan-out request failed (non-fatal)', e)
       }
     }
 
@@ -276,7 +405,7 @@ Deno.serve(async (req: Request) => {
 
     // Build Expo messages, keeping them positionally aligned with tokensList so
     // we can map Expo error tickets back to the originating token.
-    const messages = createMessages(tokensList, { title: rows.title || '', body: rows.body || '', data: rows.data || {}, sound: 'default' })
+    const messages = createMessages(tokensList, { title: rows.title || '', body: rows.body || '', data: outboxData, sound: 'default' })
 
     // Chunk and send directly to Expo Push API
     const chunkSize = 100

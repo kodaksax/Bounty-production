@@ -205,8 +205,8 @@ export function SettingsScreen({ onBack }: SettingsScreenProps = {}) {
         <SettingsSection title="Notifications">
           <SettingsRow
             icon="notifications"
-            label="Notification Center"
-            description="New applicants, task updates, and payments."
+            label="Notification Preferences"
+            description="Choose push, email, and in-app alerts per category."
             onPress={() => setPanel('notifications')}
           />
         </SettingsSection>

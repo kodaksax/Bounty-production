@@ -12,7 +12,9 @@ import {
 } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { navigationIntent } from '../services/navigation-intent';
+import { resolveNotificationDeepLink } from '../services/notification-deep-links';
 import { notificationService } from '../services/notification-service';
+import { isNotificationsChannelConnected, subscribeToNotifications } from '../services/notification-realtime';
 import { supabase } from '../supabase';
 import type { Notification } from '../types';
 import { safeCleanup } from '../utils/lifecycle';
@@ -119,22 +121,24 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Handle notification tap navigation
+  // Handle notification tap navigation. Delegates to the shared deep-link
+  // registry (lib/services/notification-deep-links.ts) so cold-start and
+  // warm-tap paths — and the Notification Center's own tap handling — all
+  // resolve destinations identically instead of duplicating this logic.
   const handleNotificationTap = useCallback(
     async (response: any) => {
-      const data = response.notification.request.content.data;
+      const data = response.notification.request.content.data || {};
+      const type = data.type || 'update';
+      const action = resolveNotificationDeepLink({ type, data });
 
-      // Navigate based on notification type and data
-      if (data.bountyId) {
-        router.push(`/bounty/${data.bountyId}`);
-      } else if (data.conversationId && typeof data.conversationId === 'string') {
-        // Use navigation intent to pass the conversation ID to the messenger screen
-        await navigationIntent.setPendingConversationId(data.conversationId);
+      if (action.kind === 'route') {
+        router.push(action.path as any);
+      } else if (action.kind === 'conversation') {
+        await navigationIntent.setPendingConversationId(action.conversationId);
         router.push('/tabs/bounty-app?screen=messages');
       } else if (data.senderId) {
-        router.push(`/profile/${data.senderId}`);
-      } else if (data.followerId) {
-        router.push(`/profile/${data.followerId}`);
+        // Legacy fallback for payloads that predate the `type` field.
+        router.push(`/profile/${data.senderId}` as any);
       }
     },
     [router]
@@ -320,34 +324,32 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     realtimeConnectedRef.current = false;
     if (!userId) return;
 
-    const channel = supabase
-      .channel(`notifications:${userId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${userId}`,
-        },
-        () => {
-          try {
-            fetchNotifications();
-            refreshUnreadCount();
-          } catch (e) {
-            console.error('notif realtime fetch failed', e);
-          }
-        }
-      )
-      .subscribe(status => {
-        realtimeConnectedRef.current = status === 'SUBSCRIBED';
-      });
+    // Shared, reference-counted channel (lib/services/notification-realtime.ts)
+    // — the bell badge and the Notification Center screen can both subscribe
+    // to the same `notifications:${userId}` feed without opening duplicate
+    // realtime channels.
+    const unsubscribe = subscribeToNotifications(userId, () => {
+      try {
+        fetchNotifications();
+        refreshUnreadCount();
+      } catch (e) {
+        console.error('notif realtime fetch failed', e);
+      }
+    });
+
+    // isNotificationsChannelConnected reflects the shared channel's join
+    // state; poll it briefly after subscribing so the fallback-poll gate
+    // below reacts once the channel actually reaches SUBSCRIBED.
+    const checkConnected = () => {
+      realtimeConnectedRef.current = isNotificationsChannelConnected(userId);
+    };
+    checkConnected();
+    const connectedCheckInterval = setInterval(checkConnected, 2000);
 
     return () => {
       realtimeConnectedRef.current = false;
-      void supabase.removeChannel(channel).catch(() => {
-        // best-effort cleanup
-      });
+      clearInterval(connectedCheckInterval);
+      unsubscribe();
     };
   }, [userId, fetchNotifications, refreshUnreadCount]);
 

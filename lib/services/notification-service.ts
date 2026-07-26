@@ -708,6 +708,145 @@ export class NotificationService {
   }
 
   /**
+   * Mark notification(s) as unread. Supabase-direct (no Node API route exists
+   * for this — it's a new operation added for the Notification Center), matching
+   * the "Supabase-first" resilience style used elsewhere in this service.
+   */
+  async markAsUnread(notificationIds: string[]): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .update({ read: false })
+        .in('id', notificationIds);
+      if (error) throw error;
+
+      this.cachedNotifications = this.cachedNotifications.map(notif =>
+        notificationIds.includes(notif.id) ? { ...notif, read: false } : notif
+      );
+      await AsyncStorage.setItem(NOTIFICATION_CACHE_KEY, JSON.stringify(this.cachedNotifications));
+      this.syncBadgeCount().catch(() => {});
+    } catch (error) {
+      console.error('Error marking notifications as unread:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Archive/unarchive notification(s) — removes them from the default
+   * Notification Center view without deleting the row.
+   */
+  async archiveNotifications(notificationIds: string[], archived: boolean = true): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .update({ archived })
+        .in('id', notificationIds);
+      if (error) throw error;
+
+      this.cachedNotifications = this.cachedNotifications.map(notif =>
+        notificationIds.includes(notif.id) ? { ...notif, archived } : notif
+      );
+      await AsyncStorage.setItem(NOTIFICATION_CACHE_KEY, JSON.stringify(this.cachedNotifications));
+    } catch (error) {
+      console.error('Error archiving notifications:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch notifications filtered by category, excluding archived rows by
+   * default. Used by the Notification Center's category filter chips.
+   * Supabase-direct only (new query shape, no legacy Node route to fall back to).
+   */
+  async fetchNotificationsByCategory(
+    category: import('../types').NotificationCategory | 'all',
+    options: { includeArchived?: boolean; limit?: number; offset?: number } = {}
+  ): Promise<Notification[]> {
+    const { includeArchived = false, limit = 50, offset = 0 } = options;
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      if (!userId) return [];
+
+      let query = supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (category !== 'all') query = query.eq('category', category);
+      if (!includeArchived) query = query.eq('archived', false);
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data as any) || [];
+    } catch (error) {
+      console.error('Error fetching notifications by category:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Fetch all notification_channel_preferences rows for the signed-in user,
+   * keyed as `${category}:${channel}` -> enabled. Absent keys mean "allow"
+   * (row-absent = allow default, matching process-notification's server-side
+   * behavior) — callers should treat a missing key as `true`.
+   */
+  async getChannelPreferences(): Promise<Record<string, boolean>> {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      if (!userId) return {};
+
+      const { data, error } = await supabase
+        .from('notification_channel_preferences')
+        .select('category, channel, enabled')
+        .eq('user_id', userId);
+      if (error) throw error;
+
+      const map: Record<string, boolean> = {};
+      for (const row of (data as any[]) || []) {
+        map[`${row.category}:${row.channel}`] = row.enabled;
+      }
+      return map;
+    } catch (error) {
+      console.error('Error fetching notification channel preferences:', error);
+      return {};
+    }
+  }
+
+  /**
+   * Upsert a single category x channel preference toggle.
+   */
+  async setChannelPreference(
+    category: import('../types').NotificationCategory,
+    channel: 'push' | 'email' | 'sms' | 'in_app',
+    enabled: boolean
+  ): Promise<void> {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const userId = session?.user?.id;
+    if (!userId) return;
+
+    const { error } = await supabase
+      .from('notification_channel_preferences')
+      .upsert(
+        { user_id: userId, category, channel, enabled },
+        { onConflict: 'user_id,category,channel' }
+      );
+    if (error) {
+      console.error('Error saving notification channel preference:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Setup notification listeners
    */
   setupNotificationListeners(

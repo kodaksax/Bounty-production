@@ -4,7 +4,7 @@ import { logger } from 'lib/utils/error-logger';
 import type { Bounty } from './database.types';
 
 // Queue item types
-export type QueueItemType = 'bounty' | 'message';
+export type QueueItemType = 'bounty' | 'message' | 'notification_action';
 
 export interface QueueItem {
   id: string;
@@ -13,11 +13,16 @@ export interface QueueItem {
   // attempts occur so callers that show "last activity" can use the same field.
   timestamp: number;
   retryCount: number;
-  data: BountyQueueData | MessageQueueData;
+  data: BountyQueueData | MessageQueueData | NotificationActionQueueData;
   // Timestamp of the last processing attempt (used for backoff). 0 or undefined means never attempted.
   lastAttempt?: number;
   status: 'pending' | 'processing' | 'failed';
   error?: string;
+}
+
+export interface NotificationActionQueueData {
+  action: 'mark_read' | 'mark_unread' | 'archive';
+  notificationIds: string[];
 }
 
 export interface BountyQueueData {
@@ -177,7 +182,7 @@ class OfflineQueueService {
    * transient error is occurring) from all being posted at once when connectivity
    * is restored.
    */
-  async enqueue(type: QueueItemType, data: BountyQueueData | MessageQueueData): Promise<QueueItem> {
+  async enqueue(type: QueueItemType, data: BountyQueueData | MessageQueueData | NotificationActionQueueData): Promise<QueueItem> {
     if (type === 'bounty') {
       const newBounty = (data as BountyQueueData)?.bounty as any;
       const newTitle = typeof newBounty?.title === 'string' ? newBounty.title.toLowerCase().trim() : '';
@@ -310,6 +315,8 @@ class OfflineQueueService {
             await this.processBountyItem(item);
           } else if (item.type === 'message') {
             await this.processMessageItem(item);
+          } else if (item.type === 'notification_action') {
+            await this.processNotificationActionItem(item);
           }
 
           // Remove from queue on success
@@ -359,6 +366,22 @@ class OfflineQueueService {
     // Import message service dynamically to avoid circular dependency
     const { messageService } = await import('./message-service');
     await messageService.processQueuedMessage(data.conversationId, data.text, data.senderId);
+  }
+
+  /**
+   * Process a notification-action queue item (mark read/unread, archive)
+   * taken while offline.
+   */
+  private async processNotificationActionItem(item: QueueItem) {
+    const data = item.data as NotificationActionQueueData;
+    const { notificationService } = await import('./notification-service');
+    if (data.action === 'mark_read') {
+      await notificationService.markAsRead(data.notificationIds);
+    } else if (data.action === 'mark_unread') {
+      await notificationService.markAsUnread(data.notificationIds);
+    } else if (data.action === 'archive') {
+      await notificationService.archiveNotifications(data.notificationIds);
+    }
   }
 
   /**

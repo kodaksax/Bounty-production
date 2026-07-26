@@ -92,6 +92,37 @@ function extractRejectionReason(session: Stripe.Identity.VerificationSession): s
   return checks?.document?.error?.reason ?? checks?.selfie?.error?.reason ?? null
 }
 
+// Notification redesign (2026-07-25): Verification category notifications.
+// Greenfield — this function previously had zero notification code. Enqueues
+// through notifications_outbox (picked up by the drain-notifications-outbox
+// pg_cron job within ~1 minute) rather than inserting into `notifications`
+// directly, so these get the full in-app + push + email + preference +
+// quiet-hours treatment like every other outbox-driven event. Safe against
+// double-enqueue on Stripe webhook redelivery because the caller already
+// checked `stripe_events.processed` before reaching this point.
+async function enqueueVerificationNotification(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  params: { userId: string; type: string; title: string; body: string }
+): Promise<void> {
+  try {
+    const { error } = await supabase.from('notifications_outbox').insert({
+      recipients: [params.userId],
+      title: params.title,
+      body: params.body,
+      data: { type: params.type },
+      status: 'pending',
+    })
+    if (error) {
+      console.error('[identity-webhooks] failed to enqueue verification notification (non-fatal)', {
+        userId: params.userId, type: params.type, error,
+      })
+    }
+  } catch (e) {
+    console.error('[identity-webhooks] unexpected error enqueueing verification notification (non-fatal)', e)
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -182,17 +213,35 @@ Deno.serve(async (req: Request) => {
             age_verified_at: now,
           })
           .eq('id', userId)
+        await enqueueVerificationNotification(supabase, {
+          userId,
+          type: 'verification_verified',
+          title: 'Identity Verified',
+          body: 'Your identity has been successfully verified.',
+        })
         break
       }
       case 'identity.verification_session.requires_input': {
+        const rejectionReason = extractRejectionReason(session)
         await supabase
           .from('profiles')
           .update({
             stripe_identity_status: 'requires_input',
-            id_verification_rejection_reason: extractRejectionReason(session),
+            id_verification_rejection_reason: rejectionReason,
             stripe_identity_last_event_at: now,
           })
           .eq('id', userId)
+        // Only notify when there's an actual rejection reason — requires_input
+        // also fires on the initial "waiting for the user to submit" state,
+        // which isn't a meaningful transition worth pushing a notification for.
+        if (rejectionReason) {
+          await enqueueVerificationNotification(supabase, {
+            userId,
+            type: 'verification_rejected',
+            title: 'Identity Verification Needs Attention',
+            body: `We couldn't verify your identity (${rejectionReason}). Please resubmit your documents.`,
+          })
+        }
         break
       }
       case 'identity.verification_session.processing': {
@@ -200,6 +249,12 @@ Deno.serve(async (req: Request) => {
           .from('profiles')
           .update({ stripe_identity_status: 'processing', stripe_identity_last_event_at: now })
           .eq('id', userId)
+        await enqueueVerificationNotification(supabase, {
+          userId,
+          type: 'verification_submitted',
+          title: 'Verification Submitted',
+          body: "We're reviewing your identity verification. This usually takes a few minutes.",
+        })
         break
       }
       case 'identity.verification_session.canceled': {
@@ -207,6 +262,12 @@ Deno.serve(async (req: Request) => {
           .from('profiles')
           .update({ stripe_identity_status: 'canceled', stripe_identity_last_event_at: now })
           .eq('id', userId)
+        await enqueueVerificationNotification(supabase, {
+          userId,
+          type: 'verification_canceled',
+          title: 'Verification Canceled',
+          body: 'Your identity verification session was canceled.',
+        })
         break
       }
       default:
