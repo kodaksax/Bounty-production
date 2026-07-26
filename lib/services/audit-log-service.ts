@@ -4,6 +4,7 @@
  * Follows Apple Human Interface Guidelines for data presentation
  */
 
+import { supabase } from '../supabase';
 import type { AuditLogEntry, AuditLogFilters } from '../types-admin';
 
 // Mock data for development - simulates various system events
@@ -170,6 +171,59 @@ function simulateNetwork<T>(data: T, delayMs = 400): Promise<T> {
   });
 }
 
+type AccountStatusLogRow = {
+  id: string;
+  admin_user_id: string;
+  target_user_id: string;
+  reason: string;
+  result: 'success' | 'failure';
+  metadata: { old_status?: string | null; new_status?: string } | null;
+  created_at: string;
+};
+
+/**
+ * Real (non-mock) account-status-change entries, written by admin-profiles'
+ * updateStatus action to admin_action_log -- see
+ * 20260726000000_enforce_account_status.sql. Merged into the 'user' category
+ * below alongside the still-mocked entries for every other category.
+ */
+async function fetchAccountStatusLogEntries(): Promise<AuditLogEntry[]> {
+  try {
+    const { data, error } = await supabase.functions.invoke('admin-profiles', {
+      body: { action: 'listAccountStatusLog' },
+    });
+    if (error || data?.error) {
+      console.error('Error fetching account status log:', error || data?.error);
+      return [];
+    }
+    const rows: AccountStatusLogRow[] = data?.entries ?? [];
+    return rows.map((row) => {
+      const newStatus = row.metadata?.new_status;
+      const oldStatus = row.metadata?.old_status ?? 'active';
+      const action = newStatus === 'active' ? 'restored' : newStatus === 'banned' ? 'banned' : 'suspended';
+      const severity = newStatus === 'banned' ? 'critical' : newStatus === 'suspended' ? 'warning' : 'info';
+      return {
+        id: `account-status-${row.id}`,
+        timestamp: row.created_at,
+        category: 'user',
+        action,
+        actorId: row.admin_user_id,
+        targetId: row.target_user_id,
+        targetType: 'user',
+        description:
+          row.result === 'failure'
+            ? `Failed attempt to change account status (${oldStatus} → ${newStatus}): ${row.reason}`
+            : `Account status changed from ${oldStatus} to ${newStatus}: ${row.reason}`,
+        severity: row.result === 'failure' ? 'critical' : severity,
+        metadata: { ...row.metadata, result: row.result },
+      } satisfies AuditLogEntry;
+    });
+  } catch (error) {
+    console.error('Error fetching account status log:', error);
+    return [];
+  }
+}
+
 export const auditLogService = {
   /**
    * Fetch audit logs with filtering and pagination
@@ -182,6 +236,13 @@ export const auditLogService = {
   }> {
     try {
       let filtered = [...mockAuditLogs];
+
+      // Merge in real account-status-change entries for the 'user' category
+      // (or 'all') -- the only category with a real backing table so far.
+      if (!filters?.category || filters.category === 'all' || filters.category === 'user') {
+        const realEntries = await fetchAccountStatusLogEntries();
+        filtered = [...realEntries, ...filtered];
+      }
 
       // Apply category filter
       if (filters?.category && filters.category !== 'all') {

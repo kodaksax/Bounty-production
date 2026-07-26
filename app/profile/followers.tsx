@@ -1,5 +1,6 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { FOLLOW_FEATURE_ENABLED } from "lib/feature-flags";
 import { followService } from "lib/services/follow-service";
 import { authProfileService, type AuthProfile } from "lib/services/auth-profile-service";
 import type { UserProfile } from "lib/types";
@@ -38,6 +39,20 @@ export default function FollowersScreen() {
   useEffect(() => {
     loadFollowers();
   }, [userId]);
+
+  // Followers is feature-flagged off app-wide (lib/feature-flags.ts). The
+  // only in-app entry point already checks the flag before navigating here,
+  // but this screen is still directly reachable via a deep link/typed URL,
+  // so guard it here too rather than relying solely on the caller.
+  useEffect(() => {
+    if (!FOLLOW_FEATURE_ENABLED) {
+      router.back();
+    }
+  }, [router]);
+
+  if (!FOLLOW_FEATURE_ENABLED) {
+    return null;
+  }
 
   const loadFollowers = async () => {
     try {

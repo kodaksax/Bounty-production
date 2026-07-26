@@ -57,6 +57,10 @@ export interface AuthProfile {
   stripe_connect_charges_enabled?: boolean;
   stripe_connect_payouts_enabled?: boolean;
   last_session_at?: string;
+  // Moderation status. Read by providers/auth-provider.tsx right after
+  // sign-in/session-restore to force-sign-out and route banned/suspended
+  // users away from the app -- see 20260726000000_enforce_account_status.sql.
+  account_status?: 'active' | 'suspended' | 'banned';
 }
 
 interface CachedProfile {
@@ -432,6 +436,7 @@ export class AuthProfileService {
           stripe_connect_charges_enabled: typeof data.stripe_connect_charges_enabled === 'boolean' ? data.stripe_connect_charges_enabled : undefined,
           stripe_connect_payouts_enabled: typeof data.stripe_connect_payouts_enabled === 'boolean' ? data.stripe_connect_payouts_enabled : undefined,
           last_session_at: data.last_session_at || undefined,
+          account_status: data.account_status || undefined,
         };
 
         console.log('[authProfileService] Profile data mapped', { username: profile.username, id: profile.id });
@@ -571,6 +576,7 @@ export class AuthProfileService {
           stripe_connect_charges_enabled: typeof data.stripe_connect_charges_enabled === 'boolean' ? data.stripe_connect_charges_enabled : undefined,
           stripe_connect_payouts_enabled: typeof data.stripe_connect_payouts_enabled === 'boolean' ? data.stripe_connect_payouts_enabled : undefined,
           last_session_at: data.last_session_at || undefined,
+          account_status: data.account_status || undefined,
         };
 
         console.log('[authProfileService] Fresh profile fetched, updating cache and notifying listeners');
@@ -686,6 +692,17 @@ export class AuthProfileService {
       this.notifyListeners(profile);
       return profile;
     } catch (error) {
+      // A suspended/banned user hits this via the profiles UPDATE RLS policy
+      // (see 20260726000000_enforce_account_status.sql). This method's
+      // return contract (AuthProfile | null) can't carry a specific reason
+      // back to the caller without a wider signature change, and pulling in
+      // lib/utils/account-status-errors.ts here would create a circular
+      // import (that module reads authProfileService.getCurrentProfile() as
+      // its fallback signal). In practice a suspended/banned user is signed
+      // out by the account-status gate in providers/auth-provider.tsx before
+      // they'd normally reach an edit screen anyway, so this only matters for
+      // the narrow mid-session-ban race -- logged generically like any other
+      // update failure.
       logger.error('Error updating profile', { userId, updates, error });
       return null;
     }

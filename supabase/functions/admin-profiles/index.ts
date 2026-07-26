@@ -72,6 +72,7 @@ Deno.serve(async (req: Request) => {
     id?: string;
     status?: string;
     verificationStatus?: string;
+    reason?: string;
   };
   try {
     body = await req.json();
@@ -131,18 +132,32 @@ Deno.serve(async (req: Request) => {
   // `auth.uid() = id`, which would otherwise reject an admin updating someone
   // else's row entirely, independent of whether the target column exists.
   //
-  // Plumbing only: this records account_status but nothing else in the app
-  // (RLS, login, bounty posting, withdrawals) reads it yet -- a suspended or
-  // banned user can still fully use the app today. See
-  // docs/withdrawals/09-security-audit-findings-2026-07-19.md finding #3.
+  // Now fully enforced app-wide (RLS + SECURITY DEFINER RPCs + client-side
+  // sign-in gate) -- see 20260726000000_enforce_account_status.sql -- and
+  // every change is written to admin_action_log for audit purposes (a
+  // `reason` is required for exactly that purpose).
   if (action === 'updateStatus') {
-    const { id, status } = body;
+    const { id, status, reason } = body;
     if (!id) {
       return jsonResponse({ error: 'id is required' }, 400);
     }
     if (status !== 'active' && status !== 'suspended' && status !== 'banned') {
       return jsonResponse({ error: "status must be one of 'active', 'suspended', 'banned'" }, 400);
     }
+    if (!reason || !reason.trim()) {
+      return jsonResponse({ error: 'reason is required' }, 400);
+    }
+
+    const { data: existing, error: existingError } = await supabase
+      .from('profiles')
+      .select('account_status')
+      .eq('id', id)
+      .single();
+    if (existingError) {
+      console.error('[admin-profiles] updateStatus: failed to read current status', { id, error: existingError });
+      return jsonResponse({ error: 'Failed to fetch user' }, 500);
+    }
+    const oldStatus = existing?.account_status ?? null;
 
     const { data, error } = await supabase
       .from('profiles')
@@ -153,11 +168,53 @@ Deno.serve(async (req: Request) => {
 
     if (error) {
       console.error('[admin-profiles] updateStatus failed', { id, status, error });
+      await supabase.from('admin_action_log').insert({
+        admin_user_id: adminUser.id,
+        action_type: 'account_status_change',
+        target_user_id: id,
+        reason: reason.trim(),
+        result: 'failure',
+        metadata: { old_status: oldStatus, new_status: status, error: error.message },
+      });
       return jsonResponse({ error: 'Failed to update user status' }, 500);
+    }
+
+    const { error: logError } = await supabase.from('admin_action_log').insert({
+      admin_user_id: adminUser.id,
+      action_type: 'account_status_change',
+      target_user_id: id,
+      reason: reason.trim(),
+      result: 'success',
+      metadata: { old_status: oldStatus, new_status: status },
+    });
+    if (logError) {
+      // Non-blocking: the status change already succeeded. Log loudly so
+      // a missing audit row doesn't go unnoticed.
+      console.error('[admin-profiles] updateStatus: audit log insert failed', { id, status, error: logError });
     }
 
     console.log('[admin-profiles] account status updated', { targetUserId: id, status, adminUserId: adminUser.id });
     return jsonResponse({ id: data.id, status: data.account_status });
+  }
+
+  // ─── listAccountStatusLog ───────────────────────────────────────────────
+  // Real (non-mock) read path for the admin audit-log screen's 'user'
+  // category -- see lib/services/audit-log-service.ts, which previously
+  // returned 100% hardcoded mock rows for every category. This surfaces the
+  // account_status_change rows written above.
+  if (action === 'listAccountStatusLog') {
+    const { data, error } = await supabase
+      .from('admin_action_log')
+      .select('id, admin_user_id, target_user_id, reason, result, metadata, created_at')
+      .eq('action_type', 'account_status_change')
+      .order('created_at', { ascending: false })
+      .limit(200);
+
+    if (error) {
+      console.error('[admin-profiles] listAccountStatusLog failed', { error });
+      return jsonResponse({ error: 'Failed to fetch account status log' }, 500);
+    }
+    return jsonResponse({ entries: data ?? [] });
   }
 
   return jsonResponse({ error: 'Unknown action' }, 400);

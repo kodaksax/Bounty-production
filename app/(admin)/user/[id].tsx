@@ -79,29 +79,49 @@ export default function AdminUserDetailScreen() {
       }
     };
 
+    // Every account_status change now requires a reason (written to
+    // admin_action_log for audit purposes -- see
+    // 20260726000000_enforce_account_status.sql). Canned options mirror the
+    // violation-type picker already used by handleSendWarning above, rather
+    // than a free-text prompt.
+    const STATUS_CHANGE_REASONS: { label: string; value: string }[] = [
+      { label: 'Spam', value: 'Spam' },
+      { label: 'Harassment', value: 'Harassment' },
+      { label: 'Fraud / Scam', value: 'Fraud / Scam' },
+      { label: 'Inappropriate Content', value: 'Inappropriate Content' },
+      { label: 'Guideline Violation', value: 'Guideline Violation' },
+      { label: 'Other', value: 'Other' },
+    ];
+
+    const submitStatusChange = async (
+      status: 'suspended' | 'banned' | 'active',
+      reason: string,
+      successVerb: string
+    ) => {
+      if (!user) return;
+      setIsActing(true);
+      try {
+        await adminDataClient.updateUserStatus(user.id, status, reason);
+        setUser({ ...user, status });
+        Alert.alert(`User ${successVerb}`, `@${user.username} has been ${successVerb.toLowerCase()}.`);
+      } catch (err) {
+        Alert.alert('Error', err instanceof Error ? err.message : 'Failed to update user status');
+      } finally {
+        setIsActing(false);
+      }
+    };
+
     const handleSuspendUser = () => {
       if (!user) return;
       Alert.alert(
         'Suspend User',
-        `Suspend @${user.username}? They will lose access until restored.`,
+        `Select a reason to suspend @${user.username}. They will lose access until restored.`,
         [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Suspend',
-            style: 'destructive',
-            onPress: async () => {
-              setIsActing(true);
-              try {
-                await adminDataClient.updateUserStatus(user.id, 'suspended');
-                setUser({ ...user, status: 'suspended' });
-                Alert.alert('User Suspended', `@${user.username} has been suspended.`);
-              } catch (err) {
-                Alert.alert('Error', err instanceof Error ? err.message : 'Failed to suspend user');
-              } finally {
-                setIsActing(false);
-              }
-            },
-          },
+          ...STATUS_CHANGE_REASONS.map(({ label, value }) => ({
+            text: label,
+            onPress: () => submitStatusChange('suspended', value, 'Suspended'),
+          })),
+          { text: 'Cancel', style: 'cancel' as const },
         ]
       );
     };
@@ -110,25 +130,13 @@ export default function AdminUserDetailScreen() {
       if (!user) return;
       Alert.alert(
         'Ban User',
-        `Permanently ban @${user.username}? This is a severe action.`,
+        `Select a reason to permanently ban @${user.username}. This is a severe action.`,
         [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Ban',
-            style: 'destructive',
-            onPress: async () => {
-              setIsActing(true);
-              try {
-                await adminDataClient.updateUserStatus(user.id, 'banned');
-                setUser({ ...user, status: 'banned' });
-                Alert.alert('User Banned', `@${user.username} has been banned.`);
-              } catch (err) {
-                Alert.alert('Error', err instanceof Error ? err.message : 'Failed to ban user');
-              } finally {
-                setIsActing(false);
-              }
-            },
-          },
+          ...STATUS_CHANGE_REASONS.map(({ label, value }) => ({
+            text: label,
+            onPress: () => submitStatusChange('banned', value, 'Banned'),
+          })),
+          { text: 'Cancel', style: 'cancel' as const },
         ]
       );
     };
@@ -142,18 +150,7 @@ export default function AdminUserDetailScreen() {
           { text: 'Cancel', style: 'cancel' },
           {
             text: 'Restore',
-            onPress: async () => {
-              setIsActing(true);
-              try {
-                await adminDataClient.updateUserStatus(user.id, 'active');
-                setUser({ ...user, status: 'active' });
-                Alert.alert('User Restored', `@${user.username} has been restored to active status.`);
-              } catch (err) {
-                Alert.alert('Error', err instanceof Error ? err.message : 'Failed to restore user');
-              } finally {
-                setIsActing(false);
-              }
-            },
+            onPress: () => submitStatusChange('active', 'Reinstated after admin review', 'Restored'),
           },
         ]
       );

@@ -17,6 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../supabase';
 import type { Conversation, Message } from '../types';
+import { getAccountStatusErrorMessage } from '../utils/account-status-errors';
 import { EventEmitter } from '../utils/event-emitter';
 import { logClientError } from './monitoring';
 
@@ -472,6 +473,13 @@ export async function sendMessage(
     try {
       logClientError('Error sending message', { err: error, conversationId, senderId });
     } catch {}
+    // A suspended/banned sender (or a recipient whose account went inactive)
+    // hits this via the messages INSERT RLS policy -- see
+    // 20260726000000_enforce_account_status.sql.
+    const accountStatusError = getAccountStatusErrorMessage(error);
+    if (accountStatusError) {
+      throw new Error(accountStatusError.message);
+    }
     throw error;
   }
 }
@@ -530,6 +538,13 @@ export async function createConversation(
           bountyId,
         });
       } catch {}
+      // A suspended/banned caller hits this via assert_account_active()
+      // inside rpc_create_conversation -- see
+      // 20260726000000_enforce_account_status.sql.
+      const accountStatusError = getAccountStatusErrorMessage(rpcError);
+      if (accountStatusError) {
+        throw new Error(accountStatusError.message);
+      }
       throw rpcError;
     }
 
@@ -625,6 +640,13 @@ export async function getOrCreateConversation(
       });
     } catch {
       /* ignore secondary logging failure */
+    }
+    // A suspended/banned caller hits this via assert_account_active() inside
+    // rpc_get_or_create_dm_conversation -- see
+    // 20260726000000_enforce_account_status.sql.
+    const accountStatusError = getAccountStatusErrorMessage(rpcError);
+    if (accountStatusError) {
+      throw new Error(accountStatusError.message);
     }
     throw rpcError;
   }

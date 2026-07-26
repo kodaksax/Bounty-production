@@ -1,102 +1,95 @@
+import { supabase } from '../supabase';
 import type { Follow } from '../types';
 
-// In-memory storage
-let follows: Follow[] = [];
+/**
+ * Real, Supabase-backed follow service against public.user_follows -- see
+ * 20260726010000_add_user_follows_rls_and_notifications.sql (RLS + self-follow
+ * CHECK constraint + notification trigger) and 20251001_baseline_schema.sql
+ * (original table definition, which had RLS enabled but zero policies until
+ * that migration).
+ *
+ * Replaces a previous in-memory mock that seeded fake data and injected a
+ * random 5% failure rate. Public API is unchanged so hooks/useFollow.ts and
+ * every other caller keep working without modification.
+ */
 
-// Seed data
-const seedFollows: Follow[] = [
-  {
-    id: 'f1',
-    followerId: 'current-user',
-    followingId: 'user-1',
-    createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'f2',
-    followerId: 'current-user',
-    followingId: 'user-2',
-    createdAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'f3',
-    followerId: 'user-1',
-    followingId: 'current-user',
-    createdAt: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-];
+interface UserFollowRow {
+  id: string;
+  follower_id: string;
+  following_id: string;
+  created_at: string;
+}
 
-// Initialize with seed data
-const initializeData = () => {
-  if (follows.length === 0) {
-    follows = [...seedFollows];
-  }
-};
+function mapRow(row: UserFollowRow): Follow {
+  return {
+    id: row.id,
+    followerId: row.follower_id,
+    followingId: row.following_id,
+    createdAt: row.created_at,
+  };
+}
 
 export const followService = {
   /**
    * Check if user is following another user
    */
   isFollowing: async (followerId: string, followingId: string): Promise<boolean> => {
-    initializeData();
-    return follows.some(f => f.followerId === followerId && f.followingId === followingId);
+    const { data, error } = await supabase
+      .from('user_follows')
+      .select('id')
+      .eq('follower_id', followerId)
+      .eq('following_id', followingId)
+      .maybeSingle();
+
+    if (error) {
+      console.error('[followService] isFollowing failed', error);
+      return false;
+    }
+    return !!data;
   },
 
   /**
-   * Follow a user (optimistic update)
+   * Follow a user
    */
   follow: async (followerId: string, followingId: string): Promise<{ success: boolean; error?: string }> => {
-    initializeData();
-
-    // Check if already following
-    const existing = follows.find(f => f.followerId === followerId && f.followingId === followingId);
-    if (existing) {
-      return { success: false, error: 'Already following' };
+    if (followerId === followingId) {
+      return { success: false, error: 'You cannot follow yourself.' };
     }
 
-    const follow: Follow = {
-      id: `f${Date.now()}`,
-      followerId,
-      followingId,
-      createdAt: new Date().toISOString(),
-    };
+    const { error } = await supabase
+      .from('user_follows')
+      .insert({ follower_id: followerId, following_id: followingId });
 
-    follows.push(follow);
-
-    // Simulate 5% failure rate for testing
-    const shouldFail = Math.random() < 0.05;
-    if (shouldFail) {
-      // Rollback
-      setTimeout(() => {
-        follows = follows.filter(f => f.id !== follow.id);
-      }, 500);
-      return { success: false, error: 'Network error' };
+    if (error) {
+      // 23505 = unique_violation (already following), 23514 = check_violation
+      // (user_follows_no_self_follow, though the guard above should catch
+      // that case first).
+      if (error.code === '23505') {
+        return { success: false, error: 'You are already following this user.' };
+      }
+      if (error.code === '23514') {
+        return { success: false, error: 'You cannot follow yourself.' };
+      }
+      console.error('[followService] follow failed', error);
+      return { success: false, error: 'Something went wrong. Please try again.' };
     }
 
     return { success: true };
   },
 
   /**
-   * Unfollow a user (optimistic update)
+   * Unfollow a user
    */
   unfollow: async (followerId: string, followingId: string): Promise<{ success: boolean; error?: string }> => {
-    initializeData();
+    const { error } = await supabase
+      .from('user_follows')
+      .delete()
+      .eq('follower_id', followerId)
+      .eq('following_id', followingId);
 
-    const existing = follows.find(f => f.followerId === followerId && f.followingId === followingId);
-    if (!existing) {
-      return { success: false, error: 'Not following' };
-    }
-
-    // Remove from array
-    follows = follows.filter(f => !(f.followerId === followerId && f.followingId === followingId));
-
-    // Simulate 5% failure rate for testing
-    const shouldFail = Math.random() < 0.05;
-    if (shouldFail) {
-      // Rollback
-      setTimeout(() => {
-        follows.push(existing);
-      }, 500);
-      return { success: false, error: 'Network error' };
+    if (error) {
+      console.error('[followService] unfollow failed', error);
+      return { success: false, error: 'Something went wrong. Please try again.' };
     }
 
     return { success: true };
@@ -106,31 +99,65 @@ export const followService = {
    * Get followers for a user
    */
   getFollowers: async (userId: string): Promise<Follow[]> => {
-    initializeData();
-    return follows.filter(f => f.followingId === userId);
+    const { data, error } = await supabase
+      .from('user_follows')
+      .select('*')
+      .eq('following_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('[followService] getFollowers failed', error);
+      return [];
+    }
+    return (data ?? []).map(mapRow);
   },
 
   /**
    * Get users that a user is following
    */
   getFollowing: async (userId: string): Promise<Follow[]> => {
-    initializeData();
-    return follows.filter(f => f.followerId === userId);
+    const { data, error } = await supabase
+      .from('user_follows')
+      .select('*')
+      .eq('follower_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('[followService] getFollowing failed', error);
+      return [];
+    }
+    return (data ?? []).map(mapRow);
   },
 
   /**
    * Get follower count
    */
   getFollowerCount: async (userId: string): Promise<number> => {
-    const followers = await followService.getFollowers(userId);
-    return followers.length;
+    const { count, error } = await supabase
+      .from('user_follows')
+      .select('*', { count: 'exact', head: true })
+      .eq('following_id', userId);
+
+    if (error) {
+      console.error('[followService] getFollowerCount failed', error);
+      return 0;
+    }
+    return count ?? 0;
   },
 
   /**
    * Get following count
    */
   getFollowingCount: async (userId: string): Promise<number> => {
-    const following = await followService.getFollowing(userId);
-    return following.length;
+    const { count, error } = await supabase
+      .from('user_follows')
+      .select('*', { count: 'exact', head: true })
+      .eq('follower_id', userId);
+
+    if (error) {
+      console.error('[followService] getFollowingCount failed', error);
+      return 0;
+    }
+    return count ?? 0;
   },
 };

@@ -91,6 +91,7 @@ export type AuditLogAction =
   | 'approved'
   | 'rejected'
   | 'suspended'
+  | 'banned'
   | 'restored'
   | 'login'
   | 'logout'

@@ -878,12 +878,23 @@ app.post('/api/supabase/bounties', async (req, res) => {
       // Try to fetch the profile and its username so we can populate the bounties.username field
       const { data: prof, error: profErr } = await supabaseAdmin
         .from('profiles')
-        .select('id, username')
+        .select('id, username, account_status')
         .eq('id', record.poster_id)
         .maybeSingle()
 
       if (profErr) {
         console.warn('[relay] profiles lookup error (non-fatal):', profErr.message)
+      }
+
+      // This relay uses the service-role client and therefore bypasses the
+      // bounties INSERT RLS policy's is_account_active() check entirely
+      // (see 20260726000000_enforce_account_status.sql) -- it is reached as
+      // a fallback from lib/services/bounty-service.ts whenever the direct
+      // client insert fails with an RLS/permission error, which is exactly
+      // what happens for a suspended/banned poster. Re-check here so that
+      // fallback path can't be used to bypass the ban.
+      if (prof && prof.account_status && prof.account_status !== 'active') {
+        return res.status(403).json({ error: 'account_' + prof.account_status })
       }
 
       if (!prof) {

@@ -85,6 +85,11 @@ export default function AuthProvider({ children }: PropsWithChildren) {
   const [isEmailVerified, setIsEmailVerified] = useState<boolean>(false);
   const [isAuthStale, setIsAuthStale] = useState<boolean>(false);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState<boolean>(false);
+  const [accountBlockedReason, setAccountBlockedReason] = useState<'banned' | 'suspended' | null>(null);
+  // Prevents re-triggering signOut() on every profile re-notification while a
+  // block is already being handled (fetchAndSyncProfile can notify listeners
+  // more than once for the same status: cached value, then fresh value).
+  const accountBlockHandledRef = useRef(false);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isRefreshingRef = useRef<boolean>(false);
   const refreshPromiseRef = useRef<Promise<void> | null>(null); // Store in-flight promise
@@ -935,6 +940,25 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     const unsubscribe = authProfileService.subscribe(authProfile => {
       setProfile(authProfile);
 
+      // Account-status enforcement (client-side gate; see
+      // 20260726000000_enforce_account_status.sql). A suspended/banned
+      // user's profile can surface here right after sign-in, on session
+      // restore, or on a background token-refresh re-fetch — in every case,
+      // force sign-out immediately and let the root auth gate route to the
+      // matching informative screen instead of the normal app/onboarding
+      // flow. Guarded by accountBlockHandledRef so repeated notifications of
+      // the same blocked status (cache-then-fresh) don't call signOut twice.
+      const status = authProfile?.account_status;
+      if ((status === 'banned' || status === 'suspended') && !accountBlockHandledRef.current) {
+        accountBlockHandledRef.current = true;
+        setAccountBlockedReason(status);
+        void supabase.auth.signOut().catch(e => {
+          reportWarning('[AuthProvider] Sign-out for blocked account failed (non-critical)', e);
+        });
+      } else if (status === 'active') {
+        accountBlockHandledRef.current = false;
+      }
+
       // Only set isLoading to false if:
       // 1. No session exists (immediate subscription callback with null), OR
       // 2. Profile fetch has completed (after setSession finishes)
@@ -999,6 +1023,11 @@ export default function AuthProvider({ children }: PropsWithChildren) {
   // render (timers, subscriptions, and profile updates fire frequently).
   // attemptRefresh has a stable identity via useCallback above, so it no
   // longer busts this memo on every render either.
+  const clearAccountBlockedReason = useCallback(() => {
+    accountBlockHandledRef.current = false;
+    setAccountBlockedReason(null);
+  }, []);
+
   const value = useMemo(
     () => ({
       session,
@@ -1009,8 +1038,20 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       isPasswordRecovery,
       isAuthStale,
       attemptRefresh,
+      accountBlockedReason,
+      clearAccountBlockedReason,
     }),
-    [session, isLoading, profile, isEmailVerified, isPasswordRecovery, isAuthStale, attemptRefresh]
+    [
+      session,
+      isLoading,
+      profile,
+      isEmailVerified,
+      isPasswordRecovery,
+      isAuthStale,
+      attemptRefresh,
+      accountBlockedReason,
+      clearAccountBlockedReason,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

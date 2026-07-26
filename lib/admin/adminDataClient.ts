@@ -197,9 +197,9 @@ export const adminDataClient = {
   // profiles is `auth.uid() = id`, so this failed for a different admin's
   // target user regardless. Now routed through the service-role
   // admin-profiles function, matching every other admin-panel write path.
-  async updateUserStatus(id: string, status: AdminUserSummary['status']): Promise<void> {
+  async updateUserStatus(id: string, status: AdminUserSummary['status'], reason: string): Promise<void> {
     const { data, error } = await supabase.functions.invoke('admin-profiles', {
-      body: { action: 'updateStatus', id, status },
+      body: { action: 'updateStatus', id, status, reason },
     });
     if (error) throw new Error(error.message);
     if (data?.error) throw new Error(data.error);

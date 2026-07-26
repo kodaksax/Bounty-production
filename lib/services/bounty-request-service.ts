@@ -1,5 +1,6 @@
 import type { Bounty, BountyRequest, Profile } from 'lib/services/database.types';
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
+import { getAccountStatusErrorMessage } from 'lib/utils/account-status-errors';
 import { getApiBase } from 'lib/utils/dev-host';
 import { logger } from 'lib/utils/error-logger';
 
@@ -715,7 +716,10 @@ export const bountyRequestService = {
         request: request as any,
         error: errorMessage,
       });
-      return { success: false, error: errorMessage };
+      // A suspended/banned hunter hits this via the bounty_requests INSERT
+      // RLS policy (see 20260726000000_enforce_account_status.sql).
+      const accountStatusError = getAccountStatusErrorMessage(err);
+      return { success: false, error: accountStatusError ? accountStatusError.message : errorMessage };
     }
   },
 
@@ -908,6 +912,17 @@ export const bountyRequestService = {
           if (msg.includes('request_not_pending') || msg.includes('bounty_not_open')) {
             const err = new Error('Bounty or request is no longer in the expected state');
             (err as any).status = 409;
+            (err as any).code = (rpcError as any)?.code;
+            (err as any).rpc = rpcError;
+            throw err;
+          }
+          // A suspended/banned poster hits this via assert_account_active()
+          // inside fn_accept_bounty_request (see
+          // 20260726000000_enforce_account_status.sql).
+          const accountStatusError = getAccountStatusErrorMessage(rpcError);
+          if (accountStatusError) {
+            const err = new Error(accountStatusError.message);
+            (err as any).status = 403;
             (err as any).code = (rpcError as any)?.code;
             (err as any).rpc = rpcError;
             throw err;

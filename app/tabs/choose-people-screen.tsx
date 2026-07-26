@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar'
+import { FOLLOW_FEATURE_ENABLED } from '../../lib/feature-flags'
 import { ROUTES } from '../../lib/routes'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
 import type { AppTheme } from '../../lib/themes/types'
@@ -29,6 +30,15 @@ export default function ChoosePeopleScreen() {
   useEffect(() => {
     let mounted = true
     ;(async () => {
+      // The Followers system is feature-flagged off app-wide -- see
+      // lib/feature-flags.ts. Skip the mutuals computation entirely rather
+      // than calling into a now-real (not mock) service while the feature
+      // is supposed to be disabled.
+      if (!FOLLOW_FEATURE_ENABLED) {
+        setMutuals([])
+        setLoading(false)
+        return
+      }
       setLoading(true)
       try {
         // Get followers and following for current user

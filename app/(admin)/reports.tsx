@@ -190,9 +190,21 @@ export default function AdminReportsScreen() {
     []
   );
 
+  // Canned reasons for a suspend/ban action, written to admin_action_log for
+  // audit purposes -- every account_status change now requires one, see
+  // 20260726000000_enforce_account_status.sql.
+  const STATUS_CHANGE_REASONS: { label: string; value: string }[] = [
+    { label: 'Spam', value: 'Spam' },
+    { label: 'Harassment', value: 'Harassment' },
+    { label: 'Fraud / Scam', value: 'Fraud / Scam' },
+    { label: 'Inappropriate Content', value: 'Inappropriate Content' },
+    { label: 'Guideline Violation', value: 'Guideline Violation' },
+    { label: 'Other', value: 'Other' },
+  ];
+
   // Handle suspend/ban user actions
   const handleUserAction = useCallback(
-    async (userId: string, action: 'suspend' | 'ban', reportId: string) => {
+    (userId: string, action: 'suspend' | 'ban', reportId: string) => {
       if (Platform.OS !== 'web') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       }
@@ -200,33 +212,34 @@ export default function AdminReportsScreen() {
       const actionLabel = action === 'suspend' ? 'Suspend' : 'Ban';
       const statusValue = action === 'suspend' ? 'suspended' : 'banned';
 
+      const submit = async (reason: string) => {
+        try {
+          // Goes through the service-role admin-profiles Edge Function,
+          // which writes profiles.account_status. A raw anon-key update
+          // here would fail: profiles has no `status`/`suspended_until`
+          // columns, and its UPDATE RLS policy is `auth.uid() = id`
+          // with no admin bypass.
+          await adminDataClient.updateUserStatus(userId, statusValue as 'suspended' | 'banned', reason);
+
+          // Also resolve the report
+          await handleUpdateStatus(reportId, 'resolved');
+
+          Alert.alert('Success', `User has been ${action === 'suspend' ? 'suspended' : 'banned'} and report resolved.`);
+        } catch (err) {
+          console.error(`Error ${action}ing user:`, err);
+          Alert.alert('Error', err instanceof Error ? err.message : `An error occurred while ${action}ing the user`);
+        }
+      };
+
       Alert.alert(
         `${actionLabel} User`,
-        `Are you sure you want to ${action} this user? ${action === 'ban' ? 'This action is permanent.' : 'The user can be unsuspended later.'}`,
+        `Select a reason to ${action} this user. ${action === 'ban' ? 'This action is permanent.' : 'The user can be unsuspended later.'}`,
         [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: actionLabel,
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                // Goes through the service-role admin-profiles Edge Function,
-                // which writes profiles.account_status. A raw anon-key update
-                // here would fail: profiles has no `status`/`suspended_until`
-                // columns, and its UPDATE RLS policy is `auth.uid() = id`
-                // with no admin bypass.
-                await adminDataClient.updateUserStatus(userId, statusValue as 'suspended' | 'banned');
-
-                // Also resolve the report
-                await handleUpdateStatus(reportId, 'resolved');
-
-                Alert.alert('Success', `User has been ${action === 'suspend' ? 'suspended' : 'banned'} and report resolved.`);
-              } catch (err) {
-                console.error(`Error ${action}ing user:`, err);
-                Alert.alert('Error', err instanceof Error ? err.message : `An error occurred while ${action}ing the user`);
-              }
-            },
-          },
+          ...STATUS_CHANGE_REASONS.map(({ label, value }) => ({
+            text: label,
+            onPress: () => submit(value),
+          })),
+          { text: 'Cancel', style: 'cancel' as const },
         ]
       );
     },

@@ -12,6 +12,17 @@ export type AuthData = {
   isAuthStale?: boolean
   // Allows callers to request an immediate token refresh attempt
   attemptRefresh?: () => Promise<void> | void
+  // Set the instant a signed-in/restored session's profile turns out to be
+  // suspended or banned. The provider force-signs-out as soon as this is
+  // set; the root auth gate (app/index.tsx) routes to the matching
+  // app/auth/account-banned.tsx / account-suspended.tsx screen instead of
+  // the normal sign-in/app flow. See providers/auth-provider.tsx and
+  // 20260726000000_enforce_account_status.sql.
+  accountBlockedReason?: 'banned' | 'suspended' | null
+  // Called by the banned/suspended screens when the user acknowledges the
+  // message (e.g. taps "Back to Sign In"), clearing the block so the root
+  // auth gate falls through to the normal unauthenticated flow.
+  clearAccountBlockedReason?: () => void
 }
 
 export const AuthContext = createContext<AuthData>({
@@ -21,6 +32,8 @@ export const AuthContext = createContext<AuthData>({
   isLoggedIn: false,
   isEmailVerified: false,
   isPasswordRecovery: false,
+  accountBlockedReason: null,
+  clearAccountBlockedReason: () => {},
 })
 
 export const useAuthContext = () => useContext(AuthContext)

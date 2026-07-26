@@ -2,6 +2,7 @@ import NetInfo from '@react-native-community/netinfo';
 import type { Bounty, BountyStatus } from 'lib/services/database.types';
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
 import { validateTitle } from 'lib/utils/bounty-validation';
+import { getAccountStatusErrorMessage } from 'lib/utils/account-status-errors';
 import { logger } from 'lib/utils/error-logger';
 import { getReachableApiBaseUrl } from 'lib/utils/network';
 import { escapeIlike, quotePostgrestValue } from 'lib/utils/postgrest-utils';
@@ -911,6 +912,13 @@ export const bountyService = {
         bounty,
         error: { message: error.message, stack: error.stack },
       });
+      // A suspended/banned poster hits this via the bounties INSERT RLS
+      // policy (see 20260726000000_enforce_account_status.sql) -- surface
+      // the specific copy instead of a raw RLS error message.
+      const accountStatusError = getAccountStatusErrorMessage(error);
+      if (accountStatusError) {
+        throw new Error(accountStatusError.message);
+      }
       // Re-throw so callers can present actionable messages to the user
       throw error;
     }

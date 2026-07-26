@@ -10,6 +10,7 @@ import { usePortfolio } from 'hooks/usePortfolio';
 import { useProfileImageViewer } from 'hooks/useProfileImageViewer';
 import { useRatings } from 'hooks/useRatings';
 import { OptimizedImage } from 'lib/components/OptimizedImage';
+import { FOLLOW_FEATURE_ENABLED } from 'lib/feature-flags';
 import { blockingService } from 'lib/services/blocking-service';
 import { MAX_PORTFOLIO_ITEMS, portfolioService } from 'lib/services/portfolio-service';
 import type { PortfolioItem } from 'lib/types';
@@ -76,6 +77,10 @@ interface EnhancedProfileSectionProps {
     badgesEarned?: number;
   };
   hideActions?: boolean;
+  // Set by callers (e.g. app/profile/[userId].tsx) that already render their
+  // own FOLLOW_FEATURE_ENABLED-gated Follow button, to avoid this component
+  // rendering a second, duplicate one.
+  hideFollowButton?: boolean;
 }
 
 function usePortfolioVideoPlayer(item: PortfolioItem | null) {
@@ -112,6 +117,7 @@ export function EnhancedProfileSection({
   showPortfolio = true,
   activityStats,
   hideActions = false,
+  hideFollowButton = false,
 }: EnhancedProfileSectionProps) {
   const { profile: normalizedFromHookOrLocal, loading: profileLoading } =
     useNormalizedProfile(userId);
@@ -175,7 +181,7 @@ export function EnhancedProfileSection({
     followingCount,
     toggleFollow,
     loading: followLoading,
-  } = useFollow(userId || 'current-user');
+  } = useFollow(userId || '', authProfileFromHook?.id || '');
 
   const ratingUserId = resolvedUserId === 'current-user' ? undefined : resolvedUserId;
   const { stats: ratingStats, loading: ratingsLoading } = useRatings(ratingUserId);
@@ -364,7 +370,7 @@ export function EnhancedProfileSection({
               )}
             </View>
           </View>
-          {!isOwnProfile && (
+          {!isOwnProfile && FOLLOW_FEATURE_ENABLED && !hideFollowButton && (
             <TouchableOpacity
               onPress={toggleFollow}
               disabled={followLoading}
@@ -531,10 +537,12 @@ export function EnhancedProfileSection({
             <Text className="text-2xl font-bold" style={{ color: theme.text }}>{activityStats?.bountiesPosted ?? 0}</Text>
             <Text className="text-xs mt-1" style={{ color: theme.textSecondary }}>Bounties Posted</Text>
           </View>
-          <View className="items-center">
-            <Text className="text-2xl font-bold" style={{ color: theme.text }}>{followerCount ?? 0}</Text>
-            <Text className="text-xs mt-1" style={{ color: theme.textSecondary }}>Followers</Text>
-          </View>
+          {FOLLOW_FEATURE_ENABLED && (
+            <View className="items-center">
+              <Text className="text-2xl font-bold" style={{ color: theme.text }}>{followerCount ?? 0}</Text>
+              <Text className="text-xs mt-1" style={{ color: theme.textSecondary }}>Followers</Text>
+            </View>
+          )}
         </View>
 
         {/* Joined Date */}

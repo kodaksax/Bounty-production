@@ -31,7 +31,7 @@ import { markInitialNavigationDone } from './initial-navigation/initialNavigatio
  */
 export default function Index() {
   const bootstrap = useAppBootstrap();
-  const { isPasswordRecovery } = useAuthContext();
+  const { isPasswordRecovery, accountBlockedReason } = useAuthContext();
   const router = useRouter();
   const authGateCorrelationRef = useRef(generateCorrelationId('root_auth_gate'));
   const hasNavigatedRef = useRef(false);
@@ -77,6 +77,32 @@ export default function Index() {
 
     // Still resolving auth or onboarding state — do nothing yet.
     if (bootstrap.status === 'loading') return;
+
+    // A banned/suspended account takes precedence over all other routing
+    // decisions, same as password recovery below — the provider has already
+    // force-signed the user out by the time this fires (see
+    // providers/auth-provider.tsx), so this only needs to redirect.
+    if (accountBlockedReason) {
+      hasNavigatedRef.current = true;
+      const dest = accountBlockedReason === 'banned' ? '/auth/account-banned' : '/auth/account-suspended';
+      if (__DEV__) {
+        console.log('[index] Account blocked — routing to', dest);
+      }
+      router.replace(dest as Href);
+      try {
+        markInitialNavigationDone();
+      } catch {}
+      logAuthLifecycleEvent({
+        correlationId,
+        stage: 'root-auth-gate:navigation',
+        status: 'success',
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        elapsedMs: Date.now() - startedAtMs,
+        outcome: `account_${accountBlockedReason}`,
+      });
+      return;
+    }
 
     // Password recovery takes precedence over all routing decisions.
     if (isPasswordRecovery) {
@@ -176,7 +202,7 @@ export default function Index() {
         onboardingComplete: bootstrap.onboardingComplete,
       },
     });
-  }, [bootstrap, isPasswordRecovery, router, confirmedReturningUser]);
+  }, [bootstrap, isPasswordRecovery, accountBlockedReason, router, confirmedReturningUser]);
 
   // Loading, authenticated (redirecting), or an unauthenticated visitor whose
   // first-time-device check hasn't resolved yet — show spinner, never the

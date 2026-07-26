@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { subscribeToFollowChanges } from '../lib/services/follow-realtime';
 import { followService } from '../lib/services/follow-service';
 
 interface UseFollowResult {
@@ -96,6 +97,18 @@ export function useFollow(userId: string, currentUserId: string = 'current-user'
 
   useEffect(() => {
     fetchFollowStatus();
+  }, [userId, currentUserId]);
+
+  // Live-update follower/following counts and isFollowing when someone else
+  // (another session, or this same user elsewhere) follows/unfollows this
+  // profile — see lib/services/follow-realtime.ts.
+  useEffect(() => {
+    if (!userId) return;
+    const unsubscribe = subscribeToFollowChanges(userId, () => {
+      fetchFollowStatus();
+    });
+    return unsubscribe;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, currentUserId]);
 
   return {
