@@ -381,6 +381,7 @@ export interface SavedAddress {
   id: string;
   label: string; // e.g., "Home", "Office", "Studio"
   address: string; // Full address string
+  unit?: string;
   latitude?: number;
   longitude?: number;
   createdAt: string;

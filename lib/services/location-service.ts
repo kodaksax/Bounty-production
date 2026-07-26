@@ -173,6 +173,41 @@ class LocationService {
   }
 
   /**
+   * Reverse geocode coordinates to a formatted address plus a coarse
+   * neighborhood label (falls back to city when the device geocoder doesn't
+   * report a district). Used by the map location picker when the user drags
+   * the pin instead of searching an address (Places autocomplete already
+   * returns a neighborhood via address-autocomplete-service).
+   */
+  async reverseGeocodeDetailed(
+    coords: LocationCoordinates
+  ): Promise<{ formattedAddress: string; neighborhood?: string } | null> {
+    try {
+      const results = await Location.reverseGeocodeAsync(coords);
+
+      if (results && results.length > 0) {
+        const location = results[0];
+        const parts = [
+          location.street,
+          location.city,
+          location.region,
+          location.postalCode,
+        ].filter(Boolean);
+
+        return {
+          formattedAddress: parts.join(', '),
+          neighborhood: location.district || location.city || undefined,
+        };
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error reverse geocoding (detailed):', error);
+      return null;
+    }
+  }
+
+  /**
    * Convert degrees to radians
    */
   private toRadians(degrees: number): number {

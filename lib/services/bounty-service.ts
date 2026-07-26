@@ -10,6 +10,26 @@ import { offlineQueueService } from './offline-queue-service';
 // UUID validation pattern used to guard PostgREST OR filter strings against injection.
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Explicit column allowlist for browse/feed/search queries (anyone can see
+// an open bounty pre-acceptance). Deliberately excludes `latitude`,
+// `longitude`, `unit`, and `geom` — those are exact-precision/privacy-sensitive
+// and only ever readable via get_bounty_exact_location(), scoped server-side
+// to the poster and the accepted hunter. `location` (the legacy free-text
+// address) is still included for now so existing bounties created before
+// this redesign keep rendering; new bounties should prefer `neighborhood` for
+// display (see components/bounty-feed.tsx). `search_tsv` is a server-only
+// search index column, not meant for client consumption.
+export const FEED_SAFE_BOUNTY_COLUMNS = [
+  'id', 'title', 'description', 'amount', 'is_for_honor', 'location', 'timeline',
+  'skills_required', 'poster_id', 'user_id', 'status', 'work_type', 'is_time_sensitive',
+  'deadline', 'attachments', 'attachments_json', 'created_at', 'updated_at',
+  'average_rating', 'rating_count', 'accepted_request_id', 'completed_at', 'username',
+  'avatar', 'accepted_by', 'is_stale', 'stale_reason', 'stale_detected_at', 'category',
+  'schedule_type', 'start_date', 'end_date', 'latest_arrival_time', 'duration_minutes',
+  'conditional_end_note', 'expiry_notified_at', 'zip_code', 'payment_architecture_version',
+  'approx_latitude', 'approx_longitude', 'neighborhood',
+].join(', ');
+
 // Lazy-load wsAdapter to avoid circular dependencies
 // Type for wsAdapter interface
 interface WsAdapter {
@@ -396,7 +416,7 @@ export const bountyService = {
 
         // No `profiles` embed — see `search()`. Poster data is attached from
         // `public_profiles` after the rows come back.
-        let query = supabase.from('bounties').select('*');
+        let query = supabase.from('bounties').select(FEED_SAFE_BOUNTY_COLUMNS);
 
         // Apply filters
         if (filters.status && filters.status.length > 0) {
@@ -470,7 +490,7 @@ export const bountyService = {
           logger.error('Supabase searchWithFilters error', { error, filters });
           if (/Could not find a relationship between 'bounties' and 'profiles'/.test(msg)) {
             // Try without join
-            let queryNoJoin = supabase.from('bounties').select('*');
+            let queryNoJoin = supabase.from('bounties').select(FEED_SAFE_BOUNTY_COLUMNS);
 
             if (filters.status && filters.status.length > 0) {
               queryNoJoin = queryNoJoin.in('status', filters.status);
@@ -592,7 +612,7 @@ export const bountyService = {
         // enrich from the `public_profiles` view instead.
         let query: any = supabase
           .from('bounties')
-          .select('*')
+          .select(FEED_SAFE_BOUNTY_COLUMNS)
           .order('created_at', { ascending: false });
 
         if (options?.status) query = query.eq('status', options.status);

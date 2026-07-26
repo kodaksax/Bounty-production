@@ -6,7 +6,11 @@ export interface UseAddressLibraryResult {
   addresses: SavedAddress[];
   isLoading: boolean;
   error: string | null;
-  addAddress: (label: string, address: string) => Promise<SavedAddress | null>;
+  addAddress: (
+    label: string,
+    address: string,
+    opts?: { unit?: string; latitude?: number; longitude?: number }
+  ) => Promise<SavedAddress | null>;
   updateAddress: (id: string, label: string, address: string) => Promise<SavedAddress | null>;
   deleteAddress: (id: string) => Promise<boolean>;
   searchAddresses: (query: string) => Promise<SavedAddress[]>;
@@ -42,10 +46,15 @@ export function useAddressLibrary(): UseAddressLibraryResult {
   }, [loadAddresses]);
 
   const addAddress = useCallback(
-    async (label: string, address: string): Promise<SavedAddress | null> => {
+    async (
+      label: string,
+      address: string,
+      opts?: { unit?: string; latitude?: number; longitude?: number }
+    ): Promise<SavedAddress | null> => {
       try {
         setError(null);
-        const newAddress = await addressLibraryService.add(label, address);
+        const newAddress = await addressLibraryService.add(label, address, opts);
+        if (!newAddress) return null;
         setAddresses((prev) => [...prev, newAddress]);
         return newAddress;
       } catch (err) {

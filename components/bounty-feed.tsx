@@ -19,6 +19,7 @@ import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 import type { AppTheme } from '../lib/themes/types'
 import { bountyRequestService } from '../lib/services/bounty-request-service'
 import { bountyService } from '../lib/services/bounty-service'
+import { searchBountiesNearby, type NearbyBounty } from '../lib/services/bounty-location-service'
 import type { Bounty } from '../lib/services/database.types'
 import { locationService } from '../lib/services/location-service'
 import { storage } from '../lib/storage'
@@ -42,6 +43,45 @@ interface BountyFeedProps {
 
 const PAGE_SIZE = 10
 
+// 'off' = no distance filter (existing behavior, unchanged). A number is a
+// radius in miles. `null` is the explicit "Anywhere" preset — still uses
+// search_bounties_nearby (so results get real distances/sort) but without a
+// radius cap.
+type DistanceFilterValue = 'off' | number | null
+const DISTANCE_PRESETS: Array<{ label: string; value: DistanceFilterValue }> = [
+  { label: 'Off', value: 'off' },
+  { label: '1 mi', value: 1 },
+  { label: '5 mi', value: 5 },
+  { label: '10 mi', value: 10 },
+  { label: '25 mi', value: 25 },
+  { label: 'Anywhere', value: null },
+]
+
+function nearbyToBounty(nb: NearbyBounty): Bounty {
+  return {
+    id: nb.id,
+    title: nb.title,
+    description: nb.description,
+    amount: nb.amount,
+    is_for_honor: nb.is_for_honor,
+    location: nb.neighborhood || '',
+    neighborhood: nb.neighborhood,
+    timeline: '',
+    skills_required: '',
+    poster_id: nb.poster_id,
+    user_id: nb.poster_id,
+    created_at: nb.created_at,
+    status: nb.status as Bounty['status'],
+    category: nb.category || undefined,
+    deadline: nb.deadline || undefined,
+    username: nb.username || undefined,
+    poster_avatar: nb.avatar || undefined,
+    approx_latitude: nb.approx_latitude,
+    approx_longitude: nb.approx_longitude,
+    distance_miles: nb.distance_miles,
+  }
+}
+
 export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function BountyFeed(
   { activeScreen, setActiveScreen, currentUserId },
   ref
@@ -57,6 +97,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   const [loadError, setLoadError] = useState<Error | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [activeCategory, setActiveCategory] = useState<string | 'all'>('all')
+  const [distanceFilter, setDistanceFilter] = useState<DistanceFilterValue>('off')
   // Count of newly-posted open bounties observed via realtime since the last
   // load/refresh. Not injected directly into `bounties` — this feed is
   // paginated (PAGE_SIZE/offsetRef), so splicing a live INSERT into the
@@ -107,7 +148,12 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   const bountyDistances = useMemo(() => {
     const distances = new Map<string, number | null>()
     bounties.forEach(bounty => {
-      distances.set(String(bounty.id), calculateDistance(bounty.location || ''))
+      // search_bounties_nearby already computed a real distance server-side —
+      // prefer it over the legacy "parse lat,lng out of the location string"
+      // fallback, which only ever matches the rare bounty whose free-text
+      // location literally is a "lat, lng" pair.
+      const known = bounty.distance_miles
+      distances.set(String(bounty.id), known != null ? known : calculateDistance(bounty.location || ''))
     })
     return distances
   }, [bounties, calculateDistance])
@@ -219,10 +265,21 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     const startedAt = Date.now()
     logger.info('feed.bounties.request_started', { reset, offset: pageOffset, pageSize: PAGE_SIZE })
     try {
-      const fetchedBounties = await withTimeout(
-        bountyService.getAll({ status: 'open', limit: PAGE_SIZE, offset: pageOffset }),
-        API_TIMEOUTS.DEFAULT
-      )
+      const fetchedBounties = distanceFilter !== 'off'
+        ? await withTimeout(
+            searchBountiesNearby({
+              latitude: userLocation?.latitude,
+              longitude: userLocation?.longitude,
+              radiusMiles: distanceFilter,
+              limit: PAGE_SIZE,
+              offset: pageOffset,
+            }).then(rows => rows.map(nearbyToBounty)),
+            API_TIMEOUTS.DEFAULT
+          )
+        : await withTimeout(
+            bountyService.getAll({ status: 'open', limit: PAGE_SIZE, offset: pageOffset }),
+            API_TIMEOUTS.DEFAULT
+          )
       const safeBounties = Array.isArray(fetchedBounties) ? fetchedBounties : []
       const mergeUniqueById = (existing: Bounty[], incoming: Bounty[]) => {
         const map = new Map<string, Bounty>()
@@ -262,7 +319,23 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       setIsLoadingBounties(false)
       setLoadingMore(false)
     }
-  }, [])
+  }, [distanceFilter, userLocation])
+
+  // Distance filter changes what's fetched from the server (unlike category,
+  // which filters client-side over the already-loaded page), so it needs a
+  // fresh reset load rather than just re-filtering `bounties` in place. Skips
+  // its first run — the separate mount effect below already does the initial load.
+  const isFirstDistanceFilterRun = useRef(true)
+  useEffect(() => {
+    if (isFirstDistanceFilterRun.current) {
+      isFirstDistanceFilterRun.current = false
+      return
+    }
+    offsetRef.current = 0
+    setHasMore(true)
+    loadBounties({ reset: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [distanceFilter])
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
@@ -412,7 +485,10 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       username: item.username,
       price: Number(item.amount),
       distance,
-      location: item.location,
+      // Prefer the coarse neighborhood label — item.location is only the
+      // full/legacy exact address for bounties created before this location
+      // redesign (see docs/ location plan; new bounties don't fall back to it).
+      location: item.neighborhood || item.location,
       description: item.description,
       isForHonor: Boolean(item.is_for_honor),
       user_id: item.user_id,
@@ -534,6 +610,41 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     </View>
   )
 
+  const renderDistanceChips = () => (
+    <View style={s.filtersRow}>
+      <FlatList
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        data={DISTANCE_PRESETS}
+        keyExtractor={(item) => String(item.value)}
+        contentContainerStyle={{ paddingHorizontal: 16 }}
+        renderItem={({ item }) => {
+          const isActive = distanceFilter === item.value
+          const chipStyle = [s.chip, isActive && s.chipActive]
+          const labelStyle = [s.chipLabel, isActive && s.chipLabelActive]
+          return (
+            <TouchableOpacity
+              onPress={() => setDistanceFilter(item.value)}
+              style={chipStyle}
+              accessibilityRole="button"
+              accessibilityLabel={`Filter by distance: ${item.label}`}
+              accessibilityState={{ selected: isActive }}
+            >
+              <MaterialIcons
+                name="near-me"
+                size={SIZING.ICON_SMALL}
+                color={isActive ? theme.primary : theme.textSecondary}
+                style={{ marginRight: SPACING.COMPACT_GAP }}
+                accessibilityElementsHidden={true}
+              />
+              <Text style={labelStyle}>{item.label}</Text>
+            </TouchableOpacity>
+          )
+        }}
+      />
+    </View>
+  )
+
   return (
     <View style={s.dashboardArea}>
       {/* Search bar — non-grid only (grid has it inside the banner block below) */}
@@ -553,6 +664,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
 
       {/* Filter chips — outside FlatList for non-grid; grid gets them inside listHeader */}
       {bountyFormat !== 'grid' && renderChips()}
+      {bountyFormat !== 'grid' && renderDistanceChips()}
 
       {/* New-bounties pill — surfaces realtime INSERTs without splicing them into
           the paginated list mid-scroll. Sits above the list so it works across
@@ -637,6 +749,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                     })}
                   </ScrollView>
                 </View>
+                {renderDistanceChips()}
               </View>
             }
           />

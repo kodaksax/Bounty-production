@@ -6,10 +6,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
-import { AddressAutocomplete } from '../../../components/AddressAutocomplete';
-import { addressAutocompleteService, isPlaceDetailsError } from '../../../lib/services/address-autocomplete-service';
-import { sanitizeAddressText } from '../../../lib/utils/address-sanitization';
-import { useLocation } from 'app/hooks/useLocation';
+import { LocationPickerMap, type LocationPickerValue } from '../../../components/location/LocationPickerMap';
 
 interface StepLocationProps {
   draft: BountyDraft;
@@ -26,10 +23,8 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
   const { theme } = useAppThemeContext();
 
   // Address library for saved addresses
-  const { addresses } = useAddressLibrary();
-  
-  // Get user location for proximity-based suggestions
-  const { location: currentLocation } = useLocation();
+  const { addresses, addAddress } = useAddressLibrary();
+  const [isSavingFavorite, setIsSavingFavorite] = useState(false);
 
   const validateLocation = (location: string, workType: string): string | null => {
     if (workType === 'in_person') {
@@ -89,42 +84,42 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
     setErrors({ ...errors, zipCode: error || '' });
   };
   
-  // Handle selecting an address from autocomplete
-  const handleSelectAddress = async (suggestion: any) => {
-    // Fetch detailed place information to get coordinates
+  // The map picker resolves an address selection (search, drag, or current
+  // location) to coordinates + neighborhood itself and reports the full
+  // result here — no separate Place Details fetch needed on this screen.
+  const handleLocationPicked = (value: LocationPickerValue) => {
+    onUpdate({
+      location: value.address,
+      latitude: value.latitude,
+      longitude: value.longitude,
+      neighborhood: value.neighborhood,
+    });
+    setTouched({ ...touched, location: true });
+    if (touched.location) {
+      const error = validateLocation(value.address, draft.workType);
+      setErrors({ ...errors, location: error || '' });
+    }
+  };
+
+  const handleSaveFavorite = async () => {
+    if (!draft.location || draft.latitude == null || draft.longitude == null) {
+      Alert.alert('Pick a location first', 'Choose an address on the map before saving it as a favorite.');
+      return;
+    }
+    setIsSavingFavorite(true);
     try {
-      const response = await addressAutocompleteService.getPlaceDetails(suggestion.placeId);
-      
-      if (isPlaceDetailsError(response)) {
-        // Handle error response with specific error message
-        Alert.alert(
-          'Address Details Unavailable',
-          response.error,
-          [{ text: 'OK' }]
-        );
-        const sanitizedDescription = sanitizeAddressText(suggestion.description);
-        onUpdate({ location: sanitizedDescription });
-        setTouched({ ...touched, location: true });
+      const saved = await addAddress(draft.location, draft.location, {
+        unit: draft.unit,
+        latitude: draft.latitude,
+        longitude: draft.longitude,
+      });
+      if (saved) {
+        Alert.alert('Saved', 'This location was added to your favorites.');
       } else {
-        // Successfully got place details
-        const sanitizedAddress = sanitizeAddressText(response.formattedAddress);
-        onUpdate({ 
-          location: sanitizedAddress,
-        });
-        setTouched({ ...touched, location: true });
+        Alert.alert('Could not save', 'Something went wrong saving this favorite. Please try again.');
       }
-    } catch (err) {
-      console.error('Error fetching place details:', err);
-      // Inform user of the error and use fallback
-      Alert.alert(
-        'Connection Issue',
-        'Could not fetch detailed address information. Using basic address.',
-        [{ text: 'OK' }]
-      );
-      // Fallback to using the sanitized description
-      const sanitizedDescription = sanitizeAddressText(suggestion.description);
-      onUpdate({ location: sanitizedDescription });
-      setTouched({ ...touched, location: true });
+    } finally {
+      setIsSavingFavorite(false);
     }
   };
 
@@ -226,25 +221,43 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
             </Text>
             
             {/* Address Autocomplete Component */}
-            <AddressAutocomplete
-              value={draft.location}
-              onChangeText={handleLocationChange}
-              onSelectAddress={handleSelectAddress}
-              onBlur={handleLocationBlur}
-              placeholder="e.g., San Francisco, CA or 123 Main St"
-              minChars={2}
-              debounceMs={500}
-              showSavedAddresses={true}
-              savedAddresses={addresses}
-              userLocation={currentLocation || undefined}
-              searchRadius={50000}
-              countryCode="us"
+            <LocationPickerMap
+              latitude={draft.latitude}
+              longitude={draft.longitude}
+              address={draft.location}
+              unit={draft.unit}
+              onChange={handleLocationPicked}
+              onAddressTextChange={handleLocationChange}
+              onUnitChange={(unit) => onUpdate({ unit })}
+              savedLocations={addresses}
+              onSelectSavedLocation={(loc) =>
+                onUpdate({
+                  location: loc.address,
+                  unit: loc.unit,
+                  latitude: loc.latitude,
+                  longitude: loc.longitude,
+                })
+              }
             />
-            
+
             {touched.location && errors.location && (
               <ValidationMessage message={errors.location} />
             )}
-            
+
+            <TouchableOpacity
+              onPress={handleSaveFavorite}
+              disabled={isSavingFavorite}
+              className="mt-3 flex-row items-center justify-center py-2 rounded-lg border"
+              style={{ borderColor: theme.border }}
+              accessibilityRole="button"
+              accessibilityLabel="Save this location as a favorite"
+            >
+              <MaterialIcons name="star-outline" size={16} color={theme.primary} />
+              <Text className="ml-2 text-sm font-semibold" style={{ color: theme.primary }}>
+                Save to favorites
+              </Text>
+            </TouchableOpacity>
+
             <View className="mt-3 rounded-lg p-3 border" style={{ backgroundColor: theme.surface, borderColor: theme.border }}>
               <View className="flex-row items-start">
                 <MaterialIcons
@@ -254,9 +267,9 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
                   style={{ marginRight: 6, marginTop: 2 }}
                 />
                 <Text className="text-xs flex-1" style={{ color: theme.textSecondary }}>
-                  Your exact address won
+                  Only your neighborhood is shown publicly. Your exact address won
                   {"'"}
-                  t be shared until you accept someone for the job. Start typing to see suggestions from Google Places and your saved addresses.
+                  t be shared until you accept someone for the job.
                 </Text>
               </View>
             </View>

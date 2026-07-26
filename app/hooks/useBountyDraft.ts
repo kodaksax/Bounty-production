@@ -30,6 +30,13 @@ export interface BountyDraft {
   // Optional ZIP code, saved as metadata so users in the same ZIP can be
   // matched to this bounty later (e.g. for a future notification feature).
   zipCode?: string;
+  // Exact-precision coordinates + unit, set by the map location picker.
+  // Privacy-sensitive: only ever shown to the poster and the accepted
+  // hunter post-acceptance (see get_bounty_exact_location() RPC).
+  latitude?: number;
+  longitude?: number;
+  unit?: string;
+  neighborhood?: string;
   workType: 'online' | 'in_person';
   timeline?: string;
   skills?: string;
@@ -51,6 +58,10 @@ const defaultDraft: BountyDraft = {
   isForHonor: false,
   location: '',
   zipCode: '',
+  latitude: undefined,
+  longitude: undefined,
+  unit: undefined,
+  neighborhood: undefined,
   workType: 'in_person',
   timeline: '',
   skills: '',

@@ -26,6 +26,9 @@ export interface PlaceDetails {
     state?: string;
     country?: string;
     postalCode?: string;
+    // Coarse area label (neighborhood/sublocality), used for pre-acceptance
+    // display instead of the exact street address.
+    neighborhood?: string;
   };
 }
 
@@ -240,6 +243,14 @@ class AddressAutocompleteService {
               streetParts.push(sanitizeAddressText(component.long_name));
             } else if (types.includes('locality')) {
               components.city = sanitizeAddressText(component.long_name);
+            } else if (
+              types.includes('neighborhood') ||
+              types.includes('sublocality') ||
+              types.includes('sublocality_level_1')
+            ) {
+              if (!components.neighborhood) {
+                components.neighborhood = sanitizeAddressText(component.long_name);
+              }
             } else if (types.includes('administrative_area_level_1')) {
               components.state = sanitizeAddressText(component.short_name);
             } else if (types.includes('country')) {

@@ -157,6 +157,7 @@
     "react-native-css-interop": "^0.2.1",
     "react-native-gesture-handler": "~2.30.0",
     "react-native-get-random-values": "~1.11.0",
+    "react-native-map-clustering": "^4.0.0",
     "react-native-maps": "1.27.2",
     "react-native-modal": "^13.0.2",
     "react-native-reanimated": "4.2.1",

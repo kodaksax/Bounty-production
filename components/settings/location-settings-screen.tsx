@@ -6,7 +6,7 @@ import { SettingsScreenHeader } from 'components/ui/settings-screen-header';
 import { SettingsSection } from 'components/ui/settings-section';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import type { AppTheme } from 'lib/themes/types';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -20,6 +20,20 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAddressLibrary } from '../../app/hooks/useAddressLibrary';
 import { useLocation } from '../../app/hooks/useLocation';
 import type { SavedAddress } from '../../lib/types';
+import { LocationPickerMap, type LocationPickerValue } from '../location/LocationPickerMap';
+import {
+  hunterServiceAreaService,
+  type HunterServiceArea,
+} from '../../lib/services/hunter-service-area-service';
+import { getCurrentUserId } from '../../lib/utils/data-utils';
+
+const RADIUS_PRESETS: Array<{ label: string; value: number | null }> = [
+  { label: '1 mi', value: 1 },
+  { label: '5 mi', value: 5 },
+  { label: '10 mi', value: 10 },
+  { label: '25 mi', value: 25 },
+  { label: 'Anywhere', value: null },
+];
 
 interface LocationSettingsScreenProps {
   onBack?: () => void;
@@ -51,6 +65,100 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
   const [editingAddress, setEditingAddress] = useState<SavedAddress | null>(null);
   const [formLabel, setFormLabel] = useState('');
   const [formAddress, setFormAddress] = useState('');
+
+  // Work radius (hunter_service_areas)
+  const [serviceAreas, setServiceAreas] = useState<HunterServiceArea[]>([]);
+  const [areasLoading, setAreasLoading] = useState(true);
+  const [areasSaving, setAreasSaving] = useState(false);
+  const [primaryPin, setPrimaryPin] = useState<{ latitude?: number; longitude?: number; address: string }>({
+    address: '',
+  });
+  const [primaryRadius, setPrimaryRadius] = useState<number | null>(10);
+  const [showAddArea, setShowAddArea] = useState(false);
+
+  const primaryArea = useMemo(() => serviceAreas.find((a) => a.isPrimary), [serviceAreas]);
+  const extraAreas = useMemo(() => serviceAreas.filter((a) => !a.isPrimary), [serviceAreas]);
+
+  const loadServiceAreas = useCallback(async () => {
+    setAreasLoading(true);
+    try {
+      const areas = await hunterServiceAreaService.getAll();
+      setServiceAreas(areas);
+      const primary = areas.find((a) => a.isPrimary);
+      if (primary) {
+        setPrimaryPin({ latitude: primary.latitude, longitude: primary.longitude, address: primary.label });
+        setPrimaryRadius(primary.radiusMiles);
+      }
+    } finally {
+      setAreasLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadServiceAreas();
+  }, [loadServiceAreas]);
+
+  const handlePrimaryPinChange = useCallback((value: LocationPickerValue) => {
+    setPrimaryPin({ latitude: value.latitude, longitude: value.longitude, address: value.neighborhood || value.address });
+  }, []);
+
+  const handleSavePrimaryArea = useCallback(async () => {
+    if (primaryPin.latitude == null || primaryPin.longitude == null) {
+      Alert.alert('Set a location', 'Drag the pin or use current location to set your work-radius center.');
+      return;
+    }
+    setAreasSaving(true);
+    try {
+      const hunterId = getCurrentUserId();
+      const saved = await hunterServiceAreaService.upsertPrimary({
+        label: primaryPin.address || 'Primary',
+        latitude: primaryPin.latitude,
+        longitude: primaryPin.longitude,
+        radiusMiles: primaryRadius,
+        hunterId,
+        existingPrimaryId: primaryArea?.id,
+      });
+      if (saved) {
+        await loadServiceAreas();
+      } else {
+        Alert.alert('Could not save', 'Something went wrong saving your work radius. Please try again.');
+      }
+    } finally {
+      setAreasSaving(false);
+    }
+  }, [primaryPin, primaryRadius, primaryArea, loadServiceAreas]);
+
+  const handleAddExtraArea = useCallback(
+    async (value: LocationPickerValue) => {
+      const hunterId = getCurrentUserId();
+      const added = await hunterServiceAreaService.addArea({
+        label: value.neighborhood || value.address || 'Service area',
+        latitude: value.latitude,
+        longitude: value.longitude,
+        radiusMiles: 10,
+        hunterId,
+      });
+      if (added) {
+        setServiceAreas((prev) => [...prev, added]);
+        setShowAddArea(false);
+      }
+    },
+    []
+  );
+
+  const handleRemoveExtraArea = useCallback((area: HunterServiceArea) => {
+    Alert.alert('Remove service area', `Remove "${area.label}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          const ok = await hunterServiceAreaService.remove(area.id);
+          if (ok) setServiceAreas((prev) => prev.filter((a) => a.id !== area.id));
+        },
+      },
+    ]);
+  }, []);
 
   const handleRequestPermission = useCallback(async () => {
     await requestPermission();
@@ -175,6 +283,107 @@ export function LocationSettingsScreen({ onBack }: LocationSettingsScreenProps) 
               Location is used to calculate distances to in-person bounties and help you find
               opportunities nearby.
             </Text>
+          </View>
+        </SettingsSection>
+
+        <SettingsSection title="Work Radius">
+          <View style={s.permissionBlock}>
+            {areasLoading ? (
+              <ActivityIndicator color={theme.primary} />
+            ) : (
+              <>
+                <Text style={s.permissionFootnote}>
+                  Set the center point and radius for the jobs you want to see nearby.
+                </Text>
+                <View style={{ marginTop: 12 }}>
+                  <LocationPickerMap
+                    mode="pin-only"
+                    latitude={primaryPin.latitude}
+                    longitude={primaryPin.longitude}
+                    address={primaryPin.address}
+                    onChange={handlePrimaryPinChange}
+                    height={180}
+                  />
+                </View>
+                <View style={s.radiusRow}>
+                  {RADIUS_PRESETS.map((preset) => {
+                    const selected = primaryRadius === preset.value;
+                    return (
+                      <TouchableOpacity
+                        key={preset.label}
+                        onPress={() => setPrimaryRadius(preset.value)}
+                        style={[s.radiusChip, selected && { backgroundColor: theme.primary, borderColor: theme.primary }]}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Set work radius to ${preset.label}`}
+                        accessibilityState={{ selected }}
+                      >
+                        <Text style={[s.radiusChipText, selected && { color: '#ffffff' }]}>{preset.label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <ThemedButton
+                  variant="primary"
+                  label={primaryArea ? 'Update work radius' : 'Save work radius'}
+                  loading={areasSaving}
+                  onPress={handleSavePrimaryArea}
+                  style={s.grantButton}
+                  accessibilityLabel="Save work radius"
+                />
+
+                {extraAreas.length > 0 && (
+                  <View style={{ marginTop: 16 }}>
+                    <Text style={s.fieldLabel}>Additional service areas</Text>
+                    {extraAreas.map((area) => (
+                      <SettingsRow
+                        key={area.id}
+                        icon="place"
+                        label={area.label}
+                        description={area.radiusMiles ? `${area.radiusMiles} mi radius` : 'Anywhere'}
+                        right={
+                          <TouchableOpacity
+                            onPress={() => handleRemoveExtraArea(area)}
+                            style={s.rowActionButton}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            accessibilityLabel={`Remove ${area.label}`}
+                            accessibilityRole="button"
+                          >
+                            <MaterialIcons name="delete" size={18} color={theme.error} />
+                          </TouchableOpacity>
+                        }
+                      />
+                    ))}
+                  </View>
+                )}
+
+                {showAddArea ? (
+                  <View style={{ marginTop: 16 }}>
+                    <Text style={s.fieldLabel}>New service area</Text>
+                    <LocationPickerMap mode="pin-only" onChange={handleAddExtraArea} height={180} />
+                    <TouchableOpacity
+                      onPress={() => setShowAddArea(false)}
+                      style={{ marginTop: 8, alignSelf: 'flex-start' }}
+                      accessibilityRole="button"
+                      accessibilityLabel="Cancel adding service area"
+                    >
+                      <Text style={{ color: theme.textSecondary, fontSize: 13 }}>Cancel</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    onPress={() => setShowAddArea(true)}
+                    style={s.addAreaButton}
+                    accessibilityRole="button"
+                    accessibilityLabel="Add another service area"
+                  >
+                    <MaterialIcons name="add" size={16} color={theme.primary} />
+                    <Text style={{ marginLeft: 6, color: theme.primary, fontSize: 13, fontWeight: '600' }}>
+                      Add another service area
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
           </View>
         </SettingsSection>
 
@@ -369,6 +578,36 @@ function makeStyles(t: AppTheme) {
       fontSize: 12,
       lineHeight: 16,
       marginTop: 12,
+    },
+    radiusRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginTop: 14,
+      marginBottom: 14,
+    },
+    radiusChip: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: t.border,
+      backgroundColor: t.surfaceSecondary,
+    },
+    radiusChipText: {
+      color: t.text,
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    addAreaButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 16,
+      paddingVertical: 10,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: t.border,
     },
     addChip: {
       flexDirection: 'row',

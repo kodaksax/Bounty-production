@@ -22,6 +22,7 @@ import type { Bounty } from '../../lib/services/database.types';
 import { recentSearchService } from '../../lib/services/recent-search-service';
 import { searchService } from '../../lib/services/search-service';
 import { userSearchService } from '../../lib/services/user-search-service';
+import { BountyMapView } from '../../components/location/BountyMapView';
 import type { AutocompleteSuggestion, BountySearchFilters, RecentSearch, UserProfile } from '../../lib/types';
 import { logger } from '../../lib/utils/error-logger';
 import type { TrendingBounty } from '../../lib/types'
@@ -53,6 +54,7 @@ export default function EnhancedSearchScreen() {
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [showMap, setShowMap] = useState(false);
   const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autocompleteRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -475,6 +477,16 @@ export default function EnhancedSearchScreen() {
         {activeTab === 'bounties' && (
           <>
             <TouchableOpacity
+              onPress={() => setShowMap((v) => !v)}
+              style={s.filterBtn}
+              accessibilityRole="button"
+              accessibilityLabel={showMap ? 'Show list view' : 'Show map view'}
+              accessibilityHint="Toggles between list and map view of bounty results"
+              accessibilityState={{ selected: showMap }}
+            >
+              <MaterialIcons name={showMap ? 'view-list' : 'map'} size={20} color={theme.primaryLight} accessibilityElementsHidden={true} />
+            </TouchableOpacity>
+            <TouchableOpacity
               onPress={() => router.push('/search/saved-searches')}
               style={s.filterBtn}
               accessibilityRole="button"
@@ -662,7 +674,9 @@ export default function EnhancedSearchScreen() {
 
 
       {/* Results */}
-      {activeTab === 'bounties' ? (
+      {activeTab === 'bounties' && showMap ? (
+        <BountyMapView height={400} />
+      ) : activeTab === 'bounties' ? (
           <FlatList
           data={bountyResults}
           keyExtractor={keyExtractorBounty}

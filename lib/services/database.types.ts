@@ -10,6 +10,17 @@ export type Bounty = {
   // Optional ZIP code, saved as metadata so users with a matching profile
   // ZIP can eventually be matched/notified about this bounty.
   zip_code?: string;
+  // Exact-precision location fields (privacy-sensitive — see
+  // get_bounty_exact_location() RPC and docs/ location redesign plan).
+  latitude?: number | null;
+  longitude?: number | null;
+  unit?: string | null;
+  // Coarse/display-safe fields, computed server-side by the
+  // bounties_compute_approx_location() trigger from latitude/longitude.
+  approx_latitude?: number | null;
+  approx_longitude?: number | null;
+  neighborhood?: string | null;
+  distance_miles?: number | null;
   timeline: string;
   skills_required: string;
   poster_id: string;

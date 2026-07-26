@@ -7,7 +7,7 @@ import type {
     TrendingBounty,
 } from '../types';
 import { logger } from '../utils/error-logger';
-import { bountyService } from './bounty-service';
+import { bountyService, FEED_SAFE_BOUNTY_COLUMNS } from './bounty-service';
 import type { Bounty } from './database.types';
 import { userSearchService } from './user-search-service';
 
@@ -164,7 +164,7 @@ export const searchService = {
       // data is enriched from `public_profiles` below.
       const { data: bounties, error } = await supabase
         .from('bounties')
-        .select('*')
+        .select(FEED_SAFE_BOUNTY_COLUMNS)
         .eq('status', 'open')
         .gte('created_at', sevenDaysAgo.toISOString())
         .order('created_at', { ascending: false })
