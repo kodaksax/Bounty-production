@@ -269,7 +269,7 @@ export async function exportUserData(userId: string): Promise<{
       const { data: reports, error } = await supabase
         .from('reports')
         .select('*')
-        .eq('user_id', userId);
+        .eq('reporter_id', userId);
       
       if (!error && reports) {
         exportData.reports = reports;

@@ -17,7 +17,6 @@ import { AdminHeader } from '../../components/admin/AdminHeader';
 import { supabase } from '../../lib/supabase';
 
 interface BlockedUserRelationship {
-  id: string;
   blocker_id: string;
   blocked_id: string;
   created_at: string;
@@ -71,7 +70,7 @@ export default function AdminBlockedUsersScreen() {
     fetchBlockedUsers();
   }, []);
 
-  const handleUnblock = async (blockId: string) => {
+  const handleUnblock = async (blockerId: string, blockedId: string) => {
     Alert.alert(
       'Unblock User',
       'Are you sure you want to remove this block relationship?',
@@ -82,10 +81,13 @@ export default function AdminBlockedUsersScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              // blocked_users has no `id` column -- its primary key is the
+              // composite (blocker_id, blocked_id).
               const { error: deleteError } = await supabase
                 .from('blocked_users')
                 .delete()
-                .eq('id', blockId);
+                .eq('blocker_id', blockerId)
+                .eq('blocked_id', blockedId);
 
               if (deleteError) {
                 Alert.alert('Error', deleteError.message);
@@ -144,7 +146,7 @@ export default function AdminBlockedUsersScreen() {
           </View>
         ) : (
           blocks.map((block) => (
-            <AdminCard key={block.id}>
+            <AdminCard key={`${block.blocker_id}-${block.blocked_id}`}>
               <View style={styles.blockCard}>
                 {/* Blocker Info */}
                 <View style={styles.userSection}>
@@ -185,7 +187,7 @@ export default function AdminBlockedUsersScreen() {
                 {/* Action */}
                 <TouchableOpacity
                   style={styles.unblockButton}
-                  onPress={() => handleUnblock(block.id)}
+                  onPress={() => handleUnblock(block.blocker_id, block.blocked_id)}
                 >
                   <MaterialIcons name="check" size={16} color="#10b981" />
                   <Text style={styles.unblockButtonText}>Remove Block</Text>

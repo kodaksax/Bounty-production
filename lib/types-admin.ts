@@ -133,7 +133,7 @@ export interface AuditLogFilters {
 // Enhanced report with priority scoring
 export interface EnhancedReport {
   id: string;
-  user_id: string;
+  reporter_id: string;
   reporter_name?: string;
   content_type: 'bounty' | 'profile' | 'message';
   content_id: string;

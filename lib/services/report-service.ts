@@ -18,7 +18,7 @@ export interface ReportReason {
 /** Shape of a report record from the database */
 export interface ReportRecord {
   id: string;
-  user_id: string;
+  reporter_id: string;
   content_type: ReportContentType;
   content_id: string;
   reason: ReportReasonId;
@@ -88,7 +88,7 @@ export const reportService = {
       }
 
       const { error } = await supabase.from('reports').insert({
-        user_id: userId,
+        reporter_id: userId,
         content_type: 'bounty',
         content_id: String(bountyId),
         reason,
@@ -129,7 +129,7 @@ export const reportService = {
       }
 
       const { error } = await supabase.from('reports').insert({
-        user_id: reporterId,
+        reporter_id: reporterId,
         content_type: 'profile',
         content_id: userId,
         reason,
@@ -170,7 +170,7 @@ export const reportService = {
       }
 
       const { error } = await supabase.from('reports').insert({
-        user_id: userId,
+        reporter_id: userId,
         content_type: 'message',
         content_id: messageId,
         reason,
@@ -220,7 +220,31 @@ export const reportService = {
         return { success: false, error: error.message };
       }
 
-      return { success: true, reports: data || [] };
+      const reports = data || [];
+
+      // Enrich with the reporter's display name. `profiles` SELECT RLS is
+      // effectively self-only for non-admins, so embedding via a join would
+      // resolve to null for every row here; use the public_profiles view
+      // instead (same pattern as blockingService.getBlockedUsers).
+      const reporterIds = Array.from(
+        new Set(reports.map((r: any) => r.reporter_id).filter(Boolean))
+      );
+
+      if (reporterIds.length > 0) {
+        const { data: profiles, error: profilesError } = await supabase
+          .from('public_profiles')
+          .select('id, username')
+          .in('id', reporterIds);
+
+        if (!profilesError && profiles) {
+          const nameById = new Map(profiles.map((p: any) => [String(p.id), p.username]));
+          for (const r of reports as any[]) {
+            r.reporter_name = nameById.get(String(r.reporter_id));
+          }
+        }
+      }
+
+      return { success: true, reports };
     } catch (error) {
       console.error('Error fetching reports:', error);
       return {

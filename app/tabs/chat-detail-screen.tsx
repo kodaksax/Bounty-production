@@ -18,6 +18,7 @@ import { useMessages } from "../../hooks/useMessages"
 import { useNormalizedProfile } from "../../hooks/useNormalizedProfile"
 import { useTypingIndicator } from "../../hooks/useSocketStub"
 import { useValidUserId } from '../../hooks/useValidUserId'
+import { blockingService } from "../../lib/services/blocking-service"
 import { generateInitials } from "../../lib/services/supabase-messaging"
 import type { Conversation, Message } from "../../lib/types"
 import { getValidAvatarUrl } from "../../lib/utils/avatar-utils"
@@ -151,6 +152,31 @@ export function ChatDetailScreen({
     if (!selectedMessageId) return
     setShowActions(false)
     setShowReportModal(true)
+  }
+
+  const handleBlockUser = () => {
+    setShowActions(false)
+    if (!otherUserId || conversation.isGroup) return
+    Alert.alert(
+      'Block User',
+      `Block ${displayName}? They won't be able to message you again.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Block',
+          style: 'destructive',
+          onPress: async () => {
+            const result = await blockingService.blockUser(otherUserId)
+            if (result.success) {
+              Alert.alert('User Blocked', `${displayName} has been blocked.`)
+              onBack?.()
+            } else {
+              Alert.alert('Error', result.error || 'Failed to block user')
+            }
+          },
+        },
+      ]
+    )
   }
 
   const handlePinnedMessagePress = () => {
@@ -356,6 +382,8 @@ export function ChatDetailScreen({
         onPin={handlePin}
         onCopy={handleCopy}
         onReport={handleReport}
+        onBlockUser={handleBlockUser}
+        showBlockOption={!conversation.isGroup && !!otherUserId}
         isPinned={selectedMessage?.isPinned}
       />
 

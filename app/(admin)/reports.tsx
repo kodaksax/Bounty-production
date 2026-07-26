@@ -18,9 +18,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AdminCard } from '../../components/admin/AdminCard';
 import { AdminHeader } from '../../components/admin/AdminHeader';
+import { adminDataClient } from '../../lib/admin/adminDataClient';
 import { ROUTES } from '../../lib/routes';
 import { reportService } from '../../lib/services/report-service';
-import { supabase } from '../../lib/supabase';
 import type { EnhancedReport, ReportStats } from '../../lib/types-admin';
 
 type FilterStatus = 'all' | 'pending' | 'reviewed' | 'resolved' | 'dismissed';
@@ -60,78 +60,6 @@ function calculateStatsFromReports(reports: EnhancedReport[]): ReportStats {
   };
 }
 
-/**
- * Mock data for development with enhanced fields.
- * In production, this would be fetched from the API.
- */
-const mockReports: EnhancedReport[] = [
-  {
-    id: 'report-001',
-    user_id: 'user-123',
-    reporter_name: '@safeuser',
-    content_type: 'bounty',
-    content_id: 'bounty-456',
-    reason: 'fraud',
-    details: 'This bounty appears to be a scam. The poster is asking for upfront payment.',
-    status: 'pending',
-    priority: 'critical',
-    created_at: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-  },
-  {
-    id: 'report-002',
-    user_id: 'user-456',
-    reporter_name: '@concerned',
-    content_type: 'message',
-    content_id: 'msg-789',
-    reason: 'harassment',
-    details: 'User sent threatening messages after I declined their offer.',
-    status: 'pending',
-    priority: 'high',
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-  },
-  {
-    id: 'report-003',
-    user_id: 'user-789',
-    reporter_name: '@vigilant',
-    content_type: 'profile',
-    content_id: 'user-spam-001',
-    reason: 'spam',
-    details: 'Profile contains promotional links and suspicious content.',
-    status: 'pending',
-    priority: 'low',
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-  },
-  {
-    id: 'report-004',
-    user_id: 'user-111',
-    reporter_name: '@helpful',
-    content_type: 'bounty',
-    content_id: 'bounty-222',
-    reason: 'inappropriate',
-    details: 'Bounty description contains inappropriate language.',
-    status: 'reviewed',
-    priority: 'medium',
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(),
-    reviewed_by: 'admin-001',
-    reviewed_at: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-  },
-  {
-    id: 'report-005',
-    user_id: 'user-333',
-    reporter_name: '@guardian',
-    content_type: 'message',
-    content_id: 'msg-444',
-    reason: 'harassment',
-    details: 'Multiple users have reported this account for aggressive behavior.',
-    status: 'resolved',
-    priority: 'high',
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 72).toISOString(),
-    reviewed_by: 'admin-002',
-    reviewed_at: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(),
-    resolution_notes: 'User account suspended for 7 days.',
-  },
-];
-
 export default function AdminReportsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -159,7 +87,6 @@ export default function AdminReportsScreen() {
     setIsLoading(true);
     setError(null);
     try {
-      // Use mock data for now, will integrate with real service
       const result = await reportService.getAllReports({
         status: statusFilter === 'all' ? undefined : statusFilter,
       });
@@ -173,15 +100,15 @@ export default function AdminReportsScreen() {
         setReports(enhanced);
         setStats(calculateStatsFromReports(enhanced));
       } else {
-        // Fall back to mock data for demo
-        setReports(mockReports);
-        setStats(calculateStatsFromReports(mockReports));
+        setReports([]);
+        setStats(calculateStatsFromReports([]));
+        setError(result.error || 'Failed to load reports');
       }
     } catch (err) {
       console.error('Error fetching reports:', err);
-      // Fall back to mock data
-      setReports(mockReports);
-      setStats(calculateStatsFromReports(mockReports));
+      setReports([]);
+      setStats(calculateStatsFromReports([]));
+      setError(err instanceof Error ? err.message : 'Failed to load reports');
     } finally {
       setIsLoading(false);
     }
@@ -272,7 +199,7 @@ export default function AdminReportsScreen() {
 
       const actionLabel = action === 'suspend' ? 'Suspend' : 'Ban';
       const statusValue = action === 'suspend' ? 'suspended' : 'banned';
-      
+
       Alert.alert(
         `${actionLabel} User`,
         `Are you sure you want to ${action} this user? ${action === 'ban' ? 'This action is permanent.' : 'The user can be unsuspended later.'}`,
@@ -283,46 +210,20 @@ export default function AdminReportsScreen() {
             style: 'destructive',
             onPress: async () => {
               try {
-                // First verify user exists to prevent invalid operations
-                const { data: existingUser, error: fetchError } = await supabase
-                  .from('profiles')
-                  .select('id')
-                  .eq('id', userId)
-                  .single();
-
-                if (fetchError || !existingUser) {
-                  Alert.alert('Error', 'User not found. They may have already been deleted.');
-                  return;
-                }
-
-                // Update user status in the database
-                // If suspending, set suspended_until to 7 days from now; otherwise, clear it
-                let suspendedUntil: Date | null = null;
-                if (action === 'suspend') {
-                  suspendedUntil = new Date();
-                  suspendedUntil.setDate(suspendedUntil.getDate() + 7);
-                }
-                const { error } = await supabase
-                  .from('profiles')
-                  .update({ 
-                    status: statusValue,
-                    suspended_until: suspendedUntil ? suspendedUntil.toISOString() : null
-                  })
-                  .eq('id', userId);
-
-                if (error) {
-                  console.error(`Error ${action}ing user:`, error);
-                  Alert.alert('Error', `Failed to ${action} user: ${error.message}`);
-                  return;
-                }
+                // Goes through the service-role admin-profiles Edge Function,
+                // which writes profiles.account_status. A raw anon-key update
+                // here would fail: profiles has no `status`/`suspended_until`
+                // columns, and its UPDATE RLS policy is `auth.uid() = id`
+                // with no admin bypass.
+                await adminDataClient.updateUserStatus(userId, statusValue as 'suspended' | 'banned');
 
                 // Also resolve the report
                 await handleUpdateStatus(reportId, 'resolved');
-                
+
                 Alert.alert('Success', `User has been ${action === 'suspend' ? 'suspended' : 'banned'} and report resolved.`);
               } catch (err) {
                 console.error(`Error ${action}ing user:`, err);
-                Alert.alert('Error', `An error occurred while ${action}ing the user`);
+                Alert.alert('Error', err instanceof Error ? err.message : `An error occurred while ${action}ing the user`);
               }
             },
           },

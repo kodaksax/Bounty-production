@@ -48,6 +48,41 @@ describe('blockingService', () => {
     expect(res.success).toBe(true);
   });
 
+  test('unblockUser requires authentication', async () => {
+    (getCurrentUserId as jest.Mock).mockReturnValue(undefined);
+    const res = await blockingService.unblockUser('them');
+    expect(res.success).toBe(false);
+    expect(res.error).toBe('User not authenticated');
+  });
+
+  test('unblockUser deletes the block row for the current user', async () => {
+    (getCurrentUserId as jest.Mock).mockReturnValue('me');
+    const eq2 = jest.fn().mockResolvedValue({ error: null });
+    const eq1 = jest.fn().mockReturnValue({ eq: eq2 });
+    const del = jest.fn().mockReturnValue({ eq: eq1 });
+    (supabase.from as jest.Mock).mockReturnValue({ delete: del });
+
+    const res = await blockingService.unblockUser('them');
+
+    expect(res.success).toBe(true);
+    expect(del).toHaveBeenCalled();
+    expect(eq1).toHaveBeenCalledWith('blocker_id', 'me');
+    expect(eq2).toHaveBeenCalledWith('blocked_id', 'them');
+  });
+
+  test('unblockUser surfaces database errors', async () => {
+    (getCurrentUserId as jest.Mock).mockReturnValue('me');
+    const eq2 = jest.fn().mockResolvedValue({ error: { message: 'boom' } });
+    const eq1 = jest.fn().mockReturnValue({ eq: eq2 });
+    const del = jest.fn().mockReturnValue({ eq: eq1 });
+    (supabase.from as jest.Mock).mockReturnValue({ delete: del });
+
+    const res = await blockingService.unblockUser('them');
+
+    expect(res.success).toBe(false);
+    expect(res.error).toBe('boom');
+  });
+
   test('isUserBlocked returns false when not authenticated', async () => {
     (getCurrentUserId as jest.Mock).mockReturnValue(undefined);
     const res = await blockingService.isUserBlocked('someone');

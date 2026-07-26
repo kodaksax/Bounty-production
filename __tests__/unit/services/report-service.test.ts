@@ -327,11 +327,106 @@ describe('Report Service', () => {
       );
     });
 
+    // Regression test: the `reports` table's actual reporter column is
+    // `reporter_id`, not `user_id` -- inserting `user_id` was silently
+    // failing against the live schema (PostgREST rejects unknown columns).
+    it('should insert reporter_id (not user_id) matching the live reports schema', async () => {
+      const reportChain = createMockQueryChain({ error: null });
+      const notificationChain = createMockQueryChain({ error: null });
+
+      supabase.from.mockImplementation((table: string) => {
+        if (table === 'reports') return reportChain;
+        if (table === 'admin_notifications') return notificationChain;
+        return reportChain;
+      });
+
+      await reportService.reportBounty('bounty-123', 'fraud', 'Suspicious activity');
+      expect(reportChain.insert).toHaveBeenCalledWith(
+        expect.objectContaining({ reporter_id: 'reporter-123' })
+      );
+      const insertedPayload = reportChain.insert.mock.calls[0][0];
+      expect(insertedPayload.user_id).toBeUndefined();
+
+      await reportService.reportUser('user-456', 'harassment', 'Threatening messages');
+      expect(reportChain.insert).toHaveBeenCalledWith(
+        expect.objectContaining({ reporter_id: 'reporter-123' })
+      );
+
+      await reportService.reportMessage('msg-789', 'spam', 'Promotional spam');
+      expect(reportChain.insert).toHaveBeenCalledWith(
+        expect.objectContaining({ reporter_id: 'reporter-123' })
+      );
+    });
+
     it('should handle report submission errors', async () => {
       const reportChain = createMockQueryChain({ error: { message: 'Database error' } });
       supabase.from.mockReturnValue(reportChain);
 
       const result = await reportService.reportBounty('bounty-123', 'spam', 'Test');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Database error');
+    });
+  });
+
+  describe('getAllReports', () => {
+    it('enriches reports with the reporter username from public_profiles', async () => {
+      const reports = [
+        { id: 'report-1', reporter_id: 'reporter-123', content_type: 'bounty', status: 'pending', created_at: '2026-01-01' },
+      ];
+      const reportsChain = createMockQueryChain({ data: reports, error: null });
+      const profilesChain = {
+        select: jest.fn().mockReturnValue({
+          in: jest.fn().mockResolvedValue({
+            data: [{ id: 'reporter-123', username: '@safeuser' }],
+            error: null,
+          }),
+        }),
+      };
+
+      supabase.from.mockImplementation((table: string) => {
+        if (table === 'reports') return reportsChain;
+        if (table === 'public_profiles') return profilesChain;
+        throw new Error(`Unexpected table: ${table}`);
+      });
+
+      const result = await reportService.getAllReports();
+
+      expect(result.success).toBe(true);
+      expect(result.reports?.[0]).toEqual(
+        expect.objectContaining({ reporter_id: 'reporter-123', reporter_name: '@safeuser' })
+      );
+    });
+
+    it('returns reports without names if the profile lookup fails (non-fatal)', async () => {
+      const reports = [
+        { id: 'report-1', reporter_id: 'reporter-123', content_type: 'bounty', status: 'pending', created_at: '2026-01-01' },
+      ];
+      const reportsChain = createMockQueryChain({ data: reports, error: null });
+      const profilesChain = {
+        select: jest.fn().mockReturnValue({
+          in: jest.fn().mockResolvedValue({ data: null, error: { message: 'lookup failed' } }),
+        }),
+      };
+
+      supabase.from.mockImplementation((table: string) => {
+        if (table === 'reports') return reportsChain;
+        if (table === 'public_profiles') return profilesChain;
+        throw new Error(`Unexpected table: ${table}`);
+      });
+
+      const result = await reportService.getAllReports();
+
+      expect(result.success).toBe(true);
+      expect(result.reports?.[0].reporter_id).toBe('reporter-123');
+      expect(result.reports?.[0].reporter_name).toBeUndefined();
+    });
+
+    it('surfaces database errors instead of falling back to fake data', async () => {
+      const reportsChain = createMockQueryChain({ data: null, error: { message: 'Database error' } });
+      supabase.from.mockReturnValue(reportsChain);
+
+      const result = await reportService.getAllReports();
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Database error');
