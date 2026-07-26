@@ -2,6 +2,7 @@
 
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { format } from 'date-fns';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -23,6 +24,7 @@ import { StripePaymentMethod, stripeService } from '../../lib/services/stripe-se
 import { useStripe } from '../../lib/stripe-context';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
+import { formatCurrency } from '../../lib/utils';
 import { useWallet, type WalletTransactionRecord } from '../../lib/wallet-context';
 
 
@@ -53,6 +55,31 @@ function getTransactionLabel(tx: WalletTransactionRecord): string {
       return `Refund${tx.details.title ? ` · ${tx.details.title}` : ''}`;
     default:
       return 'Transaction';
+  }
+}
+
+// Direction icon glyph per transaction type — hoisted for the same reason as
+// getTransactionLabel above.
+function getTransactionIconName(tx: WalletTransactionRecord): keyof typeof MaterialIcons.glyphMap {
+  switch (tx.type) {
+    case 'deposit':
+      return 'arrow-downward';
+    case 'withdrawal':
+      return 'arrow-upward';
+    case 'bounty_posted':
+      return 'gps-fixed';
+    case 'bounty_completed':
+      return 'check-circle';
+    case 'bounty_received':
+      return 'arrow-downward';
+    case 'escrow':
+      return 'lock';
+    case 'release':
+      return 'lock-open';
+    case 'refund':
+      return 'refresh';
+    default:
+      return 'receipt-long';
   }
 }
 
@@ -131,17 +158,43 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   );
 
   const renderTransactionItem = useCallback(
-    ({ item: tx }: { item: WalletTransactionRecord }) => (
-      <View style={[s.sectionPad, { marginTop: 8 }]}>
-        <View style={{ minHeight: 64 }}>
+    ({ item: tx }: { item: WalletTransactionRecord }) => {
+      const isPositive = tx.amount > 0;
+      const amountColor = isPositive ? theme.success : theme.text;
+      const status = tx.details.status?.toLowerCase();
+      const statusColor = status === 'failed' ? theme.error : status === 'pending' ? theme.warning : theme.success;
+
+      return (
+        <View style={[s.sectionPad, { marginTop: 8 }]}>
           <View style={s.bountyCard}>
-            <Text style={s.bountyName}>{getTransactionLabel(tx)}</Text>
-            <Text style={[s.bountyAmount, { color: tx.amount > 0 ? theme.primaryLight : '#fca5a5' }]}>{tx.amount > 0 ? '+' : ''}${Math.abs(tx.amount).toFixed(2)}</Text>
+            <View style={s.bountyIcon}>
+              <MaterialIcons name={getTransactionIconName(tx)} size={20} color={theme.text} />
+            </View>
+            <View style={s.bountyBody}>
+              <View style={s.bountyTopRow}>
+                <Text style={s.bountyName} numberOfLines={1} ellipsizeMode="tail">
+                  {getTransactionLabel(tx)}
+                </Text>
+                <Text style={[s.bountyAmount, { color: amountColor }]} numberOfLines={1}>
+                  {isPositive ? '+' : '-'}
+                  {formatCurrency(Math.abs(tx.amount))}
+                </Text>
+              </View>
+              <View style={s.bountyBottomRow}>
+                <Text style={s.bountyDate}>{format(tx.date, 'MMM d · h:mm a')}</Text>
+                {status && (
+                  <View style={s.bountyStatusRow}>
+                    <View style={[s.bountyStatusDot, { backgroundColor: statusColor }]} />
+                    <Text style={[s.bountyStatusText, { color: statusColor }]}>{tx.details.status}</Text>
+                  </View>
+                )}
+              </View>
+            </View>
           </View>
         </View>
-      </View>
-    ),
-    [s, theme.primaryLight]
+      );
+    },
+    [s, theme]
   );
 
   if (showWithdraw) {
@@ -202,7 +255,9 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
                   {walletLoading ? (
                     <View style={s.balanceSkeleton} />
                   ) : (
-                    <Text style={s.balanceAmount}>${balance.toFixed(2)}</Text>
+                    <Text style={s.balanceAmount} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                      {formatCurrency(balance)}
+                    </Text>
                   )}
                 </View>
                 <View style={s.balanceActionsRow}>
@@ -486,25 +541,75 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
   },
   bountyCard: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: t.surface,
     borderRadius: SPACING.ELEMENT_GAP,
     padding: SPACING.SCREEN_HORIZONTAL,
     marginBottom: SPACING.COMPACT_GAP,
+    borderWidth: 1,
+    borderColor: t.border,
     shadowColor: '#000',
     shadowOpacity: 0.08,
     shadowRadius: 6,
   },
+  bountyIcon: {
+    height: SIZING.AVATAR_MEDIUM,
+    width: SIZING.AVATAR_MEDIUM,
+    borderRadius: SIZING.AVATAR_MEDIUM / 2,
+    backgroundColor: t.surfaceSecondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: SPACING.ELEMENT_GAP,
+    flexShrink: 0,
+  },
+  bountyBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  bountyTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  bountyBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
   bountyName: {
     color: t.text,
     fontSize: TYPOGRAPHY.SIZE_BODY,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    flex: 1,
+    marginRight: 10,
   },
   bountyAmount: {
-    color: t.text,
     fontSize: TYPOGRAPHY.SIZE_BODY,
-    fontWeight: 'bold',
+    fontWeight: '700',
+    letterSpacing: 0.2,
+    flexShrink: 0,
+    textAlign: 'right',
+    fontVariant: ['tabular-nums'],
+  },
+  bountyDate: {
+    color: t.textSecondary,
+    fontSize: TYPOGRAPHY.SIZE_SMALL - 1,
+  },
+  bountyStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  bountyStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  bountyStatusText: {
+    fontSize: TYPOGRAPHY.SIZE_SMALL - 1,
+    fontWeight: '500',
+    textTransform: 'capitalize',
   },
   emptyState: {
     paddingVertical: SPACING.SECTION_GAP,

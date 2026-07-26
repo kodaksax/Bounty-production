@@ -8,6 +8,7 @@ import { FlatList, RefreshControl, ScrollView, Text, TouchableOpacity, View, Sty
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAppThemeContext } from "../lib/themes/AppThemeContext"
 import type { AppTheme } from "../lib/themes/types"
+import { formatCurrency } from "../lib/utils"
 import { TransactionDetailModal } from "./transaction-detail-modal"
 import { BrandingLogo } from "./ui/branding-logo"
 import { EmptyState } from "./ui/empty-state"
@@ -147,70 +148,65 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
   }
 
   // Render a single transaction item
-  const renderTransactionItem = useCallback(({ item: transaction }: { item: Transaction }) => (
-    <TouchableOpacity
-      key={transaction.id}
-      style={s.transactionCard}
-      onPress={() => setSelectedTransaction(transaction)}
-      activeOpacity={0.7}
-    >
-      <View style={s.transactionRow}>
-        <View style={s.iconContainer}>
-          {getTransactionIcon(transaction.type)}
-        </View>
+  const renderTransactionItem = useCallback(({ item: transaction }: { item: Transaction }) => {
+    const isPositive = transaction.amount > 0
+    const amountColor = isPositive ? theme.success : theme.text
+    const statusKey = transaction.details.status?.toLowerCase()
+    const statusColor =
+      statusKey === "completed" ? theme.success : statusKey === "failed" ? theme.error : theme.warning
 
-        <View style={s.transactionDetails}>
-          <View style={s.transactionHeader}>
-            <Text style={s.transactionTitle} numberOfLines={2}>
-              {getTransactionTitle(transaction)}
-            </Text>
-            <Text
-              style={[
-                s.transactionAmount,
-                { color: transaction.amount > 0 ? '#6ee7b7' : '#fca5a5' }
-              ]}
-            >
-              {transaction.amount > 0 ? "+" : ""}${Math.abs(transaction.amount).toFixed(2)}
-            </Text>
+    return (
+      <TouchableOpacity
+        key={transaction.id}
+        style={s.transactionCard}
+        onPress={() => setSelectedTransaction(transaction)}
+        activeOpacity={0.7}
+      >
+        <View style={s.transactionRow}>
+          <View style={s.iconContainer}>
+            {getTransactionIcon(transaction.type)}
           </View>
-          <View style={s.transactionMeta}>
-            <View style={s.metaRow}>
-              <Text style={s.timeText}>{format(transaction.date, "h:mm a")}</Text>
-              {transaction.escrowStatus && (
-                <View style={s.escrowBadge}>
-                  <MaterialIcons name="lock" size={10} color="#fff" />
-                  <Text style={s.badgeText}>{transaction.escrowStatus.toUpperCase()}</Text>
-                </View>
-              )}
-              {transaction.disputeStatus === "pending" && (
-                <View style={s.disputeBadge}>
-                  <MaterialIcons name="warning" size={10} color="#fff" />
-                  <Text style={s.badgeText}>DISPUTE</Text>
-                </View>
-              )}
-            </View>
-            {transaction.details.status && (
-              <Text
-                style={[
-                  s.statusText,
-                  {
-                    color:
-                      transaction.details.status?.toLowerCase() === "completed"
-                        ? '#6ee7b7'
-                        : transaction.details.status?.toLowerCase() === "failed"
-                          ? '#f87171'
-                          : '#fde68a',
-                  },
-                ]}
-              >
-                {transaction.details.status}
+
+          <View style={s.transactionDetails}>
+            <View style={s.transactionHeader}>
+              <Text style={s.transactionTitle} numberOfLines={1} ellipsizeMode="tail">
+                {getTransactionTitle(transaction)}
               </Text>
-            )}
+              <Text style={[s.transactionAmount, { color: amountColor }]} numberOfLines={1}>
+                {isPositive ? "+" : "-"}
+                {formatCurrency(Math.abs(transaction.amount))}
+              </Text>
+            </View>
+            <View style={s.transactionMeta}>
+              <View style={s.metaRow}>
+                <Text style={s.timeText}>{format(transaction.date, "h:mm a")}</Text>
+                {transaction.details.status && (
+                  <View style={s.statusRow}>
+                    <View style={[s.statusDot, { backgroundColor: statusColor }]} />
+                    <Text style={[s.statusText, { color: statusColor }]}>
+                      {transaction.details.status}
+                    </Text>
+                  </View>
+                )}
+                {transaction.escrowStatus && (
+                  <View style={s.escrowBadge}>
+                    <MaterialIcons name="lock" size={10} color="#fff" />
+                    <Text style={s.badgeText}>{transaction.escrowStatus.toUpperCase()}</Text>
+                  </View>
+                )}
+                {transaction.disputeStatus === "pending" && (
+                  <View style={s.disputeBadge}>
+                    <MaterialIcons name="warning" size={10} color="#fff" />
+                    <Text style={s.badgeText}>DISPUTE</Text>
+                  </View>
+                )}
+              </View>
+            </View>
           </View>
         </View>
-      </View>
-    </TouchableOpacity>
-  ), [s, theme])
+      </TouchableOpacity>
+    )
+  }, [s, theme])
 
   // Render date header for a group
   const renderDateHeader = useCallback((date: Date) => (
@@ -484,8 +480,9 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     backgroundColor: t.surface,
     borderRadius: 14,
     padding: 16,
-    marginBottom: 12,
-    minHeight: 80,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: t.border,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
@@ -503,15 +500,17 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     backgroundColor: t.surfaceSecondary,
     justifyContent: 'center',
     alignItems: 'center',
+    flexShrink: 0,
   },
   transactionDetails: {
     flex: 1,
     marginLeft: 14,
+    minWidth: 0,
   },
   transactionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     marginBottom: 6,
   },
   transactionTitle: {
@@ -519,27 +518,41 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     fontWeight: '600',
     color: t.text,
     flex: 1,
-    marginRight: 8,
+    marginRight: 10,
   },
   transactionAmount: {
     fontSize: 16,
     fontWeight: '700',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
+    flexShrink: 0,
+    textAlign: 'right',
+    fontVariant: ['tabular-nums'],
   },
   transactionMeta: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 4,
+    marginTop: 2,
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexWrap: 'wrap',
   },
   timeText: {
     fontSize: 12,
     color: t.textSecondary,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   escrowBadge: {
     flexDirection: 'row',
@@ -565,6 +578,8 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
   },
   statusText: {
     fontSize: 12,
+    fontWeight: '500',
+    textTransform: 'capitalize',
   },
   listFooter: {
     paddingVertical: 16,
