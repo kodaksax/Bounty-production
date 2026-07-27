@@ -6,6 +6,15 @@
     "packages/*",
     "services/*"
   ],
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": [
+          "@stripe/stripe-identity-react-native"
+        ]
+      }
+    }
+  },
   "scripts": {
     "start": "expo start --dev-client",
     "reset-project": "node ./scripts/reset-project.js",
