@@ -431,6 +431,34 @@ function checkInstantDailyLimit(countToday: number): InstantLimitResult {
 // in front of it.
 const CONNECT_TRANSFER_RETIRED = Deno.env.get('CONNECT_TRANSFER_RETIRED') === 'true';
 
+// Whether NEWLY created Connect accounts hold their balance until the user
+// explicitly withdraws, instead of Stripe sweeping it to their bank on its
+// default automatic daily schedule.
+//
+// This is what makes the connected account's balance behave as "the wallet":
+// under the automatic default, an available balance is paid out within ~a day,
+// so a "Withdraw Now" button would almost always find $0 to draw and the
+// wallet would read ~$0 even for a hunter who just got paid. Stripe treats the
+// schedule as all-or-nothing per account — there is no per-payment override.
+//
+// Trade-off accepted deliberately: under a manual schedule the platform is
+// obliged to pay funds out within 2 years (US) / 90 days (most other
+// countries), and a user who never taps Withdraw leaves money sitting in
+// Stripe. Mitigated by idle-balance reminders and monitoring — see
+// docs/payments/CONNECT_NATIVE_PAYOUT_ARCHITECTURE.md §7 R1.
+//
+// Applied to new accounts only. Existing accounts keep the automatic schedule
+// they were created with until a deliberate backfill (ibid. §6 step 7, R10),
+// so no current user's payouts silently stop arriving.
+const CONNECT_MANUAL_PAYOUTS = Deno.env.get('CONNECT_MANUAL_PAYOUTS') === 'true';
+
+// Payout-schedule settings for stripe.accounts.create(). Spread into the call
+// so that with the flag off the request is byte-identical to what it was
+// before this change.
+const manualPayoutSettings = CONNECT_MANUAL_PAYOUTS
+  ? { settings: { payouts: { schedule: { interval: 'manual' as const } } } }
+  : {};
+
 function legacyTransferRetiredResponse() {
   return jsonResponse(
     {
@@ -489,9 +517,10 @@ Deno.serve(async (req: Request) => {
 
   const isBankAccountsPath = subPath === '/bank-accounts' || subPath.startsWith('/bank-accounts/');
   const isDebitCardsPath = subPath === '/debit-cards' || subPath.startsWith('/debit-cards/');
+  const isBalancePath = subPath === '/balance';
   if (
     req.method !== 'POST' &&
-    !(req.method === 'GET' && (isBankAccountsPath || isDebitCardsPath)) &&
+    !(req.method === 'GET' && (isBankAccountsPath || isDebitCardsPath || isBalancePath)) &&
     !(req.method === 'DELETE' && (isBankAccountsPath || isDebitCardsPath))
   ) {
     return jsonResponse({ error: 'Method not allowed' }, 405);
@@ -567,13 +596,16 @@ Deno.serve(async (req: Request) => {
           },
           business_type: 'individual',
           metadata: { user_id: userId },
+          ...manualPayoutSettings,
         });
         accountId = account.id;
         await supabase
           .from('profiles')
           .update({ stripe_connect_account_id: accountId })
           .eq('id', userId);
-        console.log(`[connect] Created new account: ${accountId} for user ${userId}`);
+        console.log(`[connect] Created new account: ${accountId} for user ${userId}`, {
+          manualPayouts: CONNECT_MANUAL_PAYOUTS,
+        });
       }
 
       const accountLink = await stripe.accountLinks.create({
@@ -687,6 +719,7 @@ Deno.serve(async (req: Request) => {
           },
           business_type: 'individual',
           metadata: { user_id: userId },
+          ...manualPayoutSettings,
         });
         accountId = account.id;
         const { error: updateError } = await supabase
@@ -829,6 +862,104 @@ Deno.serve(async (req: Request) => {
         requirementsPendingVerification: account.requirements?.pending_verification ?? [],
         disabledReason: account.requirements?.disabled_reason ?? null,
       });
+    }
+
+    // GET /connect/balance — the caller's own Stripe Connect account balance.
+    //
+    // This is the authoritative source of WITHDRAWABLE funds under the Phase 2
+    // (payment_architecture_version = 2) architecture, where bounty releases
+    // Transfer money straight into the hunter's connected account and never
+    // touch profiles.balance. Deliberately reads nothing from profiles except
+    // the account id — profiles.balance is the legacy v1 ledger and must not
+    // be blended into this figure (see
+    // docs/payments/CONNECT_NATIVE_PAYOUT_ARCHITECTURE.md).
+    //
+    // Scoped to the authenticated caller's own account: there is no accountId
+    // parameter, by design, so this can never be used to read another user's
+    // balance.
+    //
+    // Unonboarded users get a 200 with zeros and hasConnectAccount:false
+    // rather than an error — "no account yet" is a normal state the UI
+    // renders as an onboarding CTA, not a failure.
+    if (req.method === 'GET' && isBalancePath) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('stripe_connect_account_id')
+        .eq('id', userId)
+        .single();
+
+      const accountId = (profile as { stripe_connect_account_id?: string } | null)
+        ?.stripe_connect_account_id;
+
+      if (!accountId) {
+        return jsonResponse({
+          available: 0,
+          pending: 0,
+          instantAvailable: 0,
+          currency: 'usd',
+          lastUpdated: new Date().toISOString(),
+          hasConnectAccount: false,
+          payoutsEnabled: false,
+        });
+      }
+
+      // Balance and account state are independent reads; fetch in parallel so
+      // the client's blocking balance call stays a single round trip.
+      const [balance, account] = await Promise.all([
+        stripe.balance.retrieve({ stripeAccount: accountId }),
+        stripe.accounts.retrieve(accountId),
+      ]);
+
+      // Currency selection: prefer the account's own default so this doesn't
+      // silently report 0 for a non-USD account, falling back to the first
+      // currency Stripe reports.
+      const currency = (
+        account.default_currency ??
+        balance.available?.[0]?.currency ??
+        'usd'
+      ).toLowerCase();
+
+      const sumFor = (
+        buckets: Array<{ currency: string; amount: number }> | undefined
+      ): number =>
+        (buckets ?? [])
+          .filter(b => b.currency === currency)
+          .reduce((total, b) => total + (b.amount ?? 0), 0);
+
+      // instant_available must be read via net_available (amount NET of the
+      // instant payout fee), not .amount. Stripe explicitly warns that reading
+      // .amount breaks the integration once instant-payout application fees
+      // are enabled, because the user cannot actually pay out the gross figure.
+      const instantAvailable = (balance.instant_available ?? [])
+        .filter(b => b.currency === currency)
+        .reduce(
+          (total, b) =>
+            total +
+            (b.net_available?.reduce((s, n) => s + (n.amount ?? 0), 0) ?? 0),
+          0
+        );
+
+      const payload = {
+        available: sumFor(balance.available),
+        pending: sumFor(balance.pending),
+        instantAvailable,
+        currency,
+        lastUpdated: new Date().toISOString(),
+        hasConnectAccount: true,
+        payoutsEnabled: account.payouts_enabled === true,
+      };
+
+      console.log('[connect/balance] snapshot', {
+        userId,
+        accountId,
+        available: payload.available,
+        pending: payload.pending,
+        instantAvailable: payload.instantAvailable,
+        currency: payload.currency,
+        payoutsEnabled: payload.payoutsEnabled,
+      });
+
+      return jsonResponse(payload);
     }
 
     // POST /connect/transfer
