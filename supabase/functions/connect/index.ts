@@ -329,6 +329,703 @@ interface InstantCardSummary {
   available_payout_methods?: string[] | null;
 }
 
+// ---------------------------------------------------------------------------
+// Connect-native payouts (Phases 4-5)
+// ---------------------------------------------------------------------------
+
+/**
+ * Lifecycle events written to public.payout_audit_log.
+ *
+ * Connect-native payouts never move profiles.balance, so this log is the only
+ * durable record of why a payout was allowed or refused. Emitted even on the
+ * failure paths — especially on the failure paths.
+ */
+type PayoutAuditEvent =
+  | 'withdrawal_requested'
+  | 'withdrawal_validated'
+  | 'stripe_payout_created'
+  | 'withdrawal_completed'
+  | 'withdrawal_failed';
+
+interface PayoutAuditEntry {
+  userId: string;
+  event: PayoutAuditEvent;
+  payoutMethod?: 'instant' | 'standard';
+  amountCents?: number;
+  currency?: string;
+  balanceAvailableCents?: number;
+  balanceInstantAvailableCents?: number;
+  stripePayoutId?: string | null;
+  stripeConnectAccountId?: string | null;
+  idempotencyKey?: string | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  detail?: Record<string, unknown>;
+}
+
+/**
+ * Best-effort audit write. Deliberately never throws and never blocks the
+ * payout: losing an audit row is bad, but failing a payout that Stripe already
+ * accepted because we could not write a log line would be worse. Failures are
+ * logged loudly so they surface in monitoring.
+ */
+async function writePayoutAudit(
+  supabase: ReturnType<typeof createClient>,
+  entry: PayoutAuditEntry
+): Promise<void> {
+  try {
+    const { error } = await supabase.from('payout_audit_log').insert({
+      user_id: entry.userId,
+      event: entry.event,
+      payout_method: entry.payoutMethod ?? null,
+      amount_cents: entry.amountCents ?? null,
+      currency: entry.currency ?? 'usd',
+      balance_available_cents: entry.balanceAvailableCents ?? null,
+      balance_instant_available_cents: entry.balanceInstantAvailableCents ?? null,
+      stripe_payout_id: entry.stripePayoutId ?? null,
+      stripe_connect_account_id: entry.stripeConnectAccountId ?? null,
+      idempotency_key: entry.idempotencyKey ?? null,
+      error_code: entry.errorCode ?? null,
+      error_message: entry.errorMessage ?? null,
+      detail: entry.detail ?? null,
+    });
+    if (error) {
+      console.error('[payout-audit] failed to write audit row', {
+        userId: entry.userId,
+        event: entry.event,
+        error: error.message,
+      });
+    }
+  } catch (auditError) {
+    console.error('[payout-audit] threw while writing audit row', {
+      userId: entry.userId,
+      event: entry.event,
+      error: (auditError as { message?: string })?.message,
+    });
+  }
+}
+
+interface ConnectBalanceSnapshot {
+  availableCents: number;
+  pendingCents: number;
+  instantAvailableCents: number;
+  currency: string;
+}
+
+/**
+ * Reads the spendable balances from a connected account.
+ *
+ * instant_available is summed from net_available — the amount NET of Stripe's
+ * instant payout fee — not from .amount. Stripe warns that using .amount
+ * breaks the integration once instant-payout application fees are enabled,
+ * because the gross figure is more than the account can actually pay out.
+ */
+async function readConnectBalance(
+  stripe: Stripe,
+  accountId: string,
+  currency: string
+): Promise<ConnectBalanceSnapshot> {
+  const balance = await stripe.balance.retrieve({ stripeAccount: accountId });
+
+  const sumFor = (buckets: Array<{ currency: string; amount: number }> | undefined): number =>
+    (buckets ?? [])
+      .filter(b => b.currency === currency)
+      .reduce((total, b) => total + (b.amount ?? 0), 0);
+
+  const instantAvailableCents = (balance.instant_available ?? [])
+    .filter(b => b.currency === currency)
+    .reduce(
+      (total, b) => total + (b.net_available?.reduce((s, n) => s + (n.amount ?? 0), 0) ?? 0),
+      0
+    );
+
+  return {
+    availableCents: sumFor(balance.available),
+    pendingCents: sumFor(balance.pending),
+    instantAvailableCents,
+    currency,
+  };
+}
+
+/**
+ * Maps a Stripe payouts.create failure to user-facing copy.
+ *
+ * Kept separate from mapStripeTransferError because the failure modes are
+ * genuinely different: a payout can fail for reasons a transfer cannot
+ * (instant ineligibility, destination card declined, daily instant limits),
+ * and conflating them produced misleading messages in the legacy flow.
+ */
+function mapStripePayoutError(err: {
+  code?: string;
+  type?: string;
+  message?: string;
+  raw?: { code?: string; message?: string };
+}): { error: string; code: string; status: number } {
+  const code = err?.code ?? err?.raw?.code ?? '';
+
+  switch (code) {
+    case 'balance_insufficient':
+      return {
+        error:
+          'Your Stripe balance no longer covers this amount. It may have changed since this screen loaded — refresh and try again.',
+        code: 'insufficient_balance',
+        status: 400,
+      };
+    case 'payouts_not_allowed':
+      return {
+        error:
+          'Payouts are not enabled on your account yet. Complete your payout setup and try again.',
+        code: 'payouts_disabled',
+        status: 400,
+      };
+    case 'instant_payouts_unsupported':
+    case 'instant_payouts_not_allowed':
+      return {
+        error:
+          'This card cannot receive instant payouts. Choose a different debit card or use a standard withdrawal.',
+        code: 'instant_unsupported',
+        status: 400,
+      };
+    case 'instant_payouts_limit_exceeded':
+      return {
+        error: 'You have reached the instant payout limit for today. Try again tomorrow or use a standard withdrawal.',
+        code: 'instant_limit_exceeded',
+        status: 429,
+      };
+    case 'invalid_request_error':
+      return {
+        error: 'We could not process this withdrawal. Please refresh and try again.',
+        code: 'payout_invalid_request',
+        status: 400,
+      };
+    default:
+      break;
+  }
+
+  if (err?.type === 'StripeConnectionError' || err?.type === 'StripeAPIError') {
+    return {
+      error: 'We could not reach Stripe to complete your withdrawal. No funds have moved — please try again.',
+      code: 'stripe_unavailable',
+      status: 503,
+    };
+  }
+
+  return {
+    error: 'We could not complete this withdrawal right now. No funds have moved — please try again.',
+    code: 'payout_failed',
+    status: 502,
+  };
+}
+
+interface NativePayoutParams {
+  stripe: Stripe;
+  supabase: ReturnType<typeof createClient>;
+  userId: string;
+  body: Record<string, unknown>;
+  method: 'instant' | 'standard';
+}
+
+/**
+ * Connect-native withdrawal — Phases 4 (instant) and 5 (standard).
+ *
+ * Spends the balance already held in the user's connected account:
+ *
+ *     Connect balance --payouts.create()--> bank account / debit card
+ *
+ * Contrast with the legacy path, which debited profiles.balance and then
+ * pushed a *fresh* platform Transfer into the connected account before paying
+ * out. That design could not spend money the account already held, which is
+ * precisely why Phase 2 earnings were unreachable.
+ *
+ * Invariants (enforced by tests):
+ *   - profiles.balance is never read as a funding source and never mutated.
+ *   - No stripe.transfers.create call. The money is already there.
+ *   - The connected account is resolved from the caller's JWT; the client
+ *     cannot name an account.
+ *
+ * Both methods share this one path so validation, idempotency, audit and error
+ * mapping cannot drift apart between instant and standard withdrawals.
+ */
+async function handleConnectNativePayout(params: NativePayoutParams): Promise<Response> {
+  const { stripe, supabase, userId, body, method } = params;
+  const currency = 'usd';
+  const log = `[connect/native-payout:${method}]`;
+
+  const validation = validateWithdrawalRequest(body as Parameters<typeof validateWithdrawalRequest>[0]);
+  if (!validation.ok) {
+    console.warn(`${log} validation failed`, { userId, code: validation.code });
+    return jsonResponse({ error: validation.error, code: validation.code }, 400);
+  }
+  const amount = validation.amount;
+  const amountCents = validation.amountCents;
+
+  if (method === 'instant') {
+    const instantAmountCheck = validateInstantAmount(amount);
+    if (!instantAmountCheck.ok) {
+      return jsonResponse({ error: instantAmountCheck.error, code: instantAmountCheck.code }, 400);
+    }
+  }
+
+  const idempotencyKey =
+    typeof body.idempotencyKey === 'string' && body.idempotencyKey.trim()
+      ? body.idempotencyKey.trim().slice(0, 200)
+      : undefined;
+
+  const requestedDestinationId =
+    typeof body.destinationId === 'string' && body.destinationId.trim()
+      ? body.destinationId.trim()
+      : typeof body.debitCardId === 'string' && body.debitCardId.trim()
+        ? body.debitCardId.trim()
+        : undefined;
+
+  await writePayoutAudit(supabase, {
+    userId,
+    event: 'withdrawal_requested',
+    payoutMethod: method,
+    amountCents,
+    currency,
+    idempotencyKey,
+    detail: { hasRequestedDestination: !!requestedDestinationId },
+  });
+
+  // Idempotency replay. Shares the (user_id, idempotency_key) unique index on
+  // wallet_transactions with the legacy routes; clients mint a fresh key per
+  // attempt. Returning the original result rather than paying out twice is the
+  // whole point — a retried request must never move money a second time.
+  if (idempotencyKey) {
+    const { data: existing } = await supabase
+      .from('wallet_transactions')
+      .select('id, stripe_payout_id, stripe_connect_account_id, amount, status, payout_method')
+      .eq('user_id', userId)
+      .eq('type', 'withdrawal')
+      .eq('idempotency_key', idempotencyKey)
+      .maybeSingle();
+
+    if (existing) {
+      const e = existing as WalletTransaction & {
+        stripe_connect_account_id?: string;
+        stripe_payout_id?: string | null;
+        payout_method?: string;
+      };
+      console.log(`${log} idempotent replay`, { userId, transactionId: e.id });
+      return jsonResponse({
+        payoutId: e.stripe_payout_id ?? null,
+        payoutMethod: e.payout_method ?? method,
+        status: e.status ?? 'pending',
+        amount: Math.abs(e.amount),
+        currency,
+        accountId: e.stripe_connect_account_id,
+        transactionId: e.id,
+        duplicate: true,
+        message: 'This withdrawal was already submitted and is being processed.',
+      });
+    }
+  }
+
+  // profiles.balance is deliberately NOT selected here. Under this
+  // architecture it is not a funding source, and reading it invites a future
+  // change to start gating on it again.
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('stripe_connect_account_id, stripe_connect_onboarded_at, account_status')
+    .eq('id', userId)
+    .single();
+
+  if (!profile) {
+    return jsonResponse({ error: 'Profile not found' }, 404);
+  }
+  const p = profile as Profile;
+
+  const accountEligibility = validateAccountEligibility(p.account_status);
+  if (!accountEligibility.ok) {
+    await writePayoutAudit(supabase, {
+      userId, event: 'withdrawal_failed', payoutMethod: method, amountCents, currency,
+      idempotencyKey, errorCode: accountEligibility.code,
+    });
+    return jsonResponse({ error: accountEligibility.error, code: accountEligibility.code }, 403);
+  }
+
+  if (!p.stripe_connect_account_id) {
+    await writePayoutAudit(supabase, {
+      userId, event: 'withdrawal_failed', payoutMethod: method, amountCents, currency,
+      idempotencyKey, errorCode: 'no_connect_account',
+    });
+    return jsonResponse(
+      {
+        error: 'You do not have a payout account yet. Set up payouts to withdraw your earnings.',
+        code: 'no_connect_account',
+      },
+      400
+    );
+  }
+
+  if (!p.stripe_connect_onboarded_at) {
+    await writePayoutAudit(supabase, {
+      userId, event: 'withdrawal_failed', payoutMethod: method, amountCents, currency,
+      idempotencyKey, errorCode: 'connect_not_onboarded',
+      stripeConnectAccountId: p.stripe_connect_account_id,
+    });
+    return jsonResponse(
+      {
+        error: 'Your payout setup is not finished yet. Complete onboarding before withdrawing.',
+        code: 'connect_not_onboarded',
+      },
+      400
+    );
+  }
+
+  const accountId = p.stripe_connect_account_id;
+
+  // Stripe caps instant payouts at 10 per day per connected account. Checked
+  // before touching Stripe so the user gets a clear message instead of a raw
+  // rejection mid-payout.
+  if (method === 'instant') {
+    const { count: instantPayoutsToday, error: instantCountError } = await supabase
+      .from('wallet_transactions')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('type', 'withdrawal')
+      .eq('payout_method', 'instant')
+      .in('status', ['completed', 'pending'])
+      .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+
+    if (instantCountError) {
+      return jsonResponse(
+        { error: 'We could not verify your Instant Cash Out eligibility. Please try again.', code: 'account_verification_failed' },
+        503
+      );
+    }
+    const dailyLimitCheck = checkInstantDailyLimit(instantPayoutsToday ?? 0);
+    if (!dailyLimitCheck.ok) {
+      await writePayoutAudit(supabase, {
+        userId, event: 'withdrawal_failed', payoutMethod: method, amountCents, currency,
+        idempotencyKey, errorCode: dailyLimitCheck.code, stripeConnectAccountId: accountId,
+      });
+      return jsonResponse({ error: dailyLimitCheck.error, code: dailyLimitCheck.code }, 429);
+    }
+  }
+
+  // Account state + live balance, in parallel — both are required before we
+  // can decide whether this withdrawal is allowed.
+  let account: Stripe.Account;
+  let balance: ConnectBalanceSnapshot;
+  try {
+    [account, balance] = await Promise.all([
+      stripe.accounts.retrieve(accountId),
+      readConnectBalance(stripe, accountId, currency),
+    ]);
+  } catch (balanceError) {
+    const errInfo = balanceError as { message?: string; code?: string };
+    console.error(`${log} failed to read account or balance`, { userId, accountId, error: errInfo?.message });
+    await writePayoutAudit(supabase, {
+      userId, event: 'withdrawal_failed', payoutMethod: method, amountCents, currency,
+      idempotencyKey, stripeConnectAccountId: accountId, errorCode: 'stripe_unavailable',
+      errorMessage: errInfo?.message ?? null,
+    });
+    return jsonResponse(
+      {
+        error: 'We could not reach Stripe to check your balance. No funds have moved — please try again.',
+        code: 'stripe_unavailable',
+      },
+      503
+    );
+  }
+
+  if (!account.payouts_enabled) {
+    await writePayoutAudit(supabase, {
+      userId, event: 'withdrawal_failed', payoutMethod: method, amountCents, currency,
+      idempotencyKey, stripeConnectAccountId: accountId, errorCode: 'payouts_disabled',
+      detail: { disabledReason: account.requirements?.disabled_reason ?? null },
+    });
+    return jsonResponse(
+      {
+        error: 'Payouts are currently disabled on your account. Review your payout details and try again.',
+        code: 'payouts_disabled',
+        disabledReason: account.requirements?.disabled_reason ?? null,
+        requirementsCurrentlyDue: account.requirements?.currently_due ?? [],
+      },
+      400
+    );
+  }
+
+  // Instant draws on instant_available (which includes not-yet-settled card
+  // funds); standard draws on available (settled only). Using the wrong one
+  // produces "insufficient funds" on money the user can genuinely access, or
+  // the reverse.
+  const spendableCents =
+    method === 'instant' ? balance.instantAvailableCents : balance.availableCents;
+
+  if (spendableCents <= 0) {
+    await writePayoutAudit(supabase, {
+      userId, event: 'withdrawal_failed', payoutMethod: method, amountCents, currency,
+      idempotencyKey, stripeConnectAccountId: accountId, errorCode: 'no_available_funds',
+      balanceAvailableCents: balance.availableCents,
+      balanceInstantAvailableCents: balance.instantAvailableCents,
+    });
+    return jsonResponse(
+      {
+        error:
+          method === 'instant'
+            ? 'You have no funds available for instant withdrawal right now. Recent earnings may still be clearing.'
+            : 'You have no funds available to withdraw right now. Recent earnings may still be clearing.',
+        code: 'no_available_funds',
+        availableCents: balance.availableCents,
+        pendingCents: balance.pendingCents,
+        instantAvailableCents: balance.instantAvailableCents,
+      },
+      400
+    );
+  }
+
+  if (amountCents > spendableCents) {
+    await writePayoutAudit(supabase, {
+      userId, event: 'withdrawal_failed', payoutMethod: method, amountCents, currency,
+      idempotencyKey, stripeConnectAccountId: accountId, errorCode: 'insufficient_balance',
+      balanceAvailableCents: balance.availableCents,
+      balanceInstantAvailableCents: balance.instantAvailableCents,
+    });
+    return jsonResponse(
+      {
+        error: 'That is more than you have available to withdraw.',
+        code: 'insufficient_balance',
+        availableCents: balance.availableCents,
+        pendingCents: balance.pendingCents,
+        instantAvailableCents: balance.instantAvailableCents,
+      },
+      400
+    );
+  }
+
+  // Destination. Instant requires an instant-eligible debit card. Standard
+  // omits `destination` unless one was explicitly requested, letting Stripe
+  // use the account's default external account.
+  let destinationId: string | undefined;
+  let destinationCard: InstantCardSummary | undefined;
+
+  if (method === 'instant') {
+    try {
+      const externalAccounts = await stripe.accounts.listExternalAccounts(accountId, {
+        object: 'card',
+        limit: 100,
+      });
+      const cards: InstantCardSummary[] = externalAccounts.data.map(c => ({
+        id: c.id,
+        brand: (c as unknown as { brand?: string }).brand ?? null,
+        last4: (c as unknown as { last4?: string }).last4 ?? null,
+        available_payout_methods:
+          (c as unknown as { available_payout_methods?: string[] }).available_payout_methods ?? null,
+      }));
+
+      const destination = resolveInstantDestination(cards, requestedDestinationId);
+      if (!destination.ok) {
+        await writePayoutAudit(supabase, {
+          userId, event: 'withdrawal_failed', payoutMethod: method, amountCents, currency,
+          idempotencyKey, stripeConnectAccountId: accountId, errorCode: destination.code,
+        });
+        return jsonResponse({ error: destination.error, code: destination.code }, 400);
+      }
+      destinationCard = destination.targetCard;
+      destinationId = destination.targetCard.id;
+    } catch (cardError) {
+      await writePayoutAudit(supabase, {
+        userId, event: 'withdrawal_failed', payoutMethod: method, amountCents, currency,
+        idempotencyKey, stripeConnectAccountId: accountId, errorCode: 'account_verification_failed',
+        errorMessage: (cardError as { message?: string })?.message ?? null,
+      });
+      return jsonResponse(
+        { error: 'We could not verify your payout card. No funds have moved — please try again.', code: 'account_verification_failed' },
+        503
+      );
+    }
+  } else {
+    destinationId = requestedDestinationId;
+  }
+
+  await writePayoutAudit(supabase, {
+    userId,
+    event: 'withdrawal_validated',
+    payoutMethod: method,
+    amountCents,
+    currency,
+    idempotencyKey,
+    stripeConnectAccountId: accountId,
+    balanceAvailableCents: balance.availableCents,
+    balanceInstantAvailableCents: balance.instantAvailableCents,
+    detail: { destinationId: destinationId ?? null },
+  });
+
+  // The payout itself. This is the ONLY money movement in this handler: funds
+  // already in the connected account go out to the user's bank or card.
+  let payout: Stripe.Payout;
+  try {
+    payout = await stripe.payouts.create(
+      {
+        amount: amountCents,
+        currency,
+        method,
+        ...(destinationId ? { destination: destinationId } : {}),
+        metadata: {
+          user_id: userId,
+          purpose: method === 'instant' ? 'instant_cash_out' : 'standard_withdrawal',
+          ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
+        },
+      },
+      {
+        stripeAccount: accountId,
+        // Scoped by user, key, amount and method so a retry of the same
+        // request replays, while a genuinely different request does not
+        // collide with it.
+        idempotencyKey: idempotencyKey
+          ? `native_payout_${method}_${userId}_${idempotencyKey}_${amountCents}`
+          : undefined,
+      }
+    );
+  } catch (payoutError) {
+    const errInfo = payoutError as { code?: string; type?: string; message?: string };
+    console.error(`${log} payout creation failed`, {
+      userId, accountId, amountCents, stripeCode: errInfo?.code, message: errInfo?.message,
+    });
+    await writePayoutAudit(supabase, {
+      userId, event: 'withdrawal_failed', payoutMethod: method, amountCents, currency,
+      idempotencyKey, stripeConnectAccountId: accountId,
+      errorCode: errInfo?.code ?? 'payout_failed',
+      errorMessage: errInfo?.message ?? null,
+      balanceAvailableCents: balance.availableCents,
+      balanceInstantAvailableCents: balance.instantAvailableCents,
+    });
+    // No compensating action is needed or correct here: nothing was debited
+    // anywhere. The money never left the connected account.
+    const mapped = mapStripePayoutError(errInfo);
+    return jsonResponse({ error: mapped.error, code: mapped.code }, mapped.status);
+  }
+
+  await writePayoutAudit(supabase, {
+    userId,
+    event: 'stripe_payout_created',
+    payoutMethod: method,
+    amountCents,
+    currency,
+    idempotencyKey,
+    stripeConnectAccountId: accountId,
+    stripePayoutId: payout.id,
+    detail: { status: payout.status, arrivalDate: payout.arrival_date ?? null },
+  });
+
+  const estimatedFeeCents = method === 'instant' ? estimateInstantFeeCents(amountCents) : 0;
+
+  // History record. Status mirrors Stripe's own payout status rather than
+  // being assumed 'completed' — a payout is 'pending' until it lands, and the
+  // payout.paid / payout.failed webhooks advance it from here.
+  const { data: transaction, error: txError } = await supabase
+    .from('wallet_transactions')
+    .insert({
+      user_id: userId,
+      type: 'withdrawal',
+      amount: -amount,
+      description:
+        method === 'instant' ? 'Instant Cash Out to debit card' : 'Withdrawal to bank account',
+      status: 'pending',
+      payout_method: method,
+      stripe_payout_id: payout.id,
+      stripe_connect_account_id: accountId,
+      idempotency_key: idempotencyKey ?? null,
+      instant_fee_amount: method === 'instant' ? estimatedFeeCents / 100 : null,
+      metadata: {
+        payout_id: payout.id,
+        payout_status: payout.status,
+        arrival_date: payout.arrival_date ?? null,
+        idempotency_key: idempotencyKey ?? null,
+        connect_native: true,
+        ...(destinationCard
+          ? {
+              destination_card_id: destinationCard.id,
+              destination_card_last4: destinationCard.last4 ?? null,
+              destination_card_brand: destinationCard.brand ?? null,
+            }
+          : { destination_id: destinationId ?? null }),
+        ...(method === 'instant' ? { estimated_fee_cents: estimatedFeeCents } : {}),
+      },
+    })
+    .select()
+    .single();
+
+  if (txError) {
+    // A concurrent request with the same key won the insert. Stripe's own
+    // idempotency means both calls resolved to the SAME payout, so there is
+    // nothing to reverse — report the winner.
+    if ((txError as { code?: string }).code === '23505' && idempotencyKey) {
+      const { data: winner } = await supabase
+        .from('wallet_transactions')
+        .select('id, stripe_payout_id, status, payout_method')
+        .eq('user_id', userId)
+        .eq('type', 'withdrawal')
+        .eq('idempotency_key', idempotencyKey)
+        .maybeSingle();
+
+      const w = winner as (WalletTransaction & { stripe_payout_id?: string; payout_method?: string }) | null;
+      return jsonResponse({
+        payoutId: w?.stripe_payout_id ?? payout.id,
+        payoutMethod: w?.payout_method ?? method,
+        status: w?.status ?? payout.status,
+        amount,
+        currency,
+        accountId,
+        transactionId: w?.id,
+        duplicate: true,
+        message: 'This withdrawal was already submitted and is being processed.',
+      });
+    }
+
+    logCritical('connect-native payout succeeded but transaction record failed — reconciliation required', {
+      userId, payoutId: payout.id, amountCents, error: txError,
+    });
+    // The payout is real and the audit log has it; only the history row is
+    // missing, so this is reported as success with a caveat.
+    return jsonResponse({
+      payoutId: payout.id,
+      payoutMethod: method,
+      status: payout.status,
+      amount,
+      currency,
+      accountId,
+      arrivalDate: payout.arrival_date ?? null,
+      message: 'Withdrawal initiated.',
+      warning: 'Transaction history may take a moment to update.',
+    });
+  }
+
+  await writePayoutAudit(supabase, {
+    userId,
+    event: 'withdrawal_completed',
+    payoutMethod: method,
+    amountCents,
+    currency,
+    idempotencyKey,
+    stripeConnectAccountId: accountId,
+    stripePayoutId: payout.id,
+    detail: { transactionId: (transaction as WalletTransaction).id, status: payout.status },
+  });
+
+  console.log(`${log} payout created`, { userId, payoutId: payout.id, amountCents });
+
+  return jsonResponse({
+    payoutId: payout.id,
+    payoutMethod: method,
+    status: payout.status,
+    amount,
+    currency,
+    accountId,
+    transactionId: (transaction as WalletTransaction).id,
+    arrivalDate: payout.arrival_date ?? null,
+    ...(method === 'instant' ? { estimatedFee: estimatedFeeCents / 100 } : {}),
+    remainingAvailableCents: Math.max(0, spendableCents - amountCents),
+    message:
+      method === 'instant'
+        ? 'Instant Cash Out sent. Funds typically arrive within minutes.'
+        : 'Withdrawal sent. Funds typically arrive in 1-2 business days.',
+  });
+}
+
 type InstantDestinationResolution =
   | { ok: true; targetCard: InstantCardSummary }
   | { ok: false; error: string; code: string };
@@ -458,6 +1155,15 @@ const CONNECT_MANUAL_PAYOUTS = Deno.env.get('CONNECT_MANUAL_PAYOUTS') === 'true'
 const manualPayoutSettings = CONNECT_MANUAL_PAYOUTS
   ? { settings: { payouts: { schedule: { interval: 'manual' as const } } } }
   : {};
+
+// Routes withdrawals through the Connect-native payout path: spend the money
+// already sitting in the user's connected account, instead of debiting
+// profiles.balance and pushing a fresh platform Transfer across first.
+//
+// Off by default. While off, /instant-payout keeps its legacy behaviour
+// byte-for-byte and /payout refuses, so this flag is also the rollback lever
+// (docs/payments/CONNECT_NATIVE_PAYOUT_ARCHITECTURE.md §8).
+const CONNECT_NATIVE_PAYOUTS = Deno.env.get('CONNECT_NATIVE_PAYOUTS') === 'true';
 
 function legacyTransferRetiredResponse() {
   return jsonResponse(
@@ -1598,6 +2304,29 @@ Deno.serve(async (req: Request) => {
     // scope to touch here) — it duplicates the platform-Transfer step but
     // never shares code paths with /transfer, so nothing about that route's
     // existing behavior changes.
+    // POST /connect/payout — Connect-native standard withdrawal (Phase 5).
+    // Pays out the settled balance already held in the connected account, so
+    // the user never has to wait on Stripe's automatic schedule.
+    if (subPath === '/payout') {
+      if (!CONNECT_NATIVE_PAYOUTS) {
+        return jsonResponse(
+          {
+            error: 'This withdrawal method is not available yet. Please use the standard withdrawal option.',
+            code: 'native_payouts_disabled',
+          },
+          503
+        );
+      }
+      const payoutBody = await req.json();
+      return await handleConnectNativePayout({
+        stripe,
+        supabase,
+        userId,
+        body: payoutBody as Record<string, unknown>,
+        method: 'standard',
+      });
+    }
+
     if (subPath === '/instant-payout') {
       if (!INSTANT_CASHOUT_ENABLED) {
         return jsonResponse(
@@ -1607,6 +2336,20 @@ Deno.serve(async (req: Request) => {
           },
           503
         );
+      }
+
+      // Connect-native path (Phase 4): spend the connected account's own
+      // balance. Everything below this branch is the legacy ledger-backed
+      // implementation, kept intact so the flag is a true rollback lever.
+      if (CONNECT_NATIVE_PAYOUTS) {
+        const nativeBody = await req.json();
+        return await handleConnectNativePayout({
+          stripe,
+          supabase,
+          userId,
+          body: nativeBody as Record<string, unknown>,
+          method: 'instant',
+        });
       }
 
       const body = await req.json();
