@@ -246,6 +246,39 @@ describe('connect edge function — route wiring', () => {
     );
   });
 
+  test('GET /connect/payouts sources the list from Stripe, not the ledger', () => {
+    const routeStart = connectSource.indexOf("if (req.method === 'GET' && isPayoutsPath)");
+    expect(routeStart).toBeGreaterThan(-1);
+    const route = connectSource.slice(routeStart, routeStart + 4500);
+
+    // Stripe is the authority on what happened to the money.
+    expect(route).toContain('stripe.payouts.list');
+    // Local rows are matched in only for context and drift detection, and the
+    // lookup must be scoped to the caller.
+    expect(route).toMatch(/\.eq\(\s*'user_id'\s*,\s*userId\s*\)/);
+    expect(route).toContain('reconciled');
+    expect(route).toContain('statusMatchesLedger');
+  });
+
+  test('payout history is scoped to the caller and takes no account id from the client', () => {
+    const routeStart = connectSource.indexOf("if (req.method === 'GET' && isPayoutsPath)");
+    const route = connectSource.slice(routeStart, routeStart + 4500);
+    expect(route).toMatch(/\.eq\(\s*'id'\s*,\s*userId\s*\)/);
+    expect(route).not.toMatch(/searchParams\.get\('accountId'\)/);
+    expect(route).toContain('stripeAccount: accountId');
+  });
+
+  test('in_transit maps to pending, never to completed', () => {
+    const mapBody = extractFunctionBody(connectSource, 'normalizePayoutStatusForLedger');
+    // Treating in-flight money as settled is what let the legacy flow record
+    // withdrawals as completed before they had actually landed.
+    const inTransitIdx = mapBody.indexOf("case 'in_transit':");
+    expect(inTransitIdx).toBeGreaterThan(-1);
+    const afterInTransit = mapBody.slice(inTransitIdx, inTransitIdx + 80);
+    expect(afterInTransit).toContain("return 'pending'");
+    expect(mapBody).toContain("case 'paid':");
+  });
+
   test('GET /connect/balance never reads the ledger', () => {
     const balanceRouteStart = connectSource.indexOf("if (req.method === 'GET' && isBalancePath)");
     expect(balanceRouteStart).toBeGreaterThan(-1);

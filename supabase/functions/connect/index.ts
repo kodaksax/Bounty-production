@@ -405,6 +405,34 @@ async function writePayoutAudit(
   }
 }
 
+/**
+ * Projects a Stripe payout status onto the vocabulary wallet_transactions
+ * uses, so the two can be compared without a mismatch being reported every
+ * time the words simply differ.
+ *
+ * Stripe: pending | in_transit | paid | failed | canceled
+ * Ledger: pending | completed | failed | cancelled
+ *
+ * in_transit maps to 'pending' deliberately — the money is still in flight,
+ * and treating it as complete is what let the legacy flow mark withdrawals
+ * 'completed' before they had actually landed.
+ */
+function normalizePayoutStatusForLedger(stripeStatus: string): string {
+  switch (stripeStatus) {
+    case 'paid':
+      return 'completed';
+    case 'pending':
+    case 'in_transit':
+      return 'pending';
+    case 'failed':
+      return 'failed';
+    case 'canceled':
+      return 'cancelled';
+    default:
+      return stripeStatus;
+  }
+}
+
 interface ConnectBalanceSnapshot {
   availableCents: number;
   pendingCents: number;
@@ -1224,9 +1252,10 @@ Deno.serve(async (req: Request) => {
   const isBankAccountsPath = subPath === '/bank-accounts' || subPath.startsWith('/bank-accounts/');
   const isDebitCardsPath = subPath === '/debit-cards' || subPath.startsWith('/debit-cards/');
   const isBalancePath = subPath === '/balance';
+  const isPayoutsPath = subPath === '/payouts';
   if (
     req.method !== 'POST' &&
-    !(req.method === 'GET' && (isBankAccountsPath || isDebitCardsPath || isBalancePath)) &&
+    !(req.method === 'GET' && (isBankAccountsPath || isDebitCardsPath || isBalancePath || isPayoutsPath)) &&
     !(req.method === 'DELETE' && (isBankAccountsPath || isDebitCardsPath))
   ) {
     return jsonResponse({ error: 'Method not allowed' }, 405);
@@ -2304,6 +2333,127 @@ Deno.serve(async (req: Request) => {
     // scope to touch here) — it duplicates the platform-Transfer step but
     // never shares code paths with /transfer, so nothing about that route's
     // existing behavior changes.
+    // GET /connect/payouts — payout history read straight from Stripe (Phase 6).
+    //
+    // Stripe is the authority on what actually happened to the money, so the
+    // list itself comes from stripe.payouts.list rather than from
+    // wallet_transactions. The local rows are then matched in by payout id
+    // purely to attach our own context (description, bounty linkage) and to
+    // surface reconciliation drift: a payout Stripe knows about with no local
+    // row, or a local row Stripe has no record of, is exactly the kind of
+    // divergence the legacy ledger-derived history could never show.
+    if (req.method === 'GET' && isPayoutsPath) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('stripe_connect_account_id')
+        .eq('id', userId)
+        .single();
+
+      const accountId = (profile as { stripe_connect_account_id?: string } | null)
+        ?.stripe_connect_account_id;
+
+      if (!accountId) {
+        return jsonResponse({ payouts: [], hasConnectAccount: false, unreconciled: [] });
+      }
+
+      const limitParam = Number(url.searchParams.get('limit') ?? '25');
+      const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 100) : 25;
+
+      let stripePayouts: Stripe.ApiList<Stripe.Payout>;
+      try {
+        stripePayouts = await stripe.payouts.list({ limit }, { stripeAccount: accountId });
+      } catch (listError) {
+        console.error('[connect/payouts] failed to list payouts', {
+          userId,
+          accountId,
+          error: (listError as { message?: string })?.message,
+        });
+        return jsonResponse(
+          { error: 'We could not load your withdrawal history from Stripe. Please try again.', code: 'stripe_unavailable' },
+          503
+        );
+      }
+
+      const payoutIds = stripePayouts.data.map(p => p.id);
+      const { data: localRows } = await supabase
+        .from('wallet_transactions')
+        .select('id, stripe_payout_id, description, status, payout_method, created_at, bounty_id')
+        .eq('user_id', userId)
+        .eq('type', 'withdrawal')
+        .in('stripe_payout_id', payoutIds.length > 0 ? payoutIds : ['__none__']);
+
+      const localByPayoutId = new Map<string, Record<string, unknown>>();
+      for (const row of (localRows ?? []) as Array<Record<string, unknown>>) {
+        const pid = row.stripe_payout_id;
+        if (typeof pid === 'string') localByPayoutId.set(pid, row);
+      }
+
+      const payouts = stripePayouts.data.map(p => {
+        const local = localByPayoutId.get(p.id);
+        return {
+          payoutId: p.id,
+          // Stripe's status is authoritative: pending | in_transit | paid |
+          // failed | canceled. The local row's status is reported separately
+          // rather than merged, so drift stays visible instead of being
+          // silently resolved in favour of one side.
+          status: p.status,
+          amountCents: p.amount,
+          currency: p.currency,
+          method: p.method,
+          arrivalDate: p.arrival_date ?? null,
+          createdAt: p.created,
+          failureCode: p.failure_code ?? null,
+          failureMessage: p.failure_message ?? null,
+          destinationId: typeof p.destination === 'string' ? p.destination : (p.destination?.id ?? null),
+          // Reconciliation fields.
+          ledgerStatus: (local?.status as string) ?? null,
+          transactionId: (local?.id as string) ?? null,
+          bountyId: (local?.bounty_id as string) ?? null,
+          description: (local?.description as string) ?? null,
+          reconciled: !!local,
+          statusMatchesLedger: local
+            ? normalizePayoutStatusForLedger(p.status) === (local.status as string)
+            : null,
+        };
+      });
+
+      // Local withdrawal rows carrying a payout id Stripe did not return.
+      // Usually just older than the page requested; genuinely orphaned rows
+      // are a real reconciliation finding, which Phase 8 alerts on.
+      const { data: recentLocal } = await supabase
+        .from('wallet_transactions')
+        .select('id, stripe_payout_id, status, amount, created_at')
+        .eq('user_id', userId)
+        .eq('type', 'withdrawal')
+        .not('stripe_payout_id', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      const stripeIdSet = new Set(payoutIds);
+      const unreconciled = ((recentLocal ?? []) as Array<Record<string, unknown>>)
+        .filter(r => typeof r.stripe_payout_id === 'string' && !stripeIdSet.has(r.stripe_payout_id as string))
+        .map(r => ({
+          transactionId: r.id as string,
+          payoutId: r.stripe_payout_id as string,
+          ledgerStatus: r.status as string,
+          createdAt: r.created_at as string,
+        }));
+
+      console.log('[connect/payouts] history snapshot', {
+        userId,
+        accountId,
+        stripeCount: payouts.length,
+        unreconciledCount: unreconciled.length,
+      });
+
+      return jsonResponse({
+        payouts,
+        hasConnectAccount: true,
+        unreconciled,
+        lastUpdated: new Date().toISOString(),
+      });
+    }
+
     // POST /connect/payout — Connect-native standard withdrawal (Phase 5).
     // Pays out the settled balance already held in the connected account, so
     // the user never has to wait on Stripe's automatic schedule.
