@@ -453,6 +453,14 @@ ALTER TABLE public.admin_action_log
   DROP CONSTRAINT IF EXISTS admin_action_log_action_type_check;
 ALTER TABLE public.admin_action_log
   ADD CONSTRAINT admin_action_log_action_type_check
-  CHECK (action_type IN ('force_retry_withdrawal', 'manual_balance_adjustment', 'account_status_change'));
+  CHECK (action_type IN (
+    'force_retry_withdrawal',
+    'manual_balance_adjustment',
+    'mark_externally_settled_withdrawal',
+    'reverse_stripe_transfer',
+    'run_stripe_balance_sync',
+    'acknowledge_reconciliation_finding',
+    'account_status_change'
+  ));
 
 NOTIFY pgrst, 'reload schema';

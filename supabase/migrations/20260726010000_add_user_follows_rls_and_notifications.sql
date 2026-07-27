@@ -20,6 +20,32 @@
 -- Depends on public.is_account_active() from
 -- 20260726000000_enforce_account_status.sql (must apply first): a
 -- suspended/banned user should not be able to follow anyone either.
+--
+-- CORRECTION (discovered while deploying): despite being defined in the
+-- tracked 20251001_baseline_schema.sql and that migration showing as applied
+-- in Supabase's own migration ledger, public.user_follows never actually
+-- existed live -- unlike blocked_users from the same file/migration, which
+-- does exist. The baseline file must have been edited to add this table
+-- definition sometime after the migration had already run, with no follow-up
+-- migration to create it. Adding the CREATE TABLE here (idempotent, matches
+-- the baseline definition exactly) so this migration is self-contained and
+-- fresh environments don't silently diverge from prod the same way.
+
+-- ============================================================================
+-- 0. Table (see CORRECTION note above -- never actually created live)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS public.user_follows (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  follower_id  UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  following_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (follower_id, following_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_follows_follower_id  ON public.user_follows (follower_id);
+CREATE INDEX IF NOT EXISTS idx_user_follows_following_id ON public.user_follows (following_id);
+
+ALTER TABLE public.user_follows ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================================
 -- 1. Self-follow guard
