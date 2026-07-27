@@ -57,7 +57,7 @@ export interface ButtonProps
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
 const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, ButtonProps>(
-  ({ className, variant, size, disabled, loading, onPress, children, accessibilityLabel, accessibilityHint, ...props }, ref) => {
+  ({ className, variant, size, disabled, loading, onPress, children, accessibilityLabel, accessibilityHint, style, ...props }, ref) => {
     const { theme } = useAppThemeContext();
     const { triggerHaptic } = useHapticFeedback();
     const { createSpring, createTiming } = useAccessibleAnimation();
@@ -123,6 +123,13 @@ const Button = React.forwardRef<React.ComponentRef<typeof TouchableOpacity>, But
           size && size !== "default" && buttonStyles[size],
           isDisabled && buttonStyles.disabled,
           isFocused && buttonStyles.focused,
+          // Caller-supplied style is merged here (not via the {...props} spread
+          // below) so it augments the variant styles per-property instead of
+          // replacing the whole array. Previously a caller passing e.g.
+          // `style={{ width: '100%' }}` (see FeedbackModal's OK button) wiped the
+          // variant's background, leaving off-white text on a light surface —
+          // invisible in light mode.
+          style,
           {
             transform: [{ scale: scaleAnim }],
           },
