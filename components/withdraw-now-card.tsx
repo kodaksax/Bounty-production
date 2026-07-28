@@ -229,12 +229,12 @@ export function WithdrawNowCard({ onWithdrawComplete }: WithdrawNowCardProps) {
       <Text style={s.arrivalText}>Estimated arrival: 1-2 business days</Text>
 
       <TouchableOpacity
-        style={[s.primaryButton, (payout.isProcessing || !canWithdraw) && s.buttonDisabled]}
+        style={[s.primaryButton, (payout.isProcessing || !canWithdraw || hasRequested) && s.buttonDisabled]}
         onPress={handleWithdraw}
         disabled={payout.isProcessing || !canWithdraw || hasRequested}
         accessibilityRole="button"
         accessibilityLabel={`Withdraw ${formatCurrencyCents(availableCents, balance.currency)} now`}
-        accessibilityState={{ disabled: payout.isProcessing || !canWithdraw }}
+        accessibilityState={{ disabled: payout.isProcessing || !canWithdraw || hasRequested }}
       >
         {payout.isProcessing ? (
           <View style={s.processingRow}>

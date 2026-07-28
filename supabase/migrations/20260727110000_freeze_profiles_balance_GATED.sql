@@ -58,14 +58,14 @@ BEGIN
   END IF;
 
   IF current_setting('app.allow_balance_mutation', true) = 'on' THEN
-    RAISE WARNING 'profiles.balance mutated under explicit override for user %: % -> %',
-      NEW.id, OLD.balance, NEW.balance;
+    RAISE WARNING 'profiles.balance/balance_on_hold mutated under explicit override for user %: balance % -> %, balance_on_hold % -> %',
+      NEW.id, OLD.balance, NEW.balance, OLD.balance_on_hold, NEW.balance_on_hold;
     RETURN NEW;
   END IF;
 
   RAISE EXCEPTION
-    'profiles.balance is frozen (Phase 7 Stage A). Stripe Connect is the source of truth for withdrawable funds. Attempted % -> % for user %.',
-    OLD.balance, NEW.balance, NEW.id
+    'profiles.balance/balance_on_hold is frozen (Phase 7 Stage A). Stripe Connect is the source of truth for withdrawable funds. Attempted balance % -> %, balance_on_hold % -> % for user %.',
+    OLD.balance, NEW.balance, OLD.balance_on_hold, NEW.balance_on_hold, NEW.id
     USING ERRCODE = 'check_violation',
           HINT = 'This code path still writes the legacy ledger and must be migrated. For deliberate admin correction, set app.allow_balance_mutation=on within the transaction.';
 END;

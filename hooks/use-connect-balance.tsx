@@ -184,7 +184,7 @@ export function useConnectBalance(
         inFlightRef.current = null;
       }
     },
-    [accessToken]
+    [accessToken, enabled]
   );
 
   // Reset when the signed-in user changes so one account's balance can never

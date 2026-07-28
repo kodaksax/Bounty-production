@@ -1,6 +1,6 @@
 # Stripe Connect Native Payout Architecture
 
-**Status:** Design — not yet implemented
+**Status:** Implemented — flag-gated, not enabled in production
 **Author:** Engineering
 **Date:** 2026-07-26
 **Supersedes payout portions of:** `WITHDRAWAL_SYSTEM_RUNBOOK.md`, `BOUNTY_WITHDRAWAL_TECHNICAL_SPECIFICATION.md`
