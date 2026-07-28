@@ -416,6 +416,9 @@ jest.mock('expo-application', () => ({
   getInstallationTimeAsync: jest.fn().mockResolvedValue(new Date()),
   getLastUpdateTimeAsync: jest.fn().mockResolvedValue(new Date()),
   getIosIdForVendorAsync: jest.fn().mockResolvedValue('test-vendor-id'),
+  // Android-only in the real module; resolves empty here so suites that don't
+  // care about install attribution behave as "no referrer".
+  getInstallReferrerAsync: jest.fn().mockResolvedValue(''),
 }));
 
 // Mock expo-file-system (including legacy export)

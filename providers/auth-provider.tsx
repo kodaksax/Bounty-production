@@ -14,6 +14,7 @@ import {
     useState,
 } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
+import { performMarketingAttribution } from '../services/marketingAttribution';
 import { clearBountyDraftForUser } from '../app/hooks/useBountyDraft';
 import { clearAllSessionData, incrementStartupTimeoutCount, resetStartupTimeoutCount } from '../lib/auth-session-storage';
 import { analyticsService } from '../lib/services/analytics-service';
@@ -807,6 +808,30 @@ export default function AuthProvider({ children }: PropsWithChildren) {
                 reportWarning('[AuthProvider] Error checking deferred push registration flag:', e);
               }
             })();
+          }
+
+          // Marketing install attribution — runs once per user, on the first
+          // authenticated session after signup/login. INITIAL_SESSION covers
+          // cold starts where the session is restored rather than created.
+          //
+          // Deferred off the auth lock and never awaited: the service persists
+          // its own once-per-user record, swallows every failure, and resolves
+          // (never rejects) so this can neither block nor break sign-in.
+          if (_event === 'SIGNED_IN' || _event === 'INITIAL_SESSION') {
+            const attributedUser = session?.user;
+            const attributionToken = session?.access_token;
+            if (attributedUser?.id && attributionToken) {
+              void Promise.resolve()
+                .then(() =>
+                  performMarketingAttribution({
+                    userId: attributedUser.id,
+                    accessToken: attributionToken,
+                  })
+                )
+                .catch(e => {
+                  reportWarning('[AuthProvider] Marketing attribution failed (non-critical):', e);
+                });
+            }
           }
 
           logAuthLifecycleEvent({
