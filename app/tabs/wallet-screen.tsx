@@ -103,16 +103,20 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   // Refresh wallet data from API when user is authenticated
   useEffect(() => {
     if (hasValidSession) {
-      refreshFromApi(session!.access_token);
+      // Silent so it doesn't flash the balance skeleton, and keyed on the
+      // stable access-token string rather than the whole `session` object —
+      // the object's identity churns on every token refresh / re-render, which
+      // was re-firing this refresh (and the flash) repeatedly.
+      refreshFromApi(session!.access_token, { silent: true });
     }
-  }, [session, hasValidSession, refreshFromApi]);
+  }, [hasValidSession, session?.access_token, refreshFromApi]);
 
   // Safety net alongside the realtime balance subscription in WalletProvider:
   // re-sync if the app was backgrounded long enough that a realtime event
   // could plausibly have been missed (e.g. socket dropped while backgrounded).
   useForegroundRefresh(() => {
     if (hasValidSession) {
-      refreshFromApi(session!.access_token);
+      refreshFromApi(session!.access_token, { silent: true });
     }
   });
 
@@ -120,7 +124,9 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
     if (!hasValidSession) return;
     setRefreshing(true);
     try {
-      await refreshFromApi(session!.access_token);
+      // Silent: the RefreshControl already shows its own spinner, so we don't
+      // also flip the balance skeleton.
+      await refreshFromApi(session!.access_token, { silent: true });
     } finally {
       setRefreshing(false);
     }
@@ -133,7 +139,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
     const hasValidSession = session?.access_token && session?.user?.id &&
       session.user.id !== '00000000-0000-0000-0000-000000000001';
     if (hasValidSession) {
-      refreshFromApi(session.access_token);
+      refreshFromApi(session.access_token, { silent: true });
     }
   };
 
