@@ -54,15 +54,37 @@ let cachedDeviceLocale: string | null = null
 
 export function getDeviceLocale(): string {
   if (cachedDeviceLocale) return cachedDeviceLocale
+  cachedDeviceLocale = resolveDeviceLocale()
+  return cachedDeviceLocale
+}
+
+function resolveDeviceLocale(): string {
   try {
-    // Lazily required so non-Expo consumers (Jest, edge functions) don't need
-    // the native module present just to format a number.
-    const { getLocales } = require("expo-localization")
-    cachedDeviceLocale = getLocales()?.[0]?.languageTag || "en-US"
+    // Ask expo-modules-core for the native module rather than importing
+    // expo-localization: its entry point calls requireNativeModule() at module
+    // scope, which throws when the app binary predates the dependency. Because
+    // this require happens lazily (mid-render, not during bundle startup),
+    // Metro routes that throw through ErrorUtils.reportFatalError, so it
+    // reaches the global handler as a fatal even though we catch it here.
+    // requireOptionalNativeModule() returns null instead of throwing.
+    const { requireOptionalNativeModule } = require("expo-modules-core")
+    const languageTag = requireOptionalNativeModule("ExpoLocalization")
+      ?.getLocales?.()?.[0]?.languageTag
+    if (languageTag) return languageTag
   } catch {
-    cachedDeviceLocale = "en-US"
+    // Non-Expo consumers (Jest, edge functions) have no expo-modules-core.
   }
-  return cachedDeviceLocale as string
+
+  // Web, and any platform without the native module: Hermes ships full ICU, so
+  // Intl still knows the system locale.
+  try {
+    const intlLocale = new Intl.DateTimeFormat().resolvedOptions().locale
+    if (intlLocale) return intlLocale
+  } catch {
+    // Intl unavailable — fall through.
+  }
+
+  return "en-US"
 }
 
 // Converts a theme hex color to an rgba() string at the given alpha (0-1).
