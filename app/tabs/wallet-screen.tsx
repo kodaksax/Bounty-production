@@ -131,6 +131,9 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   useForegroundRefresh(() => {
     if (hasValidSession) {
       refreshFromApi(session!.access_token, { silent: true });
+      if (balanceDisplay.source === 'connect') {
+        refreshBalance({ force: true });
+      }
     }
   });
 
@@ -140,11 +143,16 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
     try {
       // Silent: the RefreshControl already shows its own spinner, so we don't
       // also flip the balance skeleton.
-      await refreshFromApi(session!.access_token, { silent: true });
+      await Promise.all([
+        refreshFromApi(session!.access_token, { silent: true }),
+        balanceDisplay.source === 'connect'
+          ? refreshBalance({ force: true })
+          : Promise.resolve(),
+      ]);
     } finally {
       setRefreshing(false);
     }
-  }, [hasValidSession, session, refreshFromApi, refreshBalance]);
+  }, [balanceDisplay.source, hasValidSession, session, refreshFromApi, refreshBalance]);
 
   const handleAddMoney = async (amount: number) => {
     // AddMoneyScreen now handles Stripe integration internally
