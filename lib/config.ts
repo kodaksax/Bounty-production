@@ -53,6 +53,10 @@ const paymentArchitectureVersion = resolveWithFallback(
   'EXPO_PUBLIC_PAYMENT_ARCHITECTURE_VERSION',
   'PAYMENT_ARCHITECTURE_VERSION'
 );
+const walletBalanceSource = resolveWithFallback(
+  'EXPO_PUBLIC_WALLET_BALANCE_SOURCE',
+  'WALLET_BALANCE_SOURCE'
+);
 
 /**
  * Safe diagnostics — records only which source was used per key.
@@ -94,6 +98,19 @@ export const config = {
     // always keep whatever version they were created with (read from the
     // bounty row itself; see lib/utils/payment-architecture.ts).
     paymentArchitectureVersion: paymentArchitectureVersion.value || '1',
+
+    // Where the wallet reads the user's withdrawable balance from.
+    //
+    //   'ledger'  — legacy: GET /wallet/balance, backed by profiles.balance
+    //   'connect' — live Stripe Connect account balance (GET /connect/balance)
+    //
+    // Defaults to 'ledger' so the switch is opt-in, and doubles as the
+    // one-flag rollback if the live Stripe read misbehaves in production.
+    // Under the Phase 2 architecture only 'connect' reports money the user can
+    // actually withdraw, because v2 releases never credit profiles.balance —
+    // see docs/payments/CONNECT_NATIVE_PAYOUT_ARCHITECTURE.md.
+    walletBalanceSource:
+      walletBalanceSource.value === 'connect' ? 'connect' : 'ledger',
   },
 } as const;
 
