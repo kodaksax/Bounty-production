@@ -79,7 +79,7 @@ interface WalletContextValue {
   ) => Promise<boolean>; // false if insufficient
   setBalance: (amount: number) => void;
   refresh: () => Promise<void>;
-  refreshFromApi: (accessToken?: string) => Promise<void>; // Refresh from API with auth token
+  refreshFromApi: (accessToken?: string, options?: { silent?: boolean }) => Promise<void>; // Refresh from API with auth token; pass { silent: true } for background refreshes that must not toggle the loading flag
   transactions: WalletTransactionRecord[];
   logTransaction: (
     tx: Omit<WalletTransactionRecord, 'id' | 'date'> & { date?: Date }
@@ -170,13 +170,21 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Refresh wallet data from the API (fetches real transaction history and balance)
   // Defined before useEffect so it can be called on mount for initial API sync.
   const refreshFromApi = useCallback(
-    async (accessToken?: string) => {
+    async (accessToken?: string, options?: { silent?: boolean }) => {
       if (!accessToken) {
         return;
       }
 
       if (!mountedRef.current) return;
-      setIsLoading(true);
+      // Background refreshes (the realtime balance subscription, auth/token
+      // events, foreground re-sync, post-operation reconciles, the wallet
+      // screen's session effect) pass { silent: true } so they don't flip the
+      // shared `isLoading` flag that gates the balance render. Without this,
+      // every background refetch blanks the balance to a skeleton and back —
+      // the "balance flashing/refreshing constantly" bug. Only the initial
+      // mount load and explicit pull-to-refresh should surface a loading state.
+      const silent = options?.silent ?? false;
+      if (!silent) setIsLoading(true);
       try {
         // Diagnostic logging to help trace persistent 401s on wallet calls
         if (__DEV__) {
@@ -357,7 +365,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         console.error('[wallet] Error refreshing from API:', errorMessage, error);
         // Fall back to local data
       } finally {
-        if (mountedRef.current) setIsLoading(false);
+        if (!silent && mountedRef.current) setIsLoading(false);
       }
     },
     [persist, persistTransactions]
@@ -367,7 +375,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // the latest implementation without forcing the auth-state effect to
   // re-subscribe if the function identity changes.
   const refreshFromApiRef =
-    useRef<(accessToken?: string) => Promise<void> | undefined>(refreshFromApi);
+    useRef<(accessToken?: string, options?: { silent?: boolean }) => Promise<void> | undefined>(refreshFromApi);
 
   useEffect(() => {
     refreshFromApiRef.current = refreshFromApi;
@@ -468,7 +476,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
               try {
                 // Call the latest memoized implementation via ref so we don't
                 // force the effect to re-run when the function identity changes.
-                await refreshFromApiRef.current?.(token);
+                // Silent: background recovery must not flash the balance UI.
+                await refreshFromApiRef.current?.(token, { silent: true });
               } catch (err) {
                 console.error('[wallet] Error syncing balance after sign-in:', err);
               }
@@ -550,9 +559,20 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
-        () => {
+        (payload) => {
+          // This subscription fires on ANY column update to the user's profile
+          // row (session tracking, verification, Stripe sync, onboarding flags,
+          // …), not just balance. Refetching on every one was a primary cause of
+          // the balance flashing/refetching constantly. Only react when the
+          // balance field itself changed, and refresh silently so the UI doesn't
+          // blank to a skeleton.
+          const newBalance = (payload.new as { balance?: number } | null)?.balance;
+          const oldBalance = (payload.old as { balance?: number } | null)?.balance;
+          if (newBalance === oldBalance) {
+            return; // unrelated profile write — balance unchanged; ignore
+          }
           getAccessToken().then(token => {
-            if (token) refreshFromApiRef.current?.(token);
+            if (token) refreshFromApiRef.current?.(token, { silent: true });
           });
         }
       )
@@ -985,7 +1005,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         try {
           const refreshToken = await getAccessToken();
           if (refreshToken) {
-            await refreshFromApi(refreshToken);
+            // Silent: local balance already updated optimistically above; this
+            // is a background reconcile and must not flash the balance UI.
+            await refreshFromApi(refreshToken, { silent: true });
           }
         } catch {
           // Non-critical: server release already succeeded; local state will
@@ -1092,7 +1114,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       try {
         const token = await getAccessToken();
         if (token) {
-          await refreshFromApi(token);
+          // Silent: local state already updated above; background reconcile.
+          await refreshFromApi(token, { silent: true });
         }
       } catch {
         // Non-critical: local state already updated above
