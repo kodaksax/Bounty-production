@@ -564,10 +564,11 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           // row (session tracking, verification, Stripe sync, onboarding flags,
           // …), not just balance. Refetching on every one was a primary cause of
           // the balance flashing/refetching constantly. Only react when the
-          // balance actually changed, and refresh silently so the UI doesn't
+          // balance field itself changed, and refresh silently so the UI doesn't
           // blank to a skeleton.
           const newBalance = (payload.new as { balance?: number } | null)?.balance;
-          if (typeof newBalance === 'number' && newBalance === balanceRef.current) {
+          const oldBalance = (payload.old as { balance?: number } | null)?.balance;
+          if (newBalance === oldBalance) {
             return; // unrelated profile write — balance unchanged; ignore
           }
           getAccessToken().then(token => {
