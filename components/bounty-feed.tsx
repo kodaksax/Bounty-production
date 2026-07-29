@@ -751,7 +751,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                     })}
                   </ScrollView>
                 </View>
-                {renderDistanceChips()}
+                
               </View>
             }
           />
