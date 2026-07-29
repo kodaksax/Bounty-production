@@ -307,13 +307,20 @@ describe('connect edge function contract (inlined helpers stay in sync)', () => 
     expect(indexSource).toContain('destination_bank_account_id: destinationAccount.id');
   });
 
-  test('inlines validateAccountEligibility and enforces it on both /transfer and /instant-payout', () => {
+  test('inlines validateAccountEligibility and enforces it on every payout route', () => {
     expect(indexSource).toContain('function validateAccountEligibility');
+    // Three enforcement sites: legacy /transfer, legacy /instant-payout, and
+    // the Connect-native payout handler shared by /payout and the native
+    // /instant-payout path. Asserted as a lower bound rather than an exact
+    // count so that ADDING a new payout route which correctly enforces
+    // eligibility doesn't fail this test — the risk being guarded against is
+    // a route that skips the check, which is caught by the per-route
+    // assertions below.
     const callCount = (indexSource.match(/validateAccountEligibility\(p\.account_status\)/g) || []).length;
-    expect(callCount).toBe(2);
+    expect(callCount).toBeGreaterThanOrEqual(3);
     expect(indexSource).toContain("code: 'account_not_eligible'");
     // Must be fetched from the DB wherever it's consumed, not assumed.
     const selectsAccountStatus = (indexSource.match(/select\([^)]*account_status[^)]*\)/g) || []).length;
-    expect(selectsAccountStatus).toBeGreaterThanOrEqual(2);
+    expect(selectsAccountStatus).toBeGreaterThanOrEqual(3);
   });
 });

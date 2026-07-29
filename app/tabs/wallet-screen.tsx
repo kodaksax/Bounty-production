@@ -17,6 +17,7 @@ import { PayoutFailedBanner } from "../../components/ui/PayoutFailedBanner";
 import { PaymentMethodSkeleton } from "../../components/ui/skeleton-loaders";
 import { WithdrawWithBankScreen } from "../../components/withdraw-with-bank-screen";
 import { useAuthContext } from '../../hooks/use-auth-context';
+import { useWalletBalanceDisplay } from '../../hooks/use-wallet-balance-display';
 import { useForegroundRefresh } from '../../hooks/useForegroundRefresh';
 import { HEADER_LAYOUT, SIZING, SPACING, TYPOGRAPHY } from '../../lib/constants/accessibility';
 import { useHapticFeedback } from '../../lib/haptic-feedback';
@@ -24,7 +25,7 @@ import { StripePaymentMethod, stripeService } from '../../lib/services/stripe-se
 import { useStripe } from '../../lib/stripe-context';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
-import { formatCurrency } from '../../lib/utils';
+import { formatCurrency, formatCurrencyCents } from '../../lib/utils';
 import { useWallet, type WalletTransactionRecord } from '../../lib/wallet-context';
 
 
@@ -88,7 +89,11 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   const [showAddMoney, setShowAddMoney] = useState(false)
   const [showPaymentMethods, setShowPaymentMethods] = useState(false)
   const [showTransactionHistory, setShowTransactionHistory] = useState(false)
-  const { balance, isLoading: walletLoading, transactions, refreshFromApi, secureStoreAvailable } = useWallet();
+  const { balance, transactions, refreshFromApi, secureStoreAvailable } = useWallet();
+  // The one authoritative balance path — see hooks/use-wallet-balance-display.
+  // Never read useWallet().balance for display; it is the legacy ledger figure
+  // and does not reflect Phase 2 earnings held in the Connect account.
+  const balanceDisplay = useWalletBalanceDisplay();
   const { paymentMethods, isLoading: stripeLoading, error: stripeError, loadPaymentMethods } = useStripe();
   const { triggerHaptic } = useHapticFeedback();
   const { session } = useAuthContext();
@@ -100,7 +105,11 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   const hasValidSession = !!(session?.access_token && session?.user?.id &&
     session.user.id !== '00000000-0000-0000-0000-000000000001');
 
-  // Refresh wallet data from API when user is authenticated
+  const refreshBalance = balanceDisplay.refresh;
+
+  // Refresh wallet data from API when user is authenticated. The transaction
+  // list still comes from the wallet ledger; the balance comes from
+  // balanceDisplay, which is authoritative and may be Stripe-backed.
   useEffect(() => {
     if (hasValidSession) {
       // Silent so it doesn't flash the balance skeleton, and keyed on the
@@ -114,6 +123,11 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   // Safety net alongside the realtime balance subscription in WalletProvider:
   // re-sync if the app was backgrounded long enough that a realtime event
   // could plausibly have been missed (e.g. socket dropped while backgrounded).
+  //
+  // This matters more on the Stripe-backed path: the Realtime subscription
+  // watches profiles, which Phase 2 transfers never touch, so it never fires
+  // for Connect-held funds. Foreground + focus + pull-to-refresh are the real
+  // refresh triggers there.
   useForegroundRefresh(() => {
     if (hasValidSession) {
       refreshFromApi(session!.access_token, { silent: true });
@@ -130,7 +144,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
     } finally {
       setRefreshing(false);
     }
-  }, [hasValidSession, session, refreshFromApi]);
+  }, [hasValidSession, session, refreshFromApi, refreshBalance]);
 
   const handleAddMoney = async (amount: number) => {
     // AddMoneyScreen now handles Stripe integration internally
@@ -257,14 +271,68 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
               )}
               <View style={s.balanceCard}>
                 <View style={s.balanceCardHeader}>
-                  <Text style={s.balanceLabel}>BALANCE</Text>
-                  {walletLoading ? (
+                  <Text style={s.balanceLabel}>
+                    {balanceDisplay.source === 'connect' ? 'AVAILABLE BALANCE' : 'BALANCE'}
+                  </Text>
+                  {balanceDisplay.isLoading ? (
                     <View style={s.balanceSkeleton} />
                   ) : (
-                    <Text style={s.balanceAmount} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-                      {formatCurrency(balance)}
+                    <Text
+                      style={[s.balanceAmount, balanceDisplay.isStale && s.balanceAmountStale]}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.7}
+                    >
+                      {formatCurrencyCents(balanceDisplay.amountCents, balanceDisplay.currency)}
                     </Text>
                   )}
+
+                  {/* Funds Stripe is still clearing. Shown so a hunter who was
+                      just paid understands why the number is lower than the
+                      bounty they completed, rather than assuming money is missing. */}
+                  {!balanceDisplay.isLoading &&
+                    !balanceDisplay.error &&
+                    balanceDisplay.pendingCents > 0 && (
+                      <Text style={s.balancePending}>
+                        {formatCurrencyCents(balanceDisplay.pendingCents, balanceDisplay.currency)} clearing
+                      </Text>
+                    )}
+
+                  {/* Stripe read failed. Never silently substitute a locally
+                      derived figure — say the number may be out of date and
+                      offer a retry. */}
+                  {!!balanceDisplay.error && (
+                    <View style={s.balanceErrorRow}>
+                      <Text style={s.balanceErrorText} numberOfLines={2}>
+                        {balanceDisplay.isStale
+                          ? 'Balance may be out of date.'
+                          : balanceDisplay.error}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => {
+                          triggerHaptic('light');
+                          balanceDisplay.refresh({ force: true });
+                        }}
+                        disabled={balanceDisplay.isRefreshing}
+                        accessibilityRole="button"
+                        accessibilityLabel="Retry loading balance"
+                      >
+                        <Text style={s.balanceRetryText}>
+                          {balanceDisplay.isRefreshing ? 'Retrying…' : 'Retry'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {/* Connect onboarding not finished: an honest CTA beats a
+                      $0 that reads like the money vanished. */}
+                  {!balanceDisplay.isLoading &&
+                    !balanceDisplay.error &&
+                    !balanceDisplay.hasConnectAccount && (
+                      <Text style={s.balanceErrorText}>
+                        Finish setting up payouts to receive and withdraw earnings.
+                      </Text>
+                    )}
                 </View>
                 <View style={s.balanceActionsRow}>
                   <TouchableOpacity
@@ -471,6 +539,34 @@ function makeStyles(t: AppTheme) { return StyleSheet.create({
     borderRadius: 6,
     marginTop: 4,
     backgroundColor: t.border ?? 'rgba(255,255,255,0.12)',
+  },
+  // Dimmed while the figure on screen is unconfirmed by the latest fetch, so
+  // a stale number never reads as a freshly verified one.
+  balanceAmountStale: {
+    opacity: 0.55,
+  },
+  balancePending: {
+    color: t.textSecondary,
+    fontSize: TYPOGRAPHY.SIZE_SMALL,
+    marginTop: 2,
+  },
+  balanceErrorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.COMPACT_GAP,
+    marginTop: 4,
+  },
+  balanceErrorText: {
+    color: t.textSecondary,
+    fontSize: TYPOGRAPHY.SIZE_SMALL,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  balanceRetryText: {
+    color: t.primary,
+    fontSize: TYPOGRAPHY.SIZE_SMALL,
+    fontWeight: '700',
   },
   balanceActionsRow: {
     flexDirection: 'row',

@@ -21,6 +21,7 @@ import { analyticsService } from '../lib/services/analytics-service';
 import { formatCurrency } from '../lib/utils';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
+import { config } from '../lib/config';
 import { useWallet } from '../lib/wallet-context';
 import { InstantCashOutScreen } from './instant-cash-out-screen';
 import { PayoutMethodsScreen } from './payout-methods-screen';
@@ -28,6 +29,7 @@ import { EmailVerificationBanner } from './ui/email-verification-banner';
 import { WithdrawalConfirmSheet } from './ui/withdrawal-confirm-sheet';
 import { WithdrawalResultScreen, type WithdrawalResultStatus } from './ui/withdrawal-result-screen';
 import { WithdrawMethodSelect } from './withdraw-method-select';
+import { WithdrawNowCard } from './withdraw-now-card';
 
 interface WithdrawWithBankScreenProps {
   onBack?: () => void;
@@ -73,6 +75,12 @@ export function WithdrawWithBankScreen({
   const insets = useSafeAreaInsets();
 
   const balance = propBalance ?? walletBalance;
+
+  // When the wallet reads its balance from Stripe, the legacy amount form and
+  // its ledger-derived caps below are not just redundant but wrong — they cap
+  // against a figure that no longer represents withdrawable money. Swap the
+  // whole flow for the Connect-native card in that case.
+  const isConnectNativeWithdrawal = config.features.walletBalanceSource === 'connect';
 
   const eligibility = useConnectEligibility();
   const payoutMethods = usePayoutMethods();
@@ -485,6 +493,15 @@ export function WithdrawWithBankScreen({
       </View>
 
       <ScrollView contentContainerStyle={s.content}>
+        {/* Connect-native withdrawal (Phase 5). When the balance source is
+            Stripe, this card is the whole withdrawal flow: it shows the real
+            withdrawable amount and pays it out directly, with no dependency on
+            the ledger figures rendered below. The legacy balance card and
+            amount form stay mounted only while the flag is off. */}
+        {isConnectNativeWithdrawal ? (
+          <WithdrawNowCard onWithdrawComplete={onBack} />
+        ) : (
+        <>
         {/* Balance Display */}
         <View style={s.balanceCard}>
           <Text style={s.balanceLabel}>Total Balance</Text>
@@ -763,9 +780,14 @@ export function WithdrawWithBankScreen({
             )}
           </View>
         )}
+        </>
+        )}
       </ScrollView>
 
-      {/* Withdraw Button */}
+      {/* Withdraw Button — the Connect-native card owns its own action, so
+          this legacy footer is suppressed to avoid two competing withdraw
+          buttons driving two different balance sources. */}
+      {!isConnectNativeWithdrawal && (
       <View style={[s.footer, { paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 16) }]}>
         <TouchableOpacity
           onPress={handleWithdraw}
@@ -784,6 +806,7 @@ export function WithdrawWithBankScreen({
           </Text>
         </TouchableOpacity>
       </View>
+      )}
 
       <WithdrawalConfirmSheet
         visible={showConfirmSheet}
