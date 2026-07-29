@@ -21,7 +21,13 @@ type PosterFundingScreenProps = {
   posting: boolean;
   onBack: () => void;
   onFunded: () => void;
-  onSkip: () => void;
+  /**
+   * Invoked when the poster takes the "Post as For Honor instead" link.
+   * Receives whether a payment method was already linked at that moment, so
+   * analytics can separate "never linked a card" from "linked a card and
+   * still chose not to pay" — two very different problems.
+   */
+  onSkip: (context: { hasPaymentMethod: boolean }) => void;
 };
 
 // Text color placed on top of the bright brand-green primary fill, matching
@@ -222,7 +228,7 @@ export function PosterFundingScreen({ styles, price, posting, onBack, onFunded, 
       </View>
       <TouchableOpacity
         style={styles.skipLink}
-        onPress={onSkip}
+        onPress={() => onSkip({ hasPaymentMethod })}
         disabled={posting}
         accessibilityRole="button"
         accessibilityLabel="Post as a For Honor bounty instead, no payment required"

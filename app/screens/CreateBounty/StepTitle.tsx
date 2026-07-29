@@ -5,6 +5,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BOUNTY_CATEGORIES } from '../../../lib/constants/bounty-categories';
+import { analyticsService } from '../../../lib/services/analytics-service';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import { validateTitle } from '../../../lib/utils/bounty-validation';
 
@@ -38,6 +39,16 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
 
   const handleCategorySelect = (categoryId: string) => {
     onUpdate({ category: categoryId });
+    // Analytics is fire-and-forget throughout the posting funnel:
+    // trackEvent swallows its own failures, and nothing in the flow should
+    // ever block or fail on an instrumentation call.
+    analyticsService.trackEvent('category_selected', {
+      surface: 'create_flow',
+      category: categoryId,
+      // The category step is skippable, so record whether this was a first
+      // choice or a change of mind — both are useful for anchoring defaults.
+      changedFrom: draft.category || 'none',
+    });
   };
 
   const handleNext = () => {

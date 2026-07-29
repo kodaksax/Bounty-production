@@ -81,6 +81,49 @@ export type AnalyticsEvent =
   // Identity verification (Stripe Connect KYC)
   | 'identity_submitted'
   | 'identity_verified'
+  // Posting funnel — the canonical drop-off funnel for "does a published
+  // bounty actually have money escrowed at publish". Fired from BOTH posting
+  // surfaces (app/screens/CreateBounty/* and the onboarding poster branch in
+  // app/onboarding/details.tsx) so the two can be analysed as one funnel;
+  // every event carries `surface: 'create_flow' | 'onboarding'`.
+  //
+  // Happy path, in order:
+  //   post_started -> category_selected -> amount_set -> payment_attached
+  //   -> post_published -> first_submission_received
+  //
+  // `category_selected` is genuinely optional (the category step allows skip),
+  // so treat it as an informational step rather than a required funnel stage.
+  //
+  // NOTE ON `payment_attached`: under payment architecture v1 (the only one
+  // that has ever run in production) money is reserved from the poster's
+  // pre-loaded custodial wallet balance by the `fn_reserve_bounty_escrow` DB
+  // trigger at INSERT time. So this event means "funds are confirmed
+  // available to cover this amount" — either the existing balance already
+  // covered it (`source: 'existing_balance'`) or a deposit just succeeded
+  // (`source: 'deposit'`). It is NOT a card authorization.
+  //
+  // `first_submission_received` is emitted by the HUNTER's client when their
+  // application is the first one on that bounty, so its distinct_id is the
+  // hunter, not the poster. Join it to `post_published` on `bountyId` rather
+  // than treating it as a person-level funnel step.
+  | 'post_started'
+  | 'post_step_viewed'
+  | 'category_selected'
+  | 'amount_set'
+  | 'payment_attached'
+  | 'post_published'
+  | 'first_submission_received'
+  | 'post_abandoned'
+  // Posting funnel — the two ways a priced bounty becomes a $0 one. These
+  // exist to size the single biggest known leak: posters who choose an amount
+  // and then publish for free instead. Both carry `previousAmount` so
+  // "set a price, then bailed" is separable from "never wanted to pay".
+  | 'post_switched_to_honor'
+  | 'post_funding_skipped_to_honor'
+  // Fired when a poster taps a preset amount that exceeds their wallet
+  // balance and the UI refuses to apply it — a dead end with no in-flow way
+  // to add funds. Sizes how often the amount step is unusable.
+  | 'post_amount_blocked_by_balance'
   // Bounty events
   | 'bounty_created'
   | 'bounty_queued'

@@ -1,3 +1,4 @@
+import { analyticsService } from 'lib/services/analytics-service';
 import type { Bounty, BountyRequest, Profile } from 'lib/services/database.types';
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
 import { getAccountStatusErrorMessage } from 'lib/utils/account-status-errors';
@@ -19,6 +20,58 @@ const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_URL ||
   process.env.EXPO_PUBLIC_API_BASE_URL ||
   (typeof __DEV__ !== 'undefined' && __DEV__ ? getApiBase() : 'http://localhost:3001');
+
+/**
+ * Emits `first_submission_received` when the application just inserted is the
+ * first one on its bounty — the second half of the posting funnel and the
+ * input to the "median time-to-first-submission on paid bounties" metric.
+ *
+ * Two properties of this event are easy to misread, so they are worth stating:
+ *
+ *  1. It is emitted by the HUNTER's client, so its distinct_id is the hunter,
+ *     not the poster. Join it to `post_published` on `bountyId`; do not use it
+ *     as a person-level funnel step.
+ *  2. `amount`/`isForHonor` are read back from the bounty so the event can be
+ *     filtered to paid bounties without a join.
+ *
+ * Entirely best-effort: any failure here is swallowed, because a broken
+ * analytics read must never fail a hunter's application.
+ */
+async function emitFirstSubmissionIfFirst(bountyId: unknown): Promise<void> {
+  try {
+    if (!bountyId) return;
+
+    const { count, error: countError } = await supabase
+      .from('bounty_requests')
+      .select('id', { count: 'exact', head: true })
+      .eq('bounty_id', String(bountyId));
+
+    // Only the first application on this bounty produces the event. A null
+    // count means the count wasn't returned — stay silent rather than guess.
+    if (countError || count !== 1) return;
+
+    const { data: bountyRow } = await supabase
+      .from('bounties')
+      .select('amount, is_for_honor, created_at')
+      .eq('id', String(bountyId))
+      .single();
+
+    const postedAt = (bountyRow as any)?.created_at;
+    const hoursToFirstSubmission = postedAt
+      ? Number(((Date.now() - new Date(postedAt).getTime()) / 3_600_000).toFixed(3))
+      : undefined;
+
+    analyticsService.trackEvent('first_submission_received', {
+      bountyId: String(bountyId),
+      amount: Number((bountyRow as any)?.amount ?? 0),
+      isForHonor: Boolean((bountyRow as any)?.is_for_honor),
+      funded: !((bountyRow as any)?.is_for_honor) && Number((bountyRow as any)?.amount ?? 0) > 0,
+      hoursToFirstSubmission,
+    });
+  } catch {
+    /* analytics is best-effort — never fail an application over it */
+  }
+}
 
 export const bountyRequestService = {
   /**
@@ -634,6 +687,9 @@ export const bountyRequestService = {
           ? (insData[0] as unknown as BountyRequest)
           : (insData as unknown as BountyRequest);
         if (created) {
+          // Deliberately not awaited: this costs two extra reads, and the
+          // hunter's "applied" confirmation should not wait on analytics.
+          void emitFirstSubmissionIfFirst(normalizedRequest.bounty_id);
           return { success: true, request: created };
         }
 

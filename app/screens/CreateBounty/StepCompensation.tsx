@@ -4,6 +4,7 @@ import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { analyticsService } from '../../../lib/services/analytics-service';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import { EscrowExplainer } from '../../../components/ui/escrow-explainer';
 import { getInsufficientBalanceMessage, validateAmount, validateBalance } from '../../../lib/utils/bounty-validation';
@@ -48,6 +49,19 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
   };
 
   const handleHonorToggle = (value: boolean) => {
+    // Sizes the single biggest known leak in the posting funnel: posters who
+    // pick a real amount and then switch to a $0 post. `previousAmount` and
+    // `balanceCovered` separate "never intended to pay" from "wanted to pay
+    // but couldn't fund it from here".
+    if (value) {
+      analyticsService.trackEvent('post_switched_to_honor', {
+        surface: 'create_flow',
+        previousAmount: draft.amount,
+        hadAmount: draft.amount > 0,
+        balance,
+        balanceCovered: draft.amount > 0 && balance >= draft.amount,
+      });
+    }
     onUpdate({ isForHonor: value, amount: value ? 0 : draft.amount });
     if (value) {
       setErrors({});
@@ -58,6 +72,15 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
   const handlePresetSelect = (preset: number) => {
     // Check if preset amount exceeds balance using shared validation
     if (!validateBalance(preset, balance, draft.isForHonor)) {
+      // Dead end: the preset is refused and this screen offers no way to add
+      // funds. Counting these shows how often the amount step is unusable.
+      analyticsService.trackEvent('post_amount_blocked_by_balance', {
+        surface: 'create_flow',
+        attemptedAmount: preset,
+        balance,
+        shortfall: Number((preset - balance).toFixed(2)),
+        method: 'preset',
+      });
       showInsufficientBalanceAlert(preset);
       return;
     }
@@ -95,6 +118,35 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
     // We no longer block navigation here for insufficient balance.
     // Instead, we show a warning and the final submission will block it.
     // This allows users to complete the draft even if they need to top up.
+
+    // amount_set — fired on leaving the step (not per keystroke) so the value
+    // recorded is the one the poster actually committed to. Emitted for honor
+    // posts too, with amount 0, so the step reads as a single decision point.
+    const amountCovered = !draft.isForHonor && draft.amount > 0 && balance >= draft.amount;
+    analyticsService.trackEvent('amount_set', {
+      surface: 'create_flow',
+      amount: draft.isForHonor ? 0 : draft.amount,
+      isForHonor: draft.isForHonor,
+      method: isCustomSelected ? 'custom' : 'preset',
+      category: draft.category || 'none',
+      balance,
+      balanceCovered: amountCovered,
+    });
+
+    // payment_attached — under architecture v1 the money is reserved from the
+    // poster's existing wallet balance by a DB trigger at insert time, so the
+    // real gate is "does the balance already cover this". A poster who reaches
+    // here with a priced bounty but no balance will be blocked at publish with
+    // no way to fund from inside the flow; that gap is exactly the drop between
+    // amount_set and payment_attached.
+    if (amountCovered) {
+      analyticsService.trackEvent('payment_attached', {
+        surface: 'create_flow',
+        amount: draft.amount,
+        source: 'existing_balance',
+        architecture: 1,
+      });
+    }
 
     onNext();
   };
