@@ -5,6 +5,8 @@ import { BountyGridFeed } from 'components/bounty-grid-feed'
 import { BountyListItem } from 'components/bounty-list-item'
 import { NotificationBell } from 'components/notifications/notification-bell'
 import { EmptyState } from 'components/ui/empty-state'
+import { FilterChip, type FilterChipIconName } from 'components/ui/filter-chip'
+import { FilterChipSelect, type FilterChipOption } from 'components/ui/filter-chip-select'
 import { PostingsListSkeleton } from 'components/ui/skeleton-loaders'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useRouter } from 'expo-router'
@@ -49,14 +51,23 @@ const PAGE_SIZE = 10
 // search_bounties_nearby (so results get real distances/sort) but without a
 // radius cap.
 type DistanceFilterValue = 'off' | number | null
-const DISTANCE_PRESETS: Array<{ label: string; value: DistanceFilterValue }> = [
-  { label: 'Off', value: 'off' },
-  { label: '1 mi', value: 1 },
-  { label: '5 mi', value: 5 },
-  { label: '10 mi', value: 10 },
-  { label: '25 mi', value: 25 },
-  { label: 'Anywhere', value: null },
+const DISTANCE_OFF: DistanceFilterValue = 'off'
+const DISTANCE_OPTIONS: FilterChipOption<DistanceFilterValue>[] = [
+  { label: 'Any distance', value: DISTANCE_OFF, description: 'Browse every open bounty' },
+  { label: 'Within 1 mile', value: 1, chipLabel: '1 mi' },
+  { label: 'Within 5 miles', value: 5, chipLabel: '5 mi' },
+  { label: 'Within 10 miles', value: 10, chipLabel: '10 mi' },
+  { label: 'Within 25 miles', value: 25, chipLabel: '25 mi' },
+  { label: 'Anywhere', value: null, description: 'No radius cap, still sorted by distance' },
 ]
+
+// The filter carousel holds category chips and interactive filter chips in one
+// list; `kind` is what the renderer switches on. `id` is shared so a single
+// keyExtractor covers both.
+const DISTANCE_ITEM_ID = '__distance__'
+type FilterBarItem =
+  | { kind: 'category'; id: string; label: string; icon: FilterChipIconName }
+  | { kind: 'distance'; id: typeof DISTANCE_ITEM_ID }
 
 function nearbyToBounty(nb: NearbyBounty): Bounty {
   return {
@@ -98,7 +109,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   const [loadError, setLoadError] = useState<Error | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [activeCategory, setActiveCategory] = useState<string | 'all'>('all')
-  const [distanceFilter, setDistanceFilter] = useState<DistanceFilterValue>('off')
+  const [distanceFilter, setDistanceFilter] = useState<DistanceFilterValue>(DISTANCE_OFF)
   // Count of newly-posted open bounties observed via realtime since the last
   // load/refresh. Not injected directly into `bounties` — this feed is
   // paginated (PAGE_SIZE/offsetRef), so splicing a live INSERT into the
@@ -121,9 +132,28 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
 
   const categories = useMemo(() => [
     { id: 'all', label: 'For You', icon: 'auto-awesome' as const },
-    
+
     ...BOUNTY_CATEGORIES.map((c) => ({ id: c.id, label: c.label, icon: c.icon as any })),
   ], [])
+
+  // The single source of truth for the feed's one horizontal carousel: every
+  // category chip plus the Distance chip, injected between Delivery and Other
+  // as an ordinary item. Being in this list — rather than in a lane of its own
+  // — is what gives Distance the same spacing, scroll and virtualization
+  // behavior as the categories; only its tap handler differs. Future secondary
+  // filters (Price, Date, Status) get inserted here the same way.
+  //
+  // `categories` itself stays pure: it's also the allow-list that validates the
+  // persisted `activeCategory`, and a pseudo-id in there would read as a real
+  // category.
+  const filterItems = useMemo<FilterBarItem[]>(() => {
+    const items: FilterBarItem[] = categories.map((c) => ({ kind: 'category' as const, ...c }))
+    const afterDelivery = items.findIndex((i) => i.id === 'delivery')
+    const beforeOther = items.findIndex((i) => i.id === 'other')
+    const at = afterDelivery >= 0 ? afterDelivery + 1 : beforeOther >= 0 ? beforeOther : items.length
+    items.splice(at, 0, { kind: 'distance', id: DISTANCE_ITEM_ID })
+    return items
+  }, [categories])
 
   const calculateDistance = useCallback((bountyLocation: string) => {
     if (!bountyLocation) return null
@@ -537,15 +567,27 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         />
       )
     }
-    if (activeCategory && activeCategory !== 'all') {
+    // Distance now lives in the same row as the categories, so an empty result
+    // caused by either filter gets the same one-tap escape hatch.
+    const hasCategoryFilter = Boolean(activeCategory) && activeCategory !== 'all'
+    const hasDistanceFilter = distanceFilter !== DISTANCE_OFF
+    if (hasCategoryFilter || hasDistanceFilter) {
+      const clearsBoth = hasCategoryFilter && hasDistanceFilter
       return (
         <View style={{ width: '100%', alignItems: 'center' }}>
-          <Text style={{ color: theme.textSecondary, marginBottom: 8 }}>No bounties match this filter.</Text>
+          <Text style={{ color: theme.textSecondary, marginBottom: 8 }}>
+            No bounties match {clearsBoth ? 'these filters' : 'this filter'}.
+          </Text>
           <TouchableOpacity
-            onPress={() => handleSetActiveCategory('all')}
+            onPress={() => {
+              if (hasCategoryFilter) handleSetActiveCategory('all')
+              if (hasDistanceFilter) setDistanceFilter(DISTANCE_OFF)
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={clearsBoth ? 'Clear filters' : 'Clear filter'}
             style={{ backgroundColor: theme.surfaceSecondary, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999, borderWidth: 1, borderColor: theme.border }}
           >
-            <Text style={{ color: theme.text, fontWeight: '700' }}>Clear filter</Text>
+            <Text style={{ color: theme.text, fontWeight: '700' }}>{clearsBoth ? 'Clear filters' : 'Clear filter'}</Text>
           </TouchableOpacity>
         </View>
       )
@@ -559,7 +601,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         onAction={() => router.push('/screens/CreateBounty')}
       />
     )
-  }, [isLoadingBounties, applicationsLoaded, loadError, loadBounties, activeCategory, handleSetActiveCategory, theme, router])
+  }, [isLoadingBounties, applicationsLoaded, loadError, loadBounties, activeCategory, distanceFilter, handleSetActiveCategory, theme, router])
 
   const ListFooterComponent = useCallback(() => (
     loadingMore ? (
@@ -569,80 +611,57 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     ) : null
   ), [loadingMore])
 
-  // Renders the horizontal filter chips row.
-  // Chips must always live OUTSIDE any FlatList — nesting a FlatList inside another
-  // FlatList's ListHeaderComponent causes the gesture recognizer to steal all touches,
-  // so onPress never fires. This is rendered as a sibling above the list for all formats.
-  const renderChips = () => (
+  // Renders the feed's one and only horizontal filter carousel, from the single
+  // `filterItems` source: category chips and the Distance chip side by side,
+  // scrolling together as one list.
+  //
+  // Uses a ScrollView, never a nested FlatList: in the grid layout this row is
+  // rendered inside another FlatList's ListHeaderComponent, and a nested
+  // FlatList's gesture recognizer steals all touches there, so onPress never
+  // fires.
+  const renderFilterBar = () => (
     <View style={s.filtersRow}>
-      <FlatList
+      <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        data={categories}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={{ paddingHorizontal: 16 }}
-        renderItem={({ item }) => {
+        contentContainerStyle={s.filtersScrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        {filterItems.map((item) => {
+          if (item.kind === 'distance') {
+            return (
+              <FilterChipSelect<DistanceFilterValue>
+                key={item.id}
+                label="Distance"
+                icon="near-me"
+                value={distanceFilter}
+                neutralValue={DISTANCE_OFF}
+                options={DISTANCE_OPTIONS}
+                onChange={setDistanceFilter}
+                description="Show bounties within a radius of you."
+                hint={
+                  permission?.granted
+                    ? undefined
+                    : 'Location access is off, so distance filters may not match what’s actually near you.'
+                }
+                testID="feed-distance-filter"
+              />
+            )
+          }
           const isActive = activeCategory === item.id
-          const iconColor = isActive ? theme.primary : theme.textSecondary
-          const chipStyle = [s.chip, isActive && s.chipActive]
-          const labelStyle = [s.chipLabel, isActive && s.chipLabelActive]
-
           return (
-            <TouchableOpacity
+            <FilterChip
+              key={item.id}
+              label={item.label}
+              icon={item.icon}
+              active={isActive}
               onPress={() => handleSetActiveCategory(isActive ? 'all' : (item.id as any))}
-              style={chipStyle}
-              accessibilityRole="button"
               accessibilityLabel={`Filter by ${item.label}${isActive ? ', currently active' : ''}`}
               accessibilityHint={isActive ? 'Tap to remove filter and show all bounties' : `Tap to filter bounties by ${item.label}`}
-              accessibilityState={{ selected: isActive }}
-            >
-              <MaterialIcons
-                name={item.icon}
-                size={SIZING.ICON_SMALL}
-                color={iconColor}
-                style={{ marginRight: SPACING.COMPACT_GAP }}
-                accessibilityElementsHidden={true}
-              />
-              <Text style={labelStyle}>{item.label}</Text>
-            </TouchableOpacity>
+            />
           )
-        }}
-      />
-    </View>
-  )
-
-  const renderDistanceChips = () => (
-    <View style={s.filtersRow}>
-      <FlatList
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        data={DISTANCE_PRESETS}
-        keyExtractor={(item) => String(item.value)}
-        contentContainerStyle={{ paddingHorizontal: 16 }}
-        renderItem={({ item }) => {
-          const isActive = distanceFilter === item.value
-          const chipStyle = [s.chip, isActive && s.chipActive]
-          const labelStyle = [s.chipLabel, isActive && s.chipLabelActive]
-          return (
-            <TouchableOpacity
-              onPress={() => setDistanceFilter(item.value)}
-              style={chipStyle}
-              accessibilityRole="button"
-              accessibilityLabel={`Filter by distance: ${item.label}`}
-              accessibilityState={{ selected: isActive }}
-            >
-              <MaterialIcons
-                name="near-me"
-                size={SIZING.ICON_SMALL}
-                color={isActive ? theme.primary : theme.textSecondary}
-                style={{ marginRight: SPACING.COMPACT_GAP }}
-                accessibilityElementsHidden={true}
-              />
-              <Text style={labelStyle}>{item.label}</Text>
-            </TouchableOpacity>
-          )
-        }}
-      />
+        })}
+      </ScrollView>
     </View>
   )
 
@@ -664,9 +683,8 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         </View>
       )}
 
-      {/* Filter chips — outside FlatList for non-grid; grid gets them inside listHeader */}
-      {bountyFormat !== 'grid' && renderChips()}
-      {bountyFormat !== 'grid' && renderDistanceChips()}
+      {/* Filter row — outside FlatList for non-grid; grid gets it inside listHeader */}
+      {bountyFormat !== 'grid' && renderFilterBar()}
 
       {/* New-bounties pill — surfaces realtime INSERTs without splicing them into
           the paginated list mid-scroll. Sits above the list so it works across
@@ -848,33 +866,13 @@ function makeStyles(t: AppTheme) {
       flex: 1,
     },
 
-    // ── Filter chips ─────────────────────────────────────────────────────────
+    // ── Filter carousel (categories + inline filter chips) ───────────────────
     filtersRow: {
       paddingVertical: SPACING.COMPACT_GAP,
     },
-    chip: {
-      flexDirection: 'row',
+    filtersScrollContent: {
+      paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
       alignItems: 'center',
-      backgroundColor: t.surfaceSecondary,
-      borderWidth: 1,
-      borderColor: t.border,
-      paddingHorizontal: 14,
-      height: 36,
-      borderRadius: 999,
-      marginRight: SPACING.COMPACT_GAP,
-      minHeight: SIZING.MIN_TOUCH_TARGET,
-    },
-    chipActive: {
-      backgroundColor: t.surface,
-      borderColor: t.primary,
-    },
-    chipLabel: {
-      color: t.text,
-      fontSize: TYPOGRAPHY.SIZE_SMALL,
-      fontWeight: '600',
-    },
-    chipLabelActive: {
-      color: t.primaryLight,
     },
 
     // ── New-bounties pill ────────────────────────────────────────────────────

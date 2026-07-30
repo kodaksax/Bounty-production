@@ -23,7 +23,7 @@ import { getUserFriendlyError } from 'lib/utils/error-messages';
 import { shouldFundNewBountiesWithPhase2 } from 'lib/utils/payment-architecture';
 import { useWallet } from 'lib/wallet-context';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -43,6 +43,13 @@ const STEP_TITLES = [
   'Review & Confirm',
 ];
 
+/**
+ * Identifies this posting surface in the shared posting funnel. The onboarding
+ * poster branch (app/onboarding/details.tsx) emits the same events with
+ * `surface: 'onboarding'` so both can be analysed as one funnel.
+ */
+const POST_SURFACE = 'create_flow';
+
 export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateBountyFlowProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const { session } = useAuthContext();
@@ -52,6 +59,15 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
   const { paymentMethods } = useStripe();
   const { theme } = useAppThemeContext();
   const { isEmailVerified, canPostBounties, userEmail } = useEmailVerification();
+
+  // Posting-funnel bookkeeping. `publishedRef` distinguishes a real abandon
+  // (user backed out) from unmounting after a successful publish, so
+  // `post_abandoned` never double-counts a completed post.
+  const startedRef = useRef(false);
+  const publishedRef = useRef(false);
+  // Mirrors `currentStep` for use inside cleanup/callbacks that would
+  // otherwise close over a stale value.
+  const currentStepRef = useRef(1);
 
   // Use form submission hook with debouncing
   const {
@@ -78,6 +94,17 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
       // v1 bounties). The v2 path charges a card directly via Stripe, so the
       // custodial wallet balance is not relevant there.
       if (!useV2Payments && !validateBalance(draft.amount, balance, draft.isForHonor)) {
+        // The hard stop: poster composed a priced bounty, reached Publish, and
+        // is refused because their wallet was never funded — with no way to
+        // add funds from here. This is the terminal form of the funnel's
+        // biggest leak, so it is counted separately from the preset-tap block.
+        analyticsService.trackEvent('post_amount_blocked_by_balance', {
+          surface: POST_SURFACE,
+          attemptedAmount: draft.amount,
+          balance,
+          shortfall: Number((draft.amount - balance).toFixed(2)),
+          method: 'publish',
+        });
         throw new Error(getInsufficientBalanceMessage(draft.amount, balance));
       }
 
@@ -213,10 +240,29 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
         }
       }
 
+      const isOnline = offlineQueueService.getOnlineStatus();
+
+      // post_published — the funnel's terminal step for the poster. Guarded on
+      // `created` so an idempotent retry of an already-published bounty (see
+      // bountyService.createBounty) doesn't double-count. `funded` is the
+      // headline metric: did this published bounty have real money on it.
+      if (created) {
+        publishedRef.current = true;
+        analyticsService.trackEvent('post_published', {
+          surface: POST_SURFACE,
+          bountyId: String(createdBounty.id),
+          amount: draft.isForHonor ? 0 : draft.amount,
+          isForHonor: draft.isForHonor,
+          funded: !draft.isForHonor && draft.amount > 0,
+          category: draft.category || 'none',
+          workType: draft.workType,
+          architecture: useV2Payments ? 2 : 1,
+          queuedOffline: !isOnline,
+        });
+      }
+
       // Clear draft on success
       await clearDraft();
-
-      const isOnline = offlineQueueService.getOnlineStatus();
 
       if (Platform.OS === 'web') {
         // Alert.alert is a no-op on web — navigate immediately after success
@@ -315,6 +361,45 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
   useEffect(() => {
     onStepChange?.(currentStep);
   }, [currentStep, onStepChange]);
+
+  // post_started — once per entry into the flow, after the draft load settles
+  // so `resumedDraft` reflects whether the poster is resuming or starting cold.
+  useEffect(() => {
+    if (isLoading || startedRef.current) return;
+    startedRef.current = true;
+    analyticsService.trackEvent('post_started', {
+      surface: POST_SURFACE,
+      resumedDraft: Boolean(draft.title?.trim()),
+    });
+  }, [isLoading, draft.title]);
+
+  // post_step_viewed — per-step drop-off. Emitted on every step change,
+  // including backwards navigation (`direction` disambiguates).
+  useEffect(() => {
+    const previous = currentStepRef.current;
+    currentStepRef.current = currentStep;
+    if (isLoading) return;
+    analyticsService.trackEvent('post_step_viewed', {
+      surface: POST_SURFACE,
+      step: currentStep,
+      stepTitle: STEP_TITLES[currentStep - 1],
+      direction: currentStep >= previous ? 'forward' : 'back',
+    });
+  }, [currentStep, isLoading]);
+
+  // post_abandoned — fires when the flow unmounts without a publish. Covers
+  // both explicit cancel and navigating away, which the cancel handler alone
+  // would miss.
+  useEffect(() => {
+    return () => {
+      if (!startedRef.current || publishedRef.current) return;
+      analyticsService.trackEvent('post_abandoned', {
+        surface: POST_SURFACE,
+        step: currentStepRef.current,
+        stepTitle: STEP_TITLES[currentStepRef.current - 1],
+      });
+    };
+  }, []);
 
   if (isLoading) {
     return (

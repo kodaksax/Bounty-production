@@ -123,6 +123,19 @@ export default function DetailsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // post_started — entry into the onboarding poster branch. Emitted with the
+  // same event name as the main composer (app/screens/CreateBounty) so both
+  // posting surfaces roll up into one funnel, split by `surface`.
+  const posterFunnelStartedRef = useRef(false);
+  useEffect(() => {
+    if (onboardingData.intent !== 'poster' || posterFunnelStartedRef.current) return;
+    posterFunnelStartedRef.current = true;
+    analyticsService.trackEvent('post_started', {
+      surface: 'onboarding',
+      resumedDraft: Boolean(onboardingData.taskDescription?.trim()),
+    });
+  }, [onboardingData.intent, onboardingData.taskDescription]);
+
   // A bounty was already created earlier in this onboarding session (e.g. the
   // user navigated back into this screen after createBountyNow succeeded).
   // Redirect straight to the congrats screen instead of re-rendering the
@@ -593,6 +606,19 @@ export default function DetailsScreen() {
       return;
     }
 
+    // amount_set — the onboarding composer always collects a real price here
+    // (validateAmount(amount, false) above rejects $0), so any $0 bounty from
+    // this surface came from the funding screen's skip link, not from this
+    // step. That makes the amount_set -> post_published(funded) gap a clean
+    // measure of the skip link's cost.
+    analyticsService.trackEvent('amount_set', {
+      surface: 'onboarding',
+      amount,
+      isForHonor: false,
+      method: 'custom',
+      schedule: onboardingData.schedule ?? 'none',
+    });
+
     setPosterStep('funding');
   };
 
@@ -629,6 +655,21 @@ export default function DetailsScreen() {
               : undefined,
       });
       analyticsService.trackEvent('onboarding_bounty_posted', { isForHonor, amount });
+      // post_published — same terminal funnel event as the main composer.
+      // `funded` is the headline metric: did this published bounty carry real
+      // money. Kept alongside the pre-existing onboarding_bounty_posted event
+      // rather than replacing it, so existing onboarding insights don't break.
+      analyticsService.trackEvent('post_published', {
+        surface: 'onboarding',
+        bountyId: String(result.bounty.id),
+        amount: isForHonor ? 0 : amount,
+        isForHonor,
+        funded: !isForHonor && amount > 0,
+        category: 'none',
+        workType: 'in_person',
+        architecture: 1,
+        queuedOffline: false,
+      });
       updateOnboardingData({
         firstBountyPostedId: String(result.bounty.id),
         firstBountyPostedTitle: result.bounty.title,
@@ -654,6 +695,16 @@ export default function DetailsScreen() {
   };
 
   const handleFundingSuccess = async () => {
+    // payment_attached — a real deposit just cleared, so the wallet now covers
+    // the bounty. Distinguished from the main composer's
+    // `source: 'existing_balance'` because this is the only surface in the app
+    // that currently funds a wallet as part of posting.
+    analyticsService.trackEvent('payment_attached', {
+      surface: 'onboarding',
+      amount: Number(onboardingData.price) || 0,
+      source: 'deposit',
+      architecture: 1,
+    });
     postingRef.current = true;
     try {
       await createBountyNow(false);
@@ -662,7 +713,16 @@ export default function DetailsScreen() {
     }
   };
 
-  const handleSkipFunding = async () => {
+  const handleSkipFunding = async ({ hasPaymentMethod }: { hasPaymentMethod: boolean }) => {
+    // The single sharpest known cause of $0 bounties: the poster composed a
+    // priced bounty, reached the funding screen, and took the "Post as For
+    // Honor instead" link sitting under the pay button. `previousAmount` is
+    // the price they had already committed to — the money this link costs.
+    analyticsService.trackEvent('post_funding_skipped_to_honor', {
+      surface: 'onboarding',
+      previousAmount: Number(onboardingData.price) || 0,
+      hasPaymentMethod,
+    });
     await createBountyNow(true);
   };
 

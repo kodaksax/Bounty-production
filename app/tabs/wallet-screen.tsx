@@ -104,6 +104,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
 
   const hasValidSession = !!(session?.access_token && session?.user?.id &&
     session.user.id !== '00000000-0000-0000-0000-000000000001');
+  const accessToken = session?.access_token;
 
   const refreshBalance = balanceDisplay.refresh;
 
@@ -116,9 +117,9 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
       // stable access-token string rather than the whole `session` object —
       // the object's identity churns on every token refresh / re-render, which
       // was re-firing this refresh (and the flash) repeatedly.
-      refreshFromApi(session!.access_token, { silent: true });
+      refreshFromApi(accessToken, { silent: true });
     }
-  }, [hasValidSession, session?.access_token, refreshFromApi]);
+  }, [accessToken, hasValidSession, refreshFromApi]);
 
   // Safety net alongside the realtime balance subscription in WalletProvider:
   // re-sync if the app was backgrounded long enough that a realtime event
@@ -130,7 +131,10 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
   // refresh triggers there.
   useForegroundRefresh(() => {
     if (hasValidSession) {
-      refreshFromApi(session!.access_token, { silent: true });
+      refreshFromApi(accessToken, { silent: true });
+      if (balanceDisplay.source === 'connect') {
+        refreshBalance({ force: true });
+      }
     }
   });
 
@@ -140,11 +144,16 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
     try {
       // Silent: the RefreshControl already shows its own spinner, so we don't
       // also flip the balance skeleton.
-      await refreshFromApi(session!.access_token, { silent: true });
+      await Promise.all([
+        refreshFromApi(accessToken, { silent: true }),
+        balanceDisplay.source === 'connect'
+          ? refreshBalance({ force: true })
+          : Promise.resolve(),
+      ]);
     } finally {
       setRefreshing(false);
     }
-  }, [hasValidSession, session, refreshFromApi, refreshBalance]);
+  }, [accessToken, balanceDisplay.source, hasValidSession, refreshFromApi, refreshBalance]);
 
   const handleAddMoney = async (amount: number) => {
     // AddMoneyScreen now handles Stripe integration internally
@@ -153,7 +162,7 @@ export function WalletScreen({ onBack }: WalletScreenProps = {}) {
     const hasValidSession = session?.access_token && session?.user?.id &&
       session.user.id !== '00000000-0000-0000-0000-000000000001';
     if (hasValidSession) {
-      refreshFromApi(session.access_token, { silent: true });
+      refreshFromApi(accessToken, { silent: true });
     }
   };
 
