@@ -28,7 +28,6 @@ import { locationService } from '../lib/services/location-service'
 import { storage } from '../lib/storage'
 import { supabase } from '../lib/supabase'
 import { isBountyDeadlinePassed } from '../lib/utils/schedule-utils'
-import type { TrendingBounty } from '../lib/types'
 import { logger } from '../lib/utils/error-logger'
 import { withTimeout } from '../lib/utils/withTimeout'
 import { API_TIMEOUTS } from '../lib/config/network'
@@ -741,35 +740,16 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                     </TouchableOpacity>
                   </View>
                 </View>
-                {/* Chips below banner — ScrollView avoids nested-FlatList gesture conflict */}
-                <View style={s.filtersRow}>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ paddingHorizontal: SPACING.SCREEN_HORIZONTAL }}
-                    keyboardShouldPersistTaps="handled"
-                  >
-                    {categories.map((item) => {
-                      const isActive = activeCategory === item.id
-                      const iconColor = isActive ? theme.primary : theme.textSecondary
-                      const chipStyle = [s.chip, isActive && s.chipActive]
-                      const labelStyle = [s.chipLabel, isActive && s.chipLabelActive]
-                      return (
-                        <TouchableOpacity
-                          key={item.id}
-                          onPress={() => handleSetActiveCategory(isActive ? 'all' : item.id as any)}
-                          style={chipStyle}
-                          accessibilityRole="button"
-                          accessibilityState={{ selected: isActive }}
-                        >
-                          <MaterialIcons name={item.icon} size={SIZING.ICON_SMALL} color={iconColor} style={{ marginRight: SPACING.COMPACT_GAP }} accessibilityElementsHidden />
-                          <Text style={labelStyle}>{item.label}</Text>
-                        </TouchableOpacity>
-                      )
-                    })}
-                  </ScrollView>
-                </View>
-                
+                {/* The same single filter carousel used by the non-grid layouts
+                    (category chips + Distance), rendered here inside the grid
+                    FlatList's header. renderFilterBar deliberately uses a
+                    ScrollView (not a nested FlatList) so it works in this
+                    nested-list context without the gesture-recognizer conflict.
+                    Previously the grid branch inlined its own chip row against
+                    removed styles (s.chip/*), which broke the build and rendered
+                    unstyled chips with no Distance filter. */}
+                {renderFilterBar()}
+
               </View>
             }
           />
