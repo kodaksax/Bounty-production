@@ -117,9 +117,11 @@ export function LocationPickerMap({
 
   const handleSelectAddress = useCallback(
     async (suggestion: AddressSuggestion) => {
+
       onAddressTextChange?.(sanitizeAddressText(suggestion.description));
       const response = await addressAutocompleteService.getPlaceDetails(suggestion.placeId);
       if (isPlaceDetailsError(response) || response.latitude == null || response.longitude == null) {
+        console.log('DOESNT WORAAAAAAA')
         return;
       }
       animateTo(response.latitude, response.longitude);

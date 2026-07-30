@@ -7,6 +7,7 @@ import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'reac
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import { LocationPickerMap, type LocationPickerValue } from '../../../components/location/LocationPickerMap';
+import { locationService } from '../../../lib/services/location-service';
 
 interface StepLocationProps {
   draft: BountyDraft;
@@ -25,6 +26,8 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
   // Address library for saved addresses
   const { addresses, addAddress } = useAddressLibrary();
   const [isSavingFavorite, setIsSavingFavorite] = useState(false);
+  // True while forward-geocoding a typed (un-selected) address on Next.
+  const [isResolvingLocation, setIsResolvingLocation] = useState(false);
 
   const validateLocation = (location: string, workType: string): string | null => {
     if (workType === 'in_person') {
@@ -123,7 +126,7 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
     }
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     const locationError = validateLocation(draft.location, draft.workType);
     const zipCodeError = validateZipCode(draft.zipCode || '');
 
@@ -131,6 +134,40 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
       setErrors({ location: locationError || '', zipCode: zipCodeError || '' });
       setTouched({ ...touched, location: true, zipCode: true });
       return;
+    }
+
+    // In-person bounties must carry coordinates so nearby hunters can be matched
+    // (hunter_service_areas proximity notifications + the feed's radius search).
+    // The map picker sets lat/lng when the poster taps a suggestion, drops the
+    // pin, or uses current location — but NOT when they only type an address.
+    // Previously a typed-only address advanced with no coordinates, so the
+    // bounty was saved without a geom and never matched anyone. Forward-geocode
+    // the typed text here; block posting if it can't be resolved.
+    if (draft.workType === 'in_person' && (draft.latitude == null || draft.longitude == null)) {
+      setIsResolvingLocation(true);
+      try {
+        const coords = await locationService.geocodeAddress(draft.location);
+        if (!coords) {
+          setErrors({
+            ...errors,
+            location:
+              "We couldn't locate that address. Pick a suggestion from the list or drop the pin on the map.",
+          });
+          setTouched({ ...touched, location: true });
+          return;
+        }
+        onUpdate({ latitude: coords.latitude, longitude: coords.longitude });
+      } catch {
+        setErrors({
+          ...errors,
+          location:
+            'Could not verify that address right now. Check your connection, or drop the pin on the map.',
+        });
+        setTouched({ ...touched, location: true });
+        return;
+      } finally {
+        setIsResolvingLocation(false);
+      }
     }
 
     onNext();
@@ -369,23 +406,23 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
           </TouchableOpacity>
           <TouchableOpacity
             onPress={handleNext}
-            disabled={!isValid}
+            disabled={!isValid || isResolvingLocation}
             className="flex-1 py-3 rounded-lg flex-row items-center justify-center"
-            style={{ backgroundColor: isValid ? theme.primary : theme.surface }}
+            style={{ backgroundColor: isValid && !isResolvingLocation ? theme.primary : theme.surface }}
             accessibilityLabel="Continue to next step"
             accessibilityRole="button"
-            accessibilityState={{ disabled: !isValid }}
+            accessibilityState={{ disabled: !isValid || isResolvingLocation, busy: isResolvingLocation }}
           >
             <Text
               className="font-semibold mr-2"
-              style={{ color: isValid ? '#fff' : theme.textDisabled }}
+              style={{ color: isValid && !isResolvingLocation ? '#fff' : theme.textDisabled }}
             >
-              Next
+              {isResolvingLocation ? 'Locating…' : 'Next'}
             </Text>
             <MaterialIcons
-              name="arrow-forward"
+              name={isResolvingLocation ? 'hourglass-empty' : 'arrow-forward'}
               size={20}
-              color={isValid ? '#fff' : theme.textDisabled}
+              color={isValid && !isResolvingLocation ? '#fff' : theme.textDisabled}
             />
           </TouchableOpacity>
         </View>
