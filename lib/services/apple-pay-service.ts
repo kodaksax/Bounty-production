@@ -42,22 +42,25 @@ class ApplePayService {
     }
 
     try {
-      // Dynamically import Apple Pay helpers from the Stripe native SDK at runtime.
-      // Some versions of the SDK don't expose these symbols in types, so use dynamic import
-      // to avoid TypeScript/module resolution issues at build-time.
-      // Use `any` to avoid depending on the static TypeScript types from the installed SDK.
-      const stripe: any = await import('@stripe/stripe-react-native');
-      const isApplePaySupported = stripe?.isApplePaySupported ?? stripe?.ApplePay?.isApplePaySupported;
-      if (typeof isApplePaySupported !== 'function') {
-        logger.warning('[ApplePay] isApplePaySupported not exported by installed SDK', getDiagnosticContext());
-        return false;
-      }
-      const supported = await isApplePaySupported();
+      // Imported lazily (not statically) so web bundles never pull in the native
+      // module — metro/webpack alias this specifier to stripe-mock.web.js for
+      // platform === 'web' only, so on iOS this is the real SDK.
+      // Deliberately NOT typed as `any`: the previous version guessed at
+      // `isApplePaySupported`, which this SDK does not export, and the `any`
+      // hid that from the compiler until it failed at runtime.
+      const { isPlatformPaySupported } = await import('@stripe/stripe-react-native');
+      // initStripe() must have run with a merchantIdentifier before the native
+      // layer will report Apple Pay as usable. StripeProvider does this at app
+      // mount, but await it explicitly rather than depending on mount ordering —
+      // initialize() is memoized, so this is a no-op once done. Every sibling
+      // service (payment-methods, connect) follows the same convention.
+      await stripeSdk.initialize();
+      const supported = await isPlatformPaySupported();
       if (!supported) {
         // Device-capable-but-unsupported is expected on iPads/simulators; log
         // at warning (not error) so this doesn't page anyone, but keep it
         // visible for correlating against a spike in tap-time failures.
-        logger.warning('[ApplePay] isApplePaySupported() returned false', getDiagnosticContext());
+        logger.warning('[ApplePay] isPlatformPaySupported() returned false', getDiagnosticContext());
       }
       return supported;
     } catch (error) {
@@ -158,34 +161,43 @@ class ApplePayService {
         return await response.json();
       }, 3, 1000);
 
-      // Step 2: Present Apple Pay sheet
-      const stripe: any = await import('@stripe/stripe-react-native');
-      const presentApplePay = stripe?.presentApplePay ?? stripe?.ApplePay?.presentApplePay;
-      if (typeof presentApplePay !== 'function') {
-        throw new Error('presentApplePay is not available in the installed Stripe SDK');
-      }
+      // Step 2: Present the Apple Pay sheet AND confirm the PaymentIntent.
+      // This is a single native call: confirmPlatformPayPayment presents the
+      // sheet and confirms on authorization. It replaces the legacy two-step
+      // presentApplePay() -> confirmApplePayPayment() pair, which Stripe removed
+      // from this SDK entirely (see docs/payments/APPLE_PAY_PRODUCTION_FAILURE_REPORT.md).
+      const { confirmPlatformPayPayment, PlatformPay, PlatformPayError } = await import(
+        '@stripe/stripe-react-native'
+      );
+      // Same reason as in isAvailable(): without a merchantIdentifier registered
+      // via initStripe(), PassKit rejects the sheet at the native layer with no
+      // JS-visible error. Idempotent.
+      await stripeSdk.initialize();
 
-      const { error: presentError } = await presentApplePay({
-        cartItems: [
-          {
-            label: request.description,
-            amount: request.amount.toFixed(2),
-            type: 'final',
-          },
-        ],
-        country: 'US',
-        currency: 'USD',
-        requiredShippingAddressFields: [],
-        requiredBillingContactFields: ['postalAddress'],
+      const { error: confirmError } = await confirmPlatformPayPayment(clientSecret, {
+        applePay: {
+          merchantCountryCode: 'US',
+          currencyCode: 'USD',
+          cartItems: [
+            {
+              paymentType: PlatformPay.PaymentType.Immediate,
+              label: request.description,
+              amount: request.amount.toFixed(2),
+            },
+          ],
+          // Shipping fields are intentionally omitted: requesting PostalAddress
+          // for shipping obliges us to implement PlatformPayButton's
+          // onShippingContactSelected callback, and this is not a shipped good.
+          requiredBillingContactFields: [PlatformPay.ContactField.PostalAddress],
+        },
       });
 
-      if (presentError) {
-        logger.error('[ApplePay] Presentation error', { error: presentError, ...getDiagnosticContext() });
-
-        // Handle user cancellation separately
-        // The SDK may return different casing for cancellation codes; handle common variants.
-        const cancelCodes = ['Canceled', 'canceled', 'USER_CANCELLED', 'user_cancelled'];
-        if (presentError && cancelCodes.includes(presentError.code)) {
+      if (confirmError) {
+        // Dismissing the sheet is a normal user action, not a fault — return
+        // before logging at error level or emitting a payment_failed event, so
+        // cancellations don't inflate the failure rate. The SDK reports this as
+        // a single canonical enum value, so no case-variant list is needed.
+        if (confirmError.code === PlatformPayError.Canceled) {
           return {
             success: false,
             error: 'Payment cancelled by user',
@@ -193,34 +205,6 @@ class ApplePayService {
           };
         }
 
-        try {
-          await analyticsService.trackEvent('payment_failed', {
-            method: 'apple_pay',
-            stage: 'present',
-            errorCode: presentError.code,
-            ...getDiagnosticContext(),
-          });
-        } catch {
-          /* analytics is best-effort */
-        }
-
-        return {
-          success: false,
-          error: presentError.message,
-          errorCode: presentError.code,
-        };
-      }
-
-      // Step 3: Confirm payment with the client secret
-      const confirmModule: any = await import('@stripe/stripe-react-native');
-      const confirmApplePayPayment = confirmModule?.confirmApplePayPayment ?? confirmModule?.ApplePay?.confirmApplePayPayment;
-      if (typeof confirmApplePayPayment !== 'function') {
-        throw new Error('confirmApplePayPayment is not available in the installed Stripe SDK');
-      }
-
-      const { error: confirmError } = await confirmApplePayPayment(clientSecret);
-
-      if (confirmError) {
         logger.error('[ApplePay] Confirmation error', { error: confirmError, ...getDiagnosticContext() });
         try {
           await analyticsService.trackEvent('payment_failed', {
@@ -239,7 +223,7 @@ class ApplePayService {
         };
       }
 
-      // Step 4: Verify payment on backend (with retry)
+      // Step 3: Verify payment on backend (with retry)
       const confirmResult = await this.retryRequest(async () => {
         const confirmEndpoint = `${API_BASE_URL}/apple-pay/confirm`
         const token = authToken || await getAuthToken()
