@@ -173,7 +173,7 @@ jest.mock('../../lib/services/search-service', () => ({
   searchService: { getTrendingBounties: jest.fn().mockResolvedValue([]) },
 }));
 jest.mock('../../lib/services/bounty-service', () => ({
-  bountyService: { getAll: jest.fn() },
+  bountyService: { getAll: jest.fn(), getOpenCount: jest.fn().mockResolvedValue(0) },
 }));
 jest.mock('../../lib/services/bounty-request-service', () => ({
   bountyRequestService: { getAll: jest.fn() },

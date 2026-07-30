@@ -592,6 +592,45 @@ export const bountyService = {
   },
 
   /**
+   * Count open bounties matching the given filters, server-side.
+   *
+   * Powers the feed's "N active" badge with a stable, accurate total instead of
+   * the paginated loaded-count (which grew as the user scrolled). Uses a
+   * head/count query so it never transfers rows. Returns null when Supabase
+   * isn't configured or the count fails, so callers can fall back gracefully.
+   *
+   * Note: this counts every OPEN bounty in the category — it does not subtract
+   * the deadline-passed / already-applied bounties the feed hides client-side,
+   * so it reflects "open bounties that exist", which is what the badge means.
+   */
+  async getOpenCount(options?: {
+    category?: string;
+    workType?: 'online' | 'in_person';
+  }): Promise<number | null> {
+    try {
+      if (!isSupabaseConfigured) return null;
+      let query: any = supabase
+        .from('bounties')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'open');
+      const category = options?.category;
+      if (category && category !== 'all' && category !== 'everything') {
+        query = query.eq('category', category);
+      }
+      if (options?.workType) query = query.eq('work_type', options.workType);
+      const { count, error } = await query;
+      if (error) {
+        logger.warning('Supabase getOpenCount error', { error, options });
+        return null;
+      }
+      return count ?? 0;
+    } catch (err) {
+      logger.warning('getOpenCount failed', { error: (err as any)?.message, options });
+      return null;
+    }
+  },
+
+  /**
    * Get all bounties
    */
   async getAll(options?: {
@@ -611,10 +650,18 @@ export const bountyService = {
         // down to the caller's own bounties and a non-inner embed returned a
         // null profile for every other poster. Fetch bounties on their own and
         // enrich from the `public_profiles` view instead.
+        // Deterministic ordering for stable offset pagination. Ordering by
+        // created_at alone lets rows with identical timestamps (or rows shifted
+        // by concurrent inserts) land in different positions across page
+        // fetches, so an offset page could skip or repeat a bounty — which made
+        // the feed's visible count vary between loads. The `id` tiebreaker gives
+        // every row a unique, stable sort position so paging covers the set
+        // exactly once.
         let query: any = supabase
           .from('bounties')
           .select(FEED_SAFE_BOUNTY_COLUMNS)
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false });
 
         if (options?.status) query = query.eq('status', options.status);
         if (options?.userId) query = query.eq('poster_id', options.userId);
