@@ -156,7 +156,23 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
           setTouched({ ...touched, location: true });
           return;
         }
-        onUpdate({ latitude: coords.latitude, longitude: coords.longitude });
+        // geocodeAddress only returns coordinates. Reverse-geocode them to also
+        // capture the coarse locality (district/city) — the pin-drop and
+        // suggestion paths set `neighborhood`, but a typed address wouldn't, so
+        // the "New Bounty Near You in <city>" notification would fall back to a
+        // plain "near you." Non-fatal: proceed with coords even if this fails.
+        let neighborhood: string | undefined;
+        try {
+          const detail = await locationService.reverseGeocodeDetailed(coords);
+          neighborhood = detail?.neighborhood || undefined;
+        } catch {
+          // ignore — locality is a nice-to-have, coordinates are what matter
+        }
+        onUpdate({
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          neighborhood,
+        });
       } catch {
         setErrors({
           ...errors,
