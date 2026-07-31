@@ -12,8 +12,10 @@ import { renderHook, act, waitFor } from '@testing-library/react-native';
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
 const mockGetItem = jest.fn();
+const mockSetItem = jest.fn(() => Promise.resolve());
 jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: (...args: any[]) => mockGetItem(...args),
+  setItem: (...args: any[]) => mockSetItem(...args),
 }));
 
 const mockGetOnboardingCompleteKey = jest.fn((id: string) => `@bounty_onboarding_completed:${id}`);
@@ -92,8 +94,13 @@ describe('useAppBootstrap', () => {
     await waitFor(() => expect(result.current.status).toBe('authenticated'));
 
     expect(result.current).toEqual({ status: 'authenticated', onboardingComplete: true });
-    // Fast path should NOT touch AsyncStorage.
+    // Fast path never READS AsyncStorage (it trusts the loaded profile)...
     expect(mockGetItem).not.toHaveBeenCalled();
+    // ...but it DOES self-heal the per-user local flag so a future cold resume
+    // with a transiently-null profile resolves to complete instead of onboarding.
+    await waitFor(() =>
+      expect(mockSetItem).toHaveBeenCalledWith('@bounty_onboarding_completed:user-1', 'true')
+    );
   });
 
   // ── Authenticated – slow path (AsyncStorage flag present) ─────────────────
