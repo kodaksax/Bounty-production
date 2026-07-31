@@ -128,6 +128,14 @@ export function useAppBootstrap(): AppBootstrapState {
     // Avoid the async round-trip to AsyncStorage entirely.
     if (profile?.onboarding_completed === true && !profile?.needs_onboarding) {
       resolvedForRef.current = userId;
+      // Self-heal the per-user local flag whenever a loaded profile confirms
+      // completion. The slow-path fallback below (used on cold resume when the
+      // profile is transiently null) trusts this flag; if it were only ever
+      // written at onboarding completion, a returning user whose flag was never
+      // set (onboarded before the flag existed, a failed write, or a reinstall)
+      // would be wrongly routed to /onboarding whenever their profile hadn't
+      // hydrated yet. Fire-and-forget: never block the fast path on storage.
+      void AsyncStorage.setItem(getOnboardingCompleteKey(userId), 'true').catch(() => {});
       setState({ status: 'authenticated', onboardingComplete: true });
       logAuthLifecycleEvent({
         correlationId,

@@ -340,8 +340,10 @@ export class AuthProfileService {
     }
 
     // OPTIMIZATION: Check cache first for instant session restoration
-    // This allows the app to show the main screen immediately while fresh data loads
-    const cachedProfile = await this.loadFromCache(userId);
+    // This allows the app to show the main screen immediately while fresh data
+    // loads. allowStale: restore even a long-idle cache (then background-refresh
+    // below) so returning users are never bounced to onboarding on cold resume.
+    const cachedProfile = await this.loadFromCache(userId, { allowStale: true });
     if (cachedProfile) {
       console.log('[authProfileService] Using cached profile for fast restoration:', cachedProfile.username);
       this.currentProfile = cachedProfile;
@@ -466,9 +468,11 @@ export class AuthProfileService {
       // must check getLastFetchError() before treating this as a new user.
       this.lastFetchError = msg || 'Unknown error fetching profile';
 
-      // Try to load from cache
+      // Try to load from cache. allowStale: the network fetch just failed, so a
+      // stale cached profile is strictly better than none (prevents a returning
+      // user from being treated as unauthenticated / needing onboarding).
       console.log('[authProfileService] Attempting to load from cache...');
-      const cached = await this.loadFromCache(userId);
+      const cached = await this.loadFromCache(userId, { allowStale: true });
       if (cached && cached.id === userId) {
         console.log('[authProfileService] Loaded profile from cache');
         this.currentProfile = cached;
@@ -803,7 +807,10 @@ export class AuthProfileService {
   /**
    * Load profile from cache
    */
-  private async loadFromCache(userId: string): Promise<AuthProfile | null> {
+  private async loadFromCache(
+    userId: string,
+    options?: { allowStale?: boolean }
+  ): Promise<AuthProfile | null> {
     try {
       const cacheKey = getProfileCacheKey(userId);
       const cachedJson = await AsyncStorage.getItem(cacheKey);
@@ -812,9 +819,17 @@ export class AuthProfileService {
       }
 
       const cached: CachedProfile = JSON.parse(cachedJson);
-      
-      // Check if cache is still valid
-      if (Date.now() - cached.timestamp > PROFILE_CACHE_EXPIRY) {
+
+      // Stale-while-revalidate: callers that immediately kick off a background
+      // refresh (session restore, post-failure fallback) pass `allowStale` so a
+      // returning user's profile is restored INSTANTLY even after a long
+      // absence. Previously, once the cache aged past PROFILE_CACHE_EXPIRY it was
+      // discarded, leaving `profile` null on cold resume after long inactivity —
+      // which routed already-onboarded users into /onboarding (the bootstrap
+      // fast path needs a non-null profile). Freshness is still guaranteed by
+      // the caller's background fetch; the cache only bridges the gap until it
+      // returns. Non-restore callers keep the original expiry semantics.
+      if (!options?.allowStale && Date.now() - cached.timestamp > PROFILE_CACHE_EXPIRY) {
         return null;
       }
 
