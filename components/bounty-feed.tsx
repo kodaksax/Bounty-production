@@ -115,6 +115,11 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   // middle of that would corrupt pagination offsets. Surfaced instead as a
   // "New bounties" pill the user taps to pull a fresh page.
   const [newBountiesCount, setNewBountiesCount] = useState(0)
+  // Server-side total of open bounties for the active category — the stable,
+  // accurate figure behind the "N active" badge. null until first fetched (and
+  // on count-fetch failure), in which case the badge falls back to the loaded
+  // count. See bountyService.getOpenCount.
+  const [activeCount, setActiveCount] = useState<number | null>(null)
 
   const { theme } = useAppThemeContext()
   const { bountyFormat } = useBountyFormat()
@@ -248,11 +253,13 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         success: true,
       })
     } catch (error) {
-      // Non-fatal: applications only drive client-side filtering. On failure we
-      // clear any stale applied IDs and proceed with an unfiltered feed rather
-      // than blocking the UI. The finally block guarantees `applicationsLoaded`
-      // is set so the skeleton clears.
-      setAppliedBountyIds(new Set())
+      // Non-fatal: applications only drive client-side filtering. DELIBERATELY
+      // preserve the previous applied-IDs set here rather than clearing it.
+      // Clearing on failure made the feed's visible count fluctuate: on a flaky
+      // network, a timed-out applications fetch would drop the filter (applied
+      // bounties reappear → count jumps up), then a later success would re-apply
+      // it (count drops). Keeping the last-known set makes the feed count stable
+      // across refreshes regardless of whether this fetch succeeded.
       const message = error instanceof Error ? error.message : String(error)
       logger.warning('feed.applications.request_failed', {
         userId: uid,
@@ -367,6 +374,18 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [distanceFilter])
 
+  // Server-side total of open bounties for the active category. Cheap
+  // (head/count query, no rows) and independent of pagination, so the "N active"
+  // badge stays stable while the user scrolls. Refreshes on mount + category
+  // change (via the effect below) and on pull-to-refresh.
+  const refreshActiveCount = useCallback(async () => {
+    setActiveCount(null)
+    const c = await bountyService.getOpenCount({ category: activeCategory })
+    setActiveCount(c)
+  }, [activeCategory])
+
+  useEffect(() => { refreshActiveCount() }, [refreshActiveCount])
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
@@ -376,13 +395,14 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       await Promise.all([
         loadBounties({ reset: true }),
         loadUserApplications().catch(err => console.error('Failed to refresh user applications:', err)),
+        refreshActiveCount().catch(err => console.error('Failed to refresh active count:', err)),
       ])
     } catch (error) {
       console.error('Error refreshing bounties:', error)
     } finally {
       setRefreshing(false)
     }
-  }, [loadBounties, loadUserApplications])
+  }, [loadBounties, loadUserApplications, refreshActiveCount])
 
   // Realtime: patch/remove already-loaded bounties in place (safe regardless
   // of pagination), and surface new open-bounty INSERTs as a count rather
@@ -449,12 +469,20 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
 
   useEffect(() => { loadUserApplications() }, [loadUserApplications])
   useEffect(() => { loadBounties({ reset: true }) }, []) // eslint-disable-line
+  // On returning to the bounty tab, refresh only the applied-bounty set (cheap,
+  // keeps the "already applied" filter current). Deliberately do NOT call
+  // loadBounties here: this component stays mounted (hidden via display:none),
+  // so its realtime subscription keeps the loaded list fresh and surfaces new
+  // posts via the "New bounties" pill. The previous `loadBounties({ reset:false })`
+  // appended the NEXT page on every tab focus, so the visible bounty count crept
+  // up on focus and dropped back on the next reset — a spurious, confusing
+  // change in the number of bounties shown. Initial load, pull-to-refresh, and
+  // the foreground-resume effect are the real (re)load triggers.
   useEffect(() => {
     if (activeScreen === 'bounty') {
-      loadBounties({ reset: false })
       loadUserApplications()
     }
-  }, [activeScreen, loadBounties, loadUserApplications])
+  }, [activeScreen, loadUserApplications])
 
   // Silently reload feed data when the app returns from the background.
   // Requests started before backgrounding can be dropped by the OS and
@@ -725,7 +753,16 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                   <View style={s.gridBannerSubRow}>
                     <Text style={s.gridBannerSubtitle}>Explore tasks near you</Text>
                     <View style={s.gridBannerCountBadge}>
-                      <Text style={s.gridBannerCountText}>{filteredBounties.length} active</Text>
+                      {/* Stable server count of open bounties in this category
+                          (independent of pagination). Falls back to the loaded
+                          count when the count query hasn't resolved / failed, or
+                          when a distance filter is active (that set comes from
+                          the nearby-search RPC, which has no total). */}
+                      <Text style={s.gridBannerCountText}>
+                        {(distanceFilter !== 'off' || activeCount == null
+                          ? filteredBounties.length
+                          : activeCount)} active
+                      </Text>
                     </View>
                   </View>
                   <View style={s.gridBannerSearchWrapper}>
