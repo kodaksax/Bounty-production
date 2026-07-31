@@ -820,6 +820,20 @@ export class AuthProfileService {
 
       const cached: CachedProfile = JSON.parse(cachedJson);
 
+      // Lightweight runtime validation: guard against corrupted or partial
+      // cache entries (e.g. truncated writes, schema changes, wrong-user data).
+      if (
+        !cached ||
+        typeof cached.timestamp !== 'number' ||
+        !isFinite(cached.timestamp) ||
+        !cached.profile ||
+        cached.profile.id !== userId
+      ) {
+        logger.warn('Invalid cached profile entry; discarding', { userId });
+        await AsyncStorage.removeItem(cacheKey);
+        return null;
+      }
+
       // Stale-while-revalidate: callers that immediately kick off a background
       // refresh (session restore, post-failure fallback) pass `allowStale` so a
       // returning user's profile is restored INSTANTLY even after a long
