@@ -118,7 +118,7 @@ jest.mock('../../lib/storage', () => ({
   },
 }));
 jest.mock('../../lib/services/bounty-service', () => ({
-  bountyService: { getAll: jest.fn().mockResolvedValue([]) },
+  bountyService: { getAll: jest.fn().mockResolvedValue([]), getOpenCount: jest.fn().mockResolvedValue(0) },
 }));
 jest.mock('../../lib/services/bounty-request-service', () => ({
   bountyRequestService: { getAll: jest.fn().mockResolvedValue([]) },
