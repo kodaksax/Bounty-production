@@ -623,7 +623,7 @@ export const bountyService = {
         logger.warning('Supabase getOpenCount error', { error, options });
         return null;
       }
-      return count ?? 0;
+      return count == null ? null : count;
     } catch (err) {
       logger.warning('getOpenCount failed', { error: (err as any)?.message, options });
       return null;

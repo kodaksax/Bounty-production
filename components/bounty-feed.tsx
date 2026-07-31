@@ -380,6 +380,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   // badge stays stable while the user scrolls. Refreshes on mount + category
   // change (via the effect below) and on pull-to-refresh.
   const refreshActiveCount = useCallback(async () => {
+    setActiveCount(null)
     const c = await bountyService.getOpenCount({ category: activeCategory })
     setActiveCount(c)
   }, [activeCategory])
