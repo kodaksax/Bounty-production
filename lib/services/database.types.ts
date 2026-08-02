@@ -63,6 +63,9 @@ export type Bounty = {
   latest_arrival_time?: string; // ISO 8601 timestamptz
   duration_minutes?: number;
   conditional_end_note?: string;
+  // Set when the poster approves the hunter's submission (status -> 'completed').
+  // See lib/services/completion-service.ts:approveSubmission.
+  completed_at?: string | null;
 }
 
 // Lightweight attachment metadata for client state (stored serialized in attachments_json)

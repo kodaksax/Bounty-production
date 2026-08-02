@@ -149,6 +149,7 @@ export default function PayoutScreen() {
       // Update bounty status to completed
       const updated = await bountyService.update(Number(bounty?.id), {
         status: 'completed',
+        completed_at: new Date().toISOString(),
       });
 
       if (!updated) {
@@ -217,6 +218,7 @@ export default function PayoutScreen() {
 
               const updated = await bountyService.update(Number(bountyId), {
                 status: 'completed',
+                completed_at: new Date().toISOString(),
               });
 
               if (!updated) {

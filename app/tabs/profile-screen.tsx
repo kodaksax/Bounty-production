@@ -1,7 +1,6 @@
 "use client"
 import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AchievementsGrid } from "components/achievements-grid";
 import { ConnectionStatus } from "components/connection-status";
 import { EnhancedProfileSection, PortfolioSection } from "components/enhanced-profile-section";
 import { HistoryScreen } from "components/history-screen";
@@ -57,7 +56,6 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
   const [stats, setStats] = useState({
     jobsAccepted: 0,
     bountiesPosted: 0,
-    badgesEarned: 0,
     isLoading: true,
   })
 
@@ -91,7 +89,6 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
         setStats({
           jobsAccepted: 0,
           bountiesPosted: 0,
-          badgesEarned: 0,
           isLoading: false,
         });
         return;
@@ -100,11 +97,9 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
         const postedBounties = await bountyService.getByUserId(authUserId);
         const acceptedRequests = await bountyRequestService.getByUserId(authUserId);
         const acceptedJobs = acceptedRequests.filter((req) => req.status === 'accepted');
-        const badgesCount = Math.min(postedBounties.length, 3);
         setStats({
           jobsAccepted: acceptedJobs.length,
           bountiesPosted: postedBounties.length,
-          badgesEarned: badgesCount,
           isLoading: false,
         });
         // Activity feed removed
@@ -350,7 +345,6 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
             activityStats={{
               jobsAccepted: stats.jobsAccepted,
               bountiesPosted: stats.bountiesPosted,
-              badgesEarned: stats.badgesEarned,
             }}
           />
         ) : (
@@ -434,12 +428,6 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
         {/* Platform Security & Trust Badges */}
         <View style={styles.section}>
           <TrustBadges compact={true} />
-        </View>
-
-        {/* Achievements - grid display (last) */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Achievements</Text>
-          <AchievementsGrid badgesEarned={stats.badgesEarned} />
         </View>
 
         {/* Activity section removed per requirements */}

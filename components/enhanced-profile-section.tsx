@@ -74,7 +74,6 @@ interface EnhancedProfileSectionProps {
     jobsCompleted?: number;
     jobsAccepted?: number;
     bountiesPosted?: number;
-    badgesEarned?: number;
   };
   hideActions?: boolean;
   // Set by callers (e.g. app/profile/[userId].tsx) that already render their
