@@ -95,7 +95,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
             style={styles.navButton}
             accessible={true}
             accessibilityRole="button"
-            accessibilityLabel={unreadMessageCount > 0 ? `Messages, ${unreadMessageCount} unread` : "Create new bounty or message"}
+            accessibilityLabel={unreadMessageCount > 0 ? `Activity, ${unreadMessageCount} unread` : "Create new bounty or message"}
             accessibilityState={{ selected: activeScreen === "messages" }}
           >
             <View style={styles.iconWrapper}>
@@ -112,7 +112,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
                 </View>
               )}
             </View>
-            <Text style={[styles.navLabel, activeScreen === "messages" && styles.navLabelActive]}>Inbox</Text>
+            <Text style={[styles.navLabel, activeScreen === "messages" && styles.navLabelActive]}>Activity</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => handleNavigate("wallet")}
@@ -177,7 +177,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
               color={activeScreen === "postings" ? theme.text : theme.textSecondary}
               size={NAV_ICON_SIZE}
             />
-            <Text style={[styles.navLabel, activeScreen === "postings" && styles.navLabelActive]}>Activity</Text>
+            <Text style={[styles.navLabel, activeScreen === "postings" && styles.navLabelActive]}>Need Help</Text>
           </TouchableOpacity>
           {showAdmin ? (
             <TouchableOpacity

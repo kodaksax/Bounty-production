@@ -1,11 +1,14 @@
-import { StepperHeader } from 'app/components/StepperHeader';
 import { useBountyDraft } from 'app/hooks/useBountyDraft';
-import { StepCompensation } from 'app/screens/CreateBounty/StepCompensation';
-import { StepDetails } from 'app/screens/CreateBounty/StepDetails';
-import { StepLocation } from 'app/screens/CreateBounty/StepLocation';
-import { StepReview } from 'app/screens/CreateBounty/StepReview';
-import { StepSchedule } from 'app/screens/CreateBounty/StepSchedule';
-import { StepTitle } from 'app/screens/CreateBounty/StepTitle';
+// Quick flow step screens. The previous long-form steps (StepTitle,
+// StepDetails, StepSchedule, StepCompensation, StepLocation, StepReview) are
+// preserved alongside these but are no longer rendered.
+import { StepDirectionContext } from 'app/screens/CreateBounty/quick/QuickStepLayout';
+import { StepPay } from 'app/screens/CreateBounty/quick/StepPay';
+import { StepPhotos } from 'app/screens/CreateBounty/quick/StepPhotos';
+import { StepReviewQuick } from 'app/screens/CreateBounty/quick/StepReviewQuick';
+import { StepTask } from 'app/screens/CreateBounty/quick/StepTask';
+import { StepWhen } from 'app/screens/CreateBounty/quick/StepWhen';
+import { StepWhere } from 'app/screens/CreateBounty/quick/StepWhere';
 import { bountyService } from 'app/services/bountyService';
 import { ErrorBanner } from 'components/error-banner';
 import { EmailVerificationBanner } from 'components/ui/email-verification-banner';
@@ -35,11 +38,11 @@ interface CreateBountyFlowProps {
 
 const TOTAL_STEPS = 6;
 const STEP_TITLES = [
-  'Title & Category',
-  'Details & Requirements',
+  'Task',
+  'Photos',
+  'Location',
   'Schedule',
   'Compensation',
-  'Location & Visibility',
   'Review & Confirm',
 ];
 
@@ -52,6 +55,9 @@ const POST_SURFACE = 'create_flow';
 
 export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateBountyFlowProps) {
   const [currentStep, setCurrentStep] = useState(1);
+  // 1 = advancing, -1 = going back. Read by each step's layout to pick the side
+  // it slides in from.
+  const [stepDirection, setStepDirection] = useState(1);
   const { session } = useAuthContext();
   const { draft, saveDraft, clearDraft, isLoading } = useBountyDraft(session?.user?.id);
   const insets = useSafeAreaInsets();
@@ -316,6 +322,7 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
   const handleNext = () => {
     if (currentStep < TOTAL_STEPS) {
       const next = currentStep + 1;
+      setStepDirection(1);
       setCurrentStep(next);
     }
   };
@@ -323,8 +330,15 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
   const handleBack = () => {
     if (currentStep > 1) {
       const prev = currentStep - 1;
+      setStepDirection(-1);
       setCurrentStep(prev);
     }
+  };
+
+  /** Jump to an arbitrary step (the review screen's Edit links). */
+  const handleGoToStep = (target: number) => {
+    setStepDirection(target >= currentStep ? 1 : -1);
+    setCurrentStep(target);
   };
 
   const handleCancel = () => {
@@ -420,59 +434,70 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
       <View className="flex-1">
         {!isEmailVerified && <EmailVerificationBanner email={userEmail} />}
 
-        <View className="px-0" style={{ paddingTop: 8, paddingBottom: 8 }}>
-          <StepperHeader
-            currentStep={currentStep}
-            totalSteps={TOTAL_STEPS}
-            stepTitle={STEP_TITLES[currentStep - 1]}
-          />
-        </View>
-
+        <StepDirectionContext.Provider value={stepDirection}>
         <View className="flex-1">
           {currentStep === 1 && (
-            <StepTitle draft={draft} onUpdate={saveDraft} onNext={handleNext} onBack={undefined} />
+            <StepTask
+              draft={draft}
+              onUpdate={saveDraft}
+              onNext={handleNext}
+              step={1}
+              totalSteps={TOTAL_STEPS}
+            />
           )}
           {currentStep === 2 && (
-            <StepDetails
+            <StepPhotos
               draft={draft}
               onUpdate={saveDraft}
               onNext={handleNext}
               onBack={handleBack}
+              step={2}
+              totalSteps={TOTAL_STEPS}
             />
           )}
           {currentStep === 3 && (
-            <StepSchedule
+            <StepWhere
               draft={draft}
               onUpdate={saveDraft}
               onNext={handleNext}
               onBack={handleBack}
+              step={3}
+              totalSteps={TOTAL_STEPS}
             />
           )}
           {currentStep === 4 && (
-            <StepCompensation
+            <StepWhen
               draft={draft}
               onUpdate={saveDraft}
               onNext={handleNext}
               onBack={handleBack}
+              step={4}
+              totalSteps={TOTAL_STEPS}
             />
           )}
           {currentStep === 5 && (
-            <StepLocation
+            <StepPay
               draft={draft}
               onUpdate={saveDraft}
               onNext={handleNext}
               onBack={handleBack}
+              step={5}
+              totalSteps={TOTAL_STEPS}
             />
           )}
           {currentStep === 6 && (
-            <StepReview
+            <StepReviewQuick
               draft={draft}
               onSubmit={submit}
               onBack={handleBack}
+              onEdit={handleGoToStep}
               isSubmitting={isSubmitting}
+              step={6}
+              totalSteps={TOTAL_STEPS}
             />
           )}
         </View>
+        </StepDirectionContext.Provider>
 
         {submitError && (
           <View className="px-4 pb-4">

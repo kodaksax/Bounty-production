@@ -59,7 +59,7 @@ export default function BountyPostedScreen() {
     hapticFeedback.light();
     complete({
       pathname: ROUTES.TABS.BOUNTY_APP,
-      params: { screen: 'postings', initialTab: 'requests' },
+      params: { screen: 'messages', initialTab: 'requests' },
     });
   };
 
@@ -67,7 +67,7 @@ export default function BountyPostedScreen() {
     hapticFeedback.light();
     complete({
       pathname: ROUTES.TABS.BOUNTY_APP,
-      params: { screen: 'postings', initialTab: 'myPostings' },
+      params: { screen: 'messages', initialTab: 'myPostings' },
     });
   };
 

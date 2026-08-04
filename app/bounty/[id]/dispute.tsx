@@ -174,7 +174,7 @@ export default function DisputeScreen() {
           // Use a full href with query string and replace to ensure the tab
           // wrapper (`/tabs/bounty-app`) mounts and receives the `screen`
           // and `initialTab` params so BottomNav is shown.
-          router.replace(`${ROUTES.TABS.BOUNTY_APP}?screen=postings&initialTab=inProgress`)
+          router.replace(`${ROUTES.TABS.BOUNTY_APP}?screen=messages&initialTab=inProgress`)
         return;
       }
     } catch (e) {

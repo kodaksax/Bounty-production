@@ -13,6 +13,11 @@
           "@stripe/stripe-identity-react-native"
         ]
       }
+    },
+    "install": {
+      "exclude": [
+        "@stripe/stripe-react-native"
+      ]
     }
   },
   "scripts": {
