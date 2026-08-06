@@ -559,7 +559,7 @@ describe('CompletionService', () => {
       expect(result).toBe(true);
 
       const { bountyService } = require('../../../lib/services/bounty-service');
-      expect(bountyService.update).toHaveBeenCalledWith('bounty123', { status: 'completed' });
+      expect(bountyService.update).toHaveBeenCalledWith('bounty123', { status: 'completed', completed_at: expect.any(String) });
 
       // The hunter must be notified that their work was approved.
       const calls = mockSupabase.from.mock.calls.map((c: any[]) => c[0]);
