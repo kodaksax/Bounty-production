@@ -2,12 +2,17 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { ValidationMessage } from 'app/components/ValidationMessage';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Platform, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { analyticsService } from '../../../lib/services/analytics-service';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import { EscrowExplainer } from '../../../components/ui/escrow-explainer';
-import { getInsufficientBalanceMessage, validateAmount, validateBalance } from '../../../lib/utils/bounty-validation';
+import { ErrorBanner } from '../../../components/error-banner';
+import { FeedbackModal } from '../../../components/ui/feedback-modal';
+import { PaymentMethodsModal } from '../../../components/payment-methods-modal';
+import { buildDepositSuccessMessage, useWalletDeposit } from '../../../hooks/use-wallet-deposit';
+import { getUserFriendlyError } from '../../../lib/utils/error-messages';
+import { validateAmount, validateBalance } from '../../../lib/utils/bounty-validation';
 import { useWallet } from '../../../lib/wallet-context';
 
 interface StepCompensationProps {
@@ -28,6 +33,23 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
   const { balance } = useWallet();
   const { theme } = useAppThemeContext();
 
+  // P0 fix (2026-08-01): previously a poster who picked an amount above their
+  // wallet balance hit a dead end here — a blocking alert with no way to add
+  // funds, on a screen that has no other funding affordance. That dead end,
+  // not the $0/Honor toggle, was the real reason paid bounties never got
+  // created for almost anyone (1 of 116 profiles had any balance at all).
+  // This reuses the same deposit hook the onboarding funding screen already
+  // uses so top-up behavior can't drift between the two surfaces.
+  const {
+    isProcessing: isTopUpProcessing,
+    error: topUpError, setError: setTopUpError,
+    successInfo: topUpSuccess, setSuccessInfo: setTopUpSuccess,
+    showPaymentMethodsModal, setShowPaymentMethodsModal,
+    paymentMethods, stripeLoading, loadPaymentMethods,
+    payWithCard, payWithApplePay,
+  } = useWalletDeposit();
+  const hasPaymentMethod = paymentMethods.length > 0;
+
   // Initialize customAmount from draft if it's a custom value
   useEffect(() => {
     if (draft.amount > 0 && !AMOUNT_PRESETS.includes(draft.amount)) {
@@ -38,14 +60,16 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
     }
   }, [draft.amount, customAmount]);
 
-  const showInsufficientBalanceAlert = (amount: number) => {
-    Alert.alert(
-      'Insufficient Balance',
-      getInsufficientBalanceMessage(amount, balance),
-      [
-        { text: 'OK', style: 'default' }
-      ]
-    );
+  const handleAddFunds = async (shortfall: number) => {
+    if (!hasPaymentMethod) {
+      setShowPaymentMethodsModal(true);
+      return;
+    }
+    await payWithCard(shortfall);
+  };
+
+  const handleAddFundsApplePay = async (shortfall: number) => {
+    await payWithApplePay(shortfall);
   };
 
   const handleHonorToggle = (value: boolean) => {
@@ -70,10 +94,11 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
   };
 
   const handlePresetSelect = (preset: number) => {
-    // Check if preset amount exceeds balance using shared validation
+    // Selection is no longer blocked by balance (see the P0 comment above) —
+    // picking an amount above balance now surfaces the funding CTA below
+    // instead of a dead-end alert. Still counted so the funnel shows how often
+    // posters reach for an amount they haven't funded yet.
     if (!validateBalance(preset, balance, draft.isForHonor)) {
-      // Dead end: the preset is refused and this screen offers no way to add
-      // funds. Counting these shows how often the amount step is unusable.
       analyticsService.trackEvent('post_amount_blocked_by_balance', {
         surface: 'create_flow',
         attemptedAmount: preset,
@@ -81,8 +106,6 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
         shortfall: Number((preset - balance).toFixed(2)),
         method: 'preset',
       });
-      showInsufficientBalanceAlert(preset);
-      return;
     }
     onUpdate({ amount: preset, isForHonor: false });
     setCustomAmount('');
@@ -135,10 +158,10 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
 
     // payment_attached — under architecture v1 the money is reserved from the
     // poster's existing wallet balance by a DB trigger at insert time, so the
-    // real gate is "does the balance already cover this". A poster who reaches
-    // here with a priced bounty but no balance will be blocked at publish with
-    // no way to fund from inside the flow; that gap is exactly the drop between
-    // amount_set and payment_attached.
+    // real gate is "does the balance already cover this". The in-flow top-up
+    // above (see handleAddFunds) is what lets a poster reach that covered
+    // state without leaving this screen; this event's volume over time is how
+    // we tell whether that top-up is actually closing the gap.
     if (amountCovered) {
       analyticsService.trackEvent('payment_attached', {
         surface: 'create_flow',
@@ -286,17 +309,68 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
                 {touched.amount && errors.amount && (
                   <ValidationMessage message={errors.amount} />
                 )}
-                {/* Balance Warning */}
+                {/* Balance shortfall — actionable, not a dead end. Shortfall is
+                    charged directly (not the full amount), since the existing
+                    balance already covers part of it. */}
                 {showBalanceWarning && (
-                  <View className="mt-2 bg-red-500/20 border border-red-500/50 rounded-lg p-3 flex-row items-start">
-                    <MaterialIcons name="warning" size={18} color="#fca5a5" style={{ marginRight: 8, marginTop: 2 }} />
-                    <View className="flex-1">
-                      <Text className="text-red-200 text-sm font-semibold">
-                        Insufficient Balance
-                      </Text>
-                      <Text className="text-red-200/80 text-xs mt-1">
-                        Amount (${draft.amount}) exceeds your balance (${balance.toFixed(2)}). Please add funds or choose a lower amount.
-                      </Text>
+                  <View className="mt-2 bg-red-500/20 border border-red-500/50 rounded-lg p-3">
+                    <View className="flex-row items-start mb-3">
+                      <MaterialIcons name="warning" size={18} color="#fca5a5" style={{ marginRight: 8, marginTop: 2 }} />
+                      <View className="flex-1">
+                        <Text className="text-red-200 text-sm font-semibold">
+                          Add ${(draft.amount - balance).toFixed(2)} to post this
+                        </Text>
+                        <Text className="text-red-200/80 text-xs mt-1">
+                          Your balance (${balance.toFixed(2)}) doesn't cover this amount yet.
+                        </Text>
+                      </View>
+                    </View>
+
+                    {(topUpError) && (
+                      <View className="mb-3">
+                        <ErrorBanner
+                          error={getUserFriendlyError(topUpError)}
+                          onDismiss={() => setTopUpError(null)}
+                        />
+                      </View>
+                    )}
+
+                    <View className="flex-row gap-2">
+                      {Platform.OS === 'ios' && (
+                        <TouchableOpacity
+                          onPress={() => handleAddFundsApplePay(draft.amount - balance)}
+                          disabled={isTopUpProcessing || stripeLoading}
+                          className="flex-1 py-3 rounded-lg flex-row items-center justify-center"
+                          style={{ backgroundColor: theme.isDark ? '#ffffff' : '#000000' }}
+                          accessibilityRole="button"
+                          accessibilityLabel="Pay shortfall with Apple Pay"
+                        >
+                          {isTopUpProcessing ? (
+                            <ActivityIndicator size="small" color={theme.isDark ? '#000000' : '#ffffff'} />
+                          ) : (
+                            <MaterialIcons name="apple" size={20} color={theme.isDark ? '#000000' : '#ffffff'} />
+                          )}
+                        </TouchableOpacity>
+                      )}
+                      <TouchableOpacity
+                        onPress={() => handleAddFunds(draft.amount - balance)}
+                        disabled={isTopUpProcessing || stripeLoading}
+                        className="flex-1 py-3 rounded-lg flex-row items-center justify-center"
+                        style={{ backgroundColor: theme.primary }}
+                        accessibilityRole="button"
+                        accessibilityLabel={hasPaymentMethod ? `Add $${(draft.amount - balance).toFixed(2)} to your balance` : 'Link a payment method'}
+                      >
+                        {(isTopUpProcessing || stripeLoading) ? (
+                          <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />
+                        ) : null}
+                        <Text className="font-semibold" style={{ color: '#fff' }}>
+                          {stripeLoading
+                            ? 'Checking…'
+                            : !hasPaymentMethod
+                              ? 'Link a Card'
+                              : `Add $${(draft.amount - balance).toFixed(2)}`}
+                        </Text>
+                      </TouchableOpacity>
                     </View>
                   </View>
                 )}
@@ -375,6 +449,29 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
           </TouchableOpacity>
         </View>
       </View>
+
+      {showPaymentMethodsModal && (
+        <PaymentMethodsModal
+          isOpen={showPaymentMethodsModal}
+          onClose={() => {
+            setShowPaymentMethodsModal(false);
+            loadPaymentMethods();
+          }}
+          onBackdropPress={() => {
+            setShowPaymentMethodsModal(false);
+            loadPaymentMethods();
+          }}
+        />
+      )}
+
+      <FeedbackModal
+        visible={!!topUpSuccess}
+        variant="success"
+        title="Added!"
+        message={topUpSuccess ? buildDepositSuccessMessage(topUpSuccess) : ''}
+        actionLabel="Continue"
+        onDismiss={() => setTopUpSuccess(null)}
+      />
     </View>
   );
 }

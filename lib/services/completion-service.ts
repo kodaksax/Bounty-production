@@ -698,7 +698,7 @@ export const completionService = {
 
       // Update bounty status
       // Note: bounty IDs may be UUID strings; do NOT coerce to Number() (causes NaN)
-      await bountyService.update(bountyId, { status: 'completed' });
+      await bountyService.update(bountyId, { status: 'completed', completed_at: new Date().toISOString() });
 
       // Notify the hunter that their work was approved.
       // On the Supabase-direct path this update does NOT hit the server.js

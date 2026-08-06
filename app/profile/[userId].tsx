@@ -25,7 +25,6 @@ import {
 } from "react-native";
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AchievementsGrid } from "../../components/achievements-grid";
 import { EnhancedProfileSection, PortfolioSection } from "../../components/enhanced-profile-section";
 import { ReportModal } from "../../components/ReportModal";
 import { SkillsetChips } from "../../components/skillset-chips";
@@ -119,7 +118,6 @@ export default function UserProfileScreen() {
     jobsAccepted: 0,
     jobsCompleted: 0,
     bountiesPosted: 0,
-    badgesEarned: 0,
     isLoading: true,
   });
   const [isCreatingChat, setIsCreatingChat] = useState(false);
@@ -173,12 +171,10 @@ export default function UserProfileScreen() {
         const postedBounties = await bountyService.getByUserId(userId);
         const requests = await bountyRequestService.getByUserId(userId);
         const acceptedJobs = requests.filter((req) => req.status === 'accepted');
-        const badgesCount = Math.min(postedBounties.length, 3);
         setStats({
           jobsAccepted: acceptedJobs.length,
           jobsCompleted: 0,
           bountiesPosted: postedBounties.length,
-          badgesEarned: badgesCount,
           isLoading: false,
         });
       } catch (error) {
@@ -544,7 +540,6 @@ export default function UserProfileScreen() {
           activityStats={{
             jobsCompleted: stats.jobsCompleted,
             bountiesPosted: stats.bountiesPosted,
-            badgesEarned: stats.badgesEarned,
           }}
         />
 
@@ -634,12 +629,6 @@ export default function UserProfileScreen() {
 
         {/* Portfolio */}
         <PortfolioSection userId={userId} isOwnProfile={isOwnProfile} />
-
-        {/* Achievements */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Achievements</Text>
-          <AchievementsGrid badgesEarned={stats.badgesEarned} />
-        </View>
       </ScrollView>
 
       {/* Report Modal */}

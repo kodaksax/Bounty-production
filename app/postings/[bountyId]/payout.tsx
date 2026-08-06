@@ -147,8 +147,9 @@ export default function PayoutScreen() {
       }
 
       // Update bounty status to completed
-      const updated = await bountyService.update(Number(bounty?.id), {
+      const updated = await bountyService.update(bounty?.id, {
         status: 'completed',
+        completed_at: new Date().toISOString(),
       });
 
       if (!updated) {
@@ -215,8 +216,9 @@ export default function PayoutScreen() {
             try {
               setIsProcessing(true);
 
-              const updated = await bountyService.update(Number(bountyId), {
+              const updated = await bountyService.update(bountyId, {
                 status: 'completed',
+                completed_at: new Date().toISOString(),
               });
 
               if (!updated) {
