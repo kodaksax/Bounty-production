@@ -77,9 +77,9 @@
     },
     "production": {
       "ios": {
-        "appleId": "leewright093@gmail.com",
-        "ascAppId": "6756679797",
-        "appleTeamId": "TGTDD8D225"
+        "appleId": "${APPLE_ID}",
+        "ascAppId": "${ASC_APP_ID}",
+        "appleTeamId": "${APPLE_TEAM_ID}"
       }
     }
   }
