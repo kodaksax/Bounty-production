@@ -12,22 +12,28 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { SPACING } from '../../lib/constants/accessibility';
+import { BountyMapView } from '../../components/location/BountyMapView';
 import { EmptyState } from '../../components/ui/empty-state';
 import { Skeleton } from '../../components/ui/skeleton';
-import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
-import type { AppTheme } from '../../lib/themes/types';
+import { consumeIsFirstBountyListViewOfSession } from '../../lib/analytics/sessionFlags';
+import { SPACING } from '../../lib/constants/accessibility';
+import { analyticsService } from '../../lib/services/analytics-service';
 import { bountyService } from '../../lib/services/bounty-service';
 import type { Bounty } from '../../lib/services/database.types';
-import { analyticsService } from '../../lib/services/analytics-service';
-import { consumeIsFirstBountyListViewOfSession } from '../../lib/analytics/sessionFlags';
 import { recentSearchService } from '../../lib/services/recent-search-service';
 import { searchService } from '../../lib/services/search-service';
 import { userSearchService } from '../../lib/services/user-search-service';
-import { BountyMapView } from '../../components/location/BountyMapView';
-import type { AutocompleteSuggestion, BountySearchFilters, RecentSearch, UserProfile } from '../../lib/types';
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../lib/themes/types';
+import type {
+    AutocompleteSuggestion,
+    BountySearchFilters,
+    RecentSearch,
+    TrendingBounty,
+    UserProfile,
+} from '../../lib/types';
 import { logger } from '../../lib/utils/error-logger';
-import type { TrendingBounty } from '../../lib/types'
+import { getDeviceServiceabilityContext } from '../../lib/utils/serviceable-region';
 type SearchTab = 'bounties' | 'users';
 
 // Debounce delay for autocomplete (500ms as per requirements)
@@ -78,8 +84,8 @@ export default function EnhancedSearchScreen() {
   // faster, later one's results (e.g. filters change shortly after typing,
   // firing two overlapping requests).
   const searchRequestIdRef = useRef(0);
-  const [trendingBounties, setTrendingBounties] = useState<TrendingBounty[]>([])
-  const [isLoadingTrending, setIsLoadingTrending] = useState(true)
+  const [trendingBounties, setTrendingBounties] = useState<TrendingBounty[]>([]);
+  const [isLoadingTrending, setIsLoadingTrending] = useState(true);
 
   // Autocomplete state
   const [suggestions, setSuggestions] = useState<AutocompleteSuggestion[]>([]);
@@ -88,17 +94,17 @@ export default function EnhancedSearchScreen() {
   const [filtersLoaded, setFiltersLoaded] = useState(false);
   // Load trending bounties
   const loadTrendingBounties = useCallback(async () => {
-    setIsLoadingTrending(true)
+    setIsLoadingTrending(true);
     try {
-      const trending = await searchService.getTrendingBounties(5)
-      const unique = Array.from(new Map(trending.map(t => [String(t.id), t])).values())
-      setTrendingBounties(unique)
+      const trending = await searchService.getTrendingBounties(5);
+      const unique = Array.from(new Map(trending.map(t => [String(t.id), t])).values());
+      setTrendingBounties(unique);
     } catch (error) {
-      console.error('Error loading trending bounties:', error)
+      console.error('Error loading trending bounties:', error);
     } finally {
-      setIsLoadingTrending(false)
+      setIsLoadingTrending(false);
     }
-  }, [])
+  }, []);
   // Bounty filters
   const [filters, setFilters] = useState<BountySearchFilters>({
     sortBy: 'date_desc',
@@ -123,11 +129,10 @@ export default function EnhancedSearchScreen() {
     };
     loadSavedFilters();
   }, []);
-   useEffect(() => {
-   
-    loadTrendingBounties()
+  useEffect(() => {
+    loadTrendingBounties();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, []);
 
   // Persist filters when they change (debounced to reduce I/O overhead)
   useEffect(() => {
@@ -149,7 +154,9 @@ export default function EnhancedSearchScreen() {
 
   // Load recent searches function - memoized to be used in dependency arrays
   const loadRecentSearches = useCallback(async () => {
-    const searches = await recentSearchService.getRecentSearchesByType(activeTab === 'bounties' ? 'bounty' : 'user');
+    const searches = await recentSearchService.getRecentSearchesByType(
+      activeTab === 'bounties' ? 'bounty' : 'user'
+    );
     setRecentSearches(searches);
   }, [activeTab]);
 
@@ -188,37 +195,43 @@ export default function EnhancedSearchScreen() {
     };
   }, [query]);
 
-  const handleSuggestionPress = useCallback((suggestion: AutocompleteSuggestion) => {
-    setShowSuggestions(false);
+  const handleSuggestionPress = useCallback(
+    (suggestion: AutocompleteSuggestion) => {
+      setShowSuggestions(false);
 
-    if (suggestion.type === 'bounty') {
-      const bountyId = suggestion.id.replace('bounty_', '');
-      router.push(`/bounty/${bountyId}/public`);
-    } else if (suggestion.type === 'user') {
-      const userId = suggestion.id.replace('user_', '');
-      router.push(`/profile/${userId}`);
-    } else if (suggestion.type === 'skill') {
-      // Search for bounties with this skill, appending to existing skills if not already present
-      setQuery(suggestion.text);
-      setFilters(prev => ({
-        ...prev,
-        skills: prev.skills?.includes(suggestion.text)
-          ? prev.skills
-          : [...(prev.skills || []), suggestion.text]
-      }));
-    }
-  }, [router]);
+      if (suggestion.type === 'bounty') {
+        const bountyId = suggestion.id.replace('bounty_', '');
+        router.push(`/bounty/${bountyId}/public`);
+      } else if (suggestion.type === 'user') {
+        const userId = suggestion.id.replace('user_', '');
+        router.push(`/profile/${userId}`);
+      } else if (suggestion.type === 'skill') {
+        // Search for bounties with this skill, appending to existing skills if not already present
+        setQuery(suggestion.text);
+        setFilters(prev => ({
+          ...prev,
+          skills: prev.skills?.includes(suggestion.text)
+            ? prev.skills
+            : [...(prev.skills || []), suggestion.text],
+        }));
+      }
+    },
+    [router]
+  );
 
-  const mapBounty = useCallback((b: Bounty): BountyRowItem => ({
-    id: b.id.toString(),
-    title: b.title || 'Untitled',
-    description: b.description || '',
-    amount: (b as any).amount,
-    created_at: (b as any).created_at,
-    is_for_honor: (b as any).is_for_honor,
-    location: (b as any).location,
-    status: (b as any).status,
-  }), []);
+  const mapBounty = useCallback(
+    (b: Bounty): BountyRowItem => ({
+      id: b.id.toString(),
+      title: b.title || 'Untitled',
+      description: b.description || '',
+      amount: (b as any).amount,
+      created_at: (b as any).created_at,
+      is_for_honor: (b as any).is_for_honor,
+      location: (b as any).location,
+      status: (b as any).status,
+    }),
+    []
+  );
 
   const performBountySearch = useCallback(
     async (searchQuery: string, searchFilters: BountySearchFilters) => {
@@ -254,6 +267,7 @@ export default function EnhancedSearchScreen() {
           filters_applied: filtersApplied,
           sort_order: searchFilters.sortBy || 'date_desc',
           is_first_view_of_session: consumeIsFirstBountyListViewOfSession(),
+          ...getDeviceServiceabilityContext(),
         });
 
         // Save to recent searches if query exists
@@ -313,17 +327,23 @@ export default function EnhancedSearchScreen() {
     };
   }, [query, filters, activeTab, performBountySearch, performUserSearch]);
 
-  const handleRecentSearchClick = useCallback((search: RecentSearch) => {
-    setQuery(search.query);
-    if (search.filters && activeTab === 'bounties') {
-      setFilters(search.filters as BountySearchFilters);
-    }
-  }, [activeTab]);
+  const handleRecentSearchClick = useCallback(
+    (search: RecentSearch) => {
+      setQuery(search.query);
+      if (search.filters && activeTab === 'bounties') {
+        setFilters(search.filters as BountySearchFilters);
+      }
+    },
+    [activeTab]
+  );
 
-  const handleRemoveRecentSearch = useCallback(async (searchId: string) => {
-    await recentSearchService.removeSearch(searchId);
-    await loadRecentSearches();
-  }, [loadRecentSearches]);
+  const handleRemoveRecentSearch = useCallback(
+    async (searchId: string) => {
+      await recentSearchService.removeSearch(searchId);
+      await loadRecentSearches();
+    },
+    [loadRecentSearches]
+  );
 
   const clearFilters = useCallback(() => {
     setFilters({
@@ -332,113 +352,145 @@ export default function EnhancedSearchScreen() {
     });
   }, []);
 
-  const renderBountyItem = useCallback(({ item, index }: { item: BountyRowItem; index: number }) => {
-    const priceLabel = item.is_for_honor ? 'for honor' : item.amount != null ? `$${item.amount}` : '';
-    const locationLabel = item.location ? `, in ${item.location}` : '';
-    const accessibilityLabel = `${item.title}${priceLabel ? ', ' + priceLabel : ''}${locationLabel}`;
+  const renderBountyItem = useCallback(
+    ({ item, index }: { item: BountyRowItem; index: number }) => {
+      const priceLabel = item.is_for_honor
+        ? 'for honor'
+        : item.amount != null
+          ? `$${item.amount}`
+          : '';
+      const locationLabel = item.location ? `, in ${item.location}` : '';
+      const accessibilityLabel = `${item.title}${priceLabel ? ', ' + priceLabel : ''}${locationLabel}`;
 
-    return (
-      <TouchableOpacity
-        style={s.card}
-        onPress={() => router.push(`/bounty/${item.id}/public?source=search&position=${index}`)}
-        accessibilityRole="button"
-        accessibilityLabel={accessibilityLabel}
-        accessibilityHint="Opens bounty details"
-      >
-        <View style={s.cardHeader}>
-          <Text style={s.cardTitle}>{item.title}</Text>
-          {item.is_for_honor && (
-            <View style={s.honorBadge}>
-              <Text style={s.honorText}>Honor</Text>
+      return (
+        <TouchableOpacity
+          style={s.card}
+          onPress={() => router.push(`/bounty/${item.id}/public?source=search&position=${index}`)}
+          accessibilityRole="button"
+          accessibilityLabel={accessibilityLabel}
+          accessibilityHint="Opens bounty details"
+        >
+          <View style={s.cardHeader}>
+            <Text style={s.cardTitle}>{item.title}</Text>
+            {item.is_for_honor && (
+              <View style={s.honorBadge}>
+                <Text style={s.honorText}>Honor</Text>
+              </View>
+            )}
+          </View>
+          {item.description ? (
+            <Text style={s.cardDesc} numberOfLines={2}>
+              {item.description}
+            </Text>
+          ) : null}
+          <View style={s.metaRow}>
+            {item.amount != null && !item.is_for_honor && (
+              <Text style={s.amount}>${item.amount}</Text>
+            )}
+            {item.location && (
+              <Text style={s.location} numberOfLines={1}>
+                📍 {item.location}
+              </Text>
+            )}
+            {item.created_at && <Text style={s.time}>{timeAgo(item.created_at)}</Text>}
+          </View>
+          {item.status && item.status !== 'open' && (
+            <View style={s.statusBadge}>
+              <Text style={s.statusText}>{item.status}</Text>
             </View>
           )}
-        </View>
-        {item.description ? (
-          <Text style={s.cardDesc} numberOfLines={2}>
-            {item.description}
-          </Text>
-        ) : null}
-        <View style={s.metaRow}>
-          {item.amount != null && !item.is_for_honor && (
-            <Text style={s.amount}>${item.amount}</Text>
-          )}
-          {item.location && (
-            <Text style={s.location} numberOfLines={1}>
-              📍 {item.location}
+        </TouchableOpacity>
+      );
+    },
+    [router]
+  );
+
+  const renderUserItem = useCallback(
+    ({ item }: { item: UserProfile }) => {
+      const verifiedLabel =
+        item.verificationStatus === 'verified' || item.verificationStatus === 'trusted'
+          ? ', verified user'
+          : '';
+      const skillsLabel =
+        item.skills && item.skills.length > 0
+          ? `, skills: ${item.skills.slice(0, 3).join(', ')}`
+          : '';
+      const accessibilityLabel = `${item.username}${verifiedLabel}${skillsLabel}`;
+
+      return (
+        <TouchableOpacity
+          style={s.card}
+          onPress={() => router.push(`/profile/${item.id}`)}
+          accessibilityRole="button"
+          accessibilityLabel={accessibilityLabel}
+          accessibilityHint="Opens user profile"
+        >
+          <View style={s.cardHeader}>
+            <Text style={s.cardTitle}>{item.username}</Text>
+            {(item.verificationStatus === 'verified' || item.verificationStatus === 'trusted') && (
+              <MaterialIcons
+                name="verified"
+                size={16}
+                color={theme.primaryLight}
+                accessibilityElementsHidden={true}
+              />
+            )}
+          </View>
+          {item.bio && (
+            <Text style={s.cardDesc} numberOfLines={2}>
+              {item.bio}
             </Text>
           )}
-          {item.created_at && (
-            <Text style={s.time}>{timeAgo(item.created_at)}</Text>
+          {item.skills && item.skills.length > 0 && (
+            <View style={s.skillsRow}>
+              {item.skills.slice(0, 3).map((skill, idx) => (
+                <View key={`${item.id}-skill-${idx}-${skill.toLowerCase()}`} style={s.skillChip}>
+                  <Text style={s.skillText}>{skill}</Text>
+                </View>
+              ))}
+            </View>
           )}
-        </View>
-        {item.status && item.status !== 'open' && (
-          <View style={s.statusBadge}>
-            <Text style={s.statusText}>{item.status}</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-    );
-  }, [router]);
+        </TouchableOpacity>
+      );
+    },
+    [router]
+  );
 
-  const renderUserItem = useCallback(({ item }: { item: UserProfile }) => {
-    const verifiedLabel = (item.verificationStatus === 'verified' || item.verificationStatus === 'trusted') ? ', verified user' : '';
-    const skillsLabel = item.skills && item.skills.length > 0 ? `, skills: ${item.skills.slice(0, 3).join(', ')}` : '';
-    const accessibilityLabel = `${item.username}${verifiedLabel}${skillsLabel}`;
-
-    return (
-      <TouchableOpacity
-        style={s.card}
-        onPress={() => router.push(`/profile/${item.id}`)}
-        accessibilityRole="button"
-        accessibilityLabel={accessibilityLabel}
-        accessibilityHint="Opens user profile"
-      >
-        <View style={s.cardHeader}>
-          <Text style={s.cardTitle}>{item.username}</Text>
-          {(item.verificationStatus === 'verified' || item.verificationStatus === 'trusted') && (
-            <MaterialIcons name="verified" size={16} color={theme.primaryLight} accessibilityElementsHidden={true} />
-          )}
-        </View>
-        {item.bio && (
-          <Text style={s.cardDesc} numberOfLines={2}>
-            {item.bio}
-          </Text>
-        )}
-        {item.skills && item.skills.length > 0 && (
-          <View style={s.skillsRow}>
-            {item.skills.slice(0, 3).map((skill, idx) => (
-              <View key={`${item.id}-skill-${idx}-${skill.toLowerCase()}`} style={s.skillChip}>
-                <Text style={s.skillText}>{skill}</Text>
-              </View>
-            ))}
-          </View>
-        )}
-      </TouchableOpacity>
-    );
-  }, [router]);
-
-  const renderRecentSearch = useCallback(({ item }: { item: RecentSearch }) => (
-    <View style={s.recentSearchItem}>
-      <TouchableOpacity
-        style={s.recentSearchContent}
-        onPress={() => handleRecentSearchClick(item)}
-        accessibilityRole="button"
-        accessibilityLabel={`Recent search: ${item.query}`}
-        accessibilityHint="Tap to repeat this search"
-      >
-        <MaterialIcons name="history" size={18} color={theme.primaryLight} accessibilityElementsHidden={true} />
-        <Text style={s.recentSearchText}>{item.query}</Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        onPress={() => handleRemoveRecentSearch(item.id)}
-        accessibilityRole="button"
-        accessibilityLabel="Remove recent search"
-        accessibilityHint="Removes this search from history"
-      >
-        <MaterialIcons name="close" size={18} color={theme.primaryLight} accessibilityElementsHidden={true} />
-      </TouchableOpacity>
-    </View>
-  ), [handleRecentSearchClick, handleRemoveRecentSearch]);
+  const renderRecentSearch = useCallback(
+    ({ item }: { item: RecentSearch }) => (
+      <View style={s.recentSearchItem}>
+        <TouchableOpacity
+          style={s.recentSearchContent}
+          onPress={() => handleRecentSearchClick(item)}
+          accessibilityRole="button"
+          accessibilityLabel={`Recent search: ${item.query}`}
+          accessibilityHint="Tap to repeat this search"
+        >
+          <MaterialIcons
+            name="history"
+            size={18}
+            color={theme.primaryLight}
+            accessibilityElementsHidden={true}
+          />
+          <Text style={s.recentSearchText}>{item.query}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => handleRemoveRecentSearch(item.id)}
+          accessibilityRole="button"
+          accessibilityLabel="Remove recent search"
+          accessibilityHint="Removes this search from history"
+        >
+          <MaterialIcons
+            name="close"
+            size={18}
+            color={theme.primaryLight}
+            accessibilityElementsHidden={true}
+          />
+        </TouchableOpacity>
+      </View>
+    ),
+    [handleRecentSearchClick, handleRemoveRecentSearch]
+  );
 
   const keyExtractorBounty = useCallback((item: BountyRowItem) => item.id, []);
   const keyExtractorUser = useCallback((item: UserProfile) => item.id, []);
@@ -448,13 +500,14 @@ export default function EnhancedSearchScreen() {
   // so getItemLayout with fixed heights would cause incorrect offsets and blank space.
   // Removed getItemLayout to allow FlatList to measure items dynamically.
 
-  const hasActiveFilters = useMemo(() =>
-    filters.location ||
-    filters.minAmount !== undefined ||
-    filters.maxAmount !== undefined ||
-    filters.workType ||
-    filters.isForHonor !== undefined ||
-    (filters.status && filters.status.length > 1),
+  const hasActiveFilters = useMemo(
+    () =>
+      filters.location ||
+      filters.minAmount !== undefined ||
+      filters.maxAmount !== undefined ||
+      filters.workType ||
+      filters.isForHonor !== undefined ||
+      (filters.status && filters.status.length > 1),
     [filters]
   );
 
@@ -468,21 +521,32 @@ export default function EnhancedSearchScreen() {
           accessibilityLabel="Go back"
           accessibilityHint="Returns to previous screen"
         >
-          <MaterialIcons name="arrow-back" size={22} color={theme.text} accessibilityElementsHidden={true} />
+          <MaterialIcons
+            name="arrow-back"
+            size={22}
+            color={theme.text}
+            accessibilityElementsHidden={true}
+          />
         </TouchableOpacity>
-        <Text style={s.headerTitle} accessibilityRole="header">Search</Text>
+        <Text style={s.headerTitle} accessibilityRole="header">
+          Search
+        </Text>
       </View>
-
-     
 
       {/* Search bar */}
       <View style={s.searchRow}>
-        <MaterialIcons name="search" size={20} color={theme.primaryLight} style={s.iconMarginHorizontal8} accessibilityElementsHidden={true} />
+        <MaterialIcons
+          name="search"
+          size={20}
+          color={theme.primaryLight}
+          style={s.iconMarginHorizontal8}
+          accessibilityElementsHidden={true}
+        />
         <TextInput
           value={query}
           placeholder={activeTab === 'bounties' ? 'Search bounties...' : 'Search users...'}
           placeholderTextColor="#6B7280"
-          onChangeText={(text) => {
+          onChangeText={text => {
             setQuery(text);
             if (!text.trim()) {
               setShowSuggestions(false);
@@ -501,27 +565,47 @@ export default function EnhancedSearchScreen() {
         />
         {!!query && !isSearching && (
           <TouchableOpacity
-              onPress={() => { setQuery(''); setShowSuggestions(false); }}
-              style={s.smallPadding}
-              accessibilityRole="button"
-              accessibilityLabel="Clear search"
-              accessibilityHint="Clears the search text"
-            >
-            <MaterialIcons name="close" size={18} color={theme.primaryLight} accessibilityElementsHidden={true} />
+            onPress={() => {
+              setQuery('');
+              setShowSuggestions(false);
+            }}
+            style={s.smallPadding}
+            accessibilityRole="button"
+            accessibilityLabel="Clear search"
+            accessibilityHint="Clears the search text"
+          >
+            <MaterialIcons
+              name="close"
+              size={18}
+              color={theme.primaryLight}
+              accessibilityElementsHidden={true}
+            />
           </TouchableOpacity>
         )}
-        {(isSearching || isLoadingSuggestions) && <ActivityIndicator color={theme.primaryLight} size="small" style={s.activityMarginRight} accessibilityLabel="Loading search results" />}
+        {(isSearching || isLoadingSuggestions) && (
+          <ActivityIndicator
+            color={theme.primaryLight}
+            size="small"
+            style={s.activityMarginRight}
+            accessibilityLabel="Loading search results"
+          />
+        )}
         {activeTab === 'bounties' && (
           <>
             <TouchableOpacity
-              onPress={() => setShowMap((v) => !v)}
+              onPress={() => setShowMap(v => !v)}
               style={s.filterBtn}
               accessibilityRole="button"
               accessibilityLabel={showMap ? 'Show list view' : 'Show map view'}
               accessibilityHint="Toggles between list and map view of bounty results"
               accessibilityState={{ selected: showMap }}
             >
-              <MaterialIcons name={showMap ? 'view-list' : 'map'} size={20} color={theme.primaryLight} accessibilityElementsHidden={true} />
+              <MaterialIcons
+                name={showMap ? 'view-list' : 'map'}
+                size={20}
+                color={theme.primaryLight}
+                accessibilityElementsHidden={true}
+              />
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => router.push('/search/saved-searches')}
@@ -530,22 +614,32 @@ export default function EnhancedSearchScreen() {
               accessibilityLabel="Saved searches"
               accessibilityHint="View and manage saved searches"
             >
-              <MaterialIcons name="bookmark-outline" size={20} color={theme.primaryLight} accessibilityElementsHidden={true} />
+              <MaterialIcons
+                name="bookmark-outline"
+                size={20}
+                color={theme.primaryLight}
+                accessibilityElementsHidden={true}
+              />
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => setShowFilters(true)}
               style={s.filterBtn}
               accessibilityRole="button"
-              accessibilityLabel={hasActiveFilters ? "Filter (active)" : "Filter"}
+              accessibilityLabel={hasActiveFilters ? 'Filter (active)' : 'Filter'}
               accessibilityHint="Opens filter options for bounty search"
             >
-              <MaterialIcons name="tune" size={20} color={hasActiveFilters ? '#fcd34d' : theme.primaryLight} accessibilityElementsHidden={true} />
+              <MaterialIcons
+                name="tune"
+                size={20}
+                color={hasActiveFilters ? '#fcd34d' : theme.primaryLight}
+                accessibilityElementsHidden={true}
+              />
               {hasActiveFilters && <View style={s.filterDot} />}
             </TouchableOpacity>
           </>
         )}
       </View>
-       {/* Tab switcher */}
+      {/* Tab switcher */}
       <View style={s.tabRow}>
         <TouchableOpacity
           style={[s.tab, activeTab === 'bounties' && s.tabActive]}
@@ -555,9 +649,7 @@ export default function EnhancedSearchScreen() {
           accessibilityState={{ selected: activeTab === 'bounties' }}
           accessibilityHint="Switches to bounty search"
         >
-          <Text style={[s.tabText, activeTab === 'bounties' && s.tabTextActive]}>
-            Bounties
-          </Text>
+          <Text style={[s.tabText, activeTab === 'bounties' && s.tabTextActive]}>Bounties</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[s.tab, activeTab === 'users' && s.tabActive]}
@@ -567,25 +659,29 @@ export default function EnhancedSearchScreen() {
           accessibilityState={{ selected: activeTab === 'users' }}
           accessibilityHint="Switches to user search"
         >
-          <Text style={[s.tabText, activeTab === 'users' && s.tabTextActive]}>
-            Users
-          </Text>
+          <Text style={[s.tabText, activeTab === 'users' && s.tabTextActive]}>Users</Text>
         </TouchableOpacity>
       </View>
       {/* Autocomplete Suggestions */}
       {showSuggestions && suggestions.length > 0 && (
         <View style={s.suggestionsContainer}>
-          {suggestions.map((suggestion) => (
+          {suggestions.map(suggestion => (
             <TouchableOpacity
               key={suggestion.id}
               style={s.suggestionItem}
               onPress={() => handleSuggestionPress(suggestion)}
               accessibilityRole="button"
               accessibilityLabel={`${suggestion.type === 'bounty' ? 'Bounty' : suggestion.type === 'user' ? 'User' : 'Skill'}: ${suggestion.text}${suggestion.subtitle ? ', ' + suggestion.subtitle : ''}`}
-              accessibilityHint={suggestion.type === 'bounty' ? 'Opens bounty details' : suggestion.type === 'user' ? 'Opens user profile' : 'Searches for bounties with this skill'}
+              accessibilityHint={
+                suggestion.type === 'bounty'
+                  ? 'Opens bounty details'
+                  : suggestion.type === 'user'
+                    ? 'Opens user profile'
+                    : 'Searches for bounties with this skill'
+              }
             >
               <MaterialIcons
-                name={suggestion.icon as any || 'search'}
+                name={(suggestion.icon as any) || 'search'}
                 size={18}
                 color={theme.primaryLight}
                 style={s.iconMarginRight10}
@@ -598,7 +694,11 @@ export default function EnhancedSearchScreen() {
               </View>
               <View style={s.suggestionTypeBadge}>
                 <Text style={s.suggestionTypeText}>
-                  {suggestion.type === 'bounty' ? 'Bounty' : suggestion.type === 'user' ? 'User' : 'Skill'}
+                  {suggestion.type === 'bounty'
+                    ? 'Bounty'
+                    : suggestion.type === 'user'
+                      ? 'User'
+                      : 'Skill'}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -659,7 +759,7 @@ export default function EnhancedSearchScreen() {
             <Text style={s.trendingTitle}>Trending</Text>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {[0, 1, 2].map((i) => (
+            {[0, 1, 2].map(i => (
               <View key={`trending-skeleton-${i}`} style={s.trendingCard}>
                 <Skeleton style={s.trendingSkeletonLine} />
                 <Skeleton style={s.trendingSkeletonAmount} />
@@ -670,51 +770,43 @@ export default function EnhancedSearchScreen() {
       )}
 
       {/* Trending Bounties — shown only when search is empty */}
-{!query && !isSearching && !isLoadingTrending && trendingBounties.length > 0 && (
-  <View style={s.trendingSection}>
-    <View style={s.trendingHeader}>
-      <MaterialIcons name="local-fire-department" size={18} color={theme.primary} />
-      <Text style={s.trendingTitle}>Trending</Text>
-    </View>
-    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-      {trendingBounties.map((bounty) => (
-        <TouchableOpacity
-          key={String(bounty.id)}
-          style={s.trendingCard}
-          onPress={() => router.push(`/bounty/${bounty.id}/public?source=search`)}
-          accessibilityRole="button"
-          accessibilityLabel={bounty.title}
-          accessibilityHint="Opens bounty details"
-        >
-          <Text style={s.trendingCardTitle} numberOfLines={2}>
-            {bounty.title}
-          </Text>
-          {bounty.isForHonor ? (
-            <View style={s.trendingHonorBadge}>
-              <Text style={s.trendingHonorText}>For Honor</Text>
-            </View>
-          ) : (
-            <Text style={s.trendingAmount}>
-              ${bounty.amount ?? 0}
-            </Text>
-          )}
-        </TouchableOpacity>
-      ))}
-    </ScrollView>
-  </View>
-)}
-
-
-
-
-
-
+      {!query && !isSearching && !isLoadingTrending && trendingBounties.length > 0 && (
+        <View style={s.trendingSection}>
+          <View style={s.trendingHeader}>
+            <MaterialIcons name="local-fire-department" size={18} color={theme.primary} />
+            <Text style={s.trendingTitle}>Trending</Text>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {trendingBounties.map(bounty => (
+              <TouchableOpacity
+                key={String(bounty.id)}
+                style={s.trendingCard}
+                onPress={() => router.push(`/bounty/${bounty.id}/public?source=search`)}
+                accessibilityRole="button"
+                accessibilityLabel={bounty.title}
+                accessibilityHint="Opens bounty details"
+              >
+                <Text style={s.trendingCardTitle} numberOfLines={2}>
+                  {bounty.title}
+                </Text>
+                {bounty.isForHonor ? (
+                  <View style={s.trendingHonorBadge}>
+                    <Text style={s.trendingHonorText}>For Honor</Text>
+                  </View>
+                ) : (
+                  <Text style={s.trendingAmount}>${bounty.amount ?? 0}</Text>
+                )}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
       {/* Results */}
       {activeTab === 'bounties' && showMap ? (
         <BountyMapView height={400} />
       ) : activeTab === 'bounties' ? (
-          <FlatList
+        <FlatList
           data={bountyResults}
           keyExtractor={keyExtractorBounty}
           renderItem={renderBountyItem}
@@ -779,7 +871,7 @@ export default function EnhancedSearchScreen() {
                   { value: 'date_asc', label: 'Oldest First' },
                   { value: 'amount_desc', label: 'Highest Amount' },
                   { value: 'amount_asc', label: 'Lowest Amount' },
-                ].map((option) => (
+                ].map(option => (
                   <TouchableOpacity
                     key={option.value}
                     style={[
@@ -807,7 +899,7 @@ export default function EnhancedSearchScreen() {
                   { value: 'open', label: 'Open' },
                   { value: 'in_progress', label: 'In Progress' },
                   { value: 'completed', label: 'Completed' },
-                ].map((option) => (
+                ].map(option => (
                   <TouchableOpacity
                     key={option.value}
                     style={[
@@ -817,7 +909,7 @@ export default function EnhancedSearchScreen() {
                     onPress={() => {
                       const currentStatus = filters.status || ['open'];
                       const newStatus = currentStatus.includes(option.value)
-                        ? currentStatus.filter((s) => s !== option.value)
+                        ? currentStatus.filter(s => s !== option.value)
                         : [...currentStatus, option.value];
                       setFilters({ ...filters, status: newStatus });
                     }}
@@ -841,7 +933,7 @@ export default function EnhancedSearchScreen() {
                   { value: undefined, label: 'All' },
                   { value: 'online', label: 'Online' },
                   { value: 'in_person', label: 'In Person' },
-                ].map((option) => (
+                ].map(option => (
                   <TouchableOpacity
                     key={option.label}
                     style={[
@@ -871,7 +963,7 @@ export default function EnhancedSearchScreen() {
                   placeholderTextColor={theme.textDisabled}
                   keyboardType="numeric"
                   value={filters.minAmount?.toString() || ''}
-                  onChangeText={(text) =>
+                  onChangeText={text =>
                     setFilters({ ...filters, minAmount: text ? parseFloat(text) : undefined })
                   }
                 />
@@ -882,7 +974,7 @@ export default function EnhancedSearchScreen() {
                   placeholderTextColor={theme.textDisabled}
                   keyboardType="numeric"
                   value={filters.maxAmount?.toString() || ''}
-                  onChangeText={(text) =>
+                  onChangeText={text =>
                     setFilters({ ...filters, maxAmount: text ? parseFloat(text) : undefined })
                   }
                 />
@@ -893,10 +985,7 @@ export default function EnhancedSearchScreen() {
               <TouchableOpacity style={s.clearFiltersBtn} onPress={clearFilters}>
                 <Text style={s.clearFiltersBtnText}>Clear All</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={s.applyFiltersBtn}
-                onPress={() => setShowFilters(false)}
-              >
+              <TouchableOpacity style={s.applyFiltersBtn} onPress={() => setShowFilters(false)}>
                 <Text style={s.applyFiltersBtnText}>Apply Filters</Text>
               </TouchableOpacity>
             </View>
@@ -1410,5 +1499,5 @@ function makeStyles(t: AppTheme) {
       fontSize: 11,
       fontWeight: '700',
     },
-  })
+  });
 }

@@ -98,15 +98,21 @@ describe('lib/posthog — with POSTHOG_KEY set', () => {
   const mockReset = jest.fn();
   const mockFlush = jest.fn().mockResolvedValue(undefined);
   const mockRegister = jest.fn();
+  const mockAlias = jest.fn();
+  const mockGetDistinctId = jest.fn(() => 'anon-distinct-id');
+  const mockSetPersonProperties = jest.fn();
   const mockSet = jest.fn();
 
   const MockPostHog = jest.fn().mockImplementation(() => ({
     capture: mockCapture,
     identify: mockIdentify,
+    alias: mockAlias,
+    getDistinctId: mockGetDistinctId,
     screen: mockScreen,
     reset: mockReset,
     flush: mockFlush,
     register: mockRegister,
+    setPersonProperties: mockSetPersonProperties,
     $set: mockSet,
   }));
 
@@ -116,7 +122,11 @@ describe('lib/posthog — with POSTHOG_KEY set', () => {
     jest.resetModules();
     process.env.EXPO_PUBLIC_POSTHOG_KEY = 'test-posthog-key';
 
-    jest.mock('posthog-react-native', () => ({ PostHog: MockPostHog }), { virtual: true });
+    jest.doMock(
+      'posthog-react-native',
+      () => ({ PostHog: MockPostHog, useFeatureFlag: jest.fn() }),
+      { virtual: true }
+    );
 
     posthogModule = require('../../lib/posthog');
   });
@@ -150,11 +160,35 @@ describe('lib/posthog — with POSTHOG_KEY set', () => {
 
   test('identify calls client.identify with userId and properties', () => {
     posthogModule.identify('user-42', { email: 'test@example.com' });
+    expect(mockAlias).toHaveBeenCalledWith('user-42');
     expect(mockIdentify).toHaveBeenCalledWith('user-42', {
       email: 'test@example.com',
       is_internal: false,
     });
     expect(mockRegister).toHaveBeenCalledWith({ is_internal: false });
+  });
+
+  test('identify aliases before identify to preserve anonymous event continuity', () => {
+    posthogModule.identify('user-42', { email: 'test@example.com' });
+    expect(mockAlias.mock.invocationCallOrder[0]).toBeLessThan(
+      mockIdentify.mock.invocationCallOrder[0]
+    );
+  });
+
+  test('identify skips alias when distinct id is already the stable user id', () => {
+    mockGetDistinctId.mockReturnValueOnce('user-42');
+    posthogModule.identify('user-42', { email: 'test@example.com' });
+    expect(mockAlias).not.toHaveBeenCalled();
+    expect(mockIdentify).toHaveBeenCalledWith('user-42', {
+      email: 'test@example.com',
+      is_internal: false,
+    });
+  });
+
+  test('identify emits alias only once per anonymous-to-user transition', () => {
+    posthogModule.identify('user-42', { email: 'test@example.com' });
+    posthogModule.identify('user-42', { email: 'test@example.com' });
+    expect(mockAlias).toHaveBeenCalledTimes(1);
   });
 
   test.each([
@@ -179,6 +213,13 @@ describe('lib/posthog — with POSTHOG_KEY set', () => {
   test('setPersonProperties calls client.capture with $set payload', () => {
     posthogModule.setPersonProperties({ tier: 'premium' });
     expect(mockCapture).toHaveBeenCalledWith('$set', { $set: { tier: 'premium' } });
+  });
+
+  test('setPersonPropertiesOnce uses PostHog setPersonProperties $set_once channel', () => {
+    posthogModule.setPersonPropertiesOnce({ initial_utm_source: 'reddit' });
+    expect(mockSetPersonProperties).toHaveBeenCalledWith(undefined, {
+      initial_utm_source: 'reddit',
+    });
   });
 
   test('register calls client.register', () => {
@@ -283,7 +324,11 @@ describe('lib/posthog — screen falls back to capture when screen method missin
   beforeAll(() => {
     jest.resetModules();
     process.env.EXPO_PUBLIC_POSTHOG_KEY = 'test-key-no-screen';
-    jest.mock('posthog-react-native', () => ({ PostHog: MockPostHogNoScreen }), { virtual: true });
+    jest.doMock(
+      'posthog-react-native',
+      () => ({ PostHog: MockPostHogNoScreen, useFeatureFlag: jest.fn() }),
+      { virtual: true }
+    );
     posthogModule = require('../../lib/posthog');
   });
 

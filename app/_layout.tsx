@@ -40,7 +40,7 @@ import { getSentry as getSentryFromInit, initializeSentry } from '../lib/service
 import { normalizeScreenName } from '../lib/analytics/screen-name';
 import { markPendingNavigationSource, trackScreenView } from '../lib/analytics/screen-tracking';
 import { initGlobalErrorHandlers } from '../lib/error-handling';
-import posthog, { capture as posthogCapture } from '../lib/posthog';
+import posthog from '../lib/posthog';
 import { safeCleanup } from '../lib/utils/lifecycle';
 
 import { registerDeviceSession } from '../lib/services/auth-service';
@@ -251,7 +251,7 @@ function RootLayout({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        posthogCapture('Page View', { screen: 'root' });
+        // Removed Page View emission to consolidate duplicate events
         // Initialize the unified analytics surface (PostHog is the single
         // source of truth) and emit the funnel "install/visit" event so we can
         // measure acquisition → activation drop-off.

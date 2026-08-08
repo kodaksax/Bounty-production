@@ -17,14 +17,17 @@ import { HunterSampleBountyScreen } from '../../components/onboarding/HunterSamp
 import { PosterFundingScreen } from '../../components/onboarding/PosterFundingScreen';
 import { PosterTaskPrompt } from '../../components/onboarding/PosterTaskPrompt';
 import { ProfileDetailsForm } from '../../components/onboarding/ProfileDetailsForm';
+import { UnserviceableRegionWaitlistScreen } from '../../components/onboarding/UnserviceableRegionWaitlistScreen';
 import { useAttachmentUpload } from '../../hooks/use-attachment-upload';
 import { useAuthContext } from '../../hooks/use-auth-context';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
 import { useUserProfile } from '../../hooks/useUserProfile';
 import { useOnboarding } from '../../lib/context/onboarding-context';
-import { authProfileService } from '../../lib/services/auth-profile-service';
+import { isLocalBounty, rankNearbyBounties } from '../../lib/onboarding/hunter-discovery';
+import { makeOnboardingDetailsStyles } from '../../lib/onboarding/onboarding-details-styles';
 import { analyticsService } from '../../lib/services/analytics-service';
+import { authProfileService } from '../../lib/services/auth-profile-service';
 import { bountyRequestService } from '../../lib/services/bounty-request-service';
 import { bountyService } from '../../lib/services/bounty-service';
 import { Bounty, Profile } from '../../lib/services/database.types';
@@ -33,13 +36,19 @@ import { notificationService } from '../../lib/services/notification-service';
 import { getOnboardingCompleteKey } from '../../lib/storage/onboarding';
 import { supabase } from '../../lib/supabase';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
-import { makeOnboardingDetailsStyles } from '../../lib/onboarding/onboarding-details-styles';
-import { isLocalBounty, rankNearbyBounties } from '../../lib/onboarding/hunter-discovery';
-import { isValidUsZip } from '../../lib/utils/geo';
-import { getUserFriendlyError, type UserFriendlyError } from '../../lib/utils/error-messages';
 import type { LocationCoordinates } from '../../lib/types';
+import {
+    validateAmount,
+    validateDescription,
+    validateTitle,
+} from '../../lib/utils/bounty-validation';
+import { getUserFriendlyError, type UserFriendlyError } from '../../lib/utils/error-messages';
+import { isValidUsZip } from '../../lib/utils/geo';
+import {
+    buildServiceabilityContext,
+    getDeviceServiceabilityContext,
+} from '../../lib/utils/serviceable-region';
 import { bountyService as bountyCreationService } from '../services/bountyService';
-import { validateAmount, validateDescription, validateTitle } from '../../lib/utils/bounty-validation';
 
 const HUNTER_DISCOVERY_FETCH_LIMIT = 20;
 
@@ -56,27 +65,50 @@ export default function DetailsScreen() {
 
   // Initialize from context, then fallback to profile data
   const [displayName, setDisplayName] = useState<string>(
-    onboardingData.displayName || (normalized as any)?.name || (localProfile as any)?.displayName || ''
+    onboardingData.displayName ||
+      (normalized as any)?.name ||
+      (localProfile as any)?.displayName ||
+      ''
   );
   const [title, setTitle] = useState<string>(
-    onboardingData.title || ((normalized as any)?._raw && (normalized as any)._raw.title) || (localProfile as any)?.title || ''
+    onboardingData.title ||
+      ((normalized as any)?._raw && (normalized as any)._raw.title) ||
+      (localProfile as any)?.title ||
+      ''
   );
   const [bio, setBio] = useState<string>(
-    onboardingData.bio || ((normalized as any)?._raw && (normalized as any)._raw.bio) || (localProfile as any)?.bio || ''
+    onboardingData.bio ||
+      ((normalized as any)?._raw && (normalized as any)._raw.bio) ||
+      (localProfile as any)?.bio ||
+      ''
   );
   const [location, setLocation] = useState<string>(
-    onboardingData.location || ((normalized as any)?._raw && (normalized as any)._raw.location) || (localProfile as any)?.location || ''
+    onboardingData.location ||
+      ((normalized as any)?._raw && (normalized as any)._raw.location) ||
+      (localProfile as any)?.location ||
+      ''
   );
   const [skills, setSkills] = useState<string[]>(
     onboardingData.skills.length > 0
       ? onboardingData.skills
-      : ((normalized as any)?._raw && (normalized as any)._raw.skills) || (localProfile as any)?.skills || []
+      : ((normalized as any)?._raw && (normalized as any)._raw.skills) ||
+          (localProfile as any)?.skills ||
+          []
   );
   const [customSkill, setCustomSkill] = useState('');
   const [saving, setSaving] = useState(false);
   const [avatarUri, setAvatarUri] = useState<string | undefined>(
     onboardingData.avatarUri || undefined
   );
+  const [serviceabilityContext, setServiceabilityContext] = useState(() =>
+    getDeviceServiceabilityContext()
+  );
+  const [bypassUnserviceableGate, setBypassUnserviceableGate] = useState(false);
+  const [waitlistEmail, setWaitlistEmail] = useState(session?.user?.email ?? '');
+  const [waitlistJoining, setWaitlistJoining] = useState(false);
+  const [waitlistJoined, setWaitlistJoined] = useState(false);
+  const [waitlistError, setWaitlistError] = useState<string | null>(null);
+  const unserviceableShownRef = useRef(false);
 
   // Uploads profile photos to the same bucket/folder the live profile-edit
   // screen uses (bucket 'profiles', folder 'avatars') so RLS + downstream
@@ -171,7 +203,7 @@ export default function DetailsScreen() {
     let cancelled = false;
     bountyService
       .getAll({ status: 'open', limit: HUNTER_DISCOVERY_FETCH_LIMIT })
-      .then((bounties) => {
+      .then(bounties => {
         if (cancelled) return;
         setRecentBounties(bounties.filter(isLocalBounty).slice(0, 2));
         setBountySource('nearby');
@@ -213,6 +245,71 @@ export default function DetailsScreen() {
       updateOnboardingData({ avatarUri });
     }
   }, [avatarUri]);
+
+  useEffect(() => {
+    if (!waitlistEmail && session?.user?.email) {
+      setWaitlistEmail(session.user.email);
+    }
+  }, [session?.user?.email, waitlistEmail]);
+
+  useEffect(() => {
+    analyticsService.updateUserProperties(serviceabilityContext);
+  }, [
+    serviceabilityContext.country_code,
+    serviceabilityContext.region,
+    serviceabilityContext.is_serviceable_region,
+  ]);
+
+  useEffect(() => {
+    if (serviceabilityContext.is_serviceable_region !== false || unserviceableShownRef.current) {
+      return;
+    }
+    unserviceableShownRef.current = true;
+    analyticsService.trackEvent('unserviceable_region_shown', {
+      country_code: serviceabilityContext.country_code,
+      region: serviceabilityContext.region,
+    });
+  }, [
+    serviceabilityContext.country_code,
+    serviceabilityContext.region,
+    serviceabilityContext.is_serviceable_region,
+  ]);
+
+  const handleJoinRegionWaitlist = async () => {
+    const normalizedEmail = waitlistEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      setWaitlistError('Enter a valid email address.');
+      return;
+    }
+
+    setWaitlistJoining(true);
+    setWaitlistError(null);
+    try {
+      const { error } = await supabase.from('region_waitlist_signups').upsert(
+        {
+          user_id: session?.user?.id ?? null,
+          email: normalizedEmail,
+          country_code: serviceabilityContext.country_code ?? null,
+          region: serviceabilityContext.region ?? null,
+          source: 'mobile_onboarding_unserviceable',
+        },
+        {
+          onConflict: 'email,country_code',
+        }
+      );
+
+      if (error) {
+        throw error;
+      }
+
+      setWaitlistJoined(true);
+    } catch (error) {
+      console.error('[Onboarding] Failed to join region waitlist:', error);
+      setWaitlistError('Could not save your waitlist request. Please try again.');
+    } finally {
+      setWaitlistJoining(false);
+    }
+  };
 
   const pickAvatar = async () => {
     const results = await avatarUpload.pickAttachment();
@@ -343,13 +440,19 @@ export default function DetailsScreen() {
                       router.push('/onboarding/done');
                     } else {
                       // After 3 attempts, just allow skip
-                      Alert.alert('Unable to Save', 'Please skip for now and try again later from your profile settings.', [
-                        { text: 'OK', onPress: () => router.push('/onboarding/done') }
-                      ]);
+                      Alert.alert(
+                        'Unable to Save',
+                        'Please skip for now and try again later from your profile settings.',
+                        [{ text: 'OK', onPress: () => router.push('/onboarding/done') }]
+                      );
                     }
-                  }
+                  },
                 },
-                { text: 'Skip for now', style: 'cancel', onPress: () => router.push('/onboarding/done') }
+                {
+                  text: 'Skip for now',
+                  style: 'cancel',
+                  onPress: () => router.push('/onboarding/done'),
+                },
               ]
             );
           }
@@ -465,7 +568,10 @@ export default function DetailsScreen() {
       });
       setRecentBounties(online);
       setBountySource('online');
-      analyticsService.trackEvent('onboarding_online_bounties_viewed', { intent: 'hunter', count: online.length });
+      analyticsService.trackEvent('onboarding_online_bounties_viewed', {
+        intent: 'hunter',
+        count: online.length,
+      });
       setHunterStep('sample');
     } catch (err) {
       console.error('[Onboarding] Failed to load online bounties:', err);
@@ -494,10 +600,20 @@ export default function DetailsScreen() {
         throw new Error('Could not determine your current location.');
       }
 
+      const regionMetadata = await locationService.reverseGeocodeRegion(coords);
+      if (regionMetadata?.countryCode) {
+        const nextServiceability = buildServiceabilityContext({
+          countryCode: regionMetadata.countryCode,
+          region: regionMetadata.region || regionMetadata.city,
+        });
+        setServiceabilityContext(nextServiceability);
+        analyticsService.updateUserProperties(nextServiceability);
+      }
+
       // Best-effort display text; distance ranking below doesn't depend on it.
       locationService
         .reverseGeocode(coords)
-        .then((address) => {
+        .then(address => {
           if (address) setLocation(address);
         })
         .catch(() => {});
@@ -523,10 +639,19 @@ export default function DetailsScreen() {
     try {
       const coords = await locationService.geocodeAddress(zip);
       if (!coords) {
-        setZipSubmitError("We couldn't find that ZIP code. Try another, or use your location instead.");
+        setZipSubmitError(
+          "We couldn't find that ZIP code. Try another, or use your location instead."
+        );
         return;
       }
       analyticsService.trackEvent('onboarding_zip_searched', { intent: 'hunter' });
+
+      const nextServiceability = buildServiceabilityContext({
+        countryCode: 'US',
+        region: zip,
+      });
+      setServiceabilityContext(nextServiceability);
+      analyticsService.updateUserProperties(nextServiceability);
 
       setLocation(zip);
       // Save as user metadata (only now that it's confirmed a real ZIP) so
@@ -547,7 +672,10 @@ export default function DetailsScreen() {
   };
 
   const handleSkipLocation = () => {
-    analyticsService.trackEvent('onboarding_step_skipped', { step: 'hunter_location', intent: 'hunter' });
+    analyticsService.trackEvent('onboarding_step_skipped', {
+      step: 'hunter_location',
+      intent: 'hunter',
+    });
     handleBrowseOnline();
   };
 
@@ -556,6 +684,25 @@ export default function DetailsScreen() {
   const handleRetryDiscovery = () => {
     retryDiscoveryRef.current?.();
   };
+
+  if (serviceabilityContext.is_serviceable_region === false && !bypassUnserviceableGate) {
+    return (
+      <UnserviceableRegionWaitlistScreen
+        theme={theme}
+        styles={styles}
+        insets={insets}
+        email={waitlistEmail}
+        onChangeEmail={setWaitlistEmail}
+        onJoinWaitlist={handleJoinRegionWaitlist}
+        joining={waitlistJoining}
+        joined={waitlistJoined}
+        error={waitlistError}
+        countryCode={serviceabilityContext.country_code}
+        region={serviceabilityContext.region}
+        onContinue={() => setBypassUnserviceableGate(true)}
+      />
+    );
+  }
 
   // Requests push permission/registers a token so a hunter with no nearby
   // bounties can be notified when one appears in their area later. Resolves
@@ -780,7 +927,9 @@ export default function DetailsScreen() {
           attachment_count: 0,
         });
         // RENAMED from 'onboarding_bounty_accepted' — see analytics-service.ts.
-        analyticsService.trackEvent('onboarding_bounty_applied', { bountyId: String(sampleBounty.id) });
+        analyticsService.trackEvent('onboarding_bounty_applied', {
+          bountyId: String(sampleBounty.id),
+        });
         updateOnboardingData({
           firstAppliedBountyId: String(sampleBounty.id),
           firstAppliedBountyTitle: sampleBounty.title,
@@ -846,11 +995,11 @@ export default function DetailsScreen() {
         styles={styles}
         insets={insets}
         taskDescription={onboardingData.taskDescription}
-        onChangeTaskDescription={(taskDescription) => updateOnboardingData({ taskDescription })}
+        onChangeTaskDescription={taskDescription => updateOnboardingData({ taskDescription })}
         price={onboardingData.price}
-        onChangePrice={(price) => updateOnboardingData({ price })}
+        onChangePrice={price => updateOnboardingData({ price })}
         schedule={onboardingData.schedule}
-        onChangeSchedule={(schedule) => updateOnboardingData({ schedule })}
+        onChangeSchedule={schedule => updateOnboardingData({ schedule })}
         onNext={handlePostBounty}
         posting={posting}
         onSkip={handleSkipToApp}
@@ -902,7 +1051,6 @@ export default function DetailsScreen() {
       />
     );
   }
-
 
   // 'onboarding-skip-role-selection' experiment, test arm: welcome.tsx sent
   // this user here with intent still null. Show the combined chooser instead

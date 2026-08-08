@@ -73,15 +73,15 @@ export type AnalyticsEvent =
   | 'onboarding_no_nearby_bounties'
   | 'onboarding_online_bounties_viewed'
   | 'onboarding_notify_me_requested'
+  | 'unserviceable_region_shown'
   // Moments Queue — post-onboarding contextual activation prompts, see lib/moments/*
   // Funnel order for one moment instance: moment_event_enqueued (the real
-  // business event that made it eligible) -> moment_queued (became the
-  // single next-in-line moment) -> moment_shown (presented) -> exactly one
+  // business event that made it eligible) -> moment_shown (presented) ->
+  // exactly one
   // of moment_accepted/moment_dismissed/moment_snoozed/moment_skipped ->
   // (accepted only) moment_completed, or moment_expired if it was shown
   // maxShownCount times without ever being resolved.
   | 'moment_event_enqueued'
-  | 'moment_queued'
   | 'moment_shown'
   | 'moment_dismissed'
   | 'moment_snoozed'
@@ -243,6 +243,37 @@ export interface AnalyticsProperties {
   [key: string]: string | number | boolean | string[] | undefined;
 }
 
+const toSnakeCase = (key: string): string =>
+  key
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/[\s-]+/g, '_')
+    .toLowerCase();
+
+const toCamelCase = (key: string): string =>
+  key.toLowerCase().replace(/_([a-z0-9])/g, (_, letter: string) => letter.toUpperCase());
+
+const normalizePropertyKeys = (properties?: AnalyticsProperties): AnalyticsProperties => {
+  if (!properties) return {};
+
+  const normalized: AnalyticsProperties = {};
+
+  for (const [key, value] of Object.entries(properties)) {
+    normalized[key] = value;
+
+    const snakeKey = toSnakeCase(key);
+    if (!(snakeKey in normalized)) {
+      normalized[snakeKey] = value;
+    }
+
+    const camelKey = toCamelCase(key);
+    if (!(camelKey in normalized)) {
+      normalized[camelKey] = value;
+    }
+  }
+
+  return normalized;
+};
+
 class AnalyticsService {
   private initialized = false;
   private userId: string | null = null;
@@ -325,11 +356,13 @@ class AnalyticsService {
    */
   async trackEvent(event: AnalyticsEvent, properties?: AnalyticsProperties): Promise<void> {
     try {
+      const normalizedProperties = normalizePropertyKeys(properties);
       const enrichedProperties = {
-        ...properties,
+        ...normalizedProperties,
         platform: Platform.OS,
         timestamp: new Date().toISOString(),
         userId: this.userId,
+        user_id: this.userId,
       };
 
       // Track in PostHog via the shared client. The helper is a no-op when
@@ -480,13 +513,16 @@ class AnalyticsService {
     properties?: AnalyticsProperties
   ): Promise<void> {
     try {
+      const normalizedProperties = normalizePropertyKeys(properties);
       const timingProperties = {
-        ...properties,
+        ...normalizedProperties,
+        timing_name: eventName,
+        timingName: eventName,
         duration_ms: duration,
       };
 
       try {
-        posthogCapture(eventName, timingProperties);
+        posthogCapture('performance_timing', timingProperties);
       } catch {
         // ignore
       }

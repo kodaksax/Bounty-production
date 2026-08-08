@@ -1,58 +1,76 @@
-import { MaterialIcons } from '@expo/vector-icons'
-import { useLocation } from 'app/hooks/useLocation'
-import { BountyCompactItem } from 'components/bounty-compact-item'
-import { BountyGridFeed } from 'components/bounty-grid-feed'
-import { BountyListItem } from 'components/bounty-list-item'
-import { NotificationBell } from 'components/notifications/notification-bell'
-import { EmptyState } from 'components/ui/empty-state'
-import { FilterChip, type FilterChipIconName } from 'components/ui/filter-chip'
-import { FilterChipSelect, type FilterChipOption } from 'components/ui/filter-chip-select'
-import { PostingsListSkeleton } from 'components/ui/skeleton-loaders'
-import { LinearGradient } from 'expo-linear-gradient'
-import { useRouter } from 'expo-router'
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
-import { Animated, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useForegroundRefresh } from '../hooks/useForegroundRefresh'
-import { useValidUserId } from '../hooks/useValidUserId'
-import { SIZING, SPACING, TYPOGRAPHY } from '../lib/constants/accessibility'
-import { BOUNTY_CATEGORIES } from '../lib/constants/bounty-categories'
-import { useBountyFormat } from '../lib/bounty-format-context'
-import { useAppThemeContext } from '../lib/themes/AppThemeContext'
-import type { AppTheme } from '../lib/themes/types'
-import { bountyRequestService } from '../lib/services/bounty-request-service'
-import { bountyService } from '../lib/services/bounty-service'
-import { analyticsService } from '../lib/services/analytics-service'
-import { consumeIsFirstBountyListViewOfSession } from '../lib/analytics/sessionFlags'
-import { searchBountiesNearby, type NearbyBounty } from '../lib/services/bounty-location-service'
-import type { Bounty } from '../lib/services/database.types'
-import { locationService } from '../lib/services/location-service'
-import { storage } from '../lib/storage'
-import { supabase } from '../lib/supabase'
-import { isBountyDeadlinePassed } from '../lib/utils/schedule-utils'
-import { logger } from '../lib/utils/error-logger'
-import { withTimeout } from '../lib/utils/withTimeout'
-import { API_TIMEOUTS } from '../lib/config/network'
+import { MaterialIcons } from '@expo/vector-icons';
+import { useLocation } from 'app/hooks/useLocation';
+import { BountyCompactItem } from 'components/bounty-compact-item';
+import { BountyGridFeed } from 'components/bounty-grid-feed';
+import { BountyListItem } from 'components/bounty-list-item';
+import { NotificationBell } from 'components/notifications/notification-bell';
+import { EmptyState } from 'components/ui/empty-state';
+import { FilterChip, type FilterChipIconName } from 'components/ui/filter-chip';
+import { FilterChipSelect, type FilterChipOption } from 'components/ui/filter-chip-select';
+import { PostingsListSkeleton } from 'components/ui/skeleton-loaders';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
+import {
+    forwardRef,
+    useCallback,
+    useEffect,
+    useImperativeHandle,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
+import {
+    Animated,
+    FlatList,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useForegroundRefresh } from '../hooks/useForegroundRefresh';
+import { useValidUserId } from '../hooks/useValidUserId';
+import { consumeIsFirstBountyListViewOfSession } from '../lib/analytics/sessionFlags';
+import { useBountyFormat } from '../lib/bounty-format-context';
+import { API_TIMEOUTS } from '../lib/config/network';
+import { SIZING, SPACING, TYPOGRAPHY } from '../lib/constants/accessibility';
+import { BOUNTY_CATEGORIES } from '../lib/constants/bounty-categories';
+import { analyticsService } from '../lib/services/analytics-service';
+import { searchBountiesNearby, type NearbyBounty } from '../lib/services/bounty-location-service';
+import { bountyRequestService } from '../lib/services/bounty-request-service';
+import { bountyService } from '../lib/services/bounty-service';
+import type { Bounty } from '../lib/services/database.types';
+import { locationService } from '../lib/services/location-service';
+import { storage } from '../lib/storage';
+import { supabase } from '../lib/supabase';
+import { useAppThemeContext } from '../lib/themes/AppThemeContext';
+import type { AppTheme } from '../lib/themes/types';
+import { logger } from '../lib/utils/error-logger';
+import { isBountyDeadlinePassed } from '../lib/utils/schedule-utils';
+import { getDeviceServiceabilityContext } from '../lib/utils/serviceable-region';
+import { withTimeout } from '../lib/utils/withTimeout';
 
 export type BountyFeedHandle = {
-  refresh: () => void
-  handleTabRepress: () => void
-}
+  refresh: () => void;
+  handleTabRepress: () => void;
+};
 
 interface BountyFeedProps {
-  activeScreen: string
-  setActiveScreen: (screen: string) => void
-  currentUserId?: string
+  activeScreen: string;
+  setActiveScreen: (screen: string) => void;
+  currentUserId?: string;
 }
 
-const PAGE_SIZE = 10
+const PAGE_SIZE = 10;
 
 // 'off' = no distance filter (existing behavior, unchanged). A number is a
 // radius in miles. `null` is the explicit "Anywhere" preset — still uses
 // search_bounties_nearby (so results get real distances/sort) but without a
 // radius cap.
-type DistanceFilterValue = 'off' | number | null
-const DISTANCE_OFF: DistanceFilterValue = 'off'
+type DistanceFilterValue = 'off' | number | null;
+const DISTANCE_OFF: DistanceFilterValue = 'off';
 const DISTANCE_OPTIONS: FilterChipOption<DistanceFilterValue>[] = [
   { label: 'Any distance', value: DISTANCE_OFF, description: 'Browse every open bounty' },
   { label: 'Within 1 mile', value: 1, chipLabel: '1 mi' },
@@ -60,15 +78,15 @@ const DISTANCE_OPTIONS: FilterChipOption<DistanceFilterValue>[] = [
   { label: 'Within 10 miles', value: 10, chipLabel: '10 mi' },
   { label: 'Within 25 miles', value: 25, chipLabel: '25 mi' },
   { label: 'Anywhere', value: null, description: 'No radius cap, still sorted by distance' },
-]
+];
 
 // The filter carousel holds category chips and interactive filter chips in one
 // list; `kind` is what the renderer switches on. `id` is shared so a single
 // keyExtractor covers both.
-const DISTANCE_ITEM_ID = '__distance__'
+const DISTANCE_ITEM_ID = '__distance__';
 type FilterBarItem =
   | { kind: 'category'; id: string; label: string; icon: FilterChipIconName }
-  | { kind: 'distance'; id: typeof DISTANCE_ITEM_ID }
+  | { kind: 'distance'; id: typeof DISTANCE_ITEM_ID };
 
 function nearbyToBounty(nb: NearbyBounty): Bounty {
   return {
@@ -92,55 +110,58 @@ function nearbyToBounty(nb: NearbyBounty): Bounty {
     approx_latitude: nb.approx_latitude,
     approx_longitude: nb.approx_longitude,
     distance_miles: nb.distance_miles,
-  }
+  };
 }
 
 export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function BountyFeed(
   { activeScreen, setActiveScreen, currentUserId },
   ref
 ) {
-  const router = useRouter()
-  const [listHeight, setListHeight] = useState(0)
-  const [bounties, setBounties] = useState<Bounty[]>([])
-  const [isLoadingBounties, setIsLoadingBounties] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
-  const [appliedBountyIds, setAppliedBountyIds] = useState<Set<string>>(new Set())
-  const [applicationsLoaded, setApplicationsLoaded] = useState(false)
-  const [loadError, setLoadError] = useState<Error | null>(null)
-  const [refreshing, setRefreshing] = useState(false)
-  const [activeCategory, setActiveCategory] = useState<string | 'all'>('all')
-  const [distanceFilter, setDistanceFilter] = useState<DistanceFilterValue>(DISTANCE_OFF)
+  const router = useRouter();
+  const [listHeight, setListHeight] = useState(0);
+  const [bounties, setBounties] = useState<Bounty[]>([]);
+  const [isLoadingBounties, setIsLoadingBounties] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [appliedBountyIds, setAppliedBountyIds] = useState<Set<string>>(new Set());
+  const [applicationsLoaded, setApplicationsLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<Error | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [activeCategory, setActiveCategory] = useState<string | 'all'>('all');
+  const [distanceFilter, setDistanceFilter] = useState<DistanceFilterValue>(DISTANCE_OFF);
   // Count of newly-posted open bounties observed via realtime since the last
   // load/refresh. Not injected directly into `bounties` — this feed is
   // paginated (PAGE_SIZE/offsetRef), so splicing a live INSERT into the
   // middle of that would corrupt pagination offsets. Surfaced instead as a
   // "New bounties" pill the user taps to pull a fresh page.
-  const [newBountiesCount, setNewBountiesCount] = useState(0)
+  const [newBountiesCount, setNewBountiesCount] = useState(0);
   // Server-side total of open bounties for the active category — the stable,
   // accurate figure behind the "N active" badge. null until first fetched (and
   // on count-fetch failure), in which case the badge falls back to the loaded
   // count. See bountyService.getOpenCount.
-  const [activeCount, setActiveCount] = useState<number | null>(null)
+  const [activeCount, setActiveCount] = useState<number | null>(null);
 
-  const { theme } = useAppThemeContext()
-  const { bountyFormat } = useBountyFormat()
-  const isCompact = bountyFormat === 'compact'
-  const insets = useSafeAreaInsets()
-  const s = useMemo(() => makeStyles(theme), [theme])
+  const { theme } = useAppThemeContext();
+  const { bountyFormat } = useBountyFormat();
+  const isCompact = bountyFormat === 'compact';
+  const insets = useSafeAreaInsets();
+  const s = useMemo(() => makeStyles(theme), [theme]);
 
-  const scrollY = useRef(new Animated.Value(0)).current
-  const bountyListRef = useRef<FlatList>(null)
-  const offsetRef = useRef(0)
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const bountyListRef = useRef<FlatList>(null);
+  const offsetRef = useRef(0);
 
-  const { location: userLocation, permission } = useLocation()
-  const validUserId = useValidUserId()
+  const { location: userLocation, permission } = useLocation();
+  const validUserId = useValidUserId();
 
-  const categories = useMemo(() => [
-    { id: 'all', label: 'For You', icon: 'auto-awesome' as const },
+  const categories = useMemo(
+    () => [
+      { id: 'all', label: 'For You', icon: 'auto-awesome' as const },
 
-    ...BOUNTY_CATEGORIES.map((c) => ({ id: c.id, label: c.label, icon: c.icon as any })),
-  ], [])
+      ...BOUNTY_CATEGORIES.map(c => ({ id: c.id, label: c.label, icon: c.icon as any })),
+    ],
+    []
+  );
 
   // The single source of truth for the feed's one horizontal carousel: every
   // category chip plus the Distance chip, injected between Delivery and Other
@@ -153,76 +174,83 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   // persisted `activeCategory`, and a pseudo-id in there would read as a real
   // category.
   const filterItems = useMemo<FilterBarItem[]>(() => {
-    const items: FilterBarItem[] = categories.map((c) => ({ kind: 'category' as const, ...c }))
-    const afterDelivery = items.findIndex((i) => i.id === 'delivery')
-    const beforeOther = items.findIndex((i) => i.id === 'other')
-    const at = afterDelivery >= 0 ? afterDelivery + 1 : beforeOther >= 0 ? beforeOther : items.length
-    items.splice(at, 0, { kind: 'distance', id: DISTANCE_ITEM_ID })
-    return items
-  }, [categories])
+    const items: FilterBarItem[] = categories.map(c => ({ kind: 'category' as const, ...c }));
+    const afterDelivery = items.findIndex(i => i.id === 'delivery');
+    const beforeOther = items.findIndex(i => i.id === 'other');
+    const at =
+      afterDelivery >= 0 ? afterDelivery + 1 : beforeOther >= 0 ? beforeOther : items.length;
+    items.splice(at, 0, { kind: 'distance', id: DISTANCE_ITEM_ID });
+    return items;
+  }, [categories]);
 
-  const calculateDistance = useCallback((bountyLocation: string) => {
-    if (!bountyLocation) return null
-    if (userLocation && permission?.granted) {
-      const coordMatch = bountyLocation.match(/^(-?\d+\.?\d*),\s*(-?\d+\.?\d*)$/)
-      if (coordMatch) {
-        const lat = parseFloat(coordMatch[1])
-        const lng = parseFloat(coordMatch[2])
-        if (!isNaN(lat) && !isNaN(lng)) {
-          return locationService.calculateDistance(
-            userLocation,
-            { latitude: lat, longitude: lng },
-            'miles'
-          )
+  const calculateDistance = useCallback(
+    (bountyLocation: string) => {
+      if (!bountyLocation) return null;
+      if (userLocation && permission?.granted) {
+        const coordMatch = bountyLocation.match(/^(-?\d+\.?\d*),\s*(-?\d+\.?\d*)$/);
+        if (coordMatch) {
+          const lat = parseFloat(coordMatch[1]);
+          const lng = parseFloat(coordMatch[2]);
+          if (!isNaN(lat) && !isNaN(lng)) {
+            return locationService.calculateDistance(
+              userLocation,
+              { latitude: lat, longitude: lng },
+              'miles'
+            );
+          }
         }
       }
-    }
-    // No real coordinates to compare against — don't fabricate a number.
-    // Callers fall back to showing the bounty's actual location text instead.
-    return null
-  }, [userLocation, permission])
+      // No real coordinates to compare against — don't fabricate a number.
+      // Callers fall back to showing the bounty's actual location text instead.
+      return null;
+    },
+    [userLocation, permission]
+  );
 
   const bountyDistances = useMemo(() => {
-    const distances = new Map<string, number | null>()
+    const distances = new Map<string, number | null>();
     bounties.forEach(bounty => {
       // search_bounties_nearby already computed a real distance server-side —
       // prefer it over the legacy "parse lat,lng out of the location string"
       // fallback, which only ever matches the rare bounty whose free-text
       // location literally is a "lat, lng" pair.
-      const known = bounty.distance_miles
-      distances.set(String(bounty.id), known != null ? known : calculateDistance(bounty.location || ''))
-    })
-    return distances
-  }, [bounties, calculateDistance])
+      const known = bounty.distance_miles;
+      distances.set(
+        String(bounty.id),
+        known != null ? known : calculateDistance(bounty.location || '')
+      );
+    });
+    return distances;
+  }, [bounties, calculateDistance]);
 
   const filteredBounties = useMemo(() => {
-    let list = [...bounties]
+    let list = [...bounties];
     // Hide bounties whose deadline has passed — they're still visible to the
     // poster (as "Deadline Passed") in My Postings, just not to hunters here.
-    list = list.filter((b) => !isBountyDeadlinePassed(b))
+    list = list.filter(b => !isBountyDeadlinePassed(b));
     if (appliedBountyIds.size > 0) {
-      list = list.filter((b) => !appliedBountyIds.has(String(b.id)))
+      list = list.filter(b => !appliedBountyIds.has(String(b.id)));
     }
     if (activeCategory !== 'all' && activeCategory !== 'everything') {
       // Category filters use only the metadata the poster selected when
       // creating the bounty (see app/screens/CreateBounty/StepTitle.tsx) —
       // never inferred from the bounty's title/description text.
-      list = list.filter((b) => (b.category || '').toLowerCase() === activeCategory)
+      list = list.filter(b => (b.category || '').toLowerCase() === activeCategory);
     }
     // "Everything" and "For You" both show the full (category-unfiltered) set;
     // BountyGridFeed always features the highest-priced bounties within
     // whatever list it's given, so featured stays highest-priced even when a
     // specific category chip is active.
     list.sort((a, b) => {
-      const distA = bountyDistances.get(String(a.id))
-      const distB = bountyDistances.get(String(b.id))
-      if (distA == null && distB == null) return 0
-      if (distA == null) return 1
-      if (distB == null) return -1
-      return (distA ?? Infinity) - (distB ?? Infinity)
-    })
-    return list
-  }, [bounties, activeCategory, bountyDistances, appliedBountyIds])
+      const distA = bountyDistances.get(String(a.id));
+      const distB = bountyDistances.get(String(b.id));
+      if (distA == null && distB == null) return 0;
+      if (distA == null) return 1;
+      if (distB == null) return -1;
+      return (distA ?? Infinity) - (distB ?? Infinity);
+    });
+    return list;
+  }, [bounties, activeCategory, bountyDistances, appliedBountyIds]);
 
   // bounty_list_viewed — fires once the feed's actual result set for the
   // current filters is known (skeleton fully resolved), including the
@@ -230,16 +258,18 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   // applicationsLoaded rather than firing on the initial `bounties=[]`
   // render, and guarded by lastFiredKeyRef so unrelated re-renders that don't
   // change the visible list (e.g. a distance recompute) don't re-fire it.
-  const listViewedKeyRef = useRef<string | null>(null)
+  const listViewedKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    if (isLoadingBounties || !applicationsLoaded) return
-    const source = distanceFilter !== 'off' ? 'nearby' : activeCategory !== 'all' ? 'category' : 'home_feed'
-    const filtersApplied: string[] = []
-    if (activeCategory !== 'all') filtersApplied.push(`category:${activeCategory}`)
-    if (distanceFilter !== 'off') filtersApplied.push(`radius:${distanceFilter == null ? 'anywhere' : distanceFilter}`)
-    const key = `${source}|${filteredBounties.length}|${filtersApplied.join(',')}`
-    if (listViewedKeyRef.current === key) return
-    listViewedKeyRef.current = key
+    if (isLoadingBounties || !applicationsLoaded) return;
+    const source =
+      distanceFilter !== 'off' ? 'nearby' : activeCategory !== 'all' ? 'category' : 'home_feed';
+    const filtersApplied: string[] = [];
+    if (activeCategory !== 'all') filtersApplied.push(`category:${activeCategory}`);
+    if (distanceFilter !== 'off')
+      filtersApplied.push(`radius:${distanceFilter == null ? 'anywhere' : distanceFilter}`);
+    const key = `${source}|${filteredBounties.length}|${filtersApplied.join(',')}`;
+    if (listViewedKeyRef.current === key) return;
+    listViewedKeyRef.current = key;
     analyticsService.trackEvent('bounty_list_viewed', {
       results_count: filteredBounties.length,
       source,
@@ -248,18 +278,26 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       has_location_permission: Boolean(permission?.granted),
       sort_order: distanceFilter !== 'off' ? 'distance' : 'recent',
       is_first_view_of_session: consumeIsFirstBountyListViewOfSession(),
-    })
-  }, [isLoadingBounties, applicationsLoaded, filteredBounties, activeCategory, distanceFilter, permission?.granted])
+      ...getDeviceServiceabilityContext(),
+    });
+  }, [
+    isLoadingBounties,
+    applicationsLoaded,
+    filteredBounties,
+    activeCategory,
+    distanceFilter,
+    permission?.granted,
+  ]);
 
   const loadUserApplications = useCallback(async () => {
-    const uid = validUserId ?? currentUserId
+    const uid = validUserId ?? currentUserId;
     if (!uid) {
-      setAppliedBountyIds(new Set())
-      setApplicationsLoaded(true)
-      return
+      setAppliedBountyIds(new Set());
+      setApplicationsLoaded(true);
+      return;
     }
-    const startedAt = Date.now()
-    logger.info('feed.applications.request_started', { userId: uid })
+    const startedAt = Date.now();
+    logger.info('feed.applications.request_started', { userId: uid });
     try {
       // Timeout-protect this fetch: it gates the skeleton loader via
       // `applicationsLoaded`, so an un-timed hang here (stalled network, auth
@@ -268,19 +306,17 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       const requests = await withTimeout(
         bountyRequestService.getAll({ userId: uid }),
         API_TIMEOUTS.DEFAULT
-      )
+      );
       const ids = new Set<string>(
-        requests
-          .filter(r => r.bounty_id != null)
-          .map(r => String(r.bounty_id))
-      )
-      setAppliedBountyIds(ids)
+        requests.filter(r => r.bounty_id != null).map(r => String(r.bounty_id))
+      );
+      setAppliedBountyIds(ids);
       logger.info('feed.applications.request_completed', {
         userId: uid,
         durationMs: Date.now() - startedAt,
         count: ids.size,
         success: true,
-      })
+      });
     } catch (error) {
       // Non-fatal: applications only drive client-side filtering. DELIBERATELY
       // preserve the previous applied-IDs set here rather than clearing it.
@@ -289,149 +325,163 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       // bounties reappear → count jumps up), then a later success would re-apply
       // it (count drops). Keeping the last-known set makes the feed count stable
       // across refreshes regardless of whether this fetch succeeded.
-      const message = error instanceof Error ? error.message : String(error)
+      const message = error instanceof Error ? error.message : String(error);
       logger.warning('feed.applications.request_failed', {
         userId: uid,
         durationMs: Date.now() - startedAt,
         timedOut: message.includes('timed out'),
         error: message,
-      })
+      });
     } finally {
-      setApplicationsLoaded(true)
+      setApplicationsLoaded(true);
     }
-  }, [validUserId, currentUserId])
+  }, [validUserId, currentUserId]);
 
-  const activeCategoryTimerRef = useRef<number | null>(null)
+  const activeCategoryTimerRef = useRef<number | null>(null);
   const handleSetActiveCategory = useCallback((val: string | 'all') => {
-    if (activeCategoryTimerRef.current) clearTimeout(activeCategoryTimerRef.current)
+    if (activeCategoryTimerRef.current) clearTimeout(activeCategoryTimerRef.current);
     // @ts-ignore
     activeCategoryTimerRef.current = setTimeout(() => {
-      setActiveCategory(val)
-    }, 250) as unknown as number
-  }, [])
+      setActiveCategory(val);
+    }, 250) as unknown as number;
+  }, []);
 
   useEffect(() => {
     return () => {
       if (activeCategoryTimerRef.current) {
-        clearTimeout(activeCategoryTimerRef.current)
+        clearTimeout(activeCategoryTimerRef.current);
         // @ts-ignore
-        activeCategoryTimerRef.current = null
+        activeCategoryTimerRef.current = null;
       }
-    }
-  }, [])
+    };
+  }, []);
 
-  const loadBounties = useCallback(async ({ reset = false }: { reset?: boolean } = {}) => {
-    if (reset) {
-      setIsLoadingBounties(true)
-      setLoadError(null)
-    } else {
-      setLoadingMore(true)
-    }
-    const pageOffset = reset ? 0 : offsetRef.current
-    const startedAt = Date.now()
-    logger.info('feed.bounties.request_started', { reset, offset: pageOffset, pageSize: PAGE_SIZE })
-    try {
-      const fetchedBounties = distanceFilter !== 'off'
-        ? await withTimeout(
-            searchBountiesNearby({
-              latitude: userLocation?.latitude,
-              longitude: userLocation?.longitude,
-              radiusMiles: distanceFilter,
-              limit: PAGE_SIZE,
-              offset: pageOffset,
-            }).then(rows => rows.map(nearbyToBounty)),
-            API_TIMEOUTS.DEFAULT
-          )
-        : await withTimeout(
-            bountyService.getAll({ status: 'open', limit: PAGE_SIZE, offset: pageOffset }),
-            API_TIMEOUTS.DEFAULT
-          )
-      const safeBounties = Array.isArray(fetchedBounties) ? fetchedBounties : []
-      const mergeUniqueById = (existing: Bounty[], incoming: Bounty[]) => {
-        const map = new Map<string, Bounty>()
-        existing.concat(incoming).forEach(b => { map.set(String(b.id), b) })
-        return Array.from(map.values())
-      }
+  const loadBounties = useCallback(
+    async ({ reset = false }: { reset?: boolean } = {}) => {
       if (reset) {
-        setBounties(mergeUniqueById([], safeBounties))
+        setIsLoadingBounties(true);
+        setLoadError(null);
       } else {
-        setBounties(prev => mergeUniqueById(prev, safeBounties))
+        setLoadingMore(true);
       }
-      offsetRef.current = pageOffset + safeBounties.length
-      setHasMore(safeBounties.length === PAGE_SIZE)
-      setLoadError(null)
-      logger.info('feed.bounties.request_completed', {
+      const pageOffset = reset ? 0 : offsetRef.current;
+      const startedAt = Date.now();
+      logger.info('feed.bounties.request_started', {
         reset,
-        durationMs: Date.now() - startedAt,
-        count: safeBounties.length,
-        success: true,
-      })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      logger.error('feed.bounties.request_failed', {
-        reset,
-        durationMs: Date.now() - startedAt,
-        timedOut: message.includes('timed out'),
-        error: message,
-      })
-      if (reset) {
-        setLoadError(error instanceof Error ? error : new Error(message))
-        setBounties(prev => prev.length === 0 ? [] : prev)
-        setHasMore(false)
+        offset: pageOffset,
+        pageSize: PAGE_SIZE,
+      });
+      try {
+        const fetchedBounties =
+          distanceFilter !== 'off'
+            ? await withTimeout(
+                searchBountiesNearby({
+                  latitude: userLocation?.latitude,
+                  longitude: userLocation?.longitude,
+                  radiusMiles: distanceFilter,
+                  limit: PAGE_SIZE,
+                  offset: pageOffset,
+                }).then(rows => rows.map(nearbyToBounty)),
+                API_TIMEOUTS.DEFAULT
+              )
+            : await withTimeout(
+                bountyService.getAll({ status: 'open', limit: PAGE_SIZE, offset: pageOffset }),
+                API_TIMEOUTS.DEFAULT
+              );
+        const safeBounties = Array.isArray(fetchedBounties) ? fetchedBounties : [];
+        const mergeUniqueById = (existing: Bounty[], incoming: Bounty[]) => {
+          const map = new Map<string, Bounty>();
+          existing.concat(incoming).forEach(b => {
+            map.set(String(b.id), b);
+          });
+          return Array.from(map.values());
+        };
+        if (reset) {
+          setBounties(mergeUniqueById([], safeBounties));
+        } else {
+          setBounties(prev => mergeUniqueById(prev, safeBounties));
+        }
+        offsetRef.current = pageOffset + safeBounties.length;
+        setHasMore(safeBounties.length === PAGE_SIZE);
+        setLoadError(null);
+        logger.info('feed.bounties.request_completed', {
+          reset,
+          durationMs: Date.now() - startedAt,
+          count: safeBounties.length,
+          success: true,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error('feed.bounties.request_failed', {
+          reset,
+          durationMs: Date.now() - startedAt,
+          timedOut: message.includes('timed out'),
+          error: message,
+        });
+        if (reset) {
+          setLoadError(error instanceof Error ? error : new Error(message));
+          setBounties(prev => (prev.length === 0 ? [] : prev));
+          setHasMore(false);
+        }
+      } finally {
+        // Guaranteed exit: both loading flags are always cleared so the skeleton
+        // can never persist because of this request.
+        setIsLoadingBounties(false);
+        setLoadingMore(false);
       }
-    } finally {
-      // Guaranteed exit: both loading flags are always cleared so the skeleton
-      // can never persist because of this request.
-      setIsLoadingBounties(false)
-      setLoadingMore(false)
-    }
-  }, [distanceFilter, userLocation])
+    },
+    [distanceFilter, userLocation]
+  );
 
   // Distance filter changes what's fetched from the server (unlike category,
   // which filters client-side over the already-loaded page), so it needs a
   // fresh reset load rather than just re-filtering `bounties` in place. Skips
   // its first run — the separate mount effect below already does the initial load.
-  const isFirstDistanceFilterRun = useRef(true)
+  const isFirstDistanceFilterRun = useRef(true);
   useEffect(() => {
     if (isFirstDistanceFilterRun.current) {
-      isFirstDistanceFilterRun.current = false
-      return
+      isFirstDistanceFilterRun.current = false;
+      return;
     }
-    offsetRef.current = 0
-    setHasMore(true)
-    loadBounties({ reset: true })
+    offsetRef.current = 0;
+    setHasMore(true);
+    loadBounties({ reset: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [distanceFilter])
+  }, [distanceFilter]);
 
   // Server-side total of open bounties for the active category. Cheap
   // (head/count query, no rows) and independent of pagination, so the "N active"
   // badge stays stable while the user scrolls. Refreshes on mount + category
   // change (via the effect below) and on pull-to-refresh.
   const refreshActiveCount = useCallback(async () => {
-    setActiveCount(null)
-    const c = await bountyService.getOpenCount({ category: activeCategory })
-    setActiveCount(c)
-  }, [activeCategory])
+    setActiveCount(null);
+    const c = await bountyService.getOpenCount({ category: activeCategory });
+    setActiveCount(c);
+  }, [activeCategory]);
 
-  useEffect(() => { refreshActiveCount() }, [refreshActiveCount])
+  useEffect(() => {
+    refreshActiveCount();
+  }, [refreshActiveCount]);
 
   const onRefresh = useCallback(async () => {
-    setRefreshing(true)
+    setRefreshing(true);
     try {
-      offsetRef.current = 0
-      setHasMore(true)
-      setNewBountiesCount(0)
+      offsetRef.current = 0;
+      setHasMore(true);
+      setNewBountiesCount(0);
       await Promise.all([
         loadBounties({ reset: true }),
-        loadUserApplications().catch(err => console.error('Failed to refresh user applications:', err)),
+        loadUserApplications().catch(err =>
+          console.error('Failed to refresh user applications:', err)
+        ),
         refreshActiveCount().catch(err => console.error('Failed to refresh active count:', err)),
-      ])
+      ]);
     } catch (error) {
-      console.error('Error refreshing bounties:', error)
+      console.error('Error refreshing bounties:', error);
     } finally {
-      setRefreshing(false)
+      setRefreshing(false);
     }
-  }, [loadBounties, loadUserApplications, refreshActiveCount])
+  }, [loadBounties, loadUserApplications, refreshActiveCount]);
 
   // Realtime: patch/remove already-loaded bounties in place (safe regardless
   // of pagination), and surface new open-bounty INSERTs as a count rather
@@ -443,61 +493,61 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'bounties', filter: 'status=eq.open' },
         () => {
-          setNewBountiesCount(prev => prev + 1)
+          setNewBountiesCount(prev => prev + 1);
         }
       )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'bounties' },
-        (payload) => {
-          const updated = payload.new as Bounty
-          setBounties(prev => {
-            const exists = prev.some(b => String(b.id) === String(updated.id))
-            if (!exists) return prev
-            // A bounty that's no longer open (accepted/cancelled/expired) should
-            // drop out of the open-bounties feed rather than linger with a
-            // stale status.
-            if (updated.status !== 'open') {
-              return prev.filter(b => String(b.id) !== String(updated.id))
-            }
-            return prev.map(b => (String(b.id) === String(updated.id) ? { ...b, ...updated } : b))
-          })
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'bounties' },
-        (payload) => {
-          const deletedId = (payload.old as Partial<Bounty>)?.id
-          if (deletedId == null) return
-          setBounties(prev => prev.filter(b => String(b.id) !== String(deletedId)))
-        }
-      )
-      .subscribe()
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bounties' }, payload => {
+        const updated = payload.new as Bounty;
+        setBounties(prev => {
+          const exists = prev.some(b => String(b.id) === String(updated.id));
+          if (!exists) return prev;
+          // A bounty that's no longer open (accepted/cancelled/expired) should
+          // drop out of the open-bounties feed rather than linger with a
+          // stale status.
+          if (updated.status !== 'open') {
+            return prev.filter(b => String(b.id) !== String(updated.id));
+          }
+          return prev.map(b => (String(b.id) === String(updated.id) ? { ...b, ...updated } : b));
+        });
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'bounties' }, payload => {
+        const deletedId = (payload.old as Partial<Bounty>)?.id;
+        if (deletedId == null) return;
+        setBounties(prev => prev.filter(b => String(b.id) !== String(deletedId)));
+      })
+      .subscribe();
 
     return () => {
       try {
-        supabase.removeChannel(channel)
+        supabase.removeChannel(channel);
       } catch {
         // best-effort cleanup
       }
-    }
-  }, [])
+    };
+  }, []);
 
-  useImperativeHandle(ref, () => ({
-    refresh: () => {
-      offsetRef.current = 0
-      setHasMore(true)
-      loadBounties({ reset: true })
-    },
-    handleTabRepress: () => {
-      bountyListRef.current?.scrollToOffset({ offset: 0, animated: true })
-      onRefresh()
-    },
-  }), [loadBounties, onRefresh])
+  useImperativeHandle(
+    ref,
+    () => ({
+      refresh: () => {
+        offsetRef.current = 0;
+        setHasMore(true);
+        loadBounties({ reset: true });
+      },
+      handleTabRepress: () => {
+        bountyListRef.current?.scrollToOffset({ offset: 0, animated: true });
+        onRefresh();
+      },
+    }),
+    [loadBounties, onRefresh]
+  );
 
-  useEffect(() => { loadUserApplications() }, [loadUserApplications])
-  useEffect(() => { loadBounties({ reset: true }) }, []) // eslint-disable-line
+  useEffect(() => {
+    loadUserApplications();
+  }, [loadUserApplications]);
+  useEffect(() => {
+    loadBounties({ reset: true });
+  }, []); // eslint-disable-line
   // On returning to the bounty tab, refresh only the applied-bounty set (cheap,
   // keeps the "already applied" filter current). Deliberately do NOT call
   // loadBounties here: this component stays mounted (hidden via display:none),
@@ -509,9 +559,9 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   // the foreground-resume effect are the real (re)load triggers.
   useEffect(() => {
     if (activeScreen === 'bounty') {
-      loadUserApplications()
+      loadUserApplications();
     }
-  }, [activeScreen, loadUserApplications])
+  }, [activeScreen, loadUserApplications]);
 
   // Silently reload feed data when the app returns from the background.
   // Requests started before backgrounding can be dropped by the OS and
@@ -527,82 +577,91 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
   // tab at the moment the foreground resume fires.
   useForegroundRefresh(
     useCallback(() => {
-      if (activeScreen !== 'bounty') return
-      logger.info('feed.foreground.refresh_started', { targets: ['bounties', 'applications'] })
-      offsetRef.current = 0
-      setHasMore(true)
-      loadBounties({ reset: true })
+      if (activeScreen !== 'bounty') return;
+      logger.info('feed.foreground.refresh_started', { targets: ['bounties', 'applications'] });
+      offsetRef.current = 0;
+      setHasMore(true);
+      loadBounties({ reset: true });
       loadUserApplications().catch(err => {
         logger.warning('feed.foreground.applications_refresh_failed', {
           error: err instanceof Error ? err.message : String(err),
-        })
-      })
+        });
+      });
     }, [activeScreen, loadBounties, loadUserApplications])
-  )
+  );
 
   useEffect(() => {
-    ;(async () => {
+    (async () => {
       try {
-        const saved = await storage.getItem('BE:lastFilter')
-        if (saved) setActiveCategory(saved as any)
+        const saved = await storage.getItem('BE:lastFilter');
+        if (saved) setActiveCategory(saved as any);
       } catch {}
-    })()
-  }, [])
+    })();
+  }, []);
 
   useEffect(() => {
-    ;(async () => {
-      try { await storage.setItem('BE:lastFilter', String(activeCategory)) } catch {}
-    })()
-  }, [activeCategory])
+    (async () => {
+      try {
+        await storage.setItem('BE:lastFilter', String(activeCategory));
+      } catch {}
+    })();
+  }, [activeCategory]);
 
   useEffect(() => {
-    const ids = categories.map((c) => c.id)
+    const ids = categories.map(c => c.id);
     if (activeCategory !== 'all' && !ids.includes(String(activeCategory))) {
-      setActiveCategory('all')
+      setActiveCategory('all');
     }
-  }, [categories, activeCategory])
+  }, [categories, activeCategory]);
 
-  const keyExtractor = useCallback((item: Bounty, index: number) => (item.id != null ? item.id.toString() : `bounty-${index}`), [])
+  const keyExtractor = useCallback(
+    (item: Bounty, index: number) => (item.id != null ? item.id.toString() : `bounty-${index}`),
+    []
+  );
 
-  const renderBountyItem = useCallback(({ item }: { item: Bounty }) => {
-    const distance = bountyDistances.get(String(item.id)) ?? calculateDistance(item.location || '')
-    const props = {
-      id: item.id,
-      title: item.title,
-      username: item.username,
-      price: Number(item.amount),
-      distance,
-      // Prefer the coarse neighborhood label — item.location is only the
-      // full/legacy exact address for bounties created before this location
-      // redesign (see docs/ location plan; new bounties don't fall back to it).
-      location: item.neighborhood || item.location,
-      description: item.description,
-      isForHonor: Boolean(item.is_for_honor),
-      user_id: item.user_id,
-      work_type: item.work_type,
-      poster_avatar: item.poster_avatar,
-      // Schedule fields (Phase 1)
-      schedule_type: item.schedule_type,
-      start_date: item.start_date,
-      end_date: item.end_date,
-      duration_minutes: item.duration_minutes,
-      is_time_sensitive: item.is_time_sensitive,
-    }
-    if (isCompact) {
-      return <BountyCompactItem {...props} />
-    }
-    return (
-      <View style={{ height: listHeight }}>
-        <BountyListItem {...props} />
-      </View>
-    )
-  }, [bountyDistances, calculateDistance, listHeight, isCompact])
+  const renderBountyItem = useCallback(
+    ({ item }: { item: Bounty }) => {
+      const distance =
+        bountyDistances.get(String(item.id)) ?? calculateDistance(item.location || '');
+      const props = {
+        id: item.id,
+        title: item.title,
+        username: item.username,
+        price: Number(item.amount),
+        distance,
+        // Prefer the coarse neighborhood label — item.location is only the
+        // full/legacy exact address for bounties created before this location
+        // redesign (see docs/ location plan; new bounties don't fall back to it).
+        location: item.neighborhood || item.location,
+        description: item.description,
+        isForHonor: Boolean(item.is_for_honor),
+        user_id: item.user_id,
+        work_type: item.work_type,
+        poster_avatar: item.poster_avatar,
+        // Schedule fields (Phase 1)
+        schedule_type: item.schedule_type,
+        start_date: item.start_date,
+        end_date: item.end_date,
+        duration_minutes: item.duration_minutes,
+        is_time_sensitive: item.is_time_sensitive,
+      };
+      if (isCompact) {
+        return <BountyCompactItem {...props} />;
+      }
+      return (
+        <View style={{ height: listHeight }}>
+          <BountyListItem {...props} />
+        </View>
+      );
+    },
+    [bountyDistances, calculateDistance, listHeight, isCompact]
+  );
 
   const handleEndReached = useCallback(() => {
-    if (!isLoadingBounties && !loadingMore && hasMore) loadBounties()
-  }, [isLoadingBounties, loadingMore, hasMore, loadBounties])
+    if (!isLoadingBounties && !loadingMore && hasMore) loadBounties();
+  }, [isLoadingBounties, loadingMore, hasMore, loadBounties]);
 
-  const ItemSeparator = useCallback(() => null, [])
+  const ItemSeparator = useCallback(() => null, []);
 
   const EmptyListComponent = useCallback(() => {
     if (isLoadingBounties || !applicationsLoaded) {
@@ -610,7 +669,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         <View style={{ width: '100%' }}>
           <PostingsListSkeleton count={5} />
         </View>
-      )
+      );
     }
     if (loadError) {
       return (
@@ -621,14 +680,14 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
           actionLabel="Try Again"
           onAction={() => loadBounties({ reset: true })}
         />
-      )
+      );
     }
     // Distance now lives in the same row as the categories, so an empty result
     // caused by either filter gets the same one-tap escape hatch.
-    const hasCategoryFilter = Boolean(activeCategory) && activeCategory !== 'all'
-    const hasDistanceFilter = distanceFilter !== DISTANCE_OFF
+    const hasCategoryFilter = Boolean(activeCategory) && activeCategory !== 'all';
+    const hasDistanceFilter = distanceFilter !== DISTANCE_OFF;
     if (hasCategoryFilter || hasDistanceFilter) {
-      const clearsBoth = hasCategoryFilter && hasDistanceFilter
+      const clearsBoth = hasCategoryFilter && hasDistanceFilter;
       return (
         <View style={{ width: '100%', alignItems: 'center' }}>
           <Text style={{ color: theme.textSecondary, marginBottom: 8 }}>
@@ -636,17 +695,26 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
           </Text>
           <TouchableOpacity
             onPress={() => {
-              if (hasCategoryFilter) handleSetActiveCategory('all')
-              if (hasDistanceFilter) setDistanceFilter(DISTANCE_OFF)
+              if (hasCategoryFilter) handleSetActiveCategory('all');
+              if (hasDistanceFilter) setDistanceFilter(DISTANCE_OFF);
             }}
             accessibilityRole="button"
             accessibilityLabel={clearsBoth ? 'Clear filters' : 'Clear filter'}
-            style={{ backgroundColor: theme.surfaceSecondary, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999, borderWidth: 1, borderColor: theme.border }}
+            style={{
+              backgroundColor: theme.surfaceSecondary,
+              paddingHorizontal: 16,
+              paddingVertical: 10,
+              borderRadius: 999,
+              borderWidth: 1,
+              borderColor: theme.border,
+            }}
           >
-            <Text style={{ color: theme.text, fontWeight: '700' }}>{clearsBoth ? 'Clear filters' : 'Clear filter'}</Text>
+            <Text style={{ color: theme.text, fontWeight: '700' }}>
+              {clearsBoth ? 'Clear filters' : 'Clear filter'}
+            </Text>
           </TouchableOpacity>
         </View>
-      )
+      );
     }
     return (
       <EmptyState
@@ -656,16 +724,28 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         actionLabel="Post a bounty"
         onAction={() => router.push('/screens/CreateBounty')}
       />
-    )
-  }, [isLoadingBounties, applicationsLoaded, loadError, loadBounties, activeCategory, distanceFilter, handleSetActiveCategory, theme, router])
+    );
+  }, [
+    isLoadingBounties,
+    applicationsLoaded,
+    loadError,
+    loadBounties,
+    activeCategory,
+    distanceFilter,
+    handleSetActiveCategory,
+    theme,
+    router,
+  ]);
 
-  const ListFooterComponent = useCallback(() => (
-    loadingMore ? (
-      <View style={{ paddingVertical: 8 }}>
-        <PostingsListSkeleton count={2} />
-      </View>
-    ) : null
-  ), [loadingMore])
+  const ListFooterComponent = useCallback(
+    () =>
+      loadingMore ? (
+        <View style={{ paddingVertical: 8 }}>
+          <PostingsListSkeleton count={2} />
+        </View>
+      ) : null,
+    [loadingMore]
+  );
 
   // Renders the feed's one and only horizontal filter carousel, from the single
   // `filterItems` source: category chips and the Distance chip side by side,
@@ -683,7 +763,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         contentContainerStyle={s.filtersScrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        {filterItems.map((item) => {
+        {filterItems.map(item => {
           if (item.kind === 'distance') {
             return (
               <FilterChipSelect<DistanceFilterValue>
@@ -702,9 +782,9 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                 }
                 testID="feed-distance-filter"
               />
-            )
+            );
           }
-          const isActive = activeCategory === item.id
+          const isActive = activeCategory === item.id;
           return (
             <FilterChip
               key={item.id}
@@ -713,13 +793,17 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
               active={isActive}
               onPress={() => handleSetActiveCategory(isActive ? 'all' : (item.id as any))}
               accessibilityLabel={`Filter by ${item.label}${isActive ? ', currently active' : ''}`}
-              accessibilityHint={isActive ? 'Tap to remove filter and show all bounties' : `Tap to filter bounties by ${item.label}`}
+              accessibilityHint={
+                isActive
+                  ? 'Tap to remove filter and show all bounties'
+                  : `Tap to filter bounties by ${item.label}`
+              }
             />
-          )
+          );
         })}
       </ScrollView>
     </View>
-  )
+  );
 
   return (
     <View style={s.dashboardArea}>
@@ -732,7 +816,12 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
             onPress={() => router.push('/tabs/search')}
             style={[s.searchButton, s.searchButtonFlex]}
           >
-            <MaterialIcons name="search" size={20} color={theme.textDisabled} style={s.searchIcon} />
+            <MaterialIcons
+              name="search"
+              size={20}
+              color={theme.textDisabled}
+              style={s.searchIcon}
+            />
             <Text style={s.searchText}>Search bounties or users...</Text>
           </TouchableOpacity>
           <NotificationBell />
@@ -749,8 +838,8 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
         <TouchableOpacity
           style={s.newBountiesPill}
           onPress={() => {
-            bountyListRef.current?.scrollToOffset?.({ offset: 0, animated: true })
-            onRefresh()
+            bountyListRef.current?.scrollToOffset?.({ offset: 0, animated: true });
+            onRefresh();
           }}
           accessibilityRole="button"
           accessibilityLabel={`${newBountiesCount} new bounty${newBountiesCount === 1 ? '' : 'ies'} available, tap to refresh`}
@@ -788,9 +877,10 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                           when a distance filter is active (that set comes from
                           the nearby-search RPC, which has no total). */}
                       <Text style={s.gridBannerCountText}>
-                        {(distanceFilter !== 'off' || activeCount == null
+                        {distanceFilter !== 'off' || activeCount == null
                           ? filteredBounties.length
-                          : activeCount)} active
+                          : activeCount}{' '}
+                        active
                       </Text>
                     </View>
                   </View>
@@ -801,7 +891,12 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                       onPress={() => router.push('/tabs/search')}
                       style={s.gridBannerSearchButton}
                     >
-                      <MaterialIcons name="search" size={18} color="rgba(255,255,255,0.85)" style={s.searchIcon} />
+                      <MaterialIcons
+                        name="search"
+                        size={18}
+                        color="rgba(255,255,255,0.85)"
+                        style={s.searchIcon}
+                      />
                       <Text style={s.gridBannerSearchText}>Search bounties or users...</Text>
                     </TouchableOpacity>
                   </View>
@@ -815,16 +910,12 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                     removed styles (s.chip/*), which broke the build and rendered
                     unstyled chips with no Distance filter. */}
                 {renderFilterBar()}
-
               </View>
             }
           />
         </View>
       ) : (
-        <View
-          style={{ flex: 1 }}
-          onLayout={(e) => setListHeight(e.nativeEvent.layout.height)}
-        >
+        <View style={{ flex: 1 }} onLayout={e => setListHeight(e.nativeEvent.layout.height)}>
           <Animated.FlatList
             ref={bountyListRef}
             data={filteredBounties}
@@ -839,12 +930,20 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
               paddingBottom: 0,
               paddingHorizontal: 0,
             }}
-            onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
+            onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+              useNativeDriver: false,
+            })}
             scrollEventThrottle={16}
             onEndReachedThreshold={0.5}
             onEndReached={handleEndReached}
             ItemSeparatorComponent={ItemSeparator}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={theme.primary}
+              />
+            }
             ListEmptyComponent={EmptyListComponent}
             ListFooterComponent={ListFooterComponent}
             renderItem={renderBountyItem}
@@ -857,17 +956,19 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       )}
 
       <LinearGradient
-        colors={[
-          `${theme.background}00`,
-          `${theme.background}CC`,
-          theme.background,
-        ] as [string, string, string]}
+        colors={
+          [`${theme.background}00`, `${theme.background}CC`, theme.background] as [
+            string,
+            string,
+            string,
+          ]
+        }
         style={s.bottomFade}
         pointerEvents="none"
       />
     </View>
-  )
-})
+  );
+});
 
 function makeStyles(t: AppTheme) {
   return StyleSheet.create({
@@ -1008,5 +1109,5 @@ function makeStyles(t: AppTheme) {
       fontSize: 12,
       fontWeight: '700',
     },
-  })
+  });
 }

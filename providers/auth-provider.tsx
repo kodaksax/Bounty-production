@@ -14,20 +14,25 @@ import {
     useState,
 } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
-import { performMarketingAttribution } from '../services/marketingAttribution';
 import { clearBountyDraftForUser } from '../app/hooks/useBountyDraft';
-import { clearAllSessionData, incrementStartupTimeoutCount, resetStartupTimeoutCount } from '../lib/auth-session-storage';
+import {
+    clearAllSessionData,
+    incrementStartupTimeoutCount,
+    resetStartupTimeoutCount,
+} from '../lib/auth-session-storage';
 import { analyticsService } from '../lib/services/analytics-service';
 import { authProfileService } from '../lib/services/auth-profile-service';
 import { getSentry } from '../lib/services/sentry-init';
 import { isSupabaseConfigured, PROJECT_STORAGE_KEY, supabase } from '../lib/supabase';
 import { logAuthLifecycleEvent, runAuthStageWithTimeout } from '../lib/utils/auth-diagnostics';
 import { AUTH_RETRY_CONFIG, generateCorrelationId, isTimeoutError } from '../lib/utils/auth-errors';
+import { getDeviceServiceabilityContext } from '../lib/utils/serviceable-region';
 import {
     resolveSupabaseAuthSubscription,
     safeUnsubscribe,
     SupabaseAuthSubscription,
 } from '../lib/utils/supabase-subscription';
+import { performMarketingAttribution } from '../services/marketingAttribution';
 
 type AuthData = {
   session: Session | null | undefined;
@@ -86,7 +91,9 @@ export default function AuthProvider({ children }: PropsWithChildren) {
   const [isEmailVerified, setIsEmailVerified] = useState<boolean>(false);
   const [isAuthStale, setIsAuthStale] = useState<boolean>(false);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState<boolean>(false);
-  const [accountBlockedReason, setAccountBlockedReason] = useState<'banned' | 'suspended' | null>(null);
+  const [accountBlockedReason, setAccountBlockedReason] = useState<'banned' | 'suspended' | null>(
+    null
+  );
   // Prevents re-triggering signOut() on every profile re-notification while a
   // block is already being handled (fetchAndSyncProfile can notify listeners
   // more than once for the same status: cached value, then fresh value).
@@ -380,12 +387,36 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           sessionFound = true;
           devLog('[AuthProvider] Session loaded: authenticated');
           // Successful startup session restore — clear any accumulated timeout count.
-          void resetStartupTimeoutCount().catch((e) => {
+          void resetStartupTimeoutCount().catch(e => {
             reportWarning('[AuthProvider] Failed to reset startup timeout count:', e);
           });
           setSession(session);
           sessionIdRef.current = session.user.id;
           previousUserIdRef.current = session.user.id;
+
+          // Silent session restore must identify every launch so a fresh
+          // anonymous distinct id (after reset/reinstall) merges back to the
+          // stable server-side user id.
+          void Promise.resolve()
+            .then(() => {
+              const serviceability = getDeviceServiceabilityContext();
+              return analyticsService.identifyUser(session.user.id, {
+                email: session.user.email,
+                ...serviceability,
+              });
+            })
+            .catch(() => {});
+          try {
+            const Sentry = getSentry?.();
+            if (Sentry && typeof Sentry.setUser === 'function') {
+              Sentry.setUser({
+                id: session.user.id,
+                email: session.user.email,
+              });
+            }
+          } catch {
+            // ignore
+          }
 
           // Sync session with auth profile service.
           // Race against a timeout so a slow/unavailable network on app restore
@@ -434,7 +465,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           // No error but also no session (user not logged in)
           devLog('[AuthProvider] Session loaded: not authenticated');
           // Successful startup completion (signed out state) — clear any accumulated timeout count.
-          void resetStartupTimeoutCount().catch((e) => {
+          void resetStartupTimeoutCount().catch(e => {
             reportWarning('[AuthProvider] Failed to reset startup timeout count:', e);
           });
           setSession(null);
@@ -718,22 +749,26 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           // inside the auth-lock callback (see cross-user cleanup note above).
           // Route through Promise.resolve().then() so a synchronous throw or a
           // non-promise return can't break this lock-critical callback.
-          if (_event === 'SIGNED_IN' && session?.user) {
+          if ((_event === 'SIGNED_IN' || _event === 'INITIAL_SESSION') && session?.user) {
             const authedUser = session.user;
             void Promise.resolve()
-              .then(() =>
-                analyticsService.identifyUser(authedUser.id, {
+              .then(() => {
+                const serviceability = getDeviceServiceabilityContext();
+                return analyticsService.identifyUser(authedUser.id, {
                   email: authedUser.email,
-                })
-              )
+                  ...serviceability,
+                });
+              })
               .catch(() => {});
-            void Promise.resolve()
-              .then(() =>
-                analyticsService.trackEvent('user_logged_in', {
-                  method: authedUser.app_metadata?.provider || 'email',
-                })
-              )
-              .catch(() => {});
+            if (_event === 'SIGNED_IN') {
+              void Promise.resolve()
+                .then(() =>
+                  analyticsService.trackEvent('user_logged_in', {
+                    method: authedUser.app_metadata?.provider || 'email',
+                  })
+                )
+                .catch(() => {});
+            }
             try {
               const Sentry = getSentry?.();
               if (Sentry && typeof Sentry.setUser === 'function') {

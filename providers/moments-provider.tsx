@@ -359,10 +359,6 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
     setActiveMoment(prev => {
       if (prev?.type === next?.type) return prev;
       if (next) {
-        analyticsService.trackEvent('moment_queued', {
-          momentType: next.type,
-          priority: next.priority,
-        });
         setActiveContent(next.content(ctx));
       } else {
         setActiveContent(null);
