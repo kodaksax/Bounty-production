@@ -21,6 +21,19 @@ const POSTHOG_HOST = process.env.EXPO_PUBLIC_POSTHOG_HOST || 'https://us.i.posth
 // with this so Insights/dashboards can filter non-production traffic out.
 const APP_ENVIRONMENT = process.env.EXPO_PUBLIC_ENVIRONMENT || 'development';
 
+const INTERNAL_EMAILS = new Set([
+  'jordanmag11@yahoo.com',
+  'leewright093@gmail.com',
+  'support@bountyfinder.app',
+  'posterbnty158@gmail.com',
+  'hunterbnty158@gmail.com',
+]);
+
+export const isInternalEmail = (email: string): boolean => {
+  const normalizedEmail = email.trim().toLowerCase();
+  return INTERNAL_EMAILS.has(normalizedEmail) || normalizedEmail.includes('bountyfinder');
+};
+
 let _posthog: any | null = null;
 
 // Construct the client eagerly (synchronously) so it is available to the
@@ -110,7 +123,15 @@ export const identify = (distinctId: string, properties?: Record<string, any>): 
       if (__DEV__) console.warn('[posthog] identify called before client ready');
       return;
     }
-    _posthog.identify(distinctId, properties);
+    const email = typeof properties?.email === 'string' ? properties.email : null;
+    const identityProperties = email
+      ? { ...properties, is_internal: isInternalEmail(email) }
+      : properties;
+
+    if (email && typeof _posthog.register === 'function') {
+      _posthog.register({ is_internal: isInternalEmail(email) });
+    }
+    _posthog.identify(distinctId, identityProperties);
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error('[posthog] identify failed', e);

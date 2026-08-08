@@ -80,6 +80,15 @@ describe('lib/posthog — no POSTHOG_KEY (default test env)', () => {
     expect(typeof getPostHog).toBe('function');
     expect(getPostHog()).toBeNull();
   });
+
+  test.each([
+    ['jordanmag11@yahoo.com', true],
+    [' SUPPORT@BOUNTYFINDER.APP ', true],
+    ['e2e+bountyfinder+ios@example.com', true],
+    ['customer@example.com', false],
+  ])('classifies internal email %s', (email, expected) => {
+    expect(posthogModule.isInternalEmail(email)).toBe(expected);
+  });
 });
 
 describe('lib/posthog — with POSTHOG_KEY set', () => {
@@ -141,7 +150,25 @@ describe('lib/posthog — with POSTHOG_KEY set', () => {
 
   test('identify calls client.identify with userId and properties', () => {
     posthogModule.identify('user-42', { email: 'test@example.com' });
-    expect(mockIdentify).toHaveBeenCalledWith('user-42', { email: 'test@example.com' });
+    expect(mockIdentify).toHaveBeenCalledWith('user-42', {
+      email: 'test@example.com',
+      is_internal: false,
+    });
+    expect(mockRegister).toHaveBeenCalledWith({ is_internal: false });
+  });
+
+  test.each([
+    'jordanmag11@yahoo.com',
+    ' SUPPORT@BOUNTYFINDER.APP ',
+    'e2e+bountyfinder+ios@example.com',
+  ])('identify marks internal email %s on the person and subsequent events', email => {
+    posthogModule.identify('internal-user', { email });
+
+    expect(mockIdentify).toHaveBeenCalledWith('internal-user', {
+      email,
+      is_internal: true,
+    });
+    expect(mockRegister).toHaveBeenCalledWith({ is_internal: true });
   });
 
   test('identify calls client.identify with only userId', () => {

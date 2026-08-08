@@ -148,6 +148,11 @@ verify_jwt = false
 [functions.expire-bounties]
 verify_jwt = false
 
+# process-analytics-person: invoked only by the database outbox cron and
+# authenticates the service-role bearer token inside the function.
+[functions.process-analytics-person]
+verify_jwt = false
+
 # auth: handles its own auth via supabase.auth.getUser(token). Found missing
 # from this file during an environment audit — the old deploy script passed
 # --no-verify-jwt by hand instead, which only took effect for whoever ran
