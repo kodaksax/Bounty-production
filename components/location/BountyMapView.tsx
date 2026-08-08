@@ -14,12 +14,13 @@ import { Marker, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 import { useLocation } from '../../app/hooks/useLocation';
 import { consumeIsFirstBountyListViewOfSession } from '../../lib/analytics/sessionFlags';
 import { analyticsService } from '../../lib/services/analytics-service';
+import { authProfileService } from '../../lib/services/auth-profile-service';
 import {
     searchBountiesNearby,
     type NearbyBounty,
 } from '../../lib/services/bounty-location-service';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
-import { getDeviceServiceabilityContext } from '../../lib/utils/serviceable-region';
+import { coarseRegionFromLocationText, getDeviceServiceabilityContext } from '../../lib/utils/serviceable-region';
 
 // Continental US centroid — starting viewport only, when we have neither the
 // bounty poster's approx point nor the viewer's device location yet.
@@ -100,6 +101,9 @@ export function BountyMapView({ category, height = '100%' }: BountyMapViewProps)
         filters_applied: category ? [`category:${category}`] : [],
         has_location_permission: Boolean(permission?.granted),
         is_first_view_of_session: consumeIsFirstBountyListViewOfSession(),
+        // metro_region (not `region`) — getDeviceServiceabilityContext()
+        // below already emits a differently-scoped `region` (device locale).
+        metro_region: coarseRegionFromLocationText(authProfileService.getCurrentProfile()?.location),
         ...getDeviceServiceabilityContext(),
       });
     } finally {

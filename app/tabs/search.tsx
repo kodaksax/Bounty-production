@@ -18,6 +18,7 @@ import { Skeleton } from '../../components/ui/skeleton';
 import { consumeIsFirstBountyListViewOfSession } from '../../lib/analytics/sessionFlags';
 import { SPACING } from '../../lib/constants/accessibility';
 import { analyticsService } from '../../lib/services/analytics-service';
+import { authProfileService } from '../../lib/services/auth-profile-service';
 import { bountyService } from '../../lib/services/bounty-service';
 import type { Bounty } from '../../lib/services/database.types';
 import { recentSearchService } from '../../lib/services/recent-search-service';
@@ -33,7 +34,7 @@ import type {
     UserProfile,
 } from '../../lib/types';
 import { logger } from '../../lib/utils/error-logger';
-import { getDeviceServiceabilityContext } from '../../lib/utils/serviceable-region';
+import { coarseRegionFromLocationText, getDeviceServiceabilityContext } from '../../lib/utils/serviceable-region';
 type SearchTab = 'bounties' | 'users';
 
 // Debounce delay for autocomplete (500ms as per requirements)
@@ -267,6 +268,9 @@ export default function EnhancedSearchScreen() {
           filters_applied: filtersApplied,
           sort_order: searchFilters.sortBy || 'date_desc',
           is_first_view_of_session: consumeIsFirstBountyListViewOfSession(),
+          // metro_region (not `region`) — getDeviceServiceabilityContext()
+          // below already emits a differently-scoped `region` (device locale).
+          metro_region: coarseRegionFromLocationText(authProfileService.getCurrentProfile()?.location),
           ...getDeviceServiceabilityContext(),
         });
 

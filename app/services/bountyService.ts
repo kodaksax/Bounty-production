@@ -8,6 +8,7 @@ import { inferRoleFromFirstAction } from 'lib/services/role-inference-service';
 import { isSupabaseConfigured, supabaseEnv } from 'lib/supabase';
 import { validateTitle } from 'lib/utils/bounty-validation';
 import { getCurrentUserId } from 'lib/utils/data-utils';
+import { coarseRegionFromLocationText } from 'lib/utils/serviceable-region';
 
 export interface CreateBountyPayload {
   title: string;
@@ -281,6 +282,12 @@ export const bountyService = {
         hasSkills: !!draft.skills,
         hasAttachments: (draft.attachments?.length || 0) > 0,
         attachmentCount: draft.attachments?.length || 0,
+        // Metro-level only (e.g. "Baltimore, MD") — never precise coords/address.
+        // Mirrors the home_region person property so supply/demand can be
+        // compared per metro; see lib/utils/serviceable-region.ts. Named
+        // metro_region (not `region`) to avoid colliding with the device-locale
+        // `region` property already emitted by getDeviceServiceabilityContext().
+        metro_region: coarseRegionFromLocationText(draft.location),
       });
 
       // Increment user property for bounties created

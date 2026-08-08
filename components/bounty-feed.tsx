@@ -38,6 +38,7 @@ import { API_TIMEOUTS } from '../lib/config/network';
 import { SIZING, SPACING, TYPOGRAPHY } from '../lib/constants/accessibility';
 import { BOUNTY_CATEGORIES } from '../lib/constants/bounty-categories';
 import { analyticsService } from '../lib/services/analytics-service';
+import { authProfileService } from '../lib/services/auth-profile-service';
 import { searchBountiesNearby, type NearbyBounty } from '../lib/services/bounty-location-service';
 import { bountyRequestService } from '../lib/services/bounty-request-service';
 import { bountyService } from '../lib/services/bounty-service';
@@ -49,7 +50,7 @@ import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
 import { logger } from '../lib/utils/error-logger';
 import { isBountyDeadlinePassed } from '../lib/utils/schedule-utils';
-import { getDeviceServiceabilityContext } from '../lib/utils/serviceable-region';
+import { coarseRegionFromLocationText, getDeviceServiceabilityContext } from '../lib/utils/serviceable-region';
 import { withTimeout } from '../lib/utils/withTimeout';
 
 export type BountyFeedHandle = {
@@ -278,6 +279,11 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       has_location_permission: Boolean(permission?.granted),
       sort_order: distanceFilter !== 'off' ? 'distance' : 'recent',
       is_first_view_of_session: consumeIsFirstBountyListViewOfSession(),
+      // Metro-level viewer region (e.g. "Baltimore, MD") so demand density is
+      // comparable to bounty_created's metro_region per metro. Named
+      // metro_region (not `region`) — getDeviceServiceabilityContext() below
+      // already emits a differently-scoped `region` (device locale).
+      metro_region: coarseRegionFromLocationText(authProfileService.getCurrentProfile()?.location),
       ...getDeviceServiceabilityContext(),
     });
   }, [
