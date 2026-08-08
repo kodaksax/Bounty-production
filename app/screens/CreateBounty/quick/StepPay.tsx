@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import React, { useMemo, useState } from 'react';
-import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { analyticsService } from '../../../../lib/services/analytics-service';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../../lib/themes/types';
@@ -20,6 +20,13 @@ interface StepPayProps {
   onBack: () => void;
   step: number;
   totalSteps: number;
+  /**
+   * The amount the poster just committed to (preset tap, or Continue with a
+   * custom amount) exceeds their wallet balance. CreateBountyFlow handles
+   * this by showing the shared insufficient-balance → top-up gate and
+   * returning here once resolved — see app/screens/CreateBounty/index.tsx.
+   */
+  onInsufficientBalance: (amount: number) => void;
 }
 
 const AMOUNT_PRESETS = [20, 40, 60, 100, 150];
@@ -28,11 +35,21 @@ const AMOUNT_PRESETS = [20, 40, 60, 100, 150];
  * Step 5 — compensation, including the for-honor option.
  *
  * Keeps the previous compensation step's business logic verbatim: the same
- * balance guard on presets, the same validateAmount gate, and the same
- * post_switched_to_honor / post_amount_blocked_by_balance / amount_set /
- * payment_attached funnel events.
+ * validateAmount gate and the same post_switched_to_honor / amount_set /
+ * payment_attached funnel events. The balance guard no longer blocks with a
+ * raw Alert — insufficient balance routes to the shared top-up flow instead
+ * (see onInsufficientBalance), so a poster who can't afford their chosen
+ * amount is never left at a dead end.
  */
-export function StepPay({ draft, onUpdate, onNext, onBack, step, totalSteps }: StepPayProps) {
+export function StepPay({
+  draft,
+  onUpdate,
+  onNext,
+  onBack,
+  step,
+  totalSteps,
+  onInsufficientBalance,
+}: StepPayProps) {
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const { balance } = useWallet();
@@ -58,9 +75,13 @@ export function StepPay({ draft, onUpdate, onNext, onBack, step, totalSteps }: S
   };
 
   const handlePreset = (preset: number) => {
+    setError(null);
+    // Select the amount regardless of balance — the poster's next step when
+    // they can't yet afford it is the top-up gate below, not a block on the
+    // tap itself (see onInsufficientBalance).
+    onUpdate({ amount: preset, isForHonor: false });
+
     if (!validateBalance(preset, balance, false)) {
-      // Dead end: the preset is refused and this screen offers no way to add
-      // funds. Counting these shows how often the amount step is unusable.
       analyticsService.trackEvent('post_amount_blocked_by_balance', {
         surface: 'create_flow',
         attemptedAmount: preset,
@@ -68,13 +89,8 @@ export function StepPay({ draft, onUpdate, onNext, onBack, step, totalSteps }: S
         shortfall: Number((preset - balance).toFixed(2)),
         method: 'preset',
       });
-      Alert.alert('Insufficient Balance', getInsufficientBalanceMessage(preset, balance), [
-        { text: 'OK', style: 'default' },
-      ]);
-      return;
+      onInsufficientBalance(preset);
     }
-    setError(null);
-    onUpdate({ amount: preset, isForHonor: false });
   };
 
   const handleCustomAmount = (value: string) => {
@@ -90,9 +106,24 @@ export function StepPay({ draft, onUpdate, onNext, onBack, step, totalSteps }: S
       return;
     }
 
-    // Balance is not blocking here — it is a warning, and final submission
-    // enforces it. This lets a poster finish the draft and top up afterwards.
     const amountCovered = !draft.isForHonor && draft.amount > 0 && balance >= draft.amount;
+
+    // A custom-typed amount over balance never blocked here before — it just
+    // showed a passive warning and let the poster proceed to Review with an
+    // unfundable draft, deferring the reckoning to publish time. Route to the
+    // same top-up gate the preset tap uses instead, so this step behaves
+    // consistently no matter how the amount was chosen.
+    if (!draft.isForHonor && draft.amount > 0 && !amountCovered) {
+      analyticsService.trackEvent('post_amount_blocked_by_balance', {
+        surface: 'create_flow',
+        attemptedAmount: draft.amount,
+        balance,
+        shortfall: Number((draft.amount - balance).toFixed(2)),
+        method: 'continue',
+      });
+      onInsufficientBalance(draft.amount);
+      return;
+    }
 
     analyticsService.trackEvent('amount_set', {
       surface: 'create_flow',
@@ -191,7 +222,7 @@ export function StepPay({ draft, onUpdate, onNext, onBack, step, totalSteps }: S
       <View style={styles.infoCard}>
         <MaterialIcons
           name={draft.isForHonor ? 'volunteer-activism' : 'verified-user'}
-          size={22}
+          size={18}
           color={theme.primary}
           style={styles.infoIcon}
         />
@@ -219,7 +250,7 @@ export function StepPay({ draft, onUpdate, onNext, onBack, step, totalSteps }: S
         accessibilityState={{ checked: draft.isForHonor }}
       >
         <View style={[styles.checkbox, { borderColor: draft.isForHonor ? theme.primary : theme.border }]}>
-          {draft.isForHonor ? <MaterialIcons name="check" size={18} color={theme.primary} /> : null}
+          {draft.isForHonor ? <MaterialIcons name="check" size={15} color={theme.primary} /> : null}
         </View>
         <Text style={[styles.honorLabel, { color: draft.isForHonor ? theme.primary : theme.text }]}>
           Post for honor — no payment
@@ -242,14 +273,14 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: 28,
+      marginBottom: 18,
     },
-    currency: { fontSize: 34, fontWeight: '700', marginRight: 4 },
+    currency: { fontSize: 26, fontWeight: '700', marginRight: 3 },
     amount: {
-      fontSize: 72,
+      fontSize: 54,
       fontWeight: '800',
-      letterSpacing: -2,
-      minWidth: 120,
+      letterSpacing: -1.5,
+      minWidth: 96,
       padding: 0,
       textAlign: 'center',
     },
@@ -257,37 +288,37 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       flexWrap: 'wrap',
       justifyContent: 'center',
-      gap: 12,
+      gap: 8,
     },
     preset: {
-      paddingHorizontal: 24,
-      paddingVertical: 14,
-      borderRadius: 24,
+      paddingHorizontal: 18,
+      paddingVertical: 10,
+      borderRadius: 18,
       borderWidth: 2,
     },
-    presetLabel: { fontSize: 18, fontWeight: '700' },
+    presetLabel: { fontSize: 16, fontWeight: '700' },
     infoCard: {
-      marginTop: 26,
+      marginTop: 16,
       flexDirection: 'row',
-      padding: 18,
-      borderRadius: 20,
+      padding: 12,
+      borderRadius: 14,
       backgroundColor: theme.isDark ? 'rgba(5,150,105,0.18)' : 'rgba(5,150,105,0.10)',
     },
-    infoIcon: { marginRight: 12, marginTop: 2 },
+    infoIcon: { marginRight: 10, marginTop: 1 },
     infoTextWrap: { flex: 1 },
-    infoTitle: { fontSize: 16, fontWeight: '700', color: theme.text },
-    infoBody: { marginTop: 6, fontSize: 15, lineHeight: 21, color: theme.textSecondary },
-    honorRow: { marginTop: 22, flexDirection: 'row', alignItems: 'center' },
+    infoTitle: { fontSize: 14, fontWeight: '700', color: theme.text },
+    infoBody: { marginTop: 3, fontSize: 13, lineHeight: 17, color: theme.textSecondary },
+    honorRow: { marginTop: 14, flexDirection: 'row', alignItems: 'center' },
     checkbox: {
-      width: 26,
-      height: 26,
-      borderRadius: 8,
+      width: 22,
+      height: 22,
+      borderRadius: 6,
       borderWidth: 2,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    honorLabel: { marginLeft: 14, fontSize: 17, fontWeight: '600' },
-    warning: { marginTop: 16, fontSize: 14, color: theme.warning },
-    error: { marginTop: 12, fontSize: 14, color: theme.error },
+    honorLabel: { marginLeft: 10, fontSize: 15, fontWeight: '600' },
+    warning: { marginTop: 10, fontSize: 13, color: theme.warning },
+    error: { marginTop: 8, fontSize: 13, color: theme.error },
   });
 }

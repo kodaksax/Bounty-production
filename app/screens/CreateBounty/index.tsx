@@ -60,10 +60,18 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
   // 1 = advancing, -1 = going back. Read by each step's layout to pick the side
   // it slides in from.
   const [stepDirection, setStepDirection] = useState(1);
-  // Insufficient-balance gate: shown instead of a hard error when the wallet
-  // can't cover the bounty at publish time (see handlePublish below).
+  // Insufficient-balance gate: shown instead of a hard error whenever the
+  // wallet can't cover the bounty amount — either as the poster commits to an
+  // amount on the Compensation step, or (as a safety net for balance changing
+  // between steps) at publish time. `insufficientBalanceOrigin` distinguishes
+  // the two so the gate knows what to do once the top-up resolves: return the
+  // poster to the amount step to tap Continue themselves, or finish the
+  // publish that was already in flight.
   const [showInsufficientBalance, setShowInsufficientBalance] = useState(false);
   const [showTopUp, setShowTopUp] = useState(false);
+  const [insufficientBalanceOrigin, setInsufficientBalanceOrigin] = useState<
+    'amount_step' | 'publish' | null
+  >(null);
   const { session } = useAuthContext();
   const { draft, saveDraft, clearDraft, isLoading } = useBountyDraft(session?.user?.id);
   const insets = useSafeAreaInsets();
@@ -336,6 +344,7 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
         shortfall: Number((draft.amount - balance).toFixed(2)),
         method: 'publish',
       });
+      setInsufficientBalanceOrigin('publish');
       setShowInsufficientBalance(true);
       return;
     }
@@ -455,21 +464,44 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
   }
 
   if (showTopUp) {
+    const shortfall = Math.max(0, draft.amount - balance);
     return (
       <AddMoneyScreen
-        initialAmount={Math.max(0, draft.amount - balance).toFixed(2)}
+        initialAmount={shortfall.toFixed(2)}
+        headerLabel="ADD FUNDS TO POST"
+        primaryCtaLabel={amount => `Add $${amount.toFixed(2)} & Continue`}
         onBack={() => {
           setShowTopUp(false);
           setShowInsufficientBalance(true);
         }}
         onAddMoney={() => {
           // The deposit is already applied to wallet state inside
-          // useWalletDeposit — this just signals success. Continue straight
-          // into publishing instead of dropping the poster back at Review,
-          // so returning from top-up finishes the post automatically.
+          // useWalletDeposit — `balance` here already reflects it.
           setShowTopUp(false);
+
+          // The poster can edit the pre-filled amount, so the top-up may be
+          // less than the full shortfall. Re-check rather than assuming
+          // success: if still short, show the gate again immediately with the
+          // now-smaller shortfall instead of silently dropping the poster back
+          // at a screen that looks unchanged (amount_step) or auto-continuing
+          // a publish that would just fail the same check again (publish).
+          if (!validateBalance(draft.amount, balance, draft.isForHonor)) {
+            setShowInsufficientBalance(true);
+            return;
+          }
+
           setShowInsufficientBalance(false);
-          submit();
+          const origin = insufficientBalanceOrigin;
+          setInsufficientBalanceOrigin(null);
+          if (origin === 'publish') {
+            // Continue straight into publishing instead of dropping the
+            // poster back at Review, so returning from top-up finishes the
+            // post automatically.
+            submit();
+          }
+          // amount_step origin: draft.amount is already set to the chosen
+          // amount, so simply returning to the Compensation step (now with a
+          // cleared balance warning) is enough — the poster taps Continue.
         }}
       />
     );
@@ -486,10 +518,12 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
         }}
         onEditAmount={() => {
           setShowInsufficientBalance(false);
+          setInsufficientBalanceOrigin(null);
           handleGoToStep(5);
         }}
         onCancel={() => {
           setShowInsufficientBalance(false);
+          setInsufficientBalanceOrigin(null);
           onCancel?.();
         }}
       />
@@ -555,6 +589,10 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
               onBack={handleBack}
               step={5}
               totalSteps={TOTAL_STEPS}
+              onInsufficientBalance={() => {
+                setInsufficientBalanceOrigin('amount_step');
+                setShowInsufficientBalance(true);
+              }}
             />
           )}
           {currentStep === 6 && (

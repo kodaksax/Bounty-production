@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { Button } from 'components/ui/button';
 import { useEffect, useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { hapticFeedback } from '../lib/haptic-feedback';
@@ -25,6 +25,10 @@ interface InsufficientBalanceScreenProps {
  * Shown instead of a hard error when a poster's wallet balance can't cover
  * the bounty they're about to publish — the natural next step in the
  * posting flow rather than a dead end (see CreateBountyFlow's submit gate).
+ *
+ * Deliberately compact: the breakdown card + CTA are meant to be visible
+ * together without scrolling on common iPhone heights, so `onAddFunds` reads
+ * as the obvious next tap rather than something to hunt for below the fold.
  */
 export function InsufficientBalanceScreen({
   walletBalance,
@@ -45,72 +49,74 @@ export function InsufficientBalanceScreen({
   return (
     <View style={styles.container}>
       <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 32 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 16 }]}
         showsVerticalScrollIndicator={false}
       >
-        <Animated.View entering={FadeIn.duration(260)} style={styles.hero}>
+        <Animated.View entering={FadeIn.duration(200)} style={styles.hero}>
           <View style={styles.iconCircle}>
-            <MaterialIcons name="account-balance-wallet" size={40} color={theme.primary} />
+            <MaterialIcons name="account-balance-wallet" size={26} color={theme.primary} />
           </View>
 
           <Text style={styles.title} accessibilityRole="header">
-            Insufficient Balance
+            Add Funds to Post
           </Text>
           <Text style={styles.subtitle}>
-            You need additional funds in your wallet before your bounty can be posted.
-          </Text>
-          <Text style={styles.subtitle}>
-            Your payment will remain securely held in escrow until the bounty is completed.
+            Your wallet needs a bit more — funds stay in escrow until the job's done.
           </Text>
         </Animated.View>
 
-        <Animated.View entering={FadeInDown.delay(80).duration(300)} style={styles.card}>
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Wallet Balance</Text>
-            <Text style={styles.rowValue}>${walletBalance.toFixed(2)}</Text>
-          </View>
+        <Animated.View entering={FadeInDown.delay(60).duration(220)} style={styles.card}>
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Bounty Amount</Text>
             <Text style={styles.rowValue}>${bountyAmount.toFixed(2)}</Text>
           </View>
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Current Balance</Text>
+            <Text style={styles.rowValue}>${walletBalance.toFixed(2)}</Text>
+          </View>
           <View style={styles.divider} />
           <View style={styles.row}>
-            <Text style={[styles.rowLabel, styles.neededLabel]}>Needed</Text>
+            <Text style={[styles.rowLabel, styles.neededLabel]}>Amount Needed</Text>
             <Text style={styles.neededValue}>${needed.toFixed(2)}</Text>
           </View>
         </Animated.View>
       </ScrollView>
 
       <Animated.View
-        entering={FadeInDown.delay(140).duration(300)}
-        style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}
+        entering={FadeInDown.delay(100).duration(220)}
+        style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}
       >
         <Button
           variant="default"
           size="lg"
           onPress={onAddFunds}
-          accessibilityLabel="Add Funds"
+          accessibilityLabel={`Add $${needed.toFixed(2)} and continue`}
           style={styles.primaryButton}
         >
-          Add Funds
+          {`Add $${needed.toFixed(2)} & Continue`}
         </Button>
-        <Button
-          variant="outline"
-          size="lg"
-          onPress={onEditAmount}
-          accessibilityLabel="Edit Bounty Amount"
-          style={styles.secondaryButton}
-        >
-          Edit Bounty Amount
-        </Button>
-        <Button
-          variant="ghost"
-          onPress={onCancel}
-          accessibilityLabel="Cancel"
-          style={styles.cancelButton}
-        >
-          Cancel
-        </Button>
+
+        <View style={styles.secondaryRow}>
+          <TouchableOpacity
+            onPress={onEditAmount}
+            accessibilityRole="button"
+            accessibilityLabel="Edit Bounty Amount"
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={styles.secondaryLink}
+          >
+            <Text style={styles.secondaryLinkText}>Edit Amount</Text>
+          </TouchableOpacity>
+          <View style={styles.secondaryDivider} />
+          <TouchableOpacity
+            onPress={onCancel}
+            accessibilityRole="button"
+            accessibilityLabel="Cancel"
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={styles.secondaryLink}
+          >
+            <Text style={[styles.secondaryLinkText, styles.cancelText]}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
       </Animated.View>
     </View>
   );
@@ -125,87 +131,107 @@ function makeStyles(theme: AppTheme) {
       backgroundColor: theme.background,
     },
     scrollContent: {
+      flexGrow: 1,
+      justifyContent: 'center',
       paddingHorizontal: 24,
-      paddingBottom: 24,
+      paddingBottom: 12,
     },
     hero: {
       alignItems: 'center',
     },
     iconCircle: {
-      width: 88,
-      height: 88,
-      borderRadius: 44,
+      width: 52,
+      height: 52,
+      borderRadius: 26,
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: 20,
+      marginBottom: 10,
       backgroundColor: theme.isDark ? 'rgba(5,150,105,0.22)' : 'rgba(5,150,105,0.10)',
     },
     title: {
-      fontSize: 28,
+      fontSize: 21,
       fontWeight: '800',
-      letterSpacing: -0.5,
+      letterSpacing: -0.3,
       color: theme.text,
       textAlign: 'center',
-      marginBottom: 12,
+      marginBottom: 5,
     },
     subtitle: {
-      fontSize: 16,
-      lineHeight: 23,
+      fontSize: 14,
+      lineHeight: 19,
       color: theme.textSecondary,
       textAlign: 'center',
-      marginBottom: 10,
-      paddingHorizontal: 8,
+      paddingHorizontal: 12,
     },
     card: {
-      marginTop: 28,
-      borderRadius: 24,
+      marginTop: 18,
+      borderRadius: 16,
       backgroundColor: theme.surface,
       borderWidth: 1,
       borderColor: theme.border,
-      padding: 20,
+      padding: 14,
     },
     row: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingVertical: 10,
+      paddingVertical: 6,
     },
     rowLabel: {
-      fontSize: 16,
+      fontSize: 14,
       color: theme.textSecondary,
     },
     rowValue: {
-      fontSize: 17,
+      fontSize: 15,
       fontWeight: '700',
       color: theme.text,
     },
     divider: {
       height: 1,
       backgroundColor: theme.border,
-      marginVertical: 6,
+      marginVertical: 4,
     },
     neededLabel: {
       fontWeight: '600',
       color: theme.text,
     },
     neededValue: {
-      fontSize: 22,
+      fontSize: 18,
       fontWeight: '800',
       color: theme.primary,
     },
     footer: {
       paddingHorizontal: 24,
-      paddingTop: 12,
-      gap: 12,
+      paddingTop: 10,
+      gap: 8,
     },
     primaryButton: {
       width: '100%',
     },
-    secondaryButton: {
-      width: '100%',
+    secondaryRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
     },
-    cancelButton: {
-      width: '100%',
+    secondaryLink: {
+      minHeight: 36,
+      paddingVertical: 6,
+      paddingHorizontal: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    secondaryLinkText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: theme.primary,
+    },
+    cancelText: {
+      color: theme.textSecondary,
+    },
+    secondaryDivider: {
+      width: 1,
+      height: 14,
+      backgroundColor: theme.border,
     },
   });
 }
