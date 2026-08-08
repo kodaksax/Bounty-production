@@ -10,7 +10,9 @@ import { StepTask } from 'app/screens/CreateBounty/quick/StepTask';
 import { StepWhen } from 'app/screens/CreateBounty/quick/StepWhen';
 import { StepWhere } from 'app/screens/CreateBounty/quick/StepWhere';
 import { bountyService } from 'app/services/bountyService';
+import { AddMoneyScreen } from 'components/add-money-screen';
 import { ErrorBanner } from 'components/error-banner';
+import { InsufficientBalanceScreen } from 'components/insufficient-balance-screen';
 import { EmailVerificationBanner } from 'components/ui/email-verification-banner';
 import { useAuthContext } from 'hooks/use-auth-context';
 import { useEmailVerification } from 'hooks/use-email-verification';
@@ -58,6 +60,10 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
   // 1 = advancing, -1 = going back. Read by each step's layout to pick the side
   // it slides in from.
   const [stepDirection, setStepDirection] = useState(1);
+  // Insufficient-balance gate: shown instead of a hard error when the wallet
+  // can't cover the bounty at publish time (see handlePublish below).
+  const [showInsufficientBalance, setShowInsufficientBalance] = useState(false);
+  const [showTopUp, setShowTopUp] = useState(false);
   const { session } = useAuthContext();
   const { draft, saveDraft, clearDraft, isLoading } = useBountyDraft(session?.user?.id);
   const insets = useSafeAreaInsets();
@@ -313,6 +319,30 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
     }
   );
 
+  // Gate at the UI boundary: check balance before ever calling submit(), so an
+  // expected insufficient-balance case routes to the Top Up screen instead of
+  // taking the throw/Alert error path (submit's own check stays as a safety
+  // net for anything that reaches it despite this gate, e.g. a stale balance
+  // read racing a concurrent spend elsewhere).
+  const handlePublish = () => {
+    const useV2Payments =
+      !draft.isForHonor && draft.amount > 0 && shouldFundNewBountiesWithPhase2();
+
+    if (!useV2Payments && !validateBalance(draft.amount, balance, draft.isForHonor)) {
+      analyticsService.trackEvent('post_amount_blocked_by_balance', {
+        surface: POST_SURFACE,
+        attemptedAmount: draft.amount,
+        balance,
+        shortfall: Number((draft.amount - balance).toFixed(2)),
+        method: 'publish',
+      });
+      setShowInsufficientBalance(true);
+      return;
+    }
+
+    submit();
+  };
+
   useEffect(() => {
     if (!isLoading) {
       // Draft is already saved via saveDraft calls in step components
@@ -424,6 +454,48 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
     );
   }
 
+  if (showTopUp) {
+    return (
+      <AddMoneyScreen
+        initialAmount={Math.max(0, draft.amount - balance).toFixed(2)}
+        onBack={() => {
+          setShowTopUp(false);
+          setShowInsufficientBalance(true);
+        }}
+        onAddMoney={() => {
+          // The deposit is already applied to wallet state inside
+          // useWalletDeposit — this just signals success. Continue straight
+          // into publishing instead of dropping the poster back at Review,
+          // so returning from top-up finishes the post automatically.
+          setShowTopUp(false);
+          setShowInsufficientBalance(false);
+          submit();
+        }}
+      />
+    );
+  }
+
+  if (showInsufficientBalance) {
+    return (
+      <InsufficientBalanceScreen
+        walletBalance={balance}
+        bountyAmount={draft.amount}
+        onAddFunds={() => {
+          setShowInsufficientBalance(false);
+          setShowTopUp(true);
+        }}
+        onEditAmount={() => {
+          setShowInsufficientBalance(false);
+          handleGoToStep(5);
+        }}
+        onCancel={() => {
+          setShowInsufficientBalance(false);
+          onCancel?.();
+        }}
+      />
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       className="flex-1"
@@ -488,7 +560,7 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
           {currentStep === 6 && (
             <StepReviewQuick
               draft={draft}
-              onSubmit={submit}
+              onSubmit={handlePublish}
               onBack={handleBack}
               onEdit={handleGoToStep}
               isSubmitting={isSubmitting}

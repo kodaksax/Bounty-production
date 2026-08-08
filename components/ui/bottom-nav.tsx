@@ -95,12 +95,12 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
             style={styles.navButton}
             accessible={true}
             accessibilityRole="button"
-            accessibilityLabel={unreadMessageCount > 0 ? `Activity, ${unreadMessageCount} unread` : "Create new bounty or message"}
+            accessibilityLabel={unreadMessageCount > 0 ? `My Bounties, ${unreadMessageCount} unread` : "View your bounties"}
             accessibilityState={{ selected: activeScreen === "messages" }}
           >
             <View style={styles.iconWrapper}>
               <MaterialIcons
-                name="chat"
+                name="assignment"
                 color={activeScreen === "messages" ? theme.text : theme.textSecondary}
                 size={NAV_ICON_SIZE}
               />
@@ -112,7 +112,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
                 </View>
               )}
             </View>
-            <Text style={[styles.navLabel, activeScreen === "messages" && styles.navLabelActive]}>Activity</Text>
+            <Text style={[styles.navLabel, activeScreen === "messages" && styles.navLabelActive]}>My Bounties</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => handleNavigate("wallet")}
@@ -169,15 +169,15 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
             style={styles.navButton}
             accessible={true}
             accessibilityRole="button"
-            accessibilityLabel="Search and browse postings"
+            accessibilityLabel="Post a new bounty"
             accessibilityState={{ selected: activeScreen === "postings" }}
           >
             <MaterialIcons
-              name="edit-note"
+              name="post-add"
               color={activeScreen === "postings" ? theme.text : theme.textSecondary}
               size={NAV_ICON_SIZE}
             />
-            <Text style={[styles.navLabel, activeScreen === "postings" && styles.navLabelActive]}>Need Help</Text>
+            <Text style={[styles.navLabel, activeScreen === "postings" && styles.navLabelActive]}>Post</Text>
           </TouchableOpacity>
           {showAdmin ? (
             <TouchableOpacity

@@ -1091,7 +1091,7 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
                         { icon: 'task-alt', label: 'Track completed work' },
                       ]}
                       actionLabel="Post a Bounty"
-                      // Creating a bounty still lives on the Activity tab's New flow.
+                      // Creating a bounty lives on the Post tab.
                       onAction={() => setActiveScreen('postings')}
                     />
                   )
