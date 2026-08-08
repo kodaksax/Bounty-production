@@ -17,6 +17,8 @@ import { useAuthContext } from '../../hooks/use-auth-context'
 import { useFadeAnimation } from '../../hooks/use-accessible-animation'
 import { useConversations } from '../../hooks/useConversations'
 import { useAdmin } from '../../lib/admin-context'
+import { screenNameForBountyAppTab } from '../../lib/analytics/screen-name'
+import { trackScreenView } from '../../lib/analytics/screen-tracking'
 import { API_TIMEOUTS } from '../../lib/config/network'
 import { authProfileService } from '../../lib/services/auth-profile-service'
 import { navigationIntent } from '../../lib/services/navigation-intent'
@@ -75,7 +77,7 @@ function BountyFeedFade({ active, children }: { active: boolean; children: React
 function BountyAppInner() {
   const router = useRouter()
   const { theme } = useAppThemeContext()
-  const { screen, initialTab } = useLocalSearchParams<{ screen?: string, initialTab?: string }>()
+  const { screen, initialTab, source } = useLocalSearchParams<{ screen?: string, initialTab?: string, source?: string }>()
   const { isAdmin, isAdminTabEnabled } = useAdmin()
   // Get current user ID from auth context (reactive to auth state changes)
   const { session, isLoading, profile } = useAuthContext()
@@ -182,6 +184,24 @@ function BountyAppInner() {
   const allowedInitialTabs = new Set(['new', 'inProgress', 'myPostings', 'requests'])
   const paramInitialTab = typeof initialTab === 'string' && initialTab.length > 0 && allowedInitialTabs.has(initialTab) ? initialTab : undefined
   const [activeScreen, setActiveScreen] = useState(paramScreen)
+
+  // Reports this tab shell's visible screen for analytics. Switching tabs
+  // here (via BottomNav) never changes the route, so ScreenTracker in
+  // app/_layout.tsx can't see it — this shell owns its own screen_viewed
+  // calls instead, including the initial tab on arrival (tagged
+  // 'notification' when opened from a notification deep link, 'push'
+  // otherwise; later same-session tab switches are always 'tab').
+  const isFirstActiveScreenReport = useRef(true)
+  useEffect(() => {
+    const navSource = isFirstActiveScreenReport.current
+      ? (source === 'notification' ? 'notification' : 'push')
+      : 'tab'
+    isFirstActiveScreenReport.current = false
+    trackScreenView(screenNameForBountyAppTab(activeScreen), { source: navSource })
+    // Only the tab identity should retrigger this — `source` is read once,
+    // on the very first report.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeScreen])
 
   const [showBottomNav, setShowBottomNav] = useState(true)
   const [pendingInitialTab, setPendingInitialTab] = useState<string | undefined>(paramInitialTab)

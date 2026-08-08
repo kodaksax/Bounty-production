@@ -19,6 +19,8 @@ import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 import { bountyService } from '../../lib/services/bounty-service';
 import type { Bounty } from '../../lib/services/database.types';
+import { analyticsService } from '../../lib/services/analytics-service';
+import { consumeIsFirstBountyListViewOfSession } from '../../lib/analytics/sessionFlags';
 import { recentSearchService } from '../../lib/services/recent-search-service';
 import { searchService } from '../../lib/services/search-service';
 import { userSearchService } from '../../lib/services/user-search-service';
@@ -40,6 +42,19 @@ interface BountyRowItem {
   is_for_honor?: boolean;
   location?: string;
   status?: string;
+}
+
+// Human-readable filter tokens for analytics — never the raw query text.
+function describeBountyFilters(filters: BountySearchFilters): string[] {
+  const applied: string[] = [];
+  if (filters.isForHonor === false) applied.push('paid_only');
+  if (filters.isForHonor === true) applied.push('honor_only');
+  if (filters.workType) applied.push(`work_type:${filters.workType}`);
+  if (filters.minAmount != null) applied.push(`min_amount:${filters.minAmount}`);
+  if (filters.maxAmount != null) applied.push(`max_amount:${filters.maxAmount}`);
+  if (filters.skills && filters.skills.length > 0) applied.push('skills_filtered');
+  if (filters.sortBy && filters.sortBy !== 'date_desc') applied.push(`sort:${filters.sortBy}`);
+  return applied;
 }
 
 export default function EnhancedSearchScreen() {
@@ -219,6 +234,28 @@ export default function EnhancedSearchScreen() {
         if (requestId !== searchRequestIdRef.current) return; // superseded by a newer search
         setBountyResults(results.map(mapBounty));
 
+        const filtersApplied = describeBountyFilters(searchFilters);
+        const trimmedLength = searchQuery.trim().length;
+        // A blank query with only filter chips applied is browsing, not a
+        // "search" in the query-length sense — still fire bounty_list_viewed
+        // (source: search) either way since results are rendering, but only
+        // fire bounty_search itself when the user actually typed something.
+        if (trimmedLength > 0) {
+          analyticsService.trackEvent('bounty_search', {
+            query_length: trimmedLength,
+            results_count: results.length,
+            filters_applied: filtersApplied,
+            had_zero_results: results.length === 0,
+          });
+        }
+        analyticsService.trackEvent('bounty_list_viewed', {
+          results_count: results.length,
+          source: 'search',
+          filters_applied: filtersApplied,
+          sort_order: searchFilters.sortBy || 'date_desc',
+          is_first_view_of_session: consumeIsFirstBountyListViewOfSession(),
+        });
+
         // Save to recent searches if query exists
         if (searchQuery.trim()) {
           await recentSearchService.saveSearch('bounty', searchQuery, searchFilters);
@@ -295,7 +332,7 @@ export default function EnhancedSearchScreen() {
     });
   }, []);
 
-  const renderBountyItem = useCallback(({ item }: { item: BountyRowItem }) => {
+  const renderBountyItem = useCallback(({ item, index }: { item: BountyRowItem; index: number }) => {
     const priceLabel = item.is_for_honor ? 'for honor' : item.amount != null ? `$${item.amount}` : '';
     const locationLabel = item.location ? `, in ${item.location}` : '';
     const accessibilityLabel = `${item.title}${priceLabel ? ', ' + priceLabel : ''}${locationLabel}`;
@@ -303,7 +340,7 @@ export default function EnhancedSearchScreen() {
     return (
       <TouchableOpacity
         style={s.card}
-        onPress={() => router.push(`/bounty/${item.id}/public`)}
+        onPress={() => router.push(`/bounty/${item.id}/public?source=search&position=${index}`)}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
         accessibilityHint="Opens bounty details"
@@ -644,7 +681,7 @@ export default function EnhancedSearchScreen() {
         <TouchableOpacity
           key={String(bounty.id)}
           style={s.trendingCard}
-          onPress={() => router.push(`/bounty/${bounty.id}/public`)}
+          onPress={() => router.push(`/bounty/${bounty.id}/public?source=search`)}
           accessibilityRole="button"
           accessibilityLabel={bounty.title}
           accessibilityHint="Opens bounty details"

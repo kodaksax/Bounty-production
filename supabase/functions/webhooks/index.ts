@@ -856,39 +856,26 @@ function sumStripeBalanceCents(entries: Array<{ amount: number; currency: string
 }
 
 /**
- * Best-effort PostHog server-side capture — plain fetch, no SDK (Deno edge
- * runtime + this project's bundler don't carry the posthog-node dependency).
- * Reuses the existing project API key (EXPO_PUBLIC_POSTHOG_KEY is a public,
- * non-secret project identifier — safe to reuse server-side) but reads it
- * from this function's own env, which requires it to be set as an Edge
- * Function secret separately from the app's bundled env — see deploy notes.
- * Never throws: analytics must never fail a webhook delivery.
+ * Structured log for a newly-opened reconciliation finding (drift crossed
+ * DRIFT_THRESHOLD_CENTS and there was no already-open finding of the same
+ * type). This used to also fire a PostHog event (`stripe_balance_drift_detected`)
+ * — 930 of those landed in the analytics project over 26 days, effectively
+ * page-worthy alerting mixed into product telemetry with no dashboard or
+ * alert actually reading it there. `reconciliation_findings` (inserted by the
+ * caller just above) is the durable record; this is the log-based paging
+ * signal — `critical` severity already went through logCritical() before
+ * this function existed, so it's routed there instead of duplicated here.
  */
-async function postHogCapture(
-  eventName: string,
-  properties: Record<string, unknown>,
-  distinctId = 'stripe-balance-reconciliation'
-): Promise<void> {
-  const apiKey = Deno.env.get('POSTHOG_PROJECT_API_KEY');
-  if (!apiKey) return; // Not configured — skip silently, this is optional observability.
-  const host = Deno.env.get('POSTHOG_HOST') ?? 'https://us.i.posthog.com';
-  try {
-    await fetch(`${host}/capture/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        api_key: apiKey,
-        event: eventName,
-        distinct_id: distinctId,
-        properties: { ...properties, source: 'stripe-balance-reconciliation' },
-        timestamp: new Date().toISOString(),
-      }),
-    });
-  } catch (err) {
-    console.warn('[webhooks] PostHog capture failed (non-fatal)', {
-      eventName,
-      error: (err as { message?: string })?.message,
-    });
+function logReconciliationFinding(
+  severity: 'critical' | 'warning' | 'info',
+  event: string,
+  context: Record<string, unknown>
+): void {
+  const payload = JSON.stringify({ event, severity, ts: new Date().toISOString(), ...context });
+  if (severity === 'warning') {
+    console.warn(`[webhooks] ${event}`, payload);
+  } else {
+    console.log(`[webhooks] ${event}`, payload);
   }
 }
 
@@ -988,11 +975,12 @@ async function comparePlatformBalance(
           logCritical('platform Stripe balance is below the ledger total — cannot currently honor every withdrawal on the books', {
             stripeAvailableCents, stripePendingCents, ledgerCents, driftCents,
           });
+        } else {
+          logReconciliationFinding(severity, 'stripe_balance_drift_detected', {
+            scope: 'platform', stripeAvailableCents, stripePendingCents, ledgerCents, driftCents,
+          });
         }
       }
-      await postHogCapture('stripe_balance_drift_detected', {
-        scope: 'platform', severity, drift_cents: driftCents,
-      });
     }
   }
 
@@ -1112,10 +1100,10 @@ async function compareConnectAccountBalance(
         console.error('[webhooks] compareConnectAccountBalance: failed to insert finding', { error: findingError });
       } else {
         findingId = (finding as { id: string } | null)?.id ?? null;
+        logReconciliationFinding(severity, 'stripe_balance_drift_detected', {
+          scope: 'connect_account', userId, accountId, stripeAvailableCents, stripePendingCents, ledgerCents, driftCents,
+        });
       }
-      await postHogCapture('stripe_balance_drift_detected', {
-        scope: 'connect_account', severity, drift_cents: driftCents,
-      });
     }
   }
 

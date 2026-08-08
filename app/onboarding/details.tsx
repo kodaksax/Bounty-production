@@ -11,6 +11,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CombinedActivationPrompt } from '../../components/onboarding/CombinedActivationPrompt';
 import { HunterLocationPrompt } from '../../components/onboarding/HunterLocationPrompt';
 import { HunterSampleBountyScreen } from '../../components/onboarding/HunterSampleBountyScreen';
 import { PosterFundingScreen } from '../../components/onboarding/PosterFundingScreen';
@@ -159,9 +160,14 @@ export default function DetailsScreen() {
   // Initial (pre-location) preview: recent local bounties, recency-sorted —
   // matches what the location prompt shows before we know where the hunter
   // is. Once location/ZIP resolves, resolveNearby() re-ranks a fresh fetch by
-  // real distance instead.
+  // real distance instead. Also runs pre-choice for the 'onboarding-skip-role-
+  // selection' test arm, since CombinedActivationPrompt shows the same
+  // preview before intent is even set.
+  const needsPreviewFetch =
+    onboardingData.intent === 'hunter' ||
+    (onboardingData.experimentVariant === 'test' && !onboardingData.intent);
   useEffect(() => {
-    if (onboardingData.intent !== 'hunter') return;
+    if (!needsPreviewFetch) return;
     let cancelled = false;
     bountyService
       .getAll({ status: 'open', limit: HUNTER_DISCOVERY_FETCH_LIMIT })
@@ -179,7 +185,7 @@ export default function DetailsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [onboardingData.intent]);
+  }, [needsPreviewFetch]);
 
   // Sync state changes to context
   useEffect(() => {
@@ -744,6 +750,18 @@ export default function DetailsScreen() {
       return;
     }
 
+    // Onboarding applies to a real, live, randomly-selected open bounty (see
+    // the module comment on getPreviewCards in previewBounties.ts — there is
+    // no fixed/fabricated demo bounty), so bounty_claim_* here is a genuine
+    // application, just tagged so it never counts as real marketplace demand.
+    analyticsService.trackEvent('bounty_claim_started', {
+      bounty_id: String(sampleBounty.id),
+      amount: typeof sampleBounty.amount === 'number' ? sampleBounty.amount : undefined,
+      is_for_honor: Boolean(sampleBounty.is_for_honor),
+      source: 'onboarding',
+      is_onboarding_demo: true,
+    });
+
     setApplying(true);
     try {
       const result = await bountyRequestService.create({
@@ -755,7 +773,14 @@ export default function DetailsScreen() {
       } as any);
 
       if (result.success) {
-        analyticsService.trackEvent('onboarding_bounty_accepted', { bountyId: String(sampleBounty.id) });
+        analyticsService.trackEvent('bounty_claim_submitted', {
+          bounty_id: String(sampleBounty.id),
+          is_onboarding_demo: true,
+          had_message: false,
+          attachment_count: 0,
+        });
+        // RENAMED from 'onboarding_bounty_accepted' — see analytics-service.ts.
+        analyticsService.trackEvent('onboarding_bounty_applied', { bountyId: String(sampleBounty.id) });
         updateOnboardingData({
           firstAppliedBountyId: String(sampleBounty.id),
           firstAppliedBountyTitle: sampleBounty.title,
@@ -766,6 +791,11 @@ export default function DetailsScreen() {
       }
 
       console.warn('[Onboarding] Bounty application failed:', result.error);
+      analyticsService.trackEvent('bounty_claim_failed', {
+        bounty_id: String(sampleBounty.id),
+        reason: /banned|suspended/i.test(result.error || '') ? 'not_eligible' : 'validation',
+        is_onboarding_demo: true,
+      });
       Alert.alert(
         'Could Not Submit Application',
         result.error || 'Please check your connection and try again.',
@@ -776,6 +806,11 @@ export default function DetailsScreen() {
       );
     } catch (err) {
       console.error('[Onboarding] Failed to apply to sample bounty:', err);
+      analyticsService.trackEvent('bounty_claim_failed', {
+        bounty_id: String(sampleBounty.id),
+        reason: 'network',
+        is_onboarding_demo: true,
+      });
       Alert.alert(
         'Connection Error',
         "We couldn't submit your application. Please check your internet connection and try again.",
@@ -868,6 +903,25 @@ export default function DetailsScreen() {
     );
   }
 
+
+  // 'onboarding-skip-role-selection' experiment, test arm: welcome.tsx sent
+  // this user here with intent still null. Show the combined chooser instead
+  // of the generic profile-only form; picking a card sets intent and the
+  // branches above take over on the next render, unchanged.
+  if (onboardingData.experimentVariant === 'test') {
+    return (
+      <CombinedActivationPrompt
+        theme={theme}
+        styles={styles}
+        insets={insets}
+        recentBounties={recentBounties}
+        onChoosePoster={() => updateOnboardingData({ intent: 'poster' })}
+        onChooseHunter={() => updateOnboardingData({ intent: 'hunter' })}
+        onSkip={handleSkipToApp}
+        onBack={handleBack}
+      />
+    );
+  }
 
   return (
     <ProfileDetailsForm

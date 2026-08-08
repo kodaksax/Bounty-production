@@ -144,6 +144,12 @@ export function SignInForm() {
         throw new Error('Please fix the form errors');
       }
 
+      // Genuine funnel event — fires once local pre-checks (lockout, CAPTCHA,
+      // form validation) pass and we're actually about to hit Supabase. Keep
+      // this the only "attempt started" signal for this flow; the internal
+      // per-stage traces below (signIn/mfaCheck/profileCheck) stay local-only.
+      posthogCapture('AUTH_ATTEMPT_STARTED', { correlation_id: correlationId, method: 'email' });
+
       try {
         // If identifier may be username, your backend should resolve username -> email.
         // Here we assume email sign-in
@@ -417,6 +423,14 @@ export function SignInForm() {
       } catch (err: any) {
         console.error('[sign-in] Sign-in error:', err, { correlationId });
 
+        const timedOut = isTimeoutError(err) || err?.code === 'AUTH_STAGE_TIMEOUT';
+        posthogCapture('AUTH_ATTEMPT_FAILED', {
+          correlation_id: correlationId,
+          method: 'email',
+          error_code: err?.code ?? 'unknown',
+          outcome: timedOut ? 'timed_out' : 'rejected',
+        });
+
         // If this is already a user-facing Error thrown intentionally above
         // (e.g. from the auth-error handler, MFA block, or lockout check),
         // re-throw it directly.  Calling parseAuthError on an already-processed
@@ -546,13 +560,18 @@ export function SignInForm() {
         setSocialAuthLoading(false);
         return;
       }
+      let socialCorrelationId: string | undefined;
       try {
         setSocialAuthLoading(true);
         console.log('[google] Starting Google sign-in with id_token');
 
         // Simplified: Let Supabase handle its own timeout
         // See SIGN_IN_SIMPLIFICATION_SUMMARY.md for rationale
-        const socialCorrelationId = generateCorrelationId('signin_google');
+        socialCorrelationId = generateCorrelationId('signin_google');
+        posthogCapture('AUTH_ATTEMPT_STARTED', {
+          correlation_id: socialCorrelationId,
+          method: 'google',
+        });
         const socialLoginStartMs = socialLoginStartMsRef.current ?? Date.now();
         const { data, error } = await runStageWithTimeout(
           'socialSignIn',
@@ -674,6 +693,12 @@ export function SignInForm() {
         const errorMsg = getAuthErrorMessage(e);
         setSocialAuthError(errorMsg);
         console.error('[google] Error:', e);
+        posthogCapture('AUTH_ATTEMPT_FAILED', {
+          correlation_id: socialCorrelationId ?? 'unknown',
+          method: 'google',
+          error_code: e?.code ?? 'unknown',
+          outcome: isTimeoutError(e) || e?.code === 'AUTH_STAGE_TIMEOUT' ? 'timed_out' : 'rejected',
+        });
       } finally {
         setSocialAuthLoading(false);
       }
@@ -855,6 +880,7 @@ export function SignInForm() {
                       setSocialAuthError(null);
                       setSocialAuthLoading(true);
                       socialLoginStartMsRef.current = Date.now();
+                      let socialCorrelationId: string | undefined;
                       try {
                         console.log('[apple] Starting Apple sign-in');
                         const credential = await AppleAuthentication.signInAsync({
@@ -869,7 +895,7 @@ export function SignInForm() {
                         }
 
                         console.log('[apple] Exchanging token with Supabase');
-                        const socialCorrelationId = generateCorrelationId('signin_apple');
+                        socialCorrelationId = generateCorrelationId('signin_apple');
                         const socialLoginStartMs = socialLoginStartMsRef.current ?? Date.now();
                         const identityToken = credential.identityToken;
                         if (!identityToken) {
@@ -877,6 +903,10 @@ export function SignInForm() {
                           return;
                         }
 
+                        posthogCapture('AUTH_ATTEMPT_STARTED', {
+                          correlation_id: socialCorrelationId,
+                          method: 'apple',
+                        });
                         const { data, error } = await runStageWithTimeout(
                           'socialSignIn',
                           () =>
@@ -1007,6 +1037,15 @@ export function SignInForm() {
                           const errorMsg = getAuthErrorMessage(e);
                           setSocialAuthError(errorMsg);
                           console.error('[apple] Error:', e);
+                          posthogCapture('AUTH_ATTEMPT_FAILED', {
+                            correlation_id: socialCorrelationId ?? 'unknown',
+                            method: 'apple',
+                            error_code: e?.code ?? 'unknown',
+                            outcome:
+                              isTimeoutError(e) || e?.code === 'AUTH_STAGE_TIMEOUT'
+                                ? 'timed_out'
+                                : 'rejected',
+                          });
                         }
                       } finally {
                         setSocialAuthLoading(false);

@@ -4,6 +4,18 @@ import { capture as posthogCapture } from '../posthog';
 import { isTimeoutError } from './auth-errors';
 import { logger } from './error-logger';
 
+/**
+ * These per-stage lifecycle events (AUTH_STAGE_*) are internal developer
+ * traces — root-auth-gate evaluation, bootstrap state checks, token refresh
+ * plumbing — not user-facing funnel steps. They used to also go to PostHog,
+ * where they drowned out real product events (~13.7k/week of ~29.6k total,
+ * up to 143 events for a single user). They stay local (`logger`) only; the
+ * three genuine funnel events (attempt started/succeeded/failed) are emitted
+ * separately by callers at the actual user-initiated sign-in boundaries —
+ * see AUTH_ATTEMPT_STARTED/AUTH_ATTEMPT_FAILED in sign-in-form.tsx and
+ * useSocialAuth.ts, and AUTH_LOGIN_SUCCESS below.
+ */
+
 export type AuthLifecycleStatus =
   | 'started'
   | 'success'
@@ -85,43 +97,39 @@ function mapLifecycleStatusToEventName(status: AuthLifecycleStatus): string {
   }
 }
 
-function emitAuthTelemetry(event: AuthLifecycleEvent): void {
-  try {
-    const runtime = getRuntimeMetadata();
-    const eventName = mapLifecycleStatusToEventName(event.status);
+/** Builds the enriched local-diagnostic payload for one auth stage transition — see the module-level comment on why this never reaches PostHog. */
+function buildAuthTelemetryPayload(event: AuthLifecycleEvent): Record<string, unknown> {
+  const runtime = getRuntimeMetadata();
+  const eventName = mapLifecycleStatusToEventName(event.status);
 
-    const payload: Record<string, unknown> = {
-      correlation_id: event.correlationId,
-      user_id:
-        (event.metadata?.userId as string | undefined) ||
-        (event.metadata?.authUserId as string | undefined) ||
-        null,
-      auth_stage: event.stage,
-      auth_status: event.status,
-      elapsed_ms: event.elapsedMs ?? null,
-      started_at: event.startedAt,
-      finished_at: event.finishedAt ?? null,
-      timeout_ms: event.timeoutMs ?? null,
-      cancelled: event.cancelled ?? false,
-      retry: event.retry ?? 0,
-      network_type: event.network?.type ?? 'unknown',
-      network_connected: event.network?.isConnected ?? null,
-      network_reachable: event.network?.isInternetReachable ?? null,
-      app_platform: runtime.platform,
-      app_version: runtime.appVersion,
-      app_build_number: runtime.buildNumber,
-      app_environment: runtime.environment,
-      supabase_region: runtime.supabaseRegion,
-      outcome: event.outcome ?? null,
-      error_code: event.errorCode ?? null,
-      error_message: event.errorMessage ?? null,
-      ...event.metadata,
-    };
-
-    posthogCapture(eventName, payload);
-  } catch {
-    // Telemetry failures must never break auth flow.
-  }
+  return {
+    event_name: eventName,
+    correlation_id: event.correlationId,
+    user_id:
+      (event.metadata?.userId as string | undefined) ||
+      (event.metadata?.authUserId as string | undefined) ||
+      null,
+    auth_stage: event.stage,
+    auth_status: event.status,
+    elapsed_ms: event.elapsedMs ?? null,
+    started_at: event.startedAt,
+    finished_at: event.finishedAt ?? null,
+    timeout_ms: event.timeoutMs ?? null,
+    cancelled: event.cancelled ?? false,
+    retry: event.retry ?? 0,
+    network_type: event.network?.type ?? 'unknown',
+    network_connected: event.network?.isConnected ?? null,
+    network_reachable: event.network?.isInternetReachable ?? null,
+    app_platform: runtime.platform,
+    app_version: runtime.appVersion,
+    app_build_number: runtime.buildNumber,
+    app_environment: runtime.environment,
+    supabase_region: runtime.supabaseRegion,
+    outcome: event.outcome ?? null,
+    error_code: event.errorCode ?? null,
+    error_message: event.errorMessage ?? null,
+    ...event.metadata,
+  };
 }
 
 const NETWORK_SNAPSHOT_TIMEOUT_MS = 1500;
@@ -171,13 +179,20 @@ export async function getNetworkSnapshot(): Promise<AuthNetworkSnapshot> {
 }
 
 export function logAuthLifecycleEvent(event: AuthLifecycleEvent): void {
-  const payload = {
+  const rawEvent = {
     ...event,
     finishedAt: event.finishedAt ?? new Date().toISOString(),
   };
 
   const message = '[auth-lifecycle]';
-  emitAuthTelemetry(payload);
+  let payload: Record<string, unknown>;
+  try {
+    payload = buildAuthTelemetryPayload(rawEvent);
+  } catch {
+    // Enrichment failures must never break auth flow — fall back to the raw event.
+    payload = rawEvent;
+  }
+
   if (event.status === 'failure' || event.status === 'timeout') {
     logger.error(message, payload);
     return;

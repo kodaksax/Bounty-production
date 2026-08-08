@@ -22,6 +22,8 @@ import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 import type { AppTheme } from '../lib/themes/types'
 import { bountyRequestService } from '../lib/services/bounty-request-service'
 import { bountyService } from '../lib/services/bounty-service'
+import { analyticsService } from '../lib/services/analytics-service'
+import { consumeIsFirstBountyListViewOfSession } from '../lib/analytics/sessionFlags'
 import { searchBountiesNearby, type NearbyBounty } from '../lib/services/bounty-location-service'
 import type { Bounty } from '../lib/services/database.types'
 import { locationService } from '../lib/services/location-service'
@@ -221,6 +223,33 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     })
     return list
   }, [bounties, activeCategory, bountyDistances, appliedBountyIds])
+
+  // bounty_list_viewed — fires once the feed's actual result set for the
+  // current filters is known (skeleton fully resolved), including the
+  // results_count=0 case. Deliberately gated on isLoadingBounties/
+  // applicationsLoaded rather than firing on the initial `bounties=[]`
+  // render, and guarded by lastFiredKeyRef so unrelated re-renders that don't
+  // change the visible list (e.g. a distance recompute) don't re-fire it.
+  const listViewedKeyRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (isLoadingBounties || !applicationsLoaded) return
+    const source = distanceFilter !== 'off' ? 'nearby' : activeCategory !== 'all' ? 'category' : 'home_feed'
+    const filtersApplied: string[] = []
+    if (activeCategory !== 'all') filtersApplied.push(`category:${activeCategory}`)
+    if (distanceFilter !== 'off') filtersApplied.push(`radius:${distanceFilter == null ? 'anywhere' : distanceFilter}`)
+    const key = `${source}|${filteredBounties.length}|${filtersApplied.join(',')}`
+    if (listViewedKeyRef.current === key) return
+    listViewedKeyRef.current = key
+    analyticsService.trackEvent('bounty_list_viewed', {
+      results_count: filteredBounties.length,
+      source,
+      filters_applied: filtersApplied,
+      radius_miles: typeof distanceFilter === 'number' ? distanceFilter : undefined,
+      has_location_permission: Boolean(permission?.granted),
+      sort_order: distanceFilter !== 'off' ? 'distance' : 'recent',
+      is_first_view_of_session: consumeIsFirstBountyListViewOfSession(),
+    })
+  }, [isLoadingBounties, applicationsLoaded, filteredBounties, activeCategory, distanceFilter, permission?.granted])
 
   const loadUserApplications = useCallback(async () => {
     const uid = validUserId ?? currentUserId

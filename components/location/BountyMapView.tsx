@@ -7,6 +7,8 @@ import { Marker, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 import { useLocation } from '../../app/hooks/useLocation';
 import { searchBountiesNearby, type NearbyBounty } from '../../lib/services/bounty-location-service';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import { analyticsService } from '../../lib/services/analytics-service';
+import { consumeIsFirstBountyListViewOfSession } from '../../lib/analytics/sessionFlags';
 
 // Continental US centroid — starting viewport only, when we have neither the
 // bounty poster's approx point nor the viewer's device location yet.
@@ -49,7 +51,7 @@ interface BountyMapViewProps {
 export function BountyMapView({ category, height = '100%' }: BountyMapViewProps) {
   const { theme } = useAppThemeContext();
   const router = useRouter();
-  const { location: userLocation } = useLocation();
+  const { location: userLocation, permission } = useLocation();
   const [bounties, setBounties] = useState<NearbyBounty[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -64,11 +66,19 @@ export function BountyMapView({ category, height = '100%' }: BountyMapViewProps)
         category: category ?? null,
         limit: 100,
       });
-      setBounties(results.filter((b) => b.approx_latitude != null && b.approx_longitude != null));
+      const plottable = results.filter((b) => b.approx_latitude != null && b.approx_longitude != null);
+      setBounties(plottable);
+      analyticsService.trackEvent('bounty_list_viewed', {
+        results_count: plottable.length,
+        source: 'map',
+        filters_applied: category ? [`category:${category}`] : [],
+        has_location_permission: Boolean(permission?.granted),
+        is_first_view_of_session: consumeIsFirstBountyListViewOfSession(),
+      });
     } finally {
       setIsLoading(false);
     }
-  }, [userLocation?.latitude, userLocation?.longitude, category]);
+  }, [userLocation?.latitude, userLocation?.longitude, category, permission?.granted]);
 
   useEffect(() => {
     load();
@@ -118,7 +128,7 @@ export function BountyMapView({ category, height = '100%' }: BountyMapViewProps)
 
       {selected && (
         <TouchableOpacity
-          onPress={() => router.push(`/bounty/${selected.id}` as any)}
+          onPress={() => router.push(`/bounty/${selected.id}?source=map` as any)}
           style={{
             position: 'absolute', left: 12, right: 12, bottom: 12,
             backgroundColor: theme.surface, borderRadius: 14, padding: 14,

@@ -42,7 +42,7 @@ export function resolveNotificationDeepLink(ctx: NotificationDeepLinkContext): D
 
   switch (category) {
     case 'marketplace': {
-      if (data.bountyId) return { kind: 'route', path: `/bounty/${data.bountyId}` };
+      if (data.bountyId) return { kind: 'route', path: `/bounty/${data.bountyId}?source=notification` };
       return { kind: 'none' };
     }
     case 'messages': {
@@ -53,7 +53,7 @@ export function resolveNotificationDeepLink(ctx: NotificationDeepLinkContext): D
       if (ctx.type === 'payout_method_changed' || ctx.type === 'bank_disconnected') {
         return { kind: 'route', path: '/tabs/bounty-app?screen=wallet' };
       }
-      if (data.bountyId) return { kind: 'route', path: `/bounty/${data.bountyId}` };
+      if (data.bountyId) return { kind: 'route', path: `/bounty/${data.bountyId}?source=notification` };
       return { kind: 'route', path: '/tabs/bounty-app?screen=wallet' };
     }
     case 'security': {

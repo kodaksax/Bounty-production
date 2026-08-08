@@ -1,6 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -15,6 +15,7 @@ import { useAuthContext } from '../../../hooks/use-auth-context';
 import { useBackgroundColor } from '../../../lib/context/BackgroundColorContext';
 import { bountyRequestService } from '../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../lib/services/bounty-service';
+import { analyticsService } from '../../../lib/services/analytics-service';
 import type { Bounty } from '../../../lib/services/database.types';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../lib/themes/types';
@@ -22,7 +23,7 @@ import { formatCategoryLabel } from '../../../lib/utils/data-utils';
 import { LinearGradient } from 'expo-linear-gradient';
 
 export default function PublicBountyDetail() {
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { id, source, position } = useLocalSearchParams<{ id?: string; source?: string; position?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useAppThemeContext();
@@ -34,7 +35,7 @@ export default function PublicBountyDetail() {
   const [bounty, setBounty] = useState<Bounty | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   const [hasApplied, setHasApplied] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
 
@@ -42,6 +43,13 @@ export default function PublicBountyDetail() {
     const raw = Array.isArray(id) ? id[0] : id;
     return raw && String(raw).trim().length > 0 ? String(raw) : null;
   }, [id]);
+
+  // bounty_viewed fires once per (bountyId) load — guarded so remounts of the
+  // same route (e.g. a parent re-render) don't double count.
+  const viewFiredForIdRef = useRef<string | null>(null);
+  // Stamped alongside bounty_viewed — anchor for bounty_claim_submitted's
+  // seconds_from_view_to_submit.
+  const viewedAtRef = useRef<number>(Date.now());
 
   useEffect(() => {
     if (!routeBountyId) {
@@ -61,12 +69,33 @@ export default function PublicBountyDetail() {
       setIsLoading(true);
       setError(null);
       const data = await bountyService.getById(bountyId);
-      
+
       if (!data) {
         throw new Error('Bounty not found');
       }
 
       setBounty(data);
+
+      if (viewFiredForIdRef.current !== bountyId) {
+        viewFiredForIdRef.current = bountyId;
+        viewedAtRef.current = Date.now();
+        const posterIdForView = data.poster_id || data.user_id;
+        const secondsSincePosted = data.created_at
+          ? Math.max(0, Math.round((Date.now() - new Date(data.created_at).getTime()) / 1000))
+          : undefined;
+        analyticsService.trackEvent('bounty_viewed', {
+          bounty_id: String(data.id),
+          is_own_bounty: currentUserId != null && posterIdForView != null && String(currentUserId) === String(posterIdForView),
+          amount: typeof data.amount === 'number' ? data.amount : undefined,
+          is_for_honor: Boolean(data.is_for_honor),
+          category: data.category,
+          distance_miles: data.distance_miles ?? undefined,
+          seconds_since_posted: secondsSincePosted,
+          source: typeof source === 'string' ? source : undefined,
+          position_in_list: position != null ? Number(position) : undefined,
+          surface: 'public_route',
+        });
+      }
 
       if (currentUserId && currentUserId !== data.user_id && currentUserId !== data.poster_id) {
         const requests = await bountyRequestService.getAll({
@@ -129,7 +158,25 @@ export default function PublicBountyDetail() {
 
   const handleApply = async () => {
     if (!bounty) return;
+
+    const claimFailed = (reason: 'validation' | 'network' | 'not_eligible' | 'already_claimed') => {
+      analyticsService.trackEvent('bounty_claim_failed', {
+        bounty_id: String(bounty.id),
+        reason,
+        is_onboarding_demo: false,
+      });
+    };
+
+    analyticsService.trackEvent('bounty_claim_started', {
+      bounty_id: String(bounty.id),
+      amount: typeof bounty.amount === 'number' ? bounty.amount : undefined,
+      is_for_honor: Boolean(bounty.is_for_honor),
+      source: typeof source === 'string' ? source : 'public_route',
+      is_onboarding_demo: false,
+    });
+
     if (!isEmailVerified) {
+      claimFailed('not_eligible');
       Alert.alert(
         'Email verification required',
         "Please verify your email to apply for bounties.",
@@ -138,6 +185,7 @@ export default function PublicBountyDetail() {
       return;
     }
     if (!currentUserId) {
+      claimFailed('not_eligible');
       Alert.alert('Sign In Required', 'You must be signed in to apply for bounties.');
       return;
     }
@@ -147,8 +195,8 @@ export default function PublicBountyDetail() {
       'Are you sure you want to apply for this bounty? The poster will be notified of your request.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Apply', 
+        {
+          text: 'Apply',
           onPress: async () => {
             setIsApplying(true);
             try {
@@ -162,20 +210,30 @@ export default function PublicBountyDetail() {
 
               if (result && (result as any).success) {
                 setHasApplied(true);
+                analyticsService.trackEvent('bounty_claim_submitted', {
+                  bounty_id: String(bounty.id),
+                  is_onboarding_demo: false,
+                  seconds_from_view_to_submit: Math.max(0, Math.round((Date.now() - viewedAtRef.current) / 1000)),
+                  had_message: false,
+                  attachment_count: 0,
+                });
                 Alert.alert('Success', 'Your application has been submitted!', [
                   { text: 'View Status', onPress: () => router.push(`/in-progress/${bounty.id}/hunter`) },
                   { text: 'OK' }
                 ]);
               } else {
-                Alert.alert('Error', (result && (result as any).error) || 'Failed to apply.');
+                const errorMsg = (result && (result as any).error) || 'Failed to apply.';
+                claimFailed(/banned|suspended/i.test(errorMsg) ? 'not_eligible' : 'validation');
+                Alert.alert('Error', errorMsg);
               }
             } catch (err) {
               console.error('Error applying:', err);
+              claimFailed('network');
               Alert.alert('Error', 'An unexpected error occurred.');
             } finally {
               setIsApplying(false);
             }
-          } 
+          }
         }
       ]
     );

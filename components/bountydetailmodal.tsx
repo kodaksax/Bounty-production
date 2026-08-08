@@ -25,6 +25,7 @@ import { useNormalizedProfile } from '../hooks/useNormalizedProfile'
 import { useHapticFeedback } from '../lib/haptic-feedback'
 import { bountyRequestService } from "../lib/services/bounty-request-service"
 import { bountyService } from '../lib/services/bounty-service'
+import { analyticsService } from '../lib/services/analytics-service'
 import type { AttachmentMeta } from '../lib/services/database.types'
 import { storageService } from '../lib/services/storage-service'
 import type { Message } from '../lib/types'
@@ -108,7 +109,35 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   const isMountedRef = useRef(true)
   // Store timeout IDs for cleanup
   const alertTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Anchor for bounty_claim_submitted's seconds_from_view_to_submit — this
+  // modal only mounts while the user is looking at the detail view, so its
+  // own mount time is a direct proxy for "when they started viewing."
+  const viewedAtRef = useRef(Date.now())
 
+  // bounty_viewed fires exactly once per modal open (guarded by this ref,
+  // since Effect A below can re-run if the parent re-renders with a new
+  // `bounty` object literal while the modal stays open). Fired with whatever
+  // data is available once the detail-fetch (if any) has settled, so
+  // category/created_at are populated when the initial payload lacked them.
+  const viewFiredRef = useRef(false)
+  const fireBountyViewed = (b: typeof initialBounty & { category?: string; created_at?: string }) => {
+    if (viewFiredRef.current) return
+    viewFiredRef.current = true
+    const posterIdForView = b.poster_id || b.user_id
+    const secondsSincePosted = b.created_at
+      ? Math.max(0, Math.round((Date.now() - new Date(b.created_at).getTime()) / 1000))
+      : undefined
+    analyticsService.trackEvent('bounty_viewed', {
+      bounty_id: String(b.id),
+      is_own_bounty: currentUserId != null && posterIdForView != null && String(currentUserId) === String(posterIdForView),
+      amount: typeof b.price === 'number' ? b.price : undefined,
+      is_for_honor: Boolean(b.is_for_honor),
+      category: b.category,
+      distance_miles: b.distance ?? undefined,
+      seconds_since_posted: secondsSincePosted,
+      surface: 'modal',
+    })
+  }
 
   useEffect(() => {
     // Resolution priority: bounty.username -> normalizedPoster.username -> 'Loading...' -> 'Anonymous'
@@ -145,7 +174,10 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
       !initialBounty?.timeline || !initialBounty?.skills_required || !initialBounty?.location || (!initialBounty?.attachments && !initialBounty?.attachments_json)
     )
 
-    if (!shouldFetchDetail) return () => { mounted = false }
+    if (!shouldFetchDetail) {
+      fireBountyViewed(initialBounty)
+      return () => { mounted = false }
+    }
 
       ; (async () => {
         if (!mounted) return
@@ -154,10 +186,15 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
           const full = await bountyService.getById(initialBounty.id)
           if (mounted && full) {
             // Merge - prefer fields already present in initialBounty when available
-            setDetailBounty({ ...initialBounty, ...full } as any)
+            const merged = { ...initialBounty, ...full } as any
+            setDetailBounty(merged)
+            fireBountyViewed(merged)
+          } else if (mounted) {
+            fireBountyViewed(initialBounty)
           }
         } catch (e) {
           console.error('Failed to fetch bounty details for modal:', e)
+          if (mounted) fireBountyViewed(initialBounty)
         } finally {
           if (mounted) setIsLoadingAttachments(false)
         }
@@ -331,8 +368,26 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   // Handle apply for bounty
   const handleApplyForBounty = async () => {
     triggerHaptic('medium') // Medium haptic for apply action
+
+    const claimFailed = (reason: 'validation' | 'network' | 'not_eligible' | 'already_claimed') => {
+      analyticsService.trackEvent('bounty_claim_failed', {
+        bounty_id: String(bounty.id),
+        reason,
+        is_onboarding_demo: false,
+      })
+    }
+
+    analyticsService.trackEvent('bounty_claim_started', {
+      bounty_id: String(bounty.id),
+      amount: typeof bounty.price === 'number' ? bounty.price : undefined,
+      is_for_honor: Boolean(bounty.is_for_honor),
+      source: 'modal',
+      is_onboarding_demo: false,
+    })
+
     // Email verification gate: Block applying if email is not verified
     if (!isEmailVerified) {
+      claimFailed('not_eligible')
       Alert.alert(
         'Email verification required',
         "Please verify your email to apply for bounties. We've sent a verification link to your inbox.",
@@ -344,18 +399,21 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
     }
 
     if (!currentUserId || !bounty.id) {
+      claimFailed('validation')
       Alert.alert('Error', 'Unable to apply. Please try again.')
       return
     }
 
     // Check if user is trying to apply to their own bounty
     if (posterId === currentUserId) {
+      claimFailed('not_eligible')
       Alert.alert('Cannot Apply', 'You cannot apply to your own bounty.')
       return
     }
 
     // Check if bounty is already taken
     if (bounty.status === 'in_progress' || bounty.status === 'completed') {
+      claimFailed('already_claimed')
       Alert.alert('Bounty Already Taken', 'This bounty has already been accepted by another hunter.')
       return
     }
@@ -372,6 +430,13 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
 
       // Handle structured result from service
       if (result && (result as any).success) {
+        analyticsService.trackEvent('bounty_claim_submitted', {
+          bounty_id: String(bounty.id),
+          is_onboarding_demo: false,
+          seconds_from_view_to_submit: Math.max(0, Math.round((Date.now() - viewedAtRef.current) / 1000)),
+          had_message: applicationMessage.trim().length > 0,
+          attachment_count: 0,
+        })
         setHasApplied(true)
         setIsApplying(false)
 
@@ -403,6 +468,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
       // If we reach here, the create returned a failure result or null
       setIsApplying(false)
       const errorMsg = (result && (result as any).error) || 'Failed to submit application. Please try again.'
+      claimFailed(/banned|suspended/i.test(errorMsg) ? 'not_eligible' : 'validation')
 
       // Show network-style message offering to check if the request exists
       Alert.alert(
@@ -442,6 +508,7 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
     } catch (error) {
       console.error('Error applying for bounty:', error)
       setIsApplying(false)
+      claimFailed('network')
       Alert.alert(
         'Network issue',
         'Network issue — request may have been received; checking...',

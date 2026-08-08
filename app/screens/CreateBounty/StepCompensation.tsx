@@ -76,14 +76,28 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
     // Sizes the single biggest known leak in the posting funnel: posters who
     // pick a real amount and then switch to a $0 post. `previousAmount` and
     // `balanceCovered` separate "never intended to pay" from "wanted to pay
-    // but couldn't fund it from here".
+    // but couldn't fund it from here". `reason` makes that split queryable
+    // directly instead of re-deriving it from the other fields every time:
+    // a failed in-flow top-up wins (payment_setup_failed), then an
+    // uncovered amount (balance_insufficient), else a real preference
+    // (user_choice — includes toggling Honor before ever picking an amount).
     if (value) {
+      const hadAmount = draft.amount > 0;
+      const balanceCovered = hadAmount && balance >= draft.amount;
+      const reason = !hadAmount
+        ? 'user_choice'
+        : topUpError
+          ? 'payment_setup_failed'
+          : !balanceCovered
+            ? 'balance_insufficient'
+            : 'user_choice';
       analyticsService.trackEvent('post_switched_to_honor', {
         surface: 'create_flow',
         previousAmount: draft.amount,
-        hadAmount: draft.amount > 0,
+        hadAmount,
         balance,
-        balanceCovered: draft.amount > 0 && balance >= draft.amount,
+        balanceCovered,
+        reason,
       });
     }
     onUpdate({ isForHonor: value, amount: value ? 0 : draft.amount });

@@ -178,4 +178,12 @@ export const flush = async (): Promise<void> => {
   }
 };
 
+/**
+ * Reads a feature flag value inside a component tree wrapped by
+ * `PostHogProvider` (see app/_layout.tsx). Re-exported here so call sites use
+ * the same `lib/posthog` import surface as the rest of this module instead of
+ * reaching into `posthog-react-native` directly.
+ */
+export { useFeatureFlag } from 'posthog-react-native';
+
 export default getPostHog;

@@ -2,7 +2,7 @@ import { ThemeProvider } from 'components/theme-provider';
 import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
 import * as Linking from 'expo-linking';
-import { Slot } from 'expo-router';
+import { Slot, useGlobalSearchParams, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { PostHogProvider } from 'posthog-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -39,6 +39,8 @@ import { getSentry as getSentryFromInit, initializeSentry } from '../lib/service
 // Initialize our global JS error handlers that log to device console (captured by Xcode/TestFlight)
 import { initGlobalErrorHandlers } from '../lib/error-handling';
 import posthog, { capture as posthogCapture } from '../lib/posthog';
+import { normalizeScreenName } from '../lib/analytics/screen-name';
+import { markPendingNavigationSource, trackScreenView } from '../lib/analytics/screen-tracking';
 import { safeCleanup } from '../lib/utils/lifecycle';
 
 import { registerDeviceSession } from '../lib/services/auth-service';
@@ -167,6 +169,7 @@ const LayoutContent = () => {
           <NetworkProvider>
             <AuthProvider>
               <DeepLinkAnalyticsGate />
+              <ScreenTracker />
               <SessionMonitorGate />
               <AdminProvider>
                 <StripeProvider>
@@ -371,6 +374,10 @@ function trackDeepLinkOpen(url: string | null) {
     const [first, second] = path.split('/').filter(Boolean);
     const contentType = first ? DEEP_LINK_CONTENT_TYPES[first] : undefined;
     if (!contentType || !second) return;
+    // The resulting screen_viewed (fired by ScreenTracker once expo-router
+    // finishes navigating to this URL) should be tagged as a deep link, not
+    // a generic push.
+    markPendingNavigationSource('deep_link');
     analyticsService.trackEvent('deep_link_opened', {
       content_type: contentType,
       content_id: second,
@@ -379,6 +386,34 @@ function trackDeepLinkOpen(url: string | null) {
     // Malformed/unexpected URL — nothing to track.
   }
 }
+
+// Fires a normalized `screen_viewed` event per real expo-router navigation.
+// `useSegments()` returns literal route filenames (e.g. "[id]", never
+// resolved IDs) so the resulting screen_name is always ID-free — see
+// lib/analytics/screen-name.ts.
+//
+// The bounty-app tab shell (app/tabs/bounty-app.tsx) switches its visible
+// tab via local state without changing the route, so `home_feed` is skipped
+// here and reported by that screen's own trackScreenView call instead, which
+// knows the active tab.
+const ScreenTracker = () => {
+  const segments = useSegments();
+  const params = useGlobalSearchParams<{ source?: string }>();
+  const segmentsKey = segments.join('/');
+
+  useEffect(() => {
+    const screenName = normalizeScreenName(segments);
+    if (screenName === 'home_feed') return;
+    trackScreenView(screenName, {
+      source: params?.source === 'notification' ? 'notification' : undefined,
+    });
+    // segmentsKey/params.source are the real dependencies; segments/params
+    // themselves are new array/object identities on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [segmentsKey, params?.source]);
+
+  return null;
+};
 
 // Mounts once at the root to capture both a cold-start deep link
 // (getInitialURL) and any link opened while the app is already running.

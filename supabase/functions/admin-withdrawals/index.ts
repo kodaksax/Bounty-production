@@ -223,6 +223,28 @@ async function postHogCapture(
   }
 }
 
+/**
+ * Structured log for a newly-opened reconciliation finding — see the matching
+ * helper/comment in supabase/functions/webhooks/index.ts (duplicated for the
+ * same local-import-bundler reason as everything else in this section).
+ * `stripe_balance_drift_detected` used to also fire via postHogCapture above;
+ * that mixed page-worthy alerting into product analytics with no dashboard or
+ * alert actually reading it there, so it's log-only now. `critical` severity
+ * still goes through logCritical(), called separately where it applies.
+ */
+function logReconciliationFinding(
+  severity: 'critical' | 'warning' | 'info',
+  event: string,
+  context: Record<string, unknown>
+): void {
+  const payload = JSON.stringify({ event, severity, ts: new Date().toISOString(), ...context });
+  if (severity === 'warning') {
+    console.warn(`[admin-withdrawals] ${event}`, payload);
+  } else {
+    console.log(`[admin-withdrawals] ${event}`, payload);
+  }
+}
+
 async function comparePlatformBalance(
   stripe: Stripe,
   // deno-lint-ignore no-explicit-any
@@ -287,9 +309,12 @@ async function comparePlatformBalance(
           logCritical('platform Stripe balance is below the ledger total', {
             stripeAvailableCents, stripePendingCents, ledgerCents, driftCents,
           });
+        } else {
+          logReconciliationFinding(severity, 'stripe_balance_drift_detected', {
+            scope: 'platform', stripeAvailableCents, stripePendingCents, ledgerCents, driftCents,
+          });
         }
       }
-      await postHogCapture('stripe_balance_drift_detected', { scope: 'platform', severity, drift_cents: driftCents });
     }
   }
 
@@ -381,8 +406,10 @@ async function compareConnectAccountBalance(
         console.error('[admin-withdrawals] compareConnectAccountBalance: failed to insert finding', { error: findingError });
       } else {
         findingId = (finding as { id: string } | null)?.id ?? null;
+        logReconciliationFinding(severity, 'stripe_balance_drift_detected', {
+          scope: 'connect_account', userId, accountId, stripeAvailableCents, stripePendingCents, ledgerCents, driftCents,
+        });
       }
-      await postHogCapture('stripe_balance_drift_detected', { scope: 'connect_account', severity, drift_cents: driftCents });
     }
   }
 

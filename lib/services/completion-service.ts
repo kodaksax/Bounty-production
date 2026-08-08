@@ -6,6 +6,8 @@ import { getReachableApiBaseUrl } from 'lib/utils/network';
 
 import { API_BASE_URL } from 'lib/config/api';
 import { bountyService } from './bounty-service';
+import { analyticsService } from './analytics-service';
+import { getHoursSinceClaimed } from './bounty-request-service';
 
 const relayPreferredBase =
   (process.env.EXPO_PUBLIC_API_BASE_URL as string | undefined) ||
@@ -699,6 +701,29 @@ export const completionService = {
       // Update bounty status
       // Note: bounty IDs may be UUID strings; do NOT coerce to Number() (causes NaN)
       await bountyService.update(bountyId, { status: 'completed', completed_at: new Date().toISOString() });
+
+      // Funnel: bounty marked complete via the poster approving submitted
+      // work — the third real completion path, alongside payout.tsx's
+      // release/mark-complete. Best-effort: analytics must never block or
+      // fail a successful approval.
+      try {
+        const { data: bountyRow } = await supabase
+          .from('bounties')
+          .select('amount, is_for_honor')
+          .eq('id', bountyId)
+          .maybeSingle();
+        const hoursFromClaim = await getHoursSinceClaimed(bountyId);
+        analyticsService.trackEvent('bounty_completed', {
+          bountyId: String(bountyId),
+          via: 'approve_submission',
+          isForHonor: Boolean((bountyRow as any)?.is_for_honor),
+          amount: Number((bountyRow as any)?.amount ?? 0),
+          is_onboarding_demo: false,
+          hours_from_claim_to_completion: hoursFromClaim,
+        });
+      } catch {
+        /* analytics is best-effort */
+      }
 
       // Notify the hunter that their work was approved.
       // On the Supabase-direct path this update does NOT hit the server.js

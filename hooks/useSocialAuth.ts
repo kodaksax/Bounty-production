@@ -12,6 +12,7 @@ import { useIdTokenAuthRequest } from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
+import { capture as posthogCapture } from '../lib/posthog';
 import { supabase } from '../lib/supabase';
 import { runAuthStageWithTimeout } from '../lib/utils/auth-diagnostics';
 import {
@@ -73,8 +74,9 @@ export function useSocialAuth() {
         setLoading(false);
         return;
       }
+      const correlationId = generateCorrelationId('social_google');
       try {
-        const correlationId = generateCorrelationId('social_google');
+        posthogCapture('AUTH_ATTEMPT_STARTED', { correlation_id: correlationId, method: 'google' });
         const { error: authError } = await runAuthStageWithTimeout({
           correlationId,
           stage: 'social-auth:google-signInWithIdToken',
@@ -88,8 +90,14 @@ export function useSocialAuth() {
         });
         if (authError) throw authError;
         setGoogleSessionReady(true);
-      } catch (e) {
+      } catch (e: any) {
         setError(getAuthErrorMessage(e));
+        posthogCapture('AUTH_ATTEMPT_FAILED', {
+          correlation_id: correlationId,
+          method: 'google',
+          error_code: e?.code ?? 'unknown',
+          outcome: e?.code === 'AUTH_STAGE_TIMEOUT' ? 'timed_out' : 'rejected',
+        });
       } finally {
         setLoading(false);
       }
@@ -105,6 +113,7 @@ export function useSocialAuth() {
   const signInWithApple = async (): Promise<boolean> => {
     setError(null);
     setLoading(true);
+    let correlationId: string | undefined;
     try {
       const credential = await AppleAuthentication.signInAsync({
         requestedScopes: [
@@ -117,7 +126,8 @@ export function useSocialAuth() {
         return false;
       }
       const identityToken = credential.identityToken;
-      const correlationId = generateCorrelationId('social_apple');
+      correlationId = generateCorrelationId('social_apple');
+      posthogCapture('AUTH_ATTEMPT_STARTED', { correlation_id: correlationId, method: 'apple' });
       const { error: authError } = await runAuthStageWithTimeout({
         correlationId,
         stage: 'social-auth:apple-signInWithIdToken',
@@ -134,6 +144,12 @@ export function useSocialAuth() {
     } catch (e: any) {
       if (e?.code !== 'ERR_REQUEST_CANCELED') {
         setError(getAuthErrorMessage(e));
+        posthogCapture('AUTH_ATTEMPT_FAILED', {
+          correlation_id: correlationId ?? 'unknown',
+          method: 'apple',
+          error_code: e?.code ?? 'unknown',
+          outcome: e?.code === 'AUTH_STAGE_TIMEOUT' ? 'timed_out' : 'rejected',
+        });
       }
       return false;
     } finally {

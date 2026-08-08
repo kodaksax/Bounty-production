@@ -4,6 +4,7 @@ import { bountyService as baseBountyService } from 'lib/services/bounty-service'
 import type { Bounty } from 'lib/services/database.types';
 import { performanceService } from 'lib/services/performance-service';
 import { offlineQueueService } from 'lib/services/offline-queue-service';
+import { inferRoleFromFirstAction } from 'lib/services/role-inference-service';
 import { isSupabaseConfigured, supabaseEnv } from 'lib/supabase';
 import { validateTitle } from 'lib/utils/bounty-validation';
 import { getCurrentUserId } from 'lib/utils/data-utils';
@@ -284,6 +285,14 @@ export const bountyService = {
 
       // Increment user property for bounties created
       await analyticsService.incrementUserProperty('bounties_created');
+
+      // Fills in profiles.primary_role for a poster who reached this without
+      // ever picking a role in onboarding (the 'onboarding-skip-role-
+      // selection' experiment's test-arm skip path). No-op once already set —
+      // fire-and-forget so it never blocks the create.
+      if (posterId) {
+        inferRoleFromFirstAction(posterId, 'poster').catch(() => {});
+      }
 
       // End performance measurement
       await performanceService.endMeasurement('bounty_create', {
