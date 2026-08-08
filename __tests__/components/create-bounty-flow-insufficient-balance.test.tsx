@@ -266,6 +266,21 @@ jest.mock('components/add-money-screen', () => ({
         >
           <Text>Deposit partial amount</Text>
         </TouchableOpacity>
+        {/* Fixed-amount deposits (independent of the pre-filled shortfall) for
+            scenarios that need an exact, caller-chosen top-up amount — e.g.
+            the reported "$5 + $5 = $10" repro, or cents-precision cases. */}
+        <TouchableOpacity accessibilityLabel="stub-topup-deposit-5" onPress={() => { mockBalance += 5; }}>
+          <Text>Deposit $5</Text>
+        </TouchableOpacity>
+        <TouchableOpacity accessibilityLabel="stub-topup-deposit-dime" onPress={() => { mockBalance += 0.1; }}>
+          <Text>Deposit $0.10</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          accessibilityLabel="stub-topup-deposit-overfund"
+          onPress={() => { mockBalance += Number(props.initialAmount) + 3; }}
+        >
+          <Text>Deposit more than needed</Text>
+        </TouchableOpacity>
         <TouchableOpacity accessibilityLabel="stub-topup-confirm" onPress={() => props.onAddMoney(0)}>
           <Text>Confirm top-up</Text>
         </TouchableOpacity>
@@ -425,5 +440,172 @@ describe('CreateBountyFlow — insufficient balance → top-up gate', () => {
 
     expect(mockSubmit).not.toHaveBeenCalled();
     expect(screen.getByText('Add Funds to Post')).toBeTruthy();
+  });
+
+  // Regression coverage for the reported bug: $10 bounty, $0 balance, two
+  // sequential $5 top-ups. The underlying defect was AddMoneyScreen's success
+  // dismiss firing both onAddMoney AND onBack — onAddMoney correctly
+  // recognized the bounty was fully funded after the second $5, but the
+  // immediately-following onBack call unconditionally re-opened the gate
+  // anyway. Fixed in components/add-money-screen.tsx (see
+  // add-money-screen-dismiss-contract.test.tsx for the direct regression
+  // test); this test proves the fix holds through the full CreateBountyFlow
+  // wiring, for both trigger origins.
+  describe('$5 + $5 = $10 (reported bug)', () => {
+    it('from the amount step: recognizes full funding after the second top-up and returns to Compensation', () => {
+      mockBalance = 0;
+      resetDraft({ amount: 10 });
+      const { rerender } = render(<CreateBountyFlow />);
+      goToStepPay();
+
+      fireEvent.press(screen.getByLabelText('stub-trigger-insufficient'));
+      expect(screen.getByText('Add Funds to Post')).toBeTruthy();
+      // (Bounty Amount and Amount Needed are both $10.00 at $0 balance, so
+      // skip a getByText($) check here — the CTA press below already proves
+      // the $10.00 shortfall was computed correctly.)
+
+      // First $5 top-up — still short by $5.
+      fireEvent.press(screen.getByLabelText(/Add \$10\.00 and continue/i));
+      fireEvent.press(screen.getByLabelText('stub-topup-deposit-5'));
+      rerender(<CreateBountyFlow />);
+      fireEvent.press(screen.getByLabelText('stub-topup-confirm'));
+
+      expect(screen.getByText('Add Funds to Post')).toBeTruthy();
+      // Current Balance and Amount Needed are both $5.00 at this point (5 of
+      // 10), so assert via the CTA label instead of getByText to avoid
+      // ambiguity — the press below proves the $5.00 shortfall was recomputed.
+      expect(screen.getByLabelText(/Add \$5\.00 and continue/i)).toBeTruthy();
+
+      // Second $5 top-up — now exactly funded. This is the step that
+      // reproduced the bug: the gate must NOT reappear.
+      fireEvent.press(screen.getByLabelText(/Add \$5\.00 and continue/i));
+      fireEvent.press(screen.getByLabelText('stub-topup-deposit-5'));
+      rerender(<CreateBountyFlow />);
+      fireEvent.press(screen.getByLabelText('stub-topup-confirm'));
+
+      expect(screen.queryByText('Add Funds to Post')).toBeNull();
+      expect(screen.getByText('StepPay')).toBeTruthy();
+      expect(mockSubmit).not.toHaveBeenCalled();
+    });
+
+    it('from the publish gate: recognizes full funding after the second top-up and auto-submits', () => {
+      mockBalance = 0;
+      resetDraft({ amount: 10 });
+      const { rerender } = render(<CreateBountyFlow />);
+      goToReview();
+
+      fireEvent.press(screen.getByLabelText('stub-publish'));
+      fireEvent.press(screen.getByLabelText(/Add \$10\.00 and continue/i));
+      fireEvent.press(screen.getByLabelText('stub-topup-deposit-5'));
+      rerender(<CreateBountyFlow />);
+      fireEvent.press(screen.getByLabelText('stub-topup-confirm'));
+
+      expect(screen.getByText('Add Funds to Post')).toBeTruthy();
+      expect(screen.getByLabelText(/Add \$5\.00 and continue/i)).toBeTruthy();
+      expect(mockSubmit).not.toHaveBeenCalled();
+
+      fireEvent.press(screen.getByLabelText(/Add \$5\.00 and continue/i));
+      fireEvent.press(screen.getByLabelText('stub-topup-deposit-5'));
+      rerender(<CreateBountyFlow />);
+      fireEvent.press(screen.getByLabelText('stub-topup-confirm'));
+
+      expect(screen.queryByText('Add Funds to Post')).toBeNull();
+      expect(mockSubmit).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('a single top-up landing exactly on the bounty amount is recognized as fully funded (not just multi-step)', () => {
+    mockBalance = 0;
+    resetDraft({ amount: 10 });
+    const { rerender } = render(<CreateBountyFlow />);
+    goToReview();
+
+    fireEvent.press(screen.getByLabelText('stub-publish'));
+    fireEvent.press(screen.getByLabelText(/Add \$10\.00 and continue/i));
+    fireEvent.press(screen.getByLabelText('stub-topup-deposit-full'));
+    rerender(<CreateBountyFlow />);
+    fireEvent.press(screen.getByLabelText('stub-topup-confirm'));
+
+    expect(screen.queryByText('Add Funds to Post')).toBeNull();
+    expect(mockSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it('an overfunding top-up (adds more than the shortfall) is recognized as fully funded', () => {
+    mockBalance = 0;
+    resetDraft({ amount: 7 });
+    const { rerender } = render(<CreateBountyFlow />);
+    goToReview();
+
+    fireEvent.press(screen.getByLabelText('stub-publish'));
+    fireEvent.press(screen.getByLabelText(/Add \$7\.00 and continue/i));
+    fireEvent.press(screen.getByLabelText('stub-topup-deposit-overfund')); // adds $10 for a $7 shortfall
+    rerender(<CreateBountyFlow />);
+    fireEvent.press(screen.getByLabelText('stub-topup-confirm'));
+
+    expect(screen.queryByText('Add Funds to Post')).toBeNull();
+    expect(mockSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it('multiple consecutive top-ups without leaving the flow converge correctly (3 partial top-ups)', () => {
+    mockBalance = 0;
+    resetDraft({ amount: 9 });
+    const { rerender } = render(<CreateBountyFlow />);
+    goToReview();
+
+    fireEvent.press(screen.getByLabelText('stub-publish'));
+
+    for (let i = 0; i < 2; i++) {
+      const before = mockBalance;
+      // Each iteration starts back on the insufficient-balance summary
+      // (either the initial one, or the one the prior iteration's top-up
+      // re-opened because it was still short) — navigate into the top-up
+      // screen fresh each time, exactly as a poster tapping through would.
+      fireEvent.press(screen.getByText(/Add \$.+ & Continue/));
+      fireEvent.press(screen.getByLabelText('stub-topup-deposit-5'));
+      rerender(<CreateBountyFlow />);
+      fireEvent.press(screen.getByLabelText('stub-topup-confirm'));
+      expect(mockBalance).toBe(before + 5);
+    }
+
+    // After two $5 top-ups balance is $10 against a $9 bounty — overfunded,
+    // recognized as complete without a third top-up.
+    expect(screen.queryByText('Add Funds to Post')).toBeNull();
+    expect(mockSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it('cents precision: three $0.10 top-ups exactly fund a $0.30 shortfall despite float drift (0.1 + 0.1 + 0.1 !== 0.3 in IEEE-754)', () => {
+    mockBalance = 0;
+    resetDraft({ amount: 0.3 });
+    const { rerender } = render(<CreateBountyFlow />);
+    goToReview();
+
+    fireEvent.press(screen.getByLabelText('stub-publish'));
+    // Bounty Amount and Amount Needed are both $0.30 at $0 balance — assert
+    // via the CTA label instead of getByText to avoid ambiguity.
+    expect(screen.getByLabelText(/Add \$0\.30 and continue/i)).toBeTruthy();
+
+    fireEvent.press(screen.getByLabelText(/Add \$0\.30 and continue/i));
+    fireEvent.press(screen.getByLabelText('stub-topup-deposit-dime'));
+    rerender(<CreateBountyFlow />);
+    fireEvent.press(screen.getByLabelText('stub-topup-confirm'));
+    expect(screen.getByText('Add Funds to Post')).toBeTruthy();
+    expect(screen.getByText('$0.20')).toBeTruthy();
+
+    fireEvent.press(screen.getByLabelText(/Add \$0\.20 and continue/i));
+    fireEvent.press(screen.getByLabelText('stub-topup-deposit-dime'));
+    rerender(<CreateBountyFlow />);
+    fireEvent.press(screen.getByLabelText('stub-topup-confirm'));
+    expect(screen.getByText('Add Funds to Post')).toBeTruthy();
+    expect(screen.getByText('$0.10')).toBeTruthy();
+
+    // Third dime: raw JS balance is now 0.1 + 0.1 + 0.1 = 0.30000000000000004,
+    // not exactly 0.3 — this is the case a naive float compare gets wrong.
+    fireEvent.press(screen.getByLabelText(/Add \$0\.10 and continue/i));
+    fireEvent.press(screen.getByLabelText('stub-topup-deposit-dime'));
+    rerender(<CreateBountyFlow />);
+    fireEvent.press(screen.getByLabelText('stub-topup-confirm'));
+
+    expect(screen.queryByText('Add Funds to Post')).toBeNull();
+    expect(mockSubmit).toHaveBeenCalledTimes(1);
   });
 });

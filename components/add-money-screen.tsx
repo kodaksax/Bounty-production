@@ -297,7 +297,17 @@ export function AddMoneyScreen({ onBack, onAddMoney, initialAmount, headerLabel,
       )}
 
       {/* Success confirmation — blocks like the Alert.alert it replaced;
-          onAddMoney/onBack only fire once the user acknowledges. */}
+          onAddMoney only fires once the user acknowledges.
+          Deliberately does NOT also call onBack here: onAddMoney is fully
+          responsible for whatever happens next (every current caller already
+          dismisses/transitions itself inside its own onAddMoney handler — see
+          wallet-screen.tsx, postings-screen.tsx, CreateBounty/index.tsx).
+          onBack is reserved for genuine cancel/close (the header button, the
+          payment-methods-modal backdrop). Calling both here previously meant
+          onBack's unconditional "go back to the insufficient-balance gate"
+          would fire immediately after onAddMoney had already determined the
+          bounty was fully funded, silently re-opening the gate every time a
+          top-up fully funded the amount in one shot. */}
       <FeedbackModal
         visible={!!successInfo}
         variant="success"
@@ -309,7 +319,6 @@ export function AddMoneyScreen({ onBack, onAddMoney, initialAmount, headerLabel,
           setSuccessInfo(null)
           if (info) {
             onAddMoney?.(info.amount)
-            onBack?.()
           }
         }}
       />

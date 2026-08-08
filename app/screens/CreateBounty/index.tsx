@@ -23,7 +23,7 @@ import { bountyPaymentsService } from 'lib/services/bounty-payments-service';
 import { offlineQueueService } from 'lib/services/offline-queue-service';
 import { stripeService } from 'lib/services/stripe-service';
 import { useStripe } from 'lib/stripe-context';
-import { getInsufficientBalanceMessage, validateBalance } from 'lib/utils/bounty-validation';
+import { getAmountNeeded, getInsufficientBalanceMessage, validateBalance } from 'lib/utils/bounty-validation';
 import { getUserFriendlyError } from 'lib/utils/error-messages';
 import { shouldFundNewBountiesWithPhase2 } from 'lib/utils/payment-architecture';
 import { useWallet } from 'lib/wallet-context';
@@ -79,6 +79,32 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
   const { paymentMethods } = useStripe();
   const { theme } = useAppThemeContext();
   const { isEmailVerified, canPostBounties, userEmail } = useEmailVerification();
+
+  // Defensive invariant, independent of whichever handler most recently set
+  // showInsufficientBalance: if the wallet is ever sufficient to cover the
+  // draft amount while the read-only summary screen is showing, dismiss it
+  // immediately rather than leave it displaying a $0 (or negative) amount
+  // needed. `balance` is a live value from WalletContext, so this also
+  // catches funding that lands from outside this immediate top-up round
+  // trip — a delayed webhook/reconcile finishing late, or the poster funding
+  // their wallet from the Wallet tab while this screen happens to still be
+  // mounted. This never auto-submits (that stays an explicit decision inside
+  // the top-up success handler below).
+  //
+  // Deliberately scoped to showInsufficientBalance only, NOT showTopUp: the
+  // AddMoneyScreen itself already has an in-flight payment/success-modal
+  // sequence once showTopUp is true (the same balance update that would
+  // satisfy this check is usually the deposit AddMoneyScreen's own payment
+  // just made) — reacting to the balance change here would yank the screen
+  // away and its unacknowledged success modal with it, before the poster has
+  // even seen "Success!" or onAddMoney has run. AddMoneyScreen's onAddMoney
+  // callback is the correct, sole trigger for leaving showTopUp.
+  useEffect(() => {
+    if (!showInsufficientBalance) return;
+    if (!validateBalance(draft.amount, balance, draft.isForHonor)) return;
+    setShowInsufficientBalance(false);
+    setInsufficientBalanceOrigin(null);
+  }, [balance, draft.amount, draft.isForHonor, showInsufficientBalance]);
 
   // Posting-funnel bookkeeping. `publishedRef` distinguishes a real abandon
   // (user backed out) from unmounting after a successful publish, so
@@ -464,7 +490,7 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
   }
 
   if (showTopUp) {
-    const shortfall = Math.max(0, draft.amount - balance);
+    const shortfall = getAmountNeeded(draft.amount, balance);
     return (
       <AddMoneyScreen
         initialAmount={shortfall.toFixed(2)}

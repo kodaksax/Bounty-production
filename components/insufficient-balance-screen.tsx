@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { hapticFeedback } from '../lib/haptic-feedback';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
+import { getAmountNeeded } from '../lib/utils/bounty-validation';
 
 interface InsufficientBalanceScreenProps {
   /** Current wallet balance in dollars. */
@@ -40,7 +41,7 @@ export function InsufficientBalanceScreen({
   const { theme } = useAppThemeContext();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(theme), [theme]);
-  const needed = Math.max(0, bountyAmount - walletBalance);
+  const needed = getAmountNeeded(bountyAmount, walletBalance);
 
   useEffect(() => {
     hapticFeedback.warning();
