@@ -160,7 +160,8 @@
           "project": "react-native"
         }
       ],
-      "expo-localization"
+      "expo-localization",
+      "@config-plugins/react-native-branch"
     ],
     "experiments": {
       "typedRoutes": true

@@ -152,6 +152,17 @@ export const setPersonProperties = (properties: Record<string, any>): void => {
   }
 };
 
+/** Set immutable person properties without replacing values already stored by PostHog. */
+export const setPersonPropertiesOnce = (properties: Record<string, any>): void => {
+  try {
+    if (!_posthog) return;
+    _posthog.setPersonProperties(undefined, properties);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error('[posthog] setPersonPropertiesOnce failed', e);
+  }
+};
+
 /** Register super properties sent with every subsequent event. */
 export const register = (properties: Record<string, any>): void => {
   try {

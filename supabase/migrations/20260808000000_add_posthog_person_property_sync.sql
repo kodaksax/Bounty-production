@@ -1,7 +1,14 @@
 BEGIN;
 
 ALTER TABLE public.profiles
-  ADD COLUMN IF NOT EXISTS onboarding_completed_at timestamptz;
+  ADD COLUMN IF NOT EXISTS onboarding_completed_at timestamptz,
+  ADD COLUMN IF NOT EXISTS initial_utm_source text,
+  ADD COLUMN IF NOT EXISTS initial_utm_medium text,
+  ADD COLUMN IF NOT EXISTS initial_utm_campaign text,
+  ADD COLUMN IF NOT EXISTS initial_referrer text,
+  ADD COLUMN IF NOT EXISTS initial_landing_page text,
+  ADD COLUMN IF NOT EXISTS install_source text,
+  ADD COLUMN IF NOT EXISTS install_campaign text;
 
 CREATE TABLE IF NOT EXISTS public.analytics_user_facts (
   user_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -144,7 +151,14 @@ BEGIN
       AND COALESCE(v_profile.stripe_connect_payouts_enabled, false)
     ),
     'home_region', public.coarse_analytics_region(v_profile.location),
-    'is_internal', public.is_internal_analytics_email(v_profile.email)
+    'is_internal', public.is_internal_analytics_email(v_profile.email),
+    'initial_utm_source', v_profile.initial_utm_source,
+    'initial_utm_medium', v_profile.initial_utm_medium,
+    'initial_utm_campaign', v_profile.initial_utm_campaign,
+    'initial_referrer', v_profile.initial_referrer,
+    'initial_landing_page', v_profile.initial_landing_page,
+    'install_source', v_profile.install_source,
+    'install_campaign', v_profile.install_campaign
   );
 
   INSERT INTO public.analytics_person_outbox (
@@ -330,6 +344,87 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.protect_marketing_attribution()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+BEGIN
+  IF auth.role() <> 'service_role'
+     AND current_setting('app.bypass_profile_guard', true) IS DISTINCT FROM 'on'
+     AND ROW(
+       NEW.initial_utm_source,
+       NEW.initial_utm_medium,
+       NEW.initial_utm_campaign,
+       NEW.initial_referrer,
+       NEW.initial_landing_page,
+       NEW.install_source,
+       NEW.install_campaign
+     ) IS DISTINCT FROM ROW(
+       OLD.initial_utm_source,
+       OLD.initial_utm_medium,
+       OLD.initial_utm_campaign,
+       OLD.initial_referrer,
+       OLD.initial_landing_page,
+       OLD.install_source,
+       OLD.install_campaign
+     ) THEN
+    RAISE EXCEPTION 'marketing attribution is server-managed';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.claim_marketing_attribution(
+  p_user_id uuid,
+  p_properties jsonb
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  v_profile public.profiles%ROWTYPE;
+  v_already_attributed boolean;
+BEGIN
+  SELECT * INTO v_profile
+  FROM public.profiles
+  WHERE id = p_user_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'profile not found';
+  END IF;
+
+  v_already_attributed := v_profile.initial_utm_source IS NOT NULL
+    OR v_profile.install_source IS NOT NULL;
+
+  UPDATE public.profiles SET
+    initial_utm_source = COALESCE(initial_utm_source, NULLIF(left(p_properties->>'initial_utm_source', 200), '')),
+    initial_utm_medium = COALESCE(initial_utm_medium, NULLIF(left(p_properties->>'initial_utm_medium', 200), '')),
+    initial_utm_campaign = COALESCE(initial_utm_campaign, NULLIF(left(p_properties->>'initial_utm_campaign', 200), '')),
+    initial_referrer = COALESCE(initial_referrer, NULLIF(left(p_properties->>'initial_referrer', 1000), '')),
+    initial_landing_page = COALESCE(initial_landing_page, NULLIF(left(p_properties->>'initial_landing_page', 1000), '')),
+    install_source = COALESCE(install_source, NULLIF(left(p_properties->>'install_source', 200), '')),
+    install_campaign = COALESCE(install_campaign, NULLIF(left(p_properties->>'install_campaign', 200), ''))
+  WHERE id = p_user_id
+  RETURNING * INTO v_profile;
+
+  RETURN jsonb_build_object(
+    'already_attributed', v_already_attributed,
+    'initial_utm_source', v_profile.initial_utm_source,
+    'initial_utm_medium', v_profile.initial_utm_medium,
+    'initial_utm_campaign', v_profile.initial_utm_campaign,
+    'initial_referrer', v_profile.initial_referrer,
+    'initial_landing_page', v_profile.initial_landing_page,
+    'install_source', v_profile.install_source,
+    'install_campaign', v_profile.install_campaign
+  );
+END;
+$$;
+
 REVOKE ALL ON FUNCTION public.enqueue_analytics_person_snapshot(uuid) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.capture_bounty_analytics_facts() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.capture_claim_analytics_fact() FROM PUBLIC, anon, authenticated;
@@ -338,11 +433,21 @@ REVOKE ALL ON FUNCTION public.queue_profile_analytics_snapshot() FROM PUBLIC, an
 REVOKE ALL ON FUNCTION public.queue_payment_method_analytics_snapshot() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.stamp_onboarding_completed_at() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.protect_onboarding_completed_at() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.protect_marketing_attribution() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.claim_marketing_attribution(uuid, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.claim_marketing_attribution(uuid, jsonb) TO service_role;
 
 DROP TRIGGER IF EXISTS trg_00_protect_onboarding_completed_at ON public.profiles;
 CREATE TRIGGER trg_00_protect_onboarding_completed_at
   BEFORE UPDATE OF onboarding_completed_at ON public.profiles
   FOR EACH ROW EXECUTE FUNCTION public.protect_onboarding_completed_at();
+
+DROP TRIGGER IF EXISTS trg_00_protect_marketing_attribution ON public.profiles;
+CREATE TRIGGER trg_00_protect_marketing_attribution
+  BEFORE UPDATE OF initial_utm_source, initial_utm_medium, initial_utm_campaign,
+    initial_referrer, initial_landing_page, install_source, install_campaign
+  ON public.profiles
+  FOR EACH ROW EXECUTE FUNCTION public.protect_marketing_attribution();
 
 DROP TRIGGER IF EXISTS trg_stamp_onboarding_completed_at ON public.profiles;
 CREATE TRIGGER trg_stamp_onboarding_completed_at
@@ -368,7 +473,9 @@ DROP TRIGGER IF EXISTS trg_queue_profile_analytics_snapshot ON public.profiles;
 CREATE TRIGGER trg_queue_profile_analytics_snapshot
   AFTER INSERT OR UPDATE OF email, primary_role, onboarding_completed, onboarding_completed_at,
     stripe_identity_status, id_verification_status,
-    stripe_connect_charges_enabled, stripe_connect_payouts_enabled, location
+    stripe_connect_charges_enabled, stripe_connect_payouts_enabled, location,
+    initial_utm_source, initial_utm_medium, initial_utm_campaign,
+    initial_referrer, initial_landing_page, install_source, install_campaign
   ON public.profiles
   FOR EACH ROW EXECUTE FUNCTION public.queue_profile_analytics_snapshot();
 

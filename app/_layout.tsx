@@ -2,11 +2,11 @@ import { ThemeProvider } from 'components/theme-provider';
 import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
 import * as Linking from 'expo-linking';
-import { Slot, useGlobalSearchParams, useSegments } from 'expo-router';
+import { Slot, useGlobalSearchParams, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { PostHogProvider } from 'posthog-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import '../global.css';
@@ -37,10 +37,10 @@ import {
 // Sentry initialization is deferred to RootLayout useEffect to avoid early native module access
 import { getSentry as getSentryFromInit, initializeSentry } from '../lib/services/sentry-init';
 // Initialize our global JS error handlers that log to device console (captured by Xcode/TestFlight)
-import { initGlobalErrorHandlers } from '../lib/error-handling';
-import posthog, { capture as posthogCapture } from '../lib/posthog';
 import { normalizeScreenName } from '../lib/analytics/screen-name';
 import { markPendingNavigationSource, trackScreenView } from '../lib/analytics/screen-tracking';
+import { initGlobalErrorHandlers } from '../lib/error-handling';
+import posthog, { capture as posthogCapture } from '../lib/posthog';
 import { safeCleanup } from '../lib/utils/lifecycle';
 
 import { registerDeviceSession } from '../lib/services/auth-service';
@@ -169,6 +169,7 @@ const LayoutContent = () => {
           <NetworkProvider>
             <AuthProvider>
               <DeepLinkAnalyticsGate />
+              <BranchDeepLinkGate />
               <ScreenTracker />
               <SessionMonitorGate />
               <AdminProvider>
@@ -425,6 +426,35 @@ const DeepLinkAnalyticsGate = () => {
     const subscription = Linking.addEventListener('url', ({ url }) => trackDeepLinkOpen(url));
     return () => safeCleanup(subscription);
   }, []);
+
+  return null;
+};
+
+const BranchDeepLinkGate = () => {
+  const router = useRouter();
+
+  useEffect(() => {
+    if (Platform.OS !== 'ios' && Platform.OS !== 'android') return;
+
+    let unsubscribe: (() => void) | undefined;
+    void import('react-native-branch')
+      .then(({ default: branch }) => {
+        unsubscribe = branch.subscribe({
+          onOpenComplete: ({ error, params }) => {
+            if (error || !params?.['+clicked_branch_link']) return;
+            const rawPath = params.$deeplink_path;
+            if (typeof rawPath !== 'string') return;
+            const path = `/${rawPath.replace(/^\/+/, '')}`;
+            if (!/^\/(bounty|profile)\/[A-Za-z0-9_-]+$/.test(path)) return;
+            markPendingNavigationSource('deep_link');
+            router.push(path as never);
+          },
+        });
+      })
+      .catch(() => {});
+
+    return () => unsubscribe?.();
+  }, [router]);
 
   return null;
 };

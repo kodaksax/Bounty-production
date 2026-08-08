@@ -13,13 +13,14 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { notFoundOgPage, renderOgPage } from '../_shared/og-html.ts';
-import { redirectToSharePage } from '../_shared/share-page-storage.ts';
 import { logShareEvent } from '../_shared/share-log.ts';
+import { redirectToSharePage } from '../_shared/share-page-storage.ts';
 
 const SITE_ORIGIN = 'https://bountyfinder.app';
 // TODO: fill in once the app is listed on the App Store (numeric app id).
 const IOS_STORE_URL = '';
-const ANDROID_STORE_URL = 'https://play.google.com/store/apps/details?id=app.bountyfinder.BOUNTYExpo';
+const ANDROID_STORE_URL =
+  'https://play.google.com/store/apps/details?id=app.bountyfinder.BOUNTYExpo';
 
 const ABOUT_TRUNCATE_LENGTH = 200;
 
@@ -34,7 +35,10 @@ async function getRatingStats(
   supabaseAdmin: ReturnType<typeof createClient>,
   userId: string
 ): Promise<{ averageRating: number; ratingCount: number }> {
-  const { data, error } = await supabaseAdmin.from('ratings').select('rating').eq('to_user_id', userId);
+  const { data, error } = await supabaseAdmin
+    .from('ratings')
+    .select('rating')
+    .eq('to_user_id', userId);
   if (!error) {
     const rows = data || [];
     if (rows.length === 0) return { averageRating: 0, ratingCount: 0 };
@@ -70,15 +74,25 @@ Deno.serve(async (req: Request) => {
     console.error('[share-profile] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
     return new Response('Server misconfiguration', { status: 500 });
   }
-  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
+  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false },
+  });
 
   if (logEvent === 'app_redirect' || logEvent === 'store_redirect') {
-    await logShareEvent(supabaseAdmin, { contentType: 'profile', contentId: id, eventType: logEvent, req });
+    await logShareEvent(supabaseAdmin, {
+      contentType: 'profile',
+      contentId: id,
+      eventType: logEvent,
+      req,
+    });
     return new Response(null, { status: 204 });
   }
 
   const canonicalUrl = `${SITE_ORIGIN}/profile/${id}`;
   const appDeepLink = `bountyexpo-workspace://profile/${id}`;
+  const handoffUrl = `${supabaseUrl}/functions/v1/app-link/share/profile?path=${encodeURIComponent(
+    `profile/${id}`
+  )}&landing=${encodeURIComponent(canonicalUrl)}`;
 
   const { data: profile, error } = await supabaseAdmin
     .from('profiles')
@@ -91,13 +105,28 @@ Deno.serve(async (req: Request) => {
   }
 
   if (!profile) {
-    await logShareEvent(supabaseAdmin, { contentType: 'profile', contentId: id, eventType: 'page_view', req });
+    await logShareEvent(supabaseAdmin, {
+      contentType: 'profile',
+      contentId: id,
+      eventType: 'page_view',
+      req,
+    });
     const fallbackImageUrl = `${supabaseUrl}/functions/v1/share-og-image?type=profile&id=_fallback`;
     const notFoundHtml = notFoundOgPage('profile', fallbackImageUrl);
-    return redirectToSharePage(supabaseAdmin, `profile/${id}-notfound.html`, notFoundHtml, appDeepLink);
+    return redirectToSharePage(
+      supabaseAdmin,
+      `profile/${id}-notfound.html`,
+      notFoundHtml,
+      appDeepLink
+    );
   }
 
-  await logShareEvent(supabaseAdmin, { contentType: 'profile', contentId: id, eventType: 'page_view', req });
+  await logShareEvent(supabaseAdmin, {
+    contentType: 'profile',
+    contentId: id,
+    eventType: 'page_view',
+    req,
+  });
 
   const [{ averageRating, ratingCount }, { count: completedCount }] = await Promise.all([
     getRatingStats(supabaseAdmin, id),
@@ -108,7 +137,8 @@ Deno.serve(async (req: Request) => {
       .eq('status', 'completed'),
   ]);
 
-  const displayName = profile.display_name || (profile.username ? `@${profile.username}` : 'This user');
+  const displayName =
+    profile.display_name || (profile.username ? `@${profile.username}` : 'This user');
 
   const statParts: string[] = [];
   if (averageRating > 0) statParts.push(`⭐ ${averageRating.toFixed(1)} (${ratingCount})`);
@@ -129,6 +159,7 @@ Deno.serve(async (req: Request) => {
     imageUrl: ogImageUrl,
     canonicalUrl,
     appDeepLink,
+    handoffUrl,
     iosStoreUrl: IOS_STORE_URL || undefined,
     androidStoreUrl: ANDROID_STORE_URL,
   });

@@ -6,6 +6,9 @@ const read = (relativePath: string) =>
 
 const migration = read('supabase/migrations/20260808000000_add_posthog_person_property_sync.sql');
 const dispatcher = read('supabase/functions/process-analytics-person/index.ts');
+const attributionFunction = read('supabase/functions/marketing-attribute/index.ts');
+const appLinkFunction = read('supabase/functions/app-link/index.ts');
+const sharePageTemplate = read('supabase/functions/_shared/og-html.ts');
 const mobilePostHog = read('lib/posthog.ts');
 
 describe('PostHog person property contract', () => {
@@ -23,6 +26,13 @@ describe('PostHog person property contract', () => {
     'has_stripe_connect',
     'home_region',
     'is_internal',
+    'initial_utm_source',
+    'initial_utm_medium',
+    'initial_utm_campaign',
+    'initial_referrer',
+    'initial_landing_page',
+    'install_source',
+    'install_campaign',
   ])('server snapshot includes %s', property => {
     expect(migration).toContain(`'${property}'`);
   });
@@ -86,5 +96,21 @@ describe('PostHog person property contract', () => {
     }
     expect(migration).toContain("LIKE '%bountyfinder%'");
     expect(mobilePostHog).toContain("includes('bountyfinder')");
+  });
+
+  it('makes first-touch attribution server-managed and immutable', () => {
+    expect(migration).toContain('marketing attribution is server-managed');
+    expect(migration).toContain('CREATE OR REPLACE FUNCTION public.claim_marketing_attribution');
+    expect(migration).toContain('initial_utm_source = COALESCE(initial_utm_source');
+    expect(migration).toContain('install_campaign = COALESCE(install_campaign');
+  });
+
+  it('carries instrumented web handoffs through Branch into first-touch storage', () => {
+    expect(appLinkFunction).toContain("event: 'app_store_redirect_clicked'");
+    expect(appLinkFunction).toContain("fetch('https://api2.branch.io/v1/url'");
+    expect(appLinkFunction).toContain('utm_campaign: campaign');
+    expect(sharePageTemplate).toContain('handoffUrl || appDeepLink');
+    expect(attributionFunction).toContain("admin.rpc('claim_marketing_attribution'");
+    expect(attributionFunction).toContain("'branch_deferred_link'");
   });
 });

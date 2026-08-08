@@ -45,10 +45,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Application from 'expo-application';
 import { Platform } from 'react-native';
+import type { BranchParams } from 'react-native-branch';
 
 import { config } from '../lib/config';
 import { API_BASE_URL } from '../lib/config/api';
-import { identify, isPostHogReady } from '../lib/posthog';
+import { identify, isPostHogReady, setPersonPropertiesOnce } from '../lib/posthog';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { logger } from '../lib/utils/error-logger';
 
@@ -79,8 +80,26 @@ export interface MarketingAttributionResponse {
   platform?: string | null;
   match_method?: string | null;
   match_confidence?: number | null;
+  initial_utm_source?: string | null;
+  initial_utm_medium?: string | null;
+  initial_utm_campaign?: string | null;
+  initial_referrer?: string | null;
+  initial_landing_page?: string | null;
+  install_source?: string | null;
+  install_campaign?: string | null;
   error?: string;
 }
+
+type FirstTouchProperties = Pick<
+  MarketingAttributionResponse,
+  | 'initial_utm_source'
+  | 'initial_utm_medium'
+  | 'initial_utm_campaign'
+  | 'initial_referrer'
+  | 'initial_landing_page'
+  | 'install_source'
+  | 'install_campaign'
+>;
 
 export interface PerformMarketingAttributionParams {
   /**
@@ -138,12 +157,7 @@ const inFlight = new Map<string, Promise<MarketingAttributionOutcome>>();
 // Structured logging
 // ────────────────────────────────────────────────────────────
 
-type AttributionLogEvent =
-  | 'attempted'
-  | 'skipped'
-  | 'completed'
-  | 'already attributed'
-  | 'failed';
+type AttributionLogEvent = 'attempted' | 'skipped' | 'completed' | 'already attributed' | 'failed';
 
 function log(
   event: AttributionLogEvent,
@@ -239,19 +253,69 @@ async function getInstallReferrer(): Promise<string | null> {
   }
 }
 
+function branchString(params: BranchParams, ...keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = params[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+async function getDeferredDeepLink(): Promise<FirstTouchProperties | null> {
+  if (Platform.OS !== 'ios' && Platform.OS !== 'android') return null;
+
+  try {
+    const { default: branch } = await import('react-native-branch');
+    const params = await branch.getFirstReferringParams();
+    if (!params?.['+clicked_branch_link']) return null;
+
+    const initialUtmSource = branchString(params, 'utm_source', '~channel');
+    const initialUtmMedium = branchString(params, 'utm_medium', '~feature');
+    const initialUtmCampaign = branchString(params, 'utm_campaign', '~campaign');
+    const initialReferrer = branchString(params, '+referrer', '~referring_link');
+    const initialLandingPage = branchString(
+      params,
+      'initial_landing_page',
+      '$canonical_url',
+      '$desktop_url',
+      '+url',
+      '~referring_link'
+    );
+
+    return {
+      initial_utm_source: initialUtmSource,
+      initial_utm_medium: initialUtmMedium,
+      initial_utm_campaign: initialUtmCampaign,
+      initial_referrer: initialReferrer,
+      initial_landing_page: initialLandingPage,
+      install_source: branchString(params, 'install_source') ?? initialUtmSource ?? 'branch',
+      install_campaign: branchString(params, 'install_campaign') ?? initialUtmCampaign,
+    };
+  } catch (e) {
+    log('skipped', { reason: 'branch_params_unavailable', error: e });
+    return null;
+  }
+}
+
 async function buildPayload(): Promise<Record<string, unknown> | null> {
+  const deferredDeepLink = await getDeferredDeepLink();
+
   if (Platform.OS === 'android') {
     const installReferrer = await getInstallReferrer();
     // Omit rather than send an empty string — the server falls back to
     // IP/device fingerprinting when no referrer is present.
-    return installReferrer
-      ? { platform: 'android', install_referrer: installReferrer }
-      : { platform: 'android' };
+    return {
+      platform: 'android',
+      ...(installReferrer ? { install_referrer: installReferrer } : {}),
+      ...(deferredDeepLink ? { deferred_deep_link: deferredDeepLink } : {}),
+    };
   }
 
   if (Platform.OS === 'ios') {
-    // iOS has no install referrer; the server resolves probabilistically.
-    return { platform: 'ios' };
+    return {
+      platform: 'ios',
+      ...(deferredDeepLink ? { deferred_deep_link: deferredDeepLink } : {}),
+    };
   }
 
   // web / unsupported — there is no install to attribute.
@@ -355,9 +419,26 @@ function identifyWithAttribution(userId: string, body: MarketingAttributionRespo
     if (body.match_method != null) properties.match_method = body.match_method;
     if (body.match_confidence != null) properties.match_confidence = body.match_confidence;
 
-    if (Object.keys(properties).length === 0) return;
+    const firstTouchProperties: Record<string, unknown> = {};
+    for (const key of [
+      'initial_utm_source',
+      'initial_utm_medium',
+      'initial_utm_campaign',
+      'initial_referrer',
+      'initial_landing_page',
+      'install_source',
+      'install_campaign',
+    ] as const) {
+      if (body[key] != null) firstTouchProperties[key] = body[key];
+    }
+
+    if (Object.keys(properties).length === 0 && Object.keys(firstTouchProperties).length === 0)
+      return;
 
     identify(userId, properties);
+    if (Object.keys(firstTouchProperties).length > 0) {
+      setPersonPropertiesOnce(firstTouchProperties);
+    }
   } catch (e) {
     log('failed', { reason: 'posthog_identify_failed', error: e }, 'warning');
   }

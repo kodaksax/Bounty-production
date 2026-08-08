@@ -20,6 +20,8 @@ export interface OgPageOptions {
   canonicalUrl: string;
   /** Custom-scheme deep link, e.g. bountyexpo-workspace://bounty/123 */
   appDeepLink: string;
+  /** Instrumented Branch handoff URL. Preferred over a raw custom-scheme link. */
+  handoffUrl?: string;
   /** iOS App Store URL, once the app is listed (TODO: fill in real numeric App Store ID). */
   iosStoreUrl?: string;
   /** Android Play Store URL. */
@@ -34,6 +36,7 @@ export function renderOgPage(opts: OgPageOptions): string {
     imageUrl,
     canonicalUrl,
     appDeepLink,
+    handoffUrl,
     iosStoreUrl,
     androidStoreUrl,
     siteName = 'Bounty',
@@ -53,7 +56,7 @@ export function renderOgPage(opts: OgPageOptions): string {
   const redirectScript = `
   <script>
     (function () {
-      var appUrl = ${JSON.stringify(appDeepLink)};
+      var appUrl = ${JSON.stringify(handoffUrl || appDeepLink)};
       var iosStore = ${JSON.stringify(iosStoreUrl || '')};
       var androidStore = ${JSON.stringify(androidStoreUrl || '')};
       var logUrl = ${JSON.stringify(canonicalUrl)};
@@ -126,13 +129,17 @@ export function renderOgPage(opts: OgPageOptions): string {
     <img class="preview" src="${imageUrl}" alt="${safeTitle}" width="1200" height="630" />
     <h1>${safeTitle}</h1>
     <p>${safeDescription}</p>
-    <a class="button" href="${appDeepLink}">Open in Bounty</a>
+    <a class="button" href="${escapeHtml(handoffUrl || appDeepLink)}">Open in Bounty</a>
   </div>
 </body>
 </html>`;
 }
 
-export function notFoundOgPage(kind: 'bounty' | 'profile', imageUrl: string, siteName = 'Bounty'): string {
+export function notFoundOgPage(
+  kind: 'bounty' | 'profile',
+  imageUrl: string,
+  siteName = 'Bounty'
+): string {
   const title = kind === 'bounty' ? 'Bounty not found' : 'Profile not found';
   const description =
     kind === 'bounty'
