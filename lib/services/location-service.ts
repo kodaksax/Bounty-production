@@ -15,7 +15,7 @@ class LocationService {
   async requestPermission(): Promise<LocationPermissionState> {
     try {
       const { status, canAskAgain } = await Location.requestForegroundPermissionsAsync();
-      
+
       this.permissionState = {
         granted: status === 'granted',
         canAskAgain,
@@ -39,7 +39,7 @@ class LocationService {
   async getPermissionStatus(): Promise<LocationPermissionState> {
     try {
       const { status, canAskAgain } = await Location.getForegroundPermissionsAsync();
-      
+
       this.permissionState = {
         granted: status === 'granted',
         canAskAgain,
@@ -63,7 +63,7 @@ class LocationService {
   async getCurrentLocation(): Promise<LocationCoordinates | null> {
     try {
       const permissionStatus = await this.getPermissionStatus();
-      
+
       if (!permissionStatus.granted) {
         console.error('Location permission not granted');
         return null;
@@ -105,7 +105,7 @@ class LocationService {
     unit: 'miles' | 'km' = 'miles'
   ): number {
     const R = unit === 'miles' ? 3959 : 6371; // Earth's radius in miles or km
-    
+
     const lat1Rad = this.toRadians(from.latitude);
     const lat2Rad = this.toRadians(to.latitude);
     const deltaLatRad = this.toRadians(to.latitude - from.latitude);
@@ -113,10 +113,7 @@ class LocationService {
 
     const a =
       Math.sin(deltaLatRad / 2) * Math.sin(deltaLatRad / 2) +
-      Math.cos(lat1Rad) *
-        Math.cos(lat2Rad) *
-        Math.sin(deltaLonRad / 2) *
-        Math.sin(deltaLonRad / 2);
+      Math.cos(lat1Rad) * Math.cos(lat2Rad) * Math.sin(deltaLonRad / 2) * Math.sin(deltaLonRad / 2);
 
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     const distance = R * c;
@@ -131,7 +128,7 @@ class LocationService {
   async geocodeAddress(address: string): Promise<LocationCoordinates | null> {
     try {
       const results = await Location.geocodeAsync(address);
-      
+
       if (results && results.length > 0) {
         return {
           latitude: results[0].latitude,
@@ -152,16 +149,13 @@ class LocationService {
   async reverseGeocode(coords: LocationCoordinates): Promise<string | null> {
     try {
       const results = await Location.reverseGeocodeAsync(coords);
-      
+
       if (results && results.length > 0) {
         const location = results[0];
-        const parts = [
-          location.street,
-          location.city,
-          location.region,
-          location.postalCode,
-        ].filter(Boolean);
-        
+        const parts = [location.street, location.city, location.region, location.postalCode].filter(
+          Boolean
+        );
+
         return parts.join(', ');
       }
 
@@ -187,12 +181,9 @@ class LocationService {
 
       if (results && results.length > 0) {
         const location = results[0];
-        const parts = [
-          location.street,
-          location.city,
-          location.region,
-          location.postalCode,
-        ].filter(Boolean);
+        const parts = [location.street, location.city, location.region, location.postalCode].filter(
+          Boolean
+        );
 
         return {
           formattedAddress: parts.join(', '),
@@ -203,6 +194,29 @@ class LocationService {
       return null;
     } catch (error) {
       console.error('Error reverse geocoding (detailed):', error);
+      return null;
+    }
+  }
+
+  /**
+   * Reverse geocode coordinates to coarse region metadata for serviceability
+   * decisions and analytics properties.
+   */
+  async reverseGeocodeRegion(
+    coords: LocationCoordinates
+  ): Promise<{ countryCode?: string; region?: string; city?: string } | null> {
+    try {
+      const results = await Location.reverseGeocodeAsync(coords);
+      if (!results || results.length === 0) return null;
+
+      const location = results[0];
+      return {
+        countryCode: location.isoCountryCode?.toUpperCase(),
+        region: location.region || undefined,
+        city: location.city || undefined,
+      };
+    } catch (error) {
+      console.error('Error reverse geocoding region:', error);
       return null;
     }
   }

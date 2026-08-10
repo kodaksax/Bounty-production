@@ -12,26 +12,50 @@ import { BrandingLogo } from '../../components/ui/branding-logo';
 import { hapticFeedback } from '../../lib/haptic-feedback';
 import { useOnboarding } from '../../lib/context/onboarding-context';
 import { analyticsService } from '../../lib/services/analytics-service';
+import { useFeatureFlag } from '../../lib/posthog';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
+
+// 'onboarding-skip-role-selection' PostHog experiment. Resolved once here and
+// persisted onto the onboarding draft (onboarding-context.tsx) so every later
+// screen reads the same value instead of re-checking the flag mid-flow.
+const ROLE_SELECTION_FLAG_KEY = 'onboarding-skip-role-selection';
 
 export default function OnboardingWelcome() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useAppThemeContext();
-  const { updateData } = useOnboarding();
+  const { data: onboardingData, updateData } = useOnboarding();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const flagValue = useFeatureFlag(ROLE_SELECTION_FLAG_KEY);
 
   useEffect(() => {
     analyticsService.trackEvent('onboarding_welcome_viewed');
     Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
   }, [fadeAnim]);
 
+  // Resolve the experiment arm exactly once per draft. A resumed draft that
+  // already recorded an arm keeps it, even if the flag were to re-evaluate
+  // differently on a later reload.
+  useEffect(() => {
+    if (onboardingData.experimentVariant !== null) return;
+    if (flagValue === undefined) return;
+    updateData({ experimentVariant: flagValue === 'test' ? 'test' : 'control' });
+  }, [flagValue, onboardingData.experimentVariant, updateData]);
+
+  const isTestArm = onboardingData.experimentVariant === 'test';
+
   const handleSelectIntent = (intent: 'poster' | 'hunter') => {
     hapticFeedback.light();
     analyticsService.trackEvent('onboarding_role_selected', { role: intent });
     updateData({ intent });
+    router.replace('/onboarding/username');
+  };
+
+  const handleGetStarted = () => {
+    hapticFeedback.light();
+    analyticsService.trackEvent('onboarding_role_selection_skipped');
     router.replace('/onboarding/username');
   };
 
@@ -62,23 +86,36 @@ export default function OnboardingWelcome() {
       </Animated.View>
 
       <View style={styles.actionContainer}>
-        <TouchableOpacity
-          style={styles.posterButton}
-          onPress={() => handleSelectIntent('poster')}
-          accessibilityRole="button"
-          accessibilityLabel="Get something done — post a task and hire someone nearby"
-        >
-          <Text style={styles.posterButtonText}>Get something done</Text>
-        </TouchableOpacity>
+        {isTestArm ? (
+          <TouchableOpacity
+            style={[styles.hunterButton, { backgroundColor: theme.primary }]}
+            onPress={handleGetStarted}
+            accessibilityRole="button"
+            accessibilityLabel="Get started"
+          >
+            <Text style={styles.hunterButtonText}>Get started</Text>
+          </TouchableOpacity>
+        ) : (
+          <>
+            <TouchableOpacity
+              style={styles.posterButton}
+              onPress={() => handleSelectIntent('poster')}
+              accessibilityRole="button"
+              accessibilityLabel="Get something done — post a task and hire someone nearby"
+            >
+              <Text style={styles.posterButtonText}>Get something done</Text>
+            </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.hunterButton, { backgroundColor: theme.primary }]}
-          onPress={() => handleSelectIntent('hunter')}
-          accessibilityRole="button"
-          accessibilityLabel="Start earning nearby — browse and accept paid tasks"
-        >
-          <Text style={styles.hunterButtonText}>Start earning nearby</Text>
-        </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.hunterButton, { backgroundColor: theme.primary }]}
+              onPress={() => handleSelectIntent('hunter')}
+              accessibilityRole="button"
+              accessibilityLabel="Start earning nearby — browse and accept paid tasks"
+            >
+              <Text style={styles.hunterButtonText}>Start earning nearby</Text>
+            </TouchableOpacity>
+          </>
+        )}
 
         <TouchableOpacity
           style={styles.loginButton}

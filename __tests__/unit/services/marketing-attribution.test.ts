@@ -31,6 +31,14 @@ jest.mock('../../../lib/config/api', () => ({
 jest.mock('../../../lib/posthog', () => ({
   identify: jest.fn(),
   isPostHogReady: jest.fn().mockReturnValue(true),
+  setPersonPropertiesOnce: jest.fn(),
+}));
+
+jest.mock('react-native-branch', () => ({
+  __esModule: true,
+  default: {
+    getFirstReferringParams: jest.fn().mockResolvedValue({ '+clicked_branch_link': false }),
+  },
 }));
 
 jest.mock('../../../lib/utils/error-logger', () => ({
@@ -47,11 +55,12 @@ import * as Application from 'expo-application';
 import { Platform } from 'react-native';
 
 import {
-  MARKETING_ATTRIBUTION_STORAGE_PREFIX,
-  performMarketingAttribution,
+    MARKETING_ATTRIBUTION_STORAGE_PREFIX,
+    performMarketingAttribution,
 } from '../../../services/marketingAttribution';
 
-const { identify, isPostHogReady } = require('../../../lib/posthog');
+const { identify, isPostHogReady, setPersonPropertiesOnce } = require('../../../lib/posthog');
+const branch = require('react-native-branch').default;
 const { logger } = require('../../../lib/utils/error-logger');
 const { supabase } = require('../../../lib/supabase');
 
@@ -98,6 +107,7 @@ describe('performMarketingAttribution', () => {
     getItem.mockResolvedValue(null);
     setItem.mockResolvedValue(undefined);
     getInstallReferrerAsync.mockResolvedValue('');
+    branch.getFirstReferringParams.mockResolvedValue({ '+clicked_branch_link': false });
     isPostHogReady.mockReturnValue(true);
     global.fetch = jest.fn().mockResolvedValue(jsonResponse({ status: 'unattributed' }));
   });
@@ -176,6 +186,32 @@ describe('performMarketingAttribution', () => {
       expect(outcome).toBe('completed');
       expect(fetchBody()).toEqual({ platform: 'ios' });
       expect(getInstallReferrerAsync).not.toHaveBeenCalled();
+    });
+
+    it('sends immutable first-touch properties from a deferred Branch link', async () => {
+      branch.getFirstReferringParams.mockResolvedValue({
+        '+clicked_branch_link': true,
+        '~channel': 'reddit',
+        '~feature': 'guerilla',
+        '~campaign': 'orangecounty',
+        '~referring_link': 'https://bnty.app/orangecounty',
+        $canonical_url: 'https://bountyfinder.net/?utm_source=reddit',
+      });
+
+      await performMarketingAttribution({ userId: USER_ID, accessToken: TOKEN });
+
+      expect(fetchBody()).toEqual({
+        platform: 'ios',
+        deferred_deep_link: {
+          initial_utm_source: 'reddit',
+          initial_utm_medium: 'guerilla',
+          initial_utm_campaign: 'orangecounty',
+          initial_referrer: 'https://bnty.app/orangecounty',
+          initial_landing_page: 'https://bountyfinder.net/?utm_source=reddit',
+          install_source: 'reddit',
+          install_campaign: 'orangecounty',
+        },
+      });
     });
   });
 
@@ -263,7 +299,13 @@ describe('performMarketingAttribution', () => {
     it('attributes a different user on the same device independently', async () => {
       getItem.mockImplementation(async (key: string) =>
         key === STORAGE_KEY
-          ? JSON.stringify({ v: 1, state: 'completed', status: 'attributed', attempts: 1, updatedAt: '' })
+          ? JSON.stringify({
+              v: 1,
+              state: 'completed',
+              status: 'attributed',
+              attempts: 1,
+              updatedAt: '',
+            })
           : null
       );
 
@@ -274,9 +316,7 @@ describe('performMarketingAttribution', () => {
 
       expect(outcome).toBe('completed');
       expect(global.fetch).toHaveBeenCalledTimes(1);
-      expect(setItem.mock.calls[0][0]).toBe(
-        `${MARKETING_ATTRIBUTION_STORAGE_PREFIX}user-456`
-      );
+      expect(setItem.mock.calls[0][0]).toBe(`${MARKETING_ATTRIBUTION_STORAGE_PREFIX}user-456`);
     });
   });
 
@@ -322,9 +362,7 @@ describe('performMarketingAttribution', () => {
   // ── Server failure ──────────────────────────────────────────────────────
   describe('server failure', () => {
     it('treats a 500 as a retryable failure', async () => {
-      (global.fetch as jest.Mock).mockResolvedValue(
-        jsonResponse({ error: 'internal_error' }, 500)
-      );
+      (global.fetch as jest.Mock).mockResolvedValue(jsonResponse({ error: 'internal_error' }, 500));
 
       const outcome = await performMarketingAttribution({
         userId: USER_ID,
@@ -429,6 +467,33 @@ describe('performMarketingAttribution', () => {
         utm_source: 'facebook',
         match_method: 'play_referrer',
         match_confidence: 1,
+      });
+    });
+
+    it('sets first-touch person properties once', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue(
+        jsonResponse({
+          status: 'attributed',
+          initial_utm_source: 'reddit',
+          initial_utm_medium: 'guerilla',
+          initial_utm_campaign: 'orangecounty',
+          initial_referrer: 'https://reddit.com/r/orangecounty',
+          initial_landing_page: 'https://bountyfinder.net/',
+          install_source: 'reddit',
+          install_campaign: 'orangecounty',
+        })
+      );
+
+      await performMarketingAttribution({ userId: USER_ID, accessToken: TOKEN });
+
+      expect(setPersonPropertiesOnce).toHaveBeenCalledWith({
+        initial_utm_source: 'reddit',
+        initial_utm_medium: 'guerilla',
+        initial_utm_campaign: 'orangecounty',
+        initial_referrer: 'https://reddit.com/r/orangecounty',
+        initial_landing_page: 'https://bountyfinder.net/',
+        install_source: 'reddit',
+        install_campaign: 'orangecounty',
       });
     });
 
@@ -592,8 +657,9 @@ describe('performMarketingAttribution when Supabase is not configured', () => {
       supabase: { auth: { getSession: jest.fn() } },
     }));
 
-    const { performMarketingAttribution: perform } =
-      require('../../../services/marketingAttribution');
+    const {
+      performMarketingAttribution: perform,
+    } = require('../../../services/marketingAttribution');
 
     await expect(perform({ userId: USER_ID, accessToken: TOKEN })).resolves.toBe('skipped');
     expect(global.fetch).not.toHaveBeenCalled();

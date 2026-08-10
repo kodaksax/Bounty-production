@@ -31,6 +31,11 @@ export type AnalyticsEvent =
   // (profile_submitted | step_skipped)* -> completed
   | 'onboarding_welcome_viewed'
   | 'onboarding_role_selected'
+  // 'onboarding-skip-role-selection' PostHog experiment, test arm only: fired
+  // from the single "Get started" CTA that replaces the two intent buttons.
+  // Role is deferred to CombinedActivationPrompt (or inferred later from a
+  // real first action) instead of being picked here.
+  | 'onboarding_role_selection_skipped'
   | 'onboarding_intent_switched'
   | 'onboarding_login_tapped'
   | 'onboarding_auth_started'
@@ -42,7 +47,13 @@ export type AnalyticsEvent =
   | 'onboarding_step_skipped'
   | 'onboarding_bounty_posted'
   | 'onboarding_bounty_posted_screen_shown'
-  | 'onboarding_bounty_accepted'
+  // RENAMED from 'onboarding_bounty_accepted' (2026-08). It fires when the
+  // HUNTER's sample application is submitted — nothing "accepts" anything
+  // here (no poster action occurred). The old name collided with the
+  // genuinely poster-side `bounty_accepted`/`bounty_claimed` fired from
+  // hooks/useAcceptRequest.ts, which measure a completely different funnel
+  // step. Flagging in case a dashboard still queries the old name.
+  | 'onboarding_bounty_applied'
   | 'onboarding_application_submitted_screen_shown'
   | 'onboarding_completed'
   // Settings — fired when a user changes a display/layout preference after
@@ -62,15 +73,15 @@ export type AnalyticsEvent =
   | 'onboarding_no_nearby_bounties'
   | 'onboarding_online_bounties_viewed'
   | 'onboarding_notify_me_requested'
+  | 'unserviceable_region_shown'
   // Moments Queue — post-onboarding contextual activation prompts, see lib/moments/*
   // Funnel order for one moment instance: moment_event_enqueued (the real
-  // business event that made it eligible) -> moment_queued (became the
-  // single next-in-line moment) -> moment_shown (presented) -> exactly one
+  // business event that made it eligible) -> moment_shown (presented) ->
+  // exactly one
   // of moment_accepted/moment_dismissed/moment_snoozed/moment_skipped ->
   // (accepted only) moment_completed, or moment_expired if it was shown
   // maxShownCount times without ever being resolved.
   | 'moment_event_enqueued'
-  | 'moment_queued'
   | 'moment_shown'
   | 'moment_dismissed'
   | 'moment_snoozed'
@@ -128,10 +139,44 @@ export type AnalyticsEvent =
   | 'bounty_created'
   | 'bounty_queued'
   | 'bounty_viewed'
+  // NOTE ON NAMING COLLISION: `bounty_accepted`/`bounty_claimed` below are
+  // fired from hooks/useAcceptRequest.ts when the POSTER accepts a hunter's
+  // request (open -> in_progress). The `bounty_claim_*` funnel further down
+  // is unrelated and fires from the HUNTER's apply action instead. Same verb
+  // ("claim"/"accept"), two different actors and funnel stages — don't
+  // conflate them when querying.
   | 'bounty_accepted'
   | 'bounty_claimed'
+  // `bounty_completed` fires from 3 real completion paths (payout release,
+  // manual mark-complete, and poster approving a submitted-work review) plus
+  // the hunter-claim funnel below carries `is_onboarding_demo` on every
+  // event so tutorial completions (there is no fixed demo bounty — see
+  // `bounty_claim_started` below) never contaminate a real liquidity metric.
   | 'bounty_completed'
   | 'bounty_cancelled'
+  // Bounty browse/discovery events — see docs on the supply-vs-plumbing
+  // question these resolve. `bounty_list_viewed` fires whenever a
+  // list/feed/map of bounties renders with results (including zero — the
+  // empty case is the most informative outcome, so it is NOT filtered out).
+  // `bounty_search` fires when a bounty search query resolves; it carries
+  // `query_length`, never the raw query text (PII risk).
+  | 'bounty_list_viewed'
+  | 'bounty_search'
+  // Hunter claim funnel — bounty_claim_started (Apply tapped) ->
+  // bounty_claim_submitted (insert succeeded) or bounty_claim_failed.
+  // `is_onboarding_demo` is MANDATORY on all three and on `bounty_completed`.
+  //
+  // There is no fixed "demo bounty" — the onboarding hunter tutorial applies
+  // to a real, live, randomly-selected open bounty (see
+  // app/onboarding/details.tsx:handleApplyToSample), so `is_onboarding_demo`
+  // cannot be derived from the bounty ID. It is instead set by the calling
+  // surface: `false` from the two real apply screens
+  // (components/bountydetailmodal.tsx, app/bounty/[id]/public.tsx), `true`
+  // from the onboarding tutorial. Same convention as the posting funnel's
+  // `surface: 'create_flow' | 'onboarding'` property above.
+  | 'bounty_claim_started'
+  | 'bounty_claim_submitted'
+  | 'bounty_claim_failed'
   // Payment events
   | 'payment_initiated'
   | 'payment_completed'
@@ -195,8 +240,39 @@ export type AnalyticsEvent =
   | 'filter_applied';
 
 export interface AnalyticsProperties {
-  [key: string]: string | number | boolean | undefined;
+  [key: string]: string | number | boolean | string[] | undefined;
 }
+
+const toSnakeCase = (key: string): string =>
+  key
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/[\s-]+/g, '_')
+    .toLowerCase();
+
+const toCamelCase = (key: string): string =>
+  key.toLowerCase().replace(/_([a-z0-9])/g, (_, letter: string) => letter.toUpperCase());
+
+const normalizePropertyKeys = (properties?: AnalyticsProperties): AnalyticsProperties => {
+  if (!properties) return {};
+
+  const normalized: AnalyticsProperties = {};
+
+  for (const [key, value] of Object.entries(properties)) {
+    normalized[key] = value;
+
+    const snakeKey = toSnakeCase(key);
+    if (!(snakeKey in normalized)) {
+      normalized[snakeKey] = value;
+    }
+
+    const camelKey = toCamelCase(key);
+    if (!(camelKey in normalized)) {
+      normalized[camelKey] = value;
+    }
+  }
+
+  return normalized;
+};
 
 class AnalyticsService {
   private initialized = false;
@@ -280,11 +356,13 @@ class AnalyticsService {
    */
   async trackEvent(event: AnalyticsEvent, properties?: AnalyticsProperties): Promise<void> {
     try {
+      const normalizedProperties = normalizePropertyKeys(properties);
       const enrichedProperties = {
-        ...properties,
+        ...normalizedProperties,
         platform: Platform.OS,
         timestamp: new Date().toISOString(),
         userId: this.userId,
+        user_id: this.userId,
       };
 
       // Track in PostHog via the shared client. The helper is a no-op when
@@ -435,13 +513,16 @@ class AnalyticsService {
     properties?: AnalyticsProperties
   ): Promise<void> {
     try {
+      const normalizedProperties = normalizePropertyKeys(properties);
       const timingProperties = {
-        ...properties,
+        ...normalizedProperties,
+        timing_name: eventName,
+        timingName: eventName,
         duration_ms: duration,
       };
 
       try {
-        posthogCapture(eventName, timingProperties);
+        posthogCapture('performance_timing', timingProperties);
       } catch {
         // ignore
       }

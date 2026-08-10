@@ -257,6 +257,14 @@ export function useCompleteOnboarding(destination: OnboardingDestination = '/tab
       bountyFormat,
     });
 
+    // Person-level `role`, for the 'onboarding-skip-role-selection' experiment
+    // (and cohort analysis generally) — event-only `role` on
+    // onboarding_role_selected can't be queried against a person. Covers both
+    // arms uniformly: whatever `intent` settled to by completion (chosen
+    // upfront, chosen via CombinedActivationPrompt, or still null for a
+    // test-arm skip, resolved later by role-inference-service.ts).
+    analyticsService.updateUserProperties({ role: onboardingData.intent ?? 'unset' });
+
     // Deliberately NOT priming any Moments Queue prompts here. The
     // marketplace-activation moments (post_first_bounty / accept_first_bounty)
     // are enqueued by lib/moments/backfill.ts on the user's next

@@ -119,7 +119,7 @@ describe('Authentication State Persistence', () => {
       });
 
       const TestComponent = () => <></>;
-      
+
       render(
         <AuthProvider>
           <TestComponent />
@@ -129,11 +129,69 @@ describe('Authentication State Persistence', () => {
       await waitFor(() => {
         expect(supabase.auth.getSession).toHaveBeenCalled();
       });
+
+      const { analyticsService } = require('../../lib/services/analytics-service');
+      await waitFor(() => {
+        expect(analyticsService.identifyUser).toHaveBeenCalledWith(
+          'user123',
+          expect.objectContaining({ email: 'user@example.com' })
+        );
+      });
+    });
+
+    it('should identify on INITIAL_SESSION auth callback (silent restore path)', async () => {
+      let authStateChangeCallback: any;
+      (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((cb: any) => {
+        authStateChangeCallback = cb;
+        return {
+          data: {
+            subscription: {
+              unsubscribe: jest.fn(),
+            },
+          },
+        };
+      });
+
+      (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+        data: { session: null },
+        error: null,
+      });
+
+      const TestComponent = () => <></>;
+      render(
+        <AuthProvider>
+          <TestComponent />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(authStateChangeCallback).toBeDefined();
+      });
+
+      const restoredSession = {
+        access_token: 'restored_token',
+        refresh_token: 'refresh_token',
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+        user: {
+          id: 'restored-user-1',
+          email: 'restore@example.com',
+          email_confirmed_at: '2024-01-01T00:00:00Z',
+          app_metadata: { provider: 'apple' },
+        },
+      };
+
+      await authStateChangeCallback('INITIAL_SESSION', restoredSession);
+
+      const { analyticsService } = require('../../lib/services/analytics-service');
+      expect(analyticsService.identifyUser).toHaveBeenCalledWith(
+        'restored-user-1',
+        expect.objectContaining({ email: 'restore@example.com' })
+      );
     });
 
     it('should clean up subscription on unmount', async () => {
       const unsubscribeMock = jest.fn();
-      
+
       (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation(() => ({
         data: {
           subscription: {
@@ -148,7 +206,7 @@ describe('Authentication State Persistence', () => {
       });
 
       const TestComponent = () => <></>;
-      
+
       const { unmount } = render(
         <AuthProvider>
           <TestComponent />
@@ -175,7 +233,7 @@ describe('Authentication State Persistence', () => {
       });
 
       const TestComponent = () => <></>;
-      
+
       render(
         <AuthProvider>
           <TestComponent />
@@ -194,7 +252,7 @@ describe('Authentication State Persistence', () => {
       });
 
       const TestComponent = () => <></>;
-      
+
       render(
         <AuthProvider>
           <TestComponent />
@@ -213,12 +271,14 @@ describe('Authentication State Persistence', () => {
       const removeAppStateListener = jest.fn();
       const { AppState } = require('react-native');
 
-      (AppState.addEventListener as jest.Mock).mockImplementation((_event: string, callback: (state: string) => void) => {
-        appStateCallback = callback;
-        return {
-          remove: removeAppStateListener,
-        };
-      });
+      (AppState.addEventListener as jest.Mock).mockImplementation(
+        (_event: string, callback: (state: string) => void) => {
+          appStateCallback = callback;
+          return {
+            remove: removeAppStateListener,
+          };
+        }
+      );
 
       (supabase.auth.getSession as jest.Mock).mockResolvedValue({
         data: { session: null },
@@ -279,14 +339,14 @@ describe('Authentication State Persistence', () => {
 
       // Mock authProfileService to capture subscription callback
       const { authProfileService } = require('../../lib/services/auth-profile-service');
-      (authProfileService.subscribe as jest.Mock).mockImplementation((callback) => {
+      (authProfileService.subscribe as jest.Mock).mockImplementation(callback => {
         profileSubscriptionCallback = callback;
         // Immediately call with null (simulating initial subscription)
         callback(null);
         return jest.fn(); // Return unsubscribe function
       });
 
-      (authProfileService.setSession as jest.Mock).mockImplementation(async (session) => {
+      (authProfileService.setSession as jest.Mock).mockImplementation(async session => {
         // Simulate async profile fetch
         await new Promise(resolve => setTimeout(resolve, 100));
         // After fetch completes, notify subscribers
@@ -301,7 +361,7 @@ describe('Authentication State Persistence', () => {
       });
 
       const TestComponent = () => <></>;
-      
+
       render(
         <AuthProvider>
           <TestComponent />
@@ -342,7 +402,7 @@ describe('Authentication State Persistence', () => {
       let profileSubscriptionCallback: any;
 
       const { authProfileService } = require('../../lib/services/auth-profile-service');
-      (authProfileService.subscribe as jest.Mock).mockImplementation((callback) => {
+      (authProfileService.subscribe as jest.Mock).mockImplementation(callback => {
         profileSubscriptionCallback = callback;
         callback(null); // Initial call with null
         return jest.fn();
@@ -359,7 +419,7 @@ describe('Authentication State Persistence', () => {
       });
 
       const TestComponent = () => <></>;
-      
+
       render(
         <AuthProvider>
           <TestComponent />
@@ -406,7 +466,7 @@ describe('Authentication State Persistence', () => {
 
       // Resolve setSession only when we release the gate.
       let releaseSetSession: () => void = () => {};
-      const setSessionGate = new Promise<void>((resolve) => {
+      const setSessionGate = new Promise<void>(resolve => {
         releaseSetSession = resolve;
       });
       (authProfileService.setSession as jest.Mock).mockImplementation(async (session: any) => {
@@ -428,15 +488,13 @@ describe('Authentication State Persistence', () => {
         return null;
       };
 
-      render(
-        React.createElement(AuthProvider, null, React.createElement(Probe))
-      );
+      render(React.createElement(AuthProvider, null, React.createElement(Probe)));
 
       // Wait for initial fetchSession() to settle to unauthenticated/isLoading=false.
       await waitFor(() => {
-        expect(
-          renderLog.some((entry) => entry.isLoading === false && entry.userId === null)
-        ).toBe(true);
+        expect(renderLog.some(entry => entry.isLoading === false && entry.userId === null)).toBe(
+          true
+        );
       });
 
       // Now simulate SIGNED_IN for a fresh user.  setSession is gated so
@@ -446,7 +504,11 @@ describe('Authentication State Persistence', () => {
         access_token: 'new_token',
         refresh_token: 'r',
         expires_at: Math.floor(Date.now() / 1000) + 3600,
-        user: { id: 'returning-user-1', email: 'r@example.com', email_confirmed_at: '2024-01-01T00:00:00Z' },
+        user: {
+          id: 'returning-user-1',
+          email: 'r@example.com',
+          email_confirmed_at: '2024-01-01T00:00:00Z',
+        },
       };
 
       // Fire the SIGNED_IN event (do not await — the await inside is gated).
@@ -456,7 +518,7 @@ describe('Authentication State Persistence', () => {
       // Without the fix, a render would land with (userId=new, isLoading=false).
       await waitFor(() => {
         const sawLoadingForNewUser = renderLog.some(
-          (entry) => entry.isLoading === true && entry.userId === 'returning-user-1'
+          entry => entry.isLoading === true && entry.userId === 'returning-user-1'
         );
         expect(sawLoadingForNewUser).toBe(true);
       });
@@ -465,7 +527,7 @@ describe('Authentication State Persistence', () => {
       // the new user — that would indicate the gap during which the root
       // navigator made a routing decision pre-profile-hydration.
       const prematureUnload = renderLog.find(
-        (entry) => entry.isLoading === false && entry.userId === 'returning-user-1'
+        entry => entry.isLoading === false && entry.userId === 'returning-user-1'
       );
       expect(prematureUnload).toBeUndefined();
 
@@ -513,7 +575,7 @@ describe('Authentication State Persistence', () => {
       });
 
       const TestComponent = () => <></>;
-      
+
       render(
         <AuthProvider>
           <TestComponent />
@@ -528,9 +590,12 @@ describe('Authentication State Persistence', () => {
       const refreshTime = (expiresInSeconds - 300) * 1000; // 55 minutes
       jest.advanceTimersByTime(refreshTime);
 
-      await waitFor(() => {
-        expect(supabase.auth.refreshSession).toHaveBeenCalled();
-      }, { timeout: 3000 });
+      await waitFor(
+        () => {
+          expect(supabase.auth.refreshSession).toHaveBeenCalled();
+        },
+        { timeout: 3000 }
+      );
     });
 
     it('should refresh immediately if token is already expired', async () => {
@@ -562,7 +627,7 @@ describe('Authentication State Persistence', () => {
       });
 
       const TestComponent = () => <></>;
-      
+
       render(
         <AuthProvider>
           <TestComponent />
@@ -574,9 +639,12 @@ describe('Authentication State Persistence', () => {
       });
 
       // Should call refresh immediately
-      await waitFor(() => {
-        expect(supabase.auth.refreshSession).toHaveBeenCalled();
-      }, { timeout: 3000 });
+      await waitFor(
+        () => {
+          expect(supabase.auth.refreshSession).toHaveBeenCalled();
+        },
+        { timeout: 3000 }
+      );
     });
 
     it('should handle refresh failure gracefully', async () => {
@@ -601,16 +669,19 @@ describe('Authentication State Persistence', () => {
       });
 
       const TestComponent = () => <></>;
-      
+
       render(
         <AuthProvider>
           <TestComponent />
         </AuthProvider>
       );
 
-      await waitFor(() => {
-        expect(supabase.auth.refreshSession).toHaveBeenCalled();
-      }, { timeout: 3000 });
+      await waitFor(
+        () => {
+          expect(supabase.auth.refreshSession).toHaveBeenCalled();
+        },
+        { timeout: 3000 }
+      );
     });
   });
 
@@ -637,22 +708,25 @@ describe('Authentication State Persistence', () => {
       });
 
       const TestComponent = () => <></>;
-      
+
       render(
         <AuthProvider>
           <TestComponent />
         </AuthProvider>
       );
 
-      await waitFor(() => {
-        expect(supabase.auth.refreshSession).toHaveBeenCalled();
-      }, { timeout: 3000 });
+      await waitFor(
+        () => {
+          expect(supabase.auth.refreshSession).toHaveBeenCalled();
+        },
+        { timeout: 3000 }
+      );
     });
 
     it('should trigger SIGNED_OUT event on token expiration', async () => {
       let authStateCallback: any;
 
-      (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((callback) => {
+      (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation(callback => {
         authStateCallback = callback;
         return {
           data: {
@@ -669,7 +743,7 @@ describe('Authentication State Persistence', () => {
       });
 
       const TestComponent = () => <></>;
-      
+
       render(
         <AuthProvider>
           <TestComponent />
@@ -696,7 +770,7 @@ describe('Authentication State Persistence', () => {
       it('should clear draft and cache on SIGNED_OUT', async () => {
         let authStateCallback: any;
 
-        (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((callback) => {
+        (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation(callback => {
           authStateCallback = callback;
           return {
             data: {
@@ -715,7 +789,10 @@ describe('Authentication State Persistence', () => {
         };
 
         // Initial session present so provider records sessionId
-        (supabase.auth.getSession as jest.Mock).mockResolvedValue({ data: { session: mockSession }, error: null });
+        (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+          data: { session: mockSession },
+          error: null,
+        });
 
         const { clearBountyDraftForUser } = require('../../app/hooks/useBountyDraft');
         const { cachedDataService } = require('../../lib/services/cached-data-service');
@@ -744,7 +821,7 @@ describe('Authentication State Persistence', () => {
       it('should clear previous user data when a different user signs in', async () => {
         let authStateCallback: any;
 
-        (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((callback) => {
+        (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation(callback => {
           authStateCallback = callback;
           return {
             data: {
@@ -762,7 +839,10 @@ describe('Authentication State Persistence', () => {
           user: { id: 'alice', email: 'alice@example.com' },
         };
 
-        (supabase.auth.getSession as jest.Mock).mockResolvedValue({ data: { session: initialSession }, error: null });
+        (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+          data: { session: initialSession },
+          error: null,
+        });
 
         const { clearBountyDraftForUser } = require('../../app/hooks/useBountyDraft');
         const { cachedDataService } = require('../../lib/services/cached-data-service');
@@ -799,7 +879,7 @@ describe('Authentication State Persistence', () => {
     it('should handle SIGNED_IN event', async () => {
       let authStateCallback: any;
 
-      (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((callback) => {
+      (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation(callback => {
         authStateCallback = callback;
         return {
           data: {
@@ -816,7 +896,7 @@ describe('Authentication State Persistence', () => {
       });
 
       const TestComponent = () => <></>;
-      
+
       render(
         <AuthProvider>
           <TestComponent />
@@ -851,7 +931,7 @@ describe('Authentication State Persistence', () => {
     it('should handle TOKEN_REFRESHED event', async () => {
       let authStateCallback: any;
 
-      (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((callback) => {
+      (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation(callback => {
         authStateCallback = callback;
         return {
           data: {
@@ -868,7 +948,7 @@ describe('Authentication State Persistence', () => {
       });
 
       const TestComponent = () => <></>;
-      
+
       render(
         <AuthProvider>
           <TestComponent />
@@ -912,7 +992,7 @@ describe('Authentication State Persistence', () => {
     it('defers profile sync off the auth lock to avoid deadlock', async () => {
       let authStateCallback: any;
 
-      (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((callback) => {
+      (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation(callback => {
         authStateCallback = callback;
         return {
           data: {
@@ -977,7 +1057,7 @@ describe('Authentication State Persistence', () => {
     const setupAuthStateListener = async () => {
       let authStateCallback: any;
 
-      (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((callback) => {
+      (supabase.auth.onAuthStateChange as jest.Mock).mockImplementation(callback => {
         authStateCallback = callback;
         return { data: { subscription: { unsubscribe: jest.fn() } } };
       });

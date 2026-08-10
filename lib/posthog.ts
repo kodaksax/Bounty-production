@@ -21,7 +21,21 @@ const POSTHOG_HOST = process.env.EXPO_PUBLIC_POSTHOG_HOST || 'https://us.i.posth
 // with this so Insights/dashboards can filter non-production traffic out.
 const APP_ENVIRONMENT = process.env.EXPO_PUBLIC_ENVIRONMENT || 'development';
 
+const INTERNAL_EMAILS = new Set([
+  'jordanmag11@yahoo.com',
+  'leewright093@gmail.com',
+  'support@bountyfinder.app',
+  'posterbnty158@gmail.com',
+  'hunterbnty158@gmail.com',
+]);
+
+export const isInternalEmail = (email: string): boolean => {
+  const normalizedEmail = email.trim().toLowerCase();
+  return INTERNAL_EMAILS.has(normalizedEmail) || normalizedEmail.includes('bountyfinder');
+};
+
 let _posthog: any | null = null;
+const aliasTransitionsSeen = new Set<string>();
 
 // Construct the client eagerly (synchronously) so it is available to the
 // PostHogProvider at first render. The PostHog React Native SDK constructs
@@ -110,7 +124,32 @@ export const identify = (distinctId: string, properties?: Record<string, any>): 
       if (__DEV__) console.warn('[posthog] identify called before client ready');
       return;
     }
-    _posthog.identify(distinctId, properties);
+    const email = typeof properties?.email === 'string' ? properties.email : null;
+    const identityProperties = email
+      ? { ...properties, is_internal: isInternalEmail(email) }
+      : properties;
+
+    // Ensure the anonymous->identified merge occurs exactly once per
+    // anonymous distinct id in this app runtime before identify() updates
+    // the person's canonical distinct id.
+    const currentDistinctId =
+      typeof _posthog.getDistinctId === 'function' ? _posthog.getDistinctId() : undefined;
+    if (
+      currentDistinctId &&
+      currentDistinctId !== distinctId &&
+      typeof _posthog.alias === 'function'
+    ) {
+      const aliasTransition = `${currentDistinctId}->${distinctId}`;
+      if (!aliasTransitionsSeen.has(aliasTransition)) {
+        aliasTransitionsSeen.add(aliasTransition);
+        _posthog.alias(distinctId);
+      }
+    }
+
+    if (email && typeof _posthog.register === 'function') {
+      _posthog.register({ is_internal: isInternalEmail(email) });
+    }
+    _posthog.identify(distinctId, identityProperties);
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error('[posthog] identify failed', e);
@@ -128,6 +167,17 @@ export const setPersonProperties = (properties: Record<string, any>): void => {
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error('[posthog] setPersonProperties failed', e);
+  }
+};
+
+/** Set immutable person properties without replacing values already stored by PostHog. */
+export const setPersonPropertiesOnce = (properties: Record<string, any>): void => {
+  try {
+    if (!_posthog) return;
+    _posthog.setPersonProperties(undefined, properties);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error('[posthog] setPersonPropertiesOnce failed', e);
   }
 };
 
@@ -177,5 +227,13 @@ export const flush = async (): Promise<void> => {
     console.error('[posthog] flush failed', e);
   }
 };
+
+/**
+ * Reads a feature flag value inside a component tree wrapped by
+ * `PostHogProvider` (see app/_layout.tsx). Re-exported here so call sites use
+ * the same `lib/posthog` import surface as the rest of this module instead of
+ * reaching into `posthog-react-native` directly.
+ */
+export { useFeatureFlag } from 'posthog-react-native';
 
 export default getPostHog;

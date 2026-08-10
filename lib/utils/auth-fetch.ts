@@ -27,16 +27,17 @@
  *
  * Telemetry
  * ---------
- * Emits PostHog events for every /auth/v1/* request:
+ * Logs a local diagnostic trace (not PostHog — this is an internal network
+ * trace, not a product funnel event) for every /auth/v1/* request:
  *   AUTH_TOKEN_REQUEST_STARTED   – request begins
  *   AUTH_TOKEN_REQUEST_COMPLETED – request settled (success or HTTP error)
  *   AUTH_TOKEN_REQUEST_ABORTED   – request was cancelled by timeout or caller
  *
- * Each event includes: url_path (no query params), elapsed_ms, aborted,
+ * Each trace includes: url_path (no query params), elapsed_ms, aborted,
  * timed_out, http_status (if available), and whether a refresh grant was used.
  */
 
-import { capture as posthogCapture } from '../posthog';
+import { logger } from './error-logger';
 
 /** Milliseconds before a GoTrue (/auth/v1/*) fetch is aborted. */
 export const AUTH_FETCH_TIMEOUT_MS = 8_000;
@@ -49,13 +50,13 @@ export function isAuthUrl(url: unknown): boolean {
   return typeof url === 'string' && url.includes('/auth/v1/');
 }
 
-/** Emit a structured analytics event (best-effort — never throws). */
+/** Emit a structured local diagnostic trace (best-effort — never throws). */
 function emitAuthFetchEvent(
   eventName: string,
   properties: Record<string, unknown>
 ): void {
   try {
-    posthogCapture(eventName, properties);
+    logger.info(`[auth-fetch:${eventName}]`, properties);
   } catch {
     // Telemetry must never interrupt auth flow.
   }

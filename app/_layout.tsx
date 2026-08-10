@@ -2,11 +2,11 @@ import { ThemeProvider } from 'components/theme-provider';
 import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
 import * as Linking from 'expo-linking';
-import { Slot } from 'expo-router';
+import { Slot, useGlobalSearchParams, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { PostHogProvider } from 'posthog-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import '../global.css';
@@ -37,8 +37,10 @@ import {
 // Sentry initialization is deferred to RootLayout useEffect to avoid early native module access
 import { getSentry as getSentryFromInit, initializeSentry } from '../lib/services/sentry-init';
 // Initialize our global JS error handlers that log to device console (captured by Xcode/TestFlight)
+import { normalizeScreenName } from '../lib/analytics/screen-name';
+import { markPendingNavigationSource, trackScreenView } from '../lib/analytics/screen-tracking';
 import { initGlobalErrorHandlers } from '../lib/error-handling';
-import posthog, { capture as posthogCapture } from '../lib/posthog';
+import posthog from '../lib/posthog';
 import { safeCleanup } from '../lib/utils/lifecycle';
 
 import { registerDeviceSession } from '../lib/services/auth-service';
@@ -167,6 +169,8 @@ const LayoutContent = () => {
           <NetworkProvider>
             <AuthProvider>
               <DeepLinkAnalyticsGate />
+              <BranchDeepLinkGate />
+              <ScreenTracker />
               <SessionMonitorGate />
               <AdminProvider>
                 <StripeProvider>
@@ -247,7 +251,7 @@ function RootLayout({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        posthogCapture('Page View', { screen: 'root' });
+        // Removed Page View emission to consolidate duplicate events
         // Initialize the unified analytics surface (PostHog is the single
         // source of truth) and emit the funnel "install/visit" event so we can
         // measure acquisition → activation drop-off.
@@ -371,6 +375,10 @@ function trackDeepLinkOpen(url: string | null) {
     const [first, second] = path.split('/').filter(Boolean);
     const contentType = first ? DEEP_LINK_CONTENT_TYPES[first] : undefined;
     if (!contentType || !second) return;
+    // The resulting screen_viewed (fired by ScreenTracker once expo-router
+    // finishes navigating to this URL) should be tagged as a deep link, not
+    // a generic push.
+    markPendingNavigationSource('deep_link');
     analyticsService.trackEvent('deep_link_opened', {
       content_type: contentType,
       content_id: second,
@@ -379,6 +387,34 @@ function trackDeepLinkOpen(url: string | null) {
     // Malformed/unexpected URL — nothing to track.
   }
 }
+
+// Fires a normalized `screen_viewed` event per real expo-router navigation.
+// `useSegments()` returns literal route filenames (e.g. "[id]", never
+// resolved IDs) so the resulting screen_name is always ID-free — see
+// lib/analytics/screen-name.ts.
+//
+// The bounty-app tab shell (app/tabs/bounty-app.tsx) switches its visible
+// tab via local state without changing the route, so `home_feed` is skipped
+// here and reported by that screen's own trackScreenView call instead, which
+// knows the active tab.
+const ScreenTracker = () => {
+  const segments = useSegments();
+  const params = useGlobalSearchParams<{ source?: string }>();
+  const segmentsKey = segments.join('/');
+
+  useEffect(() => {
+    const screenName = normalizeScreenName(segments);
+    if (screenName === 'home_feed') return;
+    trackScreenView(screenName, {
+      source: params?.source === 'notification' ? 'notification' : undefined,
+    });
+    // segmentsKey/params.source are the real dependencies; segments/params
+    // themselves are new array/object identities on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [segmentsKey, params?.source]);
+
+  return null;
+};
 
 // Mounts once at the root to capture both a cold-start deep link
 // (getInitialURL) and any link opened while the app is already running.
@@ -390,6 +426,35 @@ const DeepLinkAnalyticsGate = () => {
     const subscription = Linking.addEventListener('url', ({ url }) => trackDeepLinkOpen(url));
     return () => safeCleanup(subscription);
   }, []);
+
+  return null;
+};
+
+const BranchDeepLinkGate = () => {
+  const router = useRouter();
+
+  useEffect(() => {
+    if (Platform.OS !== 'ios' && Platform.OS !== 'android') return;
+
+    let unsubscribe: (() => void) | undefined;
+    void import('react-native-branch')
+      .then(({ default: branch }) => {
+        unsubscribe = branch.subscribe({
+          onOpenComplete: ({ error, params }) => {
+            if (error || !params?.['+clicked_branch_link']) return;
+            const rawPath = params.$deeplink_path;
+            if (typeof rawPath !== 'string') return;
+            const path = `/${rawPath.replace(/^\/+/, '')}`;
+            if (!/^\/(bounty|profile)\/[A-Za-z0-9_-]+$/.test(path)) return;
+            markPendingNavigationSource('deep_link');
+            router.push(path as never);
+          },
+        });
+      })
+      .catch(() => {});
+
+    return () => unsubscribe?.();
+  }, [router]);
 
   return null;
 };

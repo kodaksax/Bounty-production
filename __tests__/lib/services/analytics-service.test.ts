@@ -12,13 +12,13 @@ jest.mock('../../../lib/posthog', () => ({
 }));
 
 import {
-  isPostHogReady,
-  capture as posthogCapture,
-  flush as posthogFlush,
-  identify as posthogIdentify,
-  reset as posthogReset,
-  screen as posthogScreen,
-  setPersonProperties as posthogSetPersonProperties,
+    isPostHogReady,
+    capture as posthogCapture,
+    flush as posthogFlush,
+    identify as posthogIdentify,
+    reset as posthogReset,
+    screen as posthogScreen,
+    setPersonProperties as posthogSetPersonProperties,
 } from '../../../lib/posthog';
 import { analyticsService } from '../../../lib/services/analytics-service';
 
@@ -28,7 +28,9 @@ const mockFlush = posthogFlush as jest.MockedFunction<typeof posthogFlush>;
 const mockIdentify = posthogIdentify as jest.MockedFunction<typeof posthogIdentify>;
 const mockReset = posthogReset as jest.MockedFunction<typeof posthogReset>;
 const mockScreen = posthogScreen as jest.MockedFunction<typeof posthogScreen>;
-const mockSetPersonProperties = posthogSetPersonProperties as jest.MockedFunction<typeof posthogSetPersonProperties>;
+const mockSetPersonProperties = posthogSetPersonProperties as jest.MockedFunction<
+  typeof posthogSetPersonProperties
+>;
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -82,7 +84,9 @@ describe('identifyUser()', () => {
   });
 
   test('handles posthogIdentify throwing gracefully', async () => {
-    mockIdentify.mockImplementationOnce(() => { throw new Error('identify failed'); });
+    mockIdentify.mockImplementationOnce(() => {
+      throw new Error('identify failed');
+    });
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     await expect(analyticsService.identifyUser('user-fail')).resolves.toBeUndefined();
     consoleSpy.mockRestore();
@@ -119,7 +123,9 @@ describe('trackEvent()', () => {
   });
 
   test('handles posthogCapture throwing gracefully', async () => {
-    mockCapture.mockImplementationOnce(() => { throw new Error('capture error'); });
+    mockCapture.mockImplementationOnce(() => {
+      throw new Error('capture error');
+    });
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     await expect(analyticsService.trackEvent('payment_failed')).resolves.toBeUndefined();
     consoleSpy.mockRestore();
@@ -127,13 +133,25 @@ describe('trackEvent()', () => {
 
   test('tracks all AnalyticsEvent types without throwing', async () => {
     const events = [
-      'app_opened', 'user_signed_up', 'user_logged_in', 'user_logged_out',
-      'bounty_created', 'bounty_accepted', 'bounty_completed', 'bounty_cancelled',
-      'payment_initiated', 'payment_completed', 'payment_failed',
-      'message_sent', 'conversation_started',
-      'profile_viewed', 'profile_updated',
-      'dispute_opened', 'dispute_resolved',
-      'search_performed', 'filter_applied',
+      'app_opened',
+      'user_signed_up',
+      'user_logged_in',
+      'user_logged_out',
+      'bounty_created',
+      'bounty_accepted',
+      'bounty_completed',
+      'bounty_cancelled',
+      'payment_initiated',
+      'payment_completed',
+      'payment_failed',
+      'message_sent',
+      'conversation_started',
+      'profile_viewed',
+      'profile_updated',
+      'dispute_opened',
+      'dispute_resolved',
+      'search_performed',
+      'filter_applied',
     ] as const;
 
     for (const event of events) {
@@ -150,11 +168,11 @@ describe('updateUserProperties()', () => {
   });
 
   test('handles posthogSetPersonProperties throwing gracefully', async () => {
-    mockSetPersonProperties.mockImplementationOnce(() => { throw new Error('props failed'); });
+    mockSetPersonProperties.mockImplementationOnce(() => {
+      throw new Error('props failed');
+    });
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    await expect(
-      analyticsService.updateUserProperties({ plan: 'pro' })
-    ).resolves.toBeUndefined();
+    await expect(analyticsService.updateUserProperties({ plan: 'pro' })).resolves.toBeUndefined();
     consoleSpy.mockRestore();
   });
 });
@@ -186,11 +204,11 @@ describe('incrementUserProperty()', () => {
   });
 
   test('handles posthogCapture throwing gracefully', async () => {
-    mockCapture.mockImplementationOnce(() => { throw new Error('fail'); });
+    mockCapture.mockImplementationOnce(() => {
+      throw new Error('fail');
+    });
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    await expect(
-      analyticsService.incrementUserProperty('fail_prop')
-    ).resolves.toBeUndefined();
+    await expect(analyticsService.incrementUserProperty('fail_prop')).resolves.toBeUndefined();
     consoleSpy.mockRestore();
   });
 });
@@ -210,7 +228,9 @@ describe('trackScreenView()', () => {
   });
 
   test('handles posthogScreen throwing gracefully', async () => {
-    mockScreen.mockImplementationOnce(() => { throw new Error('screen fail'); });
+    mockScreen.mockImplementationOnce(() => {
+      throw new Error('screen fail');
+    });
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     await expect(analyticsService.trackScreenView('ErrorScreen')).resolves.toBeUndefined();
     consoleSpy.mockRestore();
@@ -221,21 +241,27 @@ describe('trackTiming()', () => {
   test('calls posthogCapture with duration_ms property', async () => {
     await analyticsService.trackTiming('api_response_time', 350, { endpoint: '/bounties' });
     expect(mockCapture).toHaveBeenCalledWith(
-      'api_response_time',
-      expect.objectContaining({ duration_ms: 350, endpoint: '/bounties' })
+      'performance_timing',
+      expect.objectContaining({
+        duration_ms: 350,
+        endpoint: '/bounties',
+        timing_name: 'api_response_time',
+      })
     );
   });
 
   test('works without optional properties', async () => {
     await analyticsService.trackTiming('load_time', 200);
     expect(mockCapture).toHaveBeenCalledWith(
-      'load_time',
-      expect.objectContaining({ duration_ms: 200 })
+      'performance_timing',
+      expect.objectContaining({ duration_ms: 200, timing_name: 'load_time' })
     );
   });
 
   test('handles posthogCapture throwing gracefully', async () => {
-    mockCapture.mockImplementationOnce(() => { throw new Error('fail'); });
+    mockCapture.mockImplementationOnce(() => {
+      throw new Error('fail');
+    });
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     await expect(analyticsService.trackTiming('slow_op', 5000)).resolves.toBeUndefined();
     consoleSpy.mockRestore();
@@ -253,7 +279,9 @@ describe('reset()', () => {
   });
 
   test('handles posthogReset throwing gracefully', async () => {
-    mockReset.mockImplementationOnce(() => { throw new Error('reset fail'); });
+    mockReset.mockImplementationOnce(() => {
+      throw new Error('reset fail');
+    });
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     await expect(analyticsService.reset()).resolves.toBeUndefined();
     consoleSpy.mockRestore();

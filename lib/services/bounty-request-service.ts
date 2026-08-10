@@ -1,4 +1,5 @@
 import { analyticsService } from 'lib/services/analytics-service';
+import { inferRoleFromFirstAction } from 'lib/services/role-inference-service';
 import type { Bounty, BountyRequest, Profile } from 'lib/services/database.types';
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
 import { getAccountStatusErrorMessage } from 'lib/utils/account-status-errors';
@@ -70,6 +71,25 @@ async function emitFirstSubmissionIfFirst(bountyId: unknown): Promise<void> {
     });
   } catch {
     /* analytics is best-effort — never fail an application over it */
+  }
+}
+
+/**
+ * Best-effort "hours since this bounty was claimed" for `bounty_completed`'s
+ * `hours_from_claim_to_completion`. "Claimed" here means the winning hunter's
+ * original application (`bounty_requests.created_at` on the row whose status
+ * is now 'accepted'), matching the `bounty_claim_submitted` moment elsewhere
+ * in this funnel — not the poster's later accept action, which can lag the
+ * application by an arbitrary review period.
+ */
+export async function getHoursSinceClaimed(bountyId: string | number): Promise<number | undefined> {
+  try {
+    const accepted = await bountyRequestService.getAll({ bountyId, status: 'accepted' });
+    const claimedAt = accepted[0]?.created_at;
+    if (!claimedAt) return undefined;
+    return Math.max(0, (Date.now() - new Date(claimedAt).getTime()) / 3_600_000);
+  } catch {
+    return undefined;
   }
 }
 
@@ -690,6 +710,13 @@ export const bountyRequestService = {
           // Deliberately not awaited: this costs two extra reads, and the
           // hunter's "applied" confirmation should not wait on analytics.
           void emitFirstSubmissionIfFirst(normalizedRequest.bounty_id);
+          // Fills in profiles.primary_role for a hunter who reached this
+          // without ever picking a role in onboarding (the 'onboarding-skip-
+          // role-selection' experiment's test-arm skip path). No-op once
+          // already set — fire-and-forget so it never blocks the apply.
+          if (normalizedRequest.hunter_id) {
+            inferRoleFromFirstAction(String(normalizedRequest.hunter_id), 'hunter').catch(() => {});
+          }
           return { success: true, request: created };
         }
 

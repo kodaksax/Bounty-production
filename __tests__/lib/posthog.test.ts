@@ -80,6 +80,15 @@ describe('lib/posthog — no POSTHOG_KEY (default test env)', () => {
     expect(typeof getPostHog).toBe('function');
     expect(getPostHog()).toBeNull();
   });
+
+  test.each([
+    ['jordanmag11@yahoo.com', true],
+    [' SUPPORT@BOUNTYFINDER.APP ', true],
+    ['e2e+bountyfinder+ios@example.com', true],
+    ['customer@example.com', false],
+  ])('classifies internal email %s', (email, expected) => {
+    expect(posthogModule.isInternalEmail(email)).toBe(expected);
+  });
 });
 
 describe('lib/posthog — with POSTHOG_KEY set', () => {
@@ -89,32 +98,39 @@ describe('lib/posthog — with POSTHOG_KEY set', () => {
   const mockReset = jest.fn();
   const mockFlush = jest.fn().mockResolvedValue(undefined);
   const mockRegister = jest.fn();
+  const mockAlias = jest.fn();
+  const mockGetDistinctId = jest.fn(() => 'anon-distinct-id');
+  const mockSetPersonProperties = jest.fn();
   const mockSet = jest.fn();
 
   const MockPostHog = jest.fn().mockImplementation(() => ({
     capture: mockCapture,
     identify: mockIdentify,
+    alias: mockAlias,
+    getDistinctId: mockGetDistinctId,
     screen: mockScreen,
     reset: mockReset,
     flush: mockFlush,
     register: mockRegister,
+    setPersonProperties: mockSetPersonProperties,
     $set: mockSet,
   }));
 
   let posthogModule: typeof import('../../lib/posthog');
 
   beforeAll(() => {
-    jest.resetModules();
     process.env.EXPO_PUBLIC_POSTHOG_KEY = 'test-posthog-key';
-
-    jest.mock('posthog-react-native', () => ({ PostHog: MockPostHog }), { virtual: true });
-
-    posthogModule = require('../../lib/posthog');
+    jest.isolateModules(() => {
+      jest.doMock('posthog-react-native', () => ({
+        PostHog: MockPostHog,
+        useFeatureFlag: jest.fn(),
+      }));
+      posthogModule = require('../../lib/posthog');
+    });
   });
 
   afterAll(() => {
     delete process.env.EXPO_PUBLIC_POSTHOG_KEY;
-    jest.resetModules();
   });
 
   beforeEach(() => {
@@ -141,7 +157,52 @@ describe('lib/posthog — with POSTHOG_KEY set', () => {
 
   test('identify calls client.identify with userId and properties', () => {
     posthogModule.identify('user-42', { email: 'test@example.com' });
-    expect(mockIdentify).toHaveBeenCalledWith('user-42', { email: 'test@example.com' });
+    expect(mockAlias).toHaveBeenCalledWith('user-42');
+    expect(mockIdentify).toHaveBeenCalledWith('user-42', {
+      email: 'test@example.com',
+      is_internal: false,
+    });
+    expect(mockRegister).toHaveBeenCalledWith({ is_internal: false });
+  });
+
+  test('identify aliases before identify to preserve anonymous event continuity', () => {
+    // Use a fresh anonymous distinct id so this transition hasn't been seen yet
+    mockGetDistinctId.mockReturnValueOnce('anon-test-6');
+    posthogModule.identify('user-42', { email: 'test@example.com' });
+    expect(mockAlias.mock.invocationCallOrder[0]).toBeLessThan(
+      mockIdentify.mock.invocationCallOrder[0]
+    );
+  });
+
+  test('identify skips alias when distinct id is already the stable user id', () => {
+    mockGetDistinctId.mockReturnValueOnce('user-42');
+    posthogModule.identify('user-42', { email: 'test@example.com' });
+    expect(mockAlias).not.toHaveBeenCalled();
+    expect(mockIdentify).toHaveBeenCalledWith('user-42', {
+      email: 'test@example.com',
+      is_internal: false,
+    });
+  });
+
+  test('identify emits alias only once per anonymous-to-user transition', () => {
+    // Use a fresh user id so the transition hasn't been seen by prior tests
+    posthogModule.identify('user-8', { email: 'test@example.com' });
+    posthogModule.identify('user-8', { email: 'test@example.com' });
+    expect(mockAlias).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([
+    'jordanmag11@yahoo.com',
+    ' SUPPORT@BOUNTYFINDER.APP ',
+    'e2e+bountyfinder+ios@example.com',
+  ])('identify marks internal email %s on the person and subsequent events', email => {
+    posthogModule.identify('internal-user', { email });
+
+    expect(mockIdentify).toHaveBeenCalledWith('internal-user', {
+      email,
+      is_internal: true,
+    });
+    expect(mockRegister).toHaveBeenCalledWith({ is_internal: true });
   });
 
   test('identify calls client.identify with only userId', () => {
@@ -152,6 +213,13 @@ describe('lib/posthog — with POSTHOG_KEY set', () => {
   test('setPersonProperties calls client.capture with $set payload', () => {
     posthogModule.setPersonProperties({ tier: 'premium' });
     expect(mockCapture).toHaveBeenCalledWith('$set', { $set: { tier: 'premium' } });
+  });
+
+  test('setPersonPropertiesOnce uses PostHog setPersonProperties $set_once channel', () => {
+    posthogModule.setPersonPropertiesOnce({ initial_utm_source: 'reddit' });
+    expect(mockSetPersonProperties).toHaveBeenCalledWith(undefined, {
+      initial_utm_source: 'reddit',
+    });
   });
 
   test('register calls client.register', () => {
@@ -254,15 +322,18 @@ describe('lib/posthog — screen falls back to capture when screen method missin
   let posthogModule: typeof import('../../lib/posthog');
 
   beforeAll(() => {
-    jest.resetModules();
     process.env.EXPO_PUBLIC_POSTHOG_KEY = 'test-key-no-screen';
-    jest.mock('posthog-react-native', () => ({ PostHog: MockPostHogNoScreen }), { virtual: true });
-    posthogModule = require('../../lib/posthog');
+    jest.isolateModules(() => {
+      jest.doMock('posthog-react-native', () => ({
+        PostHog: MockPostHogNoScreen,
+        useFeatureFlag: jest.fn(),
+      }));
+      posthogModule = require('../../lib/posthog');
+    });
   });
 
   afterAll(() => {
     delete process.env.EXPO_PUBLIC_POSTHOG_KEY;
-    jest.resetModules();
   });
 
   test('screen falls back to capture when client lacks .screen method', () => {
@@ -278,23 +349,24 @@ describe('lib/posthog — initialization failure (require throws)', () => {
   let posthogModule: typeof import('../../lib/posthog');
 
   beforeAll(() => {
-    jest.resetModules();
     process.env.EXPO_PUBLIC_POSTHOG_KEY = 'test-key-broken';
-    jest.mock(
-      'posthog-react-native',
-      () => {
-        throw new Error('native module unavailable');
-      },
-      { virtual: true }
-    );
     const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    posthogModule = require('../../lib/posthog');
+    jest.isolateModules(() => {
+      jest.doMock('posthog-react-native', () => ({
+        PostHog: class {
+          constructor() {
+            throw new Error('native module unavailable');
+          }
+        },
+        useFeatureFlag: jest.fn(),
+      }));
+      posthogModule = require('../../lib/posthog');
+    });
     consoleSpy.mockRestore();
   });
 
   afterAll(() => {
     delete process.env.EXPO_PUBLIC_POSTHOG_KEY;
-    jest.resetModules();
   });
 
   test('getPostHog returns null when require throws', () => {

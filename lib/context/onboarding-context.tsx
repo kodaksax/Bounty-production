@@ -32,6 +32,12 @@ export interface OnboardingData {
   // 'poster' = "Get something done", 'hunter' = "Start earning nearby"
   intent: 'poster' | 'hunter' | null;
 
+  // Resolved once from the `onboarding-skip-role-selection` PostHog flag on
+  // welcome.tsx and persisted here so every later screen reads the same
+  // value instead of re-evaluating the flag mid-flow (which could flip on a
+  // background reload). null until the flag has resolved for this session.
+  experimentVariant: 'control' | 'test' | null;
+
   // Details screen
   displayName: string;
   title: string;
@@ -70,6 +76,7 @@ export interface OnboardingData {
 
 const defaultOnboardingData: OnboardingData = {
   intent: null,
+  experimentVariant: null,
   displayName: '',
   title: '',
   bio: '',

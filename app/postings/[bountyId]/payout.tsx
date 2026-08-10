@@ -17,6 +17,7 @@ import { ConfettiAnimation, SuccessAnimation } from '../../../components/ui/succ
 import { analyticsService } from '../../../lib/services/analytics-service';
 import { bountyPaymentsService, BountyPaymentError } from '../../../lib/services/bounty-payments-service';
 import { bountyService } from '../../../lib/services/bounty-service';
+import { getHoursSinceClaimed } from '../../../lib/services/bounty-request-service';
 import type { Bounty } from '../../../lib/services/database.types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
 import { isPhase2Bounty } from '../../../lib/utils/payment-architecture';
@@ -164,6 +165,8 @@ export default function PayoutScreen() {
           via: 'payout_release',
           isForHonor: false,
           amount: bounty.amount,
+          is_onboarding_demo: false,
+          hours_from_claim_to_completion: await getHoursSinceClaimed(bounty.id),
         });
       } catch {
         /* analytics is best-effort */
@@ -232,6 +235,8 @@ export default function PayoutScreen() {
                   via: 'mark_complete',
                   isForHonor: !!bounty.is_for_honor,
                   amount: bounty.is_for_honor ? 0 : bounty.amount,
+                  is_onboarding_demo: false,
+                  hours_from_claim_to_completion: await getHoursSinceClaimed(bounty.id),
                 });
               } catch {
                 /* analytics is best-effort */

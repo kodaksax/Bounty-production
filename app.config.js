@@ -149,8 +149,35 @@ function resolvePlugins(plugins = []) {
     iosUrlScheme.startsWith(GOOGLE_IOS_URL_SCHEME_PREFIX) &&
     iosUrlScheme.length > GOOGLE_IOS_URL_SCHEME_PREFIX.length;
 
-  return plugins.flatMap((plugin) => {
+  return plugins.flatMap(plugin => {
     const pluginName = Array.isArray(plugin) ? plugin[0] : plugin;
+
+    if (pluginName === '@config-plugins/react-native-branch') {
+      const apiKey = process.env.EXPO_PUBLIC_BRANCH_KEY;
+      const rawDomain = process.env.EXPO_PUBLIC_BRANCH_DOMAIN;
+      const domain = rawDomain?.replace(/^https?:\/\//, '').replace(/\/$/, '');
+
+      if (!apiKey || !domain) {
+        if (APP_ENV === 'production') {
+          throw new Error(
+            '[FATAL] Branch deferred linking requires EXPO_PUBLIC_BRANCH_KEY and ' +
+              'EXPO_PUBLIC_BRANCH_DOMAIN in the production EAS environment.'
+          );
+        }
+        return [];
+      }
+
+      return [
+        [
+          pluginName,
+          {
+            apiKey,
+            iosAppDomain: domain,
+            iosUniversalLinkDomains: [domain],
+          },
+        ],
+      ];
+    }
 
     if (pluginName === '@stripe/stripe-react-native') {
       // Force the plugin's merchantIdentifier to the single source of truth

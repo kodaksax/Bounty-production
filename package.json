@@ -97,6 +97,7 @@
     "upgrade:tooling": "npx npm-check-updates && npm install"
   },
   "dependencies": {
+    "@config-plugins/react-native-branch": "^12.0.0",
     "@expo/metro-runtime": "~55.0.12",
     "@expo/vector-icons": "^15.0.3",
     "@fastify/busboy": "^3.2.0",
@@ -168,6 +169,7 @@
     "posthog-react-native": "^4.44.0",
     "react": "19.2.0",
     "react-native": "0.83.10",
+    "react-native-branch": "^6.9.0",
     "react-native-css-interop": "^0.2.1",
     "react-native-gesture-handler": "~2.30.0",
     "react-native-get-random-values": "~1.11.0",

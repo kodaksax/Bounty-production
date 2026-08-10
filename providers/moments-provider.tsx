@@ -106,6 +106,18 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
   const [activeMoment, setActiveMoment] = useState<MomentDefinition | null>(null);
   const [activeContent, setActiveContent] = useState<MomentContent | null>(null);
   const shownAtRef = useRef<number | null>(null);
+  // In-flight guard for the auto-complete/expire effect below. That effect's
+  // dependency array includes buildContext, whose identity changes on nearly
+  // every screen navigation or profile refresh — far more often than the
+  // Supabase writes it triggers can settle. Without this, a burst of re-runs
+  // during one still-pending markCompleted/markExpired call all read the same
+  // stale `states` snapshot and each independently re-fire the write + the
+  // moment_completed/moment_expired analytics event for the same moment
+  // (confirmed root cause of moment_expired[complete_profile] firing 117x/user
+  // and moment_completed[enable_notifications] firing 46x/user in production —
+  // not state loss on restart, which is already ruled out by the Supabase-
+  // backed persistence in momentsService).
+  const resolvingMomentsRef = useRef<Set<MomentType>>(new Set());
   // Backfill (see lib/moments/backfill.ts) only ever needs to run once per
   // signed-in session — after it resolves, a state row exists either way,
   // so this ref is purely to avoid re-issuing the count queries while that
@@ -259,6 +271,15 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
 
     (async () => {
       for (const def of MOMENT_REGISTRY) {
+        // Skip if a previous, still-in-flight run of this same effect already
+        // started resolving this moment type — this effect re-runs on every
+        // buildContext identity change (essentially every screen navigation),
+        // far more often than the writes below can settle. Without this guard,
+        // overlapping runs all read the same pre-write `states` snapshot and
+        // each independently re-fire the Supabase write + analytics event for
+        // the same transition. See resolvingMomentsRef's doc comment.
+        if (resolvingMomentsRef.current.has(def.type)) continue;
+
         const state = states.get(def.type);
         // Any non-terminal status (shown, snoozed, dismissed, pending) can
         // resolve early if the underlying goal is met through some other
@@ -273,15 +294,30 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
           state.status !== 'expired' &&
           def.checkCompleted?.(ctx)
         ) {
-          await momentsService.markCompleted(userId, def.type);
-          patchState(def.type, { status: 'completed', completedAt: new Date().toISOString() });
-          analyticsService.trackEvent('moment_completed', {
-            momentType: def.type,
-            source: 'auto_detected',
-            msSinceShown: state.lastShownAt
-              ? Date.now() - new Date(state.lastShownAt).getTime()
-              : undefined,
-          });
+          resolvingMomentsRef.current.add(def.type);
+          try {
+            await momentsService.markCompleted(userId, def.type);
+            patchState(def.type, { status: 'completed', completedAt: new Date().toISOString() });
+            analyticsService.trackEvent('moment_completed', {
+              momentType: def.type,
+              source: 'auto_detected',
+              // Permission-type moments (enable_notifications, enable_location)
+              // resolve to 'completed' on denial as well as grant — checkCompleted
+              // only observes "no longer undetermined." Surface the outcome
+              // explicitly so a moment_completed row isn't misread as a grant.
+              granted:
+                def.type === 'enable_notifications'
+                  ? ctx.permissions.notifications === 'granted'
+                  : def.type === 'enable_location'
+                    ? ctx.permissions.location === 'granted'
+                    : undefined,
+              msSinceShown: state.lastShownAt
+                ? Date.now() - new Date(state.lastShownAt).getTime()
+                : undefined,
+            });
+          } finally {
+            resolvingMomentsRef.current.delete(def.type);
+          }
           continue;
         }
         // Exhausted its maxShownCount without ever being completed or
@@ -292,12 +328,17 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
           def.maxShownCount != null &&
           state.shownCount >= def.maxShownCount
         ) {
-          await momentsService.markExpired(userId, def.type);
-          patchState(def.type, { status: 'expired' });
-          analyticsService.trackEvent('moment_expired', {
-            momentType: def.type,
-            shownCount: state.shownCount,
-          });
+          resolvingMomentsRef.current.add(def.type);
+          try {
+            await momentsService.markExpired(userId, def.type);
+            patchState(def.type, { status: 'expired' });
+            analyticsService.trackEvent('moment_expired', {
+              momentType: def.type,
+              shownCount: state.shownCount,
+            });
+          } finally {
+            resolvingMomentsRef.current.delete(def.type);
+          }
         }
       }
     })();
@@ -318,10 +359,6 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
     setActiveMoment(prev => {
       if (prev?.type === next?.type) return prev;
       if (next) {
-        analyticsService.trackEvent('moment_queued', {
-          momentType: next.type,
-          priority: next.priority,
-        });
         setActiveContent(next.content(ctx));
       } else {
         setActiveContent(null);

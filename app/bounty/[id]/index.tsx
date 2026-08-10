@@ -13,10 +13,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { bountyService } from '../../../lib/services/bounty-service';
 import { bountyRequestService } from '../../../lib/services/bounty-request-service';
+import { analyticsService } from '../../../lib/services/analytics-service';
 import { useAuthContext } from '../../../hooks/use-auth-context';
 
 export default function BountyDetailRouter() {
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { id, source } = useLocalSearchParams<{ id?: string; source?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { session } = useAuthContext();
@@ -50,10 +51,26 @@ export default function BountyDetailRouter() {
         return;
       }
 
+      const isOwnBounty = bounty.user_id === currentUserId || bounty.poster_id === currentUserId;
+      const secondsSincePosted = bounty.created_at
+        ? Math.max(0, Math.round((Date.now() - new Date(bounty.created_at).getTime()) / 1000))
+        : undefined;
+      analyticsService.trackEvent('bounty_viewed', {
+        bounty_id: String(bounty.id),
+        is_own_bounty: isOwnBounty,
+        amount: typeof bounty.amount === 'number' ? bounty.amount : undefined,
+        is_for_honor: Boolean(bounty.is_for_honor),
+        category: bounty.category,
+        distance_miles: bounty.distance_miles ?? undefined,
+        seconds_since_posted: secondsSincePosted,
+        source: typeof source === 'string' ? source : undefined,
+        surface: 'role_route',
+      });
+
       // Check if user is the poster
       // Note: bounty.poster_id is the canonical field, user_id is a backwards-compatible alias
       // Both are checked for compatibility with older code paths
-      if (bounty.user_id === currentUserId || bounty.poster_id === currentUserId) {
+      if (isOwnBounty) {
         // Redirect to poster's dashboard view
         router.replace({
           pathname: '/postings/[bountyId]',

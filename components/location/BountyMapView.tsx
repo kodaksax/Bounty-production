@@ -1,12 +1,26 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Text, TouchableOpacity, View, type DimensionValue } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Animated,
+    Text,
+    TouchableOpacity,
+    View,
+    type DimensionValue,
+} from 'react-native';
 import ClusteredMapView from 'react-native-map-clustering';
 import { Marker, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 import { useLocation } from '../../app/hooks/useLocation';
-import { searchBountiesNearby, type NearbyBounty } from '../../lib/services/bounty-location-service';
+import { consumeIsFirstBountyListViewOfSession } from '../../lib/analytics/sessionFlags';
+import { analyticsService } from '../../lib/services/analytics-service';
+import { authProfileService } from '../../lib/services/auth-profile-service';
+import {
+    searchBountiesNearby,
+    type NearbyBounty,
+} from '../../lib/services/bounty-location-service';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
+import { coarseRegionFromLocationText, getDeviceServiceabilityContext } from '../../lib/utils/serviceable-region';
 
 // Continental US centroid — starting viewport only, when we have neither the
 // bounty poster's approx point nor the viewer's device location yet.
@@ -32,10 +46,23 @@ function AnimatedPin({ selected }: AnimatedPinProps) {
   return (
     <Animated.View
       style={{
-        transform: [{ scale: selected ? scale.interpolate({ inputRange: [0, 1], outputRange: [0, 1.25] }) : scale }],
-        width: 22, height: 22, borderRadius: 11,
-        backgroundColor: theme.primary, borderWidth: 3, borderColor: '#fff',
-        shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 3, shadowOffset: { width: 0, height: 1 },
+        transform: [
+          {
+            scale: selected
+              ? scale.interpolate({ inputRange: [0, 1], outputRange: [0, 1.25] })
+              : scale,
+          },
+        ],
+        width: 22,
+        height: 22,
+        borderRadius: 11,
+        backgroundColor: theme.primary,
+        borderWidth: 3,
+        borderColor: '#fff',
+        shadowColor: '#000',
+        shadowOpacity: 0.25,
+        shadowRadius: 3,
+        shadowOffset: { width: 0, height: 1 },
       }}
     />
   );
@@ -49,7 +76,7 @@ interface BountyMapViewProps {
 export function BountyMapView({ category, height = '100%' }: BountyMapViewProps) {
   const { theme } = useAppThemeContext();
   const router = useRouter();
-  const { location: userLocation } = useLocation();
+  const { location: userLocation, permission } = useLocation();
   const [bounties, setBounties] = useState<NearbyBounty[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -64,11 +91,25 @@ export function BountyMapView({ category, height = '100%' }: BountyMapViewProps)
         category: category ?? null,
         limit: 100,
       });
-      setBounties(results.filter((b) => b.approx_latitude != null && b.approx_longitude != null));
+      const plottable = results.filter(
+        b => b.approx_latitude != null && b.approx_longitude != null
+      );
+      setBounties(plottable);
+      analyticsService.trackEvent('bounty_list_viewed', {
+        results_count: plottable.length,
+        source: 'map',
+        filters_applied: category ? [`category:${category}`] : [],
+        has_location_permission: Boolean(permission?.granted),
+        is_first_view_of_session: consumeIsFirstBountyListViewOfSession(),
+        // metro_region (not `region`) — getDeviceServiceabilityContext()
+        // below already emits a differently-scoped `region` (device locale).
+        metro_region: coarseRegionFromLocationText(authProfileService.getCurrentProfile()?.location),
+        ...getDeviceServiceabilityContext(),
+      });
     } finally {
       setIsLoading(false);
     }
-  }, [userLocation?.latitude, userLocation?.longitude, category]);
+  }, [userLocation?.latitude, userLocation?.longitude, category, permission?.granted]);
 
   useEffect(() => {
     load();
@@ -76,12 +117,17 @@ export function BountyMapView({ category, height = '100%' }: BountyMapViewProps)
 
   const initialRegion: Region = useMemo(() => {
     if (userLocation) {
-      return { latitude: userLocation.latitude, longitude: userLocation.longitude, latitudeDelta: 0.3, longitudeDelta: 0.3 };
+      return {
+        latitude: userLocation.latitude,
+        longitude: userLocation.longitude,
+        latitudeDelta: 0.3,
+        longitudeDelta: 0.3,
+      };
     }
     return FALLBACK_REGION;
   }, [userLocation]);
 
-  const selected = bounties.find((b) => b.id === selectedId) || null;
+  const selected = bounties.find(b => b.id === selectedId) || null;
 
   return (
     <View style={{ height, width: '100%' }}>
@@ -98,7 +144,7 @@ export function BountyMapView({ category, height = '100%' }: BountyMapViewProps)
         extent={512}
         nodeSize={64}
       >
-        {bounties.map((bounty) => (
+        {bounties.map(bounty => (
           <Marker
             key={bounty.id}
             coordinate={{ latitude: bounty.approx_latitude!, longitude: bounty.approx_longitude! }}
@@ -111,25 +157,54 @@ export function BountyMapView({ category, height = '100%' }: BountyMapViewProps)
       </ClusteredMapView>
 
       {isLoading && (
-        <View style={{ position: 'absolute', top: 12, alignSelf: 'center', backgroundColor: theme.surface, borderRadius: 999, padding: 8 }}>
+        <View
+          style={{
+            position: 'absolute',
+            top: 12,
+            alignSelf: 'center',
+            backgroundColor: theme.surface,
+            borderRadius: 999,
+            padding: 8,
+          }}
+        >
           <ActivityIndicator size="small" color={theme.primary} />
         </View>
       )}
 
       {selected && (
         <TouchableOpacity
-          onPress={() => router.push(`/bounty/${selected.id}` as any)}
+          onPress={() => router.push(`/bounty/${selected.id}?source=map` as any)}
           style={{
-            position: 'absolute', left: 12, right: 12, bottom: 12,
-            backgroundColor: theme.surface, borderRadius: 14, padding: 14,
-            borderWidth: 1, borderColor: theme.border,
-            shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, shadowOffset: { width: 0, height: 2 },
+            position: 'absolute',
+            left: 12,
+            right: 12,
+            bottom: 12,
+            backgroundColor: theme.surface,
+            borderRadius: 14,
+            padding: 14,
+            borderWidth: 1,
+            borderColor: theme.border,
+            shadowColor: '#000',
+            shadowOpacity: 0.15,
+            shadowRadius: 8,
+            shadowOffset: { width: 0, height: 2 },
           }}
           accessibilityRole="button"
           accessibilityLabel={`Open bounty ${selected.title}`}
         >
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={{ color: theme.text, fontWeight: '700', fontSize: 15, flex: 1, marginRight: 8 }} numberOfLines={1}>
+          <View
+            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+          >
+            <Text
+              style={{
+                color: theme.text,
+                fontWeight: '700',
+                fontSize: 15,
+                flex: 1,
+                marginRight: 8,
+              }}
+              numberOfLines={1}
+            >
               {selected.title}
             </Text>
             <Text style={{ color: theme.primary, fontWeight: '800', fontSize: 15 }}>
