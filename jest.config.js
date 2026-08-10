@@ -38,6 +38,7 @@ module.exports = {
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
+    '^app/(.*)$': '<rootDir>/app/$1',
     '^lib/(.*)$': '<rootDir>/lib/$1',
     '^components/(.*)$': '<rootDir>/components/$1',
     '^hooks/(.*)$': '<rootDir>/hooks/$1',

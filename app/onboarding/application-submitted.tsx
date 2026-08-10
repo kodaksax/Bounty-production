@@ -60,7 +60,7 @@ export default function ApplicationSubmittedScreen() {
     hapticFeedback.light();
     complete({
       pathname: ROUTES.TABS.BOUNTY_APP,
-      params: { screen: 'postings', initialTab: 'inProgress' },
+      params: { screen: 'messages', initialTab: 'inProgress' },
     });
   };
 
@@ -68,7 +68,7 @@ export default function ApplicationSubmittedScreen() {
     hapticFeedback.light();
     complete({
       pathname: ROUTES.TABS.BOUNTY_APP,
-      params: { screen: 'postings', initialTab: 'inProgress' },
+      params: { screen: 'messages', initialTab: 'inProgress' },
     });
   };
 

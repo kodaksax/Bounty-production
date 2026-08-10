@@ -1,5 +1,9 @@
-import { MessengerScreen } from "./messenger-screen"
-import { PostingsScreen } from "app/tabs/postings-screen"
+// The messaging inbox (MessengerScreen) is preserved in ./messenger-screen but is
+// no longer what the Inbox tab renders — InboxScreen now hosts Work/Posts/Requests.
+import { InboxScreen } from "./inbox-screen"
+// The Need Help tab hosts only the post-a-bounty flow. The original combined
+// Work/Posts/Requests/New screen is preserved in app/tabs/postings-screen.
+import { NeedHelpScreen } from "./need-help-screen"
 import { ProfileScreen } from "app/tabs/profile-screen"
 import { WalletScreen } from "app/tabs/wallet-screen"
 import type { BountyFeedHandle } from 'components/bounty-feed'
@@ -310,13 +314,10 @@ function BountyAppInner() {
         )}
         {activeScreen === "postings" && (
           <FadeInScreen>
-          <PostingsScreen
-            initialTab={pendingInitialTab ?? paramInitialTab}
-            onBack={() => setActiveScreen("bounty")}
+          <NeedHelpScreen
             activeScreen={activeScreen}
             setActiveScreen={setActiveScreen}
             onBountyPosted={() => bountyFeedRef.current?.refresh()} // Refresh feed when a new bounty is posted
-            onBountyAccepted={() => bountyFeedRef.current?.refresh()} // Refresh feed when a bounty is accepted
             setShowBottomNav={setShowBottomNav}
           />
           </FadeInScreen>
@@ -328,10 +329,12 @@ function BountyAppInner() {
         )}
         {activeScreen === "messages" && (
           <FadeInScreen>
-          <MessengerScreen
+          <InboxScreen
+            initialTab={pendingInitialTab ?? paramInitialTab}
+            onBack={() => setActiveScreen("bounty")}
             activeScreen={activeScreen}
-            onNavigate={setActiveScreen}
-            onConversationModeChange={() => setShowBottomNav(true)}
+            setActiveScreen={setActiveScreen}
+            onBountyAccepted={() => bountyFeedRef.current?.refresh()} // Refresh feed when a bounty is accepted
           />
           </FadeInScreen>
         )}

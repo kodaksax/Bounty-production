@@ -20,6 +20,10 @@ interface AddMoneyScreenProps {
   onAddMoney?: (amount: number) => void
   /** Pre-fills the amount field (e.g. to match a bounty price the caller wants funded). */
   initialAmount?: string
+  /** Overrides the "ADD CASH" label above the amount, for callers with a more specific context (e.g. funding a bounty). */
+  headerLabel?: string
+  /** Overrides the default "Add Money" primary CTA text once a payment method exists, formatted from the live typed amount. */
+  primaryCtaLabel?: (amount: number) => string
 }
 
 // Text color used on top of the bright brand-green primary CTA, matching the
@@ -29,7 +33,7 @@ const ON_PRIMARY_TEXT = '#052e1b'
 
 const KEYPAD_ROWS: number[][] = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
 
-export function AddMoneyScreen({ onBack, onAddMoney, initialAmount }: AddMoneyScreenProps) {
+export function AddMoneyScreen({ onBack, onAddMoney, initialAmount, headerLabel, primaryCtaLabel }: AddMoneyScreenProps) {
   const [amount, setAmount] = useState<string>(initialAmount || "0")
   const {
     isProcessing,
@@ -128,7 +132,7 @@ export function AddMoneyScreen({ onBack, onAddMoney, initialAmount }: AddMoneySc
       >
         {/* Amount Display */}
         <View style={styles.amountSection}>
-          <Text style={styles.amountLabel}>ADD CASH</Text>
+          <Text style={styles.amountLabel}>{headerLabel || 'ADD CASH'}</Text>
           <Text
             style={styles.amountText}
             accessibilityRole="text"
@@ -257,7 +261,11 @@ export function AddMoneyScreen({ onBack, onAddMoney, initialAmount }: AddMoneySc
             </>
           ) : (
             <Text style={styles.primaryButtonText}>
-              {!hasPaymentMethod ? "Link Payment Method" : "Add Money"}
+              {!hasPaymentMethod
+                ? "Link Payment Method"
+                : primaryCtaLabel
+                  ? primaryCtaLabel(numericAmount)
+                  : "Add Money"}
             </Text>
           )}
         </TouchableOpacity>
@@ -289,7 +297,17 @@ export function AddMoneyScreen({ onBack, onAddMoney, initialAmount }: AddMoneySc
       )}
 
       {/* Success confirmation — blocks like the Alert.alert it replaced;
-          onAddMoney/onBack only fire once the user acknowledges. */}
+          onAddMoney only fires once the user acknowledges.
+          Deliberately does NOT also call onBack here: onAddMoney is fully
+          responsible for whatever happens next (every current caller already
+          dismisses/transitions itself inside its own onAddMoney handler — see
+          wallet-screen.tsx, postings-screen.tsx, CreateBounty/index.tsx).
+          onBack is reserved for genuine cancel/close (the header button, the
+          payment-methods-modal backdrop). Calling both here previously meant
+          onBack's unconditional "go back to the insufficient-balance gate"
+          would fire immediately after onAddMoney had already determined the
+          bounty was fully funded, silently re-opening the gate every time a
+          top-up fully funded the amount in one shot. */}
       <FeedbackModal
         visible={!!successInfo}
         variant="success"
@@ -301,7 +319,6 @@ export function AddMoneyScreen({ onBack, onAddMoney, initialAmount }: AddMoneySc
           setSuccessInfo(null)
           if (info) {
             onAddMoney?.(info.amount)
-            onBack?.()
           }
         }}
       />
@@ -339,51 +356,56 @@ function makeStyles(theme: AppTheme) {
     amountSection: {
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: SPACING.ELEMENT_GAP,
-      gap: SPACING.COMPACT_GAP,
+      paddingVertical: SPACING.COMPACT_GAP,
+      gap: 4,
     },
     amountLabel: {
       color: theme.primaryLight,
-      fontSize: TYPOGRAPHY.SIZE_SMALL,
+      fontSize: TYPOGRAPHY.SIZE_XSMALL,
       fontWeight: 'bold',
       letterSpacing: TYPOGRAPHY.LETTER_SPACING_WIDER,
       textTransform: 'uppercase',
     },
     amountText: {
       color: theme.text,
-      fontSize: 56,
+      fontSize: 42,
       fontWeight: '800',
     },
     errorWrapper: {
       paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
-      marginBottom: SPACING.ELEMENT_GAP,
+      marginBottom: SPACING.COMPACT_GAP,
     },
     // Note: no flex:1 / justifyContent:'center' here — this section's content
-    // (four rows of fixed 64pt keys) can't shrink to fit a squeezed box, and a
+    // (four rows of fixed keys) can't shrink to fit a squeezed box, and a
     // shrunk flex box with overflow:'visible' (RN's default) lets fixed-size
     // children spill into neighboring sections instead of resizing. Centering
     // is handled by the parent ScrollView's contentContainerStyle instead,
     // which centers when there's extra room and scrolls when there isn't.
     keypadSection: {
-      paddingHorizontal: 32,
-      paddingVertical: SPACING.SECTION_GAP,
-      gap: 12,
+      paddingHorizontal: 24,
+      paddingVertical: SPACING.COMPACT_GAP,
+      gap: 8,
     },
+    // Centered with a fixed inter-key gap (not space-between) so key spacing
+    // stays proportional to key size regardless of screen width — on a wide
+    // device space-between would stretch the gaps disproportionately instead
+    // of just giving the centered group more side margin.
     keypadRow: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
+      justifyContent: 'center',
+      gap: 22,
     },
     keypadKey: {
-      width: 64,
-      height: 64,
-      borderRadius: 32,
+      width: 52,
+      height: 52,
+      borderRadius: 26,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.surfaceSecondary,
     },
     keypadKeyText: {
       color: theme.text,
-      fontSize: 24,
+      fontSize: 20,
       fontWeight: '600',
     },
     actions: {
@@ -394,9 +416,9 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      minHeight: SIZING.BUTTON_HEIGHT_LARGE,
+      minHeight: SIZING.BUTTON_HEIGHT_DEFAULT,
       borderRadius: 999,
-      marginBottom: SPACING.ELEMENT_GAP,
+      marginBottom: SPACING.COMPACT_GAP,
     },
     applePayButtonText: {
       fontSize: TYPOGRAPHY.SIZE_BODY,
@@ -406,7 +428,7 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      minHeight: SIZING.BUTTON_HEIGHT_LARGE,
+      minHeight: SIZING.BUTTON_HEIGHT_DEFAULT,
       borderRadius: 999,
       backgroundColor: theme.primary,
     },

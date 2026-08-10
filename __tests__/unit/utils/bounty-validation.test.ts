@@ -2,7 +2,7 @@
  * Unit tests for Bounty Validation Utilities
  */
 
-import { validateBalance, getInsufficientBalanceMessage, validateAmount, validateTitle } from '../../../lib/utils/bounty-validation';
+import { validateBalance, getAmountNeeded, getInsufficientBalanceMessage, validateAmount, validateTitle } from '../../../lib/utils/bounty-validation';
 
 describe('Bounty Validation Utils', () => {
   describe('validateTitle', () => {
@@ -76,6 +76,55 @@ describe('Bounty Validation Utils', () => {
     it('should handle zero balance for honor bounties', () => {
       const result = validateBalance(0, 0, true);
       expect(result).toBe(true);
+    });
+
+    // Regression coverage: a bounty funded via several sequential deposits
+    // (e.g. two $5 top-ups for a $10 bounty) can accumulate float drift —
+    // 5 + 5 is exact, but 0.1 + 0.1 + 0.1 is not (0.30000000000000004 in
+    // IEEE-754). A naive `amount <= balance` compare would wrongly reject an
+    // exactly-funded bounty in cases like this.
+    it('recognizes balance built from float-imprecise sequential deposits as sufficient', () => {
+      const balanceAfterThreeDeposits = 0.1 + 0.1 + 0.1; // 0.30000000000000004, not 0.3
+      expect(validateBalance(0.3, balanceAfterThreeDeposits, false)).toBe(true);
+    });
+
+    it('recognizes the exact $5 + $5 = $10 case as fully funded', () => {
+      const balanceAfterTwoDeposits = 0 + 5 + 5;
+      expect(validateBalance(10, balanceAfterTwoDeposits, false)).toBe(true);
+    });
+
+    it('treats an overfunded balance as sufficient', () => {
+      expect(validateBalance(10, 15, false)).toBe(true);
+    });
+  });
+
+  describe('getAmountNeeded', () => {
+    it('returns the full amount when balance is zero', () => {
+      expect(getAmountNeeded(10, 0)).toBe(10);
+    });
+
+    it('returns the remaining shortfall for a partial balance', () => {
+      expect(getAmountNeeded(10, 5)).toBe(5);
+    });
+
+    it('returns exactly 0 once balance equals the amount', () => {
+      expect(getAmountNeeded(10, 10)).toBe(0);
+    });
+
+    it('returns exactly 0 (never negative) once balance exceeds the amount', () => {
+      expect(getAmountNeeded(10, 15)).toBe(0);
+    });
+
+    it('returns exactly 0 for balance built from float-imprecise sequential deposits', () => {
+      // Mirrors the $5 + $5 = $10 repro: after two additions, naive float
+      // subtraction can leave a residue like 0.000000000000007105 instead of 0.
+      const balanceAfterTwoDeposits = 0 + 5 + 5;
+      expect(getAmountNeeded(10, balanceAfterTwoDeposits)).toBe(0);
+    });
+
+    it('never returns a spurious sub-cent remainder for classic float-drift inputs', () => {
+      const balanceAfterThreeDeposits = 0.1 + 0.1 + 0.1; // 0.30000000000000004
+      expect(getAmountNeeded(0.3, balanceAfterThreeDeposits)).toBe(0);
     });
   });
 

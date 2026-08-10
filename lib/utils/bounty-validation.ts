@@ -80,7 +80,14 @@ export function validateTitle(value: string | undefined | null): string | null {
 /**
  * Validates if the given amount is within the user's wallet balance.
  * Honor bounties skip balance validation as they don't require payment.
- * 
+ *
+ * Compares in integer cents (via toCents), not raw floats. Dollar amounts
+ * built up through repeated addition (e.g. several sequential wallet
+ * deposits: 0.1 + 0.1 + 0.1) can drift to values like 0.30000000000000004 in
+ * IEEE-754 doubles, which would make a naive `amount <= balance` compare
+ * fail even when the two are equal to the cent. Cents are exact integers, so
+ * this comparison has no such boundary case.
+ *
  * @param amount - The bounty amount to validate
  * @param balance - The user's current wallet balance
  * @param isForHonor - Whether this is an honor bounty (no payment)
@@ -88,13 +95,30 @@ export function validateTitle(value: string | undefined | null): string | null {
  */
 export function validateBalance(amount: number, balance: number, isForHonor: boolean): boolean {
   if (isForHonor) return true;
-  // Use a small epsilon for float comparison if needed, but balance is likely numbers
-  return amount <= balance;
+  return toCents(amount) <= toCents(balance);
+}
+
+/**
+ * The additional amount (in dollars) a poster's wallet needs before it covers
+ * `amount` — the single source of truth for "how much do I need to add"
+ * everywhere it's shown (the amount step's warning, the insufficient-balance
+ * screen's breakdown, the top-up screen's pre-filled amount).
+ *
+ * `amount needed = max(0, bounty amount − available balance)`, computed in
+ * integer cents for the same precision reason as validateBalance — never
+ * returns a spurious $0.01 (or negative) remainder from float drift.
+ *
+ * @param amount - The bounty amount
+ * @param balance - The user's current wallet balance
+ * @returns Amount still needed, in dollars, never negative
+ */
+export function getAmountNeeded(amount: number, balance: number): number {
+  return Math.max(0, toCents(amount) - toCents(balance)) / 100;
 }
 
 /**
  * Returns a user-friendly error message for insufficient balance.
- * 
+ *
  * @param amount - The bounty amount
  * @param balance - The user's current wallet balance
  * @returns Formatted error message string
