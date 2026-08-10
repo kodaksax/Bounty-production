@@ -36,6 +36,7 @@ import {
   recordPaymentAttempt,
   withPaymentRetry,
 } from './payment-error-handler';
+import { withCriticalOperation } from './critical-operation';
 import { paymentMethodsService } from './payment-methods-service';
 import { performanceService } from './performance-service';
 import {
@@ -719,15 +720,19 @@ class StripeService {
     const { userId } = options || {};
 
     try {
-      const result = await withPaymentRetry(
-        async () => {
-          return await this.confirmPayment(paymentIntentClientSecret, paymentMethodId, authToken);
-        },
-        {
-          maxRetries: 2, // Fewer retries for confirmation
-          baseDelayMs: 2000,
-          maxDelayMs: 5000,
-        }
+      // Held across the whole retry sequence, including the backoff gaps — an
+      // OTA reload between attempts would abandon a payment mid-confirmation.
+      const result = await withCriticalOperation('stripe.confirmPaymentSecure', () =>
+        withPaymentRetry(
+          async () => {
+            return await this.confirmPayment(paymentIntentClientSecret, paymentMethodId, authToken);
+          },
+          {
+            maxRetries: 2, // Fewer retries for confirmation
+            baseDelayMs: 2000,
+            maxDelayMs: 5000,
+          }
+        )
       );
 
       return result;

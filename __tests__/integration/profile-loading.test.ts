@@ -48,6 +48,16 @@ describe('Profile Loading and Creation', () => {
     (authProfileService as any).currentProfile = null;
     (authProfileService as any).currentSession = null;
     (authProfileService as any).listeners = [];
+
+    // These tests all model a *signed-in* user, so gotrue must report a live
+    // session: a zero-row profile read is only treated as "needs onboarding"
+    // when the request was actually authenticated (see hasLiveSessionFor).
+    // Mirroring whatever session setSession() stored keeps each test's userId
+    // in sync without restating it here.
+    mockSupabase.auth.getSession.mockImplementation(async () => ({
+      data: { session: (authProfileService as any).currentSession },
+      error: null,
+    }));
   });
 
   describe('Profile Creation on Auth User Creation', () => {
@@ -222,6 +232,40 @@ describe('Profile Loading and Creation', () => {
         // Test should not throw errors
         expect(err).toBeFalsy();
       }
+    });
+  });
+
+  describe('Unauthenticated zero-row reads', () => {
+    // Regression: get_my_profile() is SECURITY DEFINER scoped to auth.uid(), so a
+    // request carrying an expired JWT returns zero rows with no error — identical
+    // on the wire to a deleted profile. Treating that as deletion bounced
+    // signed-in users into onboarding when they resumed the app with a lapsed
+    // token (JS timers are frozen while backgrounded, so it can expire).
+    it('does not flag onboarding when the session is not live', async () => {
+      const userId = 'test-user-expired-token';
+      const existingProfile: AuthProfile = {
+        id: userId,
+        username: 'established-user',
+        balance: 0,
+        onboarding_completed: true,
+      } as AuthProfile;
+
+      // A previously-loaded profile is in memory, as it would be on resume.
+      (authProfileService as any).currentProfile = existingProfile;
+
+      // The token has lapsed: gotrue reports no session...
+      mockSupabase.auth.getSession.mockResolvedValue({
+        data: { session: null },
+        error: null,
+      });
+      // ...so the RPC comes back empty, with no error.
+      mockSupabase.rpc.mockResolvedValue({ data: null, error: null });
+
+      const profile = await (authProfileService as any).fetchAndSyncProfile(userId);
+
+      expect(profile?.needs_onboarding).toBeUndefined();
+      expect(profile?.username).toBe('established-user');
+      expect(authProfileService.getCurrentProfile()?.onboarding_completed).toBe(true);
     });
   });
 

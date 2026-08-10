@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
+import { beginCriticalOperation } from '../lib/services/critical-operation';
 
 /**
  * Hook to prevent duplicate form submissions
@@ -32,6 +33,11 @@ export function useFormSubmission<T = any>(
         return;
       }
 
+      // Submissions can be multi-step and non-atomic (bounty publishing creates
+      // the row, then funds escrow, then rolls back on failure). Block OTA
+      // reloads for the duration so that sequence can't be cut in half.
+      const releaseCritical = beginCriticalOperation('form.submit');
+
       try {
         setIsSubmitting(true);
         setError(null);
@@ -51,6 +57,7 @@ export function useFormSubmission<T = any>(
           onError(error);
         }
       } finally {
+        releaseCritical();
         setIsSubmitting(false);
         submitInProgressRef.current = false;
       }

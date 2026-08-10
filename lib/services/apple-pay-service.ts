@@ -1,6 +1,7 @@
 import Constants from 'expo-constants';
 import { API_BASE_URL } from 'lib/config/api';
 import { analyticsService } from 'lib/services/analytics-service';
+import { beginCriticalOperation } from 'lib/services/critical-operation';
 import { stripeSdk } from 'lib/services/stripe-sdk';
 import { supabase } from 'lib/supabase';
 import { logger } from 'lib/utils/error-logger';
@@ -122,6 +123,21 @@ class ApplePayService {
    * Process payment with Apple Pay
    */
   async processPayment(request: ApplePayPaymentRequest, authToken?: string): Promise<ApplePayResult> {
+    // Creating the PaymentIntent and confirming it through the Apple Pay sheet
+    // is a two-step sequence; an OTA reload in between would leave an
+    // uncaptured intent with no client left to finish or cancel it.
+    const releaseCritical = beginCriticalOperation('applePay.processPayment');
+    try {
+      return await this.processPaymentInternal(request, authToken);
+    } finally {
+      releaseCritical();
+    }
+  }
+
+  private async processPaymentInternal(
+    request: ApplePayPaymentRequest,
+    authToken?: string
+  ): Promise<ApplePayResult> {
     try {
       await analyticsService.trackEvent('payment_initiated', {
         method: 'apple_pay',

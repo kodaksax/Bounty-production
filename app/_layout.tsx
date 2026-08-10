@@ -11,6 +11,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import '../global.css';
 import { useAuthContext } from '../hooks/use-auth-context';
+import { VersionGate } from '../components/ui/version-gate';
+import { useOtaUpdates } from '../hooks/useOtaUpdates';
 import { useSessionMonitor } from '../hooks/useSessionMonitor';
 import { AdminProvider } from '../lib/admin-context';
 import { BountyFormatProvider } from '../lib/bounty-format-context';
@@ -164,6 +166,8 @@ const LayoutContent = () => {
         }}
       >
         <AppRuntimeProvider>
+          <OtaUpdateGate />
+          <VersionGate />
           <NetworkProvider>
             <AuthProvider>
               <DeepLinkAnalyticsGate />
@@ -379,6 +383,14 @@ function trackDeepLinkOpen(url: string | null) {
     // Malformed/unexpected URL — nothing to track.
   }
 }
+
+// Applies EAS updates without requiring a force-quit. Mounted above the auth
+// and data providers so a reload can never land in the middle of a flow this
+// component is nested inside. See hooks/useOtaUpdates for the timing rules.
+const OtaUpdateGate = () => {
+  useOtaUpdates();
+  return null;
+};
 
 // Mounts once at the root to capture both a cold-start deep link
 // (getInitialURL) and any link opened while the app is already running.
