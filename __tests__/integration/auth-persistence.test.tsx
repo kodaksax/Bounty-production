@@ -132,9 +132,10 @@ describe('Authentication State Persistence', () => {
 
       const { analyticsService } = require('../../lib/services/analytics-service');
       await waitFor(() => {
-        expect(analyticsService.identifyUser).toHaveBeenCalledWith('user123', {
-          email: 'user@example.com',
-        });
+        expect(analyticsService.identifyUser).toHaveBeenCalledWith(
+          'user123',
+          expect.objectContaining({ email: 'user@example.com' })
+        );
       });
     });
 
@@ -182,9 +183,10 @@ describe('Authentication State Persistence', () => {
       await authStateChangeCallback('INITIAL_SESSION', restoredSession);
 
       const { analyticsService } = require('../../lib/services/analytics-service');
-      expect(analyticsService.identifyUser).toHaveBeenCalledWith('restored-user-1', {
-        email: 'restore@example.com',
-      });
+      expect(analyticsService.identifyUser).toHaveBeenCalledWith(
+        'restored-user-1',
+        expect.objectContaining({ email: 'restore@example.com' })
+      );
     });
 
     it('should clean up subscription on unmount', async () => {

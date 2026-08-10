@@ -110,7 +110,10 @@ export class AuthProfileService {
    * current session profile intact. Results are cached briefly to avoid
    * refetching for the same card renders.
    */
-  async getProfileById(userId: string, options: { bypassCache?: boolean } = {}): Promise<AuthProfile | null> {
+  async getProfileById(
+    userId: string,
+    options: { bypassCache?: boolean } = {}
+  ): Promise<AuthProfile | null> {
     if (typeof __DEV__ !== 'undefined' && __DEV__) {
       console.log('[authProfileService] getProfileById called', { userId, isSupabaseConfigured });
     }
@@ -123,7 +126,7 @@ export class AuthProfileService {
     }
 
     const { bypassCache = false } = options;
-      if (!bypassCache) {
+    if (!bypassCache) {
       const cached = this.externalProfileCache.get(userId);
       if (cached && Date.now() - cached.timestamp < PROFILE_CACHE_EXPIRY) {
         if (typeof __DEV__ !== 'undefined' && __DEV__) {
@@ -152,17 +155,22 @@ export class AuthProfileService {
           .from('public_profiles')
           // PostgREST aliasing uses `alias:column` — alias the snake_case DB column
           // to a camelCase property so the app can read `displayName` safely.
-          .select('id,username,displayName:display_name,avatar,location,stripe_identity_status,verified_since')
+          .select(
+            'id,username,displayName:display_name,avatar,location,stripe_identity_status,verified_since'
+          )
           .eq('id', userId)
           .maybeSingle();
         if (typeof __DEV__ !== 'undefined' && __DEV__) {
-          console.log('[authProfileService] Public_profiles query result', { hasData: !!pub.data, hasError: !!pub.error });
+          console.log('[authProfileService] Public_profiles query result', {
+            hasData: !!pub.data,
+            hasError: !!pub.error,
+          });
         }
         if (pub.error) {
           // Include error.code/message and the select used so we can trace 42703 (undefined column) errors.
           logger.warning('public_profiles fetch error', {
             userId,
-            select: "id,username,displayName:display_name,avatar,location",
+            select: 'id,username,displayName:display_name,avatar,location',
             errorCode: pub.error?.code,
             errorMessage: pub.error?.message || pub.error,
             rawError: pub.error,
@@ -206,9 +214,11 @@ export class AuthProfileService {
         balance: data.balance || 0,
         created_at: data.created_at || undefined,
         updated_at: data.updated_at || undefined,
-        onboarding_completed: typeof data.onboarding_completed === 'boolean' ? data.onboarding_completed : undefined,
+        onboarding_completed:
+          typeof data.onboarding_completed === 'boolean' ? data.onboarding_completed : undefined,
         // Phase 1 verification fields
-        email_confirmed: typeof data.email_confirmed === 'boolean' ? data.email_confirmed : undefined,
+        email_confirmed:
+          typeof data.email_confirmed === 'boolean' ? data.email_confirmed : undefined,
         phone_verified: typeof data.phone_verified === 'boolean' ? data.phone_verified : undefined,
         id_verification_status: data.id_verification_status || undefined,
         selfie_submitted_at: data.selfie_submitted_at || undefined,
@@ -217,12 +227,21 @@ export class AuthProfileService {
         verified_since: data.verified_since || undefined,
         display_name: data.display_name || undefined,
         primary_role: data.primary_role || undefined,
-        stripe_connect_charges_enabled: typeof data.stripe_connect_charges_enabled === 'boolean' ? data.stripe_connect_charges_enabled : undefined,
-        stripe_connect_payouts_enabled: typeof data.stripe_connect_payouts_enabled === 'boolean' ? data.stripe_connect_payouts_enabled : undefined,
+        stripe_connect_charges_enabled:
+          typeof data.stripe_connect_charges_enabled === 'boolean'
+            ? data.stripe_connect_charges_enabled
+            : undefined,
+        stripe_connect_payouts_enabled:
+          typeof data.stripe_connect_payouts_enabled === 'boolean'
+            ? data.stripe_connect_payouts_enabled
+            : undefined,
         last_session_at: data.last_session_at || undefined,
       };
 
-      console.log('[authProfileService] Successfully fetched profile', { username: profile.username, id: profile.id });
+      console.log('[authProfileService] Successfully fetched profile', {
+        username: profile.username,
+        id: profile.id,
+      });
 
       if (!bypassCache) {
         this.externalProfileCache.set(userId, {
@@ -248,13 +267,13 @@ export class AuthProfileService {
   async setSession(session: Session | null): Promise<void> {
     const previousUserId = this.currentSession?.user?.id;
     this.currentSession = session;
-    
-    console.log('[authProfileService] setSession called', { 
-      previousUserId, 
+
+    console.log('[authProfileService] setSession called', {
+      previousUserId,
       newUserId: session?.user?.id,
-      hasSession: !!session 
+      hasSession: !!session,
     });
-    
+
     if (!session) {
       console.log('[authProfileService] No session, clearing profile');
       this.currentProfile = null;
@@ -274,7 +293,10 @@ export class AuthProfileService {
     console.log('[authProfileService] Calling fetchAndSyncProfile for userId:', session.user.id);
     // Fetch and sync profile for authenticated user
     await this.fetchAndSyncProfile(session.user.id);
-    console.log('[authProfileService] fetchAndSyncProfile completed, profile exists:', !!this.currentProfile);
+    console.log(
+      '[authProfileService] fetchAndSyncProfile completed, profile exists:',
+      !!this.currentProfile
+    );
   }
 
   /**
@@ -311,13 +333,13 @@ export class AuthProfileService {
     // Track this fetch attempt with a timestamp to prevent race conditions
     const fetchTimestamp = Date.now();
     this.latestFetchTimestamp = fetchTimestamp;
-    
-    console.log('[authProfileService] fetchAndSyncProfile START', { 
+
+    console.log('[authProfileService] fetchAndSyncProfile START', {
       userId,
       isSupabaseConfigured,
-      fetchTimestamp
+      fetchTimestamp,
     });
-    
+
     if (!isSupabaseConfigured) {
       console.log('[authProfileService] Supabase not configured - creating fallback profile');
       // When Supabase is not configured, return a fallback profile so the app
@@ -345,15 +367,21 @@ export class AuthProfileService {
     // below) so returning users are never bounced to onboarding on cold resume.
     const cachedProfile = await this.loadFromCache(userId, { allowStale: true });
     if (cachedProfile) {
-      console.log('[authProfileService] Using cached profile for fast restoration:', cachedProfile.username);
+      console.log(
+        '[authProfileService] Using cached profile for fast restoration:',
+        cachedProfile.username
+      );
       this.currentProfile = cachedProfile;
       // Notify listeners immediately with cached data
       this.notifyListeners(cachedProfile);
       // Continue to fetch fresh data in background (don't await to avoid blocking)
       // Pass the fetchTimestamp to enable race condition detection
       // Use void to explicitly indicate intentional fire-and-forget behavior
-      void this.fetchFreshProfileInBackground(userId, fetchTimestamp).catch((error) => {
-        console.log('[authProfileService] Background fetch failed (non-critical, using cached data):', error);
+      void this.fetchFreshProfileInBackground(userId, fetchTimestamp).catch(error => {
+        console.log(
+          '[authProfileService] Background fetch failed (non-critical, using cached data):',
+          error
+        );
       });
       return cachedProfile;
     }
@@ -375,7 +403,7 @@ export class AuthProfileService {
         hasData: !!data,
         hasError: !!error,
         errorCode: error?.code,
-        errorMessage: error?.message
+        errorMessage: error?.message,
       });
 
       if (error) {
@@ -407,27 +435,32 @@ export class AuthProfileService {
       }
 
       if (data) {
-          const profile: AuthProfile = {
+        const profile: AuthProfile = {
           id: data.id,
           username: data.username,
           email: data.email,
-            avatar: data.avatar || data.avatar_url || undefined,
+          avatar: data.avatar || data.avatar_url || undefined,
           about: data.about,
           phone: data.phone,
           title: data.title || undefined,
           location: data.location || undefined,
           skills: Array.isArray(data.skills) ? data.skills : undefined,
-        skill_categories: Array.isArray(data.skill_categories) ? data.skill_categories : undefined,
-        zip_code: data.zip_code || undefined,
+          skill_categories: Array.isArray(data.skill_categories)
+            ? data.skill_categories
+            : undefined,
+          zip_code: data.zip_code || undefined,
           age_verified: typeof data.age_verified === 'boolean' ? data.age_verified : undefined,
           age_verified_at: data.age_verified_at || undefined,
           balance: data.balance || 0,
           created_at: data.created_at,
           updated_at: data.updated_at,
-          onboarding_completed: typeof data.onboarding_completed === 'boolean' ? data.onboarding_completed : undefined,
+          onboarding_completed:
+            typeof data.onboarding_completed === 'boolean' ? data.onboarding_completed : undefined,
           // Phase 1 verification fields
-          email_confirmed: typeof data.email_confirmed === 'boolean' ? data.email_confirmed : undefined,
-          phone_verified: typeof data.phone_verified === 'boolean' ? data.phone_verified : undefined,
+          email_confirmed:
+            typeof data.email_confirmed === 'boolean' ? data.email_confirmed : undefined,
+          phone_verified:
+            typeof data.phone_verified === 'boolean' ? data.phone_verified : undefined,
           id_verification_status: data.id_verification_status || undefined,
           selfie_submitted_at: data.selfie_submitted_at || undefined,
           stripe_identity_status: data.stripe_identity_status || undefined,
@@ -435,13 +468,22 @@ export class AuthProfileService {
           verified_since: data.verified_since || undefined,
           display_name: data.display_name || undefined,
           primary_role: data.primary_role || undefined,
-          stripe_connect_charges_enabled: typeof data.stripe_connect_charges_enabled === 'boolean' ? data.stripe_connect_charges_enabled : undefined,
-          stripe_connect_payouts_enabled: typeof data.stripe_connect_payouts_enabled === 'boolean' ? data.stripe_connect_payouts_enabled : undefined,
+          stripe_connect_charges_enabled:
+            typeof data.stripe_connect_charges_enabled === 'boolean'
+              ? data.stripe_connect_charges_enabled
+              : undefined,
+          stripe_connect_payouts_enabled:
+            typeof data.stripe_connect_payouts_enabled === 'boolean'
+              ? data.stripe_connect_payouts_enabled
+              : undefined,
           last_session_at: data.last_session_at || undefined,
           account_status: data.account_status || undefined,
         };
 
-        console.log('[authProfileService] Profile data mapped', { username: profile.username, id: profile.id });
+        console.log('[authProfileService] Profile data mapped', {
+          username: profile.username,
+          id: profile.id,
+        });
         this.lastFetchError = null;
         this.currentProfile = profile;
         await this.cacheProfile(profile);
@@ -455,15 +497,23 @@ export class AuthProfileService {
     } catch (error) {
       // Detect cases where the server returned an HTML error page (common when
       // the SUPABASE URL is misconfigured or a proxy/hosting page is returned).
-      const msg = (error && (((error as any).message) || String(error))) || '';
-      if (typeof msg === 'string' && (msg.includes('<!DOCTYPE') || msg.toLowerCase().includes('<html'))) {
-        console.error('[authProfileService] Received HTML response - likely misconfigured Supabase URL');
-        logger.error('Error fetching profile - received HTML response from Supabase. This usually means EXPO_PUBLIC_SUPABASE_URL is incorrect or points to a non-Supabase host.', { userId, supabaseEnv, errorSummary: msg.substring(0, 300) });
+      const msg = (error && ((error as any).message || String(error))) || '';
+      if (
+        typeof msg === 'string' &&
+        (msg.includes('<!DOCTYPE') || msg.toLowerCase().includes('<html'))
+      ) {
+        console.error(
+          '[authProfileService] Received HTML response - likely misconfigured Supabase URL'
+        );
+        logger.error(
+          'Error fetching profile - received HTML response from Supabase. This usually means EXPO_PUBLIC_SUPABASE_URL is incorrect or points to a non-Supabase host.',
+          { userId, supabaseEnv, errorSummary: msg.substring(0, 300) }
+        );
       } else {
         console.error('[authProfileService] fetchAndSyncProfile ERROR:', error);
         logger.error('Error fetching profile', { userId, error });
       }
-      
+
       // Mark this as a fetch failure (not a confirmed "no profile"). Consumers
       // must check getLastFetchError() before treating this as a new user.
       this.lastFetchError = msg || 'Unknown error fetching profile';
@@ -487,7 +537,10 @@ export class AuthProfileService {
       // users to be routed back into the username step and see "Profile not
       // found" during the 2026-07-19 profiles-SELECT-REVOKE incident.
       if (this.currentProfile && !this.currentProfile.needs_onboarding) {
-        console.warn('[authProfileService] Fetch failed but keeping last-known-good in-memory profile', { userId });
+        console.warn(
+          '[authProfileService] Fetch failed but keeping last-known-good in-memory profile',
+          { userId }
+        );
         this.notifyListeners(this.currentProfile);
         return this.currentProfile;
       }
@@ -507,17 +560,24 @@ export class AuthProfileService {
    * @param callerFetchTimestamp - The timestamp from the calling fetchAndSyncProfile to detect race conditions
    * @private
    */
-  private async fetchFreshProfileInBackground(userId: string, callerFetchTimestamp: number): Promise<void> {
+  private async fetchFreshProfileInBackground(
+    userId: string,
+    callerFetchTimestamp: number
+  ): Promise<void> {
     try {
       console.log('[authProfileService] Fetching fresh profile in background for userId:', userId);
-      
+
       // Self-profile read via get_my_profile() — see fetchAndSyncProfile for
       // why this can't be a direct select('*') anymore.
       const { data, error } = await supabase.rpc('get_my_profile');
 
       if (error) {
         // Don't throw — we already have cached data displayed
-        console.log('[authProfileService] Background fetch error (non-critical):', error.code, error.message);
+        console.log(
+          '[authProfileService] Background fetch error (non-critical):',
+          error.code,
+          error.message
+        );
         return;
       }
 
@@ -525,7 +585,9 @@ export class AuthProfileService {
       // This prevents race conditions where multiple background fetches complete out of order
       // Only apply results if no newer fetch has been initiated
       if (callerFetchTimestamp < this.latestFetchTimestamp) {
-        console.log('[authProfileService] Discarding stale background fetch result (newer fetch has started)');
+        console.log(
+          '[authProfileService] Discarding stale background fetch result (newer fetch has started)'
+        );
         return;
       }
 
@@ -533,7 +595,9 @@ export class AuthProfileService {
         // get_my_profile() returns null when no row exists for auth.uid() —
         // the profile no longer exists server-side; clear the stale cache
         // and redirect to onboarding, same as the old PGRST116 branch.
-        console.log('[authProfileService] Background fetch: profile not found, clearing stale cache');
+        console.log(
+          '[authProfileService] Background fetch: profile not found, clearing stale cache'
+        );
         await this.clearCache(userId);
         const onboardingNeededProfile: AuthProfile = {
           id: userId,
@@ -559,17 +623,22 @@ export class AuthProfileService {
           title: data.title || undefined,
           location: data.location || undefined,
           skills: Array.isArray(data.skills) ? data.skills : undefined,
-        skill_categories: Array.isArray(data.skill_categories) ? data.skill_categories : undefined,
-        zip_code: data.zip_code || undefined,
+          skill_categories: Array.isArray(data.skill_categories)
+            ? data.skill_categories
+            : undefined,
+          zip_code: data.zip_code || undefined,
           age_verified: typeof data.age_verified === 'boolean' ? data.age_verified : undefined,
           age_verified_at: data.age_verified_at || undefined,
           balance: data.balance || 0,
           created_at: data.created_at,
           updated_at: data.updated_at,
-          onboarding_completed: typeof data.onboarding_completed === 'boolean' ? data.onboarding_completed : undefined,
+          onboarding_completed:
+            typeof data.onboarding_completed === 'boolean' ? data.onboarding_completed : undefined,
           // Phase 1 verification fields
-          email_confirmed: typeof data.email_confirmed === 'boolean' ? data.email_confirmed : undefined,
-          phone_verified: typeof data.phone_verified === 'boolean' ? data.phone_verified : undefined,
+          email_confirmed:
+            typeof data.email_confirmed === 'boolean' ? data.email_confirmed : undefined,
+          phone_verified:
+            typeof data.phone_verified === 'boolean' ? data.phone_verified : undefined,
           id_verification_status: data.id_verification_status || undefined,
           selfie_submitted_at: data.selfie_submitted_at || undefined,
           stripe_identity_status: data.stripe_identity_status || undefined,
@@ -577,13 +646,21 @@ export class AuthProfileService {
           verified_since: data.verified_since || undefined,
           display_name: data.display_name || undefined,
           primary_role: data.primary_role || undefined,
-          stripe_connect_charges_enabled: typeof data.stripe_connect_charges_enabled === 'boolean' ? data.stripe_connect_charges_enabled : undefined,
-          stripe_connect_payouts_enabled: typeof data.stripe_connect_payouts_enabled === 'boolean' ? data.stripe_connect_payouts_enabled : undefined,
+          stripe_connect_charges_enabled:
+            typeof data.stripe_connect_charges_enabled === 'boolean'
+              ? data.stripe_connect_charges_enabled
+              : undefined,
+          stripe_connect_payouts_enabled:
+            typeof data.stripe_connect_payouts_enabled === 'boolean'
+              ? data.stripe_connect_payouts_enabled
+              : undefined,
           last_session_at: data.last_session_at || undefined,
           account_status: data.account_status || undefined,
         };
 
-        console.log('[authProfileService] Fresh profile fetched, updating cache and notifying listeners');
+        console.log(
+          '[authProfileService] Fresh profile fetched, updating cache and notifying listeners'
+        );
         this.currentProfile = freshProfile;
         await this.cacheProfile(freshProfile);
         this.notifyListeners(freshProfile);
@@ -597,7 +674,9 @@ export class AuthProfileService {
   /**
    * Update the authenticated user's profile
    */
-  async updateProfile(updates: Partial<Omit<AuthProfile, 'id' | 'created_at'>>): Promise<AuthProfile | null> {
+  async updateProfile(
+    updates: Partial<Omit<AuthProfile, 'id' | 'created_at'>>
+  ): Promise<AuthProfile | null> {
     const userId = this.getAuthUserId();
     if (!userId) {
       logger.error('Cannot update profile: no authenticated user');
@@ -622,7 +701,7 @@ export class AuthProfileService {
       // columns it returns, so selecting those columns here would fail even
       // though the UPDATE itself is allowed. `id` is never restricted; it's
       // only used to confirm a row was actually affected.
-        const { data: initialRes, error: initialError } = await supabase
+      const { data: initialRes, error: initialError } = await supabase
         .from('profiles')
         .update(updates)
         .eq('id', userId)
@@ -645,11 +724,7 @@ export class AuthProfileService {
             .select('id')
             .single();
         } else {
-          res = await fromProfiles
-            .update(updates)
-            .eq('id', userId)
-            .select('id')
-            .single();
+          res = await fromProfiles.update(updates).eq('id', userId).select('id').single();
         }
         data = res.data ?? null;
         error = res.data ? null : (res.error ?? initialError ?? null);
@@ -683,12 +758,16 @@ export class AuthProfileService {
         title: freshRow.title || undefined,
         location: freshRow.location || undefined,
         skills: Array.isArray(freshRow.skills) ? freshRow.skills : undefined,
-        age_verified: typeof freshRow.age_verified === 'boolean' ? freshRow.age_verified : undefined,
+        age_verified:
+          typeof freshRow.age_verified === 'boolean' ? freshRow.age_verified : undefined,
         age_verified_at: freshRow.age_verified_at || undefined,
         balance: freshRow.balance || 0,
         created_at: freshRow.created_at,
         updated_at: freshRow.updated_at,
-        onboarding_completed: typeof freshRow.onboarding_completed === 'boolean' ? freshRow.onboarding_completed : undefined,
+        onboarding_completed:
+          typeof freshRow.onboarding_completed === 'boolean'
+            ? freshRow.onboarding_completed
+            : undefined,
       };
 
       this.currentProfile = profile;
@@ -829,7 +908,7 @@ export class AuthProfileService {
         !cached.profile ||
         cached.profile.id !== userId
       ) {
-        logger.warn('Invalid cached profile entry; discarding', { userId });
+        logger.warning('Invalid cached profile entry; discarding', { userId });
         await AsyncStorage.removeItem(cacheKey);
         return null;
       }
@@ -875,18 +954,18 @@ export class AuthProfileService {
       // Clear edit profile draft
       const draftKey = `editProfile:draft:${userId}`;
       await AsyncStorage.removeItem(draftKey);
-      
+
       // Clear skills data
       const skillsKey = `profileSkills:${userId}`;
       await AsyncStorage.removeItem(skillsKey);
-      
+
       // Clear profile data
       const profileDataKey = `profileData:${userId}`;
       await AsyncStorage.removeItem(profileDataKey);
-      
+
       // Clear profile cache
       await this.clearCache(userId);
-      
+
       logger.info('Cleared user draft data', { userId });
     } catch (error) {
       logger.error('Error clearing user draft data', { error });

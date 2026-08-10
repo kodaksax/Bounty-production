@@ -3,7 +3,11 @@
  * Tests bounty completion workflow including submission, approval, revision, and rating
  */
 
-import type { CompletionSubmission, ProofItem, Rating } from '../../../lib/services/completion-service';
+import type {
+    CompletionSubmission,
+    ProofItem,
+    Rating,
+} from '../../../lib/services/completion-service';
 import { completionService } from '../../../lib/services/completion-service';
 
 // Mock Supabase
@@ -157,9 +161,9 @@ describe('CompletionService', () => {
               eq: jest.fn().mockReturnValue({
                 order: jest.fn().mockReturnValue({
                   limit: jest.fn().mockReturnValue({
-                    maybeSingle: jest.fn().mockResolvedValue({ 
-                      data: existingSubmission, 
-                      error: null 
+                    maybeSingle: jest.fn().mockResolvedValue({
+                      data: existingSubmission,
+                      error: null,
                     }),
                   }),
                 }),
@@ -194,16 +198,17 @@ describe('CompletionService', () => {
         }),
         insert: jest.fn().mockReturnValue({
           select: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue({ 
-              data: null, 
-              error: { message: 'Database error' } 
+            single: jest.fn().mockResolvedValue({
+              data: null,
+              error: { message: 'Database error' },
             }),
           }),
         }),
       });
 
-      await expect(completionService.submitCompletion(mockSubmission))
-        .rejects.toThrow('Database error');
+      await expect(completionService.submitCompletion(mockSubmission)).rejects.toThrow(
+        'Database error'
+      );
     });
 
     it('should still succeed and log a warning when notification enqueue fails', async () => {
@@ -252,7 +257,9 @@ describe('CompletionService', () => {
         }
         if (table === 'notifications_outbox') {
           return {
-            insert: jest.fn().mockResolvedValue({ data: null, error: { message: 'RLS violation' } }),
+            insert: jest
+              .fn()
+              .mockResolvedValue({ data: null, error: { message: 'RLS violation' } }),
           };
         }
         return {};
@@ -329,7 +336,9 @@ describe('CompletionService', () => {
       // Warning should have been logged for the failed bounty lookup
       expect(logger.warning).toHaveBeenCalledWith(
         'Failed to fetch bounty for review-needed notification',
-        expect.objectContaining({ error: expect.objectContaining({ message: 'Permission denied' }) })
+        expect.objectContaining({
+          error: expect.objectContaining({ message: 'Permission denied' }),
+        })
       );
       // notifications_outbox should not have been called
       const calls = mockSupabase.from.mock.calls.map((c: any[]) => c[0]);
@@ -374,9 +383,9 @@ describe('CompletionService', () => {
           eq: jest.fn().mockReturnValue({
             order: jest.fn().mockReturnValue({
               limit: jest.fn().mockReturnValue({
-                single: jest.fn().mockResolvedValue({ 
-                  data: null, 
-                  error: { code: 'PGRST116' } 
+                single: jest.fn().mockResolvedValue({
+                  data: null,
+                  error: { code: 'PGRST116' },
                 }),
               }),
             }),
@@ -395,9 +404,9 @@ describe('CompletionService', () => {
           eq: jest.fn().mockReturnValue({
             order: jest.fn().mockReturnValue({
               limit: jest.fn().mockReturnValue({
-                single: jest.fn().mockResolvedValue({ 
-                  data: null, 
-                  error: { message: 'Connection failed' } 
+                single: jest.fn().mockResolvedValue({
+                  data: null,
+                  error: { message: 'Connection failed' },
                 }),
               }),
             }),
@@ -493,14 +502,13 @@ describe('CompletionService', () => {
     it('should throw error on approval failure', async () => {
       mockSupabase.from.mockReturnValue({
         update: jest.fn().mockReturnValue({
-          eq: jest.fn().mockResolvedValue({ 
-            error: new Error('Update failed') 
+          eq: jest.fn().mockResolvedValue({
+            error: new Error('Update failed'),
           }),
         }),
       });
 
-      await expect(completionService.approveCompletion('submission123'))
-        .rejects.toThrow();
+      await expect(completionService.approveCompletion('submission123')).rejects.toThrow();
     });
   });
 
@@ -521,9 +529,9 @@ describe('CompletionService', () => {
           eq: jest.fn().mockReturnValue({
             order: jest.fn().mockReturnValue({
               limit: jest.fn().mockReturnValue({
-                single: jest.fn().mockResolvedValue({ 
-                  data: { ...mockSubmission, proof_items: '[]' }, 
-                  error: null 
+                single: jest.fn().mockResolvedValue({
+                  data: { ...mockSubmission, proof_items: '[]' },
+                  error: null,
                 }),
               }),
             }),
@@ -535,6 +543,29 @@ describe('CompletionService', () => {
       mockSupabase.from.mockReturnValueOnce({
         update: jest.fn().mockReturnValue({
           eq: jest.fn().mockResolvedValue({ error: null }),
+        }),
+      });
+
+      // Mock analytics bounties fetch (amount/is_for_honor)
+      mockSupabase.from.mockReturnValueOnce({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            maybeSingle: jest.fn().mockResolvedValue({
+              data: { amount: 50, is_for_honor: false },
+              error: null,
+            }),
+          }),
+        }),
+      });
+
+      // Mock bounty_requests fetch (getHoursSinceClaimed)
+      mockSupabase.from.mockReturnValueOnce({
+        select: jest.fn().mockReturnValue({
+          order: jest.fn().mockReturnValue({
+            eq: jest.fn().mockReturnValue({
+              eq: jest.fn().mockResolvedValue({ data: [], error: null }),
+            }),
+          }),
         }),
       });
 
@@ -559,7 +590,10 @@ describe('CompletionService', () => {
       expect(result).toBe(true);
 
       const { bountyService } = require('../../../lib/services/bounty-service');
-      expect(bountyService.update).toHaveBeenCalledWith('bounty123', { status: 'completed', completed_at: expect.any(String) });
+      expect(bountyService.update).toHaveBeenCalledWith('bounty123', {
+        status: 'completed',
+        completed_at: expect.any(String),
+      });
 
       // The hunter must be notified that their work was approved.
       const calls = mockSupabase.from.mock.calls.map((c: any[]) => c[0]);
@@ -611,7 +645,9 @@ describe('CompletionService', () => {
       mockSupabase.from.mockReturnValueOnce({
         select: jest.fn().mockReturnValue({
           eq: jest.fn().mockReturnValue({
-            maybeSingle: jest.fn().mockResolvedValue({ data: { title: 'Test Bounty' }, error: null }),
+            maybeSingle: jest
+              .fn()
+              .mockResolvedValue({ data: { title: 'Test Bounty' }, error: null }),
           }),
         }),
       });
@@ -639,8 +675,9 @@ describe('CompletionService', () => {
         }),
       });
 
-      await expect(completionService.approveSubmission('bounty123'))
-        .rejects.toThrow('No submission found for bounty');
+      await expect(completionService.approveSubmission('bounty123')).rejects.toThrow(
+        'No submission found for bounty'
+      );
     });
   });
 
@@ -656,9 +693,9 @@ describe('CompletionService', () => {
       mockSupabase.from.mockReturnValueOnce({
         select: jest.fn().mockReturnValue({
           eq: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue({ 
-              data: mockSubmissionData, 
-              error: null 
+            single: jest.fn().mockResolvedValue({
+              data: mockSubmissionData,
+              error: null,
             }),
           }),
         }),
@@ -708,16 +745,17 @@ describe('CompletionService', () => {
       mockSupabase.from.mockReturnValue({
         select: jest.fn().mockReturnValue({
           eq: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue({ 
-              data: null, 
-              error: new Error('Not found') 
+            single: jest.fn().mockResolvedValue({
+              data: null,
+              error: new Error('Not found'),
             }),
           }),
         }),
       });
 
-      await expect(completionService.requestRevision('submission123', 'feedback'))
-        .rejects.toThrow();
+      await expect(
+        completionService.requestRevision('submission123', 'feedback')
+      ).rejects.toThrow();
     });
   });
 
@@ -763,24 +801,26 @@ describe('CompletionService', () => {
       const { getCurrentUserId } = require('../../../lib/utils/data-utils');
       getCurrentUserId.mockReturnValueOnce(null);
 
-      await expect(completionService.submitRating(invalidRating))
-        .rejects.toThrow('Missing required rating fields');
+      await expect(completionService.submitRating(invalidRating)).rejects.toThrow(
+        'Missing required rating fields'
+      );
     });
 
     it('should handle rating submission errors', async () => {
       mockSupabase.from.mockReturnValue({
         insert: jest.fn().mockReturnValue({
           select: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue({ 
-              data: null, 
-              error: { message: 'Constraint violation' } 
+            single: jest.fn().mockResolvedValue({
+              data: null,
+              error: { message: 'Constraint violation' },
             }),
           }),
         }),
       });
 
-      await expect(completionService.submitRating(mockRating))
-        .rejects.toThrow('Constraint violation');
+      await expect(completionService.submitRating(mockRating)).rejects.toThrow(
+        'Constraint violation'
+      );
     });
   });
 
@@ -828,9 +868,9 @@ describe('CompletionService', () => {
       mockSupabase.from.mockReturnValue({
         select: jest.fn().mockReturnValue({
           eq: jest.fn().mockReturnValue({
-            order: jest.fn().mockResolvedValue({ 
-              data: null, 
-              error: { message: 'Query failed' } 
+            order: jest.fn().mockResolvedValue({
+              data: null,
+              error: { message: 'Query failed' },
             }),
           }),
         }),
