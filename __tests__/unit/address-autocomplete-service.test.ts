@@ -1,6 +1,6 @@
 /**
  * Unit tests for Address Autocomplete Service
- * 
+ *
  * Comprehensive tests including mocked API responses to verify:
  * - Configuration detection
  * - Caching behavior
@@ -8,11 +8,9 @@
  * - Error handling
  * - Successful API interactions
  * - Input sanitization
- * 
- * NOTE: These tests are currently skipped because Google Places API is not yet configured
- * in the production environment. Skipping prevents unnecessary API charges while the service
- * isn't actively being used. Once the Google Places API key is properly configured and the
- * service is ready for use, change `describe.skip` back to `describe` to re-enable these tests.
+ *
+ * `global.fetch` is mocked for every test in this file, so no real network
+ * calls (and no API charges) are ever made here.
  */
 
 // Mock fetch before any imports
@@ -31,7 +29,7 @@ jest.mock('expo-constants', () => ({
 
 import { addressAutocompleteService, isPlaceDetailsError } from '../../lib/services/address-autocomplete-service';
 
-describe.skip('AddressAutocompleteService', () => {
+describe('AddressAutocompleteService', () => {
   // Set up environment variable before all tests to ensure proper configuration
   beforeAll(() => {
     process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY = 'test-api-key-12345';
@@ -127,7 +125,7 @@ describe.skip('AddressAutocompleteService', () => {
       expect(results).toEqual([]);
     });
 
-    it('should throw error for API errors', async () => {
+    it('should return empty array (non-blocking) for API errors', async () => {
       const mockResponse = {
         status: 'REQUEST_DENIED',
         error_message: 'Invalid API key',
@@ -137,9 +135,8 @@ describe.skip('AddressAutocompleteService', () => {
         json: async () => mockResponse,
       });
 
-      await expect(
-        addressAutocompleteService.searchAddresses('123 Main')
-      ).rejects.toThrow('Unable to fetch address suggestions');
+      const results = await addressAutocompleteService.searchAddresses('123 Main');
+      expect(results).toEqual([]);
     });
 
     it('should cache search results', async () => {

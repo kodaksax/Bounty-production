@@ -1,14 +1,37 @@
 /**
  * End-to-end test for Apple Pay payment flow
- * 
- * TODO: These tests need absolute URLs and proper test setup with authentication
- * Currently skipped because fetch() requires absolute URLs in Node environment
+ *
+ * SKIPPED — intentionally, not a placeholder oversight. This test drives the
+ * flow purely over HTTP (`fetch('/apple-pay/...')`), which needs:
+ *   1. A real listening server (not fastify.inject()) with relative-URL
+ *      support or a configured base URL.
+ *   2. `/wallet/balance` and `/wallet/transactions` routes registered
+ *      alongside the apple-pay routes.
+ *   3. A `/webhooks/stripe` route — which does NOT exist on this Fastify app.
+ *      Per the note in services/api/src/routes/apple-pay.ts, Stripe webhooks
+ *      are handled by a separate Supabase Edge Function
+ *      (supabase/functions/webhooks/index.ts), so "webhook integration"
+ *      cannot be exercised through this server at all; that behavior would
+ *      need to be tested against the edge function directly instead.
+ *   4. A real (or emulated) test user + auth token + database, since the
+ *      wallet-balance/transactions assertions read persisted state.
+ *
+ * The payment-intent/confirm/idempotency/auth-guard/invalid-amount coverage
+ * this file was going for is already exercised, in-process and without any
+ * of the above infrastructure, by
+ * __tests__/integration/api/apple-pay-endpoints.test.ts via fastify.inject().
+ *
+ * To re-enable this file: stand up the full server (server/index.js or
+ * services/api) against a test Supabase project, register wallet + apple-pay
+ * routes, seed a real auth token, and either drop the webhook assertions or
+ * point them at the edge function's own test harness.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 
 describe.skip('Apple Pay Payment Flow E2E', () => {
   let authToken: string;
+  let userId: string;
 
   beforeAll(async () => {
     // TODO: Setup test environment

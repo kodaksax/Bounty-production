@@ -627,9 +627,23 @@ describe('Stripe Connect Service', () => {
   });
 
   describe('error handling and edge cases', () => {
-    it.skip('should handle Stripe service not configured', async () => {
-      // This test requires module reloading which is complex with singletons
-      // In practice, the service logs a warning and will throw on method calls
+    it('should handle Stripe service not configured', async () => {
+      const originalKey = process.env.STRIPE_SECRET_KEY;
+      delete process.env.STRIPE_SECRET_KEY;
+
+      let unconfiguredService: typeof stripeConnectService;
+      try {
+        jest.isolateModules(() => {
+          unconfiguredService =
+            require('../../../services/api/src/services/stripe-connect-service').stripeConnectService;
+        });
+
+        await expect(unconfiguredService!.getConnectStatus('user123')).rejects.toThrow(
+          'Stripe service not configured. Set STRIPE_SECRET_KEY environment variable.'
+        );
+      } finally {
+        process.env.STRIPE_SECRET_KEY = originalKey;
+      }
     });
 
     it('should handle database connection errors', async () => {

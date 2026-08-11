@@ -221,7 +221,7 @@ export async function registerPushToken(
   if (upsertError) throw upsertError;
 
   return {
-    existed: Boolean(existing?.id),
+    existed: existing !== null,
     reenabled: existing?.enabled === false,
   };
 }
