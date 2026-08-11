@@ -48,6 +48,16 @@ describe('Profile Loading and Creation', () => {
     (authProfileService as any).currentProfile = null;
     (authProfileService as any).currentSession = null;
     (authProfileService as any).listeners = [];
+
+    // These tests all model a *signed-in* user, so gotrue must report a live
+    // session: a zero-row profile read only means "needs onboarding" when the
+    // request was actually authenticated (see hasLiveSessionFor). Mirroring
+    // whatever session setSession() stored keeps each test's userId in sync
+    // without having to restate it here.
+    mockSupabase.auth.getSession.mockImplementation(async () => ({
+      data: { session: (authProfileService as any).currentSession },
+      error: null,
+    }));
   });
 
   describe('Profile Creation on Auth User Creation', () => {
@@ -222,6 +232,76 @@ describe('Profile Loading and Creation', () => {
         // Test should not throw errors
         expect(err).toBeFalsy();
       }
+    });
+  });
+
+  describe('Zero-row reads without a live session', () => {
+    // Regression: get_my_profile() is SECURITY DEFINER scoped to auth.uid(), so a
+    // request carrying an expired JWT returns zero rows with no error — identical
+    // on the wire to a deleted profile. Treating that as deletion sent signed-in
+    // users to onboarding when they resumed the app with a lapsed token (JS
+    // timers are frozen while backgrounded, so auto-refresh cannot run).
+    const establishedProfile = (userId: string): AuthProfile =>
+      ({
+        id: userId,
+        username: 'established-user',
+        balance: 0,
+        onboarding_completed: true,
+      }) as AuthProfile;
+
+    it('keeps the existing profile when the foreground fetch is unauthenticated', async () => {
+      const userId = 'test-user-expired-token';
+      (authProfileService as any).currentProfile = establishedProfile(userId);
+
+      // Token has lapsed: gotrue reports no session...
+      mockSupabase.auth.getSession.mockResolvedValue({
+        data: { session: null },
+        error: null,
+      });
+      // ...so the RPC comes back empty, with no error.
+      mockSupabase.rpc.mockResolvedValue({ data: null, error: null });
+
+      const profile = await (authProfileService as any).fetchAndSyncProfile(userId);
+
+      expect(profile?.needs_onboarding).toBeUndefined();
+      expect(profile?.username).toBe('established-user');
+      expect(authProfileService.getCurrentProfile()?.onboarding_completed).toBe(true);
+    });
+
+    it('does not wipe the cache on an unauthenticated background fetch', async () => {
+      const userId = 'test-user-background-expired';
+      (authProfileService as any).currentProfile = establishedProfile(userId);
+      const clearCacheSpy = jest.spyOn(authProfileService as any, 'clearCache');
+
+      mockSupabase.auth.getSession.mockResolvedValue({
+        data: { session: null },
+        error: null,
+      });
+      mockSupabase.rpc.mockResolvedValue({ data: null, error: null });
+
+      await (authProfileService as any).fetchFreshProfileInBackground(userId, Date.now());
+
+      // Clearing the cache would destroy the fallback that covers this exact case.
+      expect(clearCacheSpy).not.toHaveBeenCalled();
+      expect(authProfileService.getCurrentProfile()?.needs_onboarding).toBeUndefined();
+      clearCacheSpy.mockRestore();
+    });
+
+    it('still flags onboarding when the session IS live', async () => {
+      // The guard must not mask a genuinely deleted profile.
+      const userId = 'test-user-truly-deleted';
+      (authProfileService as any).currentProfile = establishedProfile(userId);
+      (authProfileService as any).currentSession = { user: { id: userId } };
+
+      mockSupabase.auth.getSession.mockResolvedValue({
+        data: { session: { user: { id: userId } } },
+        error: null,
+      });
+      mockSupabase.rpc.mockResolvedValue({ data: null, error: null });
+
+      const profile = await (authProfileService as any).fetchAndSyncProfile(userId);
+
+      expect(profile?.needs_onboarding).toBe(true);
     });
   });
 

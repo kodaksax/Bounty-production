@@ -384,6 +384,22 @@ export class AuthProfileService {
       }
 
       if (!data) {
+        // Zero rows is only a *confirmed* absence when the request was actually
+        // authenticated. get_my_profile() is SECURITY DEFINER scoped to
+        // auth.uid(), so an expired or missing JWT returns the same empty
+        // result with no error — indistinguishable from a deleted profile.
+        // Without this guard, a returning user whose token lapsed while the app
+        // was backgrounded (JS timers are frozen, so auto-refresh can't run) is
+        // told they need onboarding. See hasLiveSessionFor.
+        if (!(await this.hasLiveSessionFor(userId))) {
+          console.log(
+            '[authProfileService] Profile query returned no row while unauthenticated — keeping existing profile'
+          );
+          logger.warning('Profile fetch returned no row without a live session', { userId });
+          this.notifyListeners(this.currentProfile ?? null);
+          return this.currentProfile ?? null;
+        }
+
         // get_my_profile() returns null when no row exists for auth.uid() —
         // same "needs onboarding" case the old PGRST116 branch handled.
         // This is a *confirmed* absence (the query succeeded with zero rows),
@@ -530,6 +546,20 @@ export class AuthProfileService {
       }
 
       if (!data) {
+        // Same trap as the foreground path, and more damaging here: this branch
+        // clears the cache, destroying the very fallback that would otherwise
+        // carry the user through an expired-token read. Confirm the request was
+        // authenticated before treating zero rows as a deletion.
+        if (!(await this.hasLiveSessionFor(userId))) {
+          console.log(
+            '[authProfileService] Background fetch returned no row while unauthenticated — keeping cached profile'
+          );
+          logger.warning('Background profile fetch returned no row without a live session', {
+            userId,
+          });
+          return;
+        }
+
         // get_my_profile() returns null when no row exists for auth.uid() —
         // the profile no longer exists server-side; clear the stale cache
         // and redirect to onboarding, same as the old PGRST116 branch.
@@ -851,6 +881,35 @@ export class AuthProfileService {
     } catch (error) {
       logger.error('Error loading profile from cache', { error });
       return null;
+    }
+  }
+
+  /**
+   * True when Supabase currently holds a valid session for `userId`.
+   *
+   * Exists to disambiguate the one response the profile RPC cannot describe:
+   * `get_my_profile()` is SECURITY DEFINER scoped to `auth.uid()`, so a request
+   * carrying an expired or missing JWT returns zero rows with no error —
+   * byte-identical to a genuinely deleted profile.
+   *
+   * That happens routinely on resume. JS timers are frozen while the app is
+   * backgrounded, so the access token can expire with no chance to refresh, and
+   * a query fired on foreground may go out before the refresh lands. Treating
+   * that as a deletion bounces a signed-in user into onboarding, so callers
+   * must check this before acting on zero rows.
+   *
+   * getSession() reads local storage (refreshing an expired token when it can)
+   * rather than always hitting the network, so this is cheap.
+   */
+  private async hasLiveSessionFor(userId: string): Promise<boolean> {
+    try {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) return false;
+      return data?.session?.user?.id === userId;
+    } catch {
+      // An unreadable session counts as "not authenticated": the caller's
+      // fallback is to preserve existing state, which is the safe direction.
+      return false;
     }
   }
 

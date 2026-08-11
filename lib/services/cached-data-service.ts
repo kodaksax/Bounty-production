@@ -63,6 +63,7 @@ class CachedDataService {
                 timestamp: entry.timestamp,
                 expiresAt: entry.expiresAt,
               });
+              
             } catch (err) {
               logger.error('Failed to emit foreground event', { key, error: err });
             }
