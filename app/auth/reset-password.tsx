@@ -1,8 +1,11 @@
 "use client"
 import { MaterialIcons } from '@expo/vector-icons'
+import { AnimatedScreen } from 'components/ui/animated-screen'
 import { BrandingLogo } from 'components/ui/branding-logo'
 import { Label } from 'components/ui/label'
+import * as Linking from 'expo-linking'
 import { useRouter } from 'expo-router'
+import { ROUTES } from 'lib/routes'
 import { requestPasswordReset } from 'lib/services/auth-service'
 import { useAppThemeContext } from 'lib/themes/AppThemeContext'
 import { isValidEmail } from 'lib/utils/password-validation'
@@ -133,9 +136,24 @@ export function ResetPasswordScreen() {
     handleReset()
   }
 
+  const handleOpenEmailApp = async () => {
+    try {
+      const emailUrl = 'message://'
+      const canOpen = await Linking.canOpenURL(emailUrl)
+      if (canOpen) {
+        await Linking.openURL(emailUrl)
+      } else {
+        await Linking.openURL('mailto:')
+      }
+    } catch (e) {
+      console.warn('[reset-password] Could not open email app', e)
+    }
+  }
+
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
+      <AnimatedScreen>
         <View className="flex-1 px-6 pt-20 pb-8" style={{ backgroundColor: theme.background }}>
           {/* Header */}
           <View className="flex-row items-center justify-center mb-6">
@@ -227,9 +245,7 @@ export function ResetPasswordScreen() {
               <View className="gap-3">
                 {/* Open Email App */}
                 <TouchableOpacity
-                  onPress={() => {
-                    // This is a placeholder - in production, use expo-mail-composer
-                  }}
+                  onPress={handleOpenEmailApp}
                   className="w-full bg-[#059669] rounded-lg py-3 items-center"
                 >
                   <Text className="text-white font-medium">Open Email App</Text>
@@ -264,7 +280,7 @@ export function ResetPasswordScreen() {
                     t see the email.
                   </Text>
                   <Text className="text-xs text-center" style={{ color: theme.textSecondary }}>
-                    The reset link will expire in 1 hour.
+                    The reset link will expire in 1 hour and can only be used once. Requesting a new link makes any earlier one stop working.
                   </Text>
                 </View>
               </View>
@@ -288,7 +304,7 @@ export function ResetPasswordScreen() {
 
             {/* Back to Sign In */}
             <TouchableOpacity
-              onPress={() => router.push('/auth/sign-in-form')}
+              onPress={() => router.push(ROUTES.AUTH.SIGN_IN)}
               className="flex-row items-center justify-center py-3 mt-2"
             >
               <MaterialIcons name="arrow-back" size={18} color={theme.text} />
@@ -306,6 +322,7 @@ export function ResetPasswordScreen() {
             </View>
           </View>
         </View>
+      </AnimatedScreen>
       </ScrollView>
     </KeyboardAvoidingView>
   )

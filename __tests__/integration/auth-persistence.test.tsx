@@ -78,6 +78,15 @@ try {
   // Ignore if alias mocking isn't supported in this environment
 }
 
+// Mock the startup-timeout counter/purge functions so the offline-guard tests
+// below can assert on them directly without depending on real AsyncStorage
+// counter state persisting across tests.
+jest.mock('../../lib/auth-session-storage', () => ({
+  clearAllSessionData: jest.fn(() => Promise.resolve()),
+  incrementStartupTimeoutCount: jest.fn(() => Promise.resolve(1)),
+  resetStartupTimeoutCount: jest.fn(() => Promise.resolve()),
+}));
+
 // Require modules after mocks so imports inside modules pick up jest mocks
 const reactNative = require('react-native');
 if (!reactNative.AppState || typeof reactNative.AppState.addEventListener !== 'function') {
@@ -87,6 +96,7 @@ if (!reactNative.AppState || typeof reactNative.AppState.addEventListener !== 'f
 }
 
 const { supabase } = require('../../lib/supabase');
+const authSessionStorage = require('../../lib/auth-session-storage');
 const AuthProvider = require('../../providers/auth-provider').default;
 
 describe('Authentication State Persistence', () => {
@@ -1154,6 +1164,75 @@ describe('Authentication State Persistence', () => {
       await waitFor(() => {
         expect(getContext()?.isPasswordRecovery).toBe(false);
       });
+    });
+  });
+
+  describe('Startup timeout offline guard', () => {
+    // Regression tests for: a device with no network connection times out on
+    // every startup session-restore attempt by definition. That must never be
+    // treated the same as the "stalled refresh" production incident (a
+    // reachable backend that hangs) — otherwise a user who opens the app
+    // twice with no connectivity loses a perfectly valid persisted session.
+
+    it('does not count a startup timeout toward the purge threshold while offline', async () => {
+      // getSession() never resolves — forces the internal AUTH_TIMEOUT to fire.
+      (supabase.auth.getSession as jest.Mock).mockImplementation(() => new Promise(() => {}));
+
+      const netInfo = require('@react-native-community/netinfo');
+      (netInfo.fetch as jest.Mock).mockResolvedValue({
+        isConnected: false,
+        isInternetReachable: false,
+        type: 'none',
+      });
+
+      const TestComponent = () => <></>;
+      render(
+        <AuthProvider>
+          <TestComponent />
+        </AuthProvider>
+      );
+
+      // Wait for getSession() to actually be in flight (i.e. the internal
+      // AUTH_TIMEOUT setTimeout has been registered) before advancing timers —
+      // advancing too early would fire nothing since the timer doesn't exist yet.
+      await waitFor(() => {
+        expect(supabase.auth.getSession).toHaveBeenCalled();
+      });
+
+      await act(async () => {
+        jest.advanceTimersByTime(20000);
+      });
+
+      expect(authSessionStorage.incrementStartupTimeoutCount).not.toHaveBeenCalled();
+      expect(authSessionStorage.clearAllSessionData).not.toHaveBeenCalled();
+    });
+
+    it('still counts a startup timeout toward the purge threshold when the network is reachable', async () => {
+      (supabase.auth.getSession as jest.Mock).mockImplementation(() => new Promise(() => {}));
+
+      const netInfo = require('@react-native-community/netinfo');
+      (netInfo.fetch as jest.Mock).mockResolvedValue({
+        isConnected: true,
+        isInternetReachable: true,
+        type: 'wifi',
+      });
+
+      const TestComponent = () => <></>;
+      render(
+        <AuthProvider>
+          <TestComponent />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(supabase.auth.getSession).toHaveBeenCalled();
+      });
+
+      await act(async () => {
+        jest.advanceTimersByTime(20000);
+      });
+
+      expect(authSessionStorage.incrementStartupTimeoutCount).toHaveBeenCalled();
     });
   });
 });

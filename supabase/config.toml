@@ -79,10 +79,20 @@ file_size_limit = "50MiB"
 
 [auth]
 site_url = "exp://localhost:8081"
+# Keep in sync with the redirectTo values the app actually requests:
+# - lib/services/auth-service.ts defaults to the web callback URL so the
+#   reset email works on both mobile (opened via universal link) and desktop.
+# - app.json's `expo.scheme` is "bountyexpo-workspace" (not "bountyexpo") —
+#   both are listed below since some local builds still resolve the old one.
 additional_redirect_urls = [
   "exp://localhost:8081",
   "bountyexpo://",
-  "bountyexpo://auth/callback"
+  "bountyexpo://auth/callback",
+  "bountyexpo-workspace://",
+  "bountyexpo-workspace://auth/callback",
+  "bountyexpo-workspace://auth/update-password",
+  "https://bountyfinder.app/auth/callback",
+  "https://bountyfinder.app/auth/update-password"
 ]
 jwt_expiry = 3600
 enable_signup = true

@@ -3,7 +3,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { ValidationMessage } from 'app/components/ValidationMessage';
 import type { Href } from 'expo-router';
 import { useRouter } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
     KeyboardAvoidingView,
     Modal,
@@ -19,21 +19,32 @@ import { PRIVACY_TEXT } from '../../assets/legal/privacy';
 import { TERMS_TEXT } from '../../assets/legal/terms';
 import { Button } from '../../components/ui/button';
 import { BrandingLogo } from '../../components/ui/branding-logo';
-import { ValidationPatterns } from '../../hooks/use-form-validation';
 import { config } from '../../lib/config';
 import { API_BASE_URL } from '../../lib/config/api';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
+import { ROUTES } from '../../lib/routes';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import { analyticsService } from '../../lib/services/analytics-service';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { generateCorrelationId, parseAuthError } from '../../lib/utils/auth-errors';
 import { suggestEmailCorrection, validateEmail } from '../../lib/utils/auth-validation';
+import {
+    calculatePasswordStrength,
+    getStrengthColor,
+    getStrengthWidth,
+    validateNewPassword,
+    validatePasswordMatch,
+    type PasswordStrengthResult,
+} from '../../lib/utils/password-validation';
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation';
 
 // iOS Password AutoFill rules for the sign-up password fields.
-// Kept in sync with the client-side validation in `validateForm` so the
-// system-generated "Strong Password" satisfies our requirements.
-const IOS_NEW_PASSWORD_RULES = 'minlength: 8; required: lower; required: upper; required: digit;';
+// Kept in sync with `lib/utils/password-validation.ts` (the same requirements
+// used by the password reset flow) so the system-generated "Strong Password"
+// satisfies our requirements — and so a password valid at sign-up is never
+// later rejected when the user resets it.
+const IOS_NEW_PASSWORD_RULES =
+  'minlength: 8; required: lower; required: upper; required: digit; required: special;';
 
 export default function SignUpRoute() {
   return <SignUpForm />;
@@ -61,6 +72,14 @@ export function SignUpForm() {
   const passwordRef = useRef<TextInput>(null);
   const confirmPasswordRef = useRef<TextInput>(null);
 
+  // Password strength tracking — same rules/UI pattern as the reset-password
+  // flow (lib/utils/password-validation.ts), so sign-up and password reset
+  // never disagree about what makes a valid password.
+  const [passwordStrength, setPasswordStrength] = useState<PasswordStrengthResult | null>(null);
+  useEffect(() => {
+    setPasswordStrength(password ? calculatePasswordStrength(password) : null);
+  }, [password]);
+
   const validateForm = () => {
     const errors: Record<string, string> = {};
 
@@ -76,22 +95,14 @@ export function SignUpForm() {
         'Username must be 3-24 characters: lowercase letters, numbers, and underscores only';
     }
 
-    // Validate password - at least 8 chars with uppercase, lowercase, and a number.
-    // Requirements intentionally match iOS's auto-generated "Strong Password" format
-    // (letters + digits + hyphens) so Apple's password autofill works on sign-up.
-    if (!password) {
-      errors.password = 'Password is required';
-    } else if (!ValidationPatterns.password.test(password)) {
-      errors.password =
-        'Password must be at least 8 characters with uppercase, lowercase, and a number';
-    }
+    // Validate password using the same rules as password reset, so a
+    // password that's valid here is never later rejected on reset.
+    const passwordError = validateNewPassword(password);
+    if (passwordError) errors.password = passwordError;
 
     // Validate password match
-    if (password && confirmPassword && password !== confirmPassword) {
-      errors.confirmPassword = 'Passwords do not match';
-    } else if (!confirmPassword) {
-      errors.confirmPassword = 'Please confirm your password';
-    }
+    const confirmError = validatePasswordMatch(password, confirmPassword);
+    if (confirmError) errors.confirmPassword = confirmError;
 
     // Require age verification per App Store policy
     if (!ageVerified) {
@@ -460,9 +471,44 @@ export function SignUpForm() {
                   </TouchableOpacity>
                 </View>
                 {fieldErrors.password ? <ValidationMessage message={fieldErrors.password} /> : null}
-                <Text className="text-xs mt-1" style={{ color: theme.textSecondary }}>
-                  Must include uppercase, lowercase, and a number
-                </Text>
+
+                {passwordStrength && (
+                  <View className="mt-3">
+                    <View className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: theme.isDark ? 'rgba(255,255,255,0.1)' : theme.surfaceSecondary }}>
+                      <View
+                        style={{
+                          width: `${getStrengthWidth(passwordStrength.score)}%`,
+                          height: '100%',
+                          backgroundColor: getStrengthColor(passwordStrength.level),
+                          borderRadius: 4,
+                        }}
+                      />
+                    </View>
+                    <Text
+                      style={{ color: getStrengthColor(passwordStrength.level) }}
+                      className="text-xs mt-1 capitalize"
+                    >
+                      {passwordStrength.level.replace('-', ' ')}
+                    </Text>
+                    <View className="mt-2 rounded-lg p-3" style={{ backgroundColor: theme.isDark ? 'rgba(255,255,255,0.1)' : theme.surfaceSecondary }}>
+                      {passwordStrength.requirements.map((req) => (
+                        <View key={req.id} className="flex-row items-center mb-1">
+                          <MaterialIcons
+                            name={req.met ? 'check-circle' : 'radio-button-unchecked'}
+                            size={14}
+                            color={req.met ? theme.primary : theme.textSecondary}
+                          />
+                          <Text
+                            className="text-xs ml-2"
+                            style={{ color: req.met ? theme.primary : theme.textSecondary }}
+                          >
+                            {req.label}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
               </View>
 
               <View>
@@ -574,7 +620,7 @@ export function SignUpForm() {
               </Button>
 
               <TouchableOpacity
-                onPress={() => router.replace('/auth/sign-in-form' as Href)}
+                onPress={() => router.replace(ROUTES.AUTH.SIGN_IN as Href)}
                 accessibilityRole="button"
                 accessibilityLabel="Back to sign in"
               >

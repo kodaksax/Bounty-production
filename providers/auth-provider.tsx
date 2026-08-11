@@ -24,7 +24,11 @@ import { analyticsService } from '../lib/services/analytics-service';
 import { authProfileService } from '../lib/services/auth-profile-service';
 import { getSentry } from '../lib/services/sentry-init';
 import { isSupabaseConfigured, PROJECT_STORAGE_KEY, supabase } from '../lib/supabase';
-import { logAuthLifecycleEvent, runAuthStageWithTimeout } from '../lib/utils/auth-diagnostics';
+import {
+    getNetworkSnapshot,
+    logAuthLifecycleEvent,
+    runAuthStageWithTimeout,
+} from '../lib/utils/auth-diagnostics';
 import { AUTH_RETRY_CONFIG, generateCorrelationId, isTimeoutError } from '../lib/utils/auth-errors';
 import { getDeviceServiceabilityContext } from '../lib/utils/serviceable-region';
 import {
@@ -490,15 +494,31 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           // stalled refresh → timeout → next launch replays the same refresh)
           // does get cleaned up. The counter is reset whenever a startup
           // session restore succeeds (see resetStartupTimeoutCount above).
+          //
+          // A device that is genuinely offline will time out on every launch
+          // by definition — that must never count toward the purge threshold,
+          // or a user who opens the app twice on a plane/subway loses a
+          // perfectly valid session for a reason unrelated to the session
+          // itself. Only count/purge when we have positive evidence the
+          // network was reachable (so a real stalled-refresh loop, which
+          // happens against a reachable backend, still gets cleaned up).
           try {
-            const count = await incrementStartupTimeoutCount();
-            reportWarning(
-              `[AuthProvider] Startup timeout count: ${count} (purge threshold: ${STARTUP_TIMEOUT_PURGE_THRESHOLD})`
-            );
-            if (count >= STARTUP_TIMEOUT_PURGE_THRESHOLD) {
-              await clearAllSessionData(PROJECT_STORAGE_KEY);
-              await resetStartupTimeoutCount();
-              reportWarning('[AuthProvider] Purged stalled session after consecutive timeouts');
+            const network = await getNetworkSnapshot();
+            const isOffline = network.isConnected === false || network.isInternetReachable === false;
+            if (isOffline) {
+              reportWarning(
+                '[AuthProvider] Startup session restore timed out while offline — keeping persisted session for retry once connectivity returns'
+              );
+            } else {
+              const count = await incrementStartupTimeoutCount();
+              reportWarning(
+                `[AuthProvider] Startup timeout count: ${count} (purge threshold: ${STARTUP_TIMEOUT_PURGE_THRESHOLD})`
+              );
+              if (count >= STARTUP_TIMEOUT_PURGE_THRESHOLD) {
+                await clearAllSessionData(PROJECT_STORAGE_KEY);
+                await resetStartupTimeoutCount();
+                reportWarning('[AuthProvider] Purged stalled session after consecutive timeouts');
+              }
             }
           } catch (e) {
             reportWarning('[AuthProvider] Failed to handle startup timeout count:', e);

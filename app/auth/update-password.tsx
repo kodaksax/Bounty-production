@@ -22,6 +22,7 @@ import {
     View
 } from 'react-native'
 import { BrandingLogo } from '../../components/ui/branding-logo'
+import { ROUTES } from '../../lib/routes'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation'
 
@@ -122,7 +123,7 @@ export function UpdatePasswordScreen() {
         setError(result.message)
       }
     } catch (e) {
-      setError('An unexpected error occurred. Please tr again.')
+      setError('An unexpected error occurred. Please try again.')
       console.error(e)
     } finally {
       setLoading(false)
@@ -163,7 +164,7 @@ export function UpdatePasswordScreen() {
           </Text>
           <TouchableOpacity
             onPress={() => {
-              router.push('/auth/reset-password')
+              router.push(ROUTES.AUTH.RESET_PASSWORD)
               try { markInitialNavigationDone(); } catch {}
             }}
             className="bg-[#059669] rounded-lg py-3 px-6 mb-4"
@@ -171,7 +172,7 @@ export function UpdatePasswordScreen() {
             <Text className="text-white font-medium">Request New Reset Link</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => {
-            router.push('/auth/sign-in-form')
+            router.push(ROUTES.AUTH.SIGN_IN)
             try { markInitialNavigationDone(); } catch {}
           }}>
             <Text style={{ color: theme.text }}>Back to Sign In</Text>
@@ -191,18 +192,23 @@ export function UpdatePasswordScreen() {
           </View>
           <Text className="font-bold text-xl mb-2" style={{ color: theme.text }}>Password Updated!</Text>
           <Text className="text-center text-sm px-4 mb-6" style={{ color: theme.text }}>
-            Your password has been successfully updated. You can now sign in with your new password.
+            Your password has been successfully updated and you&apos;re signed in with it.
           </Text>
           <TouchableOpacity
             onPress={() => {
-              router.replace('/auth/sign-in-form')
+              // The session established by the reset link is still valid after
+              // updateUser() succeeds — routing to the root gate (instead of back
+              // to the sign-in form) lets it detect the authenticated session and
+              // continue straight into the app instead of asking for credentials
+              // the user just set.
+              router.replace(ROUTES.ROOT)
               try { markInitialNavigationDone(); } catch {}
             }}
             className="bg-[#059669] rounded-lg py-3 px-6"
           >
             <View className="flex-row items-center">
-              <MaterialIcons name="login" size={20} color="#fff" style={{ marginRight: 8 }} />
-              <Text className="text-white font-medium">Sign In Now</Text>
+              <MaterialIcons name="arrow-forward" size={20} color="#fff" style={{ marginRight: 8 }} />
+              <Text className="text-white font-medium">Continue</Text>
             </View>
           </TouchableOpacity>
         </View>
@@ -411,7 +417,7 @@ export function UpdatePasswordScreen() {
 
             {/* Cancel Link */}
             <TouchableOpacity
-              onPress={() => router.push('/auth/sign-in-form')}
+              onPress={() => router.push(ROUTES.AUTH.SIGN_IN)}
               className="py-3 items-center"
             >
               <Text style={{ color: theme.text }}>Cancel and return to Sign In</Text>

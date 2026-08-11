@@ -425,26 +425,22 @@ describe('NotificationService', () => {
         'notifications:pending_tokens',
         expect.stringContaining('ExponentPushToken[tok]')
       );
-      expect(AsyncStorage.setItem).toHaveBeenCalledWith(
-        'notifications:register_on_signin',
-        'true'
-      );
+      expect(AsyncStorage.setItem).toHaveBeenCalledWith('notifications:register_on_signin', 'true');
     });
 
     it('should recover from invalid cached pending tokens when queuing without a session', async () => {
       AsyncStorage.getItem.mockResolvedValue('{not-json');
       AsyncStorage.setItem.mockResolvedValue(undefined);
 
-      await expect(notificationService.registerPushToken('ExponentPushToken[tok]')).resolves.not.toThrow();
+      await expect(
+        notificationService.registerPushToken('ExponentPushToken[tok]')
+      ).resolves.not.toThrow();
 
       expect(AsyncStorage.setItem).toHaveBeenCalledWith(
         'notifications:pending_tokens',
         JSON.stringify([{ token: 'ExponentPushToken[tok]' }])
       );
-      expect(AsyncStorage.setItem).toHaveBeenCalledWith(
-        'notifications:register_on_signin',
-        'true'
-      );
+      expect(AsyncStorage.setItem).toHaveBeenCalledWith('notifications:register_on_signin', 'true');
     });
 
     it('should POST the token with correct body and auth header', async () => {
@@ -529,7 +525,9 @@ describe('NotificationService', () => {
       (global as any).fetch = jest.fn().mockResolvedValue(makeErrorResponse(404));
       const upsert = jest
         .fn()
-        .mockResolvedValueOnce({ error: { code: '42703', message: "column \"profile_id\" does not exist" } })
+        .mockResolvedValueOnce({
+          error: { code: '42703', message: 'column "profile_id" does not exist' },
+        })
         .mockResolvedValueOnce({ error: null });
       (supabase.from as jest.Mock).mockImplementation(() => makeFromMock({ upsert }));
 
@@ -577,7 +575,7 @@ describe('NotificationService', () => {
       expect((global as any).fetch).toHaveBeenCalledTimes(1);
       expect(upsert).toHaveBeenCalledTimes(2);
 
-      ;(Date.now as jest.Mock).mockRestore?.();
+      (Date.now as jest.Mock).mockRestore?.();
       Date.now = realDateNow;
     });
 
