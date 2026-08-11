@@ -159,9 +159,10 @@ function resolvePlugins(plugins = []) {
 
       if (!apiKey || !domain) {
         if (APP_ENV === 'production') {
-          throw new Error(
-            '[FATAL] Branch deferred linking requires EXPO_PUBLIC_BRANCH_KEY and ' +
-              'EXPO_PUBLIC_BRANCH_DOMAIN in the production EAS environment.'
+          console.warn(
+            '[build-time warning] Branch deferred linking is disabled because EXPO_PUBLIC_BRANCH_KEY ' +
+              'or EXPO_PUBLIC_BRANCH_DOMAIN is missing. Production builds will succeed, but Branch deep ' +
+              'links will not be configured.'
           );
         }
         return [];
