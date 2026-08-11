@@ -1252,7 +1252,15 @@ Deno.serve(async (req: Request) => {
       { onConflict: 'stripe_event_id' }
     );
 
-    switch (event.type) {
+    // stripe@14's Event.type union doesn't include every event name this
+    // endpoint legitimately receives (e.g. legacy transfer.paid/failed and
+    // external_account.* names still sent under this endpoint's configured
+    // Stripe API version, and refund.failed which postdates this SDK's
+    // types). Switching on a plain-string copy avoids narrowing `event`
+    // itself to `never` in those case blocks, without changing which
+    // strings any case actually matches.
+    const eventType: string = event.type;
+    switch (eventType) {
       case 'payment_intent.succeeded': {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
         const userId = paymentIntent.metadata?.user_id;
@@ -2533,7 +2541,7 @@ Deno.serve(async (req: Request) => {
             // record the wallet transaction inside a single DB transaction so
             // we cannot end up with a completed transaction without the
             // corresponding balance change (prevents the retry/idempotency bug).
-            const { data: appliedTx, error: applyError } = await supabase.rpc(
+            const { data: _appliedTx, error: applyError } = await supabase.rpc(
               'apply_dispute_loss_transaction',
               {
                 p_user_id: closedUserId,

@@ -57,7 +57,6 @@ function logCritical(event: string, context: Record<string, unknown>) {
 // supabase/functions/connect/withdrawal-validation.ts, the unit-tested
 // source of truth)
 
-const MAX_TRANSFER_RETRIES = 3;
 const MAX_ADJUSTMENT_USD = 10000; // sanity cap on a single manual adjustment; mirrors WITHDRAW_MAX_USD
 
 function mapStripeTransferError(err: {
@@ -1082,7 +1081,7 @@ Deno.serve(async (req: Request) => {
       // Already settled — idempotent no-op, not an error.
       return jsonResponse({ success: true, alreadySettled: true, transactionId });
     }
-    if (t.type !== 'withdrawal' || !['pending', 'failed'].includes(t.status)) {
+    if (t.type !== 'withdrawal' || !['pending', 'failed'].includes(t.status ?? '')) {
       return jsonResponse(
         {
           error: `Transaction status '${t.status}' is not eligible for external settlement (must be a withdrawal currently 'pending' or 'failed').`,

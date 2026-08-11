@@ -266,11 +266,10 @@ export function createNotificationsHandler({ createAdminClient }: NotificationHa
       return jsonResponse({ error: 'Authentication required. Please sign in to continue.' }, 401);
     }
 
-    let body: any = {};
-    if (req.method !== 'OPTIONS') {
-      body = await req.json().catch(() => ({}));
-      if (body == null || typeof body !== 'object' || Array.isArray(body)) body = {};
-    }
+    // req.method is already narrowed to 'POST' | 'DELETE' by the guard above
+    // (the 'OPTIONS' case returned earlier), so this always runs.
+    let body: any = await req.json().catch(() => ({}));
+    if (body == null || typeof body !== 'object' || Array.isArray(body)) body = {};
 
     if (req.method === 'POST' && subPath === '/register-token') {
       const pushToken = typeof body.token === 'string' ? body.token.trim() : '';

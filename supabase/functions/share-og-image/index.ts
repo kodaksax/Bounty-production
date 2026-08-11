@@ -33,7 +33,7 @@ const BG_DARK_2 = '#111827';
 const IMAGE_FETCH_TIMEOUT_MS = 2500;
 
 let wasmInit: Promise<void> | null = null;
-async function ensureWasmInitialized(): Promise<void> {
+function ensureWasmInitialized(): Promise<void> {
   if (!wasmInit) {
     wasmInit = (async () => {
       const wasmResp = await fetch('https://unpkg.com/@resvg/resvg-wasm@2.6.2/index_bg.wasm');
@@ -202,7 +202,8 @@ async function svgToPng(svg: string): Promise<Uint8Array> {
 }
 
 function pngResponse(bytes: Uint8Array, cacheSeconds: number): Response {
-  return new Response(bytes, {
+  // Same TS 5.7 Uint8Array<ArrayBufferLike> vs BodyInit gap as simple-png.ts.
+  return new Response(bytes as Uint8Array<ArrayBuffer>, {
     status: 200,
     headers: {
       'Content-Type': 'image/png',

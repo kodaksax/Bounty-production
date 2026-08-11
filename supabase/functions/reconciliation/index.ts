@@ -48,7 +48,11 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 /** A payout still not paid after this long is a WARNING. */
 const PAYOUT_PENDING_WARN_HOURS = 24;
-/** A transfer not settled after this long is a WARNING — transfers are near-instant. */
+/** A transfer not settled after this long is a WARNING — transfers are near-instant.
+ * TODO: not currently checked anywhere in this file — payouts (line ~568) and
+ * generic stale-pending withdrawals (line ~757) are, but pending transfers
+ * have no dedicated staleness check yet. */
+// deno-lint-ignore no-unused-vars
 const TRANSFER_PENDING_WARN_HOURS = 2;
 /** A ledger withdrawal stuck 'pending' with no Stripe payout at all. */
 const STALE_PENDING_WARN_HOURS = 2;

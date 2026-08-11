@@ -11,7 +11,7 @@
 // Route shape: GET /share-profile/:id
 //   ?log=app_redirect|store_redirect — beacon from the client redirect script.
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { notFoundOgPage, renderOgPage } from '../_shared/og-html.ts';
 import { logShareEvent } from '../_shared/share-log.ts';
 import { redirectToSharePage } from '../_shared/share-page-storage.ts';
@@ -32,7 +32,7 @@ function truncate(text: string | null | undefined, length: number): string {
 }
 
 async function getRatingStats(
-  supabaseAdmin: ReturnType<typeof createClient>,
+  supabaseAdmin: SupabaseClient,
   userId: string
 ): Promise<{ averageRating: number; ratingCount: number }> {
   const { data, error } = await supabaseAdmin

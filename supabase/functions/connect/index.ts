@@ -26,9 +26,18 @@
 //   POST /connect/debit-cards              (410 DEPRECATED — use login-link)
 //   DELETE /connect/debit-cards/:id        (410 DEPRECATED — use login-link)
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Stripe from 'npm:stripe@14';
 import type { Profile, WalletTransaction } from '../_shared/types.ts';
+
+// stripe@14's bundled types for Balance.InstantAvailable omit `net_available`,
+// even though the live API returns it (see
+// https://docs.stripe.com/api/balance/balance_object — "Breakdown of balance
+// by destination", net of Stripe's instant-payout fee). readConnectBalance()
+// below explains why the code must read this field instead of `.amount`.
+type InstantAvailableWithNet = Stripe.Balance.InstantAvailable & {
+  net_available?: Array<{ amount: number; destination: string }>;
+};
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -370,7 +379,7 @@ interface PayoutAuditEntry {
  * logged loudly so they surface in monitoring.
  */
 async function writePayoutAudit(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   entry: PayoutAuditEntry
 ): Promise<void> {
   try {
@@ -460,7 +469,7 @@ async function readConnectBalance(
       .filter(b => b.currency === currency)
       .reduce((total, b) => total + (b.amount ?? 0), 0);
 
-  const instantAvailableCents = (balance.instant_available ?? [])
+  const instantAvailableCents = ((balance.instant_available ?? []) as InstantAvailableWithNet[])
     .filter(b => b.currency === currency)
     .reduce(
       (total, b) => total + (b.net_available?.reduce((s, n) => s + (n.amount ?? 0), 0) ?? 0),
@@ -547,7 +556,7 @@ function mapStripePayoutError(err: {
 
 interface NativePayoutParams {
   stripe: Stripe;
-  supabase: ReturnType<typeof createClient>;
+  supabase: SupabaseClient;
   userId: string;
   body: Record<string, unknown>;
   method: 'instant' | 'standard';
@@ -1665,7 +1674,7 @@ Deno.serve(async (req: Request) => {
       // instant payout fee), not .amount. Stripe explicitly warns that reading
       // .amount breaks the integration once instant-payout application fees
       // are enabled, because the user cannot actually pay out the gross figure.
-      const instantAvailable = (balance.instant_available ?? [])
+      const instantAvailable = ((balance.instant_available ?? []) as InstantAvailableWithNet[])
         .filter(b => b.currency === currency)
         .reduce(
           (total, b) =>
@@ -2733,7 +2742,8 @@ Deno.serve(async (req: Request) => {
         try {
           const preTransferBalance = await stripe.balance.retrieve({ stripeAccount: p.stripe_connect_account_id });
           const preTransferInstantAvailableCents =
-            preTransferBalance.instant_available?.find(b => b.currency === 'usd')?.net_available?.[0]?.amount ?? 0;
+            (preTransferBalance.instant_available as InstantAvailableWithNet[] | undefined)
+              ?.find(b => b.currency === 'usd')?.net_available?.[0]?.amount ?? 0;
           console.log('[connect/instant-payout] pre-transfer instant_available (informational only)', {
             userId,
             preTransferInstantAvailableCents,
@@ -3147,7 +3157,8 @@ Deno.serve(async (req: Request) => {
       try {
         const balance = await stripe.balance.retrieve({ stripeAccount: accountId });
         instantAvailableCents =
-          balance.instant_available?.find(b => b.currency === 'usd')?.net_available?.[0]?.amount ?? 0;
+          (balance.instant_available as InstantAvailableWithNet[] | undefined)
+            ?.find(b => b.currency === 'usd')?.net_available?.[0]?.amount ?? 0;
       } catch (balanceError) {
         console.warn('[connect/debit-cards] failed to fetch instant_available balance', {
           userId,

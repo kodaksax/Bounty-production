@@ -9,7 +9,7 @@
 // for the client-side mirror of TYPE_CATEGORY/URGENT_TYPES below — keep both
 // in sync by hand, since Deno's bundler can't import from lib/.
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 // Inlined from ./message (local imports are not supported by the Supabase bundler)
 function createExpoMessage(to: string, opts: { title?: string; body?: string; data?: any; sound?: string } = {}) {
@@ -206,7 +206,7 @@ Deno.serve(async (req: Request) => {
 
   // Track the outbox id and supabase client so the top-level catch can record
   // the failure reason on the row instead of swallowing it as an opaque 500.
-  let supabaseAdmin: ReturnType<typeof createClient> | null = null
+  let supabaseAdmin: SupabaseClient | null = null
   let outboxId: string | null = null
   let outboxAttempts = 0
 
@@ -224,7 +224,7 @@ Deno.serve(async (req: Request) => {
     let payload: any
     try {
       payload = await req.json();
-    } catch (e) {
+    } catch {
       return jsonResponse({ error: 'Invalid JSON' }, 400);
     }
 
@@ -411,7 +411,7 @@ Deno.serve(async (req: Request) => {
     const chunkSize = 100
     const fetchImpl = fetch
     let sent = 0
-    let errors: any[] = []
+    const errors: any[] = []
     const invalidTokens: string[] = []
 
     for (let i = 0; i < messages.length; i += chunkSize) {

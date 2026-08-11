@@ -48,7 +48,12 @@ jobs:
       - name: Setup Deno
         uses: denoland/setup-deno@v2
         with:
-          deno-version: v1.x
+          # Matches the Supabase Edge Runtime's default (supabase/config.toml
+          # has no [edge_runtime].deno_version override, and the CLI's own
+          # current default is deno_version = 2). Checking against a
+          # different major version than what actually executes in
+          # production defeats the point of this verify step.
+          deno-version: v2.x
 
       - name: Discover function directories
         id: discover
@@ -58,13 +63,20 @@ jobs:
           echo "Discovered: $FUNCS"
           echo "functions=$FUNCS" >> "$GITHUB_OUTPUT"
 
+      # --config + --node-modules-dir=auto are both required: this repo's
+      # root package.json (the Expo app) is an ancestor of every function
+      # directory, so without a scoped supabase/functions/deno.json, Deno 2
+      # mis-detects the functions as part of that npm workspace and every
+      # npm: import fails to resolve. --node-modules-dir=auto must also be
+      # passed explicitly on the CLI — the same setting in deno.json alone
+      # is not honored consistently by `deno check`/`deno lint`.
       - name: deno check every discovered function's entrypoint
         run: |
           for fn in ${{ steps.discover.outputs.functions }}; do
             entry="supabase/functions/$fn/index.ts"
             if [ -f "$entry" ]; then
               echo "::group::deno check $fn"
-              deno check "$entry"
+              deno check --config supabase/functions/deno.json --node-modules-dir=auto "$entry"
               echo "::endgroup::"
             else
               echo "::warning::$fn has no index.ts entrypoint, skipping deno check"
@@ -75,7 +87,7 @@ jobs:
         run: |
           for fn in ${{ steps.discover.outputs.functions }}; do
             echo "::group::deno lint $fn"
-            deno lint "supabase/functions/$fn"
+            deno lint --config supabase/functions/deno.json "supabase/functions/$fn"
             echo "::endgroup::"
           done
 
@@ -93,7 +105,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          # Full history: the push-event diff below needs `github.event.before`
+          # to actually be present locally. A shallow fetch-depth: 2 only
+          # covers a single-commit push — anything else (a multi-commit push,
+          # a merge bringing in more than one commit) leaves `before` outside
+          # the shallow clone and makes `git diff` fail outright.
+          fetch-depth: 0
 
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
@@ -109,6 +126,13 @@ jobs:
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             TARGETS="${{ needs.verify.outputs.functions }}"
             echo "Manual dispatch with no function list: deploying all discovered functions: $TARGETS"
+          elif [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "${{ github.event.before }}" 2>/dev/null; then
+            # First push to a new branch (before = all-zeros), or the before
+            # commit is otherwise unreachable — there's no diff to compute,
+            # so fall back to deploying every discovered function instead of
+            # failing the job outright.
+            TARGETS="${{ needs.verify.outputs.functions }}"
+            echo "No usable 'before' commit for diffing: deploying all discovered functions: $TARGETS"
           else
             # push event: only redeploy functions whose directory actually changed,
             # so an unrelated function's version doesn't bump on every merge.
@@ -124,6 +148,24 @@ jobs:
           fi
           echo "targets=$TARGETS" >> "$GITHUB_OUTPUT"
 
+      - name: Record pre-deploy function versions
+        if: steps.targets.outputs.targets != ''
+        run: |
+          mkdir -p /tmp/predeploy-versions
+          for fn in ${{ steps.targets.outputs.targets }}; do
+            HTTP_CODE=$(curl -s -o /tmp/meta.json -w '%{http_code}' \
+              -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+              "https://api.supabase.com/v1/projects/$PROJECT_REF/functions/$fn")
+            if [ "$HTTP_CODE" = "200" ]; then
+              jq -r '.version' /tmp/meta.json > "/tmp/predeploy-versions/$fn"
+            else
+              # 404 (function doesn't exist yet) is expected for a brand-new
+              # function — treat it as version 0 so the post-deploy check
+              # just requires *a* version to show up.
+              echo 0 > "/tmp/predeploy-versions/$fn"
+            fi
+          done
+
       - name: Deploy each target function
         if: steps.targets.outputs.targets != ''
         run: |
@@ -133,31 +175,39 @@ jobs:
             echo "::endgroup::"
           done
 
-      - name: Post-deploy verification — deployed source must match this commit
+      # Confirms each deploy actually registered a new active version, rather
+      # than the CLI reporting success while nothing changed server-side —
+      # the failure mode behind the historical payments/apple-pay and
+      # 2026-07-17 connect incidents. This checks Management API metadata
+      # (status + version) instead of diffing source against the `/body`
+      # endpoint: that endpoint returns a bundled eszip blob (a
+      # StreamableFile), not the JSON {name, content} shape the old version
+      # of this step assumed, so it never actually verified anything.
+      - name: Post-deploy verification — function must be ACTIVE on a new version
         if: steps.targets.outputs.targets != ''
         run: |
           FAILED=0
           for fn in ${{ steps.targets.outputs.targets }}; do
             echo "::group::Verifying $fn"
-            RESPONSE=$(curl -s -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
-              "https://api.supabase.com/v1/projects/$PROJECT_REF/functions/$fn/body")
-            # The API returns the deployed source as a JSON array of {name, content}.
-            # Compare the entrypoint's content against the git blob this workflow
-            # just deployed — any mismatch means the deploy silently didn't take,
-            # which is exactly the failure mode that caused the historical
-            # payments/apple-pay and 2026-07-17 connect incidents.
-            DEPLOYED=$(echo "$RESPONSE" | node -e "
-              const data = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-              const entry = (Array.isArray(data) ? data : data.files || [])
-                .find(f => f.name.endsWith('$fn/index.ts') || f.name === 'index.ts');
-              process.stdout.write(entry ? entry.content : '');
-            ")
-            LOCAL=$(cat "supabase/functions/$fn/index.ts")
-            if [ "$(echo "$DEPLOYED" | tr -d '\r')" != "$(echo "$LOCAL" | tr -d '\r')" ]; then
-              echo "::error::$fn: deployed source does NOT match git commit ${{ github.sha }} — deploy did not take effect as expected"
+            PREV=$(cat "/tmp/predeploy-versions/$fn")
+            HTTP_CODE=$(curl -s -o /tmp/meta.json -w '%{http_code}' \
+              -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+              "https://api.supabase.com/v1/projects/$PROJECT_REF/functions/$fn")
+            if [ "$HTTP_CODE" != "200" ]; then
+              echo "::error::$fn: could not fetch post-deploy metadata (HTTP $HTTP_CODE)"
               FAILED=1
             else
-              echo "$fn: verified — deployed source matches this commit"
+              STATUS=$(jq -r '.status' /tmp/meta.json)
+              NEW_VERSION=$(jq -r '.version' /tmp/meta.json)
+              if [ "$STATUS" != "ACTIVE" ]; then
+                echo "::error::$fn: status is '$STATUS', not ACTIVE — deploy did not take effect as expected"
+                FAILED=1
+              elif [ "$NEW_VERSION" -le "$PREV" ]; then
+                echo "::error::$fn: version did not advance (was $PREV, still $NEW_VERSION) — deploy did not take effect as expected"
+                FAILED=1
+              else
+                echo "$fn: verified — ACTIVE at version $NEW_VERSION (was $PREV)"
+              fi
             fi
             echo "::endgroup::"
           done

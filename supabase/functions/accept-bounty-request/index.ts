@@ -94,7 +94,7 @@ serve(async (req: Request) => {
         Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
       },
       body: JSON.stringify({ p_request_id: String(requestId) }),
-    }).catch(e => ({ ok: false, status: 500, text: async () => String(e) }));
+    }).catch(e => ({ ok: false, status: 500, text: () => Promise.resolve(String(e)) }));
 
     const isResponse = (r: any): r is Response => !!r && typeof r.json === 'function';
 

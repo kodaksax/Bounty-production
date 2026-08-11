@@ -18,7 +18,7 @@ declare const Deno: any
 
 // Imports are URL-based (Deno/ESM). Silence tsc for local typechecking.
 // @ts-ignore: Allow runtime URL import for Deno/edge function.
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 // @ts-ignore: Allow runtime URL import for Deno/edge function.
 import Stripe from 'npm:stripe@14'
 
@@ -69,15 +69,8 @@ function isValidEmail(email: string): boolean {
   return emailRegex.test(email)
 }
 
-function deriveUsernameFromEmail(email: string, userId: string): string {
-  const prefix = email.includes('@') ? email.split('@')[0] : email
-  const cleaned = prefix.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 20)
-  if (cleaned.length > 0) return cleaned
-  return `user_${userId.slice(0, 8)}`
-}
-
 async function resolveStripeCustomerForUser(params: {
-  supabaseAdmin: ReturnType<typeof createClient>
+  supabaseAdmin: SupabaseClient
   stripe: Stripe
   userId: string
   userEmail?: string

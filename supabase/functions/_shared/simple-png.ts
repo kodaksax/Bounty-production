@@ -50,7 +50,11 @@ function pngChunk(type: string, data: Uint8Array): Uint8Array {
 async function zlibDeflate(data: Uint8Array): Promise<Uint8Array> {
   const cs = new CompressionStream('deflate');
   const writer = cs.writable.getWriter();
-  const writePromise = writer.write(data).then(() => writer.close());
+  // TS 5.7 made Uint8Array generic over its backing buffer; `data` is always
+  // ArrayBuffer-backed at runtime (never SharedArrayBuffer), but its type
+  // here is the wider Uint8Array<ArrayBufferLike> that DOM's BufferSource
+  // doesn't accept.
+  const writePromise = writer.write(data as Uint8Array<ArrayBuffer>).then(() => writer.close());
   const chunks: Uint8Array[] = [];
   const reader = cs.readable.getReader();
   // eslint-disable-next-line no-constant-condition

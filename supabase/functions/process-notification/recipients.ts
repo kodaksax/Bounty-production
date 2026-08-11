@@ -14,7 +14,7 @@ export function normalizeRecipients(raw: any): string[] {
         } else if (typeof parsed === 'string' && parsed.trim()) {
           recipients = [parsed.trim()]
         }
-      } catch (e) {
+      } catch {
         if (raw.trim()) recipients = [raw.trim()]
       }
     } else if (typeof raw === 'object') {
@@ -27,7 +27,7 @@ export function normalizeRecipients(raw: any): string[] {
           .map((v) => (v as string).trim())
       }
     }
-  } catch (e) {
+  } catch {
     // on error return empty array
     recipients = []
   }

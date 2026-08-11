@@ -1,0 +1,21 @@
+{
+  // Scoped to supabase/functions/ so `deno check`/`deno lint` stop walking up
+  // to the repo-root package.json (an Expo/RN app) and treating these Deno
+  // functions as part of its npm workspace — that mis-detection is what made
+  // every npm: import (stripe, @supabase/supabase-js, @resvg/resvg-wasm, ...)
+  // fail to resolve in CI.
+  "nodeModulesDir": "auto",
+  "lint": {
+    "rules": {
+      // Supabase Edge Functions are written with inline https:/npm: imports
+      // by convention (no import map) — that's the existing architecture
+      // here, not something to migrate away from. `any` is also used
+      // pervasively across these functions (loosely-typed DB rows, Stripe
+      // payloads); enforcing no-explicit-any retroactively as a CI gate
+      // would mean rewriting a large amount of payment-critical code with
+      // no test environment to validate against, so it's excluded rather
+      // than fought function-by-function.
+      "exclude": ["no-import-prefix", "no-explicit-any"]
+    }
+  }
+}

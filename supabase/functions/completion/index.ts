@@ -63,7 +63,7 @@ Deno.serve(async (req: Request) => {
       let body: { bounty_id?: string; hunter_id?: string }
       try {
         body = await req.json() as { bounty_id?: string; hunter_id?: string }
-      } catch (e) {
+      } catch {
         return jsonResponse({ error: 'Invalid JSON in request body' }, 400)
       }
 

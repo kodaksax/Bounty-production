@@ -29,7 +29,7 @@ type EmailContent = { subject: string; html: string; text: string }
 // Per-category templates. Kept intentionally simple/inline (no external
 // template engine) — this bundler doesn't support local imports, and the
 // notification payload's title/body already carry the human-readable copy.
-function buildEmail(category: string, title: string, body: string, data: Record<string, unknown>): EmailContent {
+function buildEmail(category: string, title: string, body: string, _data: Record<string, unknown>): EmailContent {
   const appName = 'Bounty'
   const subjectByCategory: Record<string, string> = {
     marketplace: title || `${appName}: bounty update`,
