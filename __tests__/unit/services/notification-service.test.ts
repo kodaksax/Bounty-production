@@ -128,6 +128,8 @@ describe('NotificationService', () => {
     // Reset singleton internal state between tests
     (notificationService as any).cachedNotifications = [];
     (notificationService as any).unreadCount = 0;
+    (notificationService as any).registerTokenFailureCount = 0;
+    (notificationService as any).registerTokenRetryAfterMs = 0;
     // Save and default-stub global fetch
     originalFetch = (global as any).fetch;
     (global as any).fetch = jest.fn().mockResolvedValue(makeSuccessResponse());
@@ -555,6 +557,28 @@ describe('NotificationService', () => {
         'notifications:pending_tokens',
         expect.stringContaining('ExponentPushToken[tok]')
       );
+    });
+
+    it('should back off repeated register-token endpoint failures and use the Supabase fallback directly', async () => {
+      const realDateNow = Date.now;
+      let now = 1_000;
+      jest.spyOn(Date, 'now').mockImplementation(() => now);
+
+      (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+        data: { session: MOCK_SESSION },
+      });
+      (global as any).fetch = jest.fn().mockResolvedValue(makeErrorResponse(404));
+      const upsert = jest.fn().mockResolvedValue({ error: null });
+      (supabase.from as jest.Mock).mockImplementation(() => makeFromMock({ upsert }));
+
+      await notificationService.registerPushToken('ExponentPushToken[tok]', 'device-1');
+      await notificationService.registerPushToken('ExponentPushToken[tok]', 'device-1');
+
+      expect((global as any).fetch).toHaveBeenCalledTimes(1);
+      expect(upsert).toHaveBeenCalledTimes(2);
+
+      ;(Date.now as jest.Mock).mockRestore?.();
+      Date.now = realDateNow;
     });
 
     it('should use /api prefix as fallback when API returns 404 HTML', async () => {

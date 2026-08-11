@@ -21,6 +21,8 @@ const NOTIFICATION_CACHE_KEY = 'notifications:cache';
 const LAST_FETCH_KEY = 'notifications:last_fetch';
 const PERMISSION_STATUS_KEY = 'notifications:permission_status';
 const PENDING_PUSH_TOKENS_KEY = 'notifications:pending_tokens';
+const REGISTER_TOKEN_BACKOFF_BASE_MS = 1000;
+const REGISTER_TOKEN_BACKOFF_MAX_MS = 60_000;
 
 // Helper to safely read response text without throwing further errors
 async function safeReadResponseText(response: Response): Promise<string> {
@@ -98,6 +100,8 @@ export class NotificationService {
   private static instance: NotificationService;
   private cachedNotifications: Notification[] = [];
   private unreadCount: number = 0;
+  private registerTokenFailureCount: number = 0;
+  private registerTokenRetryAfterMs: number = 0;
 
   static getInstance(): NotificationService {
     if (!NotificationService.instance) {
@@ -249,6 +253,17 @@ export class NotificationService {
         return;
       }
 
+      const userId = session.user?.id;
+
+      if (userId && this.shouldSkipRegisterEndpoint()) {
+        if (await this.savePushTokenViaSupabase(userId, token, deviceId)) {
+          if (__DEV__) {
+            console.log('[NotificationService] Skipped register-token endpoint during backoff');
+          }
+          return;
+        }
+      }
+
       const url = `${API_BASE_URL}/notifications/register-token`;
       const response = await fetchWithApiFallback(url.replace(API_BASE_URL, ''), {
         method: 'POST',
@@ -267,6 +282,7 @@ export class NotificationService {
         if (response.status === 404) {
           // User profile doesn't exist yet - retained for backward compatibility with older backend versions
           // With the current backend fix, this should not occur as profiles are auto-created
+          this.noteRegisterEndpointFailure(response.status);
           if (__DEV__) {
             console.log(
               `[NotificationService] User profile not yet created. Backend will create it on next attempt.`
@@ -279,8 +295,10 @@ export class NotificationService {
               `[NotificationService] Push token already registered (${response.status}).`
             );
           }
+          this.noteRegisterEndpointSuccess();
           return; // Don't throw for 409, it means the token is already registered
         } else if (response.status >= 500) {
+          this.noteRegisterEndpointFailure(response.status);
           console.error(
             `Failed to register push token. URL=${url} status=${response.status} body=${text}`
           );
@@ -292,6 +310,7 @@ export class NotificationService {
 
         throw new Error(`Failed to register push token (${response.status})`);
       } else {
+        this.noteRegisterEndpointSuccess();
         if (__DEV__) {
           console.log('[NotificationService] Successfully registered push token with backend');
         }
@@ -320,6 +339,10 @@ export class NotificationService {
 
       if (!isExpectedError) {
         console.error('Error registering push token:', error);
+      }
+
+      if (statusCode === undefined || statusCode === 404 || statusCode >= 500) {
+        this.noteRegisterEndpointFailure(statusCode);
       }
 
       // Fallback: save the token directly via Supabase. In production builds the
@@ -407,9 +430,11 @@ export class NotificationService {
         const row: Record<string, unknown> = {
           [ownerColumn]: userId,
           token,
-          device_id: deviceId ?? null,
           enabled: true,
         };
+        if (deviceId !== undefined) {
+          row.device_id = deviceId;
+        }
         if (platform) row.platform = platform;
 
         const { error } = await supabase.from('push_tokens').upsert(row, { onConflict: 'token' });
@@ -1030,6 +1055,25 @@ export class NotificationService {
         (deviceIdValue === undefined || typeof deviceIdValue === 'string')
       );
     });
+  }
+
+  private shouldSkipRegisterEndpoint(now: number = Date.now()): boolean {
+    return this.registerTokenRetryAfterMs > now;
+  }
+
+  private noteRegisterEndpointSuccess(): void {
+    this.registerTokenFailureCount = 0;
+    this.registerTokenRetryAfterMs = 0;
+  }
+
+  private noteRegisterEndpointFailure(_statusCode?: number): void {
+    this.registerTokenFailureCount += 1;
+    const exponent = Math.max(0, this.registerTokenFailureCount - 1);
+    const backoffMs = Math.min(
+      REGISTER_TOKEN_BACKOFF_BASE_MS * 2 ** exponent,
+      REGISTER_TOKEN_BACKOFF_MAX_MS
+    );
+    this.registerTokenRetryAfterMs = Date.now() + backoffMs;
   }
 
   /**

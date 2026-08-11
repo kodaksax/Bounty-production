@@ -160,6 +160,12 @@ verify_jwt = false
 [functions.auth]
 verify_jwt = false
 
+# notifications: handles its own auth via supabaseAdmin.auth.getUser(token).
+# Keep gateway verification off for consistency with the other self-authenticated
+# user-facing functions, avoiding historical "Invalid JWT" gateway rejects.
+[functions.notifications]
+verify_jwt = false
+
 # apple-pay: handles its own auth via supabase.auth.getUser(token).
 [functions.apple-pay]
 verify_jwt = false
