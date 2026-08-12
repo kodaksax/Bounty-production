@@ -162,42 +162,16 @@ export const completionService = {
 
         if (error) throw new Error(error?.message ?? JSON.stringify(error));
 
-        // Notify the poster that the hunter has submitted work for review.
-        // Insert into notifications_outbox so process-notification sends both
-        // an in-app bell entry and a push notification.
-        try {
-          const { data: bountyRow, error: bountyErr } = await supabase
-            .from('bounties')
-            .select('poster_id, user_id, title')
-            .eq('id', submission.bounty_id)
-            .maybeSingle();
-
-          if (bountyErr) {
-            logger.warning('Failed to fetch bounty for review-needed notification', { error: bountyErr });
-          } else {
-            // Production schema uses poster_id; legacy/staging rows may use user_id.
-            // The user_id fallback is kept for backwards compatibility with older rows
-            // and should be removed once all data is migrated to poster_id.
-            const posterId = bountyRow?.poster_id ?? bountyRow?.user_id;
-            const bountyTitle = String(bountyRow?.title ?? '').slice(0, 80);
-
-            if (posterId) {
-              const { error: outboxErr } = await supabase.from('notifications_outbox').insert({
-                recipients: [posterId],
-                title: 'Review Needed',
-                body: `A hunter has submitted their work on "${bountyTitle}" for your review.`,
-                data: { bountyId: submission.bounty_id, hunterId: submission.hunter_id, type: 'review_needed' },
-                bounty_id: String(submission.bounty_id),
-              });
-              if (outboxErr) {
-                logger.warning('Failed to enqueue review-needed notification', { error: outboxErr });
-              }
-            }
-          }
-        } catch (notifErr) {
-          // Non-fatal: submission succeeded, notification is best-effort
-          logger.warning('Failed to send review-needed notification', { error: notifErr });
-        }
+        // The poster's "work submitted for review" notification is enqueued by
+        // the `trg_completion_submission_notification` database trigger (see
+        // 20260812000000_notify_poster_on_completion_submission.sql), NOT here.
+        //
+        // This used to insert into notifications_outbox directly from the client.
+        // That could never work: the table has RLS enabled with zero policies
+        // because it is service-role only, so every insert was rejected and the
+        // error swallowed as a best-effort warning — posters silently received
+        // nothing. The trigger runs SECURITY DEFINER, so it is not subject to
+        // that restriction and cannot be bypassed by a caller that forgets it.
 
         return {
           ...data,
@@ -725,46 +699,17 @@ export const completionService = {
         /* analytics is best-effort */
       }
 
-      // Notify the hunter that their work was approved.
-      // On the Supabase-direct path this update does NOT hit the server.js
-      // /api/bounties/:id/complete endpoint (which is the only other place that
-      // sends the "Work Approved!" push), and the DB status trigger is guarded
-      // to not fire on the 'completed' transition (so it won't send a generic
-      // "Bounty Update" here). Without this enqueue the hunter would receive no
-      // approval notification at all. Best-effort: a failure here must not roll
-      // back the successful approval.
-      try {
-        if (isSupabaseConfigured && submission.hunter_id) {
-          const { data: bountyRow, error: bountyErr } = await supabase
-            .from('bounties')
-            .select('title')
-            .eq('id', bountyId)
-            .maybeSingle();
-
-          if (bountyErr) {
-            logger.warning('Failed to fetch bounty for work-approved notification', {
-              error: bountyErr,
-            });
-          }
-
-          const bountyTitle = String(bountyRow?.title ?? '').slice(0, 80);
-          const { error: outboxErr } = await supabase.from('notifications_outbox').insert({
-            recipients: [submission.hunter_id],
-            title: 'Work Approved! 🎉',
-            body: bountyTitle
-              ? `Your work on "${bountyTitle}" was approved. Payment is on its way.`
-              : 'Your work was approved. Payment is on its way.',
-            data: { bountyId: String(bountyId), type: 'completion', subtype: 'approval' },
-            bounty_id: String(bountyId),
-          });
-          if (outboxErr) {
-            logger.warning('Failed to enqueue work-approved notification', { error: outboxErr });
-          }
-        }
-      } catch (notifErr) {
-        // Non-fatal: approval succeeded, notification is best-effort
-        logger.warning('Failed to send work-approved notification', { error: notifErr });
-      }
+      // The hunter's "Work Approved!" notification (and the follow-up rating
+      // prompt) are enqueued by the `trg_completion_review_notification`
+      // database trigger, which fires on the completion_submissions status
+      // transition performed by approveCompletion() above.
+      //
+      // This used to enqueue from the client, which could never work:
+      // notifications_outbox is service-role only (RLS enabled, no policies),
+      // so the insert was always rejected and the error swallowed. Hunters have
+      // received no approval notification since 20260623 removed the 'completed'
+      // branch from handle_bounty_status_notification on the assumption that
+      // this client path was covering it.
 
       return true;
     } catch (err) {
@@ -848,23 +793,11 @@ export const completionService = {
           }
         }
 
-        // Notify the hunter that a revision was requested. Enqueue via
-        // notifications_outbox (not a direct `notifications` insert) so
-        // process-notification delivers BOTH an in-app bell entry and a push
-        // notification. Best-effort: a failed enqueue never fails the revision.
-        if (submission?.hunter_id && submission?.bounty_id) {
-          try {
-            await supabase.from('notifications_outbox').insert({
-              recipients: [submission.hunter_id],
-              title: 'Revision Requested',
-              body: `The poster requested changes to "${bountyTitle}". Check the feedback and resubmit.`,
-              data: { bountyId: submission.bounty_id, feedback, isRevision: true, type: 'completion', subtype: 'revision_requested' },
-              bounty_id: String(submission.bounty_id),
-            });
-          } catch (notifErr) {
-            logger.warning('Failed to send revision notification', { error: notifErr });
-          }
-        }
+        // The hunter's "Revision Requested" notification is enqueued by the
+        // `trg_completion_review_notification` database trigger, which fires on
+        // the status update above and reads poster_feedback from the row. The
+        // client insert this replaced was always rejected by RLS on the
+        // service-role-only notifications_outbox table.
 
         return true;
       }
