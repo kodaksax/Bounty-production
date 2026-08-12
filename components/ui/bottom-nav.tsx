@@ -1,7 +1,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { useHapticFeedback } from "lib/haptic-feedback";
 import React, { useEffect, useRef, useMemo } from 'react';
-import { Animated, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Animated, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from "react-native";
 import { A11Y, SIZING } from "../../lib/constants/accessibility";
 import { theme as legacyTheme } from "../../lib/theme";
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
@@ -22,12 +22,44 @@ interface BottomNavProps {
 const NAV_ICON_SIZE = 26;        // Standard nav icons
 const CENTER_ICON_SIZE = 32;     // Larger center GPS icon for emphasis
 
+// The center button scales up to this factor while the bounty tab is active.
+// The center column must reserve room for the *scaled* width, otherwise the
+// grown crosshair spills sideways over the Wallet/Post buttons.
+const CENTER_ACTIVE_SCALE = 1.15;
+// Horizontal breathing room between the center column and the side sections.
+const CENTER_GUTTER = 8;
+// Caps how far OS Dynamic Type can inflate the tab labels. Unbounded scaling at
+// the largest accessibility sizes is the other way these buttons collide.
+const NAV_LABEL_MAX_FONT_SCALE = 1.2;
+
+/**
+ * Derives the center button size from the viewport width instead of hardcoding
+ * it, so the crosshair keeps the same visual weight from a 320pt SE up to a
+ * 430pt Pro Max. Clamped at both ends: below ~56 the icon crowds its border,
+ * above ~72 it dominates the bar.
+ */
+function getCenterMetrics(windowWidth: number) {
+  const buttonSize = Math.round(Math.min(72, Math.max(56, windowWidth * 0.17)));
+  // Reserve the scaled footprint plus a gutter so the side sections can never
+  // be laid out underneath the active (enlarged) button.
+  const sectionWidth = Math.ceil(buttonSize * CENTER_ACTIVE_SCALE) + CENTER_GUTTER;
+  return { buttonSize, sectionWidth };
+}
+
 export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBountyTabRepress, unreadMessageCount = 0 }: BottomNavProps) {
   const centerButtonScale = useRef(new Animated.Value(1)).current;
   const centerButtonRotation = useRef(new Animated.Value(0)).current;
   const { triggerHaptic } = useHapticFeedback();
   const { theme } = useAppThemeContext();
-  const styles = useMemo(() => makeStyles(theme), [theme]);
+  const { width: windowWidth } = useWindowDimensions();
+  const { buttonSize: centerButtonSize, sectionWidth: centerSectionWidth } = useMemo(
+    () => getCenterMetrics(windowWidth),
+    [windowWidth]
+  );
+  const styles = useMemo(
+    () => makeStyles(theme, centerButtonSize, centerSectionWidth),
+    [theme, centerButtonSize, centerSectionWidth]
+  );
 
   const handleNavigate = React.useCallback((screen: ScreenKey) => {
     // If tapping the bounty button while already on bounty screen, trigger scroll-to-top + refresh
@@ -112,7 +144,13 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
                 </View>
               )}
             </View>
-            <Text style={[styles.navLabel, activeScreen === "messages" && styles.navLabelActive]}>My Bounties</Text>
+            <Text
+              numberOfLines={1}
+              maxFontSizeMultiplier={NAV_LABEL_MAX_FONT_SCALE}
+              style={[styles.navLabel, activeScreen === "messages" && styles.navLabelActive]}
+            >
+              My Bounties
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => handleNavigate("wallet")}
@@ -127,7 +165,13 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
               color={activeScreen === "wallet" ? theme.text : theme.textSecondary}
               size={NAV_ICON_SIZE}
             />
-            <Text style={[styles.navLabel, activeScreen === "wallet" && styles.navLabelActive]}>Wallet</Text>
+            <Text
+              numberOfLines={1}
+              maxFontSizeMultiplier={NAV_LABEL_MAX_FONT_SCALE}
+              style={[styles.navLabel, activeScreen === "wallet" && styles.navLabelActive]}
+            >
+              Wallet
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -177,7 +221,13 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
               color={activeScreen === "postings" ? theme.text : theme.textSecondary}
               size={NAV_ICON_SIZE}
             />
-            <Text style={[styles.navLabel, activeScreen === "postings" && styles.navLabelActive]}>Post</Text>
+            <Text
+              numberOfLines={1}
+              maxFontSizeMultiplier={NAV_LABEL_MAX_FONT_SCALE}
+              style={[styles.navLabel, activeScreen === "postings" && styles.navLabelActive]}
+            >
+              Post
+            </Text>
           </TouchableOpacity>
           {showAdmin ? (
             <TouchableOpacity
@@ -193,7 +243,13 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
                 color={activeScreen === "admin" ? "#00dc50" : theme.text}
                 size={NAV_ICON_SIZE}
               />
-              <Text style={[styles.navLabel, activeScreen === "admin" && styles.navLabelActive]}>Admin</Text>
+              <Text
+                numberOfLines={1}
+                maxFontSizeMultiplier={NAV_LABEL_MAX_FONT_SCALE}
+                style={[styles.navLabel, activeScreen === "admin" && styles.navLabelActive]}
+              >
+                Admin
+              </Text>
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
@@ -206,10 +262,16 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
             >
               <MaterialIcons
                 name="person"
-                color={activeScreen === "profile" ? theme.target : theme.target}
+                color={activeScreen === "profile" ? theme.text : theme.textSecondary}
                 size={NAV_ICON_SIZE}
               />
-              <Text style={[styles.navLabel, activeScreen === "profile" && styles.navLabelActive]}>Profile</Text>
+              <Text
+                numberOfLines={1}
+                maxFontSizeMultiplier={NAV_LABEL_MAX_FONT_SCALE}
+                style={[styles.navLabel, activeScreen === "profile" && styles.navLabelActive]}
+              >
+                Profile
+              </Text>
             </TouchableOpacity>
           )}
         </View>
@@ -218,7 +280,7 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
   );
 }
 
-function makeStyles(theme: AppTheme) {
+function makeStyles(theme: AppTheme, centerButtonSize: number, centerSectionWidth: number) {
   return StyleSheet.create({
     bottomNavContainer: {
       position: "absolute",
@@ -243,21 +305,36 @@ function makeStyles(theme: AppTheme) {
     },
     sideSection: {
       flex: 1,
+      // Without minWidth:0 a flex row refuses to size below its content, which
+      // is what let the side sections bleed into the center column.
+      minWidth: 0,
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-evenly",
     },
     centerSection: {
-      width: 80,
+      width: centerSectionWidth,
+      // Fixed column: never grow, never shrink, so the crosshair keeps its
+      // exact center position no matter how wide the labels are.
+      flexGrow: 0,
+      flexShrink: 0,
       alignItems: "center",
       justifyContent: "center",
     },
     navButton: {
-      paddingHorizontal: 12,
+      // flex:1 + minWidth:0 makes each button take an equal share of its side
+      // section and, critically, allows it to SHRINK. React Native defaults
+      // flexShrink to 0, so the old fixed-padding buttons overflowed their
+      // section and rendered over the center crosshair on narrow screens.
+      flex: 1,
+      minWidth: 0,
+      paddingHorizontal: 4,
       paddingVertical: 6,
       borderRadius: 16,
       backgroundColor: "transparent",
-      minWidth: SIZING.MIN_TOUCH_TARGET,
+      // Height (not width) now carries the 44pt touch-target guarantee; width
+      // is whatever equal share the viewport allows, always >= 44 down to 320pt.
+      minHeight: SIZING.MIN_TOUCH_TARGET,
       alignItems: 'center',
       justifyContent: 'center',
       marginTop: -28,
@@ -267,6 +344,10 @@ function makeStyles(theme: AppTheme) {
       fontWeight: '600',
       marginTop: 3,
       color: theme.textSecondary,
+      textAlign: 'center',
+      // Belt-and-braces: even if a label were wider than its share, it wraps to
+      // ellipsis inside the button rather than pushing the layout sideways.
+      width: '100%',
     },
     navLabelActive: {
       color: theme.text,
@@ -295,17 +376,15 @@ function makeStyles(theme: AppTheme) {
       lineHeight: 13,
     },
     centerButton: {
-      height: 68,
-      width: 68,
+      height: centerButtonSize,
+      width: centerButtonSize,
       backgroundColor: "rgba(5, 150, 105, 0.15)",
       borderWidth: 2.5,
       borderColor: "#059669",
-      borderRadius: 34,
+      borderRadius: centerButtonSize / 2,
       alignItems: "center",
       justifyContent: "center",
       marginTop: -28,
-      minWidth: SIZING.MIN_TOUCH_TARGET + 24,
-      minHeight: SIZING.MIN_TOUCH_TARGET + 24,
       ...legacyTheme.shadows.emerald,
       overflow: 'hidden',
     },
@@ -314,7 +393,7 @@ function makeStyles(theme: AppTheme) {
       height: "100%",
       alignItems: "center",
       justifyContent: "center",
-      borderRadius: 34,
+      borderRadius: centerButtonSize / 2,
     },
   });
 }
