@@ -36,7 +36,12 @@ function BountyCompactItemComponent({
   const [showDetail, setShowDetail] = useState(false)
   const router = useRouter()
   const { triggerHaptic } = useHapticFeedback()
-  const { profile: posterProfile, loading: profileLoading } = useNormalizedProfile(user_id ?? undefined)
+  const { profile: posterProfile, loading: profileLoading } = useNormalizedProfile(
+    user_id ?? undefined,
+    // Skip the Supabase profile lookup when the bounty row already carries
+    // both username and avatar from the feed JOIN.
+    { enabled: !(username && poster_avatar) }
+  )
   const [resolvedUsername, setResolvedUsername] = useState<string>(username || 'Loading...')
   const avatarUrl = poster_avatar || posterProfile?.avatar
 

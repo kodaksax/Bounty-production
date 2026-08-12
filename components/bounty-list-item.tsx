@@ -60,7 +60,11 @@ function BountyListItemComponent({
   const router = useRouter();
   const { triggerHaptic } = useHapticFeedback();
   const { profile: posterProfile, loading: profileLoading } = useNormalizedProfile(
-    user_id ?? undefined
+    user_id ?? undefined,
+    // Skip the Supabase profile lookup when the bounty row already carries
+    // both username and avatar from the feed JOIN — this prevents N concurrent
+    // network calls for N visible list items on every feed load.
+    { enabled: !(username && poster_avatar) }
   );
   const [resolvedUsername, setResolvedUsername] = useState<string>(username || 'Loading...');
   const avatarUrl = poster_avatar || posterProfile?.avatar;

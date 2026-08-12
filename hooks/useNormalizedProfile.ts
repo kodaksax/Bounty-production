@@ -5,9 +5,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuthProfile } from './useAuthProfile';
 import { useProfile } from './useProfile';
 
-export function useNormalizedProfile(userId?: string) {
+export function useNormalizedProfile(userId?: string, options: { enabled?: boolean } = {}) {
+  const { enabled = true } = options;
   const __DEV__flag = typeof __DEV__ !== 'undefined' && __DEV__;
-  const { profile: localProfile, loading: localLoading, error: localError, refresh: refreshLocal } = useProfile(userId);
+  const { profile: localProfile, loading: localLoading, error: localError, refresh: refreshLocal } = useProfile(userId, enabled);
   const { profile: authHookProfile, loading: authHookLoading, refreshProfile } = useAuthProfile();
 
   const authHookUserId = authHookProfile?.id ?? authProfileService.getAuthUserId();
@@ -53,6 +54,11 @@ export function useNormalizedProfile(userId?: string) {
   }, []);
 
   useEffect(() => {
+    if (!enabled) {
+      setSbLoading(false);
+      setSupabaseProfile(null);
+      return;
+    }
     loadSupabase(userId);
     
     // Safety timeout: ensure loading is cleared after max 8 seconds
@@ -70,7 +76,7 @@ export function useNormalizedProfile(userId?: string) {
     return () => clearTimeout(safetyTimeout);
     // loadSupabase has no dependencies and won't change, safe to exclude
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
+  }, [userId, enabled]);
 
   const normalizedFromSupabase = useMemo(
     () => normalizeAuthProfile(supabaseProfile || null),

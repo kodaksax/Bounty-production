@@ -94,8 +94,10 @@ export function ProfileScreen({ onBack }: { onBack?: () => void } = {}) {
         return;
       }
       try {
-        const postedBounties = await bountyService.getByUserId(authUserId);
-        const acceptedRequests = await bountyRequestService.getByUserId(authUserId);
+        const [postedBounties, acceptedRequests] = await Promise.all([
+          bountyService.getByUserId(authUserId),
+          bountyRequestService.getByUserId(authUserId),
+        ]);
         const acceptedJobs = acceptedRequests.filter((req) => req.status === 'accepted');
         setStats({
           jobsAccepted: acceptedJobs.length,
