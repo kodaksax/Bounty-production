@@ -98,7 +98,13 @@ function BountyAppInner() {
 
   // Tracks whether the profile row actually exists when the local flag is set but
   // profile is null in AuthContext (Supabase propagation lag vs truly missing row).
-  // null = not yet checked / not applicable, true = row exists, false = row missing.
+  // null = not yet checked / not applicable, true = row exists OR could not be
+  // determined, false = row *confirmed* missing.
+  //
+  // "Could not be determined" deliberately resolves to true: this check exists
+  // only to catch the rare deleted-profile case, and its failure mode must not
+  // be to eject a legitimately onboarded user into onboarding. See
+  // authProfileService.profileRowStatus.
   const [profileVerifiedForLocalFlag, setProfileVerifiedForLocalFlag] = useState<boolean | null>(null)
 
   useEffect(() => {
@@ -135,22 +141,28 @@ function BountyAppInner() {
     }
     // Guard against stale results when the effect re-runs before the fetch resolves.
     let cancelled = false
-    // Safety timeout: if the Supabase profile fetch hangs (e.g. staging with a
-    // non-responsive project) treat the profile as missing so the loading screen
-    // doesn't spin forever. This matches the existing error-path behaviour.
+    // Safety timeout: if the Supabase lookup hangs (e.g. a non-responsive
+    // project, or a radio that hasn't woken up yet after the app was resumed)
+    // stop blocking on it so the loading screen doesn't spin forever. A hang
+    // tells us nothing about whether the row exists, so we let the user
+    // through on the strength of their local onboarding flag rather than
+    // sending them back through onboarding.
     const safetyTimeoutId = setTimeout(() => {
-      if (!cancelled) setProfileVerifiedForLocalFlag(false)
+      if (!cancelled) setProfileVerifiedForLocalFlag(true)
     }, API_TIMEOUTS.DEFAULT)
     authProfileService
-      .getProfileById(currentUserId, { bypassCache: true })
-      .then(fetchedProfile => {
+      .profileRowStatus(currentUserId)
+      .then(status => {
         clearTimeout(safetyTimeoutId)
-        if (!cancelled) setProfileVerifiedForLocalFlag(fetchedProfile != null)
+        // Only a *confirmed* absence forces onboarding. 'unknown' (network
+        // error, expired JWT mid-refresh, Supabase unreachable) keeps the
+        // user in the app — this is the resume-from-background path, where a
+        // failed request is far more likely than a deleted account.
+        if (!cancelled) setProfileVerifiedForLocalFlag(status !== 'missing')
       })
       .catch(() => {
-        // On network error, treat as missing — force onboarding to be safe.
         clearTimeout(safetyTimeoutId)
-        if (!cancelled) setProfileVerifiedForLocalFlag(false)
+        if (!cancelled) setProfileVerifiedForLocalFlag(true)
       })
     return () => {
       cancelled = true

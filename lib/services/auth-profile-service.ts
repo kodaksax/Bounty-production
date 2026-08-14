@@ -105,10 +105,68 @@ export class AuthProfileService {
   }
 
   /**
+   * Does a profile row exist for this user?
+   *
+   * Unlike `getProfileById`, which collapses every failure mode (network
+   * error, expired JWT, PostgREST error, Supabase not configured) into the
+   * same `null` it returns for a genuinely absent row, this reports the three
+   * cases separately:
+   *
+   *   'exists'  — the query succeeded and returned a row.
+   *   'missing' — the query succeeded and returned zero rows. The row is
+   *               really gone; callers may treat the user as needing onboarding.
+   *   'unknown' — the query failed. Says NOTHING about the row. Callers must
+   *               NOT treat this as 'missing'.
+   *
+   * The 'unknown' case exists because conflating it with 'missing' is what
+   * sent already-onboarded users back through onboarding whenever they
+   * returned to a backgrounded app on a cold/slow network: the resume-time
+   * verification fetch failed, and the failure was read as proof of a deleted
+   * profile. Same class of bug as the 2026-07-19 incident recorded on
+   * `lastFetchError` above.
+   *
+   * Reads `public_profiles` (the curated cross-user view, which bypasses
+   * base-table RLS via view-owner privilege) so this works regardless of
+   * whether the session's JWT has finished refreshing.
+   */
+  async profileRowStatus(userId: string): Promise<'exists' | 'missing' | 'unknown'> {
+    if (!isSupabaseConfigured) {
+      // No backend to ask — absence of evidence, not evidence of absence.
+      return 'unknown';
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('public_profiles')
+        .select('id')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (error) {
+        logger.warning('profileRowStatus query error', {
+          userId,
+          errorCode: error?.code,
+          errorMessage: error?.message || error,
+        });
+        return 'unknown';
+      }
+
+      return data ? 'exists' : 'missing';
+    } catch (error) {
+      logger.warning('profileRowStatus threw', { userId, error });
+      return 'unknown';
+    }
+  }
+
+  /**
    * Fetch a profile by ID without mutating the authenticated profile state.
    * Useful for looking up other users (e.g., bounty posters) while keeping the
    * current session profile intact. Results are cached briefly to avoid
    * refetching for the same card renders.
+   *
+   * Returns `null` for a missing row AND for every failure mode. If you need
+   * to tell those apart — in particular before routing a user somewhere
+   * destructive like back through onboarding — use `profileRowStatus`.
    */
   async getProfileById(
     userId: string,
