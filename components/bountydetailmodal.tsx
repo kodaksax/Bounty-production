@@ -5,6 +5,7 @@ import { useRouter } from "expo-router"
 import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 import type { AppTheme } from '../lib/themes/types'
 import { formatCategoryLabel } from 'lib/utils/data-utils'
+import { formatScheduleDescription } from 'lib/utils/schedule-utils'
 import { shareBounty } from "lib/utils/share-utils"
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
@@ -28,7 +29,7 @@ import { bountyService } from '../lib/services/bounty-service'
 import { analyticsService } from '../lib/services/analytics-service'
 import type { AttachmentMeta } from '../lib/services/database.types'
 import { storageService } from '../lib/services/storage-service'
-import type { Message } from '../lib/types'
+import type { BountyScheduleType, Message } from '../lib/types'
 import { AttachmentViewerModal } from './attachment-viewer-modal'
 import { ReportModal } from "./ReportModal"
 import { AppModal } from './ui/app-modal'
@@ -59,7 +60,18 @@ interface BountyDetailModalProps {
     attachments?: AttachmentMeta[]
     attachments_json?: string
     poster_avatar?: string
+    /**
+     * Legacy free-text schedule field. The current post flow no longer collects
+     * it (it always writes ''), so only pre-rewrite rows have a value — the
+     * structured `schedule_*` fields below are the live source of timing info.
+     */
     timeline?: string
+    schedule_type?: BountyScheduleType | null
+    start_date?: string | null
+    end_date?: string | null
+    latest_arrival_time?: string | null
+    duration_minutes?: number | null
+    conditional_end_note?: string | null
     skills_required?: string
     location?: string
     is_time_sensitive?: boolean
@@ -170,8 +182,10 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
   useEffect(() => {
     let mounted = true
 
+    // `timeline` is intentionally not part of this check: the post flow always
+    // writes '', so testing it would force a refetch for every bounty.
     const shouldFetchDetail = !!initialBounty?.id && (
-      !initialBounty?.timeline || !initialBounty?.skills_required || !initialBounty?.location || (!initialBounty?.attachments && !initialBounty?.attachments_json)
+      !initialBounty?.schedule_type || !initialBounty?.skills_required || !initialBounty?.location || (!initialBounty?.attachments && !initialBounty?.attachments_json)
     )
 
     if (!shouldFetchDetail) {
@@ -257,10 +271,37 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
     }
   }, [])
 
-  // Sample description if not provided
-  const description =
-    bounty.description ||
-    "I need someone to mow my lawn. The yard is approximately 1/4 acre with some slopes. I have a lawn mower you can use, or you can bring your own equipment. The grass is about 3 inches tall now. Please trim around the edges and clean up afterward. This should take about 2 hours to complete. I need this done by this weekend."
+  // Empty/whitespace-only descriptions hide the whole section (header included)
+  // rather than rendering a bare "Description" heading over nothing.
+  const description = bounty.description?.trim() || ""
+
+  // Timing shown in Additional Details. The post flow writes the structured
+  // schedule_* columns, so those win; `timeline` is only a fallback for legacy
+  // rows created before the flow was rewritten (new rows always store '').
+  const scheduleSummary = useMemo(() => {
+    if (bounty.schedule_type) {
+      const summary = formatScheduleDescription({
+        type: bounty.schedule_type,
+        startDate: bounty.start_date ?? undefined,
+        endDate: bounty.end_date ?? undefined,
+        latestArrivalTime: bounty.latest_arrival_time ?? undefined,
+        durationMinutes: bounty.duration_minutes ?? undefined,
+        conditionalEndNote: bounty.conditional_end_note ?? undefined,
+      })
+      // formatScheduleDescription returns this sentinel when nothing resolved;
+      // treat it as "no schedule" so we fall through rather than print it.
+      if (summary && summary !== 'No schedule set') return summary
+    }
+    return bounty.timeline?.trim() || null
+  }, [
+    bounty.schedule_type,
+    bounty.start_date,
+    bounty.end_date,
+    bounty.latest_arrival_time,
+    bounty.duration_minutes,
+    bounty.conditional_end_note,
+    bounty.timeline,
+  ])
 
   const imageAttachments = actualAttachments.filter(a =>
     !!(a.mimeType?.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp)$/i.test(a.name))
@@ -702,23 +743,25 @@ export function BountyDetailModal({ bounty: initialBounty, onClose, onNavigateTo
                     )}
                   </View>
 
-                  {/* Description */}
-                  <View style={styles.descriptionContainer}>
-                    <Text style={styles.sectionHeader}>Description</Text>
-                    <Text style={styles.descriptionText}>{description}</Text>
-                  </View>
+                  {/* Description — omitted entirely when the bounty has none */}
+                  {!!description && (
+                    <View style={styles.descriptionContainer}>
+                      <Text style={styles.sectionHeader}>Description</Text>
+                      <Text style={styles.descriptionText}>{description}</Text>
+                    </View>
+                  )}
 
                   {/* Additional Details - Timeline, Skills, Location, Deadline */}
-                  {(bounty.timeline || bounty.skills_required || bounty.location || bounty.deadline) && (
+                  {(scheduleSummary || bounty.skills_required || bounty.location || bounty.deadline) && (
                     <View style={styles.additionalDetailsContainer}>
                       <Text style={styles.sectionHeader}>Additional Details</Text>
 
                       {([
-                        bounty.timeline && {
+                        scheduleSummary && {
                           icon: 'schedule' as const,
                           color: theme.textSecondary,
                           label: 'Timeline',
-                          value: bounty.timeline,
+                          value: scheduleSummary,
                         },
                         bounty.skills_required && {
                           icon: 'build' as const,

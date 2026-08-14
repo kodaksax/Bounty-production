@@ -21,7 +21,6 @@ import { VerificationBadge, type VerificationLevel } from './ui/verification-bad
 import { useHapticFeedback } from '../lib/haptic-feedback';
 import { approveAndRelease } from '../lib/services/completion-approval';
 import { completionService, type CompletionSubmission, type ProofItem } from '../lib/services/completion-service';
-import { supabase } from '../lib/supabase';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
 import type { Attachment } from '../lib/types';
@@ -274,24 +273,11 @@ export function PosterReviewModal({
           await completionService.approveSubmission(id);
           return true;
         },
-        notifyFn: async (userId: string, payload?: Record<string, any>) => {
-          try {
-            const notificationBody = payload?.bountyTitle
-              ? `Please rate your experience for "${String(payload.bountyTitle)}".`
-              : 'Please rate your experience for this bounty.';
-            // Enqueue via notifications_outbox so process-notification delivers
-            // BOTH an in-app bell entry and a push notification.
-            await supabase.from('notifications_outbox').insert({
-              recipients: [userId],
-              title: 'Please rate the poster',
-              body: notificationBody,
-              data: { bountyId: String(bountyId), type: 'completion', subtype: 'rating_prompt', ...payload },
-              bounty_id: String(bountyId),
-            });
-          } catch (e) {
-            console.warn('Failed to enqueue rating prompt notification', e);
-          }
-        },
+        // No notifyFn: the hunter's rating prompt is enqueued by the
+        // `trg_completion_review_notification` database trigger when the
+        // submission flips to 'approved'. Enqueueing it here never worked —
+        // notifications_outbox is service-role only (RLS enabled, no policies),
+        // so the insert was rejected and the failure logged to console.
       });
 
       if (!ok) {
