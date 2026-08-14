@@ -5,6 +5,7 @@ import * as React from "react"
 import { useState } from "react"
 import { View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
+import { getBottomNavContentPadding } from "../../lib/constants/navigation"
 import { useAppThemeContext } from "../../lib/themes/AppThemeContext"
 
 interface NeedHelpScreenProps {
@@ -13,9 +14,6 @@ interface NeedHelpScreenProps {
   onBountyPosted?: () => void // Callback when a bounty is successfully posted
   setShowBottomNav?: (show: boolean) => void
 }
-
-// Height of BottomNav + gap so the flow's CTA sits above it.
-const BOTTOM_NAV_OFFSET = 60
 
 /**
  * NeedHelpScreen — the "Need Help" bottom-nav tab.
@@ -40,7 +38,7 @@ export function NeedHelpScreen({ activeScreen, setActiveScreen, onBountyPosted, 
         flex: 1,
         backgroundColor: theme.background,
         paddingTop: insets.top,
-        paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12),
+        paddingBottom: getBottomNavContentPadding(insets.bottom),
       }}
     >
       <CreateBountyFlow

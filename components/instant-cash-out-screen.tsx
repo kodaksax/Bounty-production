@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthContext } from '../hooks/use-auth-context';
+import { BOTTOM_NAV_BASE_OFFSET } from '../lib/constants/navigation';
 import type { UseConnectEligibilityResult } from '../hooks/use-connect-eligibility';
 import type { UsePayoutMethodsResult } from '../hooks/use-payout-methods';
 import { config } from '../lib/config';
@@ -33,8 +34,6 @@ function estimateFee(amount: number): number {
   if (!Number.isFinite(amount) || amount <= 0) return 0;
   return Math.max(Math.round(amount * ESTIMATED_FEE_PERCENT) / 100, ESTIMATED_FEE_MIN_USD);
 }
-
-const BOTTOM_NAV_OFFSET = 60;
 
 // Human-readable copy for Stripe's account.requirements.disabled_reason
 // codes (https://docs.stripe.com/api/accounts/object#account_object-requirements-disabled_reason).
@@ -390,7 +389,7 @@ export function InstantCashOutScreen({
         </View>
       </ScrollView>
 
-      <View style={[s.footer, { paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 16) }]}>
+      <View style={[s.footer, { paddingBottom: BOTTOM_NAV_BASE_OFFSET + Math.max(insets.bottom, 16) }]}>
         <TouchableOpacity
           onPress={handleCashOut}
           disabled={isCashOutDisabled}

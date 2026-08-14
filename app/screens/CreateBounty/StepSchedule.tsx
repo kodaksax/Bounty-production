@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BOTTOM_NAV_BASE_OFFSET } from '../../../lib/constants/navigation';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 
 interface StepScheduleProps {
@@ -39,7 +40,6 @@ type DatePickerTarget = 'startDate' | 'endDate' | 'latestArrivalTime';
 export function StepSchedule({ draft, onUpdate, onNext, onBack }: StepScheduleProps) {
   const { theme } = useAppThemeContext();
   const insets = useSafeAreaInsets();
-  const BOTTOM_NAV_OFFSET = 60;
   const scrollRef = useRef<any>(null);
 
   // Derive the active quick-preset from current draft state
@@ -200,7 +200,7 @@ export function StepSchedule({ draft, onUpdate, onNext, onBack }: StepSchedulePr
         contentContainerStyle={{
           paddingHorizontal: 16,
           paddingTop: 8,
-          paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16,
+          paddingBottom: BOTTOM_NAV_BASE_OFFSET + Math.max(insets.bottom, 12) + 16,
         }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={true}
@@ -457,7 +457,7 @@ export function StepSchedule({ draft, onUpdate, onNext, onBack }: StepSchedulePr
           borderTopWidth: 1,
           borderTopColor: theme.border,
           backgroundColor: theme.background,
-          marginBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 8),
+          marginBottom: BOTTOM_NAV_BASE_OFFSET + Math.max(insets.bottom, 8),
         }}
       >
         <View style={{ flexDirection: 'row', gap: 12 }}>

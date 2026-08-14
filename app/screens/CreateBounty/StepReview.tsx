@@ -19,6 +19,7 @@ import { AttachmentViewerModal } from '../../../components/attachment-viewer-mod
 import { EscrowExplainer } from '../../../components/ui/escrow-explainer';
 import { TrustBadgesCompact } from '../../../components/ui/trust-badges';
 import { useAuthContext } from '../../../hooks/use-auth-context';
+import { BOTTOM_NAV_BASE_OFFSET } from '../../../lib/constants/navigation';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import type { Attachment } from '../../../lib/types';
 
@@ -44,7 +45,6 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
   const [viewerVisible, setViewerVisible] = useState(false);
   const [selectedAttachment, setSelectedAttachment] = useState<Attachment | null>(null);
   const insets = useSafeAreaInsets();
-  const BOTTOM_NAV_OFFSET = 60;
   const { theme } = useAppThemeContext();
 
   const handleViewAttachment = (attachment: Attachment) => {
@@ -122,7 +122,7 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
         contentContainerStyle={{
           paddingTop: 8,
           paddingHorizontal: 16,
-          paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 100,
+          paddingBottom: BOTTOM_NAV_BASE_OFFSET + Math.max(insets.bottom, 12) + 100,
         }}
         renderItem={({ item }) => {
           switch (item) {
@@ -348,7 +348,7 @@ export function StepReview({ draft, onSubmit, onBack, isSubmitting }: StepReview
         style={{
           backgroundColor: theme.background,
           borderColor: theme.border,
-          marginBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 8),
+          marginBottom: BOTTOM_NAV_BASE_OFFSET + Math.max(insets.bottom, 8),
         }}
       >
         <View className="flex-row gap-3">

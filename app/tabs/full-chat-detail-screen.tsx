@@ -30,6 +30,7 @@ import { useMessages } from '../../hooks/useMessages';
 import { useNormalizedProfile } from '../../hooks/useNormalizedProfile';
 import { useTypingIndicator } from '../../hooks/useSocketStub';
 import { useValidUserId } from '../../hooks/useValidUserId';
+import { getBottomNavKeyboardOffset } from '../../lib/constants/navigation';
 import { blockingService } from '../../lib/services/blocking-service';
 import { generateInitials } from '../../lib/services/supabase-messaging';
 import type { FullConversation, Message } from '../../lib/types';
@@ -45,7 +46,7 @@ interface ChatDetailScreenProps {
 export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenProps) {
  const router = useRouter();
  const insets = useSafeAreaInsets();
- const BOTTOM_NAV_OFFSET = Math.max(96, (insets.bottom || 0) + 12);
+ const bottomNavOffset = getBottomNavKeyboardOffset(insets.bottom);
  const { theme } = useAppThemeContext();
  const s = useMemo(() => makeStyles(theme), [theme]);
 
@@ -260,7 +261,7 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
 
 
  return (
-   <View style={[s.container, { paddingBottom: Math.max(insets.bottom || 0, BOTTOM_NAV_OFFSET + 8) }]}>
+   <View style={[s.container, { paddingBottom: Math.max(insets.bottom || 0, bottomNavOffset + 8) }]}>
      {/* Header */}
      <View style={s.header}>
        <View style={s.headerInner}>
@@ -328,7 +329,7 @@ export function FullChatDetailScreen({ conversation, onBack }: ChatDetailScreenP
      <KeyboardAvoidingView
        style={s.keyboardAvoidingContainer}
        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-       keyboardVerticalOffset={BOTTOM_NAV_OFFSET}
+       keyboardVerticalOffset={bottomNavOffset}
      >
        <View style={{ flex: 1 }}>
          <FlatList
@@ -570,4 +571,3 @@ function makeStyles(t: AppTheme) {
    },
  })
 }
-

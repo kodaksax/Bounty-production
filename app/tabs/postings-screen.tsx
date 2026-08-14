@@ -24,6 +24,7 @@ import { ApplicantCard } from "../../components/applicant-card"
 import { ArchivedBountiesScreen } from "../../components/archived-bounties-screen"
 import { BountyConfirmationCard } from "../../components/bounty-confirmation-card"
 import { EditPostingModal } from "../../components/edit-posting-modal"
+import { BOTTOM_NAV_BASE_OFFSET, getBottomNavContentPadding } from "../../lib/constants/navigation"
 import { useValidUserId } from '../../hooks/useValidUserId'
 import { ROUTES } from '../../lib/routes'
 import { supabase } from '../../lib/supabase'
@@ -122,7 +123,6 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   const BOTTOM_ACTIONS_HEIGHT = 64 // compact height to free more scroll space
   const HEADER_TOP_OFFSET = 55 // how far the header is visually pulled up
   const STICKY_BOTTOM_EXTRA = 44 // extra height used by chips/title in sticky bar
-  const BOTTOM_NAV_OFFSET = 60// height of BottomNav + gap so sticky actions sit fully above it
   const { balance, deposit, createEscrow, refundEscrow } = useWallet()
   const { theme } = useAppThemeContext()
   const styles = useMemo(() => makeStyles(theme), [theme])
@@ -765,7 +765,10 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
 
   // Memoized styles that must be called unconditionally (before any early returns)
   const containerPaddingTop = useMemo(() => ({ paddingTop: Math.max(0, headerHeight - (HEADER_TOP_OFFSET - 12)) }), [headerHeight])
-  const listContentPadding = useMemo(() => ({ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }), [insets.bottom])
+  const listContentPadding = useMemo(
+    () => ({ paddingBottom: getBottomNavContentPadding(insets.bottom, 16) }),
+    [insets.bottom]
+  )
 
   // Map of bountyId -> count of pending requests (for poster "Review" badge)
   const pendingRequestsByBounty = React.useMemo(() => {
@@ -1158,7 +1161,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                       colors={['#059669']}
                     />
                   }
-                  contentContainerStyle={{ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
+                  contentContainerStyle={{ paddingBottom: getBottomNavContentPadding(insets.bottom, 16) }}
                   showsVerticalScrollIndicator={false}
                   onScroll={(e) => {
                     const y = e.nativeEvent.contentOffset.y || 0
@@ -1252,7 +1255,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                       colors={['#059669']}
                     />
                   }
-                  contentContainerStyle={{ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
+                  contentContainerStyle={{ paddingBottom: getBottomNavContentPadding(insets.bottom, 16) }}
                   showsVerticalScrollIndicator={false}
                   onScroll={(e) => {
                     const y = e.nativeEvent.contentOffset.y || 0
@@ -1285,7 +1288,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
               paddingTop: 8,
               paddingBottom: Math.max(insets.bottom, 12),
               minHeight: BOTTOM_ACTIONS_HEIGHT + STICKY_BOTTOM_EXTRA,
-              bottom: BOTTOM_NAV_OFFSET
+              bottom: BOTTOM_NAV_BASE_OFFSET
             }}
           >
             {/* Amount header row */}

@@ -3,6 +3,7 @@ import { cn } from 'lib/utils';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, FlatList, KeyboardAvoidingView, Modal, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { getBottomNavKeyboardOffset } from '../lib/constants/navigation';
 import { useHapticFeedback } from '../lib/haptic-feedback';
 
 export interface ChatMessage {
@@ -52,11 +53,7 @@ export const StickyMessageInterface: React.FC<StickyMessageInterfaceProps> = ({
   const { triggerHaptic } = useHapticFeedback()
   const insets = useSafeAreaInsets()
 
-  // Ensure we reserve space for a bottom navigation bar and safe area.
-  // Many parents pass bottomInset=0; choose a sensible minimum so the composer isn't hidden.
-  // Raise the estimate so the composer clears a taller BottomNav (and floating central button).
-  const BOTTOM_NAV_ESTIMATE = 96
-  const effectiveBottomInset = Math.max(bottomInset || 0, insets.bottom || 0, BOTTOM_NAV_ESTIMATE)
+  const effectiveBottomInset = Math.max(bottomInset || 0, getBottomNavKeyboardOffset(insets.bottom))
 
 
   useEffect(() => {

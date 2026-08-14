@@ -2,7 +2,13 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useHapticFeedback } from "lib/haptic-feedback";
 import React, { useEffect, useRef, useMemo } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { A11Y, SIZING } from "../../lib/constants/accessibility";
+import {
+  BOTTOM_NAV_OFFSET,
+  getBottomNavBarHeight,
+  getBottomNavSafeAreaPadding,
+} from "../../lib/constants/navigation";
 import { theme as legacyTheme } from "../../lib/theme";
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
@@ -52,13 +58,14 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
   const { triggerHaptic } = useHapticFeedback();
   const { theme } = useAppThemeContext();
   const { width: windowWidth } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const { buttonSize: centerButtonSize, sectionWidth: centerSectionWidth } = useMemo(
     () => getCenterMetrics(windowWidth),
     [windowWidth]
   );
   const styles = useMemo(
-    () => makeStyles(theme, centerButtonSize, centerSectionWidth),
-    [theme, centerButtonSize, centerSectionWidth]
+    () => makeStyles(theme, centerButtonSize, centerSectionWidth, insets.bottom),
+    [theme, centerButtonSize, centerSectionWidth, insets.bottom]
   );
 
   const handleNavigate = React.useCallback((screen: ScreenKey) => {
@@ -280,23 +287,28 @@ export function BottomNav({ activeScreen, onNavigate, showAdmin = false, onBount
   );
 }
 
-function makeStyles(theme: AppTheme, centerButtonSize: number, centerSectionWidth: number) {
+function makeStyles(
+  theme: AppTheme,
+  centerButtonSize: number,
+  centerSectionWidth: number,
+  bottomInset: number
+) {
   return StyleSheet.create({
     bottomNavContainer: {
       position: "absolute",
       left: 0,
       right: 0,
-      bottom: -50,
+      bottom: -BOTTOM_NAV_OFFSET,
       zIndex: 100,
     },
     bottomNav: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
-      height: 110,
+      height: getBottomNavBarHeight(bottomInset),
       backgroundColor: theme.background,
       paddingHorizontal: 16,
-      paddingBottom: 12,
+      paddingBottom: getBottomNavSafeAreaPadding(bottomInset),
       borderTopLeftRadius: 28,
       borderTopRightRadius: 28,
       ...legacyTheme.shadows.lg,

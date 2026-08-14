@@ -16,6 +16,7 @@ import { useAuthContext } from '../hooks/use-auth-context';
 import { useConnectEligibility } from '../hooks/use-connect-eligibility';
 import { useEmailVerification } from '../hooks/use-email-verification';
 import { usePayoutMethods } from '../hooks/use-payout-methods';
+import { BOTTOM_NAV_BASE_OFFSET } from '../lib/constants/navigation';
 import { API_BASE_URL } from '../lib/config/api';
 import { analyticsService } from '../lib/services/analytics-service';
 import { formatCurrency } from '../lib/utils';
@@ -46,11 +47,6 @@ interface WithdrawalResultData {
 function isNetworkError(error: unknown): boolean {
   return error instanceof TypeError || (error instanceof Error && /network/i.test(error.message));
 }
-
-// Height of the bottom tab bar + gap, so the sticky Withdraw button sits
-// fully above it (same convention as postings-screen.tsx and the
-// CreateBounty Step*.tsx screens).
-const BOTTOM_NAV_OFFSET = 60;
 
 export function WithdrawWithBankScreen({
   onBack,
@@ -788,7 +784,7 @@ export function WithdrawWithBankScreen({
           this legacy footer is suppressed to avoid two competing withdraw
           buttons driving two different balance sources. */}
       {!isConnectNativeWithdrawal && (
-      <View style={[s.footer, { paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 16) }]}>
+      <View style={[s.footer, { paddingBottom: BOTTOM_NAV_BASE_OFFSET + Math.max(insets.bottom, 16) }]}>
         <TouchableOpacity
           onPress={handleWithdraw}
           disabled={isWithdrawDisabled}

@@ -5,6 +5,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BOUNTY_CATEGORIES } from '../../../lib/constants/bounty-categories';
+import { BOTTOM_NAV_BASE_OFFSET } from '../../../lib/constants/navigation';
 import { analyticsService } from '../../../lib/services/analytics-service';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import { validateTitle } from '../../../lib/utils/bounty-validation';
@@ -20,7 +21,6 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const insets = useSafeAreaInsets();
-  const BOTTOM_NAV_OFFSET = 60;
   const { theme } = useAppThemeContext();
 
   const handleTitleChange = (value: string) => {
@@ -83,7 +83,7 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
         scrollEnabled={true}
         bounces={true}
         showsVerticalScrollIndicator={true}
-        contentContainerStyle={{ flexGrow: 1, paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: BOTTOM_NAV_BASE_OFFSET + Math.max(insets.bottom, 12) + 16 }}
       >
         {/* Title Input */}
         <View className="mb-6">
@@ -148,7 +148,7 @@ export function StepTitle({ draft, onUpdate, onNext, onBack }: StepTitleProps) {
       {/* Navigation Buttons */}
       <View
         className="px-4 pb-4 pt-3 border-t"
-        style={{ backgroundColor: theme.background, borderColor: theme.border, marginBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 8) }}
+        style={{ backgroundColor: theme.background, borderColor: theme.border, marginBottom: BOTTOM_NAV_BASE_OFFSET + Math.max(insets.bottom, 8) }}
       >
         <View className="flex-row gap-3">
           {onBack && (
