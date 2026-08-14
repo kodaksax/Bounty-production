@@ -18,9 +18,9 @@ interface UseProfileResult {
 // Supabase and reset on every relaunch — every read returned null and every
 // write silently vanished. It now reads/writes through authProfileService,
 // the same Supabase-backed source the rest of the app treats as canonical.
-export function useProfile(userId?: string): UseProfileResult {
+export function useProfile(userId?: string, enabled = true): UseProfileResult {
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
 
   const fetchProfile = async () => {
@@ -76,8 +76,14 @@ export function useProfile(userId?: string): UseProfileResult {
   };
 
   useEffect(() => {
+    if (!enabled) {
+      setProfile(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     fetchProfile();
-  }, [userId]);
+  }, [userId, enabled]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
     profile,
