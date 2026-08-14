@@ -101,7 +101,9 @@ const SlideToConfirm: React.FC<SlideToConfirmProps> = React.memo(function SlideT
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => !disabled && !isProcessing,
+        // Do not claim on tap-start; let onMoveShouldSetPanResponder decide
+        // once the direction is known, so a vertical scroll is never blocked.
+        onStartShouldSetPanResponder: () => false,
         // Claim the touch only once it reads as horizontal, so a vertical
         // scroll of the modal body is not intercepted by the handle.
         onMoveShouldSetPanResponder: (_evt, gestureState) =>
