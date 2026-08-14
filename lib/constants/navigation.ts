@@ -37,14 +37,6 @@ export const BOTTOM_NAV_DEFAULT_CONTENT_SPACING = 16;
 export const BOTTOM_NAV_KEYBOARD_OFFSET = 96;
 
 /**
- * Recommended minimum bottom padding for standard scrollable content.
- */
-export const BOTTOM_NAV_SAFE_PADDING =
-  BOTTOM_NAV_VISIBLE_HEIGHT +
-  BOTTOM_NAV_MIN_SAFE_AREA_PADDING +
-  BOTTOM_NAV_DEFAULT_CONTENT_SPACING;
-
-/**
  * For screens with additional fixed bottom elements (like sticky action bars),
  * use this as the base offset and add your element height. Intentionally an
  * alias of `BOTTOM_NAV_VISIBLE_HEIGHT` so existing callers can migrate away
@@ -61,6 +53,17 @@ export function getBottomNavSafeAreaPadding(bottomInset = 0) {
 }
 
 /**
+ * Returns the baseline clearance content needs above the floating BottomNav.
+ * `minimumBottomPadding` lets callers preserve screen-specific minimum spacing.
+ */
+export function getBottomNavBaseClearance(
+  bottomInset = 0,
+  minimumBottomPadding = BOTTOM_NAV_MIN_SAFE_AREA_PADDING
+) {
+  return BOTTOM_NAV_VISIBLE_HEIGHT + Math.max(bottomInset, minimumBottomPadding);
+}
+
+/**
  * Returns the total BottomNav height after adding any device bottom inset.
  * `bottomInset` is the current `useSafeAreaInsets().bottom` value.
  */
@@ -74,10 +77,17 @@ export function getBottomNavBarHeight(bottomInset = 0) {
  */
 export function getBottomNavContentPadding(
   bottomInset = 0,
-  extraPadding = BOTTOM_NAV_DEFAULT_CONTENT_SPACING
+  extraPadding = BOTTOM_NAV_DEFAULT_CONTENT_SPACING,
+  minimumBottomPadding = BOTTOM_NAV_MIN_SAFE_AREA_PADDING
 ) {
-  return BOTTOM_NAV_VISIBLE_HEIGHT + getBottomNavSafeAreaPadding(bottomInset) + extraPadding;
+  return getBottomNavBaseClearance(bottomInset, minimumBottomPadding) + extraPadding;
 }
+
+/**
+ * Deprecated fixed fallback for callers that cannot access insets. Prefer
+ * `getBottomNavContentPadding(bottomInset)` so the value adapts per device.
+ */
+export const BOTTOM_NAV_SAFE_PADDING = getBottomNavContentPadding(0);
 
 /**
  * Returns the minimum keyboard/composer offset needed to clear the floating

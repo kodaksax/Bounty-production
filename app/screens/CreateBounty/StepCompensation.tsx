@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { analyticsService } from '../../../lib/services/analytics-service';
-import { BOTTOM_NAV_BASE_OFFSET } from '../../../lib/constants/navigation';
+import { getBottomNavBaseClearance, getBottomNavContentPadding } from '../../../lib/constants/navigation';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import { EscrowExplainer } from '../../../components/ui/escrow-explainer';
 import { ErrorBanner } from '../../../components/error-banner';
@@ -211,7 +211,7 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
         scrollEnabled={true}
         bounces={true}
         showsVerticalScrollIndicator={true}
-        contentContainerStyle={{ flexGrow: 1, paddingBottom: BOTTOM_NAV_BASE_OFFSET + Math.max(insets.bottom, 12) + 16 }}
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: getBottomNavContentPadding(insets.bottom) }}
       >
         {/* Wallet Balance Display */}
         <View className="mb-4 rounded-lg p-3 flex-row items-center justify-between" style={{ backgroundColor: theme.surface }}>
@@ -427,7 +427,7 @@ export function StepCompensation({ draft, onUpdate, onNext, onBack }: StepCompen
       {/* Navigation Buttons */}
       <View
         className="px-4 pb-4 pt-3 border-t"
-        style={{ backgroundColor: theme.background, borderColor: theme.border, marginBottom: BOTTOM_NAV_BASE_OFFSET + Math.max(insets.bottom, 8) }}
+        style={{ backgroundColor: theme.background, borderColor: theme.border, marginBottom: getBottomNavBaseClearance(insets.bottom, 8) }}
       >
         <View className="flex-row gap-3">
           <TouchableOpacity

@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthContext } from '../hooks/use-auth-context';
-import { BOTTOM_NAV_BASE_OFFSET } from '../lib/constants/navigation';
+import { getBottomNavBaseClearance } from '../lib/constants/navigation';
 import type { UseConnectEligibilityResult } from '../hooks/use-connect-eligibility';
 import type { UsePayoutMethodsResult } from '../hooks/use-payout-methods';
 import { config } from '../lib/config';
@@ -389,7 +389,7 @@ export function InstantCashOutScreen({
         </View>
       </ScrollView>
 
-      <View style={[s.footer, { paddingBottom: BOTTOM_NAV_BASE_OFFSET + Math.max(insets.bottom, 16) }]}>
+      <View style={[s.footer, { paddingBottom: getBottomNavBaseClearance(insets.bottom, 16) }]}>
         <TouchableOpacity
           onPress={handleCashOut}
           disabled={isCashOutDisabled}

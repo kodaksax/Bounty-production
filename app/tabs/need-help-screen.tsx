@@ -5,7 +5,7 @@ import * as React from "react"
 import { useState } from "react"
 import { View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import { getBottomNavContentPadding } from "../../lib/constants/navigation"
+import { getBottomNavBaseClearance } from "../../lib/constants/navigation"
 import { useAppThemeContext } from "../../lib/themes/AppThemeContext"
 
 interface NeedHelpScreenProps {
@@ -40,7 +40,7 @@ export function NeedHelpScreen({ activeScreen, setActiveScreen, onBountyPosted, 
         paddingTop: insets.top,
         // The flow owns its own CTA spacing, so this screen only clears the
         // shared BottomNav itself and does not add the extra 16px list gap.
-        paddingBottom: getBottomNavContentPadding(insets.bottom, 0),
+        paddingBottom: getBottomNavBaseClearance(insets.bottom),
       }}
     >
       <CreateBountyFlow

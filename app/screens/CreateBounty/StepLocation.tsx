@@ -5,7 +5,7 @@ import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BOTTOM_NAV_BASE_OFFSET } from '../../../lib/constants/navigation';
+import { getBottomNavBaseClearance, getBottomNavContentPadding } from '../../../lib/constants/navigation';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import { LocationPickerMap, type LocationPickerValue } from '../../../components/location/LocationPickerMap';
 import { locationService } from '../../../lib/services/location-service';
@@ -210,7 +210,7 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
         scrollEnabled={true}
         bounces={true}
         showsVerticalScrollIndicator={true}
-        contentContainerStyle={{ flexGrow: 1, paddingBottom: BOTTOM_NAV_BASE_OFFSET + Math.max(insets.bottom, 12) + 16 }}
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: getBottomNavContentPadding(insets.bottom) }}
       >
         {/* Work Type Selection */}
         <View className="mb-6">
@@ -407,7 +407,7 @@ export function StepLocation({ draft, onUpdate, onNext, onBack }: StepLocationPr
       {/* Navigation Buttons */}
       <View
         className="px-4 pb-4 pt-3 border-t"
-        style={{ backgroundColor: theme.background, borderColor: theme.border, marginBottom: BOTTOM_NAV_BASE_OFFSET + Math.max(insets.bottom, 8) }}
+        style={{ backgroundColor: theme.background, borderColor: theme.border, marginBottom: getBottomNavBaseClearance(insets.bottom, 8) }}
       >
         <View className="flex-row gap-3">
           <TouchableOpacity

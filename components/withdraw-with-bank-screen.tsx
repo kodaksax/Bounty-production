@@ -16,7 +16,7 @@ import { useAuthContext } from '../hooks/use-auth-context';
 import { useConnectEligibility } from '../hooks/use-connect-eligibility';
 import { useEmailVerification } from '../hooks/use-email-verification';
 import { usePayoutMethods } from '../hooks/use-payout-methods';
-import { BOTTOM_NAV_BASE_OFFSET } from '../lib/constants/navigation';
+import { getBottomNavBaseClearance } from '../lib/constants/navigation';
 import { API_BASE_URL } from '../lib/config/api';
 import { analyticsService } from '../lib/services/analytics-service';
 import { formatCurrency } from '../lib/utils';
@@ -784,7 +784,7 @@ export function WithdrawWithBankScreen({
           this legacy footer is suppressed to avoid two competing withdraw
           buttons driving two different balance sources. */}
       {!isConnectNativeWithdrawal && (
-      <View style={[s.footer, { paddingBottom: BOTTOM_NAV_BASE_OFFSET + Math.max(insets.bottom, 16) }]}>
+      <View style={[s.footer, { paddingBottom: getBottomNavBaseClearance(insets.bottom, 16) }]}>
         <TouchableOpacity
           onPress={handleWithdraw}
           disabled={isWithdrawDisabled}
