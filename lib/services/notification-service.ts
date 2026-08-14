@@ -1050,7 +1050,7 @@ export class NotificationService {
       // token N times is N-1 wasted round trips.
       const seen = new Set<string>();
       const unique = pending.filter(p => {
-        const key = `${p.token} ${p.deviceId ?? ''}`;
+        const key = `${p.token}|${p.deviceId ?? ''}`;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
