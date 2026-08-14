@@ -55,6 +55,7 @@ export function useNormalizedProfile(userId?: string, options: { enabled?: boole
 
   useEffect(() => {
     if (!enabled) {
+      setSbError(null);
       setSbLoading(false);
       setSupabaseProfile(null);
       return;

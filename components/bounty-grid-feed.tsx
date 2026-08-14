@@ -147,7 +147,7 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
                   isForHonor={Boolean(b.is_for_honor)}
                   user_id={b.user_id}
                   work_type={b.work_type}
-                  poster_avatar={b.poster_avatar}
+                  poster_avatar={b.poster_avatar ?? undefined}
                   categoryColor={def.color}
                   categoryLabel={def.label}
                   attachments_json={b.attachments_json}
@@ -179,7 +179,7 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
             isForHonor={Boolean(left.is_for_honor)}
             user_id={left.user_id}
             work_type={left.work_type}
-            poster_avatar={left.poster_avatar}
+            poster_avatar={left.poster_avatar ?? undefined}
             end_date={left.end_date ?? left.deadline}
             categoryColor={leftDef.color}
             categoryLabel={leftDef.label}
@@ -196,7 +196,7 @@ export function BountyGridFeed({ bounties, bountyDistances, listHeader }: Bounty
               isForHonor={Boolean(right.is_for_honor)}
               user_id={right.user_id}
               work_type={right.work_type}
-              poster_avatar={right.poster_avatar}
+              poster_avatar={right.poster_avatar ?? undefined}
               end_date={right.end_date ?? right.deadline}
               categoryColor={rightDef?.color}
               categoryLabel={rightDef?.label}

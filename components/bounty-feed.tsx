@@ -107,7 +107,7 @@ function nearbyToBounty(nb: NearbyBounty): Bounty {
     category: nb.category || undefined,
     deadline: nb.deadline || undefined,
     username: nb.username || undefined,
-    poster_avatar: nb.avatar || undefined,
+    poster_avatar: nb.avatar,
     approx_latitude: nb.approx_latitude,
     approx_longitude: nb.approx_longitude,
     distance_miles: nb.distance_miles,

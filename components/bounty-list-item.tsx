@@ -26,7 +26,7 @@ export interface BountyListItemProps {
   isForHonor?: boolean;
   user_id?: string | null;
   work_type?: 'online' | 'in_person';
-  poster_avatar?: string;
+  poster_avatar?: string | null;
   // Schedule fields (Phase 1: time as first-class citizen)
   schedule_type?: 'asap' | 'scheduled' | 'flexible' | null;
   start_date?: string | null;
@@ -59,12 +59,14 @@ function BountyListItemComponent({
   const [showDetail, setShowDetail] = useState(false);
   const router = useRouter();
   const { triggerHaptic } = useHapticFeedback();
+  const hasJoinedPosterIdentity = typeof username === 'string' && poster_avatar !== undefined;
   const { profile: posterProfile, loading: profileLoading } = useNormalizedProfile(
     user_id ?? undefined,
     // Skip the Supabase profile lookup when the bounty row already carries
-    // both username and avatar from the feed JOIN — this prevents N concurrent
-    // network calls for N visible list items on every feed load.
-    { enabled: !(username && poster_avatar) }
+    // both username and avatar state from the feed JOIN — this prevents N
+    // concurrent network calls for N visible list items on every feed load,
+    // including rows where the avatar is explicitly null.
+    { enabled: !hasJoinedPosterIdentity }
   );
   const [resolvedUsername, setResolvedUsername] = useState<string>(username || 'Loading...');
   const avatarUrl = poster_avatar || posterProfile?.avatar;
@@ -237,7 +239,7 @@ function BountyListItemComponent({
             description,
             user_id,
             work_type,
-            poster_avatar,
+            poster_avatar: poster_avatar ?? undefined,
             is_for_honor: isForHonor,
           }}
           onClose={() => setShowDetail(false)}

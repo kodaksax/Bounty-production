@@ -77,6 +77,8 @@ export function useProfile(userId?: string, enabled = true): UseProfileResult {
 
   useEffect(() => {
     if (!enabled) {
+      setProfile(null);
+      setError(null);
       setLoading(false);
       return;
     }
