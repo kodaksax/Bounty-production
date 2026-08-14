@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { ApplicantCard } from "../../components/applicant-card"
 import { ArchivedBountiesScreen } from "../../components/archived-bounties-screen"
 import { EditPostingModal } from "../../components/edit-posting-modal"
+import { getBottomNavContentPadding } from "../../lib/constants/navigation"
 import { useValidUserId } from '../../hooks/useValidUserId'
 import { ROUTES } from '../../lib/routes'
 import { supabase } from '../../lib/supabase'
@@ -78,7 +79,6 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
 
   const insets = useSafeAreaInsets()
   const HEADER_TOP_OFFSET = 55 // how far the header is visually pulled up
-  const BOTTOM_NAV_OFFSET = 60 // height of BottomNav + gap so content clears it
   const { refundEscrow } = useWallet()
   const { theme } = useAppThemeContext()
   const styles = useMemo(() => makeStyles(theme), [theme])
@@ -649,7 +649,10 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
 
   // Memoized styles that must be called unconditionally (before any early returns)
   const containerPaddingTop = useMemo(() => ({ paddingTop: Math.max(0, headerHeight - (HEADER_TOP_OFFSET - 12)) }), [headerHeight])
-  const listContentPadding = useMemo(() => ({ paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }), [insets.bottom])
+  const listContentPadding = useMemo(
+    () => ({ paddingBottom: getBottomNavContentPadding(insets.bottom, 16) }),
+    [insets.bottom]
+  )
 
   // Map of bountyId -> count of pending requests (for poster "Review" badge)
   const pendingRequestsByBounty = React.useMemo(() => {

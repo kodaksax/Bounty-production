@@ -4,6 +4,7 @@ import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { getBottomNavBaseClearance, getBottomNavContentPadding } from '../../../lib/constants/navigation';
 import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
 import { AttachmentViewerModal } from '../../../components/attachment-viewer-modal';
 import { useAttachmentUpload } from '../../../hooks/use-attachment-upload';
@@ -23,7 +24,6 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
   const [viewerVisible, setViewerVisible] = useState(false);
   const [selectedAttachment, setSelectedAttachment] = useState<Attachment | null>(null);
   const insets = useSafeAreaInsets();
-  const BOTTOM_NAV_OFFSET = 60;
   const { theme } = useAppThemeContext();
 
   const {
@@ -108,7 +108,7 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
         scrollEnabled={true}
         bounces={true}
         showsVerticalScrollIndicator={true}
-        contentContainerStyle={{ flexGrow: 1, paddingBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 12) + 16 }}
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: getBottomNavContentPadding(insets.bottom) }}
       >
         {/* Description Input */}
         <View className="mb-6">
@@ -263,7 +263,7 @@ export function StepDetails({ draft, onUpdate, onNext, onBack }: StepDetailsProp
       {/* Navigation Buttons */}
       <View
         className="px-4 pb-4 pt-3 border-t"
-        style={{ backgroundColor: theme.background, borderColor: theme.border, marginBottom: BOTTOM_NAV_OFFSET + Math.max(insets.bottom, 8) }}
+        style={{ backgroundColor: theme.background, borderColor: theme.border, marginBottom: getBottomNavBaseClearance(insets.bottom, 8) }}
       >
         <View className="flex-row gap-3">
           <TouchableOpacity
