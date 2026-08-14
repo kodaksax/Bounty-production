@@ -46,25 +46,46 @@ export const BOTTOM_NAV_SAFE_PADDING =
 
 /**
  * For screens with additional fixed bottom elements (like sticky action bars),
- * use this as the base offset and add your element height.
+ * use this as the base offset and add your element height. Intentionally an
+ * alias of `BOTTOM_NAV_VISIBLE_HEIGHT` so existing callers can migrate away
+ * from local magic numbers without changing their semantics.
  */
 export const BOTTOM_NAV_BASE_OFFSET = BOTTOM_NAV_VISIBLE_HEIGHT;
 
+/**
+ * Returns the bottom padding the BottomNav itself should reserve for the device
+ * safe area. `bottomInset` is the current `useSafeAreaInsets().bottom` value.
+ */
 export function getBottomNavSafeAreaPadding(bottomInset = 0) {
   return Math.max(bottomInset, BOTTOM_NAV_MIN_SAFE_AREA_PADDING);
 }
 
+/**
+ * Returns the total BottomNav height after adding any device bottom inset.
+ * `bottomInset` is the current `useSafeAreaInsets().bottom` value.
+ */
 export function getBottomNavBarHeight(bottomInset = 0) {
   return BOTTOM_NAV_TOTAL_HEIGHT + Math.max(bottomInset, 0);
 }
 
-export function getBottomNavContentPadding(bottomInset = 0, extraPadding = 0) {
+/**
+ * Returns the padding content should add to stay clear of the floating
+ * BottomNav. `extraPadding` defaults to the standard 16px breathing room.
+ */
+export function getBottomNavContentPadding(
+  bottomInset = 0,
+  extraPadding = BOTTOM_NAV_DEFAULT_CONTENT_SPACING
+) {
   return BOTTOM_NAV_VISIBLE_HEIGHT + getBottomNavSafeAreaPadding(bottomInset) + extraPadding;
 }
 
+/**
+ * Returns the minimum keyboard/composer offset needed to clear the floating
+ * center button and the device safe area.
+ */
 export function getBottomNavKeyboardOffset(bottomInset = 0) {
   return Math.max(
     BOTTOM_NAV_KEYBOARD_OFFSET,
-    Math.max(bottomInset, 0) + BOTTOM_NAV_MIN_SAFE_AREA_PADDING
+    bottomInset + BOTTOM_NAV_MIN_SAFE_AREA_PADDING
   );
 }

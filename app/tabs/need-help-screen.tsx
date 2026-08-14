@@ -38,7 +38,9 @@ export function NeedHelpScreen({ activeScreen, setActiveScreen, onBountyPosted, 
         flex: 1,
         backgroundColor: theme.background,
         paddingTop: insets.top,
-        paddingBottom: getBottomNavContentPadding(insets.bottom),
+        // The flow owns its own CTA spacing, so this screen only clears the
+        // shared BottomNav itself and does not add the extra 16px list gap.
+        paddingBottom: getBottomNavContentPadding(insets.bottom, 0),
       }}
     >
       <CreateBountyFlow
