@@ -18,7 +18,7 @@ export const BOTTOM_NAV_OFFSET = 50;
 /**
  * Visible height of BottomNav above the screen bottom before safe-area padding.
  */
-export const BOTTOM_NAV_VISIBLE_HEIGHT = BOTTOM_NAV_TOTAL_HEIGHT - BOTTOM_NAV_OFFSET; // 60px
+export const BOTTOM_NAV_VISIBLE_HEIGHT = BOTTOM_NAV_TOTAL_HEIGHT - BOTTOM_NAV_OFFSET;
 
 /**
  * Minimum bottom padding to preserve spacing on devices without a home indicator.
