@@ -99,13 +99,17 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
     category: 'engagement',
     cooldownHours: 72,
     maxShownCount: 3,
-    isEligible: (ctx) => ctx.permissions.notifications === 'undetermined',
-    checkCompleted: (ctx) => ctx.permissions.notifications !== 'undetermined',
+    isEligible: ctx => ctx.permissions.notifications === 'undetermined',
+    checkCompleted: ctx => ctx.permissions.notifications !== 'undetermined',
     content: () => ({
       icon: 'notifications-none',
       title: 'Know the moment money is nearby',
       body: "We'll only ping you for things that matter: a new bounty near you, an offer on your post, or a payout landing.",
-      benefits: ['Hear about nearby bounties first', 'Never miss a message or offer', 'Off anytime in Settings'],
+      benefits: [
+        'Hear about nearby bounties first',
+        'Never miss a message or offer',
+        'Off anytime in Settings',
+      ],
       primaryLabel: 'Turn on notifications',
       secondaryLabel: 'Not now',
     }),
@@ -121,10 +125,10 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
     // few sessions (MIN_SESSIONS_FOR_PROFILE_PHOTO), or they're already on
     // the Profile screen, which is the one place this prompt isn't an
     // interruption — it's exactly what they're there to do.
-    isEligible: (ctx) =>
+    isEligible: ctx =>
       !ctx.profile.hasAvatar &&
       (ctx.sessionCount >= MIN_SESSIONS_FOR_PROFILE_PHOTO || ctx.activeScreen === 'profile'),
-    checkCompleted: (ctx) => ctx.profile.hasAvatar,
+    checkCompleted: ctx => ctx.profile.hasAvatar,
     content: () => ({
       icon: 'add-a-photo',
       title: 'Add a profile photo',
@@ -142,8 +146,9 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
     category: 'profile',
     cooldownHours: 96,
     maxShownCount: 2,
-    isEligible: (ctx) => accountAgeDays(ctx) >= 1 && (!ctx.profile.hasBio || !ctx.profile.hasLocation),
-    checkCompleted: (ctx) => ctx.profile.hasBio && ctx.profile.hasLocation,
+    isEligible: ctx =>
+      accountAgeDays(ctx) >= 1 && (!ctx.profile.hasBio || !ctx.profile.hasLocation),
+    checkCompleted: ctx => ctx.profile.hasBio && ctx.profile.hasLocation,
     content: () => ({
       icon: 'person-outline',
       title: 'Finish setting up your profile',
@@ -161,13 +166,16 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
     category: 'engagement',
     cooldownHours: 72,
     maxShownCount: 3,
-    isEligible: (ctx) => ctx.permissions.location === 'undetermined',
-    checkCompleted: (ctx) => ctx.permissions.location !== 'undetermined',
+    isEligible: ctx => ctx.permissions.location === 'undetermined',
+    checkCompleted: ctx => ctx.permissions.location !== 'undetermined',
     content: () => ({
       icon: 'location-on',
       title: 'See what’s actually near you',
       body: 'Turn on location to see real distances to nearby bounties instead of browsing everything citywide.',
-      benefits: ['Real distances, not guesses', 'Only your area is stored — never your exact address'],
+      benefits: [
+        'Real distances, not guesses',
+        'Only your area is stored — never your exact address',
+      ],
       primaryLabel: 'Use my location',
       secondaryLabel: 'Not now',
     }),
@@ -191,7 +199,7 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
     // alongside 'unverified'/null so a resubmission nudge follows the same
     // cooldown/suppression rules instead of nagging unboundedly — matching
     // the resubmit entry point already on the profile screen.
-    isEligible: (ctx) => {
+    isEligible: ctx => {
       const needsVerification =
         ctx.profile.stripeIdentityStatus !== 'verified' &&
         ctx.profile.idVerificationStatus !== 'verified' &&
@@ -206,13 +214,14 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
 
       return ctx.sessionCount >= MIN_SESSIONS_FOR_ACTIVATION_PROMPT;
     },
-    checkCompleted: (ctx) =>
+    checkCompleted: ctx =>
       ctx.profile.stripeIdentityStatus === 'processing' ||
       ctx.profile.stripeIdentityStatus === 'verified' ||
       ctx.profile.idVerificationStatus === 'pending' ||
       ctx.profile.idVerificationStatus === 'verified',
-    content: (ctx) =>
-      ctx.profile.stripeIdentityStatus === 'requires_input' || ctx.profile.idVerificationStatus === 'rejected'
+    content: ctx =>
+      ctx.profile.stripeIdentityStatus === 'requires_input' ||
+      ctx.profile.idVerificationStatus === 'rejected'
         ? {
             icon: 'verified-user',
             title: 'Resubmit your ID verification',
@@ -255,16 +264,18 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
     // back for a later session. This is what keeps it from firing on the
     // very first render after signup and from feeling like a random
     // interruption on an unrelated screen.
-    isEligible: (ctx) => {
-      const isPayoutEligibleRole = ctx.profile.primaryRole === 'hunter' || ctx.profile.primaryRole === 'both';
+    isEligible: ctx => {
+      const isPayoutEligibleRole =
+        ctx.profile.primaryRole === 'hunter' || ctx.profile.primaryRole === 'both';
       if (!isPayoutEligibleRole || ctx.profile.stripeConnectPayoutsEnabled) return false;
 
-      const hasStrongReason = ctx.activeScreen != null && WALLET_RELEVANT_SCREENS.has(ctx.activeScreen);
+      const hasStrongReason =
+        ctx.activeScreen != null && WALLET_RELEVANT_SCREENS.has(ctx.activeScreen);
       if (hasStrongReason) return true;
 
       return ctx.sessionCount >= MIN_SESSIONS_FOR_ACTIVATION_PROMPT;
     },
-    checkCompleted: (ctx) => ctx.profile.stripeConnectPayoutsEnabled,
+    checkCompleted: ctx => ctx.profile.stripeConnectPayoutsEnabled,
     content: () => ({
       icon: 'account-balance',
       title: 'Set up payouts',
@@ -428,7 +439,7 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
       eligibleWhenEnqueued(ctx, state) &&
       ctx.profile.balance > 0 &&
       !ctx.profile.stripeConnectPayoutsEnabled,
-    content: (ctx) => ({
+    content: ctx => ({
       icon: 'trending-up',
       title: `$${ctx.profile.balance.toFixed(2)} is ready`,
       body: 'Add your bank account to get paid.',
@@ -450,7 +461,8 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
     // never eligible, never shown — until a real referral system ships,
     // even if something enqueues it early. Flipping that one function is
     // the only change needed to activate it.
-    isEligible: (ctx, state) => referralService.isReferralAvailable() && eligibleWhenEnqueued(ctx, state),
+    isEligible: (ctx, state) =>
+      referralService.isReferralAvailable() && eligibleWhenEnqueued(ctx, state),
     content: () => ({
       icon: 'group-add',
       title: 'Know someone who needs this?',
@@ -488,7 +500,7 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
     // Enqueue from: a remote-config/feature-flag check at app start, with
     // metadata: { title, body, route } describing the specific announcement.
     isEligible: eligibleWhenEnqueued,
-    content: (ctx) => ({
+    content: ctx => ({
       icon: 'campaign',
       title: 'New feature',
       body: "There's something new in Bounty — take a look.",
@@ -500,5 +512,5 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
 ];
 
 export function getMomentDefinition(type: string): MomentDefinition | undefined {
-  return MOMENT_REGISTRY.find((m) => m.type === type);
+  return MOMENT_REGISTRY.find(m => m.type === type);
 }

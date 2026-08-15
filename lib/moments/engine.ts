@@ -10,8 +10,8 @@
  */
 
 import { MOMENT_REGISTRY } from './registry';
-import { MAX_MOMENT_SHOWS } from './types';
 import type { MomentContext, MomentDefinition, MomentState, MomentType } from './types';
+import { MAX_MOMENT_SHOWS } from './types';
 
 const MS_PER_HOUR = 60 * 60 * 1000;
 

@@ -5,7 +5,12 @@
  */
 
 import { evaluateEligibleMoments, evaluateNextMoment } from '../../../../lib/moments/engine';
-import type { MomentContext, MomentDefinition, MomentState, MomentType } from '../../../../lib/moments/types';
+import type {
+    MomentContext,
+    MomentDefinition,
+    MomentState,
+    MomentType,
+} from '../../../../lib/moments/types';
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -70,7 +75,11 @@ describe('evaluateNextMoment cooldown handling', () => {
     // close itself before the user does anything (see isOnCooldown's doc
     // comment for why this is deliberately NOT treated as a cooldown case).
     const def = makeDef();
-    const state = makeState({ status: 'shown', shownCount: 1, lastShownAt: new Date(Date.now() - 1 * HOUR_MS).toISOString() });
+    const state = makeState({
+      status: 'shown',
+      shownCount: 1,
+      lastShownAt: new Date(Date.now() - 1 * HOUR_MS).toISOString(),
+    });
     const states = new Map<MomentType, MomentState>([[def.type, state]]);
 
     expect(evaluateNextMoment(makeContext(), states, [def])?.type).toBe(def.type);
@@ -149,7 +158,9 @@ describe('evaluateNextMoment cooldown handling', () => {
     const defB = makeDef({ type: 'enable_notifications', priority: 10 });
     const eligible = evaluateEligibleMoments(makeContext(), new Map(), [defA, defB]);
 
-    expect(eligible.map((d) => d.type)).toEqual(['enable_notifications', 'identity_verification']);
-    expect(evaluateNextMoment(makeContext(), new Map(), [defA, defB])?.type).toBe('enable_notifications');
+    expect(eligible.map(d => d.type)).toEqual(['enable_notifications', 'identity_verification']);
+    expect(evaluateNextMoment(makeContext(), new Map(), [defA, defB])?.type).toBe(
+      'enable_notifications'
+    );
   });
 });
