@@ -3,6 +3,7 @@ const path = require('path');
 const dotenv = require('dotenv');
 const { withAppBuildGradle } = require('@expo/config-plugins');
 const withRemoveMediaPermissions = require('./plugins/withRemoveMediaPermissions');
+const withNewArchAppDelegate = require('./plugins/withNewArchAppDelegate');
 
 // Environment resolution order:
 // 1) APP_ENV (primary source of truth for this app)
@@ -294,6 +295,13 @@ module.exports = ({ config }) => {
   // picker for user-initiated selection and must not request these permissions
   // (Google Play policy compliance).
   result = withRemoveMediaPermissions(result);
+
+  // Drop the template's `sourceURL(for bridge: RCTBridge)` override from the
+  // generated AppDelegate — RCTBridge no longer exists under RN 0.83 +
+  // new architecture, and leaving it in breaks the iOS build.
+  // Registered last so it runs after any plugin that injects into the
+  // AppDelegate's config-plugin extension point.
+  result = withNewArchAppDelegate(result);
 
   return result;
 };
