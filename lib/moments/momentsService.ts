@@ -9,7 +9,7 @@
 
 import * as Sentry from '@sentry/react-native';
 import { supabase } from '../supabase';
-import type { MomentState, MomentStatus, MomentType } from './types';
+import { MAX_MOMENT_SHOWS, type MomentState, type MomentStatus, type MomentType } from './types';
 
 interface MomentRow {
   moment_type: string;
@@ -72,8 +72,15 @@ export const momentsService = {
   },
 
   /** Marks a moment as having been presented to the user. Lazily creates the row on first show. */
-  async markShown(userId: string, momentType: MomentType): Promise<void> {
+  async markShown(userId: string, momentType: MomentType): Promise<boolean> {
     const existing = await fetchRow(userId, momentType);
+    if ((existing?.shown_count ?? 0) >= MAX_MOMENT_SHOWS) {
+      console.warn('[moments] show cap reached', {
+        momentType,
+        shownCount: existing?.shown_count,
+      });
+      return false;
+    }
     const now = new Date().toISOString();
     const { error } = await supabase.from('user_activation_moments').upsert(
       {
@@ -87,23 +94,29 @@ export const momentsService = {
       { onConflict: 'user_id,moment_type' }
     );
     if (error) console.error('[moments] markShown failed', { momentType, error });
+    return !error;
   },
 
-  async markDismissed(userId: string, momentType: MomentType): Promise<void> {
-    const existing = await fetchRow(userId, momentType);
-    const firstShownAt = existing?.first_shown_at
-      ? new Date(existing.first_shown_at).getTime()
-      : null;
-    if (firstShownAt != null) {
-      const msVisible = Date.now() - firstShownAt;
-      if (msVisible < 750) {
-        Sentry.captureMessage('[moments] rejected suspiciously fast dismissal', {
-          level: 'warning',
-          extra: { momentType, msVisible },
-        });
-        console.warn('[moments] rejected suspiciously fast dismissal', { momentType, msVisible });
-        return;
-      }
+  async markDismissed(
+    userId: string,
+    momentType: MomentType,
+    shownAtMs?: number | null
+  ): Promise<boolean> {
+    const existing = shownAtMs == null ? await fetchRow(userId, momentType) : null;
+    const persistedShownAt = existing?.last_shown_at ?? existing?.first_shown_at;
+    const referenceShownAt =
+      shownAtMs ?? (persistedShownAt ? new Date(persistedShownAt).getTime() : null);
+    const msVisible = referenceShownAt == null ? null : Date.now() - referenceShownAt;
+    if (msVisible == null || msVisible < 750) {
+      Sentry.captureMessage('[moments] rejected suspiciously fast or unordered dismissal', {
+        level: 'warning',
+        extra: { momentType, msVisible },
+      });
+      console.warn('[moments] rejected suspiciously fast or unordered dismissal', {
+        momentType,
+        msVisible,
+      });
+      return false;
     }
     const { error } = await supabase.from('user_activation_moments').upsert(
       {
@@ -115,6 +128,7 @@ export const momentsService = {
       { onConflict: 'user_id,moment_type' }
     );
     if (error) console.error('[moments] markDismissed failed', { momentType, error });
+    return !error;
   },
 
   async markCompleted(userId: string, momentType: MomentType): Promise<void> {
@@ -149,17 +163,15 @@ export const momentsService = {
 
   async markSnoozed(userId: string, momentType: MomentType, hours: number): Promise<void> {
     const snoozedUntil = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
-    const { error } = await supabase
-      .from('user_activation_moments')
-      .upsert(
-        {
-          user_id: userId,
-          moment_type: momentType,
-          status: 'snoozed',
-          snoozed_until: snoozedUntil,
-        },
-        { onConflict: 'user_id,moment_type' }
-      );
+    const { error } = await supabase.from('user_activation_moments').upsert(
+      {
+        user_id: userId,
+        moment_type: momentType,
+        status: 'snoozed',
+        snoozed_until: snoozedUntil,
+      },
+      { onConflict: 'user_id,moment_type' }
+    );
     if (error) console.error('[moments] markSnoozed failed', { momentType, error });
   },
 

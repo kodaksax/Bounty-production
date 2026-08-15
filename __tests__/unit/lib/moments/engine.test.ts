@@ -89,6 +89,17 @@ describe('evaluateNextMoment cooldown handling', () => {
     expect(evaluateNextMoment(makeContext(), states, [def])).toBeNull();
   });
 
+  it.each(['dismissed', 'completed', 'expired'] as const)(
+    'never re-selects a %s moment after it is resolved',
+    status => {
+      const def = makeDef({ maxShownCount: 99 });
+      const state = makeState({ status, shownCount: 1 });
+      const states = new Map<MomentType, MomentState>([[def.type, state]]);
+
+      expect(evaluateNextMoment(makeContext(), states, [def])).toBeNull();
+    }
+  );
+
   it('respects an active snooze regardless of lastShownAt', () => {
     const def = makeDef();
     const state = makeState({
@@ -101,6 +112,18 @@ describe('evaluateNextMoment cooldown handling', () => {
     expect(evaluateNextMoment(makeContext(), states, [def])).toBeNull();
   });
 
+  it('allows an expired snooze to be selected again', () => {
+    const def = makeDef();
+    const state = makeState({
+      status: 'snoozed',
+      lastShownAt: new Date(Date.now() - 1000 * HOUR_MS).toISOString(),
+      snoozedUntil: new Date(Date.now() - 1 * HOUR_MS).toISOString(),
+    });
+    const states = new Map<MomentType, MomentState>([[def.type, state]]);
+
+    expect(evaluateNextMoment(makeContext(), states, [def])?.type).toBe(def.type);
+  });
+
   it('retires a moment once maxShownCount is reached, even without a dismissal', () => {
     const def = makeDef({ maxShownCount: 2 });
     const state = makeState({
@@ -108,6 +131,14 @@ describe('evaluateNextMoment cooldown handling', () => {
       shownCount: 2,
       lastShownAt: new Date(Date.now() - 1000 * HOUR_MS).toISOString(),
     });
+    const states = new Map<MomentType, MomentState>([[def.type, state]]);
+
+    expect(evaluateNextMoment(makeContext(), states, [def])).toBeNull();
+  });
+
+  it('enforces the universal three-show backstop even when a definition asks for more', () => {
+    const def = makeDef({ maxShownCount: 99 });
+    const state = makeState({ status: 'shown', shownCount: 3 });
     const states = new Map<MomentType, MomentState>([[def.type, state]]);
 
     expect(evaluateNextMoment(makeContext(), states, [def])).toBeNull();

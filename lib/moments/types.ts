@@ -42,6 +42,9 @@ export type MomentStatus =
   | 'expired'
   | 'snoozed';
 
+/** Universal persistence backstop; definitions may choose a lower limit. */
+export const MAX_MOMENT_SHOWS = 3;
+
 /** Persisted per-user state for one moment type. One row per (user, moment_type) server-side. */
 export interface MomentState {
   momentType: MomentType;

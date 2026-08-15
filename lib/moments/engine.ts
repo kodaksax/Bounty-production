@@ -10,6 +10,7 @@
  */
 
 import { MOMENT_REGISTRY } from './registry';
+import { MAX_MOMENT_SHOWS } from './types';
 import type { MomentContext, MomentDefinition, MomentState, MomentType } from './types';
 
 const MS_PER_HOUR = 60 * 60 * 1000;
@@ -36,9 +37,14 @@ function isOnCooldown(def: MomentDefinition, state: MomentState | null): boolean
 
 function isRetired(def: MomentDefinition, state: MomentState | null): boolean {
   if (!state) return false;
-  if (state.status === 'completed' && !def.recurring) return true;
-  if (state.status === 'expired') return true;
-  if (def.maxShownCount != null && state.shownCount >= def.maxShownCount) return true;
+  // A resolved moment is terminal for this queue entry. Event-triggered
+  // moments are re-armed explicitly by enqueue(), which changes the state
+  // back to pending before selection runs again.
+  if (state.status === 'dismissed' || state.status === 'completed' || state.status === 'expired') {
+    return true;
+  }
+  const maxShownCount = Math.min(def.maxShownCount ?? MAX_MOMENT_SHOWS, MAX_MOMENT_SHOWS);
+  if (state.shownCount >= maxShownCount) return true;
   return false;
 }
 

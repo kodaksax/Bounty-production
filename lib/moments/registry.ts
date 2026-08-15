@@ -52,7 +52,9 @@ function accountAgeDays(ctx: MomentContext): number {
 
 /** Event-triggered moments share this eligibility rule: only show once explicitly enqueued and not yet resolved. */
 function eligibleWhenEnqueued(_ctx: MomentContext, state: MomentState | null): boolean {
-  return state?.status === 'pending' && Object.keys(state.metadata ?? {}).length >= 0;
+  if (state?.status === 'pending') return true;
+  if (state?.status !== 'snoozed' || !state.snoozedUntil) return false;
+  return new Date(state.snoozedUntil).getTime() <= Date.now();
 }
 
 /**

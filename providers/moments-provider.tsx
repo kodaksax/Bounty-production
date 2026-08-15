@@ -384,8 +384,9 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
 
   const dismiss = useCallback(() => {
     if (!activeMoment || !userId) return;
+    const shownAtMs = shownAtRef.current;
     hapticFeedback.light();
-    momentsService.markDismissed(userId, activeMoment.type);
+    void momentsService.markDismissed(userId, activeMoment.type, shownAtMs);
     patchState(activeMoment.type, { status: 'dismissed', dismissedAt: new Date().toISOString() });
     analyticsService.trackEvent('moment_dismissed', {
       momentType: activeMoment.type,
