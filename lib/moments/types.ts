@@ -33,7 +33,14 @@ export type MomentType =
   | 'invite_friends'
   | 'feature_announcement';
 
-export type MomentStatus = 'pending' | 'shown' | 'dismissed' | 'completed' | 'expired' | 'snoozed';
+export type MomentStatus =
+  | 'pending'
+  | 'shown'
+  | 'in_progress'
+  | 'dismissed'
+  | 'completed'
+  | 'expired'
+  | 'snoozed';
 
 /** Persisted per-user state for one moment type. One row per (user, moment_type) server-side. */
 export interface MomentState {
@@ -82,7 +89,13 @@ export interface MomentContext {
     hasLocation: boolean;
     hasSkills: boolean;
     idVerificationStatus: 'unverified' | 'pending' | 'verified' | 'rejected' | null;
-    stripeIdentityStatus?: 'unstarted' | 'requires_input' | 'processing' | 'verified' | 'canceled' | null;
+    stripeIdentityStatus?:
+      | 'unstarted'
+      | 'requires_input'
+      | 'processing'
+      | 'verified'
+      | 'canceled'
+      | null;
     stripeConnectChargesEnabled: boolean;
     stripeConnectPayoutsEnabled: boolean;
     primaryRole: 'poster' | 'hunter' | 'both' | null;

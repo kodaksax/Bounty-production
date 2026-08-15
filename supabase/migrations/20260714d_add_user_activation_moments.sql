@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS public.user_activation_moments (
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   moment_type TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending'
-    CHECK (status IN ('pending', 'shown', 'dismissed', 'completed', 'expired', 'snoozed')),
+    CHECK (status IN ('pending', 'shown', 'in_progress', 'dismissed', 'completed', 'expired', 'snoozed')),
   shown_count INTEGER NOT NULL DEFAULT 0,
   first_shown_at TIMESTAMPTZ,
   last_shown_at TIMESTAMPTZ,

@@ -140,6 +140,11 @@ verify_jwt = false
 [functions.bounty-payments]
 verify_jwt = false
 
+# Diagnostic access is authenticated so it cannot disclose Stripe mode or
+# account configuration to unauthenticated callers.
+[functions.stripe-mode-check]
+verify_jwt = true
+
 # webhooks: receives events from Stripe (not from authenticated users),
 # so it must NOT require a Supabase JWT.
 [functions.webhooks]

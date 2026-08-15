@@ -19,6 +19,7 @@ function isOnCooldown(def: MomentDefinition, state: MomentState | null): boolean
   if (state.status === 'snoozed' && state.snoozedUntil) {
     return new Date(state.snoozedUntil).getTime() > Date.now();
   }
+  if (state.status === 'in_progress') return true;
   // Deliberately NOT applied to 'shown': a currently-active moment must
   // stay eligible on every re-evaluation while it's still on screen and
   // unresolved, or the caller's "same type as last time → keep it" bailout
@@ -43,7 +44,7 @@ function isRetired(def: MomentDefinition, state: MomentState | null): boolean {
 
 function prerequisitesMet(def: MomentDefinition, states: Map<MomentType, MomentState>): boolean {
   if (!def.prerequisites || def.prerequisites.length === 0) return true;
-  return def.prerequisites.every((p) => states.get(p)?.status === 'completed');
+  return def.prerequisites.every(p => states.get(p)?.status === 'completed');
 }
 
 /**
@@ -58,7 +59,7 @@ export function evaluateEligibleMoments(
   states: Map<MomentType, MomentState>,
   registry: MomentDefinition[] = MOMENT_REGISTRY
 ): MomentDefinition[] {
-  const eligible = registry.filter((def) => {
+  const eligible = registry.filter(def => {
     const state = states.get(def.type) ?? null;
     if (isRetired(def, state)) return false;
     if (isOnCooldown(def, state)) return false;

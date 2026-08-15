@@ -415,22 +415,25 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
   },
   {
     type: 'large_payout_eligible',
-    priority: 70,
+    priority: 1,
     category: 'monetization',
     cooldownHours: 48,
     maxShownCount: 2,
-    prerequisites: ['stripe_connect_onboarding'],
-    // Enqueue from: wallet balance logic, when balance crosses a
-    // "worth expediting" threshold and Connect is already set up.
-    isEligible: eligibleWhenEnqueued,
-    content: () => ({
+    // Money owed to the hunter is the strongest reason to ask for payout setup.
+    // It must remain eligible before Connect is complete, otherwise the prompt
+    // that drives onboarding is gated on onboarding itself.
+    isEligible: (ctx, state) =>
+      eligibleWhenEnqueued(ctx, state) &&
+      ctx.profile.balance > 0 &&
+      !ctx.profile.stripeConnectPayoutsEnabled,
+    content: (ctx) => ({
       icon: 'trending-up',
-      title: 'You have a payout ready',
-      body: 'Your balance has reached a good time to withdraw. Transfer it to your bank now.',
-      primaryLabel: 'Withdraw now',
+      title: `$${ctx.profile.balance.toFixed(2)} is ready`,
+      body: 'Add your bank account to get paid.',
+      primaryLabel: 'Add your bank',
       secondaryLabel: 'Later',
     }),
-    action: { type: 'navigate', route: '/tabs/wallet-screen' },
+    action: { type: 'navigate', route: '/wallet/connect/embedded-onboarding' },
   },
   {
     type: 'invite_friends',

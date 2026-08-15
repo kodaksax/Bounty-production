@@ -10,9 +10,9 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useMoments } from '../../providers/moments-provider';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
+import { useMoments } from '../../providers/moments-provider';
 import { AppModal } from '../ui/app-modal';
 
 export function MomentSheet() {
@@ -34,58 +34,64 @@ export function MomentSheet() {
   const content = displayContent;
 
   return (
-    <AppModal visible={visible} onRequestClose={dismiss} variant="sheet">
-        <View
-          style={[styles.sheet, { paddingBottom: insets.bottom + 20 }]}
-          accessibilityViewIsModal
+    <AppModal
+      visible={visible}
+      // Moment dismissals must represent an explicit choice. Native back,
+      // backdrop presses, and lifecycle transitions must not write one.
+      onRequestClose={() => undefined}
+      dismissable={false}
+      variant="sheet"
+    >
+      <View style={[styles.sheet, { paddingBottom: insets.bottom + 20 }]} accessibilityViewIsModal>
+        {content.icon && (
+          <View style={styles.iconCircle}>
+            <MaterialIcons name={content.icon as any} size={32} color={theme.primary} />
+          </View>
+        )}
+
+        <Text style={styles.title} accessibilityRole="header">
+          {content.title}
+        </Text>
+        <Text style={styles.body}>{content.body}</Text>
+
+        {content.estimatedMinutes ? (
+          <View style={styles.metaRow}>
+            <MaterialIcons name="schedule" size={14} color={theme.textSecondary} />
+            <Text style={styles.metaText}>About {content.estimatedMinutes} min</Text>
+          </View>
+        ) : null}
+
+        {content.benefits && content.benefits.length > 0 && (
+          <View style={styles.benefitsList}>
+            {content.benefits.map((b, i) => (
+              <View key={i} style={styles.benefitRow}>
+                <MaterialIcons name="check" size={16} color={theme.primary} />
+                <Text style={styles.benefitText}>{b}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={styles.primaryButton}
+          onPress={accept}
+          accessibilityRole="button"
+          accessibilityLabel={content.primaryLabel}
         >
-          {content.icon && (
-            <View style={styles.iconCircle}>
-              <MaterialIcons name={content.icon as any} size={32} color={theme.primary} />
-            </View>
-          )}
+          <Text style={styles.primaryButtonText}>{content.primaryLabel}</Text>
+        </TouchableOpacity>
 
-          <Text style={styles.title} accessibilityRole="header">{content.title}</Text>
-          <Text style={styles.body}>{content.body}</Text>
-
-          {content.estimatedMinutes ? (
-            <View style={styles.metaRow}>
-              <MaterialIcons name="schedule" size={14} color={theme.textSecondary} />
-              <Text style={styles.metaText}>About {content.estimatedMinutes} min</Text>
-            </View>
-          ) : null}
-
-          {content.benefits && content.benefits.length > 0 && (
-            <View style={styles.benefitsList}>
-              {content.benefits.map((b, i) => (
-                <View key={i} style={styles.benefitRow}>
-                  <MaterialIcons name="check" size={16} color={theme.primary} />
-                  <Text style={styles.benefitText}>{b}</Text>
-                </View>
-              ))}
-            </View>
-          )}
-
+        {content.secondaryLabel && (
           <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={accept}
+            style={styles.secondaryButton}
+            onPress={dismiss}
             accessibilityRole="button"
-            accessibilityLabel={content.primaryLabel}
+            accessibilityLabel={content.secondaryLabel}
           >
-            <Text style={styles.primaryButtonText}>{content.primaryLabel}</Text>
+            <Text style={styles.secondaryButtonText}>{content.secondaryLabel}</Text>
           </TouchableOpacity>
-
-          {content.secondaryLabel && (
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={dismiss}
-              accessibilityRole="button"
-              accessibilityLabel={content.secondaryLabel}
-            >
-              <Text style={styles.secondaryButtonText}>{content.secondaryLabel}</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        )}
+      </View>
     </AppModal>
   );
 }

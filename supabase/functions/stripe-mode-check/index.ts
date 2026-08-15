@@ -7,9 +7,9 @@
 // of assuming an environment's Stripe configuration without checking it
 // first, which is exactly the class of mistake this closes.
 //
-// GET/POST, no body required. verify_jwt is false — this is a non-sensitive
-// health-check endpoint (boolean + key prefix only), meant to be curl-able
-// for ops/CI without managing a service token.
+// GET/POST, no body required. Gateway JWT verification is enabled in
+// supabase/config.toml because Stripe mode and account configuration are
+// operationally sensitive.
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -49,17 +49,14 @@ Deno.serve(async (req: Request) => {
     const data = await resp.json();
     return jsonResponse({
       configured: true,
-      keyPrefix,
       reachable: resp.ok,
       livemode: typeof data.livemode === 'boolean' ? data.livemode : null,
-      accountId: typeof data.account === 'string' ? data.account : null,
       webhookSecretConfigured: !!webhookSecret,
     });
   } catch (err) {
     return jsonResponse(
       {
         configured: true,
-        keyPrefix,
         reachable: false,
         error: (err as Error).message,
         webhookSecretConfigured: !!webhookSecret,

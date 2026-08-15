@@ -2,34 +2,37 @@
 // These represent the Supabase table shapes used across multiple functions.
 
 export interface Profile {
-  id: string
-  email?: string | null
-  balance?: number | null
-  balance_on_hold?: number | null
-  stripe_customer_id?: string | null
-  stripe_connect_account_id?: string | null
-  stripe_connect_onboarded_at?: string | null
-  payout_failed_at?: string | null
-  payout_failure_code?: string | null
-  account_status?: string | null
+  id: string;
+  email?: string | null;
+  full_name?: string | null;
+  phone?: string | null;
+  zip_code?: string | null;
+  balance?: number | null;
+  balance_on_hold?: number | null;
+  stripe_customer_id?: string | null;
+  stripe_connect_account_id?: string | null;
+  stripe_connect_onboarded_at?: string | null;
+  payout_failed_at?: string | null;
+  payout_failure_code?: string | null;
+  account_status?: string | null;
 }
 
 export interface WalletTransaction {
-  id: string
-  user_id: string
-  type: string
-  amount: number
-  description?: string | null
-  status?: string | null
-  stripe_payment_intent_id?: string | null
-  stripe_transfer_id?: string | null
-  stripe_charge_id?: string | null
-  bounty_id?: string | null
-  metadata?: Record<string, unknown> | null
-  created_at: string
+  id: string;
+  user_id: string;
+  type: string;
+  amount: number;
+  description?: string | null;
+  status?: string | null;
+  stripe_payment_intent_id?: string | null;
+  stripe_transfer_id?: string | null;
+  stripe_charge_id?: string | null;
+  bounty_id?: string | null;
+  metadata?: Record<string, unknown> | null;
+  created_at: string;
 }
 
 export interface ApplyDepositResult {
-  applied: boolean
-  tx_id?: string | null
+  applied: boolean;
+  tx_id?: string | null;
 }

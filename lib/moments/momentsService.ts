@@ -7,6 +7,7 @@
  * across devices and app restarts.
  */
 
+import * as Sentry from '@sentry/react-native';
 import { supabase } from '../supabase';
 import type { MomentState, MomentStatus, MomentType } from './types';
 
@@ -89,6 +90,21 @@ export const momentsService = {
   },
 
   async markDismissed(userId: string, momentType: MomentType): Promise<void> {
+    const existing = await fetchRow(userId, momentType);
+    const firstShownAt = existing?.first_shown_at
+      ? new Date(existing.first_shown_at).getTime()
+      : null;
+    if (firstShownAt != null) {
+      const msVisible = Date.now() - firstShownAt;
+      if (msVisible < 750) {
+        Sentry.captureMessage('[moments] rejected suspiciously fast dismissal', {
+          level: 'warning',
+          extra: { momentType, msVisible },
+        });
+        console.warn('[moments] rejected suspiciously fast dismissal', { momentType, msVisible });
+        return;
+      }
+    }
     const { error } = await supabase.from('user_activation_moments').upsert(
       {
         user_id: userId,
@@ -122,19 +138,28 @@ export const momentsService = {
    * asking" — see MomentsProvider's exhausted-without-resolution check.
    */
   async markExpired(userId: string, momentType: MomentType): Promise<void> {
-    const { error } = await supabase.from('user_activation_moments').upsert(
-      { user_id: userId, moment_type: momentType, status: 'expired' },
-      { onConflict: 'user_id,moment_type' }
-    );
+    const { error } = await supabase
+      .from('user_activation_moments')
+      .upsert(
+        { user_id: userId, moment_type: momentType, status: 'expired' },
+        { onConflict: 'user_id,moment_type' }
+      );
     if (error) console.error('[moments] markExpired failed', { momentType, error });
   },
 
   async markSnoozed(userId: string, momentType: MomentType, hours: number): Promise<void> {
     const snoozedUntil = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
-    const { error } = await supabase.from('user_activation_moments').upsert(
-      { user_id: userId, moment_type: momentType, status: 'snoozed', snoozed_until: snoozedUntil },
-      { onConflict: 'user_id,moment_type' }
-    );
+    const { error } = await supabase
+      .from('user_activation_moments')
+      .upsert(
+        {
+          user_id: userId,
+          moment_type: momentType,
+          status: 'snoozed',
+          snoozed_until: snoozedUntil,
+        },
+        { onConflict: 'user_id,moment_type' }
+      );
     if (error) console.error('[moments] markSnoozed failed', { momentType, error });
   },
 
@@ -152,8 +177,11 @@ export const momentsService = {
       {
         user_id: userId,
         moment_type: momentType,
-        status: existing?.status ?? 'shown',
-        metadata: { ...(existing?.metadata ?? {}), startedAt: existing?.metadata?.startedAt ?? new Date().toISOString() },
+        status: 'in_progress',
+        metadata: {
+          ...(existing?.metadata ?? {}),
+          startedAt: existing?.metadata?.startedAt ?? new Date().toISOString(),
+        },
       },
       { onConflict: 'user_id,moment_type' }
     );
@@ -167,7 +195,11 @@ export const momentsService = {
    * within cooldown, so callers can call this liberally without worrying
    * about re-showing something the user already resolved.
    */
-  async enqueue(userId: string, momentType: MomentType, metadata: Record<string, unknown> = {}): Promise<void> {
+  async enqueue(
+    userId: string,
+    momentType: MomentType,
+    metadata: Record<string, unknown> = {}
+  ): Promise<void> {
     const existing = await fetchRow(userId, momentType);
     if (existing && (existing.status === 'shown' || existing.status === 'pending')) {
       // Already queued/visible — just merge in fresh metadata (e.g. a newer bountyId).
@@ -185,10 +217,12 @@ export const momentsService = {
       // flip back to 'pending' here — a non-recurring moment simply won't
       // be picked up as eligible again regardless.
     }
-    const { error } = await supabase.from('user_activation_moments').upsert(
-      { user_id: userId, moment_type: momentType, status: 'pending', metadata },
-      { onConflict: 'user_id,moment_type' }
-    );
+    const { error } = await supabase
+      .from('user_activation_moments')
+      .upsert(
+        { user_id: userId, moment_type: momentType, status: 'pending', metadata },
+        { onConflict: 'user_id,moment_type' }
+      );
     if (error) console.error('[moments] enqueue failed', { momentType, error });
   },
 };

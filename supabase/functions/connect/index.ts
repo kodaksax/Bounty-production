@@ -60,7 +60,10 @@ function jsonResponse(data: unknown, status = 200) {
 // (local imports are not supported by the deploy bundler — see the
 // withdrawal-validation helpers below for the same constraint).
 function logCritical(event: string, context: Record<string, unknown>) {
-  console.error(`CRITICAL [connect] ${event}`, JSON.stringify({ event, ts: new Date().toISOString(), ...context }));
+  console.error(
+    `CRITICAL [connect] ${event}`,
+    JSON.stringify({ event, ts: new Date().toISOString(), ...context })
+  );
 }
 
 // ─── Inlined from ./withdrawal-validation.ts ────────────────────────────────
@@ -145,11 +148,11 @@ function validateWithdrawalRequest(body: {
   return { ok: true, amount, amountCents };
 }
 
-function mapStripeTransferError(err: {
-  code?: string;
-  type?: string;
-  message?: string;
-}): { error: string; code: string; status: number } {
+function mapStripeTransferError(err: { code?: string; type?: string; message?: string }): {
+  error: string;
+  code: string;
+  status: number;
+} {
   const code = err?.code ?? '';
   const type = err?.type ?? '';
 
@@ -274,7 +277,11 @@ function resolveWithdrawalDestination(
         code: 'bank_account_not_found',
       };
     }
-    return { ok: true, targetAccount: requested, needsDefaultUpdate: !requested.default_for_currency };
+    return {
+      ok: true,
+      targetAccount: requested,
+      needsDefaultUpdate: !requested.default_for_currency,
+    };
   }
 
   const current = accounts.find(a => a.default_for_currency) ?? accounts[0];
@@ -287,11 +294,14 @@ type AccountEligibilityResult = { ok: true } | { ok: false; error: string; code:
 // accounts (profiles.account_status). Deliberately not applied to
 // admin-withdrawals' recovery actions — see withdrawal-validation.ts for
 // the full rationale. Keep in sync.
-function validateAccountEligibility(accountStatus: string | null | undefined): AccountEligibilityResult {
+function validateAccountEligibility(
+  accountStatus: string | null | undefined
+): AccountEligibilityResult {
   if (accountStatus === 'suspended' || accountStatus === 'banned') {
     return {
       ok: false,
-      error: 'Withdrawals are unavailable while your account is under review. Contact support for details.',
+      error:
+        'Withdrawals are unavailable while your account is under review. Contact support for details.',
       code: 'account_not_eligible',
     };
   }
@@ -378,10 +388,7 @@ interface PayoutAuditEntry {
  * accepted because we could not write a log line would be worse. Failures are
  * logged loudly so they surface in monitoring.
  */
-async function writePayoutAudit(
-  supabase: SupabaseClient,
-  entry: PayoutAuditEntry
-): Promise<void> {
+async function writePayoutAudit(supabase: SupabaseClient, entry: PayoutAuditEntry): Promise<void> {
   try {
     const { error } = await supabase.from('payout_audit_log').insert({
       user_id: entry.userId,
@@ -525,7 +532,8 @@ function mapStripePayoutError(err: {
       };
     case 'instant_payouts_limit_exceeded':
       return {
-        error: 'You have reached the instant payout limit for today. Try again tomorrow or use a standard withdrawal.',
+        error:
+          'You have reached the instant payout limit for today. Try again tomorrow or use a standard withdrawal.',
         code: 'instant_limit_exceeded',
         status: 429,
       };
@@ -541,14 +549,16 @@ function mapStripePayoutError(err: {
 
   if (err?.type === 'StripeConnectionError' || err?.type === 'StripeAPIError') {
     return {
-      error: 'We could not reach Stripe to complete your withdrawal. No funds have moved — please try again.',
+      error:
+        'We could not reach Stripe to complete your withdrawal. No funds have moved — please try again.',
       code: 'stripe_unavailable',
       status: 503,
     };
   }
 
   return {
-    error: 'We could not complete this withdrawal right now. No funds have moved — please try again.',
+    error:
+      'We could not complete this withdrawal right now. No funds have moved — please try again.',
     code: 'payout_failed',
     status: 502,
   };
@@ -588,7 +598,9 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
   const currency = 'usd';
   const log = `[connect/native-payout:${method}]`;
 
-  const validation = validateWithdrawalRequest(body as Parameters<typeof validateWithdrawalRequest>[0]);
+  const validation = validateWithdrawalRequest(
+    body as Parameters<typeof validateWithdrawalRequest>[0]
+  );
   if (!validation.ok) {
     console.warn(`${log} validation failed`, { userId, code: validation.code });
     return jsonResponse({ error: validation.error, code: validation.code }, 400);
@@ -676,16 +688,26 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
   const accountEligibility = validateAccountEligibility(p.account_status);
   if (!accountEligibility.ok) {
     await writePayoutAudit(supabase, {
-      userId, event: 'withdrawal_failed', payoutMethod: method, amountCents, currency,
-      idempotencyKey, errorCode: accountEligibility.code,
+      userId,
+      event: 'withdrawal_failed',
+      payoutMethod: method,
+      amountCents,
+      currency,
+      idempotencyKey,
+      errorCode: accountEligibility.code,
     });
     return jsonResponse({ error: accountEligibility.error, code: accountEligibility.code }, 403);
   }
 
   if (!p.stripe_connect_account_id) {
     await writePayoutAudit(supabase, {
-      userId, event: 'withdrawal_failed', payoutMethod: method, amountCents, currency,
-      idempotencyKey, errorCode: 'no_connect_account',
+      userId,
+      event: 'withdrawal_failed',
+      payoutMethod: method,
+      amountCents,
+      currency,
+      idempotencyKey,
+      errorCode: 'no_connect_account',
     });
     return jsonResponse(
       {
@@ -698,8 +720,13 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
 
   if (!p.stripe_connect_onboarded_at) {
     await writePayoutAudit(supabase, {
-      userId, event: 'withdrawal_failed', payoutMethod: method, amountCents, currency,
-      idempotencyKey, errorCode: 'connect_not_onboarded',
+      userId,
+      event: 'withdrawal_failed',
+      payoutMethod: method,
+      amountCents,
+      currency,
+      idempotencyKey,
+      errorCode: 'connect_not_onboarded',
       stripeConnectAccountId: p.stripe_connect_account_id,
     });
     return jsonResponse(
@@ -728,15 +755,24 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
 
     if (instantCountError) {
       return jsonResponse(
-        { error: 'We could not verify your Instant Cash Out eligibility. Please try again.', code: 'account_verification_failed' },
+        {
+          error: 'We could not verify your Instant Cash Out eligibility. Please try again.',
+          code: 'account_verification_failed',
+        },
         503
       );
     }
     const dailyLimitCheck = checkInstantDailyLimit(instantPayoutsToday ?? 0);
     if (!dailyLimitCheck.ok) {
       await writePayoutAudit(supabase, {
-        userId, event: 'withdrawal_failed', payoutMethod: method, amountCents, currency,
-        idempotencyKey, errorCode: dailyLimitCheck.code, stripeConnectAccountId: accountId,
+        userId,
+        event: 'withdrawal_failed',
+        payoutMethod: method,
+        amountCents,
+        currency,
+        idempotencyKey,
+        errorCode: dailyLimitCheck.code,
+        stripeConnectAccountId: accountId,
       });
       return jsonResponse({ error: dailyLimitCheck.error, code: dailyLimitCheck.code }, 429);
     }
@@ -753,15 +789,26 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
     ]);
   } catch (balanceError) {
     const errInfo = balanceError as { message?: string; code?: string };
-    console.error(`${log} failed to read account or balance`, { userId, accountId, error: errInfo?.message });
+    console.error(`${log} failed to read account or balance`, {
+      userId,
+      accountId,
+      error: errInfo?.message,
+    });
     await writePayoutAudit(supabase, {
-      userId, event: 'withdrawal_failed', payoutMethod: method, amountCents, currency,
-      idempotencyKey, stripeConnectAccountId: accountId, errorCode: 'stripe_unavailable',
+      userId,
+      event: 'withdrawal_failed',
+      payoutMethod: method,
+      amountCents,
+      currency,
+      idempotencyKey,
+      stripeConnectAccountId: accountId,
+      errorCode: 'stripe_unavailable',
       errorMessage: errInfo?.message ?? null,
     });
     return jsonResponse(
       {
-        error: 'We could not reach Stripe to check your balance. No funds have moved — please try again.',
+        error:
+          'We could not reach Stripe to check your balance. No funds have moved — please try again.',
         code: 'stripe_unavailable',
       },
       503
@@ -770,13 +817,20 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
 
   if (!account.payouts_enabled) {
     await writePayoutAudit(supabase, {
-      userId, event: 'withdrawal_failed', payoutMethod: method, amountCents, currency,
-      idempotencyKey, stripeConnectAccountId: accountId, errorCode: 'payouts_disabled',
+      userId,
+      event: 'withdrawal_failed',
+      payoutMethod: method,
+      amountCents,
+      currency,
+      idempotencyKey,
+      stripeConnectAccountId: accountId,
+      errorCode: 'payouts_disabled',
       detail: { disabledReason: account.requirements?.disabled_reason ?? null },
     });
     return jsonResponse(
       {
-        error: 'Payouts are currently disabled on your account. Review your payout details and try again.',
+        error:
+          'Payouts are currently disabled on your account. Review your payout details and try again.',
         code: 'payouts_disabled',
         disabledReason: account.requirements?.disabled_reason ?? null,
         requirementsCurrentlyDue: account.requirements?.currently_due ?? [],
@@ -794,8 +848,14 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
 
   if (spendableCents <= 0) {
     await writePayoutAudit(supabase, {
-      userId, event: 'withdrawal_failed', payoutMethod: method, amountCents, currency,
-      idempotencyKey, stripeConnectAccountId: accountId, errorCode: 'no_available_funds',
+      userId,
+      event: 'withdrawal_failed',
+      payoutMethod: method,
+      amountCents,
+      currency,
+      idempotencyKey,
+      stripeConnectAccountId: accountId,
+      errorCode: 'no_available_funds',
       balanceAvailableCents: balance.availableCents,
       balanceInstantAvailableCents: balance.instantAvailableCents,
     });
@@ -816,8 +876,14 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
 
   if (amountCents > spendableCents) {
     await writePayoutAudit(supabase, {
-      userId, event: 'withdrawal_failed', payoutMethod: method, amountCents, currency,
-      idempotencyKey, stripeConnectAccountId: accountId, errorCode: 'insufficient_balance',
+      userId,
+      event: 'withdrawal_failed',
+      payoutMethod: method,
+      amountCents,
+      currency,
+      idempotencyKey,
+      stripeConnectAccountId: accountId,
+      errorCode: 'insufficient_balance',
       balanceAvailableCents: balance.availableCents,
       balanceInstantAvailableCents: balance.instantAvailableCents,
     });
@@ -850,14 +916,21 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
         brand: (c as unknown as { brand?: string }).brand ?? null,
         last4: (c as unknown as { last4?: string }).last4 ?? null,
         available_payout_methods:
-          (c as unknown as { available_payout_methods?: string[] }).available_payout_methods ?? null,
+          (c as unknown as { available_payout_methods?: string[] }).available_payout_methods ??
+          null,
       }));
 
       const destination = resolveInstantDestination(cards, requestedDestinationId);
       if (!destination.ok) {
         await writePayoutAudit(supabase, {
-          userId, event: 'withdrawal_failed', payoutMethod: method, amountCents, currency,
-          idempotencyKey, stripeConnectAccountId: accountId, errorCode: destination.code,
+          userId,
+          event: 'withdrawal_failed',
+          payoutMethod: method,
+          amountCents,
+          currency,
+          idempotencyKey,
+          stripeConnectAccountId: accountId,
+          errorCode: destination.code,
         });
         return jsonResponse({ error: destination.error, code: destination.code }, 400);
       }
@@ -865,12 +938,21 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
       destinationId = destination.targetCard.id;
     } catch (cardError) {
       await writePayoutAudit(supabase, {
-        userId, event: 'withdrawal_failed', payoutMethod: method, amountCents, currency,
-        idempotencyKey, stripeConnectAccountId: accountId, errorCode: 'account_verification_failed',
+        userId,
+        event: 'withdrawal_failed',
+        payoutMethod: method,
+        amountCents,
+        currency,
+        idempotencyKey,
+        stripeConnectAccountId: accountId,
+        errorCode: 'account_verification_failed',
         errorMessage: (cardError as { message?: string })?.message ?? null,
       });
       return jsonResponse(
-        { error: 'We could not verify your payout card. No funds have moved — please try again.', code: 'account_verification_failed' },
+        {
+          error: 'We could not verify your payout card. No funds have moved — please try again.',
+          code: 'account_verification_failed',
+        },
         503
       );
     }
@@ -920,11 +1002,20 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
   } catch (payoutError) {
     const errInfo = payoutError as { code?: string; type?: string; message?: string };
     console.error(`${log} payout creation failed`, {
-      userId, accountId, amountCents, stripeCode: errInfo?.code, message: errInfo?.message,
+      userId,
+      accountId,
+      amountCents,
+      stripeCode: errInfo?.code,
+      message: errInfo?.message,
     });
     await writePayoutAudit(supabase, {
-      userId, event: 'withdrawal_failed', payoutMethod: method, amountCents, currency,
-      idempotencyKey, stripeConnectAccountId: accountId,
+      userId,
+      event: 'withdrawal_failed',
+      payoutMethod: method,
+      amountCents,
+      currency,
+      idempotencyKey,
+      stripeConnectAccountId: accountId,
       errorCode: errInfo?.code ?? 'payout_failed',
       errorMessage: errInfo?.message ?? null,
       balanceAvailableCents: balance.availableCents,
@@ -999,7 +1090,9 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
         .eq('idempotency_key', idempotencyKey)
         .maybeSingle();
 
-      const w = winner as (WalletTransaction & { stripe_payout_id?: string; payout_method?: string }) | null;
+      const w = winner as
+        | (WalletTransaction & { stripe_payout_id?: string; payout_method?: string })
+        | null;
       return jsonResponse({
         payoutId: w?.stripe_payout_id ?? payout.id,
         payoutMethod: w?.payout_method ?? method,
@@ -1013,9 +1106,15 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
       });
     }
 
-    logCritical('connect-native payout succeeded but transaction record failed — reconciliation required', {
-      userId, payoutId: payout.id, amountCents, error: txError,
-    });
+    logCritical(
+      'connect-native payout succeeded but transaction record failed — reconciliation required',
+      {
+        userId,
+        payoutId: payout.id,
+        amountCents,
+        error: txError,
+      }
+    );
     // The payout is real and the audit log has it; only the history row is
     // missing, so this is reported as success with a caveat.
     return jsonResponse({
@@ -1099,8 +1198,9 @@ function resolveInstantDestination(
         code: 'debit_card_not_found',
       };
     }
-    const isEligible = Array.isArray(requested.available_payout_methods)
-      && requested.available_payout_methods.includes('instant');
+    const isEligible =
+      Array.isArray(requested.available_payout_methods) &&
+      requested.available_payout_methods.includes('instant');
     if (!isEligible) {
       return {
         ok: false,
@@ -1127,7 +1227,10 @@ function resolveInstantDestination(
 // Instant-specific limits — see the identical, documented copy in
 // ./instant-payout-validation.ts for the full rationale. Keep in sync.
 const INSTANT_PAYOUT_MAX_USD = readEnvNumberForInstantPayout('INSTANT_PAYOUT_MAX_USD', 9999);
-const MAX_INSTANT_PAYOUTS_PER_DAY = readEnvNumberForInstantPayout('MAX_INSTANT_PAYOUTS_PER_DAY', 10);
+const MAX_INSTANT_PAYOUTS_PER_DAY = readEnvNumberForInstantPayout(
+  'MAX_INSTANT_PAYOUTS_PER_DAY',
+  10
+);
 
 type InstantLimitResult = { ok: true } | { ok: false; error: string; code: string };
 
@@ -1210,7 +1313,7 @@ function legacyTransferRetiredResponse() {
       code: 'legacy_transfer_deprecated',
       migrate_to: '/functions/v1/bounty-payments',
     },
-    410,
+    410
   );
 }
 
@@ -1264,7 +1367,10 @@ Deno.serve(async (req: Request) => {
   const isPayoutsPath = subPath === '/payouts';
   if (
     req.method !== 'POST' &&
-    !(req.method === 'GET' && (isBankAccountsPath || isDebitCardsPath || isBalancePath || isPayoutsPath)) &&
+    !(
+      req.method === 'GET' &&
+      (isBankAccountsPath || isDebitCardsPath || isBalancePath || isPayoutsPath)
+    ) &&
     !(req.method === 'DELETE' && (isBankAccountsPath || isDebitCardsPath))
   ) {
     return jsonResponse({ error: 'Method not allowed' }, 405);
@@ -1301,7 +1407,12 @@ Deno.serve(async (req: Request) => {
   const userId = user.id;
 
   try {
-    const appUrl = Deno.env.get('APP_URL') ?? 'http://localhost:8081';
+    const configuredAppUrl = Deno.env.get('APP_URL');
+    if (!configuredAppUrl && Deno.env.get('APP_ENV') === 'production') {
+      console.error('[connect] APP_URL is required in production');
+      return jsonResponse({ error: 'Connect return URLs are not configured' }, 500);
+    }
+    const appUrl = configuredAppUrl ?? 'http://localhost:8081';
 
     // POST /connect/create-account-link
     if (subPath === '/create-account-link') {
@@ -1314,7 +1425,7 @@ Deno.serve(async (req: Request) => {
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('stripe_connect_account_id, email')
+        .select('stripe_connect_account_id, email, full_name, phone, zip_code')
         .eq('id', userId)
         .single();
 
@@ -1331,14 +1442,28 @@ Deno.serve(async (req: Request) => {
             400
           );
         }
+        const fullName = profileRow?.full_name?.trim() ?? '';
+        const nameParts = fullName.split(/\s+/).filter(Boolean);
+        const individual: Record<string, unknown> = {
+          first_name: nameParts[0] ?? undefined,
+          last_name: nameParts.slice(1).join(' ') || undefined,
+          email: profileRow?.email ?? undefined,
+          phone: profileRow?.phone ?? undefined,
+          address: {
+            postal_code: profileRow?.zip_code ?? undefined,
+          },
+        };
         const account = await stripe.accounts.create({
           type: 'express',
           email: profileRow?.email ?? undefined,
           capabilities: {
-            card_payments: { requested: true },
             transfers: { requested: true },
           },
           business_type: 'individual',
+          individual,
+          business_profile: {
+            product_description: 'Completes local errands and tasks via the Bounty marketplace.',
+          },
           metadata: { user_id: userId },
           ...manualPayoutSettings,
         });
@@ -1385,7 +1510,10 @@ Deno.serve(async (req: Request) => {
         .eq('id', userId)
         .single();
 
-      const p = profile as { stripe_connect_account_id?: string; stripe_connect_onboarded_at?: string } | null;
+      const p = profile as {
+        stripe_connect_account_id?: string;
+        stripe_connect_onboarded_at?: string;
+      } | null;
       const accountId = p?.stripe_connect_account_id;
       if (!accountId || !p?.stripe_connect_onboarded_at) {
         console.warn('[connect/login-link] no onboarded connected account for user', {
@@ -1417,7 +1545,10 @@ Deno.serve(async (req: Request) => {
           code: (loginLinkError as { code?: string })?.code,
         });
         return jsonResponse(
-          { error: 'Could not open your payout dashboard. Please try again.', code: 'login_link_failed' },
+          {
+            error: 'Could not open your payout dashboard. Please try again.',
+            code: 'login_link_failed',
+          },
           502
         );
       }
@@ -1663,9 +1794,7 @@ Deno.serve(async (req: Request) => {
         'usd'
       ).toLowerCase();
 
-      const sumFor = (
-        buckets: Array<{ currency: string; amount: number }> | undefined
-      ): number =>
+      const sumFor = (buckets: Array<{ currency: string; amount: number }> | undefined): number =>
         (buckets ?? [])
           .filter(b => b.currency === currency)
           .reduce((total, b) => total + (b.amount ?? 0), 0);
@@ -1677,9 +1806,7 @@ Deno.serve(async (req: Request) => {
       const instantAvailable = ((balance.instant_available ?? []) as InstantAvailableWithNet[])
         .filter(b => b.currency === currency)
         .reduce(
-          (total, b) =>
-            total +
-            (b.net_available?.reduce((s, n) => s + (n.amount ?? 0), 0) ?? 0),
+          (total, b) => total + (b.net_available?.reduce((s, n) => s + (n.amount ?? 0), 0) ?? 0),
           0
         );
 
@@ -1789,7 +1916,9 @@ Deno.serve(async (req: Request) => {
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('balance, balance_on_hold, stripe_connect_account_id, stripe_connect_onboarded_at, account_status')
+        .select(
+          'balance, balance_on_hold, stripe_connect_account_id, stripe_connect_onboarded_at, account_status'
+        )
         .eq('id', userId)
         .single();
 
@@ -1801,8 +1930,14 @@ Deno.serve(async (req: Request) => {
 
       const accountEligibility = validateAccountEligibility(p.account_status);
       if (!accountEligibility.ok) {
-        console.warn('[connect/transfer] blocked for account_status', { userId, accountStatus: p.account_status });
-        return jsonResponse({ error: accountEligibility.error, code: accountEligibility.code }, 403);
+        console.warn('[connect/transfer] blocked for account_status', {
+          userId,
+          accountStatus: p.account_status,
+        });
+        return jsonResponse(
+          { error: accountEligibility.error, code: accountEligibility.code },
+          403
+        );
       }
 
       if (!p.stripe_connect_account_id || !p.stripe_connect_onboarded_at) {
@@ -1869,7 +2004,8 @@ Deno.serve(async (req: Request) => {
         );
         const summaries: ExternalAccountSummary[] = externalAccounts.data.map(ba => ({
           id: ba.id,
-          default_for_currency: (ba as unknown as { default_for_currency?: boolean }).default_for_currency,
+          default_for_currency: (ba as unknown as { default_for_currency?: boolean })
+            .default_for_currency,
           bank_name: (ba as unknown as { bank_name?: string }).bank_name ?? null,
           last4: (ba as unknown as { last4?: string }).last4 ?? null,
         }));
@@ -1898,11 +2034,14 @@ Deno.serve(async (req: Request) => {
         // payout sweep pays out to whichever account is default at sweep
         // time, so this is the only account that can correctly receive it.
         if (destination.needsDefaultUpdate) {
-          console.warn('[connect/transfer] selected bank account is not the default payout account', {
-            userId,
-            accountId: p.stripe_connect_account_id,
-            bankAccountId: destinationAccount.id,
-          });
+          console.warn(
+            '[connect/transfer] selected bank account is not the default payout account',
+            {
+              userId,
+              accountId: p.stripe_connect_account_id,
+              bankAccountId: destinationAccount.id,
+            }
+          );
           return jsonResponse(
             {
               error:
@@ -1945,13 +2084,10 @@ Deno.serve(async (req: Request) => {
 
       // Deduct balance atomically via withdraw_balance which enforces the
       // hold check and dispute freeze, and returns the new balance.
-      const { data: newBalanceData, error: balanceError } = await supabase.rpc(
-        'withdraw_balance',
-        {
-          p_user_id: userId,
-          p_amount: amount,
-        }
-      );
+      const { data: newBalanceData, error: balanceError } = await supabase.rpc('withdraw_balance', {
+        p_user_id: userId,
+        p_amount: amount,
+      });
 
       if (balanceError) {
         console.error('[connect/transfer] Error deducting balance before transfer:', {
@@ -1977,7 +2113,10 @@ Deno.serve(async (req: Request) => {
             amount: validation.amountCents,
             currency,
             destination: p.stripe_connect_account_id,
-            metadata: { user_id: userId, ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}) },
+            metadata: {
+              user_id: userId,
+              ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
+            },
           },
           // Stripe-side idempotency: retries of the same client key with the
           // same amount cannot create a second transfer even if two requests
@@ -2001,9 +2140,14 @@ Deno.serve(async (req: Request) => {
           p_amount: amount,
         });
         if (refundError) {
-          logCritical('balance refund after failed transfer also failed — manual reconciliation required', {
-            userId, amount, error: refundError,
-          });
+          logCritical(
+            'balance refund after failed transfer also failed — manual reconciliation required',
+            {
+              userId,
+              amount,
+              error: refundError,
+            }
+          );
           return jsonResponse(
             {
               error:
@@ -2059,17 +2203,22 @@ Deno.serve(async (req: Request) => {
         // both requests share ONE transfer, but the balance was deducted
         // twice — refund this request's deduction and replay the winner.
         if ((txError as { code?: string }).code === '23505' && idempotencyKey) {
-          console.warn('[connect/transfer] concurrent duplicate detected, refunding extra deduction', {
-            userId,
-            transferId: transfer.id,
-          });
+          console.warn(
+            '[connect/transfer] concurrent duplicate detected, refunding extra deduction',
+            {
+              userId,
+              transferId: transfer.id,
+            }
+          );
           const { error: dupRefundError } = await supabase.rpc('update_balance', {
             p_user_id: userId,
             p_amount: amount,
           });
           if (dupRefundError) {
             logCritical('refund of duplicate deduction failed — manual reconciliation required', {
-              userId, amount, error: dupRefundError,
+              userId,
+              amount,
+              error: dupRefundError,
             });
           }
 
@@ -2098,9 +2247,15 @@ Deno.serve(async (req: Request) => {
         // The transfer already succeeded and the balance is correctly
         // deducted — only the history row failed. Do NOT surface an error
         // (the user's money IS on the way); log loudly for reconciliation.
-        logCritical('transfer succeeded but transaction record failed — manual reconciliation required', {
-          userId, transferId: transfer.id, amount, error: txError,
-        });
+        logCritical(
+          'transfer succeeded but transaction record failed — manual reconciliation required',
+          {
+            userId,
+            transferId: transfer.id,
+            amount,
+            error: txError,
+          }
+        );
         return jsonResponse({
           transferId: transfer.id,
           status: 'completed',
@@ -2192,8 +2347,8 @@ Deno.serve(async (req: Request) => {
 
       // Resolve/promote the destination bank account before touching the
       // balance — same logic and rationale as the primary /transfer path.
-      const originalDestinationId =
-        (t.metadata as Record<string, unknown> | null)?.destination_bank_account_id;
+      const originalDestinationId = (t.metadata as Record<string, unknown> | null)
+        ?.destination_bank_account_id;
       const effectiveRequestedBankAccountId =
         requestedBankAccountId ??
         (typeof originalDestinationId === 'string' ? originalDestinationId : undefined);
@@ -2206,12 +2361,16 @@ Deno.serve(async (req: Request) => {
         );
         const summaries: ExternalAccountSummary[] = externalAccounts.data.map(ba => ({
           id: ba.id,
-          default_for_currency: (ba as unknown as { default_for_currency?: boolean }).default_for_currency,
+          default_for_currency: (ba as unknown as { default_for_currency?: boolean })
+            .default_for_currency,
           bank_name: (ba as unknown as { bank_name?: string }).bank_name ?? null,
           last4: (ba as unknown as { last4?: string }).last4 ?? null,
         }));
 
-        const destination = resolveWithdrawalDestination(summaries, effectiveRequestedBankAccountId);
+        const destination = resolveWithdrawalDestination(
+          summaries,
+          effectiveRequestedBankAccountId
+        );
         if (!destination.ok) {
           return jsonResponse({ error: destination.error, code: destination.code }, 400);
         }
@@ -2220,11 +2379,14 @@ Deno.serve(async (req: Request) => {
         // Same fail-closed reasoning as /transfer above: updateExternalAccount
         // always fails for these accounts, so don't attempt it.
         if (destination.needsDefaultUpdate) {
-          console.warn('[connect/retry-transfer] selected bank account is not the default payout account', {
-            userId,
-            accountId: p.stripe_connect_account_id,
-            bankAccountId: destinationAccount.id,
-          });
+          console.warn(
+            '[connect/retry-transfer] selected bank account is not the default payout account',
+            {
+              userId,
+              accountId: p.stripe_connect_account_id,
+              bankAccountId: destinationAccount.id,
+            }
+          );
           return jsonResponse(
             {
               error:
@@ -2286,9 +2448,14 @@ Deno.serve(async (req: Request) => {
           p_amount: amount,
         });
         if (retryRefundError) {
-          logCritical('balance refund after failed retry transfer also failed — manual reconciliation required', {
-            userId, amount, error: retryRefundError,
-          });
+          logCritical(
+            'balance refund after failed retry transfer also failed — manual reconciliation required',
+            {
+              userId,
+              amount,
+              error: retryRefundError,
+            }
+          );
           return jsonResponse(
             {
               error:
@@ -2378,7 +2545,10 @@ Deno.serve(async (req: Request) => {
           error: (listError as { message?: string })?.message,
         });
         return jsonResponse(
-          { error: 'We could not load your withdrawal history from Stripe. Please try again.', code: 'stripe_unavailable' },
+          {
+            error: 'We could not load your withdrawal history from Stripe. Please try again.',
+            code: 'stripe_unavailable',
+          },
           503
         );
       }
@@ -2413,7 +2583,8 @@ Deno.serve(async (req: Request) => {
           createdAt: p.created,
           failureCode: p.failure_code ?? null,
           failureMessage: p.failure_message ?? null,
-          destinationId: typeof p.destination === 'string' ? p.destination : (p.destination?.id ?? null),
+          destinationId:
+            typeof p.destination === 'string' ? p.destination : (p.destination?.id ?? null),
           // Reconciliation fields.
           ledgerStatus: (local?.status as string) ?? null,
           transactionId: (local?.id as string) ?? null,
@@ -2440,7 +2611,10 @@ Deno.serve(async (req: Request) => {
 
       const stripeIdSet = new Set(payoutIds);
       const unreconciled = ((recentLocal ?? []) as Array<Record<string, unknown>>)
-        .filter(r => typeof r.stripe_payout_id === 'string' && !stripeIdSet.has(r.stripe_payout_id as string))
+        .filter(
+          r =>
+            typeof r.stripe_payout_id === 'string' && !stripeIdSet.has(r.stripe_payout_id as string)
+        )
         .map(r => ({
           transactionId: r.id as string,
           payoutId: r.stripe_payout_id as string,
@@ -2470,7 +2644,8 @@ Deno.serve(async (req: Request) => {
       if (!CONNECT_NATIVE_PAYOUTS) {
         return jsonResponse(
           {
-            error: 'This withdrawal method is not available yet. Please use the standard withdrawal option.',
+            error:
+              'This withdrawal method is not available yet. Please use the standard withdrawal option.',
             code: 'native_payouts_disabled',
           },
           503
@@ -2490,7 +2665,8 @@ Deno.serve(async (req: Request) => {
       if (!INSTANT_CASHOUT_ENABLED) {
         return jsonResponse(
           {
-            error: 'Instant Cash Out is not currently available. Please use a standard bank withdrawal.',
+            error:
+              'Instant Cash Out is not currently available. Please use a standard bank withdrawal.',
             code: 'instant_cashout_disabled',
           },
           503
@@ -2515,7 +2691,10 @@ Deno.serve(async (req: Request) => {
 
       const validation = validateWithdrawalRequest(body);
       if (!validation.ok) {
-        console.warn('[connect/instant-payout] validation failed', { userId, code: validation.code });
+        console.warn('[connect/instant-payout] validation failed', {
+          userId,
+          code: validation.code,
+        });
         return jsonResponse({ error: validation.error, code: validation.code }, 400);
       }
       const amount = validation.amount;
@@ -2525,7 +2704,10 @@ Deno.serve(async (req: Request) => {
       const instantAmountCheck = validateInstantAmount(amount);
       if (!instantAmountCheck.ok) {
         console.warn('[connect/instant-payout] amount above instant maximum', { userId, amount });
-        return jsonResponse({ error: instantAmountCheck.error, code: instantAmountCheck.code }, 400);
+        return jsonResponse(
+          { error: instantAmountCheck.error, code: instantAmountCheck.code },
+          400
+        );
       }
 
       const idempotencyKey =
@@ -2552,7 +2734,9 @@ Deno.serve(async (req: Request) => {
       if (idempotencyKey) {
         const { data: existing } = await supabase
           .from('wallet_transactions')
-          .select('id, stripe_transfer_id, stripe_payout_id, stripe_connect_account_id, amount, status, payout_method')
+          .select(
+            'id, stripe_transfer_id, stripe_payout_id, stripe_connect_account_id, amount, status, payout_method'
+          )
           .eq('user_id', userId)
           .eq('type', 'withdrawal')
           .eq('idempotency_key', idempotencyKey)
@@ -2564,7 +2748,10 @@ Deno.serve(async (req: Request) => {
             stripe_payout_id?: string | null;
             payout_method?: string;
           };
-          console.log('[connect/instant-payout] idempotent replay', { userId, transactionId: e.id });
+          console.log('[connect/instant-payout] idempotent replay', {
+            userId,
+            transactionId: e.id,
+          });
           const { data: replayProfile } = await supabase
             .from('profiles')
             .select('balance')
@@ -2592,7 +2779,9 @@ Deno.serve(async (req: Request) => {
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('balance, balance_on_hold, stripe_connect_account_id, stripe_connect_onboarded_at, account_status')
+        .select(
+          'balance, balance_on_hold, stripe_connect_account_id, stripe_connect_onboarded_at, account_status'
+        )
         .eq('id', userId)
         .single();
 
@@ -2604,8 +2793,14 @@ Deno.serve(async (req: Request) => {
 
       const accountEligibility = validateAccountEligibility(p.account_status);
       if (!accountEligibility.ok) {
-        console.warn('[connect/instant-payout] blocked for account_status', { userId, accountStatus: p.account_status });
-        return jsonResponse({ error: accountEligibility.error, code: accountEligibility.code }, 403);
+        console.warn('[connect/instant-payout] blocked for account_status', {
+          userId,
+          accountStatus: p.account_status,
+        });
+        return jsonResponse(
+          { error: accountEligibility.error, code: accountEligibility.code },
+          403
+        );
       }
 
       if (!p.stripe_connect_account_id || !p.stripe_connect_onboarded_at) {
@@ -2632,18 +2827,24 @@ Deno.serve(async (req: Request) => {
         .eq('status', 'completed')
         .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
       if (instantCountError) {
-        console.error('[connect/instant-payout] failed to count today\'s instant payouts', {
+        console.error("[connect/instant-payout] failed to count today's instant payouts", {
           userId,
           error: instantCountError,
         });
         return jsonResponse(
-          { error: 'We could not verify your Instant Cash Out eligibility. Please try again.', code: 'account_verification_failed' },
+          {
+            error: 'We could not verify your Instant Cash Out eligibility. Please try again.',
+            code: 'account_verification_failed',
+          },
           503
         );
       }
       const dailyLimitCheck = checkInstantDailyLimit(instantPayoutsToday ?? 0);
       if (!dailyLimitCheck.ok) {
-        console.warn('[connect/instant-payout] daily instant limit reached', { userId, count: instantPayoutsToday });
+        console.warn('[connect/instant-payout] daily instant limit reached', {
+          userId,
+          count: instantPayoutsToday,
+        });
         return jsonResponse({ error: dailyLimitCheck.error, code: dailyLimitCheck.code }, 429);
       }
 
@@ -2710,13 +2911,18 @@ Deno.serve(async (req: Request) => {
           brand: (c as unknown as { brand?: string }).brand ?? null,
           last4: (c as unknown as { last4?: string }).last4 ?? null,
           available_payout_methods:
-            (c as unknown as { available_payout_methods?: string[] }).available_payout_methods ?? null,
+            (c as unknown as { available_payout_methods?: string[] }).available_payout_methods ??
+            null,
         }));
         console.log('[connect/instant-payout] external cards found', {
           userId,
           cardCount: cards.length,
           instantEligibleCardIds: cards
-            .filter(c => Array.isArray(c.available_payout_methods) && c.available_payout_methods.includes('instant'))
+            .filter(
+              c =>
+                Array.isArray(c.available_payout_methods) &&
+                c.available_payout_methods.includes('instant')
+            )
             .map(c => c.id),
         });
 
@@ -2740,19 +2946,28 @@ Deno.serve(async (req: Request) => {
         // account reported just before the transfer, without this value
         // ever gating the request.
         try {
-          const preTransferBalance = await stripe.balance.retrieve({ stripeAccount: p.stripe_connect_account_id });
+          const preTransferBalance = await stripe.balance.retrieve({
+            stripeAccount: p.stripe_connect_account_id,
+          });
           const preTransferInstantAvailableCents =
-            (preTransferBalance.instant_available as InstantAvailableWithNet[] | undefined)
-              ?.find(b => b.currency === 'usd')?.net_available?.[0]?.amount ?? 0;
-          console.log('[connect/instant-payout] pre-transfer instant_available (informational only)', {
-            userId,
-            preTransferInstantAvailableCents,
-          });
+            (preTransferBalance.instant_available as InstantAvailableWithNet[] | undefined)?.find(
+              b => b.currency === 'usd'
+            )?.net_available?.[0]?.amount ?? 0;
+          console.log(
+            '[connect/instant-payout] pre-transfer instant_available (informational only)',
+            {
+              userId,
+              preTransferInstantAvailableCents,
+            }
+          );
         } catch (balanceLogError) {
-          console.warn('[connect/instant-payout] failed to fetch pre-transfer balance for logging', {
-            userId,
-            error: (balanceLogError as { message?: string })?.message,
-          });
+          console.warn(
+            '[connect/instant-payout] failed to fetch pre-transfer balance for logging',
+            {
+              userId,
+              error: (balanceLogError as { message?: string })?.message,
+            }
+          );
         }
       } catch (accountError) {
         console.error('[connect/instant-payout] failed to verify connected account or cards', {
@@ -2822,7 +3037,9 @@ Deno.serve(async (req: Request) => {
             },
           },
           idempotencyKey
-            ? { idempotencyKey: `instant_transfer_${userId}_${idempotencyKey}_${validation.amountCents}` }
+            ? {
+                idempotencyKey: `instant_transfer_${userId}_${idempotencyKey}_${validation.amountCents}`,
+              }
             : undefined
         );
       } catch (stripeError) {
@@ -2838,9 +3055,14 @@ Deno.serve(async (req: Request) => {
           p_amount: amount,
         });
         if (refundError) {
-          logCritical('balance refund after failed instant-payout transfer also failed — manual reconciliation required', {
-            userId, amount, error: refundError,
-          });
+          logCritical(
+            'balance refund after failed instant-payout transfer also failed — manual reconciliation required',
+            {
+              userId,
+              amount,
+              error: refundError,
+            }
+          );
           return jsonResponse(
             {
               error:
@@ -2895,12 +3117,15 @@ Deno.serve(async (req: Request) => {
         // it as a completed STANDARD withdrawal that simply couldn't be
         // expedited, and tell the hunter plainly.
         const errInfo = payoutError as { code?: string; type?: string; message?: string };
-        console.warn('[connect/instant-payout] instant payout call failed, falling back to standard sweep', {
-          userId,
-          transferId: transfer.id,
-          stripeCode: errInfo?.code,
-          message: errInfo?.message,
-        });
+        console.warn(
+          '[connect/instant-payout] instant payout call failed, falling back to standard sweep',
+          {
+            userId,
+            transferId: transfer.id,
+            stripeCode: errInfo?.code,
+            message: errInfo?.message,
+          }
+        );
 
         const { data: fallbackTx } = await supabase
           .from('wallet_transactions')
@@ -2974,19 +3199,27 @@ Deno.serve(async (req: Request) => {
       if (txError) {
         // Same concurrent-duplicate-insert race handling as /transfer.
         if ((txError as { code?: string }).code === '23505' && idempotencyKey) {
-          console.warn('[connect/instant-payout] concurrent duplicate detected, refunding extra deduction', {
-            userId,
-            transferId: transfer.id,
-            payoutId: payout.id,
-          });
+          console.warn(
+            '[connect/instant-payout] concurrent duplicate detected, refunding extra deduction',
+            {
+              userId,
+              transferId: transfer.id,
+              payoutId: payout.id,
+            }
+          );
           const { error: dupRefundError } = await supabase.rpc('update_balance', {
             p_user_id: userId,
             p_amount: amount,
           });
           if (dupRefundError) {
-            logCritical('refund of duplicate instant-payout deduction failed — manual reconciliation required', {
-              userId, amount, error: dupRefundError,
-            });
+            logCritical(
+              'refund of duplicate instant-payout deduction failed — manual reconciliation required',
+              {
+                userId,
+                amount,
+                error: dupRefundError,
+              }
+            );
           }
 
           const { data: winner } = await supabase
@@ -3014,9 +3247,16 @@ Deno.serve(async (req: Request) => {
           });
         }
 
-        logCritical('instant payout succeeded but transaction record failed — manual reconciliation required', {
-          userId, transferId: transfer.id, payoutId: payout.id, amount, error: txError,
-        });
+        logCritical(
+          'instant payout succeeded but transaction record failed — manual reconciliation required',
+          {
+            userId,
+            transferId: transfer.id,
+            payoutId: payout.id,
+            amount,
+            error: txError,
+          }
+        );
         return jsonResponse({
           transferId: transfer.id,
           payoutId: payout.id,
@@ -3132,7 +3372,11 @@ Deno.serve(async (req: Request) => {
         ?.stripe_connect_account_id;
       if (!accountId) {
         console.log('[connect/debit-cards] no connected account for user', { userId });
-        return jsonResponse({ debitCards: [], instantAvailableCents: 0, instantCashOutEnabled: INSTANT_CASHOUT_ENABLED });
+        return jsonResponse({
+          debitCards: [],
+          instantAvailableCents: 0,
+          instantCashOutEnabled: INSTANT_CASHOUT_ENABLED,
+        });
       }
 
       const cards = await stripe.accounts.listExternalAccounts(accountId, {
@@ -3140,8 +3384,8 @@ Deno.serve(async (req: Request) => {
         limit: 20,
       });
       const debitCards = cards.data.map(c => {
-        const methods = (c as unknown as { available_payout_methods?: string[] })
-          .available_payout_methods ?? [];
+        const methods =
+          (c as unknown as { available_payout_methods?: string[] }).available_payout_methods ?? [];
         return {
           id: c.id,
           brand: (c as unknown as { brand?: string }).brand ?? null,
@@ -3157,8 +3401,9 @@ Deno.serve(async (req: Request) => {
       try {
         const balance = await stripe.balance.retrieve({ stripeAccount: accountId });
         instantAvailableCents =
-          (balance.instant_available as InstantAvailableWithNet[] | undefined)
-            ?.find(b => b.currency === 'usd')?.net_available?.[0]?.amount ?? 0;
+          (balance.instant_available as InstantAvailableWithNet[] | undefined)?.find(
+            b => b.currency === 'usd'
+          )?.net_available?.[0]?.amount ?? 0;
       } catch (balanceError) {
         console.warn('[connect/debit-cards] failed to fetch instant_available balance', {
           userId,
@@ -3177,7 +3422,11 @@ Deno.serve(async (req: Request) => {
         instantAvailableCents,
       });
 
-      return jsonResponse({ debitCards, instantAvailableCents, instantCashOutEnabled: INSTANT_CASHOUT_ENABLED });
+      return jsonResponse({
+        debitCards,
+        instantAvailableCents,
+        instantCashOutEnabled: INSTANT_CASHOUT_ENABLED,
+      });
     }
 
     // POST /connect/debit-cards — DEPRECATED.
@@ -3197,7 +3446,7 @@ Deno.serve(async (req: Request) => {
           code: 'debit_card_add_deprecated',
           migrate_to: '/functions/v1/connect/login-link',
         },
-        410,
+        410
       );
     }
 
@@ -3212,7 +3461,7 @@ Deno.serve(async (req: Request) => {
           code: 'debit_card_remove_deprecated',
           migrate_to: '/functions/v1/connect/login-link',
         },
-        410,
+        410
       );
     }
 
@@ -3230,7 +3479,7 @@ Deno.serve(async (req: Request) => {
           code: 'manual_bank_entry_deprecated',
           migrate_to: '/functions/v1/payments/create-financial-connections-session',
         },
-        410,
+        410
       );
     }
 
@@ -3246,7 +3495,7 @@ Deno.serve(async (req: Request) => {
           code: 'bank_account_remove_deprecated',
           migrate_to: '/functions/v1/connect/login-link',
         },
-        410,
+        410
       );
     }
 
@@ -3266,7 +3515,7 @@ Deno.serve(async (req: Request) => {
           code: 'bank_account_default_deprecated',
           migrate_to: '/functions/v1/connect/login-link',
         },
-        410,
+        410
       );
     }
 

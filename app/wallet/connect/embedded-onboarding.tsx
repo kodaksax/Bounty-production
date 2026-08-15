@@ -41,17 +41,25 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+    ActivityIndicator,
+    Animated,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
-  ConnectOnboardingResult,
-  type ConnectOnboardingOutcome,
+    ConnectOnboardingResult,
+    type ConnectOnboardingOutcome,
 } from '../../../components/ui/connect-onboarding-result';
 import { useFadeAnimation } from '../../../hooks/use-accessible-animation';
 import { useAuthContext } from '../../../hooks/use-auth-context';
 import { API_BASE_URL } from '../../../lib/config/api';
 import { CONNECT_REFRESH_URL, CONNECT_RETURN_URL } from '../../../lib/config/app';
+import { momentsService } from '../../../lib/moments/momentsService';
 import { analyticsService } from '../../../lib/services/analytics-service';
 import { authProfileService } from '../../../lib/services/auth-profile-service';
 import { supabase } from '../../../lib/supabase';
@@ -176,6 +184,9 @@ export default function ConnectOnboardingScreen() {
         const currentlyDue = body.requirementsCurrentlyDue ?? [];
         setRequirementsCurrentlyDue(currentlyDue);
         setDisabledReason(body.disabledReason ?? null);
+        if (!body.onboarded && session?.user?.id) {
+          await momentsService.enqueue(session.user.id, 'stripe_connect_onboarding');
+        }
         setOutcome(
           deriveOutcome({
             browserResultType,
@@ -260,7 +271,10 @@ export default function ConnectOnboardingScreen() {
           /* analytics is best-effort */
         }
         try {
-          await supabase.from('profiles').update({ stripe_connect_onboarding_complete: true }).eq('id', userId);
+          await supabase
+            .from('profiles')
+            .update({ stripe_connect_onboarding_complete: true })
+            .eq('id', userId);
         } catch (err) {
           console.warn('[connect-onboarding] optimistic update failed', err);
         }

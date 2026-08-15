@@ -430,14 +430,11 @@ export function MomentsProvider({ children, activeScreen = null }: MomentsProvid
       // screen. The auto-complete effect below still recognizes 'snoozed'
       // (not just 'shown'), so finishing the flow still resolves it early.
       const startedAt = new Date().toISOString();
-      const snoozedUntil = new Date(Date.now() + def.cooldownHours * 60 * 60 * 1000).toISOString();
       patchState(def.type, existing => ({
-        status: 'snoozed',
-        snoozedUntil,
+        status: 'in_progress',
         metadata: { ...existing.metadata, startedAt: existing.metadata?.startedAt ?? startedAt },
       }));
       momentsService.markStarted(userId, def.type);
-      momentsService.markSnoozed(userId, def.type, def.cooldownHours);
       router.push(def.action.route as any);
       return;
     }
