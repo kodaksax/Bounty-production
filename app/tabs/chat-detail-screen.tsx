@@ -18,6 +18,7 @@ import { useMessages } from "../../hooks/useMessages"
 import { useNormalizedProfile } from "../../hooks/useNormalizedProfile"
 import { useTypingIndicator } from "../../hooks/useSocketStub"
 import { useValidUserId } from '../../hooks/useValidUserId'
+import { getBottomNavKeyboardOffset } from "../../lib/constants/navigation"
 import { blockingService } from "../../lib/services/blocking-service"
 import { generateInitials } from "../../lib/services/supabase-messaging"
 import type { Conversation, Message } from "../../lib/types"
@@ -57,8 +58,7 @@ export function ChatDetailScreen({
   const hasScrolledToBottom = useRef(false)
   const typingUsersRef = useTypingIndicator(conversation.id)
   const insets = useSafeAreaInsets()
-  // Use a slightly larger offset to guarantee composer is above BottomNav
-  const BOTTOM_NAV_OFFSET = Math.max(96, (insets.bottom || 0) + 12)
+  const bottomNavOffset = getBottomNavKeyboardOffset(insets.bottom)
 
   // Get the other participant's ID (not the current user) for 1:1 chats.
   // Wait for currentUserId to resolve before picking a participant — while
@@ -219,7 +219,7 @@ export function ChatDetailScreen({
   const trimmedInputText = inputText.trim()
 
   return (
-    <View style={[s.container, { paddingBottom: Math.max(insets.bottom || 0, BOTTOM_NAV_OFFSET + 8) }]}>
+    <View style={[s.container, { paddingBottom: Math.max(insets.bottom || 0, bottomNavOffset + 8) }]}>
       {/* Header */}
       <View style={s.header}>
         <View style={s.headerInner}>
@@ -281,7 +281,7 @@ export function ChatDetailScreen({
       <KeyboardAvoidingView
         style={s.keyboardAvoidingContainer}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={BOTTOM_NAV_OFFSET}
+        keyboardVerticalOffset={bottomNavOffset}
       >
         {loading ? (
           <View style={s.loadingContainer}>

@@ -23,6 +23,10 @@ const PERMISSION_STATUS_KEY = 'notifications:permission_status';
 const PENDING_PUSH_TOKENS_KEY = 'notifications:pending_tokens';
 const REGISTER_TOKEN_BACKOFF_BASE_MS = 1000;
 const REGISTER_TOKEN_BACKOFF_MAX_MS = 60_000;
+// Safety net on the persisted retry cache. Entries are deduped by token+deviceId,
+// so this should never be reached in practice; it bounds the damage if a future
+// caller writes the key directly or a legacy oversized array is read back.
+const MAX_PENDING_PUSH_TOKENS = 20;
 
 // Helper to safely read response text without throwing further errors
 async function safeReadResponseText(response: Response): Promise<string> {
@@ -378,8 +382,18 @@ export class NotificationService {
             pending = [];
           }
         }
-        pending.push({ token, deviceId });
-        await AsyncStorage.setItem(PENDING_PUSH_TOKENS_KEY, JSON.stringify(pending));
+        // Dedupe on token+deviceId. Without this, every failed attempt appended
+        // another copy of the *same* token to a cache that persists across
+        // restarts, and the next successful flush then replayed one redundant
+        // registration call per accumulated copy.
+        const isDuplicate = pending.some(p => p.token === token && p.deviceId === deviceId);
+        if (!isDuplicate) {
+          pending.push({ token, deviceId });
+        }
+        await AsyncStorage.setItem(
+          PENDING_PUSH_TOKENS_KEY,
+          JSON.stringify(pending.slice(-MAX_PENDING_PUSH_TOKENS))
+        );
         if (__DEV__) {
           console.log('[NotificationService] Cached push token for later registration');
         }
@@ -1031,7 +1045,17 @@ export class NotificationService {
         return;
       }
       await AsyncStorage.removeItem(PENDING_PUSH_TOKENS_KEY);
-      for (const p of pending) {
+      // Collapse duplicates before replaying. Existing installs may already hold
+      // a cache bloated by the pre-dedupe append path, and registering the same
+      // token N times is N-1 wasted round trips.
+      const seen = new Set<string>();
+      const unique = pending.filter(p => {
+        const key = `${p.token}|${p.deviceId ?? ''}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      for (const p of unique.slice(-MAX_PENDING_PUSH_TOKENS)) {
         try {
           await this.registerPushToken(p.token, p.deviceId);
         } catch {}

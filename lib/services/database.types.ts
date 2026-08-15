@@ -44,7 +44,7 @@ export type Bounty = {
   accepted_by?: string;
   // Profile data from joined query (populated when fetched with profile join)
   username?: string;
-  poster_avatar?: string;
+  poster_avatar?: string | null;
   // Stale bounty fields
   is_stale?: boolean;
   stale_reason?: string;

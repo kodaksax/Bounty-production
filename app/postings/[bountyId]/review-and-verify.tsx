@@ -24,7 +24,6 @@ import { completionService } from '../../../lib/services/completion-service';
 import type { Bounty, Profile } from '../../../lib/services/database.types';
 import { profileService } from '../../../lib/services/profile-service';
 import { ratingsService } from '../../../lib/services/ratings';
-import { supabase } from '../../../lib/supabase';
 import type { Attachment } from '../../../lib/types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
 import { useWallet } from '../../../lib/wallet-context';
@@ -264,21 +263,11 @@ export default function ReviewAndVerifyScreen() {
           await completionService.approveSubmission(id);
           return true;
         },
-        notifyFn: async (userId: string) => {
-          try {
-            // Enqueue via notifications_outbox so process-notification delivers
-            // BOTH an in-app bell entry and a push notification.
-            await supabase.from('notifications_outbox').insert({
-              recipients: [userId],
-              title: 'Please rate the poster',
-              body: `Please rate your experience for "${bounty.title || `Bounty ${bounty.id}`}".`,
-              data: { bountyId: String(bounty.id), type: 'completion', subtype: 'rating_prompt' },
-              bounty_id: String(bounty.id),
-            });
-          } catch (e) {
-            console.warn('Failed to enqueue rating prompt notification', e);
-          }
-        },
+        // No notifyFn: the hunter's rating prompt is enqueued by the
+        // `trg_completion_review_notification` database trigger when the
+        // submission flips to 'approved'. Enqueueing it here never worked —
+        // notifications_outbox is service-role only (RLS enabled, no policies),
+        // so the insert was rejected and the failure logged to console.
       });
 
       if (!ok) {

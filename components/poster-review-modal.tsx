@@ -21,7 +21,6 @@ import { VerificationBadge, type VerificationLevel } from './ui/verification-bad
 import { useHapticFeedback } from '../lib/haptic-feedback';
 import { approveAndRelease } from '../lib/services/completion-approval';
 import { completionService, type CompletionSubmission, type ProofItem } from '../lib/services/completion-service';
-import { supabase } from '../lib/supabase';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
 import type { Attachment } from '../lib/types';
@@ -50,6 +49,18 @@ interface PosterReviewModalProps {
 }
 
 const SLIDER_HANDLE_WIDTH = 56;
+// Fraction of the track the handle must reach for a release to count as a
+// confirm. 0.92 demanded almost the entire width before the gesture "took",
+// so near-complete drags were discarded; 0.75 still requires a deliberate
+// sweep well past halfway.
+const SLIDER_CONFIRM_THRESHOLD = 0.75;
+// Horizontal movement (px) needed before the slider claims the touch. Keeps
+// vertical scrolling in the modal working: a mostly-vertical drag is left to
+// the parent ScrollView instead of being swallowed by the handle.
+const SLIDER_CLAIM_DISTANCE = 3;
+// Snap-back: no overshoot and a gentler speed. The old bounciness:8/speed:12
+// recoil read as the control actively rejecting the drag.
+const SLIDER_SPRING_BACK = { bounciness: 0, speed: 8 } as const;
 
 interface SlideToConfirmProps {
   label: string;
@@ -89,8 +100,22 @@ const SlideToConfirm: React.FC<SlideToConfirmProps> = React.memo(function SlideT
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => !disabled && !isProcessing,
-        onMoveShouldSetPanResponder: () => !disabled && !isProcessing,
+        // Do not claim on tap-start; let onMoveShouldSetPanResponder decide
+        // once the direction is known, so a vertical scroll is never blocked.
+        onStartShouldSetPanResponder: () => false,
+        // Claim the touch only once it reads as horizontal, so a vertical
+        // scroll of the modal body is not intercepted by the handle.
+        onMoveShouldSetPanResponder: (_evt, gestureState) =>
+          !disabled &&
+          !isProcessing &&
+          Math.abs(gestureState.dx) > SLIDER_CLAIM_DISTANCE &&
+          Math.abs(gestureState.dx) > Math.abs(gestureState.dy),
+        // Once the drag is ours, keep it. Without this the enclosing ScrollView
+        // could take the responder the moment a finger drifted vertically,
+        // firing onPanResponderTerminate and snapping the handle back
+        // mid-gesture — the single biggest reason this slider felt impossible
+        // to complete.
+        onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: () => {
           translateX.stopAnimation();
         },
@@ -100,7 +125,7 @@ const SlideToConfirm: React.FC<SlideToConfirmProps> = React.memo(function SlideT
         },
         onPanResponderRelease: (_evt, gestureState) => {
           const releaseX = Math.max(0, Math.min(gestureState.dx, maxTranslate));
-          if (releaseX >= maxTranslate * 0.92 && !hasConfirmedRef.current) {
+          if (releaseX >= maxTranslate * SLIDER_CONFIRM_THRESHOLD && !hasConfirmedRef.current) {
             hasConfirmedRef.current = true;
             Animated.timing(translateX, {
               toValue: maxTranslate,
@@ -111,8 +136,7 @@ const SlideToConfirm: React.FC<SlideToConfirmProps> = React.memo(function SlideT
             Animated.spring(translateX, {
               toValue: 0,
               useNativeDriver: false,
-              bounciness: 8,
-              speed: 12,
+              ...SLIDER_SPRING_BACK,
             }).start(() => { hasConfirmedRef.current = false; });
           }
         },
@@ -120,8 +144,7 @@ const SlideToConfirm: React.FC<SlideToConfirmProps> = React.memo(function SlideT
           Animated.spring(translateX, {
             toValue: 0,
             useNativeDriver: false,
-            bounciness: 8,
-            speed: 12,
+            ...SLIDER_SPRING_BACK,
           }).start(() => { hasConfirmedRef.current = false; });
         },
       }),
@@ -274,24 +297,11 @@ export function PosterReviewModal({
           await completionService.approveSubmission(id);
           return true;
         },
-        notifyFn: async (userId: string, payload?: Record<string, any>) => {
-          try {
-            const notificationBody = payload?.bountyTitle
-              ? `Please rate your experience for "${String(payload.bountyTitle)}".`
-              : 'Please rate your experience for this bounty.';
-            // Enqueue via notifications_outbox so process-notification delivers
-            // BOTH an in-app bell entry and a push notification.
-            await supabase.from('notifications_outbox').insert({
-              recipients: [userId],
-              title: 'Please rate the poster',
-              body: notificationBody,
-              data: { bountyId: String(bountyId), type: 'completion', subtype: 'rating_prompt', ...payload },
-              bounty_id: String(bountyId),
-            });
-          } catch (e) {
-            console.warn('Failed to enqueue rating prompt notification', e);
-          }
-        },
+        // No notifyFn: the hunter's rating prompt is enqueued by the
+        // `trg_completion_review_notification` database trigger when the
+        // submission flips to 'approved'. Enqueueing it here never worked —
+        // notifications_outbox is service-role only (RLS enabled, no policies),
+        // so the insert was rejected and the failure logged to console.
       });
 
       if (!ok) {

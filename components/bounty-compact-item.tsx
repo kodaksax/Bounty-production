@@ -23,7 +23,7 @@ export interface BountyCompactItemProps {
   isForHonor?: boolean
   user_id?: string | null
   work_type?: 'online' | 'in_person'
-  poster_avatar?: string
+  poster_avatar?: string | null
 }
 
 function BountyCompactItemComponent({
@@ -36,7 +36,13 @@ function BountyCompactItemComponent({
   const [showDetail, setShowDetail] = useState(false)
   const router = useRouter()
   const { triggerHaptic } = useHapticFeedback()
-  const { profile: posterProfile, loading: profileLoading } = useNormalizedProfile(user_id ?? undefined)
+  const hasJoinedPosterIdentity = typeof username === 'string' && poster_avatar !== undefined
+  const { profile: posterProfile, loading: profileLoading } = useNormalizedProfile(
+    user_id ?? undefined,
+    // Skip the Supabase profile lookup when the bounty row already carries
+    // both username and avatar state from the feed JOIN, including null avatars.
+    { enabled: !hasJoinedPosterIdentity }
+  )
   const [resolvedUsername, setResolvedUsername] = useState<string>(username || 'Loading...')
   const avatarUrl = poster_avatar || posterProfile?.avatar
 
@@ -124,7 +130,7 @@ function BountyCompactItemComponent({
 
       {showDetail && (
         <BountyDetailModal
-          bounty={{ id, username: resolvedUsername, title, price, distance, location: location ?? undefined, description, user_id, work_type, poster_avatar, is_for_honor: isForHonor }}
+          bounty={{ id, username: resolvedUsername, title, price, distance, location: location ?? undefined, description, user_id, work_type, poster_avatar: poster_avatar ?? undefined, is_for_honor: isForHonor }}
           onClose={() => setShowDetail(false)}
         />
       )}

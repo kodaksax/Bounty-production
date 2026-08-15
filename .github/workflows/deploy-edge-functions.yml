@@ -136,7 +136,7 @@ jobs:
           else
             # push event: only redeploy functions whose directory actually changed,
             # so an unrelated function's version doesn't bump on every merge.
-            CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} -- 'supabase/functions/*' \
+            CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} -- 'supabase/functions/*/*' \
               | grep -v '^supabase/functions/_' \
               | sed -E 's#^supabase/functions/([^/]+)/.*#\1#' \
               | sort -u | tr '\n' ' ')

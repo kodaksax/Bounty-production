@@ -137,10 +137,13 @@ describe('CompletionService', () => {
       expect(result?.status).toBe('pending');
       expect(result?.proof_items).toEqual(mockProofItems);
 
-      // Verify notification enqueue was attempted
+      // The poster's review-needed notification is owned by the
+      // trg_completion_submission_notification DB trigger, not this service.
+      // Asserting the client never touches notifications_outbox guards against
+      // reintroducing the old client-side insert, which RLS always rejected
+      // (and which would double-notify anywhere RLS were relaxed).
       const calls = mockSupabase.from.mock.calls.map((c: any[]) => c[0]);
-      expect(calls).toContain('bounties');
-      expect(calls).toContain('notifications_outbox');
+      expect(calls).not.toContain('notifications_outbox');
     });
 
     it('should prevent duplicate pending submissions', async () => {
@@ -211,7 +214,12 @@ describe('CompletionService', () => {
       );
     });
 
-    it('should still succeed and log a warning when notification enqueue fails', async () => {
+    it('does not enqueue the poster notification from the client', async () => {
+      // Regression guard for the bug where posters were never told a hunter had
+      // finished: this service used to insert into notifications_outbox, a
+      // service-role-only table with RLS enabled and no policies, so the insert
+      // was always rejected and the failure swallowed as a warning. The
+      // trg_completion_submission_notification trigger owns the enqueue now.
       const mockData = {
         id: 'submission123',
         ...mockSubmission,
@@ -243,25 +251,6 @@ describe('CompletionService', () => {
             }),
           };
         }
-        if (table === 'bounties') {
-          return {
-            select: jest.fn().mockReturnValue({
-              eq: jest.fn().mockReturnValue({
-                maybeSingle: jest.fn().mockResolvedValue({
-                  data: { poster_id: 'poster123', title: 'Test Bounty' },
-                  error: null,
-                }),
-              }),
-            }),
-          };
-        }
-        if (table === 'notifications_outbox') {
-          return {
-            insert: jest
-              .fn()
-              .mockResolvedValue({ data: null, error: { message: 'RLS violation' } }),
-          };
-        }
         return {};
       });
 
@@ -269,80 +258,17 @@ describe('CompletionService', () => {
 
       const result = await completionService.submitCompletion(mockSubmission);
 
-      // Submission should still succeed despite the outbox failure
       expect(result).toBeDefined();
       expect(result?.id).toBe('submission123');
-      // Warning should have been logged for the failed enqueue
-      expect(logger.warning).toHaveBeenCalledWith(
-        'Failed to enqueue review-needed notification',
-        expect.objectContaining({ error: expect.objectContaining({ message: 'RLS violation' }) })
-      );
-    });
 
-    it('should still succeed and log a warning when bounty fetch fails', async () => {
-      const mockData = {
-        id: 'submission123',
-        ...mockSubmission,
-        status: 'pending',
-        submitted_at: '2024-01-01T00:00:00Z',
-        proof_items: JSON.stringify(mockProofItems),
-      };
-
-      mockSupabase.from.mockImplementation((table: string) => {
-        if (table === 'completion_submissions') {
-          return {
-            select: jest.fn().mockReturnValue({
-              eq: jest.fn().mockReturnValue({
-                eq: jest.fn().mockReturnValue({
-                  eq: jest.fn().mockReturnValue({
-                    order: jest.fn().mockReturnValue({
-                      limit: jest.fn().mockReturnValue({
-                        maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
-                      }),
-                    }),
-                  }),
-                }),
-              }),
-            }),
-            insert: jest.fn().mockReturnValue({
-              select: jest.fn().mockReturnValue({
-                single: jest.fn().mockResolvedValue({ data: mockData, error: null }),
-              }),
-            }),
-          };
-        }
-        if (table === 'bounties') {
-          return {
-            select: jest.fn().mockReturnValue({
-              eq: jest.fn().mockReturnValue({
-                maybeSingle: jest.fn().mockResolvedValue({
-                  data: null,
-                  error: { message: 'Permission denied' },
-                }),
-              }),
-            }),
-          };
-        }
-        return {};
-      });
-
-      const { logger } = require('../../../lib/utils/error-logger');
-
-      const result = await completionService.submitCompletion(mockSubmission);
-
-      // Submission should still succeed despite the bounty fetch failure
-      expect(result).toBeDefined();
-      expect(result?.id).toBe('submission123');
-      // Warning should have been logged for the failed bounty lookup
-      expect(logger.warning).toHaveBeenCalledWith(
-        'Failed to fetch bounty for review-needed notification',
-        expect.objectContaining({
-          error: expect.objectContaining({ message: 'Permission denied' }),
-        })
-      );
-      // notifications_outbox should not have been called
       const calls = mockSupabase.from.mock.calls.map((c: any[]) => c[0]);
       expect(calls).not.toContain('notifications_outbox');
+      // No best-effort warnings either, since there is no longer a doomed call
+      // whose failure needs swallowing.
+      expect(logger.warning).not.toHaveBeenCalledWith(
+        expect.stringContaining('review-needed notification'),
+        expect.anything()
+      );
     });
   });
 
@@ -569,22 +495,6 @@ describe('CompletionService', () => {
         }),
       });
 
-      // Mock bounty title fetch for the work-approved notification
-      mockSupabase.from.mockReturnValueOnce({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            maybeSingle: jest.fn().mockResolvedValue({
-              data: { title: 'Test Bounty' },
-              error: null,
-            }),
-          }),
-        }),
-      });
-
-      // Mock notifications_outbox insert
-      const outboxInsert = jest.fn().mockResolvedValue({ data: null, error: null });
-      mockSupabase.from.mockReturnValueOnce({ insert: outboxInsert });
-
       const result = await completionService.approveSubmission('bounty123');
 
       expect(result).toBe(true);
@@ -595,71 +505,12 @@ describe('CompletionService', () => {
         completed_at: expect.any(String),
       });
 
-      // The hunter must be notified that their work was approved.
+      // The hunter's "Work Approved!" notification and rating prompt are
+      // enqueued by the trg_completion_review_notification DB trigger off the
+      // completion_submissions status change, not by this service. The client
+      // insert this replaced was always rejected by RLS.
       const calls = mockSupabase.from.mock.calls.map((c: any[]) => c[0]);
-      expect(calls).toContain('notifications_outbox');
-      expect(outboxInsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          recipients: ['hunter123'],
-          title: 'Work Approved! 🎉',
-          bounty_id: 'bounty123',
-          data: expect.objectContaining({ type: 'completion', bountyId: 'bounty123' }),
-        })
-      );
-    });
-
-    it('should still approve when the work-approved notification enqueue fails', async () => {
-      const mockSubmission = {
-        id: 'submission123',
-        bounty_id: 'bounty123',
-        hunter_id: 'hunter123',
-        message: 'Work done',
-        proof_items: [],
-        status: 'pending' as const,
-      };
-
-      // Mock getSubmission
-      mockSupabase.from.mockReturnValueOnce({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            order: jest.fn().mockReturnValue({
-              limit: jest.fn().mockReturnValue({
-                single: jest.fn().mockResolvedValue({
-                  data: { ...mockSubmission, proof_items: '[]' },
-                  error: null,
-                }),
-              }),
-            }),
-          }),
-        }),
-      });
-
-      // Mock approveCompletion
-      mockSupabase.from.mockReturnValueOnce({
-        update: jest.fn().mockReturnValue({
-          eq: jest.fn().mockResolvedValue({ error: null }),
-        }),
-      });
-
-      // Mock bounty title fetch
-      mockSupabase.from.mockReturnValueOnce({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            maybeSingle: jest
-              .fn()
-              .mockResolvedValue({ data: { title: 'Test Bounty' }, error: null }),
-          }),
-        }),
-      });
-
-      // Mock notifications_outbox insert failing
-      mockSupabase.from.mockReturnValueOnce({
-        insert: jest.fn().mockResolvedValue({ data: null, error: { message: 'outbox down' } }),
-      });
-
-      // Approval must still succeed even though the notification enqueue failed.
-      const result = await completionService.approveSubmission('bounty123');
-      expect(result).toBe(true);
+      expect(calls).not.toContain('notifications_outbox');
     });
 
     it('should throw error if no submission exists', async () => {
@@ -708,12 +559,6 @@ describe('CompletionService', () => {
         }),
       });
 
-      // Mock notification outbox insert (push + in-app)
-      const outboxInsert = jest.fn().mockResolvedValue({ error: null });
-      mockSupabase.from.mockReturnValueOnce({
-        insert: outboxInsert,
-      });
-
       const result = await completionService.requestRevision(
         'submission123',
         'Please update the color scheme'
@@ -721,24 +566,14 @@ describe('CompletionService', () => {
 
       expect(result).toBe(true);
 
-      // The revision alert must be delivered via the outbox (push + in-app),
-      // not a direct in-app-only `notifications` insert.
+      // The hunter's "Revision Requested" alert is enqueued by the
+      // trg_completion_review_notification DB trigger off the status change
+      // above (it reads poster_feedback from the row). The client must not
+      // touch notifications_outbox — RLS rejects it — nor write a direct
+      // in-app-only `notifications` row.
       const calls = mockSupabase.from.mock.calls.map((c: any[]) => c[0]);
-      expect(calls).toContain('notifications_outbox');
+      expect(calls).not.toContain('notifications_outbox');
       expect(calls).not.toContain('notifications');
-      expect(outboxInsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          recipients: ['hunter123'],
-          title: 'Revision Requested',
-          body: 'The poster requested changes to "Test Bounty". Check the feedback and resubmit.',
-          bounty_id: 'bounty123',
-          data: expect.objectContaining({
-            type: 'completion',
-            isRevision: true,
-            feedback: 'Please update the color scheme',
-          }),
-        })
-      );
     });
 
     it('should handle revision request errors', async () => {

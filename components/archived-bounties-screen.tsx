@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react"
 import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import type { Bounty } from "lib/services/database.types"
+import { getBottomNavContentPadding } from "../lib/constants/navigation"
 import { bountyService } from "lib/services/bounty-service"
 import { getCurrentUserId } from "lib/utils/data-utils"
 import { useAppThemeContext } from "../lib/themes/AppThemeContext"
@@ -20,8 +21,6 @@ export function ArchivedBountiesScreen({ onBack }: ArchivedBountiesScreenProps) 
   const { theme } = useAppThemeContext()
   const insets = useSafeAreaInsets()
   const s = useMemo(() => makeStyles(theme), [theme])
-  // Matches the offset used by other tab screens to clear the floating BottomNav
-  const bottomNavOffset = Math.max(96, (insets.bottom || 0) + 12)
 
   const [archivedBounties, setArchivedBounties] = useState<Bounty[]>([])
   const [loading, setLoading] = useState(true)
@@ -68,7 +67,7 @@ export function ArchivedBountiesScreen({ onBack }: ArchivedBountiesScreenProps) 
       title={item.title}
       amount={item.amount}
       distance={item.distance || 0}
-      avatarSrc={item.poster_avatar}
+      avatarSrc={item.poster_avatar ?? undefined}
       isForHonor={item.is_for_honor}
       workType={item.work_type}
       onMenuClick={() => {
@@ -115,7 +114,7 @@ export function ArchivedBountiesScreen({ onBack }: ArchivedBountiesScreenProps) 
           initialNumToRender={3}
           contentContainerStyle={[
             s.listContent,
-            { paddingBottom: bottomNavOffset + Math.max(insets.bottom, 12) + 16 },
+            { paddingBottom: getBottomNavContentPadding(insets.bottom, 16) },
             isEmpty && s.listContentEmpty,
           ]}
           refreshControl={

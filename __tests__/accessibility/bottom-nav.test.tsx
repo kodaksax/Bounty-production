@@ -10,6 +10,10 @@ jest.mock('../../lib/haptic-feedback', () => ({
   useHapticFeedback: () => ({ triggerHaptic: jest.fn() }),
 }));
 
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
+}));
+
 describe('BottomNav Accessibility', () => {
   it('should import BottomNav component without errors', () => {
     // This test verifies the component can be imported with proper mocks
@@ -212,4 +216,3 @@ describe('BottomNav Accessibility', () => {
     });
   });
 });
-
