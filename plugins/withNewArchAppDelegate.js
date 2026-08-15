@@ -32,8 +32,8 @@ const withNewArchAppDelegate = (config) => {
       return cfg;
     }
 
-    // The body contains no nested braces, so a lazy match to the first
-    // two-space-indented closing brace ends exactly at the function's end.
+    // The body contains no nested braces, so a lazy match to the first closing
+    // brace on its own line (at any indentation) ends exactly at the function's end.
     cfg.modResults.contents = cfg.modResults.contents.replace(
       /\n[^\S\n]*override func sourceURL\(for bridge: RCTBridge\) -> URL\? \{[\s\S]*?\n[^\S\n]*\}\n/,
       '\n'
