@@ -49,6 +49,18 @@ interface PosterReviewModalProps {
 }
 
 const SLIDER_HANDLE_WIDTH = 56;
+// Fraction of the track the handle must reach for a release to count as a
+// confirm. 0.92 demanded almost the entire width before the gesture "took",
+// so near-complete drags were discarded; 0.75 still requires a deliberate
+// sweep well past halfway.
+const SLIDER_CONFIRM_THRESHOLD = 0.75;
+// Horizontal movement (px) needed before the slider claims the touch. Keeps
+// vertical scrolling in the modal working: a mostly-vertical drag is left to
+// the parent ScrollView instead of being swallowed by the handle.
+const SLIDER_CLAIM_DISTANCE = 3;
+// Snap-back: no overshoot and a gentler speed. The old bounciness:8/speed:12
+// recoil read as the control actively rejecting the drag.
+const SLIDER_SPRING_BACK = { bounciness: 0, speed: 8 } as const;
 
 interface SlideToConfirmProps {
   label: string;
@@ -88,8 +100,22 @@ const SlideToConfirm: React.FC<SlideToConfirmProps> = React.memo(function SlideT
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => !disabled && !isProcessing,
-        onMoveShouldSetPanResponder: () => !disabled && !isProcessing,
+        // Do not claim on tap-start; let onMoveShouldSetPanResponder decide
+        // once the direction is known, so a vertical scroll is never blocked.
+        onStartShouldSetPanResponder: () => false,
+        // Claim the touch only once it reads as horizontal, so a vertical
+        // scroll of the modal body is not intercepted by the handle.
+        onMoveShouldSetPanResponder: (_evt, gestureState) =>
+          !disabled &&
+          !isProcessing &&
+          Math.abs(gestureState.dx) > SLIDER_CLAIM_DISTANCE &&
+          Math.abs(gestureState.dx) > Math.abs(gestureState.dy),
+        // Once the drag is ours, keep it. Without this the enclosing ScrollView
+        // could take the responder the moment a finger drifted vertically,
+        // firing onPanResponderTerminate and snapping the handle back
+        // mid-gesture — the single biggest reason this slider felt impossible
+        // to complete.
+        onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: () => {
           translateX.stopAnimation();
         },
@@ -99,7 +125,7 @@ const SlideToConfirm: React.FC<SlideToConfirmProps> = React.memo(function SlideT
         },
         onPanResponderRelease: (_evt, gestureState) => {
           const releaseX = Math.max(0, Math.min(gestureState.dx, maxTranslate));
-          if (releaseX >= maxTranslate * 0.92 && !hasConfirmedRef.current) {
+          if (releaseX >= maxTranslate * SLIDER_CONFIRM_THRESHOLD && !hasConfirmedRef.current) {
             hasConfirmedRef.current = true;
             Animated.timing(translateX, {
               toValue: maxTranslate,
@@ -110,8 +136,7 @@ const SlideToConfirm: React.FC<SlideToConfirmProps> = React.memo(function SlideT
             Animated.spring(translateX, {
               toValue: 0,
               useNativeDriver: false,
-              bounciness: 8,
-              speed: 12,
+              ...SLIDER_SPRING_BACK,
             }).start(() => { hasConfirmedRef.current = false; });
           }
         },
@@ -119,8 +144,7 @@ const SlideToConfirm: React.FC<SlideToConfirmProps> = React.memo(function SlideT
           Animated.spring(translateX, {
             toValue: 0,
             useNativeDriver: false,
-            bounciness: 8,
-            speed: 12,
+            ...SLIDER_SPRING_BACK,
           }).start(() => { hasConfirmedRef.current = false; });
         },
       }),
