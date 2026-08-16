@@ -30,6 +30,7 @@ import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supa
 import Stripe from 'npm:stripe@14';
 import type { Profile, WalletTransaction } from '../_shared/types.ts';
 import {
+  buildNativePayoutIdempotencyKey,
   buildPayoutIdempotencyKey,
   buildTransferIdempotencyKey,
   isRecoverableInstantPayoutError,
@@ -446,8 +447,8 @@ async function writePayoutAudit(supabase: SupabaseClient, entry: PayoutAuditEntr
  * what would otherwise be a raw 23505 after a balance deduction into a clean,
  * refund-free rejection with copy the hunter can act on.
  *
- * The insert path still handles 23505 as a backstop for the race where two
- * requests pass this check simultaneously.
+ * The begin_legacy_withdrawal / retry_failed_withdrawal RPCs still handle
+ * 23505 as the race backstop if two requests pass this check simultaneously.
  */
 async function findInFlightWithdrawal(
   supabase: SupabaseClient,
@@ -1059,7 +1060,12 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
         // request replays, while a genuinely different request does not
         // collide with it.
         idempotencyKey: idempotencyKey
-          ? `native_payout_${method}_${userId}_${idempotencyKey}_${amountCents}`
+          ? buildNativePayoutIdempotencyKey({
+              userId,
+              clientKey: idempotencyKey,
+              amountCents,
+              method,
+            })
           : undefined,
       }
     );
@@ -2155,24 +2161,77 @@ Deno.serve(async (req: Request) => {
         return inFlightWithdrawalResponse(transferInFlight);
       }
 
-      // Deduct balance atomically via withdraw_balance which enforces the
-      // hold check and dispute freeze, and returns the new balance.
-      const { data: newBalanceData, error: balanceError } = await supabase.rpc('withdraw_balance', {
-        p_user_id: userId,
-        p_amount: amount,
-      });
+      const reservationMetadata = {
+        idempotency_key: idempotencyKey ?? null,
+        destination_bank_account_id: destinationAccount.id,
+        destination_bank_last4: destinationAccount.last4 ?? null,
+        destination_bank_name: destinationAccount.bank_name ?? null,
+      };
+      const { data: reservation, error: reservationError } = await supabase
+        .rpc('begin_legacy_withdrawal', {
+          p_user_id: userId,
+          p_amount: amount,
+          p_description: 'Withdrawal to bank account',
+          p_payout_method: 'standard',
+          p_idempotency_key: idempotencyKey ?? null,
+          p_stripe_connect_account_id: p.stripe_connect_account_id,
+          p_instant_fee_amount: null,
+          p_metadata: reservationMetadata,
+        })
+        .single();
 
-      if (balanceError) {
-        console.error('[connect/transfer] Error deducting balance before transfer:', {
+      if (reservationError) {
+        const violatedConstraint = `${(reservationError as { message?: string }).message ?? ''} ${
+          (reservationError as { details?: string }).details ?? ''
+        }`;
+        if (
+          (reservationError as { code?: string }).code === '23505' &&
+          violatedConstraint.includes('idx_wallet_tx_one_pending_withdrawal')
+        ) {
+          const inFlight = await findInFlightWithdrawal(supabase, userId);
+          return inFlightWithdrawalResponse(inFlight ?? { amount: -amount });
+        }
+
+        if ((reservationError as { code?: string }).code === '23505' && idempotencyKey) {
+          const { data: winner } = await supabase
+            .from('wallet_transactions')
+            .select('id, stripe_transfer_id, stripe_payout_id, status, payout_method')
+            .eq('user_id', userId)
+            .eq('type', 'withdrawal')
+            .eq('idempotency_key', idempotencyKey)
+            .maybeSingle();
+
+          const w = winner as
+            | (WalletTransaction & { stripe_payout_id?: string; payout_method?: string })
+            | null;
+          return jsonResponse({
+            transferId: w?.stripe_transfer_id ?? null,
+            payoutId: w?.stripe_payout_id ?? null,
+            payoutMethod: w?.payout_method ?? 'standard',
+            status: w?.status ?? 'pending',
+            amount,
+            currency,
+            accountId: p.stripe_connect_account_id,
+            transactionId: w?.id,
+            duplicate: true,
+            estimatedArrival: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+            message: 'This withdrawal was already submitted and is being processed.',
+          });
+        }
+
+        console.error('[connect/transfer] Error reserving withdrawal before transfer:', {
           userId,
           amount,
-          error: balanceError.message,
+          error: reservationError.message,
         });
-        const mapped = mapWithdrawBalanceError(balanceError.message);
+        const mapped = mapWithdrawBalanceError(reservationError.message);
         return jsonResponse({ error: mapped.error, code: mapped.code }, mapped.status);
       }
 
-      const newBalance = typeof newBalanceData === 'number' ? newBalanceData : null;
+      const reservedWithdrawal = reservation as { tx_id?: string | null; new_balance?: number | null } | null;
+      const transactionId = reservedWithdrawal?.tx_id ?? null;
+      const newBalance =
+        typeof reservedWithdrawal?.new_balance === 'number' ? reservedWithdrawal.new_balance : null;
 
       let transfer: Stripe.Transfer;
       try {
@@ -2237,6 +2296,24 @@ Deno.serve(async (req: Request) => {
             500
           );
         }
+        if (transactionId) {
+          const { error: cleanupError } = await supabase
+            .from('wallet_transactions')
+            .delete()
+            .eq('id', transactionId)
+            .eq('status', 'pending');
+          if (cleanupError) {
+            logCritical(
+              'withdrawal reservation cleanup failed after transfer creation was refunded',
+              {
+                userId,
+                transactionId,
+                amount,
+                error: cleanupError,
+              }
+            );
+          }
+        }
         const mapped = mapStripeTransferError(errInfo);
         return jsonResponse({ error: mapped.error, code: mapped.code }, mapped.status);
       }
@@ -2299,107 +2376,23 @@ Deno.serve(async (req: Request) => {
 
       const { data: transaction, error: txError } = await supabase
         .from('wallet_transactions')
-        .insert({
-          user_id: userId,
-          type: 'withdrawal',
-          amount: -amount,
-          description: 'Withdrawal to bank account',
+        .update({
           // Only payout.paid may promote this.
-          status: 'pending',
           payout_method: 'standard',
           stripe_transfer_id: transfer.id,
           stripe_payout_id: standardPayout?.id ?? null,
-          stripe_connect_account_id: p.stripe_connect_account_id,
-          idempotency_key: idempotencyKey ?? null,
           metadata: {
+            ...reservationMetadata,
             transfer_id: transfer.id,
             payout_id: standardPayout?.id ?? null,
-            idempotency_key: idempotencyKey ?? null,
-            destination_bank_account_id: destinationAccount.id,
-            destination_bank_last4: destinationAccount.last4 ?? null,
-            destination_bank_name: destinationAccount.bank_name ?? null,
             ...(standardPayoutError ? { payout_creation_failed: standardPayoutError } : {}),
           },
         })
+        .eq('id', transactionId)
         .select()
         .single();
 
       if (txError) {
-        // 23505 now has two possible sources, and they mean different things:
-        //
-        //   idx_wallet_tx_withdrawal_idempotency  — a concurrent retry of THIS
-        //     request won the race. Stripe idempotency ensured both share one
-        //     transfer; refund the double deduction and replay the winner.
-        //
-        //   idx_wallet_tx_one_pending_withdrawal  — a DIFFERENT withdrawal is
-        //     already settling. The pre-check above catches this in the normal
-        //     case; this is the race backstop. Refund and reject.
-        const violatedConstraint = `${(txError as { message?: string }).message ?? ''} ${
-          (txError as { details?: string }).details ?? ''
-        }`;
-        if (
-          (txError as { code?: string }).code === '23505' &&
-          violatedConstraint.includes('idx_wallet_tx_one_pending_withdrawal')
-        ) {
-          console.warn('[connect/transfer] lost race to another in-flight withdrawal, refunding', {
-            userId,
-            transferId: transfer.id,
-          });
-          const { error: raceRefundError } = await supabase.rpc('update_balance', {
-            p_user_id: userId,
-            p_amount: amount,
-          });
-          if (raceRefundError) {
-            logCritical(
-              'refund after in-flight-withdrawal race failed — manual reconciliation required',
-              { userId, amount, transferId: transfer.id, error: raceRefundError }
-            );
-          }
-          return inFlightWithdrawalResponse({ amount });
-        }
-
-        if ((txError as { code?: string }).code === '23505' && idempotencyKey) {
-          console.warn(
-            '[connect/transfer] concurrent duplicate detected, refunding extra deduction',
-            {
-              userId,
-              transferId: transfer.id,
-            }
-          );
-          const { error: dupRefundError } = await supabase.rpc('update_balance', {
-            p_user_id: userId,
-            p_amount: amount,
-          });
-          if (dupRefundError) {
-            logCritical('refund of duplicate deduction failed — manual reconciliation required', {
-              userId,
-              amount,
-              error: dupRefundError,
-            });
-          }
-
-          const { data: winner } = await supabase
-            .from('wallet_transactions')
-            .select('id, stripe_transfer_id, status')
-            .eq('user_id', userId)
-            .eq('type', 'withdrawal')
-            .eq('idempotency_key', idempotencyKey)
-            .maybeSingle();
-
-          const w = winner as WalletTransaction | null;
-          return jsonResponse({
-            transferId: w?.stripe_transfer_id ?? transfer.id,
-            status: w?.status ?? 'pending',
-            amount,
-            currency,
-            accountId: p.stripe_connect_account_id,
-            transactionId: w?.id,
-            duplicate: true,
-            estimatedArrival: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
-            message: 'This withdrawal was already submitted and is being processed.',
-          });
-        }
-
         // The transfer already succeeded and the balance is correctly
         // deducted — only the history row failed. Do NOT surface an error
         // (the user's money IS on the way); log loudly for reconciliation.
@@ -2577,13 +2570,34 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ error: 'Insufficient balance for retry' }, 400);
       }
 
-      const { error: rpcError } = await supabase.rpc('withdraw_balance', {
-        p_user_id: userId,
-        p_amount: amount,
-      });
+      const { error: retryReservationError } = await supabase
+        .rpc('retry_failed_withdrawal', {
+          p_transaction_id: transactionId,
+          p_user_id: userId,
+          p_amount: amount,
+        })
+        .single();
 
-      if (rpcError) {
-        console.error('[connect] withdraw_balance RPC failed during transfer retry:', rpcError);
+      if (retryReservationError) {
+        const violatedConstraint = `${(retryReservationError as { message?: string }).message ?? ''} ${
+          (retryReservationError as { details?: string }).details ?? ''
+        }`;
+        if (
+          (retryReservationError as { code?: string }).code === '23505' &&
+          violatedConstraint.includes('idx_wallet_tx_one_pending_withdrawal')
+        ) {
+          const inFlight = await findInFlightWithdrawal(supabase, userId);
+          return inFlightWithdrawalResponse(inFlight ?? { amount: -amount });
+        }
+
+        if ((retryReservationError as { code?: string }).code === '23514') {
+          return jsonResponse({ error: 'Insufficient balance for retry' }, 400);
+        }
+
+        console.error(
+          '[connect] retry_failed_withdrawal RPC failed during transfer retry:',
+          retryReservationError
+        );
         return jsonResponse({ error: 'Failed to reserve balance for retry' }, 500);
       }
 
@@ -2624,6 +2638,17 @@ Deno.serve(async (req: Request) => {
             500
           );
         }
+        await supabase
+          .from('wallet_transactions')
+          .update({
+            status: 'failed',
+            stripe_transfer_id: t.stripe_transfer_id ?? null,
+            stripe_payout_id: (t as WalletTransaction & { stripe_payout_id?: string | null })
+              .stripe_payout_id ?? null,
+            metadata: t.metadata ?? null,
+          })
+          .eq('id', transactionId)
+          .eq('status', 'pending');
         const mapped = mapStripeTransferError(
           stripeError as { code?: string; type?: string; message?: string }
         );
@@ -3208,22 +3233,78 @@ Deno.serve(async (req: Request) => {
         return inFlightWithdrawalResponse(instantInFlight);
       }
 
-      const { data: newBalanceData, error: balanceError } = await supabase.rpc('withdraw_balance', {
-        p_user_id: userId,
-        p_amount: amount,
-      });
+      const estimatedFeeCents = estimateInstantFeeCents(validation.amountCents);
+      const instantReservationMetadata = {
+        idempotency_key: idempotencyKey ?? null,
+        destination_card_id: destinationCard.id,
+        destination_card_last4: destinationCard.last4 ?? null,
+        destination_card_brand: destinationCard.brand ?? null,
+        estimated_fee_cents: estimatedFeeCents,
+      };
+      const { data: reservation, error: reservationError } = await supabase
+        .rpc('begin_legacy_withdrawal', {
+          p_user_id: userId,
+          p_amount: amount,
+          p_description: 'Instant Cash Out to debit card',
+          p_payout_method: 'instant',
+          p_idempotency_key: idempotencyKey ?? null,
+          p_stripe_connect_account_id: p.stripe_connect_account_id,
+          p_instant_fee_amount: estimatedFeeCents / 100,
+          p_metadata: instantReservationMetadata,
+        })
+        .single();
 
-      if (balanceError) {
+      if (reservationError) {
+        const violatedConstraint = `${(reservationError as { message?: string }).message ?? ''} ${
+          (reservationError as { details?: string }).details ?? ''
+        }`;
+        if (
+          (reservationError as { code?: string }).code === '23505' &&
+          violatedConstraint.includes('idx_wallet_tx_one_pending_withdrawal')
+        ) {
+          const inFlight = await findInFlightWithdrawal(supabase, userId);
+          return inFlightWithdrawalResponse(inFlight ?? { amount: -amount });
+        }
+
+        if ((reservationError as { code?: string }).code === '23505' && idempotencyKey) {
+          const { data: winner } = await supabase
+            .from('wallet_transactions')
+            .select('id, stripe_transfer_id, stripe_payout_id, status, payout_method')
+            .eq('user_id', userId)
+            .eq('type', 'withdrawal')
+            .eq('idempotency_key', idempotencyKey)
+            .maybeSingle();
+
+          const w = winner as
+            | (WalletTransaction & { stripe_payout_id?: string; payout_method?: string })
+            | null;
+          return jsonResponse({
+            transferId: w?.stripe_transfer_id ?? null,
+            payoutId: w?.stripe_payout_id ?? null,
+            payoutMethod: w?.payout_method ?? 'instant',
+            status: w?.status ?? 'pending',
+            amount,
+            currency,
+            accountId: p.stripe_connect_account_id,
+            transactionId: w?.id,
+            duplicate: true,
+            message: 'This withdrawal was already submitted and is being processed.',
+          });
+        }
+
         console.error('[connect/instant-payout] Error deducting balance before transfer:', {
           userId,
           amount,
-          error: balanceError.message,
+          error: reservationError.message,
         });
-        const mapped = mapWithdrawBalanceError(balanceError.message);
+        const mapped = mapWithdrawBalanceError(reservationError.message);
         return jsonResponse({ error: mapped.error, code: mapped.code }, mapped.status);
       }
 
-      const newBalance = typeof newBalanceData === 'number' ? newBalanceData : null;
+      const reservedWithdrawal = reservation as { tx_id?: string | null; new_balance?: number | null } | null;
+      const transactionId = reservedWithdrawal?.tx_id ?? null;
+      const newBalance =
+        typeof reservedWithdrawal?.new_balance === 'number' ? reservedWithdrawal.new_balance : null;
 
       // Step 1: move funds from the platform balance into the connected
       // account's Stripe balance — required before Stripe will let the
@@ -3287,6 +3368,24 @@ Deno.serve(async (req: Request) => {
             500
           );
         }
+        if (transactionId) {
+          const { error: cleanupError } = await supabase
+            .from('wallet_transactions')
+            .delete()
+            .eq('id', transactionId)
+            .eq('status', 'pending');
+          if (cleanupError) {
+            logCritical(
+              'instant withdrawal reservation cleanup failed after transfer creation was refunded',
+              {
+                userId,
+                transactionId,
+                amount,
+                error: cleanupError,
+              }
+            );
+          }
+        }
         const mapped = mapStripeTransferError(errInfo);
         return jsonResponse({ error: mapped.error, code: mapped.code }, mapped.status);
       }
@@ -3300,7 +3399,6 @@ Deno.serve(async (req: Request) => {
       // account's now-funded balance TO the debit card. Scoped via
       // { stripeAccount } — this Stripe call acts "as" the connected
       // account, unlike every other Stripe call in this file.
-      const estimatedFeeCents = estimateInstantFeeCents(validation.amountCents);
       let payout: Stripe.Payout;
       try {
         payout = await stripe.payouts.create(
@@ -3441,27 +3539,22 @@ Deno.serve(async (req: Request) => {
 
         const { data: fallbackTx, error: fallbackTxError } = await supabase
           .from('wallet_transactions')
-          .insert({
-            user_id: userId,
-            type: 'withdrawal',
-            amount: -amount,
+          .update({
             description: 'Withdrawal to bank account (Instant Cash Out unavailable)',
             // NOT 'completed'. Only payout.paid may promote this row.
-            status: 'pending',
             payout_method: 'standard',
             stripe_transfer_id: transfer.id,
             stripe_payout_id: fallbackPayout?.id ?? null,
-            stripe_connect_account_id: p.stripe_connect_account_id,
-            idempotency_key: idempotencyKey ?? null,
             metadata: {
+              ...instantReservationMetadata,
               transfer_id: transfer.id,
               payout_id: fallbackPayout?.id ?? null,
-              idempotency_key: idempotencyKey ?? null,
               instant_payout_attempted_but_fell_back: true,
               instant_payout_error: instantErrorCode,
               ...(fallbackPayoutError ? { payout_creation_failed: fallbackPayoutError } : {}),
             },
           })
+          .eq('id', transactionId)
           .select()
           .single();
 
@@ -3469,7 +3562,7 @@ Deno.serve(async (req: Request) => {
           // A payout may already exist at this point, so there is real money
           // in flight with no ledger row behind it. Never swallow this.
           logCritical(
-            'fallback withdrawal row insert failed — payout may exist with no ledger record, manual reconciliation required',
+            'fallback withdrawal row update failed — payout may exist with no ledger record, manual reconciliation required',
             {
               userId,
               transferId: transfer.id,
@@ -3521,112 +3614,26 @@ Deno.serve(async (req: Request) => {
 
       const { data: transaction, error: txError } = await supabase
         .from('wallet_transactions')
-        .insert({
-          user_id: userId,
-          type: 'withdrawal',
-          amount: -amount,
-          description: 'Instant Cash Out to debit card',
+        .update({
           // A submitted payout is not a settled payout. Even an instant
           // payout can fail or be canceled after creation, so the row waits
           // for payout.paid like every other withdrawal. Instant payouts
           // typically settle within minutes, so this window is short — but it
           // is a real window, and pretending otherwise is what this whole
           // change exists to stop.
-          status: 'pending',
-          payout_method: 'instant',
           stripe_transfer_id: transfer.id,
           stripe_payout_id: payout.id,
-          stripe_connect_account_id: p.stripe_connect_account_id,
-          idempotency_key: idempotencyKey ?? null,
-          instant_fee_amount: estimatedFeeCents / 100,
           metadata: {
+            ...instantReservationMetadata,
             transfer_id: transfer.id,
             payout_id: payout.id,
-            idempotency_key: idempotencyKey ?? null,
-            destination_card_id: destinationCard.id,
-            destination_card_last4: destinationCard.last4 ?? null,
-            destination_card_brand: destinationCard.brand ?? null,
-            estimated_fee_cents: estimatedFeeCents,
           },
         })
+        .eq('id', transactionId)
         .select()
         .single();
 
       if (txError) {
-        // Same two-source 23505 handling as /transfer — see the comment there.
-        const instantViolated = `${(txError as { message?: string }).message ?? ''} ${
-          (txError as { details?: string }).details ?? ''
-        }`;
-        if (
-          (txError as { code?: string }).code === '23505' &&
-          instantViolated.includes('idx_wallet_tx_one_pending_withdrawal')
-        ) {
-          console.warn(
-            '[connect/instant-payout] lost race to another in-flight withdrawal, refunding',
-            { userId, transferId: transfer.id, payoutId: payout.id }
-          );
-          const { error: raceRefundError } = await supabase.rpc('update_balance', {
-            p_user_id: userId,
-            p_amount: amount,
-          });
-          if (raceRefundError) {
-            logCritical(
-              'refund after in-flight-withdrawal race failed — manual reconciliation required',
-              { userId, amount, payoutId: payout.id, error: raceRefundError }
-            );
-          }
-          return inFlightWithdrawalResponse({ amount });
-        }
-
-        if ((txError as { code?: string }).code === '23505' && idempotencyKey) {
-          console.warn(
-            '[connect/instant-payout] concurrent duplicate detected, refunding extra deduction',
-            {
-              userId,
-              transferId: transfer.id,
-              payoutId: payout.id,
-            }
-          );
-          const { error: dupRefundError } = await supabase.rpc('update_balance', {
-            p_user_id: userId,
-            p_amount: amount,
-          });
-          if (dupRefundError) {
-            logCritical(
-              'refund of duplicate instant-payout deduction failed — manual reconciliation required',
-              {
-                userId,
-                amount,
-                error: dupRefundError,
-              }
-            );
-          }
-
-          const { data: winner } = await supabase
-            .from('wallet_transactions')
-            .select('id, stripe_transfer_id, stripe_payout_id, status, payout_method')
-            .eq('user_id', userId)
-            .eq('type', 'withdrawal')
-            .eq('idempotency_key', idempotencyKey)
-            .maybeSingle();
-
-          const w = winner as
-            | (WalletTransaction & { stripe_payout_id?: string; payout_method?: string })
-            | null;
-          return jsonResponse({
-            transferId: w?.stripe_transfer_id ?? transfer.id,
-            payoutId: w?.stripe_payout_id ?? payout.id,
-            payoutMethod: w?.payout_method ?? 'instant',
-            status: w?.status ?? 'pending',
-            amount,
-            currency,
-            accountId: p.stripe_connect_account_id,
-            transactionId: w?.id,
-            duplicate: true,
-            message: 'This Instant Cash Out was already submitted and is being processed.',
-          });
-        }
-
         logCritical(
           'instant payout succeeded but transaction record failed — manual reconciliation required',
           {

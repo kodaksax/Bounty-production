@@ -53,4 +53,22 @@ describe('handleUndeliveredPayout (payout.failed / payout.canceled)', () => {
   test('logs the payout amount by recomputing it from the Stripe Payout object in scope', () => {
     expect(body).toContain('payout.amount / 100');
   });
+
+  test('applies the refund and failed-status transition through one atomic RPC', () => {
+    expect(body).toContain("rpc('fail_legacy_withdrawal'");
+    expect(body).not.toContain(".update({\n          status: 'failed'");
+    expect(body).not.toContain("rpc('update_balance'");
+  });
+});
+
+describe("case 'payout.paid'", () => {
+  test('still reconciles instant-payout fees when the completion action is a noop', () => {
+    const start = webhooksSource.indexOf("case 'payout.paid':");
+    expect(start).toBeGreaterThan(-1);
+    const nextCase = webhooksSource.indexOf("case 'payout.updated':", start);
+    expect(nextCase).toBeGreaterThan(start);
+    const body = webhooksSource.slice(start, nextCase);
+    expect(body).toContain('shouldReconcileInstantFee');
+    expect(body).toContain('reconcileInstantPayoutFee');
+  });
 });

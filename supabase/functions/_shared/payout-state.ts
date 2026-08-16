@@ -261,7 +261,7 @@ export function buildTransferIdempotencyKey(args: {
   amountCents: number;
   purpose: string;
 }): string {
-  return `wtr_${args.purpose}_${args.userId}_${args.clientKey}_${args.amountCents}`;
+  return `wtr_${args.purpose}_${args.userId}_${hashClientKey(args.clientKey)}_${args.amountCents}`;
 }
 
 export function buildPayoutIdempotencyKey(args: {
@@ -270,5 +270,19 @@ export function buildPayoutIdempotencyKey(args: {
   amountCents: number;
   method: 'standard' | 'instant';
 }): string {
-  return `wpo_${args.method}_${args.userId}_${args.clientKey}_${args.amountCents}`;
+  return `wpo_${args.method}_${args.userId}_${hashClientKey(args.clientKey)}_${args.amountCents}`;
 }
+
+export function buildNativePayoutIdempotencyKey(args: {
+  userId: string;
+  clientKey: string;
+  amountCents: number;
+  method: 'standard' | 'instant';
+}): string {
+  return `wnp_${args.method}_${args.userId}_${hashClientKey(args.clientKey)}_${args.amountCents}`;
+}
+
+function hashClientKey(clientKey: string): string {
+  return createHash('sha256').update(clientKey).digest('hex');
+}
+import { createHash } from 'node:crypto';

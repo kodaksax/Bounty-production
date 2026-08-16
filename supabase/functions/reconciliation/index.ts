@@ -143,15 +143,24 @@ export function normalizeStripeStatus(stripeStatus: string): string {
  */
 export function isSafeStatusRepair(
   stripeStatus: string,
-  ledgerStatus: string
+  ledgerStatus: string,
+  metadata?: Record<string, unknown> | null
 ): boolean {
   // Only ever repair FROM pending. A ledger row already claiming a terminal
   // state that disagrees with Stripe is a genuine conflict, not a lag.
   if (ledgerStatus !== 'pending') return false;
 
-  // Only repair TO a state Stripe has actually reached and will not leave.
-  const terminal = new Set(['paid', 'failed', 'canceled']);
-  return terminal.has(stripeStatus);
+  if (stripeStatus === 'paid') return true;
+
+  // Failed/canceled only auto-repair for Connect-native payouts, which never
+  // debited profiles.balance in the first place. Legacy withdrawals need an
+  // atomic balance refund with the status change; reconciliation only reports
+  // those mismatches so a separate repair path can apply both together.
+  if (stripeStatus === 'failed' || stripeStatus === 'canceled') {
+    return metadata?.connect_native === true;
+  }
+
+  return false;
 }
 
 /** Health rolls up from the worst thing seen. */
@@ -607,7 +616,7 @@ serve(async (req: Request) => {
         }
 
         // --- Statuses disagree ---
-        if (isSafeStatusRepair(payout.status, ledgerStatus)) {
+        if (isSafeStatusRepair(payout.status, ledgerStatus, local.metadata ?? null)) {
           // Provably safe: Stripe reached a terminal state, our row is still
           // pending. Move the ledger to match what Stripe already did. This
           // moves no money and invents nothing.

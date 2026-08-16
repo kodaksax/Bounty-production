@@ -46,10 +46,15 @@ describe('normalizeStripeStatus', () => {
 });
 
 describe('isSafeStatusRepair', () => {
-  it.each(['paid', 'failed', 'canceled'])(
-    'allows advancing a pending ledger row to Stripe terminal state %s',
+  it('allows advancing a pending ledger row to paid', () => {
+    expect(isSafeStatusRepair('paid', 'pending')).toBe(true);
+  });
+
+  it.each(['failed', 'canceled'])(
+    'allows failed/canceled auto-repair only for Connect-native payouts (%s)',
     stripeStatus => {
-      expect(isSafeStatusRepair(stripeStatus, 'pending')).toBe(true);
+      expect(isSafeStatusRepair(stripeStatus, 'pending', { connect_native: true })).toBe(true);
+      expect(isSafeStatusRepair(stripeStatus, 'pending')).toBe(false);
     }
   );
 
@@ -181,6 +186,7 @@ describe('reconciliation edge function contract (inlined logic stays in sync)', 
 
   it('inlines the same safe-repair rule', () => {
     expect(indexSource).toContain("if (ledgerStatus !== 'pending') return false");
+    expect(indexSource).toContain("metadata?.connect_native === true");
   });
 
   it('only ever repairs a row that is still pending (compare-and-set)', () => {

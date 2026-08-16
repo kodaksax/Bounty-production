@@ -67,9 +67,17 @@ export function normalizeStripeStatus(stripeStatus: string): string {
  *   - Stripe still in flight → nothing to copy yet.
  *   - amount disagreements → never a status question; handled as CRITICAL.
  */
-export function isSafeStatusRepair(stripeStatus: string, ledgerStatus: string): boolean {
+export function isSafeStatusRepair(
+  stripeStatus: string,
+  ledgerStatus: string,
+  metadata?: Record<string, unknown> | null
+): boolean {
   if (ledgerStatus !== 'pending') return false;
-  return stripeStatus === 'paid' || stripeStatus === 'failed' || stripeStatus === 'canceled';
+  if (stripeStatus === 'paid') return true;
+  if (stripeStatus === 'failed' || stripeStatus === 'canceled') {
+    return metadata?.connect_native === true;
+  }
+  return false;
 }
 
 export interface HealthCounts {

@@ -272,9 +272,15 @@ describe('connect edge function contract (inlined helpers stay in sync)', () => 
     expect(indexSource).toContain("code: 'payouts_disabled'");
   });
 
-  test('refunds the deducted balance when a concurrent duplicate loses the insert race', () => {
-    expect(indexSource).toContain('concurrent duplicate detected');
-    expect(indexSource).toContain("'23505'");
+  test('reserves the pending withdrawal row atomically before any Stripe transfer call', () => {
+    expect(indexSource).toContain("rpc('begin_legacy_withdrawal'");
+    const transferStart = indexSource.indexOf("if (subPath === '/transfer')");
+    expect(transferStart).toBeGreaterThan(-1);
+    const transferBlock = indexSource.slice(transferStart, indexSource.indexOf("if (subPath === '/retry-transfer')"));
+    expect(transferBlock.indexOf("rpc('begin_legacy_withdrawal'")).toBeGreaterThan(-1);
+    expect(transferBlock.indexOf("rpc('begin_legacy_withdrawal'")).toBeLessThan(
+      transferBlock.indexOf('transfer = await stripe.transfers.create')
+    );
   });
 
   test('inlines resolveWithdrawalDestination and wires it into both transfer and retry-transfer', () => {
