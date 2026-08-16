@@ -881,7 +881,7 @@ serve(async (req: Request) => {
             oldest: violations[violations.length - 1]?.created_at ?? null,
             newest: violations[0]?.created_at ?? null,
             transactionIds: violations.slice(0, 50).map(r => r.id),
-            note: 'Withdrawals marked completed with no Stripe payout id. Rows predating 2026-08-17 are the known historical set from the instant-payout fallback incident; anything newer means the invariant is being bypassed.',
+            note: 'Withdrawals marked completed with no Stripe payout id. Rows predating 2026-08-15 are the known historical set from the instant-payout fallback incident (25 rows, $526.65) and are grandfathered by the DB constraint; anything newer means the invariant is being bypassed.',
           },
         });
         alert('CRITICAL', 'completed_withdrawal_without_payout_total', {
@@ -964,18 +964,33 @@ serve(async (req: Request) => {
 
     // Persist findings (skip INFO-level repairs already captured above? no —
     // keep everything; the audit value is in the complete picture).
+    //
+    // severity is lowercased on the way in: reconciliation_findings carries
+    // CHECK (severity IN ('info','warning','critical')) while this file's
+    // Severity type is uppercase. Every findings insert from this function had
+    // been failing that constraint since it shipped — and because the error is
+    // logged and swallowed below, the job reported healthy counts while
+    // writing nothing. The findings visible in the table all came from the
+    // separate run_withdrawal_reconciliation() DB function, which masked it.
+    // Found 2026-08-16 while verifying that the new invariant sweep actually
+    // recorded anything.
     if (findings.length > 0) {
       const { error: findingsError } = await supabase.from('reconciliation_findings').insert(
         findings.map(f => ({
           finding_type: f.findingType,
-          severity: f.severity,
+          severity: f.severity.toLowerCase(),
           user_id: f.userId,
           details: f.details,
           auto_repaired: f.findingType === 'ledger_status_repaired',
         }))
       );
       if (findingsError) {
-        console.error('[reconciliation] failed to persist findings', findingsError.message);
+        // Loud: a reconciliation run whose findings vanish is worse than one
+        // that did not run, because it looks like a clean pass.
+        console.error(
+          '[reconciliation-alert][CRITICAL] findings_persist_failed',
+          JSON.stringify({ error: findingsError.message, findingCount: findings.length })
+        );
       }
     }
 

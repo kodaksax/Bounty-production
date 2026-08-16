@@ -298,6 +298,18 @@ describe('reconciliation — the blind spot is closed', () => {
     expect(stripped).toContain('pending_withdrawal_past_payout_deadline');
   });
 
+  test('findings are written with the lowercase severity the table accepts', () => {
+    // reconciliation_findings has CHECK (severity IN ('info','warning',
+    // 'critical')) but this file's Severity type is uppercase. Without the
+    // fold, every insert fails the constraint and is swallowed — the job
+    // reports counts while persisting nothing.
+    expect(stripped).toContain('severity: f.severity.toLowerCase()');
+  });
+
+  test('a failed findings insert is logged as CRITICAL, not swallowed quietly', () => {
+    expect(stripped).toContain('findings_persist_failed');
+  });
+
   test('the sweep reports and never repairs', () => {
     // Bounds from the raw source — the closing marker is a comment.
     const sweep = stripComments(
