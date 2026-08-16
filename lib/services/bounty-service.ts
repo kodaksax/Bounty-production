@@ -1054,8 +1054,28 @@ export const bountyService = {
     try {
       if (isSupabaseConfigured) {
         const { error } = await supabase.from('bounties').delete().eq('id', id);
+        if (!error) {
+          return true;
+        }
 
-        if (error) throw error;
+        if (error.code !== '23503') {
+          throw error;
+        }
+
+        logOnce('bounties:delete:fk', 'warn', 'Bounty delete hit FK violation; deleting bounty_payments and retrying', {
+          id,
+          error,
+        });
+
+        const { error: paymentsError } = await supabase.from('bounty_payments').delete().eq('bounty_id', id);
+        if (paymentsError) {
+          throw paymentsError;
+        }
+
+        const { error: retryError } = await supabase.from('bounties').delete().eq('id', id);
+        if (retryError) {
+          throw retryError;
+        }
         return true;
       }
 

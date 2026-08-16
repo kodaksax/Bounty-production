@@ -877,18 +877,50 @@ export async function registerConsolidatedBountyRoutes(
           throw new AuthorizationError('Only the bounty owner can perform this action');
         }
 
-        // Delete bounty
         const { error: deleteError } = await supabase
           .from('bounties')
           .delete()
           .eq('id', bountyId);
 
         if (deleteError) {
-          request.log.error(
+          if (deleteError.code !== '23503') {
+            request.log.error(
+              { error: deleteError.message, bountyId },
+              'Bounty deletion failed'
+            );
+            throw new Error(deleteError.message);
+          }
+
+          request.log.warn(
             { error: deleteError.message, bountyId },
-            'Bounty deletion failed'
+            'Bounty delete hit FK violation; deleting bounty_payments and retrying'
           );
-          throw new Error(deleteError.message);
+
+          const { error: paymentsDeleteError } = await supabase
+            .from('bounty_payments')
+            .delete()
+            .eq('bounty_id', bountyId);
+
+          if (paymentsDeleteError) {
+            request.log.error(
+              { error: paymentsDeleteError.message, bountyId },
+              'Failed to delete bounty_payments records after FK violation'
+            );
+            throw new Error(paymentsDeleteError.message);
+          }
+
+          const { error: retryDeleteError } = await supabase
+            .from('bounties')
+            .delete()
+            .eq('id', bountyId);
+
+          if (retryDeleteError) {
+            request.log.error(
+              { error: retryDeleteError.message, bountyId },
+              'Bounty deletion retry failed'
+            );
+            throw new Error(retryDeleteError.message);
+          }
         }
 
         // Invalidate caches
