@@ -264,7 +264,7 @@ export function useAcceptRequest({
 
       const viewAction = {
         text: 'View Conversation',
-        onPress: () => {
+        onPress: async () => {
           if (pendingConvId) {
             // Navigate directly to the conversation screen and clear the
             // pending intent so it doesn't re-trigger on the inbox later.
