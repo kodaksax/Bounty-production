@@ -23,6 +23,7 @@ jest.mock('../../lib/supabase', () => ({
     },
   },
   isSupabaseConfigured: true,
+  supabaseEnv: { mismatch: false },
 }));
 
 // Mock auth profile service
@@ -1233,6 +1234,83 @@ describe('Authentication State Persistence', () => {
       });
 
       expect(authSessionStorage.incrementStartupTimeoutCount).toHaveBeenCalled();
+    });
+  });
+
+  describe('Environment guard failure (env-guard)', () => {
+    // Regression tests for: production Android devices hitting the
+    // checkEnvironmentIntegrity() guard (lib/config/env-guard.ts) — confirmed
+    // via Sentry issues REACT-NATIVE-1H/1D — were silently falling through to
+    // the normal "not authenticated" path and showing the sign-in screen,
+    // making a broken OTA bundle look identical to the user being logged out.
+    // The persisted session must be left alone, and the app must surface a
+    // distinct environmentError flag instead of a generic signed-out state.
+    afterEach(() => {
+      const { supabaseEnv } = require('../../lib/supabase');
+      supabaseEnv.mismatch = false;
+    });
+
+    it('sets environmentError instead of a generic signed-out state when the env guard fails', async () => {
+      const { supabaseEnv } = require('../../lib/supabase');
+      supabaseEnv.mismatch = true;
+
+      (supabase.auth.getSession as jest.Mock).mockRejectedValue(
+        new Error('[env-guard] Build channel "production" must use Supabase project "a", but this bundle resolved to "b".')
+      );
+
+      const { useContext } = require('react');
+      const { AuthContext } = require('../../hooks/use-auth-context');
+      let capturedContext: any;
+      const ContextCapture = () => {
+        capturedContext = useContext(AuthContext);
+        return null;
+      };
+
+      render(
+        <AuthProvider>
+          <ContextCapture />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(capturedContext?.environmentError).toBe(true);
+      });
+
+      expect(capturedContext.isLoggedIn).toBe(false);
+      expect(capturedContext.isLoading).toBe(false);
+
+      // Must NOT be treated as a stalled-refresh timeout: no purge of the
+      // persisted session, which may still be perfectly valid once a
+      // corrected OTA bundle loads.
+      expect(authSessionStorage.incrementStartupTimeoutCount).not.toHaveBeenCalled();
+      expect(authSessionStorage.clearAllSessionData).not.toHaveBeenCalled();
+    });
+
+    it('does not set environmentError for an ordinary (non-env-guard) session fetch failure', async () => {
+      const { supabaseEnv } = require('../../lib/supabase');
+      supabaseEnv.mismatch = false;
+
+      (supabase.auth.getSession as jest.Mock).mockRejectedValue(new Error('network request failed'));
+
+      const { useContext } = require('react');
+      const { AuthContext } = require('../../hooks/use-auth-context');
+      let capturedContext: any;
+      const ContextCapture = () => {
+        capturedContext = useContext(AuthContext);
+        return null;
+      };
+
+      render(
+        <AuthProvider>
+          <ContextCapture />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(capturedContext?.isLoading).toBe(false);
+      });
+
+      expect(capturedContext.environmentError).toBeFalsy();
     });
   });
 });

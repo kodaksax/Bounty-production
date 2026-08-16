@@ -23,7 +23,7 @@ import {
 import { analyticsService } from '../lib/services/analytics-service';
 import { authProfileService } from '../lib/services/auth-profile-service';
 import { getSentry } from '../lib/services/sentry-init';
-import { isSupabaseConfigured, PROJECT_STORAGE_KEY, supabase } from '../lib/supabase';
+import { isSupabaseConfigured, PROJECT_STORAGE_KEY, supabase, supabaseEnv } from '../lib/supabase';
 import {
     getNetworkSnapshot,
     logAuthLifecycleEvent,
@@ -98,6 +98,10 @@ export default function AuthProvider({ children }: PropsWithChildren) {
   const [accountBlockedReason, setAccountBlockedReason] = useState<'banned' | 'suspended' | null>(
     null
   );
+  // See AuthData.environmentError in hooks/use-auth-context.tsx — set only
+  // when checkEnvironmentIntegrity() refused the connection, never on a
+  // timeout or a real signed-out state.
+  const [environmentError, setEnvironmentError] = useState<boolean>(false);
   // Prevents re-triggering signOut() on every profile re-notification while a
   // block is already being handled (fetchAndSyncProfile can notify listeners
   // more than once for the same status: cached value, then fresh value).
@@ -483,6 +487,33 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         }
       } catch (error) {
         reportError(error, '[AuthProvider] Unexpected error fetching session:');
+
+        // The environment guard (lib/config/env-guard.ts) refused to connect
+        // because this bundle's Supabase URL doesn't match its immutable
+        // build channel — e.g. a stale/misconfigured OTA update on a
+        // production binary. This is a fatal client-init failure, not a
+        // signed-out state: the persisted session is intentionally left
+        // alone (a future correct OTA update must still be able to restore
+        // it), so skip the timeout/purge handling below entirely and let the
+        // root auth gate show a dedicated error screen instead of silently
+        // falling through to "please sign in," which would wrongly read as
+        // the user having been logged out.
+        if (supabaseEnv.mismatch) {
+          reportWarning(
+            '[AuthProvider] Environment integrity check failed — session restore blocked, not signing out'
+          );
+          if (isMountedRef.current) {
+            setEnvironmentError(true);
+            setSession(null);
+            try {
+              await authProfileService.setSession(null);
+            } catch (e) {
+              reportWarning('[AuthProvider] Profile service unavailable during env-guard clear:', e);
+            }
+          }
+          return;
+        }
+
         if (isTimeoutError(error) || (error as any)?.code === 'AUTH_STAGE_TIMEOUT') {
           reportWarning(
             '[AuthProvider] Session initialization timed out; falling back to signed-out state'
@@ -1120,6 +1151,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       attemptRefresh,
       accountBlockedReason,
       clearAccountBlockedReason,
+      environmentError,
     }),
     [
       session,
@@ -1131,6 +1163,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       attemptRefresh,
       accountBlockedReason,
       clearAccountBlockedReason,
+      environmentError,
     ]
   );
 

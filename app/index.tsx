@@ -31,7 +31,7 @@ import { markInitialNavigationDone } from './initial-navigation/initialNavigatio
  */
 export default function Index() {
   const bootstrap = useAppBootstrap();
-  const { isPasswordRecovery, accountBlockedReason } = useAuthContext();
+  const { isPasswordRecovery, accountBlockedReason, environmentError } = useAuthContext();
   const router = useRouter();
   const authGateCorrelationRef = useRef(generateCorrelationId('root_auth_gate'));
   const hasNavigatedRef = useRef(false);
@@ -74,6 +74,33 @@ export default function Index() {
 
     // Prevent double-navigation across re-renders.
     if (hasNavigatedRef.current) return;
+
+    // The environment guard (lib/config/env-guard.ts) refused to connect —
+    // this bundle's Supabase URL doesn't match its build channel, so no auth
+    // call can succeed regardless of whether a valid session is persisted.
+    // Takes precedence over every other branch, including the loading gate
+    // below: showing the sign-in form here would misleadingly suggest the
+    // user was logged out when their session was never touched.
+    if (environmentError) {
+      hasNavigatedRef.current = true;
+      if (__DEV__) {
+        console.log('[index] Environment integrity check failed — routing to environment-error');
+      }
+      router.replace('/auth/environment-error' as Href);
+      try {
+        markInitialNavigationDone();
+      } catch {}
+      logAuthLifecycleEvent({
+        correlationId,
+        stage: 'root-auth-gate:navigation',
+        status: 'success',
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        elapsedMs: Date.now() - startedAtMs,
+        outcome: 'environment_error',
+      });
+      return;
+    }
 
     // Still resolving auth or onboarding state — do nothing yet.
     if (bootstrap.status === 'loading') return;
@@ -202,7 +229,7 @@ export default function Index() {
         onboardingComplete: bootstrap.onboardingComplete,
       },
     });
-  }, [bootstrap, isPasswordRecovery, accountBlockedReason, router, confirmedReturningUser]);
+  }, [bootstrap, isPasswordRecovery, accountBlockedReason, environmentError, router, confirmedReturningUser]);
 
   // Loading, authenticated (redirecting), or an unauthenticated visitor whose
   // first-time-device check hasn't resolved yet — show spinner, never the

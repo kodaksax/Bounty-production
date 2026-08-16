@@ -23,6 +23,16 @@ export type AuthData = {
   // message (e.g. taps "Back to Sign In"), clearing the block so the root
   // auth gate falls through to the normal unauthenticated flow.
   clearAccountBlockedReason?: () => void
+  // Set when session restore failed because lib/config/env-guard.ts refused
+  // to connect (the build's immutable channel doesn't match the Supabase
+  // project the resolved EXPO_PUBLIC_SUPABASE_URL points at — e.g. a
+  // production binary that received an OTA bundle built for the wrong
+  // environment). This is NOT "signed out": the persisted session in
+  // SecureStore is left untouched. The root auth gate (app/index.tsx) must
+  // route to app/auth/environment-error.tsx instead of the sign-in screen,
+  // otherwise a user with a perfectly valid session is misled into thinking
+  // they were logged out and re-enters credentials against a broken client.
+  environmentError?: boolean
 }
 
 export const AuthContext = createContext<AuthData>({
@@ -34,6 +44,7 @@ export const AuthContext = createContext<AuthData>({
   isPasswordRecovery: false,
   accountBlockedReason: null,
   clearAccountBlockedReason: () => {},
+  environmentError: false,
 })
 
 export const useAuthContext = () => useContext(AuthContext)
