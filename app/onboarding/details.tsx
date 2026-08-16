@@ -165,7 +165,11 @@ export default function DetailsScreen() {
     posterFunnelStartedRef.current = true;
     analyticsService.trackEvent('post_started', {
       surface: 'onboarding',
-      resumedDraft: Boolean(onboardingData.taskDescription?.trim()),
+      // snake_case to match the same property on the main composer's
+      // post_started call (app/screens/CreateBounty/index.tsx) — previously
+      // `resumedDraft` here, which the (now-removed) analytics-service
+      // key-normalizer expanded into three competing spellings on PostHog.
+      resumed_draft: Boolean(onboardingData.taskDescription?.trim()),
     });
   }, [onboardingData.intent, onboardingData.taskDescription]);
 

@@ -281,36 +281,17 @@ export interface AnalyticsProperties {
   [key: string]: string | number | boolean | string[] | undefined;
 }
 
-const toSnakeCase = (key: string): string =>
-  key
-    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-    .replace(/[\s-]+/g, '_')
-    .toLowerCase();
-
-const toCamelCase = (key: string): string =>
-  key.toLowerCase().replace(/_([a-z0-9])/g, (_, letter: string) => letter.toUpperCase());
-
-const normalizePropertyKeys = (properties?: AnalyticsProperties): AnalyticsProperties => {
-  if (!properties) return {};
-
-  const normalized: AnalyticsProperties = {};
-
-  for (const [key, value] of Object.entries(properties)) {
-    normalized[key] = value;
-
-    const snakeKey = toSnakeCase(key);
-    if (!(snakeKey in normalized)) {
-      normalized[snakeKey] = value;
-    }
-
-    const camelKey = toCamelCase(key);
-    if (!(camelKey in normalized)) {
-      normalized[camelKey] = value;
-    }
-  }
-
-  return normalized;
-};
+// Historically this expanded every property key into both its snake_case and
+// camelCase form (so a call site passing `stepTitle` would also emit
+// `step_title` AND `steptitle` — the latter from lowercasing an
+// already-camelCase key with no underscores to convert, which is not a real
+// spelling anyone intended). That silently multiplied every event's property
+// count and fragmented PostHog breakdowns across spurious spellings of the
+// same field (see the `post_step_viewed` property audit). Call sites now emit
+// exactly the property keys they mean; this stays as an identity pass so any
+// future normalization need has one obvious place to live.
+const normalizePropertyKeys = (properties?: AnalyticsProperties): AnalyticsProperties =>
+  properties ? { ...properties } : {};
 
 // HeyCatch's event-property type is Record<string, string | number | boolean | null> —
 // narrower than AnalyticsProperties (which also allows string[] and undefined).

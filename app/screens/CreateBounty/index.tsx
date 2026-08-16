@@ -15,11 +15,20 @@ import { useEmailVerification } from 'hooks/use-email-verification';
 import { useBackHandler } from 'hooks/useBackHandler';
 import { analyticsService } from 'lib/services/analytics-service';
 import { useStripe } from 'lib/stripe-context';
-import { getUserFriendlyError } from 'lib/utils/error-messages';
-import { useWallet } from 'lib/wallet-context';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
+import { getUserFriendlyError } from 'lib/utils/error-messages';
+import { createForegroundTimer, getMonotonicNow } from 'lib/utils/foreground-timer';
+import { useWallet } from 'lib/wallet-context';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, KeyboardAvoidingView, Platform, Text, View } from 'react-native';
+import {
+    ActivityIndicator,
+    Alert,
+    AppState,
+    KeyboardAvoidingView,
+    Platform,
+    Text,
+    View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface CreateBountyFlowProps {
@@ -33,14 +42,7 @@ interface CreateBountyFlowProps {
 }
 
 const TOTAL_STEPS = 6;
-const STEP_TITLES = [
-  'Task',
-  'Photos',
-  'Location',
-  'Schedule',
-  'Compensation',
-  'Review & Confirm',
-];
+const STEP_TITLES = ['Task', 'Photos', 'Location', 'Schedule', 'Compensation', 'Review & Confirm'];
 
 /**
  * Identifies this posting surface in the shared posting funnel. The onboarding
@@ -57,7 +59,28 @@ const POST_SURFACE = 'create_flow';
  */
 const POST_FLOW_VARIANT = 'control';
 
-export function CreateBountyFlow({ onComplete, onCancel, onStepChange, entryPoint = 'unknown' }: CreateBountyFlowProps) {
+/**
+ * A poster can leave the app open on a step for a very long time without
+ * ever backgrounding it — cap the reported duration so one outlier session
+ * doesn't skew the funnel's median/p75, while still flagging it via
+ * `seconds_capped` so the dashboard can filter capped sessions out of timing
+ * percentiles without dropping them from conversion rates.
+ */
+const SECONDS_CAP = 1800;
+
+function capSeconds(rawSeconds: number): { seconds: number; capped: boolean } {
+  if (rawSeconds > SECONDS_CAP) {
+    return { seconds: SECONDS_CAP, capped: true };
+  }
+  return { seconds: rawSeconds, capped: false };
+}
+
+export function CreateBountyFlow({
+  onComplete,
+  onCancel,
+  onStepChange,
+  entryPoint = 'unknown',
+}: CreateBountyFlowProps) {
   const [currentStep, setCurrentStep] = useState(1);
   // 1 = advancing, -1 = going back. Read by each step's layout to pick the side
   // it slides in from.
@@ -80,8 +103,23 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange, entryPoin
 
   // "Graveyard" funnel bookkeeping (post_flow_started/post_step_completed/
   // post_step_abandoned/bounty_published — see analytics-service.ts).
-  const flowStartedAtRef = useRef<number | null>(null);
-  const stepEnteredAtRef = useRef<number>(Date.now());
+  // flowTimerRef/stepTimerRef accumulate FOREGROUND-ONLY elapsed time (see
+  // lib/utils/foreground-timer.ts) so a backgrounded phone call or a poster
+  // setting the app down doesn't inflate seconds_total/seconds_on_step.
+  // flowTimerRef starts once, at post_flow_started; stepTimerRef resets on
+  // every step transition.
+  const flowTimerRef = useRef(createForegroundTimer());
+  const stepTimerRef = useRef(createForegroundTimer());
+  // Guards post_step_viewed against firing more than once for the same step
+  // entry — see the post_step_viewed effect below.
+  const lastViewedStepRef = useRef<number | null>(null);
+  // Backgrounded time for the CURRENT step only, feeding post_step_abandoned's
+  // background_seconds. Reset alongside stepTimerRef on every step
+  // transition; backgroundedAtRef holds the in-progress segment while
+  // currently backgrounded (folded in on the next resume, or read live if
+  // still backgrounded when the flow unmounts).
+  const stepBackgroundMsRef = useRef(0);
+  const backgroundedAtRef = useRef<number | null>(null);
   const titleTypedFiredRef = useRef(false);
   // Set right before an explicit exit path runs, so the post_step_abandoned
   // cleanup below can attribute *why* the flow was left. Left null when the
@@ -100,7 +138,22 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange, entryPoin
     try {
       if (AppState?.addEventListener) {
         subscription = AppState.addEventListener('change', next => {
+          const wasActive = appStateRef.current === 'active';
+          const nowActive = next === 'active';
           appStateRef.current = next;
+
+          if (wasActive && !nowActive) {
+            flowTimerRef.current.pause();
+            stepTimerRef.current.pause();
+            backgroundedAtRef.current = getMonotonicNow();
+          } else if (!wasActive && nowActive) {
+            flowTimerRef.current.resume();
+            stepTimerRef.current.resume();
+            if (backgroundedAtRef.current !== null) {
+              stepBackgroundMsRef.current += getMonotonicNow() - backgroundedAtRef.current;
+              backgroundedAtRef.current = null;
+            }
+          }
         });
       }
     } catch {
@@ -141,14 +194,16 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange, entryPoin
     sessionUserId: session?.user?.id,
     canPostBounties,
     onPublished: (bountyId, meta) => {
+      const { seconds: secondsTotal, capped: secondsCapped } = capSeconds(
+        flowTimerRef.current.elapsedSeconds()
+      );
       analyticsService.trackEvent('bounty_published', {
         category: meta.category,
         amount_cents: meta.amountCents,
         // No category-chip UI exists yet on the control arm — always false.
         used_chip: false,
-        seconds_total: flowStartedAtRef.current
-          ? Number(((Date.now() - flowStartedAtRef.current) / 1000).toFixed(1))
-          : 0,
+        seconds_total: secondsTotal,
+        seconds_capped: secondsCapped,
         variant: POST_FLOW_VARIANT,
       });
       onComplete?.(bountyId);
@@ -234,16 +289,20 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange, entryPoin
   }, [currentStep, onStepChange]);
 
   // post_started / post_flow_started — once per entry into the flow, after
-  // the draft load settles so `resumedDraft` reflects whether the poster is
-  // resuming or starting cold.
+  // the draft load settles so `resumed_draft` reflects whether the poster is
+  // resuming or starting cold. `resumed_draft` (snake_case) is the single
+  // canonical spelling — it matches the onboarding surface's emit so the two
+  // don't fragment the breakdown.
   useEffect(() => {
     if (isLoading || startedRef.current) return;
     startedRef.current = true;
-    flowStartedAtRef.current = Date.now();
-    stepEnteredAtRef.current = Date.now();
+    flowTimerRef.current.start();
+    stepTimerRef.current.start();
+    stepBackgroundMsRef.current = 0;
+    backgroundedAtRef.current = appStateRef.current === 'active' ? null : getMonotonicNow();
     analyticsService.trackEvent('post_started', {
       surface: POST_SURFACE,
-      resumedDraft: Boolean(draft.title?.trim()),
+      resumed_draft: Boolean(draft.title?.trim()),
     });
     analyticsService.trackEvent('post_flow_started', {
       variant: POST_FLOW_VARIANT,
@@ -251,34 +310,48 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange, entryPoin
     });
   }, [isLoading, draft.title, entryPoint]);
 
-  // post_step_viewed — per-step drop-off. Emitted on every step change,
-  // including backwards navigation (`direction` disambiguates). Also fires
-  // post_step_completed when the change is a genuine forward advance, timing
-  // how long the poster spent on the step they just left.
+  // post_step_viewed — per-step drop-off. Emitted exactly ONCE per step
+  // entry, including backwards navigation (`direction` disambiguates).
+  // lastViewedStepRef is what makes it once-per-entry: this effect also
+  // re-runs whenever `isLoading` flips (draft autosaves do that on every
+  // keystroke), which previously re-emitted the same step view dozens of
+  // times per person. Also fires post_step_completed when the change is a
+  // genuine forward advance, timing how long the poster spent on the step
+  // they just left.
   useEffect(() => {
-    const previousStep = currentStepRef.current;
-    const previousStepEnteredAt = stepEnteredAtRef.current;
-    currentStepRef.current = currentStep;
-    stepEnteredAtRef.current = Date.now();
     if (isLoading) return;
+    if (lastViewedStepRef.current === currentStep) return;
+
+    const previousStep = currentStepRef.current;
+    const isFirstEntry = lastViewedStepRef.current === null;
+    lastViewedStepRef.current = currentStep;
+    currentStepRef.current = currentStep;
 
     analyticsService.trackEvent('post_step_viewed', {
       surface: POST_SURFACE,
-      step: currentStep,
-      stepTitle: STEP_TITLES[currentStep - 1],
       direction: currentStep >= previousStep ? 'forward' : 'back',
       step_index: currentStep,
       step_name: STEP_TITLES[currentStep - 1],
       variant: POST_FLOW_VARIANT,
     });
 
-    if (currentStep > previousStep) {
+    if (!isFirstEntry && currentStep > previousStep) {
+      const { seconds, capped } = capSeconds(stepTimerRef.current.elapsedSeconds());
       analyticsService.trackEvent('post_step_completed', {
         step_index: previousStep,
         step_name: STEP_TITLES[previousStep - 1],
-        seconds_on_step: Number(((Date.now() - previousStepEnteredAt) / 1000).toFixed(1)),
+        seconds_on_step: seconds,
+        seconds_capped: capped,
         variant: POST_FLOW_VARIANT,
       });
+    }
+
+    // New step — restart per-step accumulation, including any in-progress
+    // background segment (only time backgrounded *on this step* counts).
+    stepTimerRef.current.reset();
+    stepBackgroundMsRef.current = 0;
+    if (backgroundedAtRef.current !== null) {
+      backgroundedAtRef.current = getMonotonicNow();
     }
   }, [currentStep, isLoading]);
 
@@ -302,11 +375,19 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange, entryPoin
       // which unmounts this component directly without going through
       // handleCancel at all).
       const exitMethod: 'back' | 'close' | 'tab' | 'background' =
-        appStateRef.current !== 'active' ? 'background' : exitMethodRef.current ?? 'tab';
+        appStateRef.current !== 'active' ? 'background' : (exitMethodRef.current ?? 'tab');
+      const { seconds, capped } = capSeconds(stepTimerRef.current.elapsedSeconds());
+      // Fold in the still-open background segment when the flow is torn down
+      // while backgrounded — the common case for exit_method: 'background'.
+      const backgroundMs =
+        stepBackgroundMsRef.current +
+        (backgroundedAtRef.current === null ? 0 : getMonotonicNow() - backgroundedAtRef.current);
       analyticsService.trackEvent('post_step_abandoned', {
         step_index: currentStepRef.current,
         step_name: STEP_TITLES[currentStepRef.current - 1],
-        seconds_on_step: Number(((Date.now() - stepEnteredAtRef.current) / 1000).toFixed(1)),
+        seconds_on_step: seconds,
+        seconds_capped: capped,
+        background_seconds: Math.round(backgroundMs / 1000),
         exit_method: exitMethod,
         variant: POST_FLOW_VARIANT,
       });
@@ -315,9 +396,14 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange, entryPoin
 
   if (isLoading) {
     return (
-      <View className="flex-1 items-center justify-center" style={{ backgroundColor: theme.background }}>
+      <View
+        className="flex-1 items-center justify-center"
+        style={{ backgroundColor: theme.background }}
+      >
         <ActivityIndicator size="large" color={theme.text} />
-        <Text className="mt-4" style={{ color: theme.text }}>Loading draft...</Text>
+        <Text className="mt-4" style={{ color: theme.text }}>
+          Loading draft...
+        </Text>
       </View>
     );
   }
@@ -337,69 +423,69 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange, entryPoin
         {!isEmailVerified && <EmailVerificationBanner email={userEmail} />}
 
         <StepDirectionContext.Provider value={stepDirection}>
-        <View className="flex-1">
-          {currentStep === 1 && (
-            <StepTask
-              draft={draft}
-              onUpdate={saveDraft}
-              onNext={handleNext}
-              step={1}
-              totalSteps={TOTAL_STEPS}
-            />
-          )}
-          {currentStep === 2 && (
-            <StepPhotos
-              draft={draft}
-              onUpdate={saveDraft}
-              onNext={handleNext}
-              onBack={handleBack}
-              step={2}
-              totalSteps={TOTAL_STEPS}
-            />
-          )}
-          {currentStep === 3 && (
-            <StepWhere
-              draft={draft}
-              onUpdate={saveDraft}
-              onNext={handleNext}
-              onBack={handleBack}
-              step={3}
-              totalSteps={TOTAL_STEPS}
-            />
-          )}
-          {currentStep === 4 && (
-            <StepWhen
-              draft={draft}
-              onUpdate={saveDraft}
-              onNext={handleNext}
-              onBack={handleBack}
-              step={4}
-              totalSteps={TOTAL_STEPS}
-            />
-          )}
-          {currentStep === 5 && (
-            <StepPay
-              draft={draft}
-              onUpdate={saveDraft}
-              onNext={handleNext}
-              onBack={handleBack}
-              step={5}
-              totalSteps={TOTAL_STEPS}
-              onInsufficientBalance={showInsufficientBalanceFromAmountStep}
-            />
-          )}
-          {currentStep === 6 && (
-            <StepReviewQuick
-              draft={draft}
-              onSubmit={handlePublish}
-              onBack={handleBack}
-              onEdit={handleGoToStep}
-              isSubmitting={isSubmitting}
-              step={6}
-              totalSteps={TOTAL_STEPS}
-            />
-          )}
-        </View>
+          <View className="flex-1">
+            {currentStep === 1 && (
+              <StepTask
+                draft={draft}
+                onUpdate={saveDraft}
+                onNext={handleNext}
+                step={1}
+                totalSteps={TOTAL_STEPS}
+              />
+            )}
+            {currentStep === 2 && (
+              <StepPhotos
+                draft={draft}
+                onUpdate={saveDraft}
+                onNext={handleNext}
+                onBack={handleBack}
+                step={2}
+                totalSteps={TOTAL_STEPS}
+              />
+            )}
+            {currentStep === 3 && (
+              <StepWhere
+                draft={draft}
+                onUpdate={saveDraft}
+                onNext={handleNext}
+                onBack={handleBack}
+                step={3}
+                totalSteps={TOTAL_STEPS}
+              />
+            )}
+            {currentStep === 4 && (
+              <StepWhen
+                draft={draft}
+                onUpdate={saveDraft}
+                onNext={handleNext}
+                onBack={handleBack}
+                step={4}
+                totalSteps={TOTAL_STEPS}
+              />
+            )}
+            {currentStep === 5 && (
+              <StepPay
+                draft={draft}
+                onUpdate={saveDraft}
+                onNext={handleNext}
+                onBack={handleBack}
+                step={5}
+                totalSteps={TOTAL_STEPS}
+                onInsufficientBalance={showInsufficientBalanceFromAmountStep}
+              />
+            )}
+            {currentStep === 6 && (
+              <StepReviewQuick
+                draft={draft}
+                onSubmit={handlePublish}
+                onBack={handleBack}
+                onEdit={handleGoToStep}
+                isSubmitting={isSubmitting}
+                step={6}
+                totalSteps={TOTAL_STEPS}
+              />
+            )}
+          </View>
         </StepDirectionContext.Provider>
 
         {submitError && (
