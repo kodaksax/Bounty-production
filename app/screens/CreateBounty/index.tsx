@@ -1,4 +1,5 @@
 import { useBountyDraft } from 'app/hooks/useBountyDraft';
+import { PublishFundingGate } from 'app/screens/CreateBounty/PublishFundingGate';
 import { StepDirectionContext } from 'app/screens/CreateBounty/quick/QuickStepLayout';
 import { StepPay } from 'app/screens/CreateBounty/quick/StepPay';
 import { StepPhotos } from 'app/screens/CreateBounty/quick/StepPhotos';
@@ -6,23 +7,15 @@ import { StepReviewQuick } from 'app/screens/CreateBounty/quick/StepReviewQuick'
 import { StepTask } from 'app/screens/CreateBounty/quick/StepTask';
 import { StepWhen } from 'app/screens/CreateBounty/quick/StepWhen';
 import { StepWhere } from 'app/screens/CreateBounty/quick/StepWhere';
-import { bountyService } from 'app/services/bountyService';
-import { AddMoneyScreen } from 'components/add-money-screen';
+import { useBountyPublish } from 'app/screens/CreateBounty/useBountyPublish';
 import { ErrorBanner } from 'components/error-banner';
-import { InsufficientBalanceScreen } from 'components/insufficient-balance-screen';
 import { EmailVerificationBanner } from 'components/ui/email-verification-banner';
 import { useAuthContext } from 'hooks/use-auth-context';
 import { useEmailVerification } from 'hooks/use-email-verification';
 import { useBackHandler } from 'hooks/useBackHandler';
-import { useFormSubmission } from 'hooks/useFormSubmission';
 import { analyticsService } from 'lib/services/analytics-service';
-import { bountyPaymentsService } from 'lib/services/bounty-payments-service';
-import { offlineQueueService } from 'lib/services/offline-queue-service';
-import { stripeService } from 'lib/services/stripe-service';
 import { useStripe } from 'lib/stripe-context';
-import { getAmountNeeded, getInsufficientBalanceMessage, validateBalance } from 'lib/utils/bounty-validation';
 import { getUserFriendlyError } from 'lib/utils/error-messages';
-import { shouldFundNewBountiesWithPhase2 } from 'lib/utils/payment-architecture';
 import { useWallet } from 'lib/wallet-context';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import { useEffect, useRef, useState } from 'react';
@@ -57,18 +50,6 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
   // 1 = advancing, -1 = going back. Read by each step's layout to pick the side
   // it slides in from.
   const [stepDirection, setStepDirection] = useState(1);
-  // Insufficient-balance gate: shown instead of a hard error whenever the
-  // wallet can't cover the bounty amount — either as the poster commits to an
-  // amount on the Compensation step, or (as a safety net for balance changing
-  // between steps) at publish time. `insufficientBalanceOrigin` distinguishes
-  // the two so the gate knows what to do once the top-up resolves: return the
-  // poster to the amount step to tap Continue themselves, or finish the
-  // publish that was already in flight.
-  const [showInsufficientBalance, setShowInsufficientBalance] = useState(false);
-  const [showTopUp, setShowTopUp] = useState(false);
-  const [insufficientBalanceOrigin, setInsufficientBalanceOrigin] = useState<
-    'amount_step' | 'publish' | null
-  >(null);
   const { session } = useAuthContext();
   const { draft, saveDraft, clearDraft, isLoading } = useBountyDraft(session?.user?.id);
   const insets = useSafeAreaInsets();
@@ -77,309 +58,43 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
   const { theme } = useAppThemeContext();
   const { isEmailVerified, canPostBounties, userEmail } = useEmailVerification();
 
-  // Defensive invariant, independent of whichever handler most recently set
-  // showInsufficientBalance: if the wallet is ever sufficient to cover the
-  // draft amount while the read-only summary screen is showing, dismiss it
-  // immediately rather than leave it displaying a $0 (or negative) amount
-  // needed. `balance` is a live value from WalletContext, so this also
-  // catches funding that lands from outside this immediate top-up round
-  // trip — a delayed webhook/reconcile finishing late, or the poster funding
-  // their wallet from the Wallet tab while this screen happens to still be
-  // mounted. This never auto-submits (that stays an explicit decision inside
-  // the top-up success handler below).
-  //
-  // Deliberately scoped to showInsufficientBalance only, NOT showTopUp: the
-  // AddMoneyScreen itself already has an in-flight payment/success-modal
-  // sequence once showTopUp is true (the same balance update that would
-  // satisfy this check is usually the deposit AddMoneyScreen's own payment
-  // just made) — reacting to the balance change here would yank the screen
-  // away and its unacknowledged success modal with it, before the poster has
-  // even seen "Success!" or onAddMoney has run. AddMoneyScreen's onAddMoney
-  // callback is the correct, sole trigger for leaving showTopUp.
-  useEffect(() => {
-    if (!showInsufficientBalance) return;
-    if (!validateBalance(draft.amount, balance, draft.isForHonor)) return;
-    setShowInsufficientBalance(false);
-    setInsufficientBalanceOrigin(null);
-  }, [balance, draft.amount, draft.isForHonor, showInsufficientBalance]);
-
-  // Posting-funnel bookkeeping. `publishedRef` distinguishes a real abandon
-  // (user backed out) from unmounting after a successful publish, so
-  // `post_abandoned` never double-counts a completed post.
+  // Posting-funnel bookkeeping. `startedRef`/`currentStepRef` stay local to
+  // this orchestrator; `publishedRef` (below) comes from useBountyPublish so
+  // post_abandoned never double-counts a completed publish.
   const startedRef = useRef(false);
-  const publishedRef = useRef(false);
   // Mirrors `currentStep` for use inside cleanup/callbacks that would
   // otherwise close over a stale value.
   const currentStepRef = useRef(1);
 
-  // Use form submission hook with debouncing
-  const {
-    submit,
-    isSubmitting,
-    error: submitError,
-    reset,
-  } = useFormSubmission(
-    async () => {
-      // Email verification gate: Block posting if email not verified
-      if (!canPostBounties) {
-        throw new Error(
-          'Please verify your email address before posting bounties. Check your inbox for the verification link.'
-        );
-      }
-
-      // Route new paid bounties to the Stripe-native Phase 2 escrow path when
-      // enabled; existing/legacy bounties always keep the custodial wallet
-      // flow they were created with (see lib/utils/payment-architecture.ts).
-      const useV2Payments =
-        !draft.isForHonor && draft.amount > 0 && shouldFundNewBountiesWithPhase2();
-
-      // Check balance before posting using shared validation (for non-honor,
-      // v1 bounties). The v2 path charges a card directly via Stripe, so the
-      // custodial wallet balance is not relevant there.
-      if (!useV2Payments && !validateBalance(draft.amount, balance, draft.isForHonor)) {
-        // The hard stop: poster composed a priced bounty, reached Publish, and
-        // is refused because their wallet was never funded — with no way to
-        // add funds from here. This is the terminal form of the funnel's
-        // biggest leak, so it is counted separately from the preset-tap block.
-        analyticsService.trackEvent('post_amount_blocked_by_balance', {
-          surface: POST_SURFACE,
-          attemptedAmount: draft.amount,
-          balance,
-          shortfall: Number((draft.amount - balance).toFixed(2)),
-          method: 'publish',
-        });
-        throw new Error(getInsufficientBalanceMessage(draft.amount, balance));
-      }
-
-      // Create the bounty first (before deducting funds to prevent loss on failure).
-      // The service may return `created: false` when this submission is an
-      // idempotent retry of a recent identical create (double-tap / network
-      // retry). In that case the original call already funded escrow, so we
-      // must NOT fund escrow again.
-      const { bounty: createdBounty, created } = await bountyService.createBounty(draft);
-
-      if (!createdBounty) {
-        throw new Error('Failed to create bounty');
-      }
-
-      // Only create escrow for fresh creates of paid bounties.
-      if (created && !draft.isForHonor && draft.amount > 0) {
-        try {
-          await analyticsService.trackEvent('payment_architecture_routed', {
-            bountyId: String(createdBounty.id),
-            version: useV2Payments ? 2 : 1,
-            context: 'funding',
-          });
-        } catch {
-          /* analytics is best-effort */
-        }
-
-        if (useV2Payments) {
-          try {
-            try {
-              await analyticsService.trackEvent('payment_initiated', {
-                bountyId: String(createdBounty.id),
-                architecture: 'v2',
-                amount: draft.amount,
-              });
-            } catch {
-              /* analytics is best-effort */
-            }
-
-            const paymentResult = await bountyPaymentsService.createBountyPayment(
-              String(createdBounty.id)
-            );
-
-            // Confirm the PaymentIntent against the poster's saved payment
-            // method. This codebase does not use Stripe's PaymentSheet UI
-            // component — card confirmation goes through stripeService
-            // directly, the same call used by the wallet deposit flow (see
-            // hooks/use-wallet-deposit.ts / lib/stripe-context.tsx).
-            const paymentMethodId = paymentMethods[0]?.id;
-            if (!paymentMethodId) {
-              throw new Error('No payment method available. Please add a payment method first.');
-            }
-            const confirmedIntent = await stripeService.confirmPaymentSecure(
-              paymentResult.clientSecret,
-              paymentMethodId,
-              undefined,
-              { userId: session?.user?.id }
-            );
-            if (confirmedIntent.status !== 'succeeded') {
-              throw new Error('Payment was not completed. Please try again.');
-            }
-
-            try {
-              await analyticsService.trackEvent('escrow_funded', {
-                bountyId: String(createdBounty.id),
-                architecture: 'v2',
-                amount: draft.amount,
-              });
-            } catch {
-              /* analytics is best-effort */
-            }
-          } catch (escrowError) {
-            try {
-              await analyticsService.trackEvent('payment_failed', {
-                bountyId: String(createdBounty.id),
-                architecture: 'v2',
-                stage: 'create_or_confirm',
-              });
-            } catch {
-              /* analytics is best-effort */
-            }
-            // Best-effort: cancel the PaymentIntent server-side before rolling
-            // back the bounty (no-ops safely if it never reached create).
-            try {
-              await bountyPaymentsService.cancelBountyPayment(String(createdBounty.id));
-            } catch {
-              /* best-effort — the bounty delete below is the real safety net */
-            }
-            try {
-              await bountyService.deleteBounty(createdBounty.id);
-              console.error('Bounty creation rolled back due to failed Stripe payment:', escrowError);
-            } catch (deleteErr) {
-              console.error('Failed to delete bounty after payment failure:', deleteErr);
-              throw new Error(
-                'Failed to charge your card and could not roll back the bounty. Please contact support.'
-              );
-            }
-            throw new Error('Failed to charge your card for this bounty. Your bounty was not posted.');
-          }
-        } else {
-          try {
-            await createEscrow(createdBounty.id, draft.amount, draft.title, session?.user?.id ?? '');
-            try {
-              await analyticsService.trackEvent('escrow_funded', {
-                bountyId: String(createdBounty.id),
-                architecture: 'v1',
-                amount: draft.amount,
-              });
-            } catch {
-              /* analytics is best-effort */
-            }
-          } catch (escrowError) {
-            try {
-              await analyticsService.trackEvent('payment_failed', {
-                bountyId: String(createdBounty.id),
-                architecture: 'v1',
-                stage: 'create_escrow',
-              });
-            } catch {
-              /* analytics is best-effort */
-            }
-            // If escrow creation fails, delete the bounty to maintain consistency
-            try {
-              await bountyService.deleteBounty(createdBounty.id);
-              console.error('Bounty creation rolled back due to failed escrow:', escrowError);
-            } catch (deleteErr) {
-              console.error('Failed to delete bounty after escrow failure:', deleteErr);
-              throw new Error(
-                'Failed to create escrow and could not roll back bounty. Please contact support.'
-              );
-            }
-            throw new Error('Failed to create escrow for this bounty. Your bounty was not posted.');
-          }
-        }
-      }
-
-      const isOnline = offlineQueueService.getOnlineStatus();
-
-      // post_published — the funnel's terminal step for the poster. Guarded on
-      // `created` so an idempotent retry of an already-published bounty (see
-      // bountyService.createBounty) doesn't double-count. `funded` is the
-      // headline metric: did this published bounty have real money on it.
-      if (created) {
-        publishedRef.current = true;
-        analyticsService.trackEvent('post_published', {
-          surface: POST_SURFACE,
-          bountyId: String(createdBounty.id),
-          amount: draft.isForHonor ? 0 : draft.amount,
-          isForHonor: draft.isForHonor,
-          funded: !draft.isForHonor && draft.amount > 0,
-          category: draft.category || 'none',
-          workType: draft.workType,
-          architecture: useV2Payments ? 2 : 1,
-          queuedOffline: !isOnline,
-        });
-      }
-
-      // Clear draft on success
-      await clearDraft();
-
-      if (Platform.OS === 'web') {
-        // Alert.alert is a no-op on web — navigate immediately after success
-        if (onComplete) {
-          onComplete(createdBounty.id.toString());
-        }
-      } else {
-        Alert.alert(
-          isOnline ? 'Bounty Posted! 🎉' : 'Bounty Queued! 📋',
-          isOnline
-            ? 'Your bounty has been posted successfully. Hunters will be able to see it and apply.'
-            : "You're offline. Your bounty will be posted automatically when you reconnect.",
-          [
-            {
-              text: isOnline ? 'View Bounty' : 'OK',
-              onPress: () => {
-                if (onComplete) {
-                  onComplete(createdBounty.id.toString());
-                }
-              },
-            },
-          ]
-        );
-      }
-    },
-    {
-      debounceMs: 1000,
-      onError: error => {
-        const userError = getUserFriendlyError(error);
-        // Always log the raw error so it appears in Metro/device logs regardless of platform
-        console.error('[CreateBounty] bounty_create failed:', error?.message ?? error);
-        if (Platform.OS === 'web') {
-          // Error is already surfaced via the ErrorBanner component below
-        } else {
-          Alert.alert(
-            userError.title,
-            userError.message + '\n\nYour draft has been saved. Please try again.',
-            [{ text: 'OK' }]
-          );
-        }
-      },
-    }
-  );
-
-  // Gate at the UI boundary: check balance before ever calling submit(), so an
-  // expected insufficient-balance case routes to the Top Up screen instead of
-  // taking the throw/Alert error path (submit's own check stays as a safety
-  // net for anything that reaches it despite this gate, e.g. a stale balance
-  // read racing a concurrent spend elsewhere).
-  const handlePublish = () => {
-    const useV2Payments =
-      !draft.isForHonor && draft.amount > 0 && shouldFundNewBountiesWithPhase2();
-
-    if (!useV2Payments && !validateBalance(draft.amount, balance, draft.isForHonor)) {
-      analyticsService.trackEvent('post_amount_blocked_by_balance', {
-        surface: POST_SURFACE,
-        attemptedAmount: draft.amount,
-        balance,
-        shortfall: Number((draft.amount - balance).toFixed(2)),
-        method: 'publish',
-      });
-      setInsufficientBalanceOrigin('publish');
-      setShowInsufficientBalance(true);
-      return;
-    }
-
-    submit();
+  /** Jump to an arbitrary step (the review screen's Edit links, and the
+   * insufficient-balance gate's "Edit amount"). */
+  const handleGoToStep = (target: number) => {
+    setStepDirection(target >= currentStep ? 1 : -1);
+    setCurrentStep(target);
   };
 
-  useEffect(() => {
-    if (!isLoading) {
-      // Draft is already saved via saveDraft calls in step components
-    }
-  }, [draft, isLoading]);
+  const {
+    publish: handlePublish,
+    retry,
+    isSubmitting,
+    submitError,
+    resetSubmitError,
+    publishedRef,
+    funding,
+    showInsufficientBalanceFromAmountStep,
+  } = useBountyPublish({
+    surface: POST_SURFACE,
+    draft,
+    clearDraft,
+    balance,
+    createEscrow,
+    paymentMethods,
+    sessionUserId: session?.user?.id,
+    canPostBounties,
+    onPublished: bountyId => onComplete?.(bountyId),
+    onEditAmount: () => handleGoToStep(5),
+    onCancelGate: onCancel,
+  });
 
   const handleNext = () => {
     if (currentStep < TOTAL_STEPS) {
@@ -395,12 +110,6 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
       setStepDirection(-1);
       setCurrentStep(prev);
     }
-  };
-
-  /** Jump to an arbitrary step (the review screen's Edit links). */
-  const handleGoToStep = (target: number) => {
-    setStepDirection(target >= currentStep ? 1 : -1);
-    setCurrentStep(target);
   };
 
   const handleCancel = () => {
@@ -486,71 +195,8 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
     );
   }
 
-  if (showTopUp) {
-    const shortfall = getAmountNeeded(draft.amount, balance);
-    return (
-      <AddMoneyScreen
-        initialAmount={shortfall.toFixed(2)}
-        headerLabel="ADD FUNDS TO POST"
-        primaryCtaLabel={amount => `Add $${amount.toFixed(2)} & Continue`}
-        onBack={() => {
-          setShowTopUp(false);
-          setShowInsufficientBalance(true);
-        }}
-        onAddMoney={() => {
-          // The deposit is already applied to wallet state inside
-          // useWalletDeposit — `balance` here already reflects it.
-          setShowTopUp(false);
-
-          // The poster can edit the pre-filled amount, so the top-up may be
-          // less than the full shortfall. Re-check rather than assuming
-          // success: if still short, show the gate again immediately with the
-          // now-smaller shortfall instead of silently dropping the poster back
-          // at a screen that looks unchanged (amount_step) or auto-continuing
-          // a publish that would just fail the same check again (publish).
-          if (!validateBalance(draft.amount, balance, draft.isForHonor)) {
-            setShowInsufficientBalance(true);
-            return;
-          }
-
-          setShowInsufficientBalance(false);
-          const origin = insufficientBalanceOrigin;
-          setInsufficientBalanceOrigin(null);
-          if (origin === 'publish') {
-            // Continue straight into publishing instead of dropping the
-            // poster back at Review, so returning from top-up finishes the
-            // post automatically.
-            submit();
-          }
-          // amount_step origin: draft.amount is already set to the chosen
-          // amount, so simply returning to the Compensation step (now with a
-          // cleared balance warning) is enough — the poster taps Continue.
-        }}
-      />
-    );
-  }
-
-  if (showInsufficientBalance) {
-    return (
-      <InsufficientBalanceScreen
-        walletBalance={balance}
-        bountyAmount={draft.amount}
-        onAddFunds={() => {
-          setShowInsufficientBalance(false);
-          setShowTopUp(true);
-        }}
-        onEditAmount={() => {
-          setShowInsufficientBalance(false);
-          setInsufficientBalanceOrigin(null);
-          handleGoToStep(5);
-        }}
-        onCancel={() => {
-          setShowInsufficientBalance(false);
-          setInsufficientBalanceOrigin(null);
-          onCancel?.();
-        }}
-      />
-    );
+  if (funding.showTopUp || funding.showInsufficientBalance) {
+    return <PublishFundingGate funding={funding} />;
   }
 
   return (
@@ -612,10 +258,7 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
               onBack={handleBack}
               step={5}
               totalSteps={TOTAL_STEPS}
-              onInsufficientBalance={() => {
-                setInsufficientBalanceOrigin('amount_step');
-                setShowInsufficientBalance(true);
-              }}
+              onInsufficientBalance={showInsufficientBalanceFromAmountStep}
             />
           )}
           {currentStep === 6 && (
@@ -636,8 +279,8 @@ export function CreateBountyFlow({ onComplete, onCancel, onStepChange }: CreateB
           <View className="px-4 pb-4">
             <ErrorBanner
               error={getUserFriendlyError(submitError)}
-              onDismiss={reset}
-              onAction={submitError ? () => submit(draft) : undefined}
+              onDismiss={resetSubmitError}
+              onAction={submitError ? () => retry(draft) : undefined}
             />
           </View>
         )}
