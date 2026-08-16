@@ -1005,6 +1005,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
             {activeTab === "new" ? (
               <View className="flex-1">
                 <CreateBountyFlow
+                  entryPoint="postings_new_tab"
                   onComplete={(bountyId) => {
                     // After creation, go to main feed and refresh publicly visible list
                     setShowBottomNav?.(true)
