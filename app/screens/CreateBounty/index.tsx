@@ -1,7 +1,4 @@
 import { useBountyDraft } from 'app/hooks/useBountyDraft';
-// Quick flow step screens. The previous long-form steps (StepTitle,
-// StepDetails, StepSchedule, StepCompensation, StepLocation, StepReview) are
-// preserved alongside these but are no longer rendered.
 import { StepDirectionContext } from 'app/screens/CreateBounty/quick/QuickStepLayout';
 import { StepPay } from 'app/screens/CreateBounty/quick/StepPay';
 import { StepPhotos } from 'app/screens/CreateBounty/quick/StepPhotos';
