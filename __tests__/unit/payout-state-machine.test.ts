@@ -14,6 +14,7 @@
 import {
   RECOVERABLE_INSTANT_PAYOUT_ERROR_CODES,
   NON_RECOVERABLE_INSTANT_PAYOUT_ERROR_CODES,
+  buildNativePayoutIdempotencyKey,
   isRecoverableInstantPayoutError,
   mapStripePayoutStatusToLedger,
   isTerminalLedgerStatus,
@@ -354,5 +355,33 @@ describe('idempotency keys are deterministic', () => {
     expect(buildTransferIdempotencyKey({ ...args, purpose: 'standard' })).not.toBe(
       buildPayoutIdempotencyKey({ ...args, method: 'standard' })
     );
+  });
+
+  test('hashed keys stay within Stripe’s 255-character limit even with a long client key', () => {
+    const longClientKey = 'k'.repeat(200);
+    expect(
+      buildTransferIdempotencyKey({
+        userId: '12345678-1234-1234-1234-123456789abc',
+        clientKey: longClientKey,
+        amountCents: 9_999_999,
+        purpose: 'standard',
+      }).length
+    ).toBeLessThanOrEqual(255);
+    expect(
+      buildPayoutIdempotencyKey({
+        userId: '12345678-1234-1234-1234-123456789abc',
+        clientKey: longClientKey,
+        amountCents: 9_999_999,
+        method: 'standard',
+      }).length
+    ).toBeLessThanOrEqual(255);
+    expect(
+      buildNativePayoutIdempotencyKey({
+        userId: '12345678-1234-1234-1234-123456789abc',
+        clientKey: longClientKey,
+        amountCents: 9_999_999,
+        method: 'standard',
+      }).length
+    ).toBeLessThanOrEqual(255);
   });
 });

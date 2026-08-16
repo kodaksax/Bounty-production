@@ -169,9 +169,9 @@ describe('withdrawal serialization pre-check', () => {
     expect(preChecks.length).toBeGreaterThanOrEqual(2);
   });
 
-  test('the pre-check runs before withdraw_balance in the transfer route', () => {
+  test('the pre-check runs before begin_legacy_withdrawal in the transfer route', () => {
     const routeStart = stripped.indexOf('[connect/transfer] blocked');
-    const debit = stripped.indexOf("rpc('withdraw_balance'", routeStart);
+    const debit = stripped.indexOf("rpc('begin_legacy_withdrawal'", routeStart);
     expect(routeStart).toBeGreaterThan(-1);
     expect(debit).toBeGreaterThan(routeStart);
   });
@@ -179,6 +179,51 @@ describe('withdrawal serialization pre-check', () => {
   test('a lost race refunds rather than stranding a deducted balance', () => {
     expect(stripped).toContain('idx_wallet_tx_one_pending_withdrawal');
     expect(stripped).toContain('inFlightWithdrawalResponse');
+  });
+
+  test('both legacy money-moving routes reserve the pending row before the Stripe call', () => {
+    const transferRoute = regionBetween(
+      stripped,
+      "if (subPath === '/transfer')",
+      "if (subPath === '/retry-transfer')"
+    );
+    const instantRoute = regionBetween(
+      stripped,
+      "if (subPath === '/instant-payout')",
+      "if (req.method === 'GET' && subPath === '/bank-accounts')"
+    );
+    expect(transferRoute.indexOf("rpc('begin_legacy_withdrawal'")).toBeGreaterThan(-1);
+    expect(transferRoute.indexOf("rpc('begin_legacy_withdrawal'")).toBeLessThan(
+      transferRoute.indexOf('stripe.transfers.create')
+    );
+    expect(instantRoute.indexOf("rpc('begin_legacy_withdrawal'")).toBeGreaterThan(-1);
+    expect(instantRoute.indexOf("rpc('begin_legacy_withdrawal'")).toBeLessThan(
+      instantRoute.indexOf('stripe.transfers.create')
+    );
+  });
+
+  test('retry-transfer re-reserves the failed row before creating a new transfer', () => {
+    const retryRoute = regionBetween(
+      stripped,
+      "if (subPath === '/retry-transfer')",
+      "if (subPath === '/instant-payout')"
+    );
+    expect(retryRoute.indexOf("rpc('retry_failed_withdrawal'")).toBeGreaterThan(-1);
+    expect(retryRoute.indexOf("rpc('retry_failed_withdrawal'")).toBeLessThan(
+      retryRoute.indexOf('stripe.transfers.create')
+    );
+  });
+
+  test('retry-transfer does not swallow a post-payout history update failure', () => {
+    const retryRoute = regionBetween(
+      stripped,
+      "if (subPath === '/retry-transfer')",
+      "if (subPath === '/instant-payout')"
+    );
+    expect(retryRoute).toContain('retry transfer succeeded but transaction record failed');
+    expect(retryRoute).toContain('Transaction history may take a moment to update.');
+    expect(retryRoute).toContain('.select()');
+    expect(retryRoute).toContain('.single()');
   });
 });
 
@@ -248,13 +293,13 @@ describe('webhooks — failed and canceled payouts never complete a withdrawal',
     )
   );
 
-  test('writes only the failed status', () => {
-    expect(undelivered).toMatch(/status:\s*'failed'/);
+  test('routes the failed transition through the atomic refund RPC', () => {
+    expect(undelivered).toContain("rpc('fail_legacy_withdrawal'");
     expect(undelivered).not.toMatch(/status:\s*'completed'/);
   });
 
-  test('rolls back only from pending, so a settled withdrawal is untouchable', () => {
-    expect(undelivered).toMatch(/\.eq\('status',\s*'pending'\)/);
+  test('duplicate or out-of-order deliveries still no-op instead of refunding twice', () => {
+    expect(undelivered).toContain('Skipping duplicate refund');
     expect(undelivered).not.toMatch(/\.eq\('status',\s*'completed'\)/);
   });
 

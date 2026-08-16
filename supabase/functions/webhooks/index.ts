@@ -330,19 +330,13 @@ async function handleUndeliveredPayout(
     if (action.kind === 'noop') {
       console.log(`[webhooks] payout.${outcome} ${payout.id}: no ledger action (${action.reason})`);
     } else {
-      // CAS on status='pending'. Withdrawals now live in 'pending' until
-      // payout.paid promotes them, so that is the only state from which a
-      // failure can roll back. Crucially this also means a payout.failed
-      // arriving AFTER a payout.paid (out-of-order delivery) matches nothing
-      // and cannot un-complete a settled withdrawal or refund it a second
-      // time — the terminal states absorb.
-      const { data: updatedTx, error: txUpdateError } = await supabase
-        .from('wallet_transactions')
-        .update({
-          status: 'failed',
-          stripe_payout_id: payout.id,
-          updated_at: new Date().toISOString(),
-          metadata: {
+      const refundAmount = Math.abs(candidateTxRow.amount);
+      const { data: failedTx, error: failedTxError } = await supabase
+        .rpc('fail_legacy_withdrawal', {
+          p_transaction_id: candidateTxRow.id,
+          p_user_id: profile.id,
+          p_stripe_payout_id: payout.id,
+          p_metadata_patch: {
             ...candidateMetadata,
             payout_status: outcome,
             payout_failure_code: payout.failure_code ?? (outcome === 'canceled' ? 'canceled' : null),
@@ -350,42 +344,23 @@ async function handleUndeliveredPayout(
             payout_id: payout.id,
           },
         })
-        .eq('id', candidateTxRow.id)
-        .eq('status', 'pending') // optimistic-lock guard against a concurrent redelivery
-        .select()
-        .maybeSingle();
+        .single();
 
-      if (txUpdateError) {
-        console.error(`[webhooks] Failed to update transaction for payout.${outcome}`, {
+      if (failedTxError) {
+        console.error(`[webhooks] Failed to apply atomic refund for payout.${outcome}`, {
           transactionId: candidateTxRow.id,
           payoutId: payout.id,
-          error: txUpdateError,
+          error: failedTxError,
         });
-        throw txUpdateError;
+        throw failedTxError;
       }
 
-      if (!updatedTx) {
+      const refundResult = failedTx as { refunded?: boolean | null; refund_amount?: number | null } | null;
+      if (!refundResult?.refunded) {
         console.log(
           `[webhooks] Skipping duplicate refund for payout ${payout.id} — a concurrent delivery already resolved this transaction`
         );
       } else {
-        const refundAmount = Math.abs(candidateTxRow.amount);
-        const { error: rpcError } = await supabase.rpc('update_balance', {
-          p_user_id: profile.id,
-          p_amount: refundAmount,
-        });
-        if (rpcError) {
-          const { error: retryError } = await supabase.rpc('update_balance', {
-            p_user_id: profile.id,
-            p_amount: refundAmount,
-          });
-          if (retryError) {
-            logCritical(`balance refund for ${outcome} payout could not be applied — letting Stripe retry`, {
-              payoutId: payout.id, userId: profile.id, error: retryError,
-            });
-            throw retryError;
-          }
-        }
         console.log(
           `[webhooks] Refunded $${refundAmount} to user ${profile.id} for ${outcome} payout ${payout.id}`
         );
@@ -2200,6 +2175,9 @@ Deno.serve(async (req: Request) => {
                     }
                   : null,
               });
+              const shouldReconcileInstantFee =
+                !!candidateTx &&
+                (payout.method === 'instant' || candidateTx.payout_method === 'instant');
 
               if (action.kind === 'noop') {
                 console.log(
@@ -2258,10 +2236,10 @@ Deno.serve(async (req: Request) => {
                     `[webhooks] payout.paid ${payout.id} matched an already-resolved withdrawal, no change`
                   );
                 }
+              }
 
-                if (payout.method === 'instant' || candidateTx.payout_method === 'instant') {
-                  await reconcileInstantPayoutFee(stripe, supabase, payout, paidAccountId, candidateTx.id);
-                }
+              if (shouldReconcileInstantFee && candidateTx) {
+                await reconcileInstantPayoutFee(stripe, supabase, payout, paidAccountId, candidateTx.id);
               }
             } catch (reconcileError) {
               console.error('[webhooks] payout.paid completion step failed', {

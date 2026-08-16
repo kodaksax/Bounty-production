@@ -41,6 +41,16 @@ CREATE TABLE IF NOT EXISTS public.payout_audit_log (
   created_at                      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE public.payout_audit_log
+  ALTER COLUMN user_id DROP NOT NULL;
+
+ALTER TABLE public.payout_audit_log
+  DROP CONSTRAINT IF EXISTS payout_audit_log_user_id_fkey;
+
+ALTER TABLE public.payout_audit_log
+  ADD CONSTRAINT payout_audit_log_user_id_fkey
+    FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
 COMMENT ON TABLE public.payout_audit_log IS
   'Append-only audit trail of every withdrawal/payout decision made by the connect Edge Function. Written by service role only. Created 2026-08-16 after the instant-payout fallback incident revealed writePayoutAudit() had been failing silently against a non-existent table.';
 
@@ -58,6 +68,9 @@ CREATE INDEX IF NOT EXISTS idx_payout_audit_log_event_created
   ON public.payout_audit_log (event, created_at DESC);
 
 ALTER TABLE public.payout_audit_log ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users read own payout audit log" ON public.payout_audit_log;
+DROP POLICY IF EXISTS "Admins read all payout audit logs" ON public.payout_audit_log;
 
 -- No policy is defined on purpose. service_role bypasses RLS; authenticated
 -- and anon therefore have no path to this table. Revoke the default grants
