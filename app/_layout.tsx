@@ -1,3 +1,4 @@
+import { analytics, HeyCatchProvider } from '@heycatch/sdk';
 import { ThemeProvider } from 'components/theme-provider';
 import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
@@ -44,6 +45,15 @@ import posthog from '../lib/posthog';
 import { safeCleanup } from '../lib/utils/lifecycle';
 
 import { registerDeviceSession } from '../lib/services/auth-service';
+
+analytics.init({
+  projectKey: 'hck_pk_L0Qj5d0kLrDm_dwGl8j4tSnUlMFnR5vc',
+  install: {
+    framework: 'react-native',
+    frameworkVersion: '19',
+    agent: 'claude-code',
+  },
+});
 
 // Lazily require Sentry to avoid importing native module at module-evaluation time
 let Sentry: any = null;
@@ -342,17 +352,19 @@ function RootLayout({ children }: { children: React.ReactNode }) {
         captureTouches: false,
       }}
     >
-      <SafeAreaProvider>
-        <GestureHandlerRootView style={styles.gestureRoot}>
-          <AppThemeProvider>
-            <BountyFormatProvider>
-              <BackgroundColorProvider>
-                <LayoutContent />
-              </BackgroundColorProvider>
-            </BountyFormatProvider>
-          </AppThemeProvider>
-        </GestureHandlerRootView>
-      </SafeAreaProvider>
+      <HeyCatchProvider>
+        <SafeAreaProvider>
+          <GestureHandlerRootView style={styles.gestureRoot}>
+            <AppThemeProvider>
+              <BountyFormatProvider>
+                <BackgroundColorProvider>
+                  <LayoutContent />
+                </BackgroundColorProvider>
+              </BountyFormatProvider>
+            </AppThemeProvider>
+          </GestureHandlerRootView>
+        </SafeAreaProvider>
+      </HeyCatchProvider>
     </PostHogProvider>
   );
 }

@@ -5,6 +5,7 @@
 // `lib/posthog.ts`, so non-React surfaces (services, hooks, startup) emit the
 // exact same events into the exact same PostHog project as the React
 // `usePostHog()` hook and autocapture.
+import { analytics as heycatch } from '@heycatch/sdk';
 import { Platform } from 'react-native';
 import {
     isPostHogReady,
@@ -274,6 +275,34 @@ const normalizePropertyKeys = (properties?: AnalyticsProperties): AnalyticsPrope
   return normalized;
 };
 
+// HeyCatch's event-property type is Record<string, string | number | boolean | null> —
+// narrower than AnalyticsProperties (which also allows string[] and undefined).
+// Arrays are joined so the value still reaches the dashboard instead of being dropped.
+// Takes Record<string, unknown> rather than AnalyticsProperties because callers
+// (e.g. trackEvent's enrichedProperties) legitimately widen fields like `userId`
+// to `string | null`, which AnalyticsProperties' index signature doesn't allow.
+const toHeyCatchProperties = (
+  properties: Record<string, unknown>
+): Record<string, string | number | boolean | null> => {
+  const result: Record<string, string | number | boolean | null> = {};
+  for (const [key, value] of Object.entries(properties)) {
+    if (value === undefined) continue;
+    if (Array.isArray(value)) {
+      result[key] = value.join(',');
+    } else if (
+      typeof value === 'string' ||
+      typeof value === 'number' ||
+      typeof value === 'boolean' ||
+      value === null
+    ) {
+      result[key] = value;
+    } else {
+      result[key] = String(value);
+    }
+  }
+  return result;
+};
+
 class AnalyticsService {
   private initialized = false;
   private userId: string | null = null;
@@ -329,6 +358,12 @@ class AnalyticsService {
         // ignore — PostHog may not be ready
       }
 
+      try {
+        heycatch.setIdentity(userId, properties);
+      } catch {
+        // ignore — HeyCatch may not be ready
+      }
+
       // Set user in Sentry
       try {
         // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
@@ -373,6 +408,12 @@ class AnalyticsService {
         // ignore — never let analytics failures bubble up to the caller
       }
 
+      try {
+        heycatch.trackEvent(event, toHeyCatchProperties(enrichedProperties));
+      } catch {
+        // ignore — HeyCatch may not be ready
+      }
+
       // Add breadcrumb to Sentry for context (if available)
       try {
         // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
@@ -408,6 +449,12 @@ class AnalyticsService {
         posthogSetPersonProperties(properties);
       } catch {
         // ignore — PostHog may not be ready
+      }
+
+      try {
+        heycatch.setPersonProperties(properties);
+      } catch {
+        // ignore — HeyCatch may not be ready
       }
 
       try {
@@ -549,6 +596,12 @@ class AnalyticsService {
         posthogReset();
       } catch {
         // ignore
+      }
+
+      try {
+        heycatch.resetIdentity();
+      } catch {
+        // ignore — HeyCatch may not be ready
       }
 
       try {

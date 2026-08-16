@@ -3,9 +3,16 @@
 // This is the most critical function to migrate as it processes payments
 // and must verify Stripe's webhook signature.
 
+import { analytics as heycatch } from 'npm:@heycatch/sdk@0.7.0/server';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Stripe from 'npm:stripe@14';
 import type { WalletTransaction } from '../_shared/types.ts';
+
+// Module scope, once per server bundle — see the HeyCatch RN/server install
+// guide. Business events fired below (payment_completed, payout_success,
+// payout_failed) are additive analytics only; they never affect webhook
+// control flow or the balance/transfer logic around them.
+heycatch.init({ projectKey: 'hck_pk_L0Qj5d0kLrDm_dwGl8j4tSnUlMFnR5vc' });
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -357,6 +364,19 @@ async function handleUndeliveredPayout(
         console.log(
           `[webhooks] Refunded $${refundAmount} to user ${profile.id} for ${outcome} payout ${payout.id}`
         );
+        try {
+          await heycatch.trackEvent(
+            'payout_failed',
+            {
+              amount: refundAmount,
+              outcome,
+              failure_code: payout.failure_code ?? null,
+            },
+            { userId: profile.id }
+          );
+        } catch (analyticsErr) {
+          console.warn('[webhooks] HeyCatch trackEvent failed (non-fatal)', analyticsErr);
+        }
       }
     }
   }
@@ -1347,6 +1367,15 @@ Deno.serve(async (req: Request) => {
           console.log(
             `[webhooks] Deposit applied via apply_deposit, tx_id=${appliedRow.tx_id} for user ${userId}`
           );
+          try {
+            await heycatch.trackEvent(
+              'payment_completed',
+              { amount: amountDollars, currency: paymentIntent.currency, source: 'wallet_deposit' },
+              { userId }
+            );
+          } catch (analyticsErr) {
+            console.warn('[webhooks] HeyCatch trackEvent failed (non-fatal)', analyticsErr);
+          }
         } else {
           console.log(
             `[webhooks] apply_deposit no-op (already processed) for intent ${paymentIntent.id}`
@@ -2106,6 +2135,16 @@ Deno.serve(async (req: Request) => {
               body: notifRow.body,
               data: notifRow.data,
             });
+
+            try {
+              await heycatch.trackEvent(
+                'payout_success',
+                { amount: payout.amount / 100, payout_method: payout.method ?? null },
+                { userId: paidProfile.id }
+              );
+            } catch (analyticsErr) {
+              console.warn('[webhooks] HeyCatch trackEvent failed (non-fatal)', analyticsErr);
+            }
 
             // Best-effort: backfill stripe_payout_id (useful for standard
             // rows, where this is the first time Bounty learns the payout
