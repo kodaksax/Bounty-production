@@ -4,55 +4,51 @@
  * Tests for Stripe Connect bank account operations
  */
 
-import { consolidatedStripeConnectService } from '../services/consolidated-stripe-connect-service';
+const mockTokensCreate = jest.fn().mockResolvedValue({
+  id: 'btok_test_123456',
+});
+
+const mockCreateExternalAccount = jest.fn().mockResolvedValue({
+  id: 'ba_test_123456',
+  object: 'bank_account',
+  last4: '6789',
+  bank_name: 'STRIPE TEST BANK',
+  routing_number: '110000000',
+  status: 'new',
+  default_for_currency: false,
+});
+
+const mockListExternalAccounts = jest.fn().mockResolvedValue({
+  object: 'list',
+  data: [
+    {
+      id: 'ba_test_123456',
+      object: 'bank_account',
+      account_holder_name: 'John Doe',
+      last4: '6789',
+      bank_name: 'STRIPE TEST BANK',
+      routing_number: '110000000',
+      status: 'verified',
+      default_for_currency: true,
+    },
+  ],
+});
+
+const mockDeleteExternalAccount = jest.fn();
+
+const mockUpdateExternalAccount = jest.fn();
 
 // Mock Stripe
 jest.mock('stripe', () => {
   return jest.fn().mockImplementation(() => ({
     tokens: {
-      create: jest.fn().mockResolvedValue({
-        id: 'btok_test_123456',
-      }),
+      create: mockTokensCreate,
     },
     accounts: {
-      createExternalAccount: jest.fn().mockResolvedValue({
-        id: 'ba_test_123456',
-        object: 'bank_account',
-        last4: '6789',
-        bank_name: 'STRIPE TEST BANK',
-        routing_number: '110000000',
-        status: 'new',
-        default_for_currency: false,
-      }),
-      listExternalAccounts: jest.fn().mockResolvedValue({
-        object: 'list',
-        data: [
-          {
-            id: 'ba_test_123456',
-            object: 'bank_account',
-            account_holder_name: 'John Doe',
-            last4: '6789',
-            bank_name: 'STRIPE TEST BANK',
-            routing_number: '110000000',
-            status: 'verified',
-            default_for_currency: true,
-          },
-        ],
-      }),
-      deleteExternalAccount: jest.fn().mockResolvedValue({
-        id: 'ba_test_123456',
-        deleted: true,
-      }),
-      updateExternalAccount: jest.fn().mockResolvedValue({
-        id: 'ba_test_123456',
-        object: 'bank_account',
-        account_holder_name: 'John Doe',
-        last4: '6789',
-        bank_name: 'STRIPE TEST BANK',
-        routing_number: '110000000',
-        status: 'verified',
-        default_for_currency: true,
-      }),
+      createExternalAccount: mockCreateExternalAccount,
+      listExternalAccounts: mockListExternalAccounts,
+      deleteExternalAccount: mockDeleteExternalAccount,
+      updateExternalAccount: mockUpdateExternalAccount,
     },
   }));
 });
@@ -79,8 +75,15 @@ jest.mock('@supabase/supabase-js', () => ({
   })),
 }));
 
+// Load service after all mocks are set up to avoid temporal dead zone
+const { consolidatedStripeConnectService } = require('../services/consolidated-stripe-connect-service');
+
 describe('Bank Account Management', () => {
   const mockUserId = 'user_test_123';
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
 
   describe('addBankAccount', () => {
     it('should add a bank account successfully', async () => {
@@ -99,17 +102,11 @@ describe('Bank Account Management', () => {
     });
 
     it('should handle invalid routing number from Stripe API', async () => {
-      // Mock Stripe to reject invalid routing number
-      const Stripe = require('stripe');
-      const mockTokens = Stripe.mock.results[0]?.value?.tokens;
-      
-      if (mockTokens) {
-        mockTokens.create.mockRejectedValueOnce({
-          type: 'StripeInvalidRequestError',
-          code: 'invalid_routing_number',
-          message: 'Invalid routing number',
-        });
-      }
+      mockTokensCreate.mockRejectedValueOnce({
+        type: 'StripeInvalidRequestError',
+        code: 'invalid_routing_number',
+        message: 'Invalid routing number',
+      });
 
       await expect(
         consolidatedStripeConnectService.addBankAccount(
@@ -150,27 +147,42 @@ describe('Bank Account Management', () => {
   });
 
   describe('removeBankAccount', () => {
-    it('should remove a bank account successfully', async () => {
-      const result = await consolidatedStripeConnectService.removeBankAccount(
-        mockUserId,
-        'ba_test_123456'
-      );
+    it('rejects with payout dashboard guidance instead of attempting a forbidden Stripe delete', async () => {
+      await expect(
+        consolidatedStripeConnectService.removeBankAccount(
+          mockUserId,
+          'ba_test_123456'
+        )
+      ).rejects.toMatchObject({
+        message: expect.stringMatching(/no longer supported/i),
+        details: expect.objectContaining({
+          code: 'bank_account_remove_deprecated',
+          migrateTo: '/functions/v1/connect/login-link',
+          bankAccountId: 'ba_test_123456',
+        }),
+      });
 
-      expect(result).toBeDefined();
-      expect(result.success).toBe(true);
+      expect(mockDeleteExternalAccount).not.toHaveBeenCalled();
     });
   });
 
   describe('setDefaultBankAccount', () => {
-    it('should set a bank account as default', async () => {
-      const result = await consolidatedStripeConnectService.setDefaultBankAccount(
-        mockUserId,
-        'ba_test_123456'
-      );
+    it('rejects with payout dashboard guidance instead of attempting a forbidden Stripe update', async () => {
+      await expect(
+        consolidatedStripeConnectService.setDefaultBankAccount(
+          mockUserId,
+          'ba_test_123456'
+        )
+      ).rejects.toMatchObject({
+        message: expect.stringMatching(/no longer supported/i),
+        details: expect.objectContaining({
+          code: 'bank_account_default_deprecated',
+          migrateTo: '/functions/v1/connect/login-link',
+          bankAccountId: 'ba_test_123456',
+        }),
+      });
 
-      expect(result).toBeDefined();
-      expect(result.default).toBe(true);
-      expect(result.id).toBe('ba_test_123456');
+      expect(mockUpdateExternalAccount).not.toHaveBeenCalled();
     });
   });
 });

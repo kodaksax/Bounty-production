@@ -761,82 +761,51 @@ export async function listBankAccounts(
 }
 
 /**
- * Remove a bank account from a user's Connect account
+ * Remove a bank account from a user's Connect account.
+ *
+ * Deprecated for Express accounts with Stripe-managed requirement collection:
+ * callers must send the user to the Stripe payout dashboard instead.
  * 
  * @param userId - User ID
  * @param bankAccountId - Bank account ID to remove
- * @returns Success status
+ * @returns Never resolves; throws a ValidationError with migration guidance
  */
 export async function removeBankAccount(
-  userId: string,
+  _userId: string,
   bankAccountId: string
 ): Promise<{ success: boolean }> {
-  // Get user's Connect account ID
-  const accountId = await getConnectAccountId(userId);
-  
-  try {
-    await stripe.accounts.deleteExternalAccount(
-      accountId,
-      bankAccountId
-    );
-    
-    logger.info({
-      userId,
-      accountId,
+  throw new ValidationError(
+    'Removing a bank account here is no longer supported. Please remove it through your Stripe payout dashboard.',
+    {
+      code: 'bank_account_remove_deprecated',
+      migrateTo: '/functions/v1/connect/login-link',
       bankAccountId,
-    }, '[StripeConnect] Removed bank account');
-    
-    return { success: true };
-  } catch (error) {
-    throw handleStripeError(error);
-  }
+    }
+  );
 }
 
 /**
- * Set a bank account as the default for payouts
+ * Set a bank account as the default for payouts.
+ *
+ * Deprecated for Express accounts with Stripe-managed requirement collection:
+ * callers must send the user to the Stripe payout dashboard instead.
  * 
  * @param userId - User ID
  * @param bankAccountId - Bank account ID to set as default
- * @returns Updated bank account details
+ * @returns Never resolves; throws a ValidationError with migration guidance
  */
 export async function setDefaultBankAccount(
-  userId: string,
+  _userId: string,
   bankAccountId: string
 ): Promise<BankAccountResult> {
-  // Get user's Connect account ID
-  const accountId = await getConnectAccountId(userId);
-  
-  try {
-    // Update bank account to set as default
-    const externalAccount = await stripe.accounts.updateExternalAccount(
-      accountId,
+  throw new ValidationError(
+    'Setting a default bank account here is no longer supported. Please set it through your Stripe payout dashboard.',
+    {
+      code: 'bank_account_default_deprecated',
+      migrateTo: '/functions/v1/connect/login-link',
       bankAccountId,
-      {
-        default_for_currency: true,
-      }
-    );
-    
-    const bankAccount = externalAccount as Stripe.BankAccount;
-    
-    logger.info({
-      userId,
-      accountId,
-      bankAccountId,
-    }, '[StripeConnect] Set default bank account');
-    
-    return {
-      id: bankAccount.id,
-      accountHolderName: bankAccount.account_holder_name || '',
-      last4: bankAccount.last4 || '',
-      bankName: bankAccount.bank_name || undefined,
-      routingNumber: bankAccount.routing_number || undefined,
-      accountType: 'checking',
-      status: bankAccount.status || 'new',
-      default: true,
-    };
-  } catch (error) {
-    throw handleStripeError(error);
-  }
+    }
+  );
 }
 
 /**
