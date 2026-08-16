@@ -19,99 +19,100 @@ jobs:
       contents: read
       pull-requests: write
       checks: write
-    
+
     strategy:
       matrix:
         node-version: [18.x, 20.x]
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
-      
+
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
-      
+
       - name: Build workspace packages
         run: npm run build
-      
+
       - name: Validate environment variables
         run: npm run env:check
         env:
           APP_ENV: development
           ALLOW_MISSING_SECRETS: '1'
-          EXPO_PUBLIC_SUPABASE_URL:  ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
           EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL }}
 
       - name: Run linter
         run: npm run lint --if-present
         # continue-on-error: true
-      
+
       - name: Run type check
         run: npm run type-check --if-present
         # continue-on-error: true
 
       - name: Run npm audit
         run: npm audit --audit-level=moderate
-        continue-on-error: true  # OK - This is for visibility only
+        continue-on-error: true # OK - This is for visibility only
 
       - name: Run dependency check
         run: npm run audit:deps
-        continue-on-error: true  # OK - This is for visibility only
-  
+        continue-on-error: true # OK - This is for visibility only
+
       - name: Run unit tests
         run: npm run test:unit
         env:
           NODE_ENV: test
-          EXPO_PUBLIC_SUPABASE_URL:  ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
-      
+
       - name: Run integration tests
         run: npm run test:integration
         env:
           NODE_ENV: test
-          EXPO_PUBLIC_SUPABASE_URL:  ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
-      
+
       - name: Run E2E tests
         run: npm run test:e2e
         env:
           NODE_ENV: test
-          EXPO_PUBLIC_SUPABASE_URL:  ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
-      
+
       - name: Generate coverage report
         run: npm run test:coverage
         env:
           NODE_ENV: test
-      
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@5c47607acb93fed5485fdbf7232e8a31425f672a # v4.6.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          file: ./coverage/coverage-final.json
+          files: ./coverage/coverage-final.json
           flags: unittests
           name: codecov-umbrella
           fail_ci_if_error: false
-      
+
       - name: Archive test results
         if: always()
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: test-results-${{ matrix.node-version }}
           path: |
             coverage/
             __tests__/**/*.test.ts
           retention-days: 30
-      
+
       - name: Comment coverage on PR
         if: github.event_name == 'pull_request'
         uses: ArtiomTr/jest-coverage-report-action@v2
@@ -127,23 +128,23 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20.x'
           cache: 'npm'
-      
+
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
-      
+
       - name: Build packages
         run: npm run build
-      
+
       # The bundler can emit sourcemap mappings with non-finite spans
       # (e.g. "generated column Infinity") which break the visualizer JSON
       # parser. `scripts/check-bundle-size.js` runs a sanitizer that removes
@@ -153,12 +154,13 @@ jobs:
         run: npm run bundle:size-check
         env:
           NODE_ENV: production
-          EXPO_PUBLIC_SUPABASE_URL:  ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
-          EXPO_PUBLIC_SUPABASE_ANON_KEY:  ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
 
       - name: Upload tmp_bundle artifacts (bundle debug)
         if: always()
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: tmp_bundle-artifacts
           path: tmp_bundle/**
@@ -168,16 +170,16 @@ jobs:
         run: npx expo export --platform ios --output-dir dist/ios --max-workers 2
         env:
           NODE_ENV: production
-          EXPO_PUBLIC_SUPABASE_URL:  ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
-          EXPO_PUBLIC_SUPABASE_ANON_KEY:  ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
 
       - name: Validate Expo Android export
         run: npx expo export --platform android --output-dir dist/android --max-workers 2
         env:
           NODE_ENV: production
-          EXPO_PUBLIC_SUPABASE_URL:  ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
-          EXPO_PUBLIC_SUPABASE_ANON_KEY:  ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
-      
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+
       - name: Check build artifacts
         run: |
           if [ ! -d "dist/ios" ] || [ ! -d "dist/android" ]; then
@@ -186,9 +188,10 @@ jobs:
           fi
           echo "✅ Build validation successful"
           ls -R dist/
-      
+
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: expo-mobile-build-artifacts
           path: dist/
@@ -199,20 +202,20 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20.x'
           cache: 'npm'
-      
+
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
-      
+
       - name: Run ESLint
         run: npm run lint
         continue-on-error: true
@@ -222,20 +225,20 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20.x'
-      
+
       - name: Run npm audit
         run: npm audit --audit-level=moderate
         continue-on-error: true
-      
+
       - name: Run dependency check
         run: npm run audit:deps
         continue-on-error: true
@@ -284,14 +287,14 @@ jobs:
     if: always()
     permissions:
       contents: read
-    
+
     steps:
       - name: Download test artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts/
         continue-on-error: true
-      
+
       - name: Test Summary
         run: |
           echo "## Test Summary" >> $GITHUB_STEP_SUMMARY
