@@ -136,6 +136,33 @@ export type AnalyticsEvent =
   | 'post_published'
   | 'first_submission_received'
   | 'post_abandoned'
+  // Post-flow "graveyard" funnel (2026-08 Part C spec) — a finer-grained,
+  // per-step drop-off funnel layered ON TOP OF (not replacing) the posting
+  // funnel above: post_flow_started/post_step_completed/post_step_abandoned/
+  // bounty_published add step timing (seconds_on_step/seconds_total) and an
+  // exit_method breakdown that post_started/post_abandoned/post_published
+  // don't carry. `post_step_viewed` is shared — this spec's step_index/
+  // step_name/variant properties are added onto the SAME event above rather
+  // than duplicated under a new name.
+  //
+  // Currently wired for the control arm only (the existing 6-step flow in
+  // app/screens/CreateBounty/index.tsx) — `variant` is hardcoded 'control'
+  // until a second arm exists to compare against. The key ratio this funnel
+  // exists to expose: bounty_published ÷ post_flow_started.
+  | 'post_flow_started'
+  | 'post_step_completed'
+  | 'post_step_abandoned'
+  | 'post_title_typed'
+  | 'bounty_published'
+  // NOT YET WIRED — no UI exists for these today. The redesigned fast-path
+  // flow they belong to (category chips on the title step, a price-anchor
+  // display sourced from historical bounty amounts per category, and a
+  // post-publish "add detail" surface for photos/time/address/notes deferred
+  // off the critical path) hasn't been built. Wire these up alongside that
+  // work rather than faking them now.
+  | 'post_chip_tapped'
+  | 'post_price_anchor_shown'
+  | 'post_publish_detail_added'
   // Posting funnel — the two ways a priced bounty becomes a $0 one. These
   // exist to size the single biggest known leak: posters who choose an amount
   // and then publish for free instead. Both carry `previousAmount` so

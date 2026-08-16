@@ -45,6 +45,7 @@ export function NeedHelpScreen({ activeScreen, setActiveScreen, onBountyPosted, 
     >
       <CreateBountyFlow
         key={flowKey}
+        entryPoint="need_help_tab"
         onComplete={() => {
           // After creation, go to the main feed and refresh the public list
           setShowBottomNav?.(true)
