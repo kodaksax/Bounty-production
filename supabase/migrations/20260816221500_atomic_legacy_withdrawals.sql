@@ -129,6 +129,7 @@ COMMENT ON FUNCTION public.retry_failed_withdrawal(UUID, UUID, NUMERIC) IS
 CREATE OR REPLACE FUNCTION public.fail_legacy_withdrawal(
   p_transaction_id UUID,
   p_user_id UUID,
+  p_stripe_transfer_id TEXT DEFAULT NULL,
   p_stripe_payout_id TEXT DEFAULT NULL,
   p_metadata_patch JSONB DEFAULT '{}'::jsonb
 )
@@ -161,6 +162,7 @@ BEGIN
 
   UPDATE public.wallet_transactions
      SET status = 'failed',
+         stripe_transfer_id = COALESCE(p_stripe_transfer_id, stripe_transfer_id),
          stripe_payout_id = COALESCE(p_stripe_payout_id, stripe_payout_id),
          updated_at = NOW(),
          metadata = COALESCE(v_metadata, '{}'::jsonb) || COALESCE(p_metadata_patch, '{}'::jsonb)
@@ -171,9 +173,9 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.fail_legacy_withdrawal(UUID, UUID, TEXT, JSONB) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.fail_legacy_withdrawal(UUID, UUID, TEXT, JSONB) FROM authenticated;
-GRANT EXECUTE ON FUNCTION public.fail_legacy_withdrawal(UUID, UUID, TEXT, JSONB) TO service_role;
+REVOKE ALL ON FUNCTION public.fail_legacy_withdrawal(UUID, UUID, TEXT, TEXT, JSONB) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.fail_legacy_withdrawal(UUID, UUID, TEXT, TEXT, JSONB) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.fail_legacy_withdrawal(UUID, UUID, TEXT, TEXT, JSONB) TO service_role;
 
-COMMENT ON FUNCTION public.fail_legacy_withdrawal(UUID, UUID, TEXT, JSONB) IS
+COMMENT ON FUNCTION public.fail_legacy_withdrawal(UUID, UUID, TEXT, TEXT, JSONB) IS
   'Atomically credits profiles.balance and marks a pending legacy withdrawal failed. Used for payout.failed/canceled handling so retries can reapply the whole effect if needed.';

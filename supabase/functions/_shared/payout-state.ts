@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 /**
  * The withdrawal/payout state machine — the single source of truth shared by
  * the `connect`, `webhooks` and `reconciliation` Edge Functions.
@@ -285,4 +287,3 @@ export function buildNativePayoutIdempotencyKey(args: {
 function hashClientKey(clientKey: string): string {
   return createHash('sha256').update(clientKey).digest('hex');
 }
-import { createHash } from 'node:crypto';

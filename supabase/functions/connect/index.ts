@@ -2265,7 +2265,6 @@ Deno.serve(async (req: Request) => {
             : undefined
         );
       } catch (stripeError) {
-        // Refund the deducted balance if Stripe transfer creation fails
         const errInfo = stripeError as { code?: string; type?: string; message?: string };
         console.error('[connect/transfer] Transfer creation failed, refunding balance:', {
           userId,
@@ -2274,11 +2273,19 @@ Deno.serve(async (req: Request) => {
           stripeType: errInfo?.type,
           message: errInfo?.message,
         });
-        const { error: refundError } = await supabase.rpc('update_balance', {
-          p_user_id: userId,
-          p_amount: amount,
-        });
-        if (refundError) {
+        const { data: rollbackResult, error: refundError } = await supabase
+          .rpc('fail_legacy_withdrawal', {
+            p_transaction_id: transactionId,
+            p_user_id: userId,
+            p_stripe_transfer_id: null,
+            p_stripe_payout_id: null,
+            p_metadata_patch: {
+              ...reservationMetadata,
+              transfer_creation_failed: errInfo?.code ?? errInfo?.message ?? 'transfer_failed',
+            },
+          })
+          .single();
+        if (refundError || !(rollbackResult as { refunded?: boolean | null } | null)?.refunded) {
           logCritical(
             'balance refund after failed transfer also failed — manual reconciliation required',
             {
@@ -2295,24 +2302,6 @@ Deno.serve(async (req: Request) => {
             },
             500
           );
-        }
-        if (transactionId) {
-          const { error: cleanupError } = await supabase
-            .from('wallet_transactions')
-            .delete()
-            .eq('id', transactionId)
-            .eq('status', 'pending');
-          if (cleanupError) {
-            logCritical(
-              'withdrawal reservation cleanup failed after transfer creation was refunded',
-              {
-                userId,
-                transactionId,
-                amount,
-                error: cleanupError,
-              }
-            );
-          }
         }
         const mapped = mapStripeTransferError(errInfo);
         return jsonResponse({ error: mapped.error, code: mapped.code }, mapped.status);
@@ -2616,11 +2605,21 @@ Deno.serve(async (req: Request) => {
         );
       } catch (stripeError) {
         console.error('[connect] Transfer creation failed, refunding balance:', stripeError);
-        const { error: retryRefundError } = await supabase.rpc('update_balance', {
-          p_user_id: userId,
-          p_amount: amount,
-        });
-        if (retryRefundError) {
+        const retryErrInfo = stripeError as { code?: string; type?: string; message?: string };
+        const { data: rollbackResult, error: retryRefundError } = await supabase
+          .rpc('fail_legacy_withdrawal', {
+            p_transaction_id: transactionId,
+            p_user_id: userId,
+            p_stripe_transfer_id: t.stripe_transfer_id ?? null,
+            p_stripe_payout_id: (t as WalletTransaction & { stripe_payout_id?: string | null })
+              .stripe_payout_id ?? null,
+            p_metadata_patch: {
+              ...((t.metadata as Record<string, unknown> | null) ?? {}),
+              retry_transfer_failed: retryErrInfo?.code ?? retryErrInfo?.message ?? 'transfer_failed',
+            },
+          })
+          .single();
+        if (retryRefundError || !(rollbackResult as { refunded?: boolean | null } | null)?.refunded) {
           logCritical(
             'balance refund after failed retry transfer also failed — manual reconciliation required',
             {
@@ -2638,17 +2637,6 @@ Deno.serve(async (req: Request) => {
             500
           );
         }
-        await supabase
-          .from('wallet_transactions')
-          .update({
-            status: 'failed',
-            stripe_transfer_id: t.stripe_transfer_id ?? null,
-            stripe_payout_id: (t as WalletTransaction & { stripe_payout_id?: string | null })
-              .stripe_payout_id ?? null,
-            metadata: t.metadata ?? null,
-          })
-          .eq('id', transactionId)
-          .eq('status', 'pending');
         const mapped = mapStripeTransferError(
           stripeError as { code?: string; type?: string; message?: string }
         );
@@ -3346,11 +3334,19 @@ Deno.serve(async (req: Request) => {
           stripeCode: errInfo?.code,
           message: errInfo?.message,
         });
-        const { error: refundError } = await supabase.rpc('update_balance', {
-          p_user_id: userId,
-          p_amount: amount,
-        });
-        if (refundError) {
+        const { data: rollbackResult, error: refundError } = await supabase
+          .rpc('fail_legacy_withdrawal', {
+            p_transaction_id: transactionId,
+            p_user_id: userId,
+            p_stripe_transfer_id: null,
+            p_stripe_payout_id: null,
+            p_metadata_patch: {
+              ...instantReservationMetadata,
+              transfer_creation_failed: errInfo?.code ?? errInfo?.message ?? 'transfer_failed',
+            },
+          })
+          .single();
+        if (refundError || !(rollbackResult as { refunded?: boolean | null } | null)?.refunded) {
           logCritical(
             'balance refund after failed instant-payout transfer also failed — manual reconciliation required',
             {
@@ -3367,24 +3363,6 @@ Deno.serve(async (req: Request) => {
             },
             500
           );
-        }
-        if (transactionId) {
-          const { error: cleanupError } = await supabase
-            .from('wallet_transactions')
-            .delete()
-            .eq('id', transactionId)
-            .eq('status', 'pending');
-          if (cleanupError) {
-            logCritical(
-              'instant withdrawal reservation cleanup failed after transfer creation was refunded',
-              {
-                userId,
-                transactionId,
-                amount,
-                error: cleanupError,
-              }
-            );
-          }
         }
         const mapped = mapStripeTransferError(errInfo);
         return jsonResponse({ error: mapped.error, code: mapped.code }, mapped.status);
