@@ -224,6 +224,7 @@ const ReactNative = require('react-native');
 
 type AppStateHandler = (state: string) => void;
 let appStateHandlers: AppStateHandler[] = [];
+const originalPerformanceNow = global.performance.now.bind(global.performance);
 
 // jest.setup.js's react-native mock doesn't include AppState (the flow guards
 // for exactly that with optional chaining). Install a controllable one so the
@@ -240,6 +241,22 @@ function installAppStateMock() {
       };
     },
   };
+}
+
+function installPerformanceNowMock() {
+  Object.defineProperty(global.performance, 'now', {
+    writable: true,
+    configurable: true,
+    value: () => mockNow,
+  });
+}
+
+function restorePerformanceNow() {
+  Object.defineProperty(global.performance, 'now', {
+    writable: true,
+    configurable: true,
+    value: originalPerformanceNow,
+  });
 }
 
 const trackEvent = analyticsService.trackEvent as jest.Mock;
@@ -266,11 +283,12 @@ describe('CreateBountyFlow — posting-funnel timing analytics', () => {
     appStateHandlers = [];
 
     // foreground-timer prefers performance.now() as its monotonic source.
-    jest.spyOn(performance, 'now').mockImplementation(() => mockNow);
+    installPerformanceNowMock();
     installAppStateMock();
   });
 
   afterEach(() => {
+    restorePerformanceNow();
     jest.restoreAllMocks();
   });
 
@@ -424,11 +442,12 @@ describe('CreateBountyFlow — post_step_viewed fires once per step entry', () =
     mockNow = 0;
     mockIsLoading = false;
     appStateHandlers = [];
-    jest.spyOn(performance, 'now').mockImplementation(() => mockNow);
+    installPerformanceNowMock();
     installAppStateMock();
   });
 
   afterEach(() => {
+    restorePerformanceNow();
     jest.restoreAllMocks();
   });
 
