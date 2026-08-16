@@ -2675,7 +2675,7 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      await supabase
+      const { data: retriedTx, error: retriedTxError } = await supabase
         .from('wallet_transactions')
         .update({
           stripe_transfer_id: transfer.id,
@@ -2692,7 +2692,32 @@ Deno.serve(async (req: Request) => {
             ...(retryPayoutError ? { payout_creation_failed: retryPayoutError } : {}),
           },
         })
-        .eq('id', transactionId);
+        .eq('id', transactionId)
+        .select()
+        .single();
+
+      if (retriedTxError) {
+        logCritical(
+          'retry transfer succeeded but transaction record failed — manual reconciliation required',
+          {
+            userId,
+            transferId: transfer.id,
+            payoutId: retryPayout?.id ?? null,
+            transactionId,
+            amount,
+            error: retriedTxError,
+          }
+        );
+        return jsonResponse({
+          success: true,
+          transferId: transfer.id,
+          payoutId: retryPayout?.id ?? null,
+          transactionId,
+          status: 'pending',
+          message: 'Transfer retry initiated successfully.',
+          warning: 'Transaction history may take a moment to update.',
+        });
+      }
 
       console.log(
         `[connect] Transfer retry successful: ${transfer.id} for transaction ${transactionId}`
@@ -2702,7 +2727,7 @@ Deno.serve(async (req: Request) => {
         success: true,
         transferId: transfer.id,
         payoutId: retryPayout?.id ?? null,
-        transactionId,
+        transactionId: (retriedTx as WalletTransaction | null)?.id ?? transactionId,
         status: 'pending',
         message: 'Transfer retry initiated successfully.',
       });

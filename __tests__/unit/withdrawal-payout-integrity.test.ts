@@ -213,6 +213,18 @@ describe('withdrawal serialization pre-check', () => {
       retryRoute.indexOf('stripe.transfers.create')
     );
   });
+
+  test('retry-transfer does not swallow a post-payout history update failure', () => {
+    const retryRoute = regionBetween(
+      stripped,
+      "if (subPath === '/retry-transfer')",
+      "if (subPath === '/instant-payout')"
+    );
+    expect(retryRoute).toContain('retry transfer succeeded but transaction record failed');
+    expect(retryRoute).toContain('Transaction history may take a moment to update.');
+    expect(retryRoute).toContain('.select()');
+    expect(retryRoute).toContain('.single()');
+  });
 });
 
 // ---------------------------------------------------------------------------
