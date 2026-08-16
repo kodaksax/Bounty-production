@@ -266,8 +266,10 @@ export function useAcceptRequest({
         text: 'View Conversation',
         onPress: () => {
           if (pendingConvId) {
-            // Navigate directly to the conversation screen.
+            // Navigate directly to the conversation screen and clear the
+            // pending intent so it doesn't re-trigger on the inbox later.
             router.push(`/tabs/messenger/${encodeURIComponent(pendingConvId)}` as any)
+            try { await navigationIntent.setPendingConversationId(null) } catch { /* best-effort */ }
           } else {
             // Fallback: open the My Bounties / Inbox tab so the user can find
             // the conversation manually.

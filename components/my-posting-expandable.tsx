@@ -982,7 +982,7 @@ export function MyPostingExpandable({
     let targetConversationId: string | null = conversation?.id ? String(conversation.id) : null;
     try {
       if (!targetConversationId) {
-        const hunterId = bounty.accepted_by;
+        const hunterId = bounty.accepted_by || readyRecord?.hunter_id;
         if (!hunterId) {
           Alert.alert('No Conversation', 'No active conversation found for this bounty yet.');
           return;
