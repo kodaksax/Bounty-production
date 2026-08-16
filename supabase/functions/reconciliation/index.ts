@@ -616,7 +616,10 @@ serve(async (req: Request) => {
         }
 
         // --- Statuses disagree ---
-        if (isSafeStatusRepair(payout.status, ledgerStatus, (local.metadata as Record<string, unknown> | null | undefined) ?? null)) {
+        const localMeta = (typeof local.metadata === 'object' && local.metadata !== null && !Array.isArray(local.metadata))
+          ? local.metadata as Record<string, unknown>
+          : null;
+        if (isSafeStatusRepair(payout.status, ledgerStatus, localMeta)) {
           // Provably safe: Stripe reached a terminal state, our row is still
           // pending. Move the ledger to match what Stripe already did. This
           // moves no money and invents nothing.
