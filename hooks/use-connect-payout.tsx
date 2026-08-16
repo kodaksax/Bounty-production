@@ -69,6 +69,10 @@ const NON_RETRYABLE_CODES = new Set([
   'account_banned',
   'instant_limit_exceeded',
   'native_payouts_disabled',
+  // One withdrawal in flight at a time. Retrying the identical request now
+  // fails identically; it becomes valid on its own once the in-flight payout
+  // settles (1-2 business days), so this is not a bare-Retry situation.
+  'withdrawal_already_in_progress',
 ]);
 
 /**
