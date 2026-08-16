@@ -4,8 +4,6 @@
  * Tests for Stripe Connect bank account operations
  */
 
-import { consolidatedStripeConnectService } from '../services/consolidated-stripe-connect-service';
-
 const mockTokensCreate = jest.fn().mockResolvedValue({
   id: 'btok_test_123456',
 });
@@ -76,6 +74,9 @@ jest.mock('@supabase/supabase-js', () => ({
     })),
   })),
 }));
+
+// Load service after all mocks are set up to avoid temporal dead zone
+const { consolidatedStripeConnectService } = require('../services/consolidated-stripe-connect-service');
 
 describe('Bank Account Management', () => {
   const mockUserId = 'user_test_123';
