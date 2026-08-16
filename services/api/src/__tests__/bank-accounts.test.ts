@@ -150,27 +150,48 @@ describe('Bank Account Management', () => {
   });
 
   describe('removeBankAccount', () => {
-    it('should remove a bank account successfully', async () => {
-      const result = await consolidatedStripeConnectService.removeBankAccount(
-        mockUserId,
-        'ba_test_123456'
-      );
+    it('rejects with payout dashboard guidance instead of attempting a forbidden Stripe delete', async () => {
+      const Stripe = require('stripe');
+      const mockAccounts = Stripe.mock.results[0]?.value?.accounts;
 
-      expect(result).toBeDefined();
-      expect(result.success).toBe(true);
+      await expect(
+        consolidatedStripeConnectService.removeBankAccount(
+          mockUserId,
+          'ba_test_123456'
+        )
+      ).rejects.toMatchObject({
+        message: expect.stringMatching(/no longer supported/i),
+        details: expect.objectContaining({
+          code: 'bank_account_remove_deprecated',
+          migrateTo: '/functions/v1/connect/login-link',
+          bankAccountId: 'ba_test_123456',
+        }),
+      });
+
+      expect(mockAccounts?.deleteExternalAccount).not.toHaveBeenCalled();
     });
   });
 
   describe('setDefaultBankAccount', () => {
-    it('should set a bank account as default', async () => {
-      const result = await consolidatedStripeConnectService.setDefaultBankAccount(
-        mockUserId,
-        'ba_test_123456'
-      );
+    it('rejects with payout dashboard guidance instead of attempting a forbidden Stripe update', async () => {
+      const Stripe = require('stripe');
+      const mockAccounts = Stripe.mock.results[0]?.value?.accounts;
 
-      expect(result).toBeDefined();
-      expect(result.default).toBe(true);
-      expect(result.id).toBe('ba_test_123456');
+      await expect(
+        consolidatedStripeConnectService.setDefaultBankAccount(
+          mockUserId,
+          'ba_test_123456'
+        )
+      ).rejects.toMatchObject({
+        message: expect.stringMatching(/no longer supported/i),
+        details: expect.objectContaining({
+          code: 'bank_account_default_deprecated',
+          migrateTo: '/functions/v1/connect/login-link',
+          bankAccountId: 'ba_test_123456',
+        }),
+      });
+
+      expect(mockAccounts?.updateExternalAccount).not.toHaveBeenCalled();
     });
   });
 });
