@@ -5,20 +5,25 @@
 
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef, useMemo, useState } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
+import { PosterFirstWelcome } from '../../components/onboarding/PosterFirstWelcome';
+import type { ProofCardActiveItem } from '../../components/onboarding/ProofCard';
 import { hapticFeedback } from '../../lib/haptic-feedback';
 import { useOnboarding } from '../../lib/context/onboarding-context';
 import { analyticsService } from '../../lib/services/analytics-service';
 import { useFeatureFlag } from '../../lib/posthog';
+import { useFirstScreenVariant } from '../../lib/experiments/first-screen-variant';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 
 // 'onboarding-skip-role-selection' PostHog experiment. Resolved once here and
 // persisted onto the onboarding draft (onboarding-context.tsx) so every later
-// screen reads the same value instead of re-checking the flag mid-flow.
+// screen reads the same value instead of re-checking the flag mid-flow. This
+// is independent of the first_screen_variant A/B below — it only applies
+// within the control (unchanged) layout.
 const ROLE_SELECTION_FLAG_KEY = 'onboarding-skip-role-selection';
 
 export default function OnboardingWelcome() {
@@ -29,11 +34,25 @@ export default function OnboardingWelcome() {
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const flagValue = useFeatureFlag(ROLE_SELECTION_FLAG_KEY);
+  const { variant: firstScreenVariant, ready: firstScreenVariantReady } = useFirstScreenVariant();
+  const isPosterFirst = firstScreenVariant === 'poster_first';
+
+  const mountedAtRef = useRef(Date.now());
+  const activeProofRef = useRef<ProofCardActiveItem>({ index: 0, proofState: 'fallback', bountyId: null });
+  const [ctaStopped, setCtaStopped] = useState(false);
 
   useEffect(() => {
     analyticsService.trackEvent('onboarding_welcome_viewed');
     Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
   }, [fadeAnim]);
+
+  // first_screen_viewed fires once, after the variant assignment is
+  // confirmed (not on the transient 'control' default guess), so every
+  // impression is attributed to the arm that actually rendered.
+  useEffect(() => {
+    if (!firstScreenVariantReady) return;
+    analyticsService.trackEvent('first_screen_viewed', { variant: firstScreenVariant });
+  }, [firstScreenVariantReady, firstScreenVariant]);
 
   // Resolve the experiment arm exactly once per draft. A resumed draft that
   // already recorded an arm keeps it, even if the flag were to re-evaluate
@@ -46,9 +65,21 @@ export default function OnboardingWelcome() {
 
   const isTestArm = onboardingData.experimentVariant === 'test';
 
+  const trackCtaTapped = (side: 'poster' | 'hunter' | 'login') => {
+    const secondsOnScreen = (Date.now() - mountedAtRef.current) / 1000;
+    analyticsService.trackEvent('first_screen_cta_tapped', {
+      side,
+      variant: firstScreenVariant,
+      seconds_on_screen: secondsOnScreen,
+      ...(isPosterFirst ? { proof_index_at_tap: activeProofRef.current.index } : {}),
+    });
+  };
+
   const handleSelectIntent = (intent: 'poster' | 'hunter') => {
     hapticFeedback.light();
+    setCtaStopped(true);
     analyticsService.trackEvent('onboarding_role_selected', { role: intent });
+    trackCtaTapped(intent);
     updateData({ intent });
     router.replace('/onboarding/username');
   };
@@ -61,9 +92,34 @@ export default function OnboardingWelcome() {
 
   const handleLogIn = () => {
     hapticFeedback.light();
+    setCtaStopped(true);
     analyticsService.trackEvent('onboarding_login_tapped');
+    trackCtaTapped('login');
     router.push('/auth/sign-in-form');
   };
+
+  if (isPosterFirst) {
+    return (
+      <PosterFirstWelcome
+        theme={theme}
+        insets={insets}
+        stopped={ctaStopped}
+        onProofActiveChange={item => {
+          activeProofRef.current = item;
+        }}
+        onProofImpression={item => {
+          analyticsService.trackEvent('first_screen_proof_impression', {
+            bounty_id: item.bountyId ?? 'fallback',
+            proof_state: item.proofState,
+            index: item.index,
+          });
+        }}
+        onPosterPress={() => handleSelectIntent('poster')}
+        onHunterPress={() => handleSelectIntent('hunter')}
+        onLoginPress={handleLogIn}
+      />
+    );
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top * 0.3, paddingBottom: insets.bottom }]}>

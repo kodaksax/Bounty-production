@@ -360,6 +360,18 @@ export function makeOnboardingDetailsStyles(theme: AppTheme) {
     priceChipTextSelected: {
       color: '#052e1b',
     },
+    trustCopyBlock: {
+      marginTop: 16,
+      paddingTop: 16,
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
+    },
+    trustCopyLine: {
+      color: theme.textSecondary,
+      fontSize: 13,
+      lineHeight: 18,
+      textAlign: 'center',
+    },
     posterActions: {
       paddingHorizontal: 24,
       paddingBottom: 40,

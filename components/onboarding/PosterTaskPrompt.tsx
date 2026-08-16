@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { OnboardingProgressDots } from './OnboardingProgressDots';
 import { hapticFeedback } from '../../lib/haptic-feedback';
+import { posterTrustCopyStrings } from '../../lib/strings/firstScreen';
 import type { OnboardingDetailsStyles } from '../../lib/onboarding/onboarding-details-styles';
 import type { AppTheme } from '../../lib/themes/types';
 
@@ -154,6 +155,15 @@ export function PosterTaskPrompt({
                 Flexible
               </Text>
             </TouchableOpacity>
+          </View>
+
+          {/* Relocated from the old welcome.tsx feature rows — see
+              lib/strings/firstScreen.ts. Shown here, at the moment the user
+              is committing to a dollar amount, rather than before they've
+              even imagined posting a bounty. */}
+          <View style={styles.trustCopyBlock}>
+            <Text style={styles.trustCopyLine}>{posterTrustCopyStrings.line1}</Text>
+            <Text style={styles.trustCopyLine}>{posterTrustCopyStrings.line2}</Text>
           </View>
         </View>
       </View>

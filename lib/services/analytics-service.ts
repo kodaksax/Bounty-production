@@ -32,6 +32,16 @@ export type AnalyticsEvent =
   // (profile_submitted | step_skipped)* -> completed
   | 'onboarding_welcome_viewed'
   | 'onboarding_role_selected'
+  // first_screen_variant A/B (lib/experiments/first-screen-variant.ts):
+  // control vs poster_first arm of app/onboarding/welcome.tsx. Fired
+  // identically by both arms (in addition to the funnel events above, which
+  // both arms also still fire) so poster-tap-rate can be compared cleanly:
+  // poster taps ÷ total first_screen_cta_tapped where side != 'login'.
+  // first_screen_proof_impression only applies to the poster_first arm
+  // (control has no proof card).
+  | 'first_screen_viewed'
+  | 'first_screen_proof_impression'
+  | 'first_screen_cta_tapped'
   // 'onboarding-skip-role-selection' PostHog experiment, test arm only: fired
   // from the single "Get started" CTA that replaces the two intent buttons.
   // Role is deferred to CombinedActivationPrompt (or inferred later from a
