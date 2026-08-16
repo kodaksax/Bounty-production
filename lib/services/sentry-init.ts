@@ -2,6 +2,7 @@
 import type { Integration } from '@sentry/types';
 import * as Application from 'expo-application';
 import Constants from 'expo-constants';
+import * as Updates from 'expo-updates';
 import { Platform } from 'react-native';
 
 // Sentry configuration
@@ -173,6 +174,23 @@ export function initializeSentry() {
       // Integrations (tracing integration may be undefined on older/newer SDKs)
       integrations,
     });
+
+    // Tag every event with the EAS Update identity of the JS actually
+    // running, not just the native build version set via `release`/`dist`
+    // above. Native version alone can't tell us which OTA update a crash or
+    // error came from — see docs/deployment/EAS_UPDATE_POLICY.md ("rollback
+    // → determine which users received it"). All three are null when
+    // running the embedded (non-OTA) build, in Expo Go, or in a dev client.
+    try {
+      Sentry.setTags({
+        eas_update_id: Updates.updateId ?? 'embedded',
+        eas_update_channel: Updates.channel ?? 'none',
+        eas_runtime_version: Updates.runtimeVersion ?? 'unknown',
+        eas_is_embedded_launch: Updates.isEmbeddedLaunch,
+      });
+    } catch {
+      // Tagging is best-effort — never block init on it.
+    }
 
   } catch (error) {
     console.error('[Sentry] Failed to initialize:', error);

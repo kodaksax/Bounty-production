@@ -1,0 +1,147 @@
+name: EAS Update - Production
+
+# Manually-triggered, reviewable path for publishing a production OTA (JS)
+# update via EAS Update. This replaces ad hoc `eas update` runs from a
+# developer's machine, which is how the 2026-08-11 incident happened: an
+# update was published with no record of who ran it or why, and nothing
+# checked whether it was actually compatible with the native code already
+# in the field. See docs/deployment/EAS_UPDATE_POLICY.md and
+# docs/deployment/EAS_UPDATE_INCIDENT_2026-08-11.md.
+#
+# Deliberately workflow_dispatch only — not triggered on push. Not every
+# commit to main is safe to ship as an instant, 100%-rollout OTA update; a
+# human decides when and picks the message and rollout percentage.
+
+on:
+  workflow_dispatch:
+    inputs:
+      message:
+        description: 'What changed and why (recorded as the update message; shows up in `eas update:list`).'
+        required: true
+        type: string
+      rollout_percentage:
+        description: 'Percentage of users to receive this update immediately (1-100). Use less than 100 to stage the rollout; see docs/deployment/EAS_UPDATE_POLICY.md.'
+        required: false
+        default: '100'
+        type: string
+      confirm_production:
+        description: 'I understand this publishes an OTA update to PRODUCTION users on a matching native build.'
+        required: true
+        type: boolean
+        default: false
+
+concurrency:
+  group: eas-update-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish production OTA update
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - name: Require explicit confirmation
+        if: ${{ inputs.confirm_production != true }}
+        run: |
+          echo "::error::confirm_production must be checked to publish to production. Aborting."
+          exit 1
+
+      - name: Validate rollout percentage
+        run: |
+          pct="${{ inputs.rollout_percentage }}"
+          if ! [[ "$pct" =~ ^[0-9]+$ ]] || [ "$pct" -lt 1 ] || [ "$pct" -gt 100 ]; then
+            echo "::error::rollout_percentage must be an integer between 1 and 100, got: '$pct'"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+
+      - name: Normalize tokens
+        run: |
+          if [ -n "${{ secrets.EAS_TOKEN }}" ]; then
+            echo "EAS_TOKEN=${{ secrets.EAS_TOKEN }}" >> "$GITHUB_ENV"
+          elif [ -n "${{ secrets.EXPO_TOKEN }}" ]; then
+            echo "EAS_TOKEN=${{ secrets.EXPO_TOKEN }}" >> "$GITHUB_ENV"
+          else
+            echo "::error::No EAS_TOKEN or EXPO_TOKEN secret configured for this repo."
+            exit 1
+          fi
+
+      - name: Verify EAS auth
+        run: eas whoami --token "$EAS_TOKEN"
+
+      - name: Record publish metadata
+        run: |
+          {
+            echo "### 🚀 Production OTA publish"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Triggered by | @${{ github.actor }} |"
+            echo "| Commit SHA | \`${{ github.sha }}\` |"
+            echo "| Branch/ref | \`${{ github.ref_name }}\` |"
+            echo "| Timestamp (UTC) | $(date -u +'%Y-%m-%dT%H:%M:%SZ') |"
+            echo "| Channel | \`production\` |"
+            echo "| Rollout | ${{ inputs.rollout_percentage }}% |"
+            echo "| Message | ${{ inputs.message }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # This is the guardrail that would have caught the 2026-08-11 incident:
+      # it compares this commit's fingerprint against the fingerprint EAS
+      # actually recorded on the latest finished production build, per
+      # platform. A mismatch means the JS about to be published relies on
+      # native code/config the shipped binary doesn't have — that needs a
+      # new native build, not an OTA update, and the job stops here.
+      - name: Guardrails — verify OTA compatibility with the latest production build
+        run: node scripts/eas-update-guardrails.js --channel=production --environment=production --platforms=ios,android
+        env:
+          APP_ENV: production
+
+      - name: Publish update
+        run: |
+          eas update \
+            --branch production \
+            --environment production \
+            --message "${{ inputs.message }}" \
+            --rollout-percentage "${{ inputs.rollout_percentage }}" \
+            --non-interactive \
+            --json > update-result.json
+          cat update-result.json
+        env:
+          APP_ENV: production
+
+      - name: Record publish result
+        if: always()
+        run: |
+          {
+            echo ""
+            echo "#### Published update group"
+            echo '```json'
+            cat update-result.json 2>/dev/null || echo "(publish step did not produce output — check the job log above)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload update metadata artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eas-update-production-${{ github.run_id }}
+          path: update-result.json
+          retention-days: 90
+          if-no-files-found: ignore
