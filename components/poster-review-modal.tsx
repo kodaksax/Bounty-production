@@ -49,6 +49,9 @@ interface PosterReviewModalProps {
 }
 
 const SLIDER_HANDLE_WIDTH = 56;
+// Uniform inset (px) between the handle and the track edges when at rest.
+// Matches the vertical top/bottom gap so the handle looks centred on all sides.
+const SLIDER_HANDLE_INSET = 2;
 // Fraction of the track the handle must reach for a release to count as a
 // confirm. 0.92 demanded almost the entire width before the gesture "took",
 // so near-complete drags were discarded; 0.75 still requires a deliberate
@@ -80,7 +83,9 @@ const SlideToConfirm: React.FC<SlideToConfirmProps> = React.memo(function SlideT
   const translateX = useRef(new Animated.Value(0)).current;
   const [trackWidth, setTrackWidth] = useState(0);
   const hasConfirmedRef = useRef(false);
-  const handleOffset = useRef(new Animated.Value(SLIDER_HANDLE_WIDTH));
+  // fillWidth = translateX + (inset + handle width) so the fill always covers
+  // from the track's left edge to the handle's right edge with no gap.
+  const handleOffset = useRef(new Animated.Value(SLIDER_HANDLE_WIDTH + SLIDER_HANDLE_INSET));
   const accessibilityLabelText = isProcessing ? 'Processing payout' : label;
 
   useEffect(() => {
@@ -95,7 +100,9 @@ const SlideToConfirm: React.FC<SlideToConfirmProps> = React.memo(function SlideT
     }
   }, [disabled, isProcessing, translateX]);
 
-  const maxTranslate = Math.max(trackWidth - SLIDER_HANDLE_WIDTH, 0);
+  // Maximum translate: leave SLIDER_HANDLE_INSET gap on the right so the
+  // handle stops symmetrically with its left-edge inset.
+  const maxTranslate = Math.max(trackWidth - SLIDER_HANDLE_WIDTH - SLIDER_HANDLE_INSET * 2, 0);
 
   const panResponder = useMemo(
     () =>
@@ -106,6 +113,16 @@ const SlideToConfirm: React.FC<SlideToConfirmProps> = React.memo(function SlideT
         // Claim the touch only once it reads as horizontal, so a vertical
         // scroll of the modal body is not intercepted by the handle.
         onMoveShouldSetPanResponder: (_evt, gestureState) =>
+          !disabled &&
+          !isProcessing &&
+          Math.abs(gestureState.dx) > SLIDER_CLAIM_DISTANCE &&
+          Math.abs(gestureState.dx) > Math.abs(gestureState.dy),
+        // Capture-phase mirror of the above.  The ScrollView's own PanResponder
+        // also competes in the bubble phase; adding the capture-phase handler
+        // means we win the responder negotiation before the ScrollView's bubble
+        // handler even runs, which is the root cause of the slider appearing
+        // frozen inside a scrollable container.
+        onMoveShouldSetPanResponderCapture: (_evt, gestureState) =>
           !disabled &&
           !isProcessing &&
           Math.abs(gestureState.dx) > SLIDER_CLAIM_DISTANCE &&
@@ -483,6 +500,7 @@ export function PosterReviewModal({
             <ScrollView
               style={s.scrollView}
               contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 20 }]}
+              scrollEnabled={false}
             >
               <View style={s.payoutWarningContainer}>
                 <View style={s.warningIcon}>
@@ -730,8 +748,8 @@ function makeSliderStyles(t: AppTheme) {
       backgroundColor: '#059669',
       justifyContent: 'center',
       alignItems: 'center',
-      top: 2,
-      left: 0,
+      top: SLIDER_HANDLE_INSET,
+      left: SLIDER_HANDLE_INSET,
       ...EMERALD_SHADOW,
     },
   });
