@@ -256,8 +256,15 @@ describe('connect edge function contract (inlined helpers stay in sync)', () => 
   });
 
   test('passes a Stripe idempotency key when creating transfers', () => {
-    expect(indexSource).toMatch(/idempotencyKey: `transfer_\$\{userId\}_\$\{idempotencyKey\}/);
-    expect(indexSource).toMatch(/idempotencyKey: `retry_\$\{transactionId\}_\$\{retryCount \+ 1\}`/);
+    // Built by buildTransferIdempotencyKey() since 2026-08-16 rather than
+    // interpolated inline — see financial-invariants.test.ts for why.
+    expect(indexSource).toMatch(/idempotencyKey:\s*buildTransferIdempotencyKey\(/);
+  });
+
+  test('passes a Stripe idempotency key when creating payouts', () => {
+    // The payout is the leg that actually moves money to the hunter, so a
+    // retry replaying rather than re-paying matters more here than anywhere.
+    expect(indexSource).toMatch(/buildPayoutIdempotencyKey\(\{/);
   });
 
   test('verifies live payout eligibility before deducting balance', () => {

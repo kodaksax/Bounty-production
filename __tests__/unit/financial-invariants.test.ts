@@ -90,7 +90,20 @@ describe('invariant: no duplicate transfers', () => {
 
   it('the legacy transfer path passes a Stripe idempotency key', () => {
     // Retained for rollback; must stay safe while it exists.
-    expect(connectSource).toMatch(/idempotencyKey:\s*`?(instant_)?transfer_/);
+    //
+    // The key used to be built inline as `transfer_${userId}_${key}_${cents}`.
+    // It now comes from buildTransferIdempotencyKey() in _shared/payout-state,
+    // because the inline version interpolated a client timestamp on the
+    // instant path and so produced a fresh key on every retry — Stripe's
+    // idempotency protection was present in the code and absent in effect.
+    // What matters here is unchanged: a key is always passed.
+    expect(connectSource).toMatch(/idempotencyKey:\s*buildTransferIdempotencyKey\(/);
+  });
+
+  it('transfer idempotency keys carry no timestamp', () => {
+    // The specific defect behind the 2026-08-13 incident's retry exposure.
+    expect(connectSource).not.toMatch(/idempotencyKey:\s*`[^`]*\$\{Date\.now\(\)\}/);
+    expect(connectSource).not.toMatch(/`instant_\$\{userId\}_\$\{Date\.now\(\)\}`/);
   });
 
   it('Phase 2 release ties the transfer to its source charge', () => {

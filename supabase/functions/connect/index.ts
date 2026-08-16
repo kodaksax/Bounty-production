@@ -29,6 +29,11 @@
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Stripe from 'npm:stripe@14';
 import type { Profile, WalletTransaction } from '../_shared/types.ts';
+import {
+  buildPayoutIdempotencyKey,
+  buildTransferIdempotencyKey,
+  isRecoverableInstantPayoutError,
+} from '../_shared/payout-state.ts';
 
 // stripe@14's bundled types for Balance.InstantAvailable omit `net_available`,
 // even though the live API returns it (see
@@ -363,6 +368,11 @@ type PayoutAuditEvent =
   | 'withdrawal_requested'
   | 'withdrawal_validated'
   | 'stripe_payout_created'
+  // An instant payout Stripe refused. Recorded separately from
+  // withdrawal_failed because the withdrawal itself has NOT failed — it falls
+  // back to a standard payout and stays pending. Conflating the two is the
+  // reasoning that produced the 2026-08-13 incident.
+  | 'instant_payout_failed'
   | 'withdrawal_completed'
   | 'withdrawal_failed';
 
@@ -419,6 +429,60 @@ async function writePayoutAudit(supabase: SupabaseClient, entry: PayoutAuditEntr
       error: (auditError as { message?: string })?.message,
     });
   }
+}
+
+/**
+ * True when this hunter already has a withdrawal in flight.
+ *
+ * `idx_wallet_tx_one_pending_withdrawal` is a partial UNIQUE index on
+ * (user_id) WHERE type='withdrawal' AND status='pending', so the database
+ * permits exactly one in-flight withdrawal per hunter. Before 2026-08-16 that
+ * index was effectively inert: withdrawals were written straight to
+ * 'completed', so 'pending' lasted microseconds and the index never fired.
+ *
+ * Now that a withdrawal legitimately stays 'pending' for the 1-2 business days
+ * a standard payout takes to settle, the index becomes a real serialization
+ * lock. Checking it here — BEFORE withdraw_balance() debits anything — turns
+ * what would otherwise be a raw 23505 after a balance deduction into a clean,
+ * refund-free rejection with copy the hunter can act on.
+ *
+ * The insert path still handles 23505 as a backstop for the race where two
+ * requests pass this check simultaneously.
+ */
+async function findInFlightWithdrawal(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<{ id: string; amount: number; created_at: string } | null> {
+  const { data, error } = await supabase
+    .from('wallet_transactions')
+    .select('id, amount, created_at')
+    .eq('user_id', userId)
+    .eq('type', 'withdrawal')
+    .eq('status', 'pending')
+    .maybeSingle();
+
+  if (error) {
+    // Fail open: the DB index is the real guarantee, and blocking every
+    // withdrawal because a read failed would be worse than letting the insert
+    // hit 23505 and refund.
+    console.warn('[connect] in-flight withdrawal pre-check failed (non-fatal)', {
+      userId,
+      error: error.message,
+    });
+    return null;
+  }
+  return (data as { id: string; amount: number; created_at: string } | null) ?? null;
+}
+
+/** Shared 409 for a hunter who already has a withdrawal settling. */
+function inFlightWithdrawalResponse(inFlight: { amount: number }): Response {
+  return jsonResponse(
+    {
+      error: `You already have a withdrawal of $${Math.abs(inFlight.amount).toFixed(2)} on its way to your bank. You can start another one once it lands — usually within 1-2 business days.`,
+      code: 'withdrawal_already_in_progress',
+    },
+    409
+  );
 }
 
 /**
@@ -2079,6 +2143,18 @@ Deno.serve(async (req: Request) => {
         );
       }
 
+      // One withdrawal in flight at a time — checked before any money moves so
+      // the hunter is never left with a deducted balance and a rejected
+      // request. See findInFlightWithdrawal().
+      const transferInFlight = await findInFlightWithdrawal(supabase, userId);
+      if (transferInFlight) {
+        console.warn('[connect/transfer] blocked: withdrawal already in flight', {
+          userId,
+          existingTransactionId: transferInFlight.id,
+        });
+        return inFlightWithdrawalResponse(transferInFlight);
+      }
+
       // Deduct balance atomically via withdraw_balance which enforces the
       // hold check and dispute freeze, and returns the new balance.
       const { data: newBalanceData, error: balanceError } = await supabase.rpc('withdraw_balance', {
@@ -2119,7 +2195,14 @@ Deno.serve(async (req: Request) => {
           // same amount cannot create a second transfer even if two requests
           // race past the DB replay check above.
           idempotencyKey
-            ? { idempotencyKey: `transfer_${userId}_${idempotencyKey}_${validation.amountCents}` }
+            ? {
+                idempotencyKey: buildTransferIdempotencyKey({
+                  userId,
+                  clientKey: idempotencyKey,
+                  amountCents: validation.amountCents,
+                  purpose: 'standard',
+                }),
+              }
             : undefined
         );
       } catch (stripeError) {
@@ -2163,15 +2246,57 @@ Deno.serve(async (req: Request) => {
         transferId: transfer.id,
       });
 
-      // Stripe transfers to a connected account's balance are synchronous —
-      // by the time stripe.transfers.create() above returned without throwing,
-      // the funds have already moved. There is no `transfer.paid` webhook for
-      // this flow (that event, along with `transfer.failed`, belongs to a
-      // legacy recipient-transfer API and is never delivered here), so
-      // recording this as 'pending' and waiting on a webhook to promote it
-      // would leave the row stuck forever. Record it as 'completed' now;
-      // `payout.failed` already expects a 'completed' row to roll back if the
-      // later bank-level payout fails.
+      // The Transfer above is synchronous: by the time transfers.create()
+      // returned, funds sit in the connected account's Stripe balance. That is
+      // hop one of two. Hop two — the Payout that actually reaches the
+      // hunter's bank — is created here.
+      //
+      // This route used to stop after hop one and write 'completed', reasoning
+      // that no `transfer.paid` webhook exists to promote a pending row. That
+      // is true and irrelevant: the event that matters is `payout.paid`, and
+      // the way to receive it is to create a payout. Not doing so produced 13
+      // withdrawals ($261.65) whose delivery nobody could verify.
+      let standardPayout: Stripe.Payout | null = null;
+      let standardPayoutError: string | null = null;
+      try {
+        standardPayout = await stripe.payouts.create(
+          {
+            amount: validation.amountCents,
+            currency,
+            method: 'standard',
+            destination: destinationAccount.id,
+            metadata: {
+              user_id: userId,
+              purpose: 'standard_withdrawal',
+              transfer_id: transfer.id,
+              ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
+            },
+          },
+          {
+            stripeAccount: p.stripe_connect_account_id,
+            idempotencyKey: idempotencyKey
+              ? buildPayoutIdempotencyKey({
+                  userId,
+                  clientKey: idempotencyKey,
+                  amountCents: validation.amountCents,
+                  method: 'standard',
+                })
+              : undefined,
+          }
+        );
+      } catch (payoutCreateError) {
+        // Funds are in the connected account but no payout exists. Refunding
+        // is wrong (the transfer did happen) and completing is wrong (nothing
+        // was delivered), so the row stays `pending` with no payout id and
+        // reconciliation raises it as CRITICAL.
+        const pcInfo = payoutCreateError as { code?: string; message?: string };
+        standardPayoutError = pcInfo?.code ?? pcInfo?.message ?? 'unknown';
+        logCritical(
+          'standard payout creation failed after transfer landed — funds are in the connected account with no payout, manual reconciliation required',
+          { userId, transferId: transfer.id, amount, error: standardPayoutError }
+        );
+      }
+
       const { data: transaction, error: txError } = await supabase
         .from('wallet_transactions')
         .insert({
@@ -2179,26 +2304,60 @@ Deno.serve(async (req: Request) => {
           type: 'withdrawal',
           amount: -amount,
           description: 'Withdrawal to bank account',
-          status: 'completed',
+          // Only payout.paid may promote this.
+          status: 'pending',
+          payout_method: 'standard',
           stripe_transfer_id: transfer.id,
+          stripe_payout_id: standardPayout?.id ?? null,
           stripe_connect_account_id: p.stripe_connect_account_id,
           idempotency_key: idempotencyKey ?? null,
           metadata: {
             transfer_id: transfer.id,
+            payout_id: standardPayout?.id ?? null,
             idempotency_key: idempotencyKey ?? null,
             destination_bank_account_id: destinationAccount.id,
             destination_bank_last4: destinationAccount.last4 ?? null,
             destination_bank_name: destinationAccount.bank_name ?? null,
+            ...(standardPayoutError ? { payout_creation_failed: standardPayoutError } : {}),
           },
         })
         .select()
         .single();
 
       if (txError) {
-        // Unique violation on (user_id, idempotency_key): a concurrent
-        // duplicate request won the insert race. Stripe idempotency ensured
-        // both requests share ONE transfer, but the balance was deducted
-        // twice — refund this request's deduction and replay the winner.
+        // 23505 now has two possible sources, and they mean different things:
+        //
+        //   idx_wallet_tx_withdrawal_idempotency  — a concurrent retry of THIS
+        //     request won the race. Stripe idempotency ensured both share one
+        //     transfer; refund the double deduction and replay the winner.
+        //
+        //   idx_wallet_tx_one_pending_withdrawal  — a DIFFERENT withdrawal is
+        //     already settling. The pre-check above catches this in the normal
+        //     case; this is the race backstop. Refund and reject.
+        const violatedConstraint = `${(txError as { message?: string }).message ?? ''} ${
+          (txError as { details?: string }).details ?? ''
+        }`;
+        if (
+          (txError as { code?: string }).code === '23505' &&
+          violatedConstraint.includes('idx_wallet_tx_one_pending_withdrawal')
+        ) {
+          console.warn('[connect/transfer] lost race to another in-flight withdrawal, refunding', {
+            userId,
+            transferId: transfer.id,
+          });
+          const { error: raceRefundError } = await supabase.rpc('update_balance', {
+            p_user_id: userId,
+            p_amount: amount,
+          });
+          if (raceRefundError) {
+            logCritical(
+              'refund after in-flight-withdrawal race failed — manual reconciliation required',
+              { userId, amount, transferId: transfer.id, error: raceRefundError }
+            );
+          }
+          return inFlightWithdrawalResponse({ amount });
+        }
+
         if ((txError as { code?: string }).code === '23505' && idempotencyKey) {
           console.warn(
             '[connect/transfer] concurrent duplicate detected, refunding extra deduction',
@@ -2255,7 +2414,8 @@ Deno.serve(async (req: Request) => {
         );
         return jsonResponse({
           transferId: transfer.id,
-          status: 'completed',
+          payoutId: standardPayout?.id ?? null,
+          status: 'pending',
           amount,
           currency,
           accountId: p.stripe_connect_account_id,
@@ -2266,15 +2426,17 @@ Deno.serve(async (req: Request) => {
         });
       }
 
-      console.log('[connect/transfer] withdrawal completed', {
+      console.log('[connect/transfer] withdrawal submitted', {
         userId,
         transferId: transfer.id,
+        payoutId: standardPayout?.id ?? null,
         transactionId: (transaction as WalletTransaction).id,
       });
 
       return jsonResponse({
         transferId: transfer.id,
-        status: 'completed',
+        payoutId: standardPayout?.id ?? null,
+        status: 'pending',
         amount,
         currency,
         accountId: p.stripe_connect_account_id,
@@ -2468,22 +2630,53 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ error: mapped.error, code: mapped.code }, mapped.status);
       }
 
-      // Same reasoning as the primary /transfer path: the retry's transfer
-      // creation above already succeeded synchronously, so this is 'completed'
-      // immediately rather than waiting on a `transfer.paid` webhook that
-      // Stripe never sends for connected-account balance transfers.
+      // Same two-hop rule as the primary /transfer path: the retry re-ran hop
+      // one, so create hop two and leave the row `pending` for payout.paid.
+      let retryPayout: Stripe.Payout | null = null;
+      let retryPayoutError: string | null = null;
+      try {
+        retryPayout = await stripe.payouts.create(
+          {
+            amount: Math.round(amount * 100),
+            currency: 'usd',
+            method: 'standard',
+            destination: destinationAccount.id,
+            metadata: {
+              user_id: userId,
+              purpose: 'standard_withdrawal_retry',
+              transfer_id: transfer.id,
+              retry_of_transaction: transactionId,
+            },
+          },
+          {
+            stripeAccount: p.stripe_connect_account_id,
+            idempotencyKey: `wpo_retry_${transactionId}_${retryCount + 1}`,
+          }
+        );
+      } catch (retryPayoutCreateError) {
+        const rpInfo = retryPayoutCreateError as { code?: string; message?: string };
+        retryPayoutError = rpInfo?.code ?? rpInfo?.message ?? 'unknown';
+        logCritical(
+          'standard payout creation failed on withdrawal retry — funds are in the connected account with no payout, manual reconciliation required',
+          { userId, transferId: transfer.id, transactionId, amount, error: retryPayoutError }
+        );
+      }
+
       await supabase
         .from('wallet_transactions')
         .update({
           stripe_transfer_id: transfer.id,
-          status: 'completed',
+          stripe_payout_id: retryPayout?.id ?? null,
+          status: 'pending',
           metadata: {
             ...t.metadata,
             retry_count: retryCount + 1,
             retried_at: new Date().toISOString(),
+            payout_id: retryPayout?.id ?? null,
             destination_bank_account_id: destinationAccount.id,
             destination_bank_last4: destinationAccount.last4 ?? null,
             destination_bank_name: destinationAccount.bank_name ?? null,
+            ...(retryPayoutError ? { payout_creation_failed: retryPayoutError } : {}),
           },
         })
         .eq('id', transactionId);
@@ -2495,7 +2688,9 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({
         success: true,
         transferId: transfer.id,
+        payoutId: retryPayout?.id ?? null,
         transactionId,
+        status: 'pending',
         message: 'Transfer retry initiated successfully.',
       });
     }
@@ -2762,7 +2957,9 @@ Deno.serve(async (req: Request) => {
             transferId: e.stripe_transfer_id,
             payoutId: e.stripe_payout_id ?? null,
             payoutMethod: e.payout_method ?? 'standard',
-            status: e.status ?? 'completed',
+            // Never default to 'completed': an unknown status is not a
+            // settled one, and this response is what the client renders.
+            status: e.status ?? 'pending',
             amount: Math.abs(e.amount),
             currency,
             accountId: e.stripe_connect_account_id,
@@ -2815,13 +3012,19 @@ Deno.serve(async (req: Request) => {
       // this hunter's completed instant withdrawals in the last rolling 24h
       // before touching the balance, same fail-closed discipline as the rest
       // of this route.
+      // Counts every instant payout SUBMITTED in the window, not just settled
+      // ones. Instant rows are now created `pending` and only reach
+      // `completed` when payout.paid lands, so a `status = 'completed'` filter
+      // here (the pre-2026-08-16 behaviour) would count almost nothing and let
+      // a hunter blow straight through Stripe's 10/day ceiling. `failed` is
+      // excluded because a payout that never delivered did not consume quota.
       const { count: instantPayoutsToday, error: instantCountError } = await supabase
         .from('wallet_transactions')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', userId)
         .eq('type', 'withdrawal')
         .eq('payout_method', 'instant')
-        .eq('status', 'completed')
+        .neq('status', 'failed')
         .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
       if (instantCountError) {
         console.error("[connect/instant-payout] failed to count today's instant payouts", {
@@ -2995,6 +3198,16 @@ Deno.serve(async (req: Request) => {
         );
       }
 
+      // One withdrawal in flight at a time — see findInFlightWithdrawal().
+      const instantInFlight = await findInFlightWithdrawal(supabase, userId);
+      if (instantInFlight) {
+        console.warn('[connect/instant-payout] blocked: withdrawal already in flight', {
+          userId,
+          existingTransactionId: instantInFlight.id,
+        });
+        return inFlightWithdrawalResponse(instantInFlight);
+      }
+
       const { data: newBalanceData, error: balanceError } = await supabase.rpc('withdraw_balance', {
         p_user_id: userId,
         p_amount: amount,
@@ -3035,7 +3248,12 @@ Deno.serve(async (req: Request) => {
           },
           idempotencyKey
             ? {
-                idempotencyKey: `instant_transfer_${userId}_${idempotencyKey}_${validation.amountCents}`,
+                idempotencyKey: buildTransferIdempotencyKey({
+                  userId,
+                  clientKey: idempotencyKey,
+                  amountCents: validation.amountCents,
+                  purpose: 'instant',
+                }),
               }
             : undefined
         );
@@ -3100,22 +3318,37 @@ Deno.serve(async (req: Request) => {
           {
             stripeAccount: p.stripe_connect_account_id,
             idempotencyKey: idempotencyKey
-              ? `instant_payout_${userId}_${idempotencyKey}_${validation.amountCents}`
+              ? buildPayoutIdempotencyKey({
+                  userId,
+                  clientKey: idempotencyKey,
+                  amountCents: validation.amountCents,
+                  method: 'instant',
+                })
               : undefined,
           }
         );
       } catch (payoutError) {
-        // The platform Transfer above already succeeded — the money is
-        // already sitting in the connected account's Stripe balance and will
-        // still go out via Stripe's normal automatic payout schedule
-        // regardless of this failure. This is NOT a failed withdrawal and
-        // must never trigger a balance refund (that would let the hunter
-        // double-collect once the automatic sweep pays out anyway). Record
-        // it as a completed STANDARD withdrawal that simply couldn't be
-        // expedited, and tell the hunter plainly.
+        // The platform Transfer above already succeeded, so the money is
+        // sitting in the connected account's Stripe balance. That is NOT
+        // payment and must never be recorded as one.
+        //
+        // This block used to insert `status: 'completed'` here on the theory
+        // that Stripe's automatic payout schedule would sweep the funds out
+        // eventually. That theory produced the 2026-08-13 incident: 13
+        // withdrawals ($275) marked paid with no Stripe Payout behind them,
+        // invisible to every control that keys off stripe_payout_id. Whether
+        // the money later arrived depended entirely on account configuration
+        // this code never reads, and on one hunter who knew to pay themselves
+        // from the Stripe Express Dashboard.
+        //
+        // What happens instead: create the STANDARD payout ourselves, record
+        // its id, and leave the row `pending` until payout.paid says the money
+        // landed. A balance refund is still wrong here (the funds did move to
+        // the connected account) — but so is claiming success.
         const errInfo = payoutError as { code?: string; type?: string; message?: string };
+        const instantErrorCode = errInfo?.code ?? errInfo?.message ?? 'unknown';
         console.warn(
-          '[connect/instant-payout] instant payout call failed, falling back to standard sweep',
+          '[connect/instant-payout] instant payout failed, creating standard payout instead',
           {
             userId,
             transferId: transfer.id,
@@ -3124,40 +3357,160 @@ Deno.serve(async (req: Request) => {
           }
         );
 
-        const { data: fallbackTx } = await supabase
+        await writePayoutAudit(supabase, {
+          userId,
+          event: 'instant_payout_failed',
+          payoutMethod: 'instant',
+          amountCents: validation.amountCents,
+          currency,
+          idempotencyKey,
+          stripeConnectAccountId: p.stripe_connect_account_id,
+          errorCode: errInfo?.code ?? 'instant_payout_failed',
+          errorMessage: errInfo?.message ?? null,
+          detail: { transferId: transfer.id },
+        });
+
+        if (!isRecoverableInstantPayoutError(errInfo?.code)) {
+          // The account or destination is the problem, not the delivery
+          // speed. Retrying as `standard` would fail the same way. Leave the
+          // row pending with no payout so reconciliation surfaces it, rather
+          // than sending money at a destination Stripe just rejected.
+          logCritical(
+            'instant payout failed with a non-recoverable error after the transfer landed — funds are in the connected account with no payout',
+            {
+              userId,
+              transferId: transfer.id,
+              amount,
+              stripeCode: errInfo?.code,
+            }
+          );
+        }
+
+        // Standard payout from the connected account's balance. Scoped via
+        // { stripeAccount } so it acts AS the connected account, and keyed
+        // deterministically so a retry replays instead of paying twice.
+        let fallbackPayout: Stripe.Payout | null = null;
+        let fallbackPayoutError: string | null = null;
+        if (isRecoverableInstantPayoutError(errInfo?.code)) {
+          try {
+            fallbackPayout = await stripe.payouts.create(
+              {
+                amount: validation.amountCents,
+                currency,
+                method: 'standard',
+                metadata: {
+                  user_id: userId,
+                  purpose: 'instant_cash_out_fallback',
+                  transfer_id: transfer.id,
+                  instant_payout_error: instantErrorCode,
+                  ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
+                },
+              },
+              {
+                stripeAccount: p.stripe_connect_account_id,
+                idempotencyKey: idempotencyKey
+                  ? buildPayoutIdempotencyKey({
+                      userId,
+                      clientKey: idempotencyKey,
+                      amountCents: validation.amountCents,
+                      method: 'standard',
+                    })
+                  : undefined,
+              }
+            );
+          } catch (fallbackError) {
+            // Both payout attempts failed. The transfer still landed, so the
+            // funds are recoverable — but nothing about this is "completed".
+            // Leave the row pending with no payout id: reconciliation raises
+            // `stale_pending_withdrawal` for it, which is exactly the loud
+            // failure the old silent-success path denied us.
+            const fbInfo = fallbackError as { code?: string; message?: string };
+            fallbackPayoutError = fbInfo?.code ?? fbInfo?.message ?? 'unknown';
+            logCritical(
+              'standard payout fallback also failed — funds are in the connected account with no payout, manual reconciliation required',
+              {
+                userId,
+                transferId: transfer.id,
+                amount,
+                instantError: instantErrorCode,
+                standardError: fallbackPayoutError,
+              }
+            );
+          }
+        }
+
+        const { data: fallbackTx, error: fallbackTxError } = await supabase
           .from('wallet_transactions')
           .insert({
             user_id: userId,
             type: 'withdrawal',
             amount: -amount,
             description: 'Withdrawal to bank account (Instant Cash Out unavailable)',
-            status: 'completed',
+            // NOT 'completed'. Only payout.paid may promote this row.
+            status: 'pending',
             payout_method: 'standard',
             stripe_transfer_id: transfer.id,
+            stripe_payout_id: fallbackPayout?.id ?? null,
             stripe_connect_account_id: p.stripe_connect_account_id,
             idempotency_key: idempotencyKey ?? null,
             metadata: {
               transfer_id: transfer.id,
+              payout_id: fallbackPayout?.id ?? null,
               idempotency_key: idempotencyKey ?? null,
               instant_payout_attempted_but_fell_back: true,
-              instant_payout_error: errInfo?.code ?? errInfo?.message ?? 'unknown',
+              instant_payout_error: instantErrorCode,
+              ...(fallbackPayoutError ? { payout_creation_failed: fallbackPayoutError } : {}),
             },
           })
           .select()
           .single();
 
+        if (fallbackTxError) {
+          // A payout may already exist at this point, so there is real money
+          // in flight with no ledger row behind it. Never swallow this.
+          logCritical(
+            'fallback withdrawal row insert failed — payout may exist with no ledger record, manual reconciliation required',
+            {
+              userId,
+              transferId: transfer.id,
+              payoutId: fallbackPayout?.id ?? null,
+              amount,
+              error: fallbackTxError,
+            }
+          );
+        }
+
+        await writePayoutAudit(supabase, {
+          userId,
+          event: fallbackPayout ? 'stripe_payout_created' : 'withdrawal_failed',
+          payoutMethod: 'standard',
+          amountCents: validation.amountCents,
+          currency,
+          idempotencyKey,
+          stripeConnectAccountId: p.stripe_connect_account_id,
+          stripePayoutId: fallbackPayout?.id ?? null,
+          errorCode: fallbackPayoutError ?? null,
+          detail: {
+            transferId: transfer.id,
+            fellBackFromInstant: true,
+            instantError: instantErrorCode,
+          },
+        });
+
         return jsonResponse({
           transferId: transfer.id,
+          payoutId: fallbackPayout?.id ?? null,
           payoutMethod: 'standard',
-          status: 'completed',
+          status: 'pending',
           amount,
           currency,
           accountId: p.stripe_connect_account_id,
           transactionId: (fallbackTx as WalletTransaction | null)?.id,
           newBalance,
           fellBackToStandard: true,
-          message:
-            "Instant Cash Out couldn't be completed for this card, but your withdrawal is still on its way via standard transfer (typically 1-2 business days). Your balance has been deducted only once.",
+          message: fallbackPayout
+            ? "Instant Cash Out isn't available for this card, so your withdrawal is on its way as a standard bank transfer. It typically arrives in 1-2 business days, and your balance was deducted only once."
+            : "Your withdrawal is being processed. It's taking longer than usual to confirm with our payments provider — we're on it, and your balance was deducted only once.",
         });
       }
 
@@ -3173,7 +3526,13 @@ Deno.serve(async (req: Request) => {
           type: 'withdrawal',
           amount: -amount,
           description: 'Instant Cash Out to debit card',
-          status: 'completed',
+          // A submitted payout is not a settled payout. Even an instant
+          // payout can fail or be canceled after creation, so the row waits
+          // for payout.paid like every other withdrawal. Instant payouts
+          // typically settle within minutes, so this window is short — but it
+          // is a real window, and pretending otherwise is what this whole
+          // change exists to stop.
+          status: 'pending',
           payout_method: 'instant',
           stripe_transfer_id: transfer.id,
           stripe_payout_id: payout.id,
@@ -3194,7 +3553,31 @@ Deno.serve(async (req: Request) => {
         .single();
 
       if (txError) {
-        // Same concurrent-duplicate-insert race handling as /transfer.
+        // Same two-source 23505 handling as /transfer — see the comment there.
+        const instantViolated = `${(txError as { message?: string }).message ?? ''} ${
+          (txError as { details?: string }).details ?? ''
+        }`;
+        if (
+          (txError as { code?: string }).code === '23505' &&
+          instantViolated.includes('idx_wallet_tx_one_pending_withdrawal')
+        ) {
+          console.warn(
+            '[connect/instant-payout] lost race to another in-flight withdrawal, refunding',
+            { userId, transferId: transfer.id, payoutId: payout.id }
+          );
+          const { error: raceRefundError } = await supabase.rpc('update_balance', {
+            p_user_id: userId,
+            p_amount: amount,
+          });
+          if (raceRefundError) {
+            logCritical(
+              'refund after in-flight-withdrawal race failed — manual reconciliation required',
+              { userId, amount, payoutId: payout.id, error: raceRefundError }
+            );
+          }
+          return inFlightWithdrawalResponse({ amount });
+        }
+
         if ((txError as { code?: string }).code === '23505' && idempotencyKey) {
           console.warn(
             '[connect/instant-payout] concurrent duplicate detected, refunding extra deduction',
@@ -3234,7 +3617,7 @@ Deno.serve(async (req: Request) => {
             transferId: w?.stripe_transfer_id ?? transfer.id,
             payoutId: w?.stripe_payout_id ?? payout.id,
             payoutMethod: w?.payout_method ?? 'instant',
-            status: w?.status ?? 'completed',
+            status: w?.status ?? 'pending',
             amount,
             currency,
             accountId: p.stripe_connect_account_id,
@@ -3258,7 +3641,7 @@ Deno.serve(async (req: Request) => {
           transferId: transfer.id,
           payoutId: payout.id,
           payoutMethod: 'instant',
-          status: 'completed',
+          status: 'pending',
           amount,
           currency,
           accountId: p.stripe_connect_account_id,
@@ -3268,7 +3651,7 @@ Deno.serve(async (req: Request) => {
         });
       }
 
-      console.log('[connect/instant-payout] instant cash out completed', {
+      console.log('[connect/instant-payout] instant payout submitted', {
         userId,
         transferId: transfer.id,
         payoutId: payout.id,
@@ -3279,14 +3662,14 @@ Deno.serve(async (req: Request) => {
         transferId: transfer.id,
         payoutId: payout.id,
         payoutMethod: 'instant',
-        status: 'completed',
+        status: 'pending',
         amount,
         currency,
         accountId: p.stripe_connect_account_id,
         transactionId: (transaction as WalletTransaction).id,
         newBalance,
         estimatedFee: estimatedFeeCents / 100,
-        message: 'Instant Cash Out complete. Funds typically arrive within minutes.',
+        message: 'Instant Cash Out sent. Funds typically arrive within minutes.',
       });
     }
 

@@ -97,6 +97,10 @@ interface DriftReport {
   totalLedgerAmountCents: number;
   deltaCents: number;
   safeRepairs: number;
+  /** Withdrawals asserting completion with no Stripe payout behind them. */
+  completedWithoutPayout: number;
+  /** Withdrawals still pending long past normal payout settlement. */
+  paidButNotCompleted: number;
   health: Health;
   unreconciled: UnreconciledEntry[];
 }
@@ -428,6 +432,8 @@ serve(async (req: Request) => {
   let orphanLedger = 0;
   let stalePending = 0;
   let safeRepairs = 0;
+  let completedWithoutPayout = 0;
+  let paidButNotCompleted = 0;
   let totalStripeAmountCents = 0;
   let totalLedgerAmountCents = 0;
 
@@ -756,8 +762,51 @@ serve(async (req: Request) => {
         continue;
       }
 
-      // No payout id at all. Fine briefly (the row is written moments before
-      // the payout id lands); a problem if it persists.
+      // No payout id at all.
+      //
+      // THE 2026-08-13 BLIND SPOT. This branch used to be guarded by
+      // `status === 'pending'` alone, so a withdrawal marked 'completed' with
+      // a null payout id — the exact shape the instant-payout fallback
+      // produced 13 times — fell off the end of this loop untouched. 25 such
+      // rows ($526.65) passed through this job every night for a month
+      // without raising anything. A completed withdrawal with no payout is
+      // the most serious state this system can be in: it asserts a hunter was
+      // paid while holding no evidence that anyone was.
+      if (status === 'completed') {
+        completedWithoutPayout++;
+        unreconciled.push({
+          kind: 'completed_withdrawal_without_payout',
+          transactionId: row.id as string,
+          userId: (row.user_id as string) ?? null,
+          ledgerStatus: status,
+          ageHours: Math.round(ageH),
+        });
+        findings.push({
+          findingType: 'completed_withdrawal_without_payout',
+          severity: 'CRITICAL',
+          userId: (row.user_id as string) ?? null,
+          details: {
+            transactionId: row.id,
+            amount: row.amount,
+            ageHours: Math.round(ageH),
+            note: 'Withdrawal is completed but references no Stripe payout. Completion is unverifiable — a Transfer alone is not payment. Do not resolve by inventing a payout id; confirm delivery in Stripe first.',
+          },
+        });
+        alert('CRITICAL', 'completed_withdrawal_without_payout', {
+          transactionId: row.id,
+          userId: row.user_id,
+          amount: row.amount,
+        });
+        continue;
+      }
+
+      // manually_paid is an explicit human decision recorded via
+      // mark_externally_settled and is expected to have no Stripe payout.
+      if (status === 'manually_paid') continue;
+
+      // Pending with no payout id: either the payout was never created (the
+      // /connect routes log CRITICAL when payouts.create throws) or the id was
+      // never recorded. Fine briefly, a problem if it persists.
       if (status === 'pending' && ageH > STALE_PENDING_WARN_HOURS) {
         stalePending++;
         unreconciled.push({
@@ -783,6 +832,98 @@ serve(async (req: Request) => {
           { transactionId: row.id, ageHours: Math.round(ageH) }
         );
       }
+    }
+
+    // -----------------------------------------------------------------
+    // Invariant sweep — deliberately NOT limited to the reconcile window.
+    //
+    // "No completed withdrawal may exist without a settled Stripe payout id"
+    // is the invariant the 2026-08-13 incident violated 13 times, and the DB
+    // CHECK constraint now enforces it going forward. This sweep is the
+    // detection half: it reports every existing violation regardless of age,
+    // so the historical rows the constraint grandfathers stay visible instead
+    // of quietly aging out of a 72-hour window.
+    //
+    // It reports. It does not repair. Resolving one of these requires
+    // confirming in Stripe whether money actually reached the hunter, which
+    // is a human decision and never a job's.
+    // -----------------------------------------------------------------
+    const { data: invariantRows, error: invariantError } = await supabase
+      .from('wallet_transactions')
+      .select('id, user_id, amount, status, created_at, stripe_transfer_id')
+      .eq('type', 'withdrawal')
+      .eq('status', 'completed')
+      .is('stripe_payout_id', null)
+      .order('created_at', { ascending: false })
+      .limit(500);
+
+    if (invariantError) {
+      findings.push({
+        findingType: 'invariant_sweep_failed',
+        severity: 'WARNING',
+        userId: null,
+        details: { error: invariantError.message },
+      });
+    } else {
+      const violations = (invariantRows ?? []) as Array<Record<string, unknown>>;
+      if (violations.length > 0) {
+        const totalCents = violations.reduce(
+          (sum, r) => sum + Math.round(Math.abs(Number(r.amount ?? 0)) * 100),
+          0
+        );
+        findings.push({
+          findingType: 'completed_withdrawal_without_payout_total',
+          severity: 'CRITICAL',
+          userId: null,
+          details: {
+            count: violations.length,
+            totalCents,
+            oldest: violations[violations.length - 1]?.created_at ?? null,
+            newest: violations[0]?.created_at ?? null,
+            transactionIds: violations.slice(0, 50).map(r => r.id),
+            note: 'Withdrawals marked completed with no Stripe payout id. Rows predating 2026-08-17 are the known historical set from the instant-payout fallback incident; anything newer means the invariant is being bypassed.',
+          },
+        });
+        alert('CRITICAL', 'completed_withdrawal_without_payout_total', {
+          count: violations.length,
+          totalCents,
+        });
+      }
+    }
+
+    // Reverse direction: a payout Stripe has settled while the ledger still
+    // says pending. The safe-repair path above fixes these when the payout is
+    // inside the window; this catches the ones that have aged past it, where a
+    // hunter has been paid but their history still shows a withdrawal in
+    // progress.
+    const { data: stuckRows, error: stuckError } = await supabase
+      .from('wallet_transactions')
+      .select('id, user_id, amount, status, created_at, stripe_payout_id')
+      .eq('type', 'withdrawal')
+      .eq('status', 'pending')
+      .not('stripe_payout_id', 'is', null)
+      .lt('created_at', new Date(Date.now() - PAYOUT_PENDING_CRITICAL_HOURS * HOUR_MS).toISOString())
+      .limit(200);
+
+    if (!stuckError && (stuckRows ?? []).length > 0) {
+      for (const row of (stuckRows ?? []) as Array<Record<string, unknown>>) {
+        paidButNotCompleted++;
+        findings.push({
+          findingType: 'pending_withdrawal_past_payout_deadline',
+          severity: 'WARNING',
+          userId: (row.user_id as string) ?? null,
+          details: {
+            transactionId: row.id,
+            payoutId: row.stripe_payout_id,
+            amount: row.amount,
+            ageHours: Math.round(hoursSince(row.created_at as string)),
+            note: 'Withdrawal still pending well past normal payout settlement. Check the payout in Stripe: if it is paid, payout.paid was missed and the row needs promoting; if it failed, the balance was never refunded.',
+          },
+        });
+      }
+      alert('WARNING', 'pending_withdrawal_past_payout_deadline', {
+        count: (stuckRows ?? []).length,
+      });
     }
 
     // -----------------------------------------------------------------
@@ -850,6 +991,8 @@ serve(async (req: Request) => {
       totalLedgerAmountCents,
       deltaCents,
       safeRepairs,
+      completedWithoutPayout,
+      paidButNotCompleted,
       health,
       unreconciled,
     };
@@ -877,6 +1020,8 @@ serve(async (req: Request) => {
       orphanLedger,
       stalePending,
       safeRepairs,
+      completedWithoutPayout,
+      paidButNotCompleted,
       deltaCents,
       durationMs: report.durationMs,
     });
