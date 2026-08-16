@@ -8,6 +8,7 @@ import { logClientError, logClientInfo } from 'lib/services/monitoring'
 import { navigationIntent } from 'lib/services/navigation-intent'
 import { sendMessage as sendSupabaseMessage } from 'lib/services/supabase-messaging'
 import { supabase } from 'lib/supabase'
+import { router } from 'expo-router'
 import { useCallback } from 'react'
 import { Alert } from 'react-native'
 
@@ -264,14 +265,14 @@ export function useAcceptRequest({
       const viewAction = {
         text: 'View Conversation',
         onPress: () => {
-          // Re-assert the pending conversation id and a pending navigation
-          // target just before navigating so the root app and MessengerScreen
-          // can reliably pick them up on mount.
-          ;(async () => {
-            try { await navigationIntent.setPendingConversationId(pendingConvId) } catch {}
-            try { await navigationIntent.setPendingNavigation('?screen=messages') } catch {}
+          if (pendingConvId) {
+            // Navigate directly to the conversation screen.
+            router.push(`/tabs/messenger/${encodeURIComponent(pendingConvId)}` as any)
+          } else {
+            // Fallback: open the My Bounties / Inbox tab so the user can find
+            // the conversation manually.
             try { setActiveScreen('messages') } catch {}
-          })()
+          }
         }
       }
 

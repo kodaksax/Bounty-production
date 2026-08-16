@@ -978,6 +978,42 @@ export function MyPostingExpandable({
     router.push(`/bounty/${bounty.id}/dispute`);
   };
 
+  const handleMessageHunter = async () => {
+    let targetConversationId: string | null = conversation?.id ? String(conversation.id) : null;
+    try {
+      if (!targetConversationId) {
+        const hunterId = bounty.accepted_by;
+        if (!hunterId) {
+          Alert.alert('No Conversation', 'No active conversation found for this bounty yet.');
+          return;
+        }
+        const targetConversation = await messageService.getOrCreateConversation(
+          [String(hunterId)],
+          bounty.title || 'Conversation',
+          String(bounty.id)
+        );
+        targetConversationId = targetConversation?.id ? String(targetConversation.id) : null;
+        if (targetConversation) {
+          dispatchUi({ type: 'set', key: 'conversation', value: targetConversation });
+        }
+      }
+      if (!targetConversationId) {
+        Alert.alert(
+          'Message Failed',
+          'We could not open or create a conversation. You can try again or compose a new message manually.'
+        );
+        return;
+      }
+      router.push(`/tabs/messenger/${encodeURIComponent(targetConversationId)}` as any);
+    } catch (err) {
+      console.error('[handleMessageHunter] Failed to open conversation:', err);
+      Alert.alert(
+        'Message Failed',
+        'We could not open or create a conversation. You can try again or compose a new message manually.'
+      );
+    }
+  };
+
   const handleMessagePoster = async () => {
     let targetConversationId: string | null = null;
     try {
@@ -1212,6 +1248,16 @@ export function MyPostingExpandable({
                     />
                   )}
 
+                  <TouchableOpacity
+                    style={styles.messagingBtn}
+                    onPress={handleMessageHunter}
+                    accessibilityRole="button"
+                    accessibilityLabel="Message Hunter"
+                  >
+                    <MaterialIcons name="chat" size={18} color="#fff" />
+                    <Text style={styles.messagingBtnText}>Message Hunter</Text>
+                  </TouchableOpacity>
+
                   <AttachmentsList attachments={attachments} />
 
                   <RatingStars
@@ -1405,6 +1451,16 @@ export function MyPostingExpandable({
                       size={18}
                       color="#fff"
                     />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.messagingBtn}
+                    onPress={handleMessagePoster}
+                    accessibilityRole="button"
+                    accessibilityLabel="Message Poster"
+                  >
+                    <MaterialIcons name="chat" size={18} color="#fff" />
+                    <Text style={styles.messagingBtnText}>Message Poster</Text>
                   </TouchableOpacity>
 
                   <View style={styles.hunterToolsSection}>
@@ -1982,6 +2038,21 @@ function makeStyles(theme: AppTheme) {
       borderRadius: 10,
     },
     primaryText: { color: '#fff', fontWeight: '600' },
+    messagingBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      backgroundColor: '#0284c7',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderRadius: 10,
+    },
+    messagingBtnText: {
+      color: '#fff',
+      fontWeight: '600',
+      fontSize: 15,
+    },
     muted: { color: theme.textSecondary, fontSize: 12 },
     honorBadge: {
       flexDirection: 'row',
