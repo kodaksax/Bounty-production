@@ -1845,7 +1845,7 @@ export function MyPostingExpandable({
                           if (!bounty) return;
                           Alert.alert(
                             'Delete Bounty',
-                            'Permanently delete this bounty from active lists? It will remain in your history. This cannot be undone.',
+                            'Permanently delete this bounty? This cannot be undone.',
                             [
                               { text: 'Cancel', style: 'cancel' },
                               {
@@ -1858,7 +1858,7 @@ export function MyPostingExpandable({
                                     if (!success) throw new Error('Failed to delete bounty');
                                     Alert.alert(
                                       'Deleted',
-                                      'Bounty deleted and removed from active lists.'
+                                      'Bounty permanently deleted.'
                                     );
                                     onRefresh?.();
                                   } catch (err) {

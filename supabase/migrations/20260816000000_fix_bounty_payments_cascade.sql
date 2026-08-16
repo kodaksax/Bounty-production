@@ -18,3 +18,21 @@ ALTER TABLE public.bounty_payments
     FOREIGN KEY (bounty_id)
     REFERENCES public.bounties(id)
     ON DELETE CASCADE;
+
+GRANT DELETE ON TABLE public.bounty_payments TO authenticated;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'bounty_payments'
+      AND policyname = 'bounty_payments_delete_poster'
+  ) THEN
+    CREATE POLICY bounty_payments_delete_poster ON public.bounty_payments
+      FOR DELETE
+      USING (auth.uid() = poster_id);
+  END IF;
+END
+$$;
