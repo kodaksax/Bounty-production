@@ -771,11 +771,9 @@ export async function listBankAccounts(
  * @returns Never resolves; throws a ValidationError with migration guidance
  */
 export async function removeBankAccount(
-  userId: string,
+  _userId: string,
   bankAccountId: string
 ): Promise<{ success: boolean }> {
-  await getConnectAccountId(userId);
-
   throw new ValidationError(
     'Removing a bank account here is no longer supported. Please remove it through your Stripe payout dashboard.',
     {
@@ -797,11 +795,9 @@ export async function removeBankAccount(
  * @returns Never resolves; throws a ValidationError with migration guidance
  */
 export async function setDefaultBankAccount(
-  userId: string,
+  _userId: string,
   bankAccountId: string
 ): Promise<BankAccountResult> {
-  await getConnectAccountId(userId);
-
   throw new ValidationError(
     'Setting a default bank account here is no longer supported. Please set it through your Stripe payout dashboard.',
     {
