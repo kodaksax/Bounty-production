@@ -36,12 +36,6 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ configured: false, webhookSecretConfigured: !!webhookSecret });
   }
 
-  const keyPrefix = stripeKey.startsWith('sk_test_')
-    ? 'sk_test_'
-    : stripeKey.startsWith('sk_live_')
-      ? 'sk_live_'
-      : 'unrecognized';
-
   try {
     const resp = await fetch('https://api.stripe.com/v1/balance', {
       headers: { Authorization: `Bearer ${stripeKey}` },
