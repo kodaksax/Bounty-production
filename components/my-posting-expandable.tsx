@@ -1854,10 +1854,8 @@ export function MyPostingExpandable({
                                 onPress: async () => {
                                   try {
                                     setIsProcessing(true);
-                                    const updated = await bountyService.update(String(bounty.id), {
-                                      status: 'deleted',
-                                    });
-                                    if (!updated) throw new Error('Failed to delete bounty');
+                                    const success = await bountyService.delete(bounty.id);
+                                    if (!success) throw new Error('Failed to delete bounty');
                                     Alert.alert(
                                       'Deleted',
                                       'Bounty deleted and removed from active lists.'

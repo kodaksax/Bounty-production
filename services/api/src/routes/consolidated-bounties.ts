@@ -877,6 +877,22 @@ export async function registerConsolidatedBountyRoutes(
           throw new AuthorizationError('Only the bounty owner can perform this action');
         }
 
+        // Delete related bounty_payments records first.
+        // The FK on bounty_payments.bounty_id lacked ON DELETE CASCADE in older
+        // environments; once migration 20260816000000_fix_bounty_payments_cascade
+        // has been applied everywhere this becomes a safe no-op.
+        const { error: paymentsDeleteError } = await supabase
+          .from('bounty_payments')
+          .delete()
+          .eq('bounty_id', bountyId);
+
+        if (paymentsDeleteError) {
+          request.log.warn(
+            { error: paymentsDeleteError.message, bountyId },
+            'Failed to delete bounty_payments records before bounty delete'
+          );
+        }
+
         // Delete bounty
         const { error: deleteError } = await supabase
           .from('bounties')
