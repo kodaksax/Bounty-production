@@ -7,6 +7,7 @@ import { analytics as heycatch } from 'npm:@heycatch/sdk@0.7.0/server';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Stripe from 'npm:stripe@14';
 import type { WalletTransaction } from '../_shared/types.ts';
+import { decidePayoutEventAction } from '../_shared/payout-state.ts';
 
 // Module scope, once per server bundle — see the HeyCatch RN/server install
 // guide. Business events fired below (payment_completed, payout_success,
@@ -133,58 +134,64 @@ async function syncConnectAccountToProfile(
 }
 
 /**
- * Locates the wallet_transactions row a Payout event should update. Prefers
- * an exact match on stripe_payout_id — unambiguous, and always set at
- * creation time for Instant Cash Out rows (POST /connect/instant-payout).
- * Falls back to matching by (user, exact amount) among completed
- * withdrawals, which remains the only option for STANDARD withdrawals before
- * any payout webhook has named them yet — see handleUndeliveredPayout's own
- * docstring for the residual ambiguity that fallback cannot fully resolve
- * (two completed withdrawals of the exact same amount for one user).
+ * Locates the wallet_transactions row a Payout event refers to, by
+ * `stripe_payout_id` and nothing else.
+ *
+ * This used to fall back to "most recent completed withdrawal for this user
+ * with this exact amount" when the id did not match. That heuristic is
+ * unsound, and it demonstrably misfired: dashboard-initiated payout
+ * po_1Txc3k… ($20, 2026-07-27) was attached to a withdrawal row from
+ * 2026-07-16, eleven days earlier. Because Stripe's automatic payouts sweep
+ * the connected account's *entire* balance and hunters can create their own
+ * payouts from the Express Dashboard, a payout frequently has no 1:1
+ * withdrawal at all — and matching one anyway meant handleUndeliveredPayout
+ * could credit real balance against a withdrawal that had already been
+ * delivered.
+ *
+ * Identifier matching is now the only matching. Every withdrawal row created
+ * by /connect carries its payout id from birth, so the id is always available
+ * for anything this system originated. A payout with no id match is either
+ * foreign (dashboard/automatic) or an orphan; both are reported for human
+ * review rather than guessed at. Legacy rows written before 2026-08-16 have
+ * no payout id and are deliberately left alone — this change does not
+ * retro-fit history.
+ *
+ * Status is deliberately NOT filtered here: callers apply their own
+ * compare-and-set on the status they require, which is what makes replayed
+ * and out-of-order deliveries safe.
  */
 async function findCandidateWithdrawalTx(
   // deno-lint-ignore no-explicit-any
   supabase: any,
   userId: string,
   payout: Stripe.Payout
-): Promise<{ id: string; amount: number; metadata: Record<string, unknown> | null; payout_method?: string } | null> {
+): Promise<{
+  id: string;
+  amount: number;
+  status: string;
+  metadata: Record<string, unknown> | null;
+  payout_method?: string;
+} | null> {
   const { data: byPayoutId, error: byPayoutIdError } = await supabase
     .from('wallet_transactions')
-    .select('id, amount, metadata, payout_method')
+    .select('id, amount, status, metadata, payout_method')
     .eq('stripe_payout_id', payout.id)
-    .eq('status', 'completed')
+    .eq('type', 'withdrawal')
     .maybeSingle();
 
   if (byPayoutIdError) {
     console.error('[webhooks] Failed to look up transaction by stripe_payout_id', {
       payoutId: payout.id,
+      userId,
       error: byPayoutIdError,
     });
-  } else if (byPayoutId) {
-    return byPayoutId;
+    // Throw rather than silently returning null: a lookup failure is not
+    // evidence that no row exists, and treating it as such is how a payout
+    // event gets dropped.
+    throw byPayoutIdError;
   }
 
-  const payoutAmountDollars = payout.amount / 100;
-  const { data: byAmount, error: byAmountError } = await supabase
-    .from('wallet_transactions')
-    .select('id, amount, metadata, payout_method')
-    .eq('user_id', userId)
-    .eq('type', 'withdrawal')
-    .eq('status', 'completed')
-    .eq('amount', -payoutAmountDollars)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (byAmountError) {
-    console.error('[webhooks] Failed to look up candidate transaction by amount', {
-      payoutId: payout.id,
-      userId,
-      error: byAmountError,
-    });
-    throw byAmountError;
-  }
-  return byAmount ?? null;
+  return byPayoutId ?? null;
 }
 
 /**
@@ -239,8 +246,8 @@ async function reconcileInstantPayoutFee(
 /**
  * Shared handler for `payout.failed` and `payout.canceled`. Both events mean
  * the same thing from the wallet's perspective: the platform-to-connected-
- * account Transfer already succeeded (the withdrawal row is 'completed'),
- * but the connected-account-to-bank Payout never delivered the money, so the
+ * account Transfer already succeeded (the withdrawal row is 'pending'), but
+ * the connected-account-to-bank Payout never delivered the money, so the
  * balance must be credited back to the hunter — otherwise their app balance
  * is permanently short by the withdrawal amount with no automated recovery.
  *
@@ -255,13 +262,13 @@ async function reconcileInstantPayoutFee(
  * mechanics are identical because the financial consequence (money did not
  * arrive) is identical.
  *
- * LIMITATION (shared with the original payout.failed logic): Stripe's
- * automatic Connect payouts sweep the connected account's *entire* available
- * balance on a schedule — a payout is not necessarily 1:1 with a single
- * Transfer. We match by (user, exact amount) against the most recent
- * unresolved completed withdrawal. If two completed, unresolved withdrawals
- * of the exact same amount exist for one user, only the most recent is
- * matched; this is logged for manual review, not silently wrong.
+ * Matching is by `stripe_payout_id` only. Stripe's automatic Connect payouts
+ * sweep the connected account's *entire* available balance on a schedule, so a
+ * payout is frequently not 1:1 with any single withdrawal — and hunters can
+ * create their own payouts from the Express Dashboard, which are not ours at
+ * all. The previous (user, exact amount) fallback could therefore credit real
+ * balance against an unrelated, already-delivered withdrawal. An unmatched
+ * payout is now reported, never guessed at; see findCandidateWithdrawalTx.
  */
 async function handleUndeliveredPayout(
   // deno-lint-ignore no-explicit-any
@@ -294,30 +301,42 @@ async function handleUndeliveredPayout(
   const candidateTx = await findCandidateWithdrawalTx(supabase, profile.id, payout);
 
   if (!candidateTx) {
+    // No withdrawal carries this payout id. That means the payout is foreign
+    // to Bounty — an automatic balance sweep, or one the hunter created in the
+    // Stripe Express Dashboard — or it is an orphan. Either way there is
+    // nothing of ours to roll back, and guessing at a row by amount (the
+    // pre-2026-08-16 behaviour) risked crediting balance against a withdrawal
+    // that had already been delivered.
     console.warn(
-      `[webhooks] No matching completed withdrawal found for payout ${payout.id} ` +
-        `(user ${profile.id}, amount $${payout.amount / 100}) — nothing to refund. ` +
-        'Manual review recommended if this is unexpected.'
+      `[webhooks] payout.${outcome} ${payout.id} (user ${profile.id}, $${payout.amount / 100}) ` +
+        'matches no withdrawal by payout id — no ledger action taken. ' +
+        'If this payout was Bounty-originated, reconciliation will report it as an orphan.'
     );
   } else {
     const candidateTxRow = candidateTx as unknown as WalletTransaction;
     const candidateMetadata = (candidateTxRow.metadata as Record<string, unknown> | null) ?? {};
-    // Idempotency guard covers redelivery of either event type for the same
-    // transaction — once refunded via either outcome, never refund again.
-    const refundAlreadyIssued =
-      candidateMetadata.payout_status === 'failed' || candidateMetadata.payout_status === 'canceled';
+    // Duplicate deliveries, replays and out-of-order events are all resolved
+    // by decidePayoutEventAction — see its docstring for the rules.
+    const action = decidePayoutEventAction({
+      outcome,
+      row: {
+        id: candidateTxRow.id,
+        status: candidateTx.status,
+        amount: candidateTxRow.amount,
+        metadata: candidateMetadata,
+      },
+    });
 
-    if (refundAlreadyIssued) {
-      console.log(
-        `[webhooks] Skipping duplicate refund for payout ${payout.id} — balance already restored in a prior invocation`
-      );
+    if (action.kind === 'noop') {
+      console.log(`[webhooks] payout.${outcome} ${payout.id}: no ledger action (${action.reason})`);
     } else {
-      const { data: updatedTx, error: txUpdateError } = await supabase
-        .from('wallet_transactions')
-        .update({
-          status: 'failed',
-          stripe_payout_id: payout.id,
-          metadata: {
+      const refundAmount = Math.abs(candidateTxRow.amount);
+      const { data: failedTx, error: failedTxError } = await supabase
+        .rpc('fail_legacy_withdrawal', {
+          p_transaction_id: candidateTxRow.id,
+          p_user_id: profile.id,
+          p_stripe_payout_id: payout.id,
+          p_metadata_patch: {
             ...candidateMetadata,
             payout_status: outcome,
             payout_failure_code: payout.failure_code ?? (outcome === 'canceled' ? 'canceled' : null),
@@ -325,42 +344,23 @@ async function handleUndeliveredPayout(
             payout_id: payout.id,
           },
         })
-        .eq('id', candidateTxRow.id)
-        .eq('status', 'completed') // optimistic-lock guard against a concurrent redelivery
-        .select()
-        .maybeSingle();
+        .single();
 
-      if (txUpdateError) {
-        console.error(`[webhooks] Failed to update transaction for payout.${outcome}`, {
+      if (failedTxError) {
+        console.error(`[webhooks] Failed to apply atomic refund for payout.${outcome}`, {
           transactionId: candidateTxRow.id,
           payoutId: payout.id,
-          error: txUpdateError,
+          error: failedTxError,
         });
-        throw txUpdateError;
+        throw failedTxError;
       }
 
-      if (!updatedTx) {
+      const refundResult = failedTx as { refunded?: boolean | null; refund_amount?: number | null } | null;
+      if (!refundResult?.refunded) {
         console.log(
           `[webhooks] Skipping duplicate refund for payout ${payout.id} — a concurrent delivery already resolved this transaction`
         );
       } else {
-        const refundAmount = Math.abs(candidateTxRow.amount);
-        const { error: rpcError } = await supabase.rpc('update_balance', {
-          p_user_id: profile.id,
-          p_amount: refundAmount,
-        });
-        if (rpcError) {
-          const { error: retryError } = await supabase.rpc('update_balance', {
-            p_user_id: profile.id,
-            p_amount: refundAmount,
-          });
-          if (retryError) {
-            logCritical(`balance refund for ${outcome} payout could not be applied — letting Stripe retry`, {
-              payoutId: payout.id, userId: profile.id, error: retryError,
-            });
-            throw retryError;
-          }
-        }
         console.log(
           `[webhooks] Refunded $${refundAmount} to user ${profile.id} for ${outcome} payout ${payout.id}`
         );
@@ -740,7 +740,7 @@ async function handlePayoutStatusUpdate(
       },
     })
     .eq('id', candidateTx.id)
-    .eq('status', 'completed'); // don't overwrite a row a concurrent payout.failed/canceled already resolved
+    .eq('status', 'pending'); // never touch a row a terminal event already resolved
 
   if (updateErr) {
     console.error('[webhooks] Failed to record payout.updated status', {
@@ -2146,31 +2146,107 @@ Deno.serve(async (req: Request) => {
               console.warn('[webhooks] HeyCatch trackEvent failed (non-fatal)', analyticsErr);
             }
 
-            // Best-effort: backfill stripe_payout_id (useful for standard
-            // rows, where this is the first time Bounty learns the payout
-            // id) and reconcile the instant-payout fee against the
-            // pre-submission estimate. Deliberately non-throwing —
-            // payout.paid is "notification only, no balance action" by
-            // design; a failure here must never turn an already-successful
-            // payout into a retried/erroring webhook delivery.
+            // THE completion event. payout.paid is the only authoritative
+            // signal that money reached the hunter's bank, and this is the
+            // only place in the codebase that may promote a withdrawal to
+            // 'completed'.
+            //
+            // Before 2026-08-16 this handler did not touch status at all — it
+            // only back-filled the payout id — while /connect wrote
+            // 'completed' up front on the strength of a Transfer. Both halves
+            // were wrong, and together they produced a ledger where
+            // 'completed' meant "we tried" rather than "they were paid".
+            //
+            // Idempotency is structural, not bolted on: the update is a
+            // compare-and-set on status='pending'. A replayed or out-of-order
+            // delivery matches zero rows and changes nothing. It moves no
+            // money — the payout already happened — so there is no balance
+            // action to double-apply.
             try {
               const candidateTx = await findCandidateWithdrawalTx(supabase, paidProfile.id, payout);
-              if (candidateTx) {
-                await supabase
-                  .from('wallet_transactions')
-                  .update({ stripe_payout_id: payout.id })
-                  .eq('id', candidateTx.id)
-                  .is('stripe_payout_id', null);
+              const action = decidePayoutEventAction({
+                outcome: 'paid',
+                row: candidateTx
+                  ? {
+                      id: candidateTx.id,
+                      status: candidateTx.status,
+                      amount: candidateTx.amount,
+                      metadata: candidateTx.metadata,
+                    }
+                  : null,
+              });
+              const shouldReconcileInstantFee =
+                !!candidateTx &&
+                (payout.method === 'instant' || candidateTx.payout_method === 'instant');
 
-                if (payout.method === 'instant' || candidateTx.payout_method === 'instant') {
-                  await reconcileInstantPayoutFee(stripe, supabase, payout, paidAccountId, candidateTx.id);
+              if (action.kind === 'noop') {
+                console.log(
+                  `[webhooks] payout.paid ${payout.id}: no ledger action (${action.reason})`
+                );
+                if (action.reason === 'no_matching_withdrawal') {
+                  // Foreign payouts (automatic sweeps, Express Dashboard) land
+                  // here legitimately; reconciliation reports genuine orphans.
+                  console.warn(
+                    `[webhooks] payout.paid ${payout.id} ($${payout.amount / 100}) matched no withdrawal for user ${paidProfile.id} — foreign or orphan payout`
+                  );
+                }
+              } else if (candidateTx) {
+                const candidateMeta =
+                  (candidateTx.metadata as Record<string, unknown> | null) ?? {};
+                const { data: promoted, error: promoteError } = await supabase
+                  .from('wallet_transactions')
+                  .update({
+                    status: 'completed',
+                    stripe_payout_id: payout.id,
+                    completed_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                    metadata: {
+                      ...candidateMeta,
+                      payout_id: payout.id,
+                      payout_status: 'paid',
+                      payout_paid_at: new Date().toISOString(),
+                    },
+                  })
+                  .eq('id', candidateTx.id)
+                  .eq('status', 'pending') // CAS: replay-safe, terminal states absorb
+                  .select()
+                  .maybeSingle();
+
+                if (promoteError) {
+                  // Throw so Stripe retries: a withdrawal stuck 'pending'
+                  // after its payout settled is a real ledger divergence, and
+                  // reconciliation's 72h window is a slower backstop than a
+                  // webhook retry.
+                  console.error('[webhooks] failed to promote withdrawal on payout.paid', {
+                    payoutId: payout.id,
+                    transactionId: candidateTx.id,
+                    error: promoteError,
+                  });
+                  throw promoteError;
+                }
+
+                if (promoted) {
+                  console.log(
+                    `[webhooks] Withdrawal ${candidateTx.id} completed by payout ${payout.id}`
+                  );
+                } else {
+                  // Already terminal — a duplicate delivery, or reconciliation
+                  // got there first. Expected and harmless.
+                  console.log(
+                    `[webhooks] payout.paid ${payout.id} matched an already-resolved withdrawal, no change`
+                  );
                 }
               }
+
+              if (shouldReconcileInstantFee && candidateTx) {
+                await reconcileInstantPayoutFee(stripe, supabase, payout, paidAccountId, candidateTx.id);
+              }
             } catch (reconcileError) {
-              console.warn('[webhooks] payout.paid reconciliation step failed (non-fatal)', {
+              console.error('[webhooks] payout.paid completion step failed', {
                 payoutId: payout.id,
                 error: (reconcileError as { message?: string })?.message,
               });
+              throw reconcileError;
             }
           } else {
             console.warn(`[webhooks] No profile found for Connect account ${paidAccountId}`);

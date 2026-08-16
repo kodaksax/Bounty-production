@@ -42,7 +42,23 @@ const REQUEST_ERROR_MESSAGES: Record<string, string> = {
   above_instant_maximum: 'Instant Cash Out has a maximum amount per transfer. Try a smaller amount, or use a standard bank withdrawal.',
   insufficient_instant_balance: 'Your Stripe balance available for Instant Cash Out is lower than this amount right now. Try a smaller amount, or use a standard bank withdrawal.',
   daily_instant_limit_reached: "You've reached today's Instant Cash Out limit. Please try again tomorrow, or use a standard bank withdrawal.",
+  // Since 2026-08-16 a withdrawal stays 'pending' until Stripe confirms the
+  // payout reached the bank, and the database allows one in-flight withdrawal
+  // per hunter. Nothing failed here and no balance was deducted — the request
+  // was declined because the previous one is still on its way.
+  withdrawal_already_in_progress:
+    "You already have a withdrawal on its way to your bank. You can start another one once it lands — usually within 1-2 business days.",
 };
+
+// Codes where retrying the identical request right now cannot succeed, so the
+// screen offers no "Try Again". For withdrawal_already_in_progress the request
+// becomes valid again on its own once the in-flight payout settles; offering a
+// button that is guaranteed to fail reads as a broken app.
+const NO_RETRY_ERROR_CODES = new Set(['withdrawal_already_in_progress']);
+
+// Codes that are a decline, not a failure. Nothing went wrong and no money
+// moved, so the harsher "Withdrawal Failed" framing would misrepresent it.
+const NOT_A_FAILURE_ERROR_CODES = new Set(['withdrawal_already_in_progress']);
 
 // Error codes where the fix lives in the Stripe payout dashboard (add/remove/
 // default a bank account or debit card) — these get a direct "Manage Payout
@@ -110,6 +126,9 @@ export function WithdrawalResultScreen({
   const insets = useSafeAreaInsets();
   const showManagePayoutMethods =
     !!onManagePayoutMethods && !!errorCode && MANAGE_PAYOUT_METHODS_ERROR_CODES.has(errorCode);
+  const retryWouldFail = !!errorCode && NO_RETRY_ERROR_CODES.has(errorCode);
+  const showRetry = !!onRetry && !retryWouldFail;
+  const isDecline = !!errorCode && NOT_A_FAILURE_ERROR_CODES.has(errorCode);
 
   if (status === 'processing') {
     return (
@@ -129,10 +148,18 @@ export function WithdrawalResultScreen({
       <View style={[s.container, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}>
         <View style={s.centered}>
           <View style={[s.iconCircle, s.iconCircleError]}>
-            <MaterialIcons name="error-outline" size={44} color="#ef4444" />
+            <MaterialIcons
+              name={isDecline ? 'schedule' : 'error-outline'}
+              size={44}
+              color={isDecline ? theme.textSecondary : '#ef4444'}
+            />
           </View>
           <Text style={s.resultTitle}>
-            {method === 'instant' ? 'Cash Out Failed' : 'Withdrawal Failed'}
+            {isDecline
+              ? 'Withdrawal Already In Progress'
+              : method === 'instant'
+                ? 'Cash Out Failed'
+                : 'Withdrawal Failed'}
           </Text>
           <Text style={s.resultAmount}>{formatCurrency(amount)}</Text>
           <Text style={s.errorMessage}>{message}</Text>
@@ -150,14 +177,14 @@ export function WithdrawalResultScreen({
               <Text style={s.primaryButtonText}>Manage Payout Methods</Text>
             </TouchableOpacity>
           ) : (
-            onRetry && (
+            showRetry && (
               <TouchableOpacity style={s.primaryButton} onPress={onRetry} accessibilityRole="button" accessibilityLabel="Try again">
                 <Text style={s.primaryButtonText}>Try Again</Text>
               </TouchableOpacity>
             )
           )}
           <TouchableOpacity style={s.secondaryButton} onPress={onDismiss} accessibilityRole="button" accessibilityLabel="Dismiss">
-            <Text style={s.secondaryButtonText}>{onRetry || showManagePayoutMethods ? 'Cancel' : 'Done'}</Text>
+            <Text style={s.secondaryButtonText}>{showRetry || showManagePayoutMethods ? 'Cancel' : 'Done'}</Text>
           </TouchableOpacity>
         </View>
       </View>

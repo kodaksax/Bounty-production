@@ -61,9 +61,7 @@ describe('invariant: no duplicate payouts', () => {
   });
 
   it('passes an idempotency key to Stripe scoped by user, key, method and amount', () => {
-    expect(connectSource).toContain(
-      'native_payout_${method}_${userId}_${idempotencyKey}_${amountCents}'
-    );
+    expect(connectSource).toContain('buildNativePayoutIdempotencyKey');
   });
 
   it('resolves the unique-index race without creating a second payout', () => {
@@ -90,7 +88,20 @@ describe('invariant: no duplicate transfers', () => {
 
   it('the legacy transfer path passes a Stripe idempotency key', () => {
     // Retained for rollback; must stay safe while it exists.
-    expect(connectSource).toMatch(/idempotencyKey:\s*`?(instant_)?transfer_/);
+    //
+    // The key used to be built inline as `transfer_${userId}_${key}_${cents}`.
+    // It now comes from buildTransferIdempotencyKey() in _shared/payout-state,
+    // because the inline version interpolated a client timestamp on the
+    // instant path and so produced a fresh key on every retry — Stripe's
+    // idempotency protection was present in the code and absent in effect.
+    // What matters here is unchanged: a key is always passed.
+    expect(connectSource).toMatch(/idempotencyKey:\s*buildTransferIdempotencyKey\(/);
+  });
+
+  it('transfer idempotency keys carry no timestamp', () => {
+    // The specific defect behind the 2026-08-13 incident's retry exposure.
+    expect(connectSource).not.toMatch(/idempotencyKey:\s*`[^`]*\$\{Date\.now\(\)\}/);
+    expect(connectSource).not.toMatch(/`instant_\$\{userId\}_\$\{Date\.now\(\)\}`/);
   });
 
   it('Phase 2 release ties the transfer to its source charge', () => {
@@ -125,9 +136,10 @@ describe('invariant: webhook replay and duplicate delivery are idempotent', () =
 
 describe('invariant: concurrent withdrawals cannot double-spend', () => {
   it('the legacy path deducts through an atomic RPC, not a read-then-write', () => {
-    // withdraw_balance performs the check and the debit under one lock; doing
-    // it in application code would allow two concurrent requests to both pass.
-    expect(connectSource).toContain("supabase.rpc('withdraw_balance'");
+    // begin_legacy_withdrawal inserts the pending row and debits the balance in
+    // one database transaction; doing either piece in application code would
+    // recreate the race where money moves before the serialization guard exists.
+    expect(connectSource).toContain("rpc('begin_legacy_withdrawal'");
     const handlerStart = connectSource.indexOf("if (subPath === '/transfer')");
     const block = connectSource.slice(handlerStart, handlerStart + 6000);
     expect(block).not.toMatch(/update\(\s*\{\s*balance:/);

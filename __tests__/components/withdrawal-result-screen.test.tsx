@@ -177,6 +177,52 @@ describe('WithdrawalResultScreen', () => {
       expect(getByText('Done')).toBeTruthy();
     });
 
+    // Since 2026-08-16 a withdrawal stays pending until Stripe confirms the
+    // payout landed, and the DB allows one in-flight withdrawal per hunter.
+    // A second attempt is declined with 409 withdrawal_already_in_progress.
+    describe('withdrawal_already_in_progress', () => {
+      const renderInProgress = (extra = {}) =>
+        render(
+          <WithdrawalResultScreen
+            status="failure"
+            method="standard"
+            amount={50}
+            errorCode="withdrawal_already_in_progress"
+            errorMessage="raw server message"
+            onDismiss={jest.fn()}
+            {...extra}
+          />
+        );
+
+      it('explains that an earlier withdrawal is still on its way', () => {
+        const { getByText } = renderInProgress();
+        expect(
+          getByText(/already have a withdrawal on its way to your bank/i)
+        ).toBeTruthy();
+        expect(getByText(/1-2 business days/i)).toBeTruthy();
+      });
+
+      it('does not frame a decline as a failure', () => {
+        const { getByText, queryByText } = renderInProgress();
+        expect(getByText('Withdrawal Already In Progress')).toBeTruthy();
+        expect(queryByText('Withdrawal Failed')).toBeNull();
+      });
+
+      it('uses the same copy for the instant flow', () => {
+        const { queryByText } = renderInProgress({ method: 'instant' });
+        expect(queryByText('Cash Out Failed')).toBeNull();
+      });
+
+      it('hides Try Again, because retrying now fails identically', () => {
+        const onRetry = jest.fn();
+        const { queryByText, getByText } = renderInProgress({ onRetry });
+        expect(queryByText('Try Again')).toBeNull();
+        // With no retry offered, the dismiss action reads as Done, not Cancel.
+        expect(getByText('Done')).toBeTruthy();
+        expect(onRetry).not.toHaveBeenCalled();
+      });
+    });
+
     it('shows "Manage Payout Methods" instead of "Try Again" for a payout-method error code, and calls onManagePayoutMethods', () => {
       const onManagePayoutMethods = jest.fn();
       const onRetry = jest.fn();

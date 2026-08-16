@@ -256,8 +256,15 @@ describe('connect edge function contract (inlined helpers stay in sync)', () => 
   });
 
   test('passes a Stripe idempotency key when creating transfers', () => {
-    expect(indexSource).toMatch(/idempotencyKey: `transfer_\$\{userId\}_\$\{idempotencyKey\}/);
-    expect(indexSource).toMatch(/idempotencyKey: `retry_\$\{transactionId\}_\$\{retryCount \+ 1\}`/);
+    // Built by buildTransferIdempotencyKey() since 2026-08-16 rather than
+    // interpolated inline — see financial-invariants.test.ts for why.
+    expect(indexSource).toMatch(/idempotencyKey:\s*buildTransferIdempotencyKey\(/);
+  });
+
+  test('passes a Stripe idempotency key when creating payouts', () => {
+    // The payout is the leg that actually moves money to the hunter, so a
+    // retry replaying rather than re-paying matters more here than anywhere.
+    expect(indexSource).toMatch(/buildPayoutIdempotencyKey\(\{/);
   });
 
   test('verifies live payout eligibility before deducting balance', () => {
@@ -265,9 +272,15 @@ describe('connect edge function contract (inlined helpers stay in sync)', () => 
     expect(indexSource).toContain("code: 'payouts_disabled'");
   });
 
-  test('refunds the deducted balance when a concurrent duplicate loses the insert race', () => {
-    expect(indexSource).toContain('concurrent duplicate detected');
-    expect(indexSource).toContain("'23505'");
+  test('reserves the pending withdrawal row atomically before any Stripe transfer call', () => {
+    expect(indexSource).toContain("rpc('begin_legacy_withdrawal'");
+    const transferStart = indexSource.indexOf("if (subPath === '/transfer')");
+    expect(transferStart).toBeGreaterThan(-1);
+    const transferBlock = indexSource.slice(transferStart, indexSource.indexOf("if (subPath === '/retry-transfer')"));
+    expect(transferBlock.indexOf("rpc('begin_legacy_withdrawal'")).toBeGreaterThan(-1);
+    expect(transferBlock.indexOf("rpc('begin_legacy_withdrawal'")).toBeLessThan(
+      transferBlock.indexOf('transfer = await stripe.transfers.create')
+    );
   });
 
   test('inlines resolveWithdrawalDestination and wires it into both transfer and retry-transfer', () => {

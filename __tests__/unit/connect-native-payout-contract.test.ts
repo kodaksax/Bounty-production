@@ -165,7 +165,7 @@ describe('handleConnectNativePayout — idempotency', () => {
   });
 
   test('passes a scoped idempotency key to Stripe', () => {
-    expect(handlerBody).toContain('native_payout_${method}_${userId}_${idempotencyKey}_${amountCents}');
+    expect(handlerBody).toContain('buildNativePayoutIdempotencyKey');
   });
 
   test('handles the concurrent duplicate insert race without reversing money', () => {
@@ -236,7 +236,7 @@ describe('connect edge function — route wiring', () => {
     // The legacy ledger-backed code must survive so the flag is a true
     // rollback lever rather than a one-way door.
     expect(connectSource).toContain('if (CONNECT_NATIVE_PAYOUTS) {');
-    expect(connectSource).toContain("supabase.rpc('withdraw_balance'");
+    expect(connectSource).toContain("rpc('begin_legacy_withdrawal'");
   });
 
   test('new Connect accounts can be created with a manual payout schedule', () => {
