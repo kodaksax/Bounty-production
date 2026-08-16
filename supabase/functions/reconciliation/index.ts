@@ -464,7 +464,7 @@ serve(async (req: Request) => {
 
     const { data: ledgerRows } = await supabase
       .from('wallet_transactions')
-      .select('id, user_id, amount, status, stripe_payout_id, stripe_transfer_id, payout_method, created_at')
+      .select('id, user_id, amount, status, stripe_payout_id, stripe_transfer_id, payout_method, metadata, created_at')
       .eq('type', 'withdrawal')
       .gte('created_at', windowStart.toISOString());
 
@@ -616,7 +616,7 @@ serve(async (req: Request) => {
         }
 
         // --- Statuses disagree ---
-        if (isSafeStatusRepair(payout.status, ledgerStatus, local.metadata ?? null)) {
+        if (isSafeStatusRepair(payout.status, ledgerStatus, (local.metadata as Record<string, unknown> | null | undefined) ?? null)) {
           // Provably safe: Stripe reached a terminal state, our row is still
           // pending. Move the ledger to match what Stripe already did. This
           // moves no money and invents nothing.
