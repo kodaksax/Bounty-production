@@ -336,6 +336,28 @@ describe('database invariant', () => {
     expect(constraintMigration).not.toMatch(/\bDELETE\s+FROM\b/i);
   });
 
+  test('the grandfather cutoff is in the past, so the constraint actually bites', () => {
+    // A future-dated cutoff makes the whole CHECK inert without failing
+    // anything: every new row satisfies the escape clause. The first draft of
+    // this migration used 2026-08-17 while running on 2026-08-16 and was
+    // silently a no-op until a live probe caught it.
+    const match = constraintMigration.match(
+      /created_at\s*<\s*TIMESTAMPTZ\s*'([^']+)'/i
+    );
+    expect(match).not.toBeNull();
+    const cutoff = new Date(match![1]);
+    expect(Number.isNaN(cutoff.getTime())).toBe(false);
+    expect(cutoff.getTime()).toBeLessThan(Date.now());
+  });
+
+  test('the cutoff is after the newest known historical violation', () => {
+    // The 25 grandfathered rows end at 2026-08-14 14:44 UTC. A cutoff earlier
+    // than that would make the migration fail to apply against live data.
+    const match = constraintMigration.match(/created_at\s*<\s*TIMESTAMPTZ\s*'([^']+)'/i);
+    const cutoff = new Date(match![1]);
+    expect(cutoff.getTime()).toBeGreaterThan(new Date('2026-08-14T14:44:08Z').getTime());
+  });
+
   test('one Stripe payout cannot settle two withdrawals', () => {
     expect(constraintMigration).toContain('idx_wallet_tx_stripe_payout_id_unique');
     expect(constraintMigration).toContain('UNIQUE INDEX');

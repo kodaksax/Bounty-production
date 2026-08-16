@@ -16,14 +16,20 @@
 -- edit, a manual UPDATE or an admin tool cannot reintroduce the state.
 --
 -- GRANDFATHERING
--- The 25 historical rows that violate this ($526.65, latest 2026-08-14) are
--- deliberately NOT modified — remediating them requires confirming against
--- Stripe whether each hunter was actually paid, which is a human decision.
--- The cutoff below exempts rows created before this migration so the
+-- The 25 historical rows that violate this ($526.65, newest 2026-08-14
+-- 14:44 UTC) are deliberately NOT modified — remediating them requires
+-- confirming against Stripe whether each hunter was actually paid, which is a
+-- human decision. The cutoff below exempts exactly those rows so the
 -- constraint can be added as VALID (checked on every future INSERT *and*
 -- UPDATE) instead of NOT VALID (which would let a later UPDATE of a legacy
 -- row fail unpredictably). Those rows remain visible: the reconciliation job's
 -- `completed_withdrawal_without_payout` finding reports them on every run.
+--
+-- The cutoff MUST sit in the past. An earlier draft used 2026-08-17, which
+-- was tomorrow when the migration ran — every row written on the day of the
+-- fix satisfied the escape clause and the constraint was silently inert. A
+-- cutoff between the newest violating row (2026-08-14 14:44) and now is what
+-- makes it bite immediately; 2026-08-15 00:00 UTC is comfortably both.
 --
 -- Scoped to withdrawals only. Deposits, escrow, releases and refunds have no
 -- payout and legitimately complete without one. `manually_paid` is likewise
@@ -40,12 +46,12 @@ ALTER TABLE public.wallet_transactions
     OR status <> 'completed'::wallet_tx_status_enum
     OR stripe_payout_id IS NOT NULL
     -- Historical rows from the pre-fix flow. See GRANDFATHERING above.
-    OR created_at < TIMESTAMPTZ '2026-08-17 00:00:00+00'
+    OR created_at < TIMESTAMPTZ '2026-08-15 00:00:00+00'
   );
 
 COMMENT ON CONSTRAINT wallet_transactions_completed_withdrawal_requires_payout
   ON public.wallet_transactions IS
-  'A withdrawal may only be completed when a Stripe payout id records which payout settled it. Rows created before 2026-08-17 are grandfathered (the instant-payout fallback incident); every row after that date must carry the evidence. See supabase/functions/_shared/payout-state.ts.';
+  'A withdrawal may only be completed when a Stripe payout id records which payout settled it. Rows created before 2026-08-15 are grandfathered (the instant-payout fallback incident); every row after that date must carry the evidence. See supabase/functions/_shared/payout-state.ts.';
 
 -- Supports the reconciliation invariant sweep, which scans all time rather
 -- than a rolling window.
