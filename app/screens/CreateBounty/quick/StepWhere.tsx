@@ -73,7 +73,27 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, step, totalSteps }:
         // Permission not yet requested (or denied but can ask again) — request now.
         const requested = await locationService.requestPermission();
         if (!requested.granted) {
-          setError('Location permission denied. You can search a ZIP code or address instead.');
+          if (!requested.canAskAgain) {
+            Alert.alert(
+              'Location Permission Required',
+              'Please enable location access in your device settings to use this feature.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Open Settings',
+                  onPress: () => {
+                    if (Platform.OS === 'ios') {
+                      Linking.openURL('app-settings:');
+                    } else {
+                      Linking.openSettings();
+                    }
+                  },
+                },
+              ]
+            );
+          } else {
+            setError('Location permission denied. You can search a ZIP code or address instead.');
+          }
           return;
         }
       }
