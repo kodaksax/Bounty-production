@@ -17,12 +17,16 @@ import { NotFoundScreen } from '../../../components/not-found-screen';
 import WorkInProgressBanner from '../../../components/work-in-progress-banner';
 import { useBackgroundColor } from '../../../lib/context/BackgroundColorContext';
 import { bountyService } from '../../../lib/services/bounty-service';
-import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
-import type { AppTheme } from '../../../lib/themes/types';
 import type { Bounty } from '../../../lib/services/database.types';
 import { messageService } from '../../../lib/services/message-service';
+import { useAppThemeContext } from '../../../lib/themes/AppThemeContext';
+import type { AppTheme } from '../../../lib/themes/types';
 import type { Conversation } from '../../../lib/types';
 import { formatCategoryLabel, getCurrentUserId } from '../../../lib/utils/data-utils';
+import {
+    getPosterDashboardNextRoute,
+    isBountyPoster,
+} from '../../../lib/utils/poster-bounty-dashboard';
 
 type BountyStage = 'apply_work' | 'working_progress' | 'review_verify' | 'payout';
 
@@ -60,9 +64,9 @@ export default function BountyDashboard() {
 
   // Normalize route param to a string (supports UUIDs)
   const routeBountyId = React.useMemo(() => {
-    const raw = Array.isArray(bountyId) ? bountyId[0] : bountyId
-    return raw && String(raw).trim().length > 0 ? String(raw) : null
-  }, [bountyId])
+    const raw = Array.isArray(bountyId) ? bountyId[0] : bountyId;
+    return raw && String(raw).trim().length > 0 ? String(raw) : null;
+  }, [bountyId]);
 
   // Tracks the most recently requested bounty id so a slower, stale response
   // for a previous id (fast back-and-forth navigation between two bounty
@@ -72,18 +76,18 @@ export default function BountyDashboard() {
 
   useEffect(() => {
     if (!routeBountyId) {
-      setError('Invalid bounty id')
-      setIsLoading(false)
-      return
+      setError('Invalid bounty id');
+      setIsLoading(false);
+      return;
     }
     latestRequestedIdRef.current = routeBountyId;
     // Ensure the app-level safe area color matches this screen's dark background
     pushColor(theme.background);
-    loadBounty(routeBountyId)
-    loadConversation(routeBountyId)
+    loadBounty(routeBountyId);
+    loadConversation(routeBountyId);
     return () => {
       popColor(theme.background);
-    }
+    };
   }, [routeBountyId]);
 
   // Start pulsing glow when a bounty is in progress
@@ -112,7 +116,7 @@ export default function BountyDashboard() {
       }
 
       // Check ownership
-      if (data.user_id !== currentUserId) {
+      if (!isBountyPoster(data, currentUserId)) {
         Alert.alert('Access Denied', 'You can only view your own bounty dashboards.', [
           { text: 'OK', onPress: () => router.back() },
         ]);
@@ -144,7 +148,7 @@ export default function BountyDashboard() {
     try {
       const conversations = await messageService.getConversations();
       if (latestRequestedIdRef.current !== idStr) return;
-      const bountyConv = conversations.find((c) => String(c.bountyId) === idStr);
+      const bountyConv = conversations.find(c => String(c.bountyId) === idStr);
       setConversation(bountyConv || null);
     } catch (err) {
       console.error('Error loading conversation:', err);
@@ -164,7 +168,11 @@ export default function BountyDashboard() {
           return;
         }
 
-        conv = await messageService.getOrCreateConversation([String(bounty.user_id)], '', routeBountyId || undefined);
+        conv = await messageService.getOrCreateConversation(
+          [String(bounty.user_id)],
+          '',
+          routeBountyId || undefined
+        );
         setConversation(conv);
       }
 
@@ -180,8 +188,8 @@ export default function BountyDashboard() {
   };
 
   const handleStagePress = (stage: BountyStage) => {
-    const stageIndex = STAGES.findIndex((s) => s.id === stage);
-    const currentIndex = STAGES.findIndex((s) => s.id === currentStage);
+    const stageIndex = STAGES.findIndex(s => s.id === stage);
+    const currentIndex = STAGES.findIndex(s => s.id === currentStage);
 
     // Can only navigate to current or previous stages
     if (stageIndex > currentIndex) {
@@ -193,14 +201,16 @@ export default function BountyDashboard() {
   };
 
   const handleNext = () => {
-    const currentIndex = STAGES.findIndex((s) => s.id === currentStage);
-    
-    if (currentIndex === STAGES.length - 2) {
-      // Moving from review_verify to payout
-      // Legacy full-screen review route removed — keep modal-only flow.
-      // Previously: router.push('/postings/[bountyId]/review-and-verify')
-      // No-op to prevent navigation to deprecated screen.
-    } else if (currentIndex < STAGES.length - 1) {
+    if (!routeBountyId) return;
+    const nextRoute = getPosterDashboardNextRoute(currentStage, routeBountyId);
+    if (nextRoute) {
+      router.push(nextRoute as any);
+      return;
+    }
+
+    const currentIndex = STAGES.findIndex(s => s.id === currentStage);
+
+    if (currentIndex < STAGES.length - 1) {
       const nextStage = STAGES[currentIndex + 1];
       setCurrentStage(nextStage.id);
     }
@@ -261,7 +271,7 @@ export default function BountyDashboard() {
   if (error || !bounty) {
     // Check if it's a "not found" error
     const isNotFound = error?.includes('not found') || error?.includes('Not found') || !bounty;
-    
+
     if (isNotFound) {
       return (
         <NotFoundScreen
@@ -273,13 +283,16 @@ export default function BountyDashboard() {
         />
       );
     }
-    
+
     // Other errors - show error screen with retry
     return (
       <SafeAreaView style={s.errorContainer}>
         <MaterialIcons name="error-outline" size={48} color="#ef4444" />
         <Text style={s.errorText}>{error || 'Failed to load bounty'}</Text>
-        <TouchableOpacity style={s.retryButton} onPress={() => routeBountyId && loadBounty(routeBountyId)}>
+        <TouchableOpacity
+          style={s.retryButton}
+          onPress={() => routeBountyId && loadBounty(routeBountyId)}
+        >
           <Text style={s.retryButtonText}>Retry</Text>
         </TouchableOpacity>
         <TouchableOpacity style={s.backButton} onPress={() => router.back()}>
@@ -289,14 +302,13 @@ export default function BountyDashboard() {
     );
   }
 
-  const descriptionPreview = bounty.description.length > 150 
-    ? bounty.description.substring(0, 150) + '...' 
-    : bounty.description;
-
-  
+  const descriptionPreview =
+    bounty.description.length > 150
+      ? bounty.description.substring(0, 150) + '...'
+      : bounty.description;
 
   return (
-    <SafeAreaView style={[s.container, { width: '100%', alignSelf: 'stretch' }]} edges={["top"]}>
+    <SafeAreaView style={[s.container, { width: '100%', alignSelf: 'stretch' }]} edges={['top']}>
       {/* Header */}
       <View style={s.header}>
         <TouchableOpacity style={s.backIcon} onPress={() => router.back()}>
@@ -320,12 +332,14 @@ export default function BountyDashboard() {
               <Text style={s.bountyTitle} numberOfLines={2}>
                 {bounty.title}
               </Text>
-                  <Text style={s.bountyAge}>{formatTimeAgo(bounty.created_at)}</Text>
-                  {((bounty as any)?.category) && (
-                    <View style={s.categoryPill}>
-                      <Text style={s.categoryPillText}>{formatCategoryLabel((bounty as any).category)}</Text>
-                    </View>
-                  )}
+              <Text style={s.bountyAge}>{formatTimeAgo(bounty.created_at)}</Text>
+              {(bounty as any)?.category && (
+                <View style={s.categoryPill}>
+                  <Text style={s.categoryPillText}>
+                    {formatCategoryLabel((bounty as any).category)}
+                  </Text>
+                </View>
+              )}
             </View>
           </View>
 
@@ -355,7 +369,8 @@ export default function BountyDashboard() {
             <MaterialIcons name="hourglass-empty" size={24} color={theme.primaryLight} />
             <Text style={s.preAcceptanceTitle}>Awaiting a hunter</Text>
             <Text style={s.preAcceptanceText}>
-              This posting is visible in the feed. You’ll receive requests from hunters and can review them from the Postings screen.
+              This posting is visible in the feed. You’ll receive requests from hunters and can
+              review them from the Postings screen.
             </Text>
             <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
               <TouchableOpacity style={s.secondaryBtn} onPress={() => router.back()}>
@@ -367,11 +382,15 @@ export default function BountyDashboard() {
 
         <View style={s.timelineContainer}>
           <Text style={s.sectionTitle}>Progress Timeline</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.timeline}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={s.timeline}
+          >
             {STAGES.map((stage, index) => {
               const isActive = stage.id === currentStage;
-              const stageIndex = STAGES.findIndex((s) => s.id === stage.id);
-              const currentIndex = STAGES.findIndex((s) => s.id === currentStage);
+              const stageIndex = STAGES.findIndex(s => s.id === stage.id);
+              const currentIndex = STAGES.findIndex(s => s.id === currentStage);
               const isCompleted = stageIndex < currentIndex;
               const isAccessible = stageIndex <= currentIndex;
 
@@ -388,21 +407,29 @@ export default function BountyDashboard() {
                   disabled={!isAccessible}
                 >
                   <View style={{ position: 'relative', width: 48, height: 48, marginBottom: 8 }}>
-                    {bounty?.status === 'in_progress' && stage.id === 'working_progress' && isActive && (
-                      <Animated.View
-                        style={[
-                          s.stageIconGlow,
-                          {
-                            transform: [
-                              {
-                                scale: glowAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.25] }),
-                              },
-                            ],
-                            opacity: glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0.12] }),
-                          },
-                        ]}
-                      />
-                    )}
+                    {bounty?.status === 'in_progress' &&
+                      stage.id === 'working_progress' &&
+                      isActive && (
+                        <Animated.View
+                          style={[
+                            s.stageIconGlow,
+                            {
+                              transform: [
+                                {
+                                  scale: glowAnim.interpolate({
+                                    inputRange: [0, 1],
+                                    outputRange: [1, 1.25],
+                                  }),
+                                },
+                              ],
+                              opacity: glowAnim.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [0.55, 0.12],
+                              }),
+                            },
+                          ]}
+                        />
+                      )}
 
                     <View
                       style={[
@@ -454,7 +481,10 @@ export default function BountyDashboard() {
                 numberOfLines={3}
               />
               <TouchableOpacity
-                style={[s.sendButton, (!messageText.trim() || isSendingMessage) && s.sendButtonDisabled]}
+                style={[
+                  s.sendButton,
+                  (!messageText.trim() || isSendingMessage) && s.sendButtonDisabled,
+                ]}
                 onPress={handleSendMessage}
                 disabled={!messageText.trim() || isSendingMessage}
               >
@@ -532,7 +562,13 @@ export default function BountyDashboard() {
         {currentStage === 'payout' && (
           <TouchableOpacity
             style={s.nextButton}
-            onPress={() => routeBountyId && router.push({ pathname: '/postings/[bountyId]/payout', params: { bountyId: routeBountyId } })}
+            onPress={() =>
+              routeBountyId &&
+              router.push({
+                pathname: '/postings/[bountyId]/payout',
+                params: { bountyId: routeBountyId },
+              })
+            }
           >
             <Text style={s.nextButtonText}>Go to Payout</Text>
             <MaterialIcons name="arrow-forward" size={20} color="#ffffff" />

@@ -346,6 +346,78 @@ describe('CompletionService', () => {
     });
   });
 
+  describe('getSubmissionForReview', () => {
+    it('loads the newest submission only for the requested bounty and accepted hunter', async () => {
+      const latestSubmission = {
+        id: 'submission-latest',
+        bounty_id: 'bounty123',
+        hunter_id: 'hunter123',
+        status: 'pending',
+        proof_items: JSON.stringify([{ id: 'proof-1', type: 'image', name: 'after.jpg' }]),
+      };
+      const maybeSingle = jest.fn().mockResolvedValue({ data: latestSubmission, error: null });
+      const limit = jest.fn().mockReturnValue({ maybeSingle });
+      const order = jest.fn().mockReturnValue({ limit });
+      const hunterFilter = jest.fn().mockReturnValue({ order });
+      const bountyFilter = jest.fn().mockReturnValue({ eq: hunterFilter });
+
+      mockSupabase.from.mockReturnValue({
+        select: jest.fn().mockReturnValue({ eq: bountyFilter }),
+      });
+
+      const result = await completionService.getSubmissionForReview('bounty123', 'hunter123');
+
+      expect(bountyFilter).toHaveBeenCalledWith('bounty_id', 'bounty123');
+      expect(hunterFilter).toHaveBeenCalledWith('hunter_id', 'hunter123');
+      expect(result).toMatchObject({
+        id: 'submission-latest',
+        bounty_id: 'bounty123',
+        hunter_id: 'hunter123',
+      });
+      expect(result?.proof_items).toEqual([{ id: 'proof-1', type: 'image', name: 'after.jpg' }]);
+    });
+
+    it('throws on proof loading failure instead of reporting an empty submission', async () => {
+      const maybeSingle = jest
+        .fn()
+        .mockResolvedValue({ data: null, error: { message: 'RLS denied' } });
+      const limit = jest.fn().mockReturnValue({ maybeSingle });
+      const order = jest.fn().mockReturnValue({ limit });
+      const hunterFilter = jest.fn().mockReturnValue({ order });
+      const bountyFilter = jest.fn().mockReturnValue({ eq: hunterFilter });
+      mockSupabase.from.mockReturnValue({
+        select: jest.fn().mockReturnValue({ eq: bountyFilter }),
+      });
+
+      await expect(
+        completionService.getSubmissionForReview('bounty123', 'hunter123')
+      ).rejects.toThrow('RLS denied');
+    });
+
+    it('rejects a response that belongs to a different hunter', async () => {
+      const maybeSingle = jest.fn().mockResolvedValue({
+        data: {
+          id: 'submission-wrong',
+          bounty_id: 'bounty123',
+          hunter_id: 'hunter-other',
+          proof_items: '[]',
+        },
+        error: null,
+      });
+      const limit = jest.fn().mockReturnValue({ maybeSingle });
+      const order = jest.fn().mockReturnValue({ limit });
+      const hunterFilter = jest.fn().mockReturnValue({ order });
+      const bountyFilter = jest.fn().mockReturnValue({ eq: hunterFilter });
+      mockSupabase.from.mockReturnValue({
+        select: jest.fn().mockReturnValue({ eq: bountyFilter }),
+      });
+
+      await expect(
+        completionService.getSubmissionForReview('bounty123', 'hunter123')
+      ).rejects.toThrow('does not match the accepted hunter');
+    });
+  });
+
   describe('markReady and getReady', () => {
     it('should mark bounty as ready for submission', async () => {
       const maybeSingle = jest.fn().mockResolvedValue({ data: null, error: null });
@@ -755,9 +827,14 @@ describe('CompletionService', () => {
         }),
       });
 
-      // getSubmission handles JSON parse errors and returns null
+      // A corrupt proof payload must not hide the submission from the poster.
       const result = await completionService.getSubmission('bounty123');
-      expect(result).toBeNull();
+      expect(result).toMatchObject({
+        id: 'submission123',
+        bounty_id: 'bounty123',
+        hunter_id: 'hunter123',
+      });
+      expect(result?.proof_items).toEqual([]);
     });
 
     it('should handle empty proof_items array', async () => {

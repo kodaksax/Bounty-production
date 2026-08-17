@@ -43,49 +43,18 @@ export async function approveAndRelease(opts: ApproveAndReleaseOptions): Promise
     return false;
   }
 
-  let approved = false;
   let released = false;
 
   try {
-    // Do the status write first because it is easier to compensate than a money movement.
-    approved = await approveFn(String(bountyId));
-    if (!approved) {
-      logClientError('approveFn failed in approveAndRelease', { bountyId, hunterId });
-      return false;
-    }
-
-    // For honor bounties, skip release step
+    // Never mark work approved before its paid settlement has succeeded.
+    // A failed release must leave the submission pending for a safe retry.
     if (!isForHonor) {
       released = await releaseFn(bountyId, hunterId, title);
       if (!released) {
-        logClientError('Escrow release failed after approve in approveAndRelease', {
+        logClientError('Escrow release failed before completion approval', {
           bountyId,
           hunterId,
         });
-
-        if (revertApproveFn) {
-          try {
-            const reverted = await revertApproveFn(String(bountyId));
-            if (!reverted) {
-              logClientError('revertApproveFn returned false after release failure', {
-                bountyId,
-                hunterId,
-              });
-            } else {
-              logClientInfo('revertApproveFn succeeded after release failure', {
-                bountyId,
-                hunterId,
-              });
-            }
-          } catch (revertErr) {
-            logClientError('revertApproveFn threw after release failure', {
-              bountyId,
-              hunterId,
-              error: revertErr,
-            });
-          }
-        }
-
         return false;
       }
 
@@ -93,6 +62,12 @@ export async function approveAndRelease(opts: ApproveAndReleaseOptions): Promise
         bountyId,
         hunterId,
       });
+    }
+
+    const approved = await approveFn(String(bountyId));
+    if (!approved) {
+      logClientError('approveFn failed after settlement', { bountyId, hunterId });
+      return false;
     }
 
     // Notify hunter to rate the poster if notifyFn provided
@@ -107,20 +82,6 @@ export async function approveAndRelease(opts: ApproveAndReleaseOptions): Promise
 
     return true;
   } catch (err) {
-    // If any error happens after approval in the paid flow, attempt a best-effort
-    // refund when a compensating handler is provided.
-    if (approved && !isForHonor && refundReleaseFn) {
-      try {
-        await refundReleaseFn(bountyId, hunterId, title);
-      } catch (refundErr) {
-        logClientError('refundReleaseFn threw during approveAndRelease catch path', {
-          bountyId,
-          hunterId,
-          error: refundErr,
-        });
-      }
-    }
-
     logClientError('approveAndRelease unexpected error', { error: err, bountyId, hunterId });
     // Re-throw errors that carry a user-visible message (e.g. "no payout account",
     // "session expired") so the calling UI can display the specific reason rather than

@@ -11,7 +11,7 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    View
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AttachmentViewerModal } from '../../../components/attachment-viewer-modal';
@@ -20,12 +20,16 @@ import { ROUTES } from '../../../lib/routes';
 import { bountyRequestService } from '../../../lib/services/bounty-request-service';
 import { bountyService } from '../../../lib/services/bounty-service';
 import { approveAndRelease } from '../../../lib/services/completion-approval';
-import { completionService } from '../../../lib/services/completion-service';
+import {
+    completionService,
+    type CompletionSubmission,
+} from '../../../lib/services/completion-service';
 import type { Bounty, Profile } from '../../../lib/services/database.types';
 import { profileService } from '../../../lib/services/profile-service';
 import { ratingsService } from '../../../lib/services/ratings';
 import type { Attachment } from '../../../lib/types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
+import { isBountyPoster } from '../../../lib/utils/poster-bounty-dashboard';
 import { useWallet } from '../../../lib/wallet-context';
 
 interface ProofItem {
@@ -52,6 +56,10 @@ export default function ReviewAndVerifyScreen() {
   const [rating, setRating] = useState(0);
   const [ratingComment, setRatingComment] = useState('');
   const [proofItems, setProofItems] = useState<ProofItem[]>([]);
+  const [originalAttachments, setOriginalAttachments] = useState<ProofItem[]>([]);
+  const [reviewSubmission, setReviewSubmission] = useState<CompletionSubmission | null>(null);
+  const [isLoadingProof, setIsLoadingProof] = useState(false);
+  const [proofLoadError, setProofLoadError] = useState<string | null>(null);
   const [selectedAttachment, setSelectedAttachment] = useState<Attachment | null>(null);
   const [isViewerVisible, setIsViewerVisible] = useState(false);
   const [isRequestingRevision, setIsRequestingRevision] = useState(false);
@@ -63,7 +71,7 @@ export default function ReviewAndVerifyScreen() {
 
   useEffect(() => {
     if (bounty) {
-      loadProofItems();
+      loadReviewSubmission();
       loadHunterProfile();
     }
   }, [bounty]);
@@ -72,9 +80,9 @@ export default function ReviewAndVerifyScreen() {
     try {
       setIsLoading(true);
       setError(null);
-      const id = Array.isArray(bountyId) ? bountyId[0] : bountyId
+      const id = Array.isArray(bountyId) ? bountyId[0] : bountyId;
       if (!id) {
-        throw new Error('Invalid bounty id')
+        throw new Error('Invalid bounty id');
       }
       const data = await bountyService.getById(id);
 
@@ -83,7 +91,7 @@ export default function ReviewAndVerifyScreen() {
       }
 
       // Check ownership
-      if (data.user_id !== currentUserId) {
+      if (!isBountyPoster(data, currentUserId)) {
         Alert.alert('Access Denied', 'You can only review your own bounties.', [
           { text: 'OK', onPress: () => router.back() },
         ]);
@@ -99,50 +107,78 @@ export default function ReviewAndVerifyScreen() {
     }
   };
 
-  const loadProofItems = async () => {
+  const loadOriginalAttachments = () => {
+    const attachmentsJson = (bounty as any)?.attachments_json;
+    if (!attachmentsJson) {
+      setOriginalAttachments([]);
+      return;
+    }
     try {
-      // If bounty carries attachments_json (serialized AttachmentMeta[]), parse it
-      const attachmentsJson = (bounty as any)?.attachments_json
-      if (attachmentsJson) {
-        let parsed: any[] = []
-        try { parsed = JSON.parse(attachmentsJson) } catch { parsed = [] }
-        const items: ProofItem[] = parsed.map((a: any) => ({
-          id: a.id || String(Date.now()),
-          type: (a.mimeType || a.name || '').includes('image') ? 'image' : (a.type === 'image' ? 'image' : 'file'),
-          name: a.name || (a.remoteUri ? a.remoteUri.split('/').pop() : 'attachment'),
-          uri: a.uri,
-          remoteUri: a.remoteUri,
-          size: a.size,
-          mimeType: a.mimeType,
-          mime: a.mimeType,
-        }))
-        setProofItems(items)
-        return
-      }
+      const parsed = JSON.parse(attachmentsJson);
+      setOriginalAttachments(
+        Array.isArray(parsed)
+          ? parsed.map((attachment: any, index: number) => ({
+              id: attachment.id || `bounty-attachment-${index}`,
+              type: (attachment.mimeType || attachment.name || '').includes('image')
+                ? 'image'
+                : 'file',
+              name: attachment.name || 'Original attachment',
+              uri: attachment.uri,
+              remoteUri: attachment.remoteUri,
+              size: attachment.size,
+              mimeType: attachment.mimeType,
+              mime: attachment.mimeType,
+            }))
+          : []
+      );
+    } catch {
+      setOriginalAttachments([]);
+    }
+  };
 
-      // Fallback: no attachments present
-      setProofItems([])
-    } catch (err) {
-      console.error('Error loading proof items:', err);
-      setProofItems([])
+  const getAcceptedHunterId = async (): Promise<string | null> => {
+    if (bounty?.accepted_by) return String(bounty.accepted_by);
+    if (!bounty?.id) return null;
+    const requests = await bountyRequestService.getAll({
+      bountyId: String(bounty.id),
+      status: 'accepted',
+    });
+    return requests[0]?.hunter_id ? String(requests[0].hunter_id) : null;
+  };
+
+  const loadReviewSubmission = async () => {
+    if (!bounty) return;
+    setIsLoadingProof(true);
+    setProofLoadError(null);
+    try {
+      loadOriginalAttachments();
+      const hunterId = await getAcceptedHunterId();
+      if (!hunterId) {
+        throw new Error('No accepted hunter is assigned to this bounty.');
+      }
+      const submission = await completionService.getSubmissionForReview(
+        String(bounty.id),
+        hunterId
+      );
+      setReviewSubmission(submission);
+      setProofItems((submission?.proof_items ?? []) as ProofItem[]);
+    } catch (loadError) {
+      console.error('Error loading completion proof:', loadError);
+      setReviewSubmission(null);
+      setProofItems([]);
+      setProofLoadError(
+        loadError instanceof Error
+          ? loadError.message
+          : 'Unable to load completion proof. Please try again.'
+      );
+    } finally {
+      setIsLoadingProof(false);
     }
   };
 
   const loadHunterProfile = async () => {
     try {
-      // First check if bounty has accepted_by field
-      let hunterId = bounty?.accepted_by;
-      
-      // If not, look for accepted request
-      if (!hunterId && bounty?.id) {
-        const requests = await bountyRequestService.getAll({
-          bountyId: String(bounty.id),
-          status: 'accepted',
-        });
-        if (requests.length > 0) {
-          hunterId = requests[0].hunter_id;
-        }
-      }
+      const hunterId = await getAcceptedHunterId();
 
       if (hunterId) {
         const profile = await profileService.getById(hunterId);
@@ -205,16 +241,15 @@ export default function ReviewAndVerifyScreen() {
           onPress: async () => {
             try {
               setIsRequestingRevision(true);
-              
+
               // Get the submission to find its ID
-              const submission = await completionService.getSubmission(String(bounty.id));
-              if (!submission || !submission.id) {
-                throw new Error('No submission found for this bounty');
+              if (!reviewSubmission?.id || reviewSubmission.status !== 'pending') {
+                throw new Error('There is no pending submission available for revision.');
               }
-              
+
               // Request revision via completion service
-              await completionService.requestRevision(submission.id, ratingComment.trim());
-              
+              await completionService.requestRevision(reviewSubmission.id, ratingComment.trim());
+
               Alert.alert(
                 'Revision Requested',
                 'The hunter has been notified that revisions are needed.',
@@ -227,7 +262,10 @@ export default function ReviewAndVerifyScreen() {
               );
             } catch (err) {
               console.error('Error requesting revision:', err);
-              Alert.alert('Error', err instanceof Error ? err.message : 'Failed to request revision. Please try again.');
+              Alert.alert(
+                'Error',
+                err instanceof Error ? err.message : 'Failed to request revision. Please try again.'
+              );
             } finally {
               setIsRequestingRevision(false);
             }
@@ -247,7 +285,25 @@ export default function ReviewAndVerifyScreen() {
       return;
     }
 
-    if (!bounty || !hunterProfile) return;
+    if (
+      !bounty ||
+      !hunterProfile ||
+      !reviewSubmission?.id ||
+      reviewSubmission.status !== 'pending'
+    ) {
+      Alert.alert(
+        'Submission Required',
+        "Load the hunter's pending completion submission before approving."
+      );
+      return;
+    }
+    if (String(reviewSubmission.hunter_id) !== String(hunterProfile.id)) {
+      Alert.alert(
+        'Submission Mismatch',
+        'The completion submission does not belong to the accepted hunter.'
+      );
+      return;
+    }
 
     try {
       setIsRequestingRevision(true); // Reuse this state for loading
@@ -289,22 +345,25 @@ export default function ReviewAndVerifyScreen() {
         comment: ratingComment.trim() || undefined,
       });
 
-      Alert.alert(
-        'Work Approved',
-        'The work has been approved and the hunter will be paid.',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              const id = Array.isArray(bountyId) ? bountyId[0] : bountyId;
-              if (id) router.push({ pathname: '/postings/[bountyId]/payout', params: { bountyId: String(id) } });
-            },
+      Alert.alert('Work Approved', 'The work has been approved and the hunter will be paid.', [
+        {
+          text: 'OK',
+          onPress: () => {
+            const id = Array.isArray(bountyId) ? bountyId[0] : bountyId;
+            if (id)
+              router.push({
+                pathname: '/postings/[bountyId]/payout',
+                params: { bountyId: String(id) },
+              });
           },
-        ]
-      );
+        },
+      ]);
     } catch (err) {
       console.error('Error approving completion:', err);
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to approve work. Please try again.');
+      Alert.alert(
+        'Error',
+        err instanceof Error ? err.message : 'Failed to approve work. Please try again.'
+      );
     } finally {
       setIsRequestingRevision(false);
     }
@@ -359,7 +418,15 @@ export default function ReviewAndVerifyScreen() {
         <TouchableOpacity style={styles.retryButton} onPress={loadBounty}>
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.push({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'messages', initialTab: 'myPostings' } } as any)}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() =>
+            router.push({
+              pathname: ROUTES.TABS.BOUNTY_APP,
+              params: { screen: 'messages', initialTab: 'myPostings' },
+            } as any)
+          }
+        >
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -370,7 +437,15 @@ export default function ReviewAndVerifyScreen() {
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top }]}>
-        <TouchableOpacity style={styles.backIcon} onPress={() => router.push({ pathname: ROUTES.TABS.BOUNTY_APP, params: { screen: 'messages', initialTab: 'myPostings' } } as any)}>
+        <TouchableOpacity
+          style={styles.backIcon}
+          onPress={() =>
+            router.push({
+              pathname: ROUTES.TABS.BOUNTY_APP,
+              params: { screen: 'messages', initialTab: 'myPostings' },
+            } as any)
+          }
+        >
           <MaterialIcons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Review & Verify</Text>
@@ -420,25 +495,54 @@ export default function ReviewAndVerifyScreen() {
 
         {/* Proof/Attachments Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Submitted Proof</Text>
+          <Text style={styles.sectionTitle}>Completion Proof</Text>
           <Text style={styles.sectionSubtitle}>
-            Review the work submitted by the hunter
+            Submitted by the accepted hunter for this completion
           </Text>
-          {proofItems.length > 0 ? (
+          {isLoadingProof ? (
+            <View style={styles.emptyProof}>
+              <ActivityIndicator size="small" color="#6ee7b7" />
+              <Text style={styles.emptyProofText}>Loading completion proof...</Text>
+            </View>
+          ) : proofLoadError ? (
+            <View style={styles.emptyProof}>
+              <MaterialIcons name="error-outline" size={48} color="#f59e0b" />
+              <Text style={styles.emptyProofText}>{proofLoadError}</Text>
+              <TouchableOpacity style={styles.retryButton} onPress={loadReviewSubmission}>
+                <Text style={styles.retryButtonText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          ) : proofItems.length > 0 ? (
             <FlatList
               data={proofItems}
               renderItem={renderProofItem}
-              keyExtractor={(item) => item.id}
+              keyExtractor={item => item.id}
               scrollEnabled={false}
               contentContainerStyle={styles.proofList}
             />
           ) : (
             <View style={styles.emptyProof}>
               <MaterialIcons name="folder-open" size={48} color="#6ee7b7" />
-              <Text style={styles.emptyProofText}>No proof submitted yet</Text>
+              <Text style={styles.emptyProofText}>
+                The hunter submitted no proof for this completion.
+              </Text>
             </View>
           )}
         </View>
+
+        {originalAttachments.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Original Bounty Attachments</Text>
+            <Text style={styles.sectionSubtitle}>Files attached when this bounty was posted</Text>
+            <FlatList
+              data={originalAttachments}
+              renderItem={renderProofItem}
+              keyExtractor={item => item.id}
+              scrollEnabled={false}
+              contentContainerStyle={styles.proofList}
+            />
+          </View>
+        )}
 
         {/* Rating Section */}
         <View style={styles.section}>
@@ -449,7 +553,7 @@ export default function ReviewAndVerifyScreen() {
 
           {/* Star Rating */}
           <View style={styles.ratingContainer}>
-            {[1, 2, 3, 4, 5].map((star) => (
+            {[1, 2, 3, 4, 5].map(star => (
               <TouchableOpacity
                 key={star}
                 onPress={() => handleRatingPress(star)}
@@ -493,7 +597,12 @@ export default function ReviewAndVerifyScreen() {
           <TouchableOpacity
             style={[styles.revisionButton, isRequestingRevision && styles.revisionButtonDisabled]}
             onPress={handleRequestRevision}
-            disabled={isRequestingRevision}
+            disabled={
+              isRequestingRevision ||
+              isLoadingProof ||
+              !!proofLoadError ||
+              reviewSubmission?.status !== 'pending'
+            }
           >
             {isRequestingRevision ? (
               <ActivityIndicator size="small" color="#fff" />
@@ -506,7 +615,23 @@ export default function ReviewAndVerifyScreen() {
           </TouchableOpacity>
 
           {/* Next Button */}
-          <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
+          <TouchableOpacity
+            style={[
+              styles.nextButton,
+              (isRequestingRevision ||
+                isLoadingProof ||
+                !!proofLoadError ||
+                reviewSubmission?.status !== 'pending') &&
+                styles.revisionButtonDisabled,
+            ]}
+            onPress={handleNext}
+            disabled={
+              isRequestingRevision ||
+              isLoadingProof ||
+              !!proofLoadError ||
+              reviewSubmission?.status !== 'pending'
+            }
+          >
             <Text style={styles.nextButtonText}>Approve & Proceed to Payout</Text>
             <MaterialIcons name="arrow-forward" size={20} color="#fff" />
           </TouchableOpacity>

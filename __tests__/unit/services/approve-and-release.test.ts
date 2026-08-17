@@ -1,7 +1,7 @@
 import { approveAndRelease } from '../../../lib/services/completion-approval';
 
 describe('approveAndRelease', () => {
-  test('calls approve before release and notifies hunter', async () => {
+  test('calls release before approval and notifies hunter', async () => {
     const calls: string[] = [];
 
     const releaseFn = jest.fn(async () => {
@@ -31,10 +31,10 @@ describe('approveAndRelease', () => {
     expect(approveFn).toHaveBeenCalled();
     expect(notifyFn).toHaveBeenCalled();
     // Ensure order
-    expect(calls).toEqual(['approve', 'release', 'notify']);
+    expect(calls).toEqual(['release', 'approve', 'notify']);
   });
 
-  test('reverts approve when release fails after approval', async () => {
+  test('does not approve when release fails', async () => {
     const calls: string[] = [];
 
     const releaseFn = jest.fn(async () => {
@@ -43,10 +43,6 @@ describe('approveAndRelease', () => {
     });
     const approveFn = jest.fn(async () => {
       calls.push('approve');
-      return true;
-    });
-    const revertApproveFn = jest.fn(async () => {
-      calls.push('revert-approve');
       return true;
     });
     const notifyFn = jest.fn(async () => {
@@ -60,24 +56,21 @@ describe('approveAndRelease', () => {
       isForHonor: false,
       releaseFn,
       approveFn,
-      revertApproveFn,
       notifyFn,
     });
 
     expect(ok).toBe(false);
-    expect(approveFn).toHaveBeenCalled();
+    expect(approveFn).not.toHaveBeenCalled();
     expect(releaseFn).toHaveBeenCalled();
-    expect(revertApproveFn).toHaveBeenCalled();
     expect(notifyFn).not.toHaveBeenCalled();
-    expect(calls).toEqual(['approve', 'release', 'revert-approve']);
+    expect(calls).toEqual(['release']);
   });
 
-  test('attempts refund handler when post-approve paid-flow errors throw', async () => {
+  test('does not approve when release throws', async () => {
     const approveFn = jest.fn(async () => true);
     const releaseFn = jest.fn(async () => {
       throw new Error('release transport timeout');
     });
-    const refundReleaseFn = jest.fn(async () => true);
 
     await expect(
       approveAndRelease({
@@ -87,12 +80,10 @@ describe('approveAndRelease', () => {
         isForHonor: false,
         releaseFn,
         approveFn,
-        refundReleaseFn,
       })
     ).rejects.toThrow('release transport timeout');
 
-    expect(approveFn).toHaveBeenCalled();
+    expect(approveFn).not.toHaveBeenCalled();
     expect(releaseFn).toHaveBeenCalled();
-    expect(refundReleaseFn).toHaveBeenCalledWith('b3', 'h3', 't3');
   });
 });

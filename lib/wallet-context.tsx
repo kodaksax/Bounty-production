@@ -10,11 +10,13 @@ import React, {
 import { config } from './config';
 import { FINANCIAL_API_BASE_URL } from './config/api';
 import { API_TIMEOUTS } from './config/network';
+import { bountyPaymentsService } from './services/bounty-payments-service';
 import { bountyService } from './services/bounty-service';
 import { paymentService } from './services/payment-service';
 import { supabase } from './supabase';
 import { fetchWithTimeout } from './utils/fetch-with-timeout';
 import { getNetworkErrorMessage } from './utils/network-connectivity';
+import { isPhase2Bounty } from './utils/payment-architecture';
 import {
     getSecureJSON,
     migrateSecureStorageKeys,
@@ -375,7 +377,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // the latest implementation without forcing the auth-state effect to
   // re-subscribe if the function identity changes.
   const refreshFromApiRef =
-    useRef<(accessToken?: string, options?: { silent?: boolean }) => Promise<void> | undefined>(refreshFromApi);
+    useRef<(accessToken?: string, options?: { silent?: boolean }) => Promise<void> | undefined>(
+      refreshFromApi
+    );
 
   useEffect(() => {
     refreshFromApiRef.current = refreshFromApi;
@@ -559,7 +563,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
-        (payload) => {
+        payload => {
           // This subscription fires on ANY column update to the user's profile
           // row (session tracking, verification, Stripe sync, onboarding flags,
           // …), not just balance. Refetching on every one was a primary cause of
@@ -799,6 +803,21 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         // Fetch bounty data early — needed to determine the release path and as a
         // fallback amount source for legacy bounties that have no local escrow record.
         const bountyData = await bountyService.getById(bountyId);
+
+        // Phase 2 funds are held by Stripe, not the legacy wallet ledger.
+        // Their authoritative release is the bounty-payments edge function,
+        // which creates the Connect transfer with a Stripe idempotency key.
+        if (isPhase2Bounty(bountyData)) {
+          const result = await bountyPaymentsService.releaseBountyPayment(bountyIdStr, hunterId);
+          if (!result.released || result.status !== 'released') return false;
+          try {
+            const refreshToken = await getAccessToken();
+            if (refreshToken) await refreshFromApi(refreshToken, { silent: true });
+          } catch {
+            // The settlement result came from the authoritative server; refresh can retry later.
+          }
+          return true;
+        }
 
         if (!escrowTx) {
           // If there's a Stripe PaymentIntent, the Stripe capture path doesn't require a

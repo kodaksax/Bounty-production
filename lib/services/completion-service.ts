@@ -5,9 +5,9 @@ import { logger } from 'lib/utils/error-logger';
 import { getReachableApiBaseUrl } from 'lib/utils/network';
 
 import { API_BASE_URL } from 'lib/config/api';
-import { bountyService } from './bounty-service';
 import { analyticsService } from './analytics-service';
 import { getHoursSinceClaimed } from './bounty-request-service';
+import { bountyService } from './bounty-service';
 
 const relayPreferredBase =
   (process.env.EXPO_PUBLIC_API_BASE_URL as string | undefined) ||
@@ -108,6 +108,17 @@ export interface ProofItem {
   uri?: string;
   size?: number;
   mimeType?: string;
+}
+
+function parseProofItems(raw: unknown): ProofItem[] {
+  if (Array.isArray(raw)) return raw as ProofItem[];
+  if (typeof raw !== 'string' || !raw.trim()) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as ProofItem[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 export interface Rating {
@@ -232,7 +243,8 @@ export const completionService = {
             /* ignore */
           }
         }
-        (globalThis as any).__BACKGROUND_INTERVALS = (globalThis as any).__BACKGROUND_INTERVALS || [];
+        (globalThis as any).__BACKGROUND_INTERVALS =
+          (globalThis as any).__BACKGROUND_INTERVALS || [];
         (globalThis as any).__BACKGROUND_INTERVALS.push(pollInterval);
       }
     };
@@ -261,10 +273,14 @@ export const completionService = {
               onUpdate(latest);
             }
           )
-          .subscribe((status) => {
+          .subscribe(status => {
             if (status === 'SUBSCRIBED') {
               stopPolling();
-            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            } else if (
+              status === 'CHANNEL_ERROR' ||
+              status === 'TIMED_OUT' ||
+              status === 'CLOSED'
+            ) {
               startPolling();
             }
           });
@@ -321,7 +337,7 @@ export const completionService = {
 
         return {
           ...data,
-          proof_items: JSON.parse(data.proof_items || '[]'),
+          proof_items: parseProofItems(data.proof_items),
         } as CompletionSubmission;
       }
 
@@ -337,6 +353,63 @@ export const completionService = {
       logger.error('Error fetching completion', { bountyId, error });
       return null;
     }
+  },
+
+  /**
+   * Returns the latest submission belonging to the hunter currently accepted
+   * for a bounty. Unlike getSubmission(), failures are intentionally exposed
+   * so a poster never mistakes an unavailable proof record for no proof.
+   */
+  async getSubmissionForReview(
+    bountyId: string,
+    hunterId: string
+  ): Promise<CompletionSubmission | null> {
+    if (!bountyId || !hunterId) {
+      throw new Error('A bounty and accepted hunter are required to load completion proof.');
+    }
+
+    if (isSupabaseConfigured) {
+      const { data, error } = await supabase
+        .from('completion_submissions')
+        .select('*')
+        .eq('bounty_id', bountyId)
+        .eq('hunter_id', hunterId)
+        .order('submitted_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        throw new Error(error.message || 'Failed to load completion proof.');
+      }
+      if (!data) return null;
+      if (
+        String(data.bounty_id) !== String(bountyId) ||
+        String(data.hunter_id) !== String(hunterId)
+      ) {
+        throw new Error('Completion proof does not match the accepted hunter.');
+      }
+
+      return {
+        ...data,
+        proof_items: parseProofItems(data.proof_items),
+      } as CompletionSubmission;
+    }
+
+    const response = await fetch(
+      `${API_BASE_URL}/api/completions/${encodeURIComponent(bountyId)}?hunterId=${encodeURIComponent(hunterId)}`
+    );
+    if (!response.ok) {
+      if (response.status === 404) return null;
+      throw new Error('Failed to load completion proof.');
+    }
+    const submission = (await response.json()) as CompletionSubmission;
+    if (
+      String(submission.bounty_id) !== String(bountyId) ||
+      String(submission.hunter_id) !== String(hunterId)
+    ) {
+      throw new Error('Completion proof does not match the accepted hunter.');
+    }
+    return { ...submission, proof_items: parseProofItems(submission.proof_items) };
   },
 
   /**
@@ -555,7 +628,8 @@ export const completionService = {
             /* ignore */
           }
         }
-        (globalThis as any).__BACKGROUND_INTERVALS = (globalThis as any).__BACKGROUND_INTERVALS || [];
+        (globalThis as any).__BACKGROUND_INTERVALS =
+          (globalThis as any).__BACKGROUND_INTERVALS || [];
         (globalThis as any).__BACKGROUND_INTERVALS.push(pollInterval);
       }
     };
@@ -583,10 +657,14 @@ export const completionService = {
               onUpdate(payload.new || null);
             }
           )
-          .subscribe((status) => {
+          .subscribe(status => {
             if (status === 'SUBSCRIBED') {
               stopPolling();
-            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            } else if (
+              status === 'CHANNEL_ERROR' ||
+              status === 'TIMED_OUT' ||
+              status === 'CLOSED'
+            ) {
               startPolling();
             }
           });
@@ -674,7 +752,10 @@ export const completionService = {
 
       // Update bounty status
       // Note: bounty IDs may be UUID strings; do NOT coerce to Number() (causes NaN)
-      await bountyService.update(bountyId, { status: 'completed', completed_at: new Date().toISOString() });
+      await bountyService.update(bountyId, {
+        status: 'completed',
+        completed_at: new Date().toISOString(),
+      });
 
       // Funnel: bounty marked complete via the poster approving submitted
       // work — the third real completion path, alongside payout.tsx's

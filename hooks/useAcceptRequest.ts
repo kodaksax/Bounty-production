@@ -47,6 +47,7 @@ export function useAcceptRequest({
     // Track the conversation id created during this accept flow so
     // the alert action can re-assert the intent when the user taps "View Conversation".
     let pendingConvId: string | null = null
+    let messagingSetupError: string | null = null
     try {
       // Show quick-refresh UI for list transitions
       setIsLoading((prev) => ({ ...prev, requests: true, myBounties: true, inProgress: true }))
@@ -216,6 +217,8 @@ export function useAcceptRequest({
         } catch (fallbackErr) {
           console.error('Fallback to local conversation also failed:', fallbackErr)
           logClientError('Fallback to local conversation failed', { err: fallbackErr })
+          messagingSetupError =
+            'The hunter was accepted, but we could not set up your conversation. Please retry messaging before coordinating work.'
         }
       }
 
@@ -276,6 +279,38 @@ export function useAcceptRequest({
             try { setActiveScreen('messages') } catch {}
           }
         }
+      }
+
+      const retryMessagingAction = {
+        text: 'Retry Messaging Setup',
+        onPress: async () => {
+          try {
+            const conversation = await messageService.getOrCreateConversation(
+              [String(hunterIdForConv)],
+              request.profile?.username || 'Hunter',
+              String(bountyId)
+            )
+            if (!conversation?.id) throw new Error('No conversation was returned')
+            pendingConvId = String(conversation.id)
+            await navigationIntent.setPendingConversationId(pendingConvId)
+            router.push(`/tabs/messenger/${encodeURIComponent(pendingConvId)}` as any)
+          } catch (retryError) {
+            console.error('Retrying messaging setup failed:', retryError)
+            Alert.alert(
+              'Messaging Setup Still Needs Attention',
+              'The bounty remains accepted. Please try again from My Bounties when your connection is stable.'
+            )
+          }
+        },
+      }
+
+      if (messagingSetupError) {
+        Alert.alert(
+          'Bounty Accepted - Messaging Setup Needed',
+          messagingSetupError,
+          [retryMessagingAction, { text: 'Go to My Bounties', onPress: () => setActiveScreen('messages') }]
+        )
+        return
       }
 
       if (request.bounty && !request.bounty.is_for_honor && request.bounty.amount > 0) {

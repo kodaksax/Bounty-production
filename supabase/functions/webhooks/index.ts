@@ -3,11 +3,16 @@
 // This is the most critical function to migrate as it processes payments
 // and must verify Stripe's webhook signature.
 
-import { analytics as heycatch } from 'npm:@heycatch/sdk@0.7.0/server';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { analytics as heycatch } from 'npm:@heycatch/sdk@0.7.0/server';
 import Stripe from 'npm:stripe@14';
-import type { WalletTransaction } from '../_shared/types.ts';
+import {
+    transitionBountyPaymentForTransfer,
+    type BountyPaymentSettlementStatus,
+    type StripeTransferEvent,
+} from '../_shared/bounty-payment-settlement-state.ts';
 import { decidePayoutEventAction } from '../_shared/payout-state.ts';
+import type { WalletTransaction } from '../_shared/types.ts';
 
 // Module scope, once per server bundle — see the HeyCatch RN/server install
 // guide. Business events fired below (payment_completed, payout_success,
@@ -35,7 +40,10 @@ function jsonResponse(data: unknown, status = 200) {
 // the identical copy in supabase/functions/connect/index.ts for rationale
 // (duplicated because local imports aren't supported by the deploy bundler).
 function logCritical(event: string, context: Record<string, unknown>) {
-  console.error(`CRITICAL [webhooks] ${event}`, JSON.stringify({ event, ts: new Date().toISOString(), ...context }));
+  console.error(
+    `CRITICAL [webhooks] ${event}`,
+    JSON.stringify({ event, ts: new Date().toISOString(), ...context })
+  );
 }
 
 /**
@@ -54,7 +62,13 @@ function logCritical(event: string, context: Record<string, unknown>) {
 async function enqueuePushEmailFanout(
   // deno-lint-ignore no-explicit-any
   supabase: any,
-  params: { userId: string; type: string; title: string; body: string; data: Record<string, unknown> }
+  params: {
+    userId: string;
+    type: string;
+    title: string;
+    body: string;
+    data: Record<string, unknown>;
+  }
 ): Promise<void> {
   try {
     const { error } = await supabase.from('notifications_outbox').insert({
@@ -66,12 +80,66 @@ async function enqueuePushEmailFanout(
     });
     if (error) {
       console.error('[webhooks] enqueuePushEmailFanout: outbox insert failed (non-fatal)', {
-        userId: params.userId, type: params.type, error,
+        userId: params.userId,
+        type: params.type,
+        error,
       });
     }
   } catch (e) {
     console.error('[webhooks] enqueuePushEmailFanout: unexpected error (non-fatal)', e);
   }
+}
+
+async function reconcilePhase2Transfer(
+  supabase: any,
+  transfer: Stripe.Transfer,
+  event: StripeTransferEvent
+): Promise<void> {
+  const bountyId = transfer.metadata?.bounty_id;
+  if (!bountyId) return;
+
+  const { data: payment, error: paymentError } = await supabase
+    .from('bounty_payments')
+    .select('id, status, stripe_transfer_id')
+    .eq('bounty_id', bountyId)
+    .maybeSingle();
+  if (paymentError) throw paymentError;
+  if (!payment) {
+    console.error('[webhooks] Phase 2 transfer has no bounty_payments row; Stripe will retry', {
+      event,
+      bountyId,
+      transferId: transfer.id,
+    });
+    throw new Error('Missing bounty payment for Phase 2 transfer');
+  }
+
+  if (payment.stripe_transfer_id && payment.stripe_transfer_id !== transfer.id) {
+    console.warn('[webhooks] Ignoring stale Phase 2 transfer event for a different transfer', {
+      event,
+      bountyId,
+      transferId: transfer.id,
+      recordedTransferId: payment.stripe_transfer_id,
+    });
+    return;
+  }
+
+  const next = transitionBountyPaymentForTransfer(
+    payment.status as BountyPaymentSettlementStatus,
+    event
+  );
+  if (!next) return;
+
+  const { error: updateError } = await supabase
+    .from('bounty_payments')
+    .update({
+      stripe_transfer_id: transfer.id,
+      status: next,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', payment.id)
+    .eq('status', payment.status)
+    .or(`stripe_transfer_id.is.null,stripe_transfer_id.eq.${transfer.id}`);
+  if (updateError) throw updateError;
 }
 
 /**
@@ -229,7 +297,8 @@ async function reconcileInstantPayoutFee(
     .select('instant_fee_amount')
     .eq('id', transactionId)
     .maybeSingle();
-  const estimatedFee = (txRow as { instant_fee_amount?: number } | null)?.instant_fee_amount ?? null;
+  const estimatedFee =
+    (txRow as { instant_fee_amount?: number } | null)?.instant_fee_amount ?? null;
 
   if (estimatedFee != null && Math.abs(actualFee - estimatedFee) > 0.5) {
     logCritical('instant payout fee diverged materially from the pre-submission estimate', {
@@ -240,7 +309,10 @@ async function reconcileInstantPayoutFee(
     });
   }
 
-  await supabase.from('wallet_transactions').update({ instant_fee_amount: actualFee }).eq('id', transactionId);
+  await supabase
+    .from('wallet_transactions')
+    .update({ instant_fee_amount: actualFee })
+    .eq('id', transactionId);
 }
 
 /**
@@ -339,7 +411,8 @@ async function handleUndeliveredPayout(
           p_metadata_patch: {
             ...candidateMetadata,
             payout_status: outcome,
-            payout_failure_code: payout.failure_code ?? (outcome === 'canceled' ? 'canceled' : null),
+            payout_failure_code:
+              payout.failure_code ?? (outcome === 'canceled' ? 'canceled' : null),
             payout_failure_message: payout.failure_message ?? null,
             payout_id: payout.id,
           },
@@ -355,7 +428,10 @@ async function handleUndeliveredPayout(
         throw failedTxError;
       }
 
-      const refundResult = failedTx as { refunded?: boolean | null; refund_amount?: number | null } | null;
+      const refundResult = failedTx as {
+        refunded?: boolean | null;
+        refund_amount?: number | null;
+      } | null;
       if (!refundResult?.refunded) {
         console.log(
           `[webhooks] Skipping duplicate refund for payout ${payout.id} — a concurrent delivery already resolved this transaction`
@@ -564,9 +640,13 @@ async function handleTransferSetback(
     // stripe_transfer_id with a new transfer ID between our SELECT and
     // UPDATE. Surface for immediate manual investigation to avoid silent
     // fund loss, same as the transfer.failed race case this mirrors.
-    logCritical(`transfer.${outcome} race condition detected — stripe_transfer_id for transaction ${existingTx.id} was replaced by a retry between SELECT and UPDATE, ${outcome} not recorded and refund not issued`, {
-      transferId: transfer.id, transactionId: existingTx.id,
-    });
+    logCritical(
+      `transfer.${outcome} race condition detected — stripe_transfer_id for transaction ${existingTx.id} was replaced by a retry between SELECT and UPDATE, ${outcome} not recorded and refund not issued`,
+      {
+        transferId: transfer.id,
+        transactionId: existingTx.id,
+      }
+    );
     return;
   }
 
@@ -609,9 +689,14 @@ async function handleTransferSetback(
   }
 
   if (outcome === 'reversed') {
-    logCritical('transfer was reversed after appearing to succeed — no code path in this app does this and needs investigation (manual Stripe Dashboard reversal, or a Stripe-side fraud/compliance action)', {
-      transferId: transfer.id, userId: txUserId, amount: refundAmount,
-    });
+    logCritical(
+      'transfer was reversed after appearing to succeed — no code path in this app does this and needs investigation (manual Stripe Dashboard reversal, or a Stripe-side fraud/compliance action)',
+      {
+        transferId: transfer.id,
+        userId: txUserId,
+        amount: refundAmount,
+      }
+    );
   }
 
   if (permanentlyFailed) {
@@ -809,15 +894,17 @@ async function handleAccountDeauthorized(
     .eq('id', profile.id);
 
   if (updateError) {
-    console.error(
-      '[webhooks] Failed to update profile for account.application.deauthorized',
-      { userId: profile.id, accountId, error: updateError }
-    );
+    console.error('[webhooks] Failed to update profile for account.application.deauthorized', {
+      userId: profile.id,
+      accountId,
+      error: updateError,
+    });
     throw updateError;
   }
 
   const deauthTitle = 'Bank Connection Disconnected';
-  const deauthBody = 'Your Stripe payout connection was disconnected. Please reconnect your account to withdraw funds.';
+  const deauthBody =
+    'Your Stripe payout connection was disconnected. Please reconnect your account to withdraw funds.';
   const { error: notifError } = await supabase.from('notifications').insert({
     user_id: profile.id,
     type: 'payment',
@@ -966,7 +1053,9 @@ async function comparePlatformBalance(
       .limit(1)
       .maybeSingle();
     if (openFindingError) {
-      console.error('[webhooks] comparePlatformBalance: failed to check for an open finding', { error: openFindingError });
+      console.error('[webhooks] comparePlatformBalance: failed to check for an open finding', {
+        error: openFindingError,
+      });
     }
 
     if (openFinding) {
@@ -988,16 +1077,28 @@ async function comparePlatformBalance(
         .select('id')
         .maybeSingle();
       if (findingError) {
-        console.error('[webhooks] comparePlatformBalance: failed to insert finding', { error: findingError });
+        console.error('[webhooks] comparePlatformBalance: failed to insert finding', {
+          error: findingError,
+        });
       } else {
         findingId = (finding as { id: string } | null)?.id ?? null;
         if (severity === 'critical') {
-          logCritical('platform Stripe balance is below the ledger total — cannot currently honor every withdrawal on the books', {
-            stripeAvailableCents, stripePendingCents, ledgerCents, driftCents,
-          });
+          logCritical(
+            'platform Stripe balance is below the ledger total — cannot currently honor every withdrawal on the books',
+            {
+              stripeAvailableCents,
+              stripePendingCents,
+              ledgerCents,
+              driftCents,
+            }
+          );
         } else {
           logReconciliationFinding(severity, 'stripe_balance_drift_detected', {
-            scope: 'platform', stripeAvailableCents, stripePendingCents, ledgerCents, driftCents,
+            scope: 'platform',
+            stripeAvailableCents,
+            stripePendingCents,
+            ledgerCents,
+            driftCents,
           });
         }
       }
@@ -1015,7 +1116,9 @@ async function comparePlatformBalance(
     reconciliation_finding_id: findingId,
   });
   if (snapshotError) {
-    console.error('[webhooks] comparePlatformBalance: failed to insert snapshot', { error: snapshotError });
+    console.error('[webhooks] comparePlatformBalance: failed to insert snapshot', {
+      error: snapshotError,
+    });
   }
 }
 
@@ -1041,9 +1144,14 @@ async function compareConnectAccountBalance(
   try {
     balance = await stripe.balance.retrieve({ stripeAccount: accountId });
   } catch (err) {
-    console.warn('[webhooks] compareConnectAccountBalance: Stripe balance retrieve failed (non-fatal)', {
-      userId, accountId, error: (err as { message?: string })?.message,
-    });
+    console.warn(
+      '[webhooks] compareConnectAccountBalance: Stripe balance retrieve failed (non-fatal)',
+      {
+        userId,
+        accountId,
+        error: (err as { message?: string })?.message,
+      }
+    );
     return;
   }
 
@@ -1056,18 +1164,25 @@ async function compareConnectAccountBalance(
     .select('amount, status, stripe_payout_id, created_at')
     .eq('user_id', userId)
     .eq('type', 'withdrawal')
-    .or(`status.eq.pending,and(status.eq.completed,created_at.gte.${sevenDaysAgo},stripe_payout_id.is.null)`);
+    .or(
+      `status.eq.pending,and(status.eq.completed,created_at.gte.${sevenDaysAgo},stripe_payout_id.is.null)`
+    );
 
   if (unresolvedError) {
-    console.error('[webhooks] compareConnectAccountBalance: failed to read unresolved withdrawals', {
-      userId, error: unresolvedError,
-    });
+    console.error(
+      '[webhooks] compareConnectAccountBalance: failed to read unresolved withdrawals',
+      {
+        userId,
+        error: unresolvedError,
+      }
+    );
     return;
   }
 
   const ledgerCents = Math.round(
     ((unresolvedRows as Array<{ amount: number }> | null) ?? []).reduce(
-      (sum, row) => sum + Math.abs(row.amount), 0
+      (sum, row) => sum + Math.abs(row.amount),
+      0
     ) * 100
   );
   const driftCents = stripeAvailableCents + stripePendingCents - ledgerCents;
@@ -1094,7 +1209,10 @@ async function compareConnectAccountBalance(
       .limit(1)
       .maybeSingle();
     if (openFindingError) {
-      console.error('[webhooks] compareConnectAccountBalance: failed to check for an open finding', { userId, error: openFindingError });
+      console.error(
+        '[webhooks] compareConnectAccountBalance: failed to check for an open finding',
+        { userId, error: openFindingError }
+      );
     }
 
     if (openFinding) {
@@ -1117,11 +1235,19 @@ async function compareConnectAccountBalance(
         .select('id')
         .maybeSingle();
       if (findingError) {
-        console.error('[webhooks] compareConnectAccountBalance: failed to insert finding', { error: findingError });
+        console.error('[webhooks] compareConnectAccountBalance: failed to insert finding', {
+          error: findingError,
+        });
       } else {
         findingId = (finding as { id: string } | null)?.id ?? null;
         logReconciliationFinding(severity, 'stripe_balance_drift_detected', {
-          scope: 'connect_account', userId, accountId, stripeAvailableCents, stripePendingCents, ledgerCents, driftCents,
+          scope: 'connect_account',
+          userId,
+          accountId,
+          stripeAvailableCents,
+          stripePendingCents,
+          ledgerCents,
+          driftCents,
         });
       }
     }
@@ -1138,7 +1264,9 @@ async function compareConnectAccountBalance(
     reconciliation_finding_id: findingId,
   });
   if (snapshotError) {
-    console.error('[webhooks] compareConnectAccountBalance: failed to insert snapshot', { error: snapshotError });
+    console.error('[webhooks] compareConnectAccountBalance: failed to insert snapshot', {
+      error: snapshotError,
+    });
   }
 }
 
@@ -1312,10 +1440,13 @@ Deno.serve(async (req: Request) => {
             .maybeSingle();
 
           if (bpUpdErr) {
-            console.error('[webhooks] Failed to mark bounty_payment captured — letting Stripe retry', {
-              paymentIntentId: paymentIntent.id,
-              error: bpUpdErr,
-            });
+            console.error(
+              '[webhooks] Failed to mark bounty_payment captured — letting Stripe retry',
+              {
+                paymentIntentId: paymentIntent.id,
+                error: bpUpdErr,
+              }
+            );
             throw bpUpdErr;
           }
           if (updatedBp) {
@@ -1501,10 +1632,13 @@ Deno.serve(async (req: Request) => {
             .select('id')
             .maybeSingle();
           if (cancelErr) {
-            console.error('[webhooks] Failed to mark bounty_payment canceled — letting Stripe retry', {
-              paymentIntentId: paymentIntent.id,
-              error: cancelErr,
-            });
+            console.error(
+              '[webhooks] Failed to mark bounty_payment canceled — letting Stripe retry',
+              {
+                paymentIntentId: paymentIntent.id,
+                error: cancelErr,
+              }
+            );
             throw cancelErr;
           }
           console.log(
@@ -1834,11 +1968,14 @@ Deno.serve(async (req: Request) => {
             .select('id')
             .maybeSingle();
           if (bpRefundErr) {
-            console.error('[webhooks] Failed to reflect refund into bounty_payments — letting Stripe retry', {
-              paymentIntentId,
-              chargeId: charge.id,
-              error: bpRefundErr,
-            });
+            console.error(
+              '[webhooks] Failed to reflect refund into bounty_payments — letting Stripe retry',
+              {
+                paymentIntentId,
+                chargeId: charge.id,
+                error: bpRefundErr,
+              }
+            );
             throw bpRefundErr;
           }
           if (refundedBp) {
@@ -1871,9 +2008,7 @@ Deno.serve(async (req: Request) => {
         // amount/user-id heuristic backfill entirely so it can never
         // mis-match a Phase 2 transfer onto a legacy withdrawal row.
         if (transfer.metadata?.bounty_id) {
-          console.log(
-            `[webhooks] transfer.created for Phase 2 bounty ${transfer.metadata.bounty_id} — recorded synchronously, no action`
-          );
+          await reconcilePhase2Transfer(supabase, transfer, 'created');
           break;
         }
         const transferUserId = transfer.metadata?.user_id;
@@ -1891,11 +2026,14 @@ Deno.serve(async (req: Request) => {
             .maybeSingle();
 
           if (candidateErr) {
-            console.error('[webhooks] Failed to look up candidate transaction for transfer.created', {
-              transferId: transfer.id,
-              userId: transferUserId,
-              error: candidateErr,
-            });
+            console.error(
+              '[webhooks] Failed to look up candidate transaction for transfer.created',
+              {
+                transferId: transfer.id,
+                userId: transferUserId,
+                error: candidateErr,
+              }
+            );
           } else if (candidateTx) {
             const { error: backfillErr } = await supabase
               .from('wallet_transactions')
@@ -1906,11 +2044,14 @@ Deno.serve(async (req: Request) => {
               .eq('id', (candidateTx as { id: string }).id)
               .is('stripe_transfer_id', null); // optimistic-lock guard against a concurrent backfill
             if (backfillErr) {
-              console.error('[webhooks] Failed to backfill stripe_transfer_id for transfer.created', {
-                transferId: transfer.id,
-                transactionId: (candidateTx as { id: string }).id,
-                error: backfillErr,
-              });
+              console.error(
+                '[webhooks] Failed to backfill stripe_transfer_id for transfer.created',
+                {
+                  transferId: transfer.id,
+                  transactionId: (candidateTx as { id: string }).id,
+                  error: backfillErr,
+                }
+              );
             }
           }
         }
@@ -1920,13 +2061,11 @@ Deno.serve(async (req: Request) => {
       case 'transfer.paid': {
         const transfer = event.data.object as Stripe.Transfer;
         console.log(`[webhooks] Transfer paid: ${transfer.id}`);
-        // Phase 2: the release endpoint already marked the row 'released'
-        // synchronously (Connect balance transfers settle synchronously in
-        // this codebase). This event is a confirmation only — no action.
+        // Stripe does not emit transfer.paid for the public Connect Transfer
+        // lifecycle; Phase 2 settlement is finalized by transfer.created.
+        // Preserve this legacy branch as a no-op if an older integration sends
+        // it, so it cannot regress or falsely promote a payment row.
         if (transfer.metadata?.bounty_id) {
-          console.log(
-            `[webhooks] transfer.paid for Phase 2 bounty ${transfer.metadata.bounty_id} — confirmation only, no action`
-          );
           break;
         }
         await supabase
@@ -1941,6 +2080,10 @@ Deno.serve(async (req: Request) => {
 
       case 'transfer.failed': {
         const transfer = event.data.object as Stripe.Transfer;
+        if (transfer.metadata?.bounty_id) {
+          await reconcilePhase2Transfer(supabase, transfer, 'failed');
+          break;
+        }
         await handleTransferSetback(supabase, transfer, 'failed');
         break;
       }
@@ -1950,6 +2093,10 @@ Deno.serve(async (req: Request) => {
         // account) was pulled back. See handleTransferSetback's docstring
         // for why this always requires manual review.
         const transfer = event.data.object as Stripe.Transfer;
+        if (transfer.metadata?.bounty_id) {
+          await reconcilePhase2Transfer(supabase, transfer, 'reversed');
+          break;
+        }
         await handleTransferSetback(supabase, transfer, 'reversed');
         break;
       }
@@ -2010,7 +2157,9 @@ Deno.serve(async (req: Request) => {
         // endpoint's subscribed events in the Stripe Dashboard.
         const payout = event.data.object as Stripe.Payout;
         const createdAccountId = (event as any).account as string | undefined;
-        console.log(`[webhooks] Payout created: ${payout.id} for $${payout.amount / 100} (method: ${payout.method})`);
+        console.log(
+          `[webhooks] Payout created: ${payout.id} for $${payout.amount / 100} (method: ${payout.method})`
+        );
 
         if (createdAccountId) {
           try {
@@ -2021,12 +2170,19 @@ Deno.serve(async (req: Request) => {
               .maybeSingle();
 
             if (createdProfileError) {
-              console.warn('[webhooks] Supabase error looking up profile for payout.created (non-fatal)', {
-                accountId: createdAccountId,
-                error: createdProfileError,
-              });
+              console.warn(
+                '[webhooks] Supabase error looking up profile for payout.created (non-fatal)',
+                {
+                  accountId: createdAccountId,
+                  error: createdProfileError,
+                }
+              );
             } else if (createdProfile) {
-              const candidateTx = await findCandidateWithdrawalTx(supabase, createdProfile.id, payout);
+              const candidateTx = await findCandidateWithdrawalTx(
+                supabase,
+                createdProfile.id,
+                payout
+              );
               if (candidateTx) {
                 await supabase
                   .from('wallet_transactions')
@@ -2239,7 +2395,13 @@ Deno.serve(async (req: Request) => {
               }
 
               if (shouldReconcileInstantFee && candidateTx) {
-                await reconcileInstantPayoutFee(stripe, supabase, payout, paidAccountId, candidateTx.id);
+                await reconcileInstantPayoutFee(
+                  stripe,
+                  supabase,
+                  payout,
+                  paidAccountId,
+                  candidateTx.id
+                );
               }
             } catch (reconcileError) {
               console.error('[webhooks] payout.paid completion step failed', {
@@ -2429,7 +2591,8 @@ Deno.serve(async (req: Request) => {
         // "workflow" disputes elsewhere in the app, but shares the same
         // account-integrity urgency semantics (always bypasses quiet hours).
         const disputeOpenedTitle = 'Payment Dispute Opened';
-        const disputeOpenedBody = 'A payment dispute has been opened on your account. Your wallet has been temporarily frozen.';
+        const disputeOpenedBody =
+          'A payment dispute has been opened on your account. Your wallet has been temporarily frozen.';
         const { error: notifError } = await supabase.from('notifications').insert({
           user_id: disputeUserId,
           type: 'dispute_created',
@@ -2807,7 +2970,9 @@ Deno.serve(async (req: Request) => {
           if (ownerUserId) {
             await compareConnectAccountBalance(stripe, supabase, ownerUserId, accountId);
           } else {
-            console.warn(`[webhooks] balance.available: no profile found for Connect account ${accountId}`);
+            console.warn(
+              `[webhooks] balance.available: no profile found for Connect account ${accountId}`
+            );
           }
         } else {
           await comparePlatformBalance(stripe, supabase);
@@ -2834,7 +2999,9 @@ Deno.serve(async (req: Request) => {
           });
           throw updateDisputeErr;
         }
-        console.log(`[webhooks] charge.dispute.updated: dispute ${updatedDispute.id} → ${updatedDispute.status}`);
+        console.log(
+          `[webhooks] charge.dispute.updated: dispute ${updatedDispute.id} → ${updatedDispute.status}`
+        );
         break;
       }
 
@@ -2849,7 +3016,8 @@ Deno.serve(async (req: Request) => {
         // the resulting Stripe balance change instead of flagging it as
         // unexplained drift.
         const fundsDispute = event.data.object as Stripe.Dispute;
-        const fundsEventKind = event.type === 'charge.dispute.funds_withdrawn' ? 'withdrawn' : 'reinstated';
+        const fundsEventKind =
+          event.type === 'charge.dispute.funds_withdrawn' ? 'withdrawn' : 'reinstated';
         console.log(
           `[webhooks] charge.dispute.${fundsEventKind}: dispute=${fundsDispute.id} amount=$${fundsDispute.amount / 100}`
         );
@@ -2896,13 +3064,14 @@ Deno.serve(async (req: Request) => {
         const failedRefundPI =
           typeof failedRefund.payment_intent === 'string'
             ? failedRefund.payment_intent
-            : (failedRefund.payment_intent as Stripe.PaymentIntent | null)?.id ?? null;
+            : ((failedRefund.payment_intent as Stripe.PaymentIntent | null)?.id ?? null);
 
         logCritical('Stripe refund failed — funds did not return to the customer', {
           refundId: failedRefund.id,
           paymentIntentId: failedRefundPI,
           amountCents: failedRefund.amount,
-          failureReason: (failedRefund as unknown as { failure_reason?: string }).failure_reason ?? null,
+          failureReason:
+            (failedRefund as unknown as { failure_reason?: string }).failure_reason ?? null,
         });
 
         if (failedRefundPI) {
@@ -2921,7 +3090,9 @@ Deno.serve(async (req: Request) => {
             throw revertErr;
           }
           if (revertedBp) {
-            console.log(`[webhooks] refund.failed: reverted bounty_payment ${(revertedBp as any).id} to 'captured'`);
+            console.log(
+              `[webhooks] refund.failed: reverted bounty_payment ${(revertedBp as any).id} to 'captured'`
+            );
           }
         }
         break;
@@ -2936,15 +3107,25 @@ Deno.serve(async (req: Request) => {
         // comparePlatformBalance has an explanation for the resulting
         // balance change instead of flagging it as unexplained drift.
         const topup = event.data.object as Stripe.Topup;
-        console.log(`[webhooks] ${event.type}: topup=${topup.id} amount=$${topup.amount / 100} status=${topup.status}`);
+        console.log(
+          `[webhooks] ${event.type}: topup=${topup.id} amount=$${topup.amount / 100} status=${topup.status}`
+        );
         const { error: topupFindingErr } = await supabase.from('reconciliation_findings').insert({
           finding_type: 'stripe_topup',
           severity: 'info',
           user_id: null,
-          details: { stripe_topup_id: topup.id, amount_cents: topup.amount, status: topup.status, event_type: event.type },
+          details: {
+            stripe_topup_id: topup.id,
+            amount_cents: topup.amount,
+            status: topup.status,
+            event_type: event.type,
+          },
         });
         if (topupFindingErr) {
-          console.error('[webhooks] topup event: failed to record finding', { topup_id: topup.id, error: topupFindingErr });
+          console.error('[webhooks] topup event: failed to record finding', {
+            topup_id: topup.id,
+            error: topupFindingErr,
+          });
         }
         break;
       }
@@ -2977,9 +3158,14 @@ Deno.serve(async (req: Request) => {
           console.warn(`[webhooks] ${event.type}: no event.account present — skipping`);
           break;
         }
-        const eaOwnerUserId = await findUserIdByConnectAccountId(supabase, externalAccountEventAccountId);
+        const eaOwnerUserId = await findUserIdByConnectAccountId(
+          supabase,
+          externalAccountEventAccountId
+        );
         if (!eaOwnerUserId) {
-          console.warn(`[webhooks] ${event.type}: no profile found for Connect account ${externalAccountEventAccountId}`);
+          console.warn(
+            `[webhooks] ${event.type}: no profile found for Connect account ${externalAccountEventAccountId}`
+          );
           break;
         }
 
@@ -2995,7 +3181,9 @@ Deno.serve(async (req: Request) => {
           },
         });
         if (eaFindingErr) {
-          console.error(`[webhooks] ${event.type}: failed to record finding`, { error: eaFindingErr });
+          console.error(`[webhooks] ${event.type}: failed to record finding`, {
+            error: eaFindingErr,
+          });
         }
 
         // A removed debit card invalidates any cached Instant Payout
@@ -3016,7 +3204,9 @@ Deno.serve(async (req: Request) => {
           data: eaNotifData,
         });
         if (eaNotifErr) {
-          console.error(`[webhooks] ${event.type}: failed to insert notification`, { error: eaNotifErr });
+          console.error(`[webhooks] ${event.type}: failed to insert notification`, {
+            error: eaNotifErr,
+          });
           // Non-fatal — the audit finding above is the load-bearing write.
         } else {
           await enqueuePushEmailFanout(supabase, {

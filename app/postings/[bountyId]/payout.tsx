@@ -15,9 +15,12 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ConfettiAnimation, SuccessAnimation } from '../../../components/ui/success-animation';
 import { analyticsService } from '../../../lib/services/analytics-service';
-import { bountyPaymentsService, BountyPaymentError } from '../../../lib/services/bounty-payments-service';
-import { bountyService } from '../../../lib/services/bounty-service';
+import {
+    BountyPaymentError,
+    bountyPaymentsService,
+} from '../../../lib/services/bounty-payments-service';
 import { getHoursSinceClaimed } from '../../../lib/services/bounty-request-service';
+import { bountyService } from '../../../lib/services/bounty-service';
 import type { Bounty } from '../../../lib/services/database.types';
 import { getCurrentUserId } from '../../../lib/utils/data-utils';
 import { isPhase2Bounty } from '../../../lib/utils/payment-architecture';
@@ -49,9 +52,9 @@ export default function PayoutScreen() {
     try {
       setIsLoading(true);
       setError(null);
-      const id = Array.isArray(bountyId) ? bountyId[0] : bountyId
+      const id = Array.isArray(bountyId) ? bountyId[0] : bountyId;
       if (!id) {
-        throw new Error('Invalid bounty id')
+        throw new Error('Invalid bounty id');
       }
       const data = await bountyService.getById(id);
 
@@ -105,10 +108,15 @@ export default function PayoutScreen() {
         // Stripe-native Phase 2 escrow: transfer captured funds to the
         // hunter's Connect account via the bounty-payments edge function.
         try {
-          await bountyPaymentsService.releaseBountyPayment(
+          const releaseResult = await bountyPaymentsService.releaseBountyPayment(
             String(bounty.id),
             bounty.accepted_by || undefined
           );
+          if (!releaseResult.released || releaseResult.status !== 'released') {
+            throw new Error(
+              'Transfer requested. Waiting for Stripe to confirm settlement before completing this bounty.'
+            );
+          }
           try {
             await analyticsService.trackEvent('escrow_released', {
               bountyId: String(bounty.id),
@@ -131,7 +139,9 @@ export default function PayoutScreen() {
           const message =
             releaseErr instanceof BountyPaymentError
               ? releaseErr.message
-              : 'Failed to release the payout. Please try again.';
+              : releaseErr instanceof Error
+                ? releaseErr.message
+                : 'Failed to release the payout. Please try again.';
           throw new Error(message);
         }
       } else {
@@ -175,7 +185,7 @@ export default function PayoutScreen() {
       // Show success animation with confetti
       setShowSuccessAnimation(true);
       setShowConfetti(true);
-      
+
       // After animations, show alert and navigate
       setTimeout(() => {
         setShowSuccessAnimation(false);
@@ -196,7 +206,10 @@ export default function PayoutScreen() {
       }, 2000);
     } catch (err) {
       console.error('Error releasing payout:', err);
-      Alert.alert('Error', 'Failed to release payout. Please try again.');
+      Alert.alert(
+        'Payout Not Finalized',
+        err instanceof Error ? err.message : 'Failed to release payout. Please try again.'
+      );
     } finally {
       setIsProcessing(false);
     }
@@ -261,7 +274,7 @@ export default function PayoutScreen() {
 
               // Show success animation
               setShowSuccessAnimation(true);
-              
+
               // After animation, show alert and navigate
               setTimeout(() => {
                 setShowSuccessAnimation(false);
@@ -310,14 +323,18 @@ export default function PayoutScreen() {
                 throw new Error('Failed to delete bounty');
               }
 
-              Alert.alert('Deleted', 'Bounty has been removed from your postings. You can still view it in your history.', [
-                {
-                  text: 'OK',
-                  onPress: () => {
-                    router.replace('/tabs/bounty-app');
+              Alert.alert(
+                'Deleted',
+                'Bounty has been removed from your postings. You can still view it in your history.',
+                [
+                  {
+                    text: 'OK',
+                    onPress: () => {
+                      router.replace('/tabs/bounty-app');
+                    },
                   },
-                },
-              ]);
+                ]
+              );
             } catch (err) {
               console.error('Error deleting bounty:', err);
               Alert.alert('Error', 'Failed to delete bounty. Please try again.');
@@ -447,7 +464,9 @@ export default function PayoutScreen() {
               {isPhase2Bounty(bounty) ? (
                 <View style={styles.balanceInfo}>
                   <MaterialIcons name="verified-user" size={16} color="#6ee7b7" />
-                  <Text style={styles.balanceLabel}>Secured in Stripe escrow — automatic payout on release</Text>
+                  <Text style={styles.balanceLabel}>
+                    Secured in Stripe escrow — automatic payout on release
+                  </Text>
                 </View>
               ) : (
                 <View style={styles.balanceInfo}>
@@ -464,8 +483,8 @@ export default function PayoutScreen() {
           <View style={styles.confirmationCard}>
             <Text style={styles.confirmationTitle}>Confirm Payout Release</Text>
             <Text style={styles.confirmationSubtext}>
-              By confirming, you agree that the work has been completed satisfactorily and the hunter
-              will receive the payout amount.
+              By confirming, you agree that the work has been completed satisfactorily and the
+              hunter will receive the payout amount.
             </Text>
             <View style={styles.switchContainer}>
               <Text style={styles.switchLabel}>I confirm payout release</Text>
@@ -547,7 +566,10 @@ export default function PayoutScreen() {
           <View style={styles.actionButtons}>
             {!bounty.is_for_honor && (
               <TouchableOpacity
-                style={[styles.releaseButton, (!confirmRelease || isProcessing) && styles.buttonDisabled]}
+                style={[
+                  styles.releaseButton,
+                  (!confirmRelease || isProcessing) && styles.buttonDisabled,
+                ]}
                 onPress={handleReleasePayout}
                 disabled={!confirmRelease || isProcessing}
               >
