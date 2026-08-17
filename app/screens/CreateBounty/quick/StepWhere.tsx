@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { locationService } from '../../../../lib/services/location-service';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../../lib/themes/types';
@@ -43,9 +43,64 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, step, totalSteps }:
     setError(null);
     setIsLocating(true);
     try {
+      // Check current permission status first.
+      const permStatus = await locationService.getPermissionStatus();
+
+      if (!permStatus.granted) {
+        if (!permStatus.canAskAgain) {
+          // Permission permanently denied — tell the user where to fix it.
+          Alert.alert(
+            'Location access required',
+            'Location permission is disabled. Please enable it in your device settings so we can use your current location.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Open Settings',
+                onPress: () => {
+                  if (Platform.OS === 'ios') {
+                    Linking.openURL('app-settings:');
+                  } else {
+                    Linking.openSettings();
+                  }
+                },
+              },
+            ]
+          );
+          // isLocating is cleared by the finally block below.
+          return;
+        }
+
+        // Permission not yet requested (or denied but can ask again) — request now.
+        const requested = await locationService.requestPermission();
+        if (!requested.granted) {
+          if (!requested.canAskAgain) {
+            Alert.alert(
+              'Location Permission Required',
+              'Please enable location access in your device settings to use this feature.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Open Settings',
+                  onPress: () => {
+                    if (Platform.OS === 'ios') {
+                      Linking.openURL('app-settings:');
+                    } else {
+                      Linking.openSettings();
+                    }
+                  },
+                },
+              ]
+            );
+          } else {
+            setError('Location permission denied. You can search a ZIP code or address instead.');
+          }
+          return;
+        }
+      }
+
       const coords = await locationService.getCurrentLocation();
       if (!coords) {
-        setError('We could not get your location. Check location permissions, or search an address instead.');
+        setError('We could not get your location right now. Please try again or search an address.');
         return;
       }
       const detail = await locationService.reverseGeocodeDetailed(coords);
@@ -175,11 +230,12 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, step, totalSteps }:
         <TextInput
           value={usedCurrentLocation ? '' : draft.location}
           onChangeText={handleAddressChange}
-          placeholder="Search address"
+          placeholder="ZIP / postal code or address"
           placeholderTextColor={theme.textSecondary}
           style={styles.input}
           autoCorrect={false}
-          accessibilityLabel="Search address"
+          keyboardType="default"
+          accessibilityLabel="ZIP / postal code or address"
         />
       </View>
 
