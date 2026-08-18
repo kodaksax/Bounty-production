@@ -46,6 +46,11 @@ import { markInitialNavigationDone } from '../initial-navigation/initialNavigati
 
 WebBrowser.maybeCompleteAuthSession();
 
+// Storage keys that persist the failed-attempt throttle across remounts of the
+// sign-in screen, so the CAPTCHA and lockout survive a navigation or reload.
+const LOGIN_ATTEMPTS_KEY = 'loginAttempts';
+const LOCKOUT_UNTIL_KEY = 'lockoutUntil';
+
 export default function SignInRoute() {
   return <SignInForm />;
 }
@@ -86,7 +91,11 @@ export function SignInForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [loginAttempts, setLoginAttempts] = useState(0);
   const [lockoutUntil, setLockoutUntil] = useState<number | null>(null);
+  // Guards the persistence effects so they do not overwrite stored values
+  // before the mount effect has loaded them.
+  const [throttleHydrated, setThrottleHydrated] = useState(false);
   const [captchaVerified, setCaptchaVerified] = useState(false);
+  const captchaShownRef = useRef(false);
   console.log('[sign-in] Component rendered', { loginAttempts, lockoutUntil, captchaVerified });
   const passwordRef = useRef<TextInput>(null);
 
@@ -508,6 +517,62 @@ export function SignInForm() {
     loadSavedEmail();
   }, []);
 
+  // Restore the persisted failed-attempt throttle on mount so a remount does
+  // not reset the count and let the CAPTCHA silently never appear.
+  useEffect(() => {
+    const loadThrottle = async () => {
+      try {
+        const [savedAttempts, savedLockout] = await Promise.all([
+          storage.getItem(LOGIN_ATTEMPTS_KEY),
+          storage.getItem(LOCKOUT_UNTIL_KEY),
+        ]);
+        const lockout = savedLockout ? parseInt(savedLockout, 10) : NaN;
+        if (Number.isFinite(lockout) && Date.now() < lockout) {
+          setLockoutUntil(lockout);
+        }
+        const attempts = savedAttempts ? parseInt(savedAttempts, 10) : NaN;
+        if (Number.isFinite(attempts) && attempts > 0) {
+          setLoginAttempts(attempts);
+        }
+      } catch (error) {
+        console.error('[sign-in] Failed to load login throttle:', error);
+      } finally {
+        setThrottleHydrated(true);
+      }
+    };
+    loadThrottle();
+  }, []);
+
+  // Persist the throttle whenever it changes, once hydrated.
+  useEffect(() => {
+    if (!throttleHydrated) return;
+    if (loginAttempts > 0) {
+      storage.setItem(LOGIN_ATTEMPTS_KEY, String(loginAttempts));
+    } else {
+      storage.removeItem(LOGIN_ATTEMPTS_KEY);
+    }
+  }, [loginAttempts, throttleHydrated]);
+
+  useEffect(() => {
+    if (!throttleHydrated) return;
+    if (lockoutUntil !== null) {
+      storage.setItem(LOCKOUT_UNTIL_KEY, String(lockoutUntil));
+    } else {
+      storage.removeItem(LOCKOUT_UNTIL_KEY);
+    }
+  }, [lockoutUntil, throttleHydrated]);
+
+  // Capture the CAPTCHA lifecycle so this flow is measurable instead of
+  // inferred. Fire "shown" once each time the check appears.
+  useEffect(() => {
+    if (captchaRequired && !captchaShownRef.current) {
+      captchaShownRef.current = true;
+      posthogCapture('AUTH_CAPTCHA_SHOWN', { attempts: loginAttempts });
+    } else if (!captchaRequired) {
+      captchaShownRef.current = false;
+    }
+  }, [captchaRequired, loginAttempts]);
+
   const getFieldError = (field: string) => fieldErrors[field];
 
   const validateForm = () => {
@@ -859,7 +924,10 @@ export function SignInForm() {
                     Please complete the security check below to continue signing in.
                   </Text>
                   <CaptchaChallenge
-                    onVerified={() => setCaptchaVerified(true)}
+                    onVerified={() => {
+                      setCaptchaVerified(true);
+                      posthogCapture('AUTH_CAPTCHA_SOLVED', { attempts: loginAttempts });
+                    }}
                     onReset={() => setCaptchaVerified(false)}
                   />
                 </View>
