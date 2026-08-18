@@ -9,13 +9,13 @@
  * indefinitely, causing every subsequent auth call (including signInWithPassword)
  * to queue behind it and eventually time out too.
  *
- * The fix: `authFetchWithTimeout` aborts /auth/v1/* fetches after 8 s so the
- * stalled refresh fails fast and the auth lock is released within the 15 s
- * AUTH_TIMEOUT budget.
+ * The fix: `authFetchWithTimeout` retries one /auth/v1/* fetch after a 6 s
+ * timeout so a stalled refresh releases the auth lock within the auth-stage
+ * budget.
  *
  * Tests here:
  *  - Non-auth URLs are forwarded without a timeout (no regression on other calls)
- *  - Auth URLs get an 8 s AbortController timeout
+ *  - Auth URLs get a 6 s AbortController timeout with one retry
  *  - A timed-out fetch is aborted (AbortError)
  *  - The timeout is cleared if the fetch completes before the deadline
  *  - A caller-supplied AbortSignal is forwarded into the controller
@@ -31,7 +31,11 @@ jest.mock('../../../lib/posthog', () => ({
   capture: jest.fn(),
 }));
 
-import { authFetchWithTimeout, AUTH_FETCH_TIMEOUT_MS, isAuthUrl } from '../../../lib/utils/auth-fetch';
+import {
+    AUTH_FETCH_TIMEOUT_MS,
+    authFetchWithTimeout,
+    isAuthUrl,
+} from '../../../lib/utils/auth-fetch';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -195,12 +199,12 @@ describe('authFetchWithTimeout — auth URLs (timeout path)', () => {
     global.fetch = mockFetch;
 
     const promise = authFetchWithTimeout('https://abcdef.supabase.co/auth/v1/token');
+    const rejection = expect(promise).rejects.toMatchObject({ name: 'AbortError' });
 
-    // Advance past the 8 s deadline.
-    jest.advanceTimersByTime(AUTH_FETCH_TIMEOUT_MS + 100);
-    await Promise.resolve(); // flush microtasks
+    // Advance through both retry attempts.
+    await jest.advanceTimersByTimeAsync(AUTH_FETCH_TIMEOUT_MS * 2 + 100);
 
-    await expect(promise).rejects.toMatchObject({ name: 'AbortError' });
+    await rejection;
     expect(injectedSignal?.aborted).toBe(true);
   });
 
@@ -295,10 +299,7 @@ describe('authFetchWithTimeout — caller AbortSignal forwarding', () => {
 
   it('cleans up the caller-signal listener after the fetch resolves', async () => {
     const callerController = new AbortController();
-    const removeEventListenerSpy = jest.spyOn(
-      callerController.signal,
-      'removeEventListener'
-    );
+    const removeEventListenerSpy = jest.spyOn(callerController.signal, 'removeEventListener');
 
     const mockFetch = jest.fn().mockResolvedValue(fakeResponse(200));
     global.fetch = mockFetch;
@@ -313,10 +314,7 @@ describe('authFetchWithTimeout — caller AbortSignal forwarding', () => {
 
   it('cleans up the caller-signal listener after the fetch rejects', async () => {
     const callerController = new AbortController();
-    const removeEventListenerSpy = jest.spyOn(
-      callerController.signal,
-      'removeEventListener'
-    );
+    const removeEventListenerSpy = jest.spyOn(callerController.signal, 'removeEventListener');
 
     const mockFetch = jest.fn().mockImplementation((_input: any, init: any) => {
       return new Promise<Response>((_, reject) => {
@@ -330,11 +328,11 @@ describe('authFetchWithTimeout — caller AbortSignal forwarding', () => {
     const promise = authFetchWithTimeout('https://abcdef.supabase.co/auth/v1/token', {
       signal: callerController.signal,
     });
+    const rejection = expect(promise).rejects.toMatchObject({ name: 'AbortError' });
 
-    jest.advanceTimersByTime(AUTH_FETCH_TIMEOUT_MS + 100);
-    await Promise.resolve();
+    await jest.advanceTimersByTimeAsync(AUTH_FETCH_TIMEOUT_MS * 2 + 100);
 
-    await expect(promise).rejects.toMatchObject({ name: 'AbortError' });
+    await rejection;
     expect(removeEventListenerSpy).toHaveBeenCalledWith('abort', expect.any(Function));
     removeEventListenerSpy.mockRestore();
   });
@@ -382,7 +380,9 @@ describe('authFetchWithTimeout — concurrent requests are independent', () => {
         });
       }
       // signInWithPassword request — resolves immediately.
-      return new Promise<Response>((resolve) => { resolveSignIn = resolve; });
+      return new Promise<Response>(resolve => {
+        resolveSignIn = resolve;
+      });
     });
     global.fetch = mockFetch;
 
@@ -398,12 +398,12 @@ describe('authFetchWithTimeout — concurrent requests are independent', () => {
     resolveSignIn(fakeResponse(200));
     const signInResult = await signInPromise;
     expect(signInResult.status).toBe(200);
+    const refreshRejection = expect(refreshPromise).rejects.toMatchObject({ name: 'AbortError' });
 
     // Advance timers to trigger the refresh timeout.
-    jest.advanceTimersByTime(AUTH_FETCH_TIMEOUT_MS + 100);
-    await Promise.resolve();
+    await jest.advanceTimersByTimeAsync(AUTH_FETCH_TIMEOUT_MS * 2 + 100);
 
     // The refresh should now reject with AbortError.
-    await expect(refreshPromise).rejects.toMatchObject({ name: 'AbortError' });
+    await refreshRejection;
   });
 });

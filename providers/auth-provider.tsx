@@ -221,6 +221,10 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         }
       } catch (error) {
         reportError(error, '[AuthProvider] Unexpected error refreshing token:');
+        if (isTimeoutError(error) || (error as any)?.name === 'AbortError') {
+          if (isMountedRef.current) setIsAuthStale(true);
+          return;
+        }
         if (isMountedRef.current) {
           setSession(null);
           setIsAuthStale(false);
@@ -508,7 +512,10 @@ export default function AuthProvider({ children }: PropsWithChildren) {
             try {
               await authProfileService.setSession(null);
             } catch (e) {
-              reportWarning('[AuthProvider] Profile service unavailable during env-guard clear:', e);
+              reportWarning(
+                '[AuthProvider] Profile service unavailable during env-guard clear:',
+                e
+              );
             }
           }
           return;
@@ -516,8 +523,9 @@ export default function AuthProvider({ children }: PropsWithChildren) {
 
         if (isTimeoutError(error) || (error as any)?.code === 'AUTH_STAGE_TIMEOUT') {
           reportWarning(
-            '[AuthProvider] Session initialization timed out; falling back to signed-out state'
+            '[AuthProvider] Session initialization timed out; showing retryable connection state'
           );
+          if (isMountedRef.current) setIsAuthStale(true);
           // Increment the consecutive startup-timeout counter. Only purge the
           // stored session after STARTUP_TIMEOUT_PURGE_THRESHOLD consecutive
           // timeouts. One bad launch (transient network stall) doesn't force a
@@ -535,7 +543,8 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           // happens against a reachable backend, still gets cleaned up).
           try {
             const network = await getNetworkSnapshot();
-            const isOffline = network.isConnected === false || network.isInternetReachable === false;
+            const isOffline =
+              network.isConnected === false || network.isInternetReachable === false;
             if (isOffline) {
               reportWarning(
                 '[AuthProvider] Startup session restore timed out while offline — keeping persisted session for retry once connectivity returns'
@@ -557,6 +566,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         }
         if (!isMountedRef.current) return;
         setSession(null);
+        setIsAuthStale(false);
         try {
           await authProfileService.setSession(null);
         } catch (e) {

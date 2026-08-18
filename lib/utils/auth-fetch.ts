@@ -12,16 +12,17 @@
  * AUTH_TIMEOUT fires → user sees sign-in screen → sign-in sits in queue behind
  * dead refresh → sign-in also times out.
  *
- * This wrapper breaks the cascade: the stalled refresh fails fast (8 s) and
- * releases the lock before the outer 15 s budget is exhausted.
+ * This wrapper breaks the cascade: the stalled refresh fails fast (6 s),
+ * retries once, and releases the lock before the outer auth-stage budget is
+ * exhausted.
  *
  * Design decisions
  * ----------------
  * - Only /auth/v1/* URLs are bounded. PostgREST/Storage requests keep the
  *   platform default: a hard 8 s cap would break legitimately long operations
  *   like image uploads, and those requests do not hold the auth lock.
- * - 8 s leaves room for auth-js's internal 200/400/800 ms backoff retries to
- *   finish inside our 15 s AUTH_TIMEOUT budget.
+ * - One 6 s retry gives a transient network stall a second chance without
+ *   trapping the auth lock behind the former 15 s request budget.
  * - A caller-supplied signal is forwarded so auth-js's own cancellations are
  *   not swallowed by our controller.
  *
@@ -40,7 +41,8 @@
 import { logger } from './error-logger';
 
 /** Milliseconds before a GoTrue (/auth/v1/*) fetch is aborted. */
-export const AUTH_FETCH_TIMEOUT_MS = 8_000;
+export const AUTH_FETCH_TIMEOUT_MS = 6_000;
+export const AUTH_FETCH_MAX_ATTEMPTS = 2;
 
 /**
  * Returns true when `url` targets the Supabase GoTrue service.
@@ -51,10 +53,7 @@ export function isAuthUrl(url: unknown): boolean {
 }
 
 /** Emit a structured local diagnostic trace (best-effort — never throws). */
-function emitAuthFetchEvent(
-  eventName: string,
-  properties: Record<string, unknown>
-): void {
+function emitAuthFetchEvent(eventName: string, properties: Record<string, unknown>): void {
   try {
     logger.info(`[auth-fetch:${eventName}]`, properties);
   } catch {
@@ -92,8 +91,7 @@ export function authFetchWithTimeout(
 
   const startedAt = Date.now();
   const urlPath = safeUrlPath(url);
-  const isRefreshGrant =
-    typeof url === 'string' && url.includes('grant_type=refresh_token');
+  const isRefreshGrant = typeof url === 'string' && url.includes('grant_type=refresh_token');
 
   emitAuthFetchEvent('AUTH_TOKEN_REQUEST_STARTED', {
     url_path: urlPath,
@@ -101,55 +99,55 @@ export function authFetchWithTimeout(
     started_at: new Date(startedAt).toISOString(),
   });
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), AUTH_FETCH_TIMEOUT_MS);
-
-  // Forward the caller's signal into our controller so neither cancellation
-  // path is lost (auth-js passes its own signal for some operations).
   const callerSignal: AbortSignal | undefined = init?.signal as AbortSignal | undefined;
-  const onCallerAbort = () => controller.abort();
-  if (callerSignal) {
-    if (callerSignal.aborted) {
-      controller.abort();
-    } else {
-      callerSignal.addEventListener?.('abort', onCallerAbort);
-    }
-  }
 
-  return fetch(input as any, { ...init, signal: controller.signal })
-    .then(
-      (response) => {
-        const elapsedMs = Date.now() - startedAt;
-        emitAuthFetchEvent('AUTH_TOKEN_REQUEST_COMPLETED', {
-          url_path: urlPath,
-          is_refresh_grant: isRefreshGrant,
-          elapsed_ms: elapsedMs,
-          http_status: response.status,
-          aborted: false,
-          timed_out: false,
-        });
-        return response;
-      },
-      (err) => {
-        const elapsedMs = Date.now() - startedAt;
-        const isAbort =
-          err?.name === 'AbortError' || err?.name === 'DOMException';
-        const timedOut = isAbort && !callerSignal?.aborted;
-        emitAuthFetchEvent('AUTH_TOKEN_REQUEST_ABORTED', {
-          url_path: urlPath,
-          is_refresh_grant: isRefreshGrant,
-          elapsed_ms: elapsedMs,
-          aborted: true,
-          timed_out: timedOut,
-          caller_aborted: callerSignal?.aborted ?? false,
-          error_name: err?.name,
-        });
-        throw err;
+  const attemptFetch = async (attempt: number): Promise<Response> => {
+    const controller = new AbortController();
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, AUTH_FETCH_TIMEOUT_MS);
+    const onCallerAbort = () => controller.abort();
+
+    if (callerSignal) {
+      if (callerSignal.aborted) controller.abort();
+      else callerSignal.addEventListener?.('abort', onCallerAbort);
+    }
+
+    try {
+      const response = await fetch(input as any, { ...init, signal: controller.signal });
+      emitAuthFetchEvent('AUTH_TOKEN_REQUEST_COMPLETED', {
+        url_path: urlPath,
+        is_refresh_grant: isRefreshGrant,
+        attempt,
+        elapsed_ms: Date.now() - startedAt,
+        http_status: response.status,
+        aborted: false,
+        timed_out: false,
+      });
+      return response;
+    } catch (err: any) {
+      const isAbort = err?.name === 'AbortError' || err?.name === 'DOMException';
+      emitAuthFetchEvent('AUTH_TOKEN_REQUEST_ABORTED', {
+        url_path: urlPath,
+        is_refresh_grant: isRefreshGrant,
+        attempt,
+        elapsed_ms: Date.now() - startedAt,
+        aborted: isAbort,
+        timed_out: timedOut,
+        caller_aborted: callerSignal?.aborted ?? false,
+        error_name: err?.name,
+      });
+      if (timedOut && !callerSignal?.aborted && attempt < AUTH_FETCH_MAX_ATTEMPTS) {
+        return attemptFetch(attempt + 1);
       }
-    )
-    .finally(() => {
+      throw err;
+    } finally {
       clearTimeout(timeoutId);
       callerSignal?.removeEventListener?.('abort', onCallerAbort);
-    });
-}
+    }
+  };
 
+  return attemptFetch(1);
+}

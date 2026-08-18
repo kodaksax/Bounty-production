@@ -1,7 +1,7 @@
 import type { Href } from 'expo-router';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import 'react-native-get-random-values'; // must run before using tweetnacl
 import { useAuthContext } from '../hooks/use-auth-context';
 import { useAppBootstrap } from '../hooks/useAppBootstrap';
@@ -31,7 +31,13 @@ import { markInitialNavigationDone } from './initial-navigation/initialNavigatio
  */
 export default function Index() {
   const bootstrap = useAppBootstrap();
-  const { isPasswordRecovery, accountBlockedReason, environmentError } = useAuthContext();
+  const {
+    isPasswordRecovery,
+    accountBlockedReason,
+    environmentError,
+    isAuthStale,
+    attemptRefresh,
+  } = useAuthContext();
   const router = useRouter();
   const authGateCorrelationRef = useRef(generateCorrelationId('root_auth_gate'));
   const hasNavigatedRef = useRef(false);
@@ -111,7 +117,8 @@ export default function Index() {
     // providers/auth-provider.tsx), so this only needs to redirect.
     if (accountBlockedReason) {
       hasNavigatedRef.current = true;
-      const dest = accountBlockedReason === 'banned' ? '/auth/account-banned' : '/auth/account-suspended';
+      const dest =
+        accountBlockedReason === 'banned' ? '/auth/account-banned' : '/auth/account-suspended';
       if (__DEV__) {
         console.log('[index] Account blocked — routing to', dest);
       }
@@ -229,7 +236,28 @@ export default function Index() {
         onboardingComplete: bootstrap.onboardingComplete,
       },
     });
-  }, [bootstrap, isPasswordRecovery, accountBlockedReason, environmentError, router, confirmedReturningUser]);
+  }, [
+    bootstrap,
+    isPasswordRecovery,
+    accountBlockedReason,
+    environmentError,
+    router,
+    confirmedReturningUser,
+  ]);
+
+  if (isAuthStale) {
+    return (
+      <View style={indexStyles.loadingContainer}>
+        <Text style={indexStyles.offlineTitle}>Connection interrupted</Text>
+        <Text style={indexStyles.offlineText}>
+          We could not restore your session. Check your connection and try again.
+        </Text>
+        <TouchableOpacity style={indexStyles.retryButton} onPress={() => void attemptRefresh?.()}>
+          <Text style={indexStyles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   // Loading, authenticated (redirecting), or an unauthenticated visitor whose
   // first-time-device check hasn't resolved yet — show spinner, never the
@@ -272,5 +300,32 @@ const indexStyles = StyleSheet.create({
     color: '#ffffff',
     marginTop: 16,
     fontSize: 16,
+  },
+  offlineTitle: {
+    color: '#ffffff',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  offlineText: {
+    color: '#d1d5db',
+    fontSize: 16,
+    lineHeight: 22,
+    marginTop: 12,
+    maxWidth: 300,
+    textAlign: 'center',
+  },
+  retryButton: {
+    alignItems: 'center',
+    backgroundColor: '#059669',
+    borderRadius: 6,
+    marginTop: 24,
+    minWidth: 112,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  retryButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });
