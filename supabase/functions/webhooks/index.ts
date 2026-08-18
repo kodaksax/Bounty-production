@@ -3404,12 +3404,12 @@ Deno.serve(async (req: Request) => {
             }
             posterId = (racedId as string | null) ?? null;
             if (!posterId) {
-              console.error('[webhooks] Could not create or resolve a poster account', {
+              console.error('[webhooks] Could not create or resolve a poster account — createUser returned 422 but re-resolve also found no user', {
                 sessionId: session.id,
-                error: createErr,
+                createErr,
               });
               await recordCheckoutFailure(
-                `account_creation_failed: ${createErr.message ?? 'unknown'}`
+                'account_creation_failed: re-resolve returned no user after 422 conflict'
               );
               break;
             }
