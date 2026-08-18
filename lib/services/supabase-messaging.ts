@@ -172,6 +172,8 @@ export function generateInitials(username?: string, fullName?: string): string {
  * Optimized to eliminate N+1 queries by batching all data fetches
  */
 export async function fetchConversations(userId: string): Promise<Conversation[]> {
+  if (!userId || userId.trim() === '') return [];
+
   try {
     // Query conversations where user is a participant and hasn't soft-deleted
     const { data: participants, error: participantsError } = await supabase

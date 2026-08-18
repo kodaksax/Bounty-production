@@ -20,6 +20,12 @@ interface UserFollowRow {
   created_at: string;
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function hasValidUuid(...ids: string[]): boolean {
+  return ids.every(id => UUID_PATTERN.test(id.trim()));
+}
+
 function mapRow(row: UserFollowRow): Follow {
   return {
     id: row.id,
@@ -34,6 +40,8 @@ export const followService = {
    * Check if user is following another user
    */
   isFollowing: async (followerId: string, followingId: string): Promise<boolean> => {
+    if (!hasValidUuid(followerId, followingId)) return false;
+
     const { data, error } = await supabase
       .from('user_follows')
       .select('id')
@@ -51,7 +59,14 @@ export const followService = {
   /**
    * Follow a user
    */
-  follow: async (followerId: string, followingId: string): Promise<{ success: boolean; error?: string }> => {
+  follow: async (
+    followerId: string,
+    followingId: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!hasValidUuid(followerId, followingId)) {
+      return { success: false, error: 'A valid user is required.' };
+    }
+
     if (followerId === followingId) {
       return { success: false, error: 'You cannot follow yourself.' };
     }
@@ -80,7 +95,14 @@ export const followService = {
   /**
    * Unfollow a user
    */
-  unfollow: async (followerId: string, followingId: string): Promise<{ success: boolean; error?: string }> => {
+  unfollow: async (
+    followerId: string,
+    followingId: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!hasValidUuid(followerId, followingId)) {
+      return { success: false, error: 'A valid user is required.' };
+    }
+
     const { error } = await supabase
       .from('user_follows')
       .delete()
@@ -99,6 +121,8 @@ export const followService = {
    * Get followers for a user
    */
   getFollowers: async (userId: string): Promise<Follow[]> => {
+    if (!hasValidUuid(userId)) return [];
+
     const { data, error } = await supabase
       .from('user_follows')
       .select('*')
@@ -116,6 +140,8 @@ export const followService = {
    * Get users that a user is following
    */
   getFollowing: async (userId: string): Promise<Follow[]> => {
+    if (!hasValidUuid(userId)) return [];
+
     const { data, error } = await supabase
       .from('user_follows')
       .select('*')
@@ -133,6 +159,8 @@ export const followService = {
    * Get follower count
    */
   getFollowerCount: async (userId: string): Promise<number> => {
+    if (!hasValidUuid(userId)) return 0;
+
     const { count, error } = await supabase
       .from('user_follows')
       .select('*', { count: 'exact', head: true })
@@ -149,6 +177,8 @@ export const followService = {
    * Get following count
    */
   getFollowingCount: async (userId: string): Promise<number> => {
+    if (!hasValidUuid(userId)) return 0;
+
     const { count, error } = await supabase
       .from('user_follows')
       .select('*', { count: 'exact', head: true })

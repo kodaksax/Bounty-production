@@ -40,12 +40,11 @@ export async function logClientError(message: string, metadata?: Record<string, 
       }
     }
 
-    // Best-effort: try sending to a 'client_logs' table if it exists
-    await supabase
-      .from('client_logs')
-      .insert([
-        { level: 'error', message, metadata: safeMeta, created_at: new Date().toISOString() },
-      ]);
+    await (supabase as any).rpc('write_client_log', {
+      p_level: 'error',
+      p_message: message,
+      p_metadata: safeMeta,
+    });
   } catch (e) {
     // swallow - we don't want monitoring failures to break app logic
     // still print to console for local debugging
@@ -91,11 +90,11 @@ export async function logClientInfo(message: string, metadata?: Record<string, a
         }
       }
     }
-    await supabase
-      .from('client_logs')
-      .insert([
-        { level: 'info', message, metadata: safeMeta, created_at: new Date().toISOString() },
-      ]);
+    await (supabase as any).rpc('write_client_log', {
+      p_level: 'info',
+      p_message: message,
+      p_metadata: safeMeta,
+    });
   } catch (e) {}
   // Also log to console in development for debugging
   if (typeof __DEV__ !== 'undefined' && __DEV__) {
