@@ -20,6 +20,23 @@ function createMessages(tokens: string[], opts?: { title?: string; body?: string
   return (tokens || []).map(t => createExpoMessage(t, opts))
 }
 
+// Inlined from ./push-delivery-diagnostics
+const MAX_LOGGED_RECIPIENTS = 20
+function buildZeroTokenWarning(params: {
+  notificationId: unknown
+  notificationType: unknown
+  pushRecipients: string[]
+}) {
+  const recipients = params.pushRecipients ?? []
+  return {
+    notificationId: String(params.notificationId ?? 'unknown'),
+    notificationType: String(params.notificationType || 'unknown'),
+    recipientCount: recipients.length,
+    recipients: recipients.slice(0, MAX_LOGGED_RECIPIENTS),
+    truncated: recipients.length > MAX_LOGGED_RECIPIENTS,
+  }
+}
+
 // Inlined from ./recipients
 function normalizeRecipients(raw: any): string[] {
   let recipients: string[] = []
@@ -399,6 +416,16 @@ Deno.serve(async (req: Request) => {
 
     const tokensList = (tokens || []).map((r: any) => r.token).filter(Boolean)
     if (tokensList.length === 0) {
+      // Every one of these recipients wanted a push and not one of them has a
+      // deliverable token. That is indistinguishable from a healthy send in the
+      // outbox — the row is still marked 'sent' below, because retrying cannot
+      // conjure a device — so the warning is the only signal that a delivery
+      // gap exists. Its absence is how a push regression can run for months
+      // without surfacing anywhere.
+      console.warn(
+        '[process-notification] resolved zero deliverable push tokens',
+        buildZeroTokenWarning({ notificationId: id, notificationType, pushRecipients })
+      )
       await supabaseAdmin.from('notifications_outbox').update({ status: 'sent', attempts: (rows.attempts || 0) + 1 }).eq('id', id)
       return jsonResponse({ message: 'In-app notifications saved; no tokens for recipients', inApp: inAppRecipients.length })
     }
