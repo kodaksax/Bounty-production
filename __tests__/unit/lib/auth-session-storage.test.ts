@@ -9,11 +9,12 @@
 
 import * as SecureStore from 'expo-secure-store';
 import {
-  clearAllSessionData,
-  createAuthSessionStorageAdapter,
-  getStartupTimeoutCount,
-  incrementStartupTimeoutCount,
-  resetStartupTimeoutCount,
+    clearAllSessionData,
+    createAuthSessionStorageAdapter,
+    getStartupTimeoutCount,
+    incrementStartupTimeoutCount,
+    readPersistedSession,
+    resetStartupTimeoutCount,
 } from '../../../lib/auth-session-storage';
 
 jest.mock('expo-secure-store', () => ({
@@ -302,6 +303,78 @@ describe('createAuthSessionStorageAdapter', () => {
 // ---------------------------------------------------------------------------
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+describe('readPersistedSession', () => {
+  // Startup fallback used when supabase.auth.getSession() stalls (offline cold
+  // start). Must read the same bytes the adapter wrote, and never throw.
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    (SecureStore.getItemAsync as jest.Mock).mockResolvedValue(null);
+    (SecureStore.setItemAsync as jest.Mock).mockResolvedValue(undefined);
+    (SecureStore.deleteItemAsync as jest.Mock).mockResolvedValue(undefined);
+    await clearAllSessionData();
+  });
+
+  it('returns the persisted session written by the adapter', async () => {
+    (SecureStore.getItemAsync as jest.Mock).mockImplementation(async (k: string) =>
+      k === SESSION_KEY ? mockSession : null
+    );
+
+    const session = await readPersistedSession(SESSION_KEY);
+    expect(session?.user?.id).toBe('user123');
+    expect(session?.access_token).toBe('test_token');
+  });
+
+  it('reassembles a chunked session', async () => {
+    const value = JSON.stringify({
+      access_token: 'a'.repeat(3000),
+      refresh_token: 'r',
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+      user: { id: 'chunked-user' },
+    });
+    const store: Record<string, string> = {};
+    (SecureStore.setItemAsync as jest.Mock).mockImplementation(async (k: string, v: string) => {
+      store[k] = v;
+    });
+    (SecureStore.getItemAsync as jest.Mock).mockImplementation(
+      async (k: string) => store[k] ?? null
+    );
+
+    const adapter = createAuthSessionStorageAdapter();
+    await adapter.setItem(SESSION_KEY, value);
+    await clearAllSessionData(); // drop the in-memory cache so we read from storage
+    (SecureStore.getItemAsync as jest.Mock).mockImplementation(
+      async (k: string) => store[k] ?? null
+    );
+
+    const session = await readPersistedSession(SESSION_KEY);
+    expect(session?.user?.id).toBe('chunked-user');
+  });
+
+  it('unwraps the legacy { currentSession } envelope', async () => {
+    (SecureStore.getItemAsync as jest.Mock).mockImplementation(async (k: string) =>
+      k === SESSION_KEY
+        ? JSON.stringify({ currentSession: JSON.parse(mockSession), expiresAt: 123 })
+        : null
+    );
+
+    const session = await readPersistedSession(SESSION_KEY);
+    expect(session?.user?.id).toBe('user123');
+  });
+
+  it.each([
+    ['nothing stored', null],
+    ['malformed JSON', 'not-json{'],
+    ['a session with no access token', JSON.stringify({ user: { id: 'x' } })],
+    ['a session with no user', JSON.stringify({ access_token: 'a' })],
+  ])('returns null for %s', async (_label, stored) => {
+    (SecureStore.getItemAsync as jest.Mock).mockImplementation(async (k: string) =>
+      k === SESSION_KEY ? stored : null
+    );
+
+    await expect(readPersistedSession(SESSION_KEY)).resolves.toBeNull();
+  });
+});
 
 describe('consecutiveStartupTimeout counter', () => {
   const TIMEOUT_COUNT_KEY = 'auth.startup_timeout_count';

@@ -31,7 +31,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 import { supabase } from '../../../lib/supabase';
-import { refreshSession } from '../../../lib/utils/session-handler';
+import { refreshSession, startSessionMonitoring } from '../../../lib/utils/session-handler';
 
 describe('refreshSession', () => {
   beforeEach(() => {
@@ -88,5 +88,95 @@ describe('refreshSession', () => {
 
     const result = await refreshSession();
     expect(result).toEqual({ refreshed: false, isNetworkError: true });
+  });
+});
+
+describe('startSessionMonitoring immediate check', () => {
+  // Regression coverage for auth-persistence audit findings:
+  //  - An expired access token used to trigger signOut() with NO refresh
+  //    attempt. JS timers are paused while backgrounded, so the built-in
+  //    auto-refresh routinely misses its window and the app foregrounds with
+  //    an already-expired token — that must refresh, not log the user out.
+  //  - A transiently unreadable session (cold start, secure-storage stall)
+  //    reported isExpired=true with no session at all, and signOut() then
+  //    destroyed the valid persisted session on disk.
+  let stop: (() => void) | undefined;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    stop?.();
+    stop = undefined;
+  });
+
+  const flush = async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  };
+
+  it('refreshes an expired session instead of signing the user out', async () => {
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+      data: { session: { expires_at: Math.floor(Date.now() / 1000) - 60 } },
+      error: null,
+    });
+    (supabase.auth.refreshSession as jest.Mock).mockResolvedValue({
+      data: { session: { access_token: 'fresh' } },
+      error: null,
+    });
+
+    stop = startSessionMonitoring();
+    await flush();
+
+    expect(supabase.auth.refreshSession).toHaveBeenCalled();
+    expect(supabase.auth.signOut).not.toHaveBeenCalled();
+  });
+
+  it('keeps an expired session when the refresh fails for a network reason', async () => {
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+      data: { session: { expires_at: Math.floor(Date.now() / 1000) - 60 } },
+      error: null,
+    });
+    (supabase.auth.refreshSession as jest.Mock).mockResolvedValue({
+      data: { session: null },
+      error: { message: 'network request failed' },
+    });
+
+    stop = startSessionMonitoring();
+    await flush();
+
+    expect(supabase.auth.signOut).not.toHaveBeenCalled();
+  });
+
+  it('signs out only when an expired session is definitively unrefreshable', async () => {
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+      data: { session: { expires_at: Math.floor(Date.now() / 1000) - 60 } },
+      error: null,
+    });
+    (supabase.auth.refreshSession as jest.Mock).mockResolvedValue({
+      data: { session: null },
+      error: { message: 'Invalid refresh token', status: 401 },
+    });
+
+    stop = startSessionMonitoring();
+    await flush();
+
+    expect(supabase.auth.signOut).toHaveBeenCalled();
+  });
+
+  it('never signs out when no session could be read at all', async () => {
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+      data: { session: null },
+      error: null,
+    });
+
+    stop = startSessionMonitoring();
+    await flush();
+
+    expect(supabase.auth.refreshSession).not.toHaveBeenCalled();
+    expect(supabase.auth.signOut).not.toHaveBeenCalled();
   });
 });

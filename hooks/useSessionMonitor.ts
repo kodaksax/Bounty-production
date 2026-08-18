@@ -21,6 +21,7 @@ const createDefaultState = (): SessionState => ({
   isExpired: false,
   expiresAt: null,
   needsRefresh: false,
+  hasSession: false,
 });
 
 export function useSessionMonitor(options: SessionMonitorOptions = {}) {

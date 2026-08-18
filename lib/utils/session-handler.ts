@@ -19,6 +19,13 @@ export interface SessionState {
   isExpired: boolean;
   expiresAt: number | null;
   needsRefresh: boolean;
+  /**
+   * Whether a session was actually readable. `isExpired` is also true when no
+   * session could be read at all, which during a cold start or a transient
+   * secure-storage read failure is NOT the same as "this session expired".
+   * The monitor uses this to avoid a destructive signOut() in that case.
+   */
+  hasSession: boolean;
 }
 
 let sessionExpirationCallback: (() => void) | null = null;
@@ -75,11 +82,11 @@ export async function checkSessionExpiration(): Promise<SessionState> {
 
     if (error) {
       logger.error('Error checking session', { error });
-      return { isExpired: false, expiresAt: null, needsRefresh: false };
+      return { isExpired: false, expiresAt: null, needsRefresh: false, hasSession: false };
     }
 
     if (!session) {
-      return { isExpired: true, expiresAt: null, needsRefresh: false };
+      return { isExpired: true, expiresAt: null, needsRefresh: false, hasSession: false };
     }
 
     const expiresAt = session.expires_at ? session.expires_at * 1000 : null;
@@ -94,10 +101,11 @@ export async function checkSessionExpiration(): Promise<SessionState> {
       isExpired,
       expiresAt,
       needsRefresh,
+      hasSession: true,
     };
   } catch (error) {
     logger.error('Unexpected error checking session', { error });
-    return { isExpired: false, expiresAt: null, needsRefresh: false };
+    return { isExpired: false, expiresAt: null, needsRefresh: false, hasSession: false };
   }
 }
 
@@ -182,9 +190,22 @@ export function startSessionMonitoring(): () => void {
   const checkAndRefresh = async () => {
     const state = await checkSessionExpiration();
 
-    if (state.isExpired) {
-      await handleSessionExpiration();
-    } else if (state.needsRefresh) {
+    // No readable session at all: nothing to expire. This happens on a cold
+    // start before AuthProvider has restored the session, and on a transient
+    // secure-storage read failure. Calling handleSessionExpiration() here would
+    // signOut() and destroy a perfectly valid persisted session, which is what
+    // put returning users back on the login screen. AuthProvider owns the
+    // signed-out state; the monitor must never manufacture it.
+    if (!state.hasSession) {
+      return;
+    }
+
+    if (state.isExpired || state.needsRefresh) {
+      // An expired access token is normally recoverable — JS timers are paused
+      // while the app is backgrounded, so the built-in auto-refresh loop
+      // routinely misses its window and the app foregrounds with an already
+      // expired token. Always attempt a refresh before concluding the user is
+      // signed out.
       const { refreshed, isNetworkError } = await refreshSession();
       // Only a definitive failure (bad/revoked refresh token, or the SDK
       // returning no session at all) means the user is actually signed

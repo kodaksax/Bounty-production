@@ -86,6 +86,7 @@ jest.mock('../../lib/auth-session-storage', () => ({
   clearAllSessionData: jest.fn(() => Promise.resolve()),
   incrementStartupTimeoutCount: jest.fn(() => Promise.resolve(1)),
   resetStartupTimeoutCount: jest.fn(() => Promise.resolve()),
+  readPersistedSession: jest.fn(() => Promise.resolve(null)),
 }));
 
 // Require modules after mocks so imports inside modules pick up jest mocks
@@ -1237,6 +1238,119 @@ describe('Authentication State Persistence', () => {
     });
   });
 
+  describe('Offline cold-start local session recovery', () => {
+    // Regression tests for: `getSession()` stalling on a cold start (offline or
+    // unreachable backend) used to fall through to `setSession(null)`, which
+    // presented a recoverable connectivity problem as "you have been logged
+    // out." The session bytes are on-device — read them directly instead.
+
+    const renderWithContext = () => {
+      const { useContext } = require('react');
+      const { AuthContext } = require('../../hooks/use-auth-context');
+      let captured: any;
+      const ContextCapture = () => {
+        captured = useContext(AuthContext);
+        return null;
+      };
+      render(
+        <AuthProvider>
+          <ContextCapture />
+        </AuthProvider>
+      );
+      return () => captured;
+    };
+
+    const goOffline = () => {
+      const netInfo = require('@react-native-community/netinfo');
+      (netInfo.fetch as jest.Mock).mockResolvedValue({
+        isConnected: false,
+        isInternetReachable: false,
+        type: 'none',
+      });
+    };
+
+    it('restores an unexpired persisted session when startup getSession times out', async () => {
+      (supabase.auth.getSession as jest.Mock).mockImplementation(() => new Promise(() => {}));
+      goOffline();
+
+      const persisted = {
+        access_token: 'local-token',
+        refresh_token: 'local-refresh',
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+        user: { id: 'offline-user', email: 'offline@example.com' },
+      };
+      (authSessionStorage.readPersistedSession as jest.Mock).mockResolvedValue(persisted);
+
+      const getContext = renderWithContext();
+
+      await waitFor(() => {
+        expect(supabase.auth.getSession).toHaveBeenCalled();
+      });
+
+      await act(async () => {
+        jest.advanceTimersByTime(20000);
+      });
+
+      await waitFor(() => {
+        expect(getContext()?.session?.user?.id).toBe('offline-user');
+      });
+      expect(getContext()?.isLoading).toBe(false);
+      expect(getContext()?.isAuthStale).toBe(false);
+      expect(authSessionStorage.clearAllSessionData).not.toHaveBeenCalled();
+    });
+
+    it('surfaces a retryable stale state (not a logout) when the persisted session is expired', async () => {
+      (supabase.auth.getSession as jest.Mock).mockImplementation(() => new Promise(() => {}));
+      goOffline();
+
+      (authSessionStorage.readPersistedSession as jest.Mock).mockResolvedValue({
+        access_token: 'stale-token',
+        refresh_token: 'stale-refresh',
+        expires_at: Math.floor(Date.now() / 1000) - 60,
+        user: { id: 'offline-user' },
+      });
+
+      const getContext = renderWithContext();
+
+      await waitFor(() => {
+        expect(supabase.auth.getSession).toHaveBeenCalled();
+      });
+
+      await act(async () => {
+        jest.advanceTimersByTime(20000);
+      });
+
+      await waitFor(() => {
+        expect(getContext()?.isAuthStale).toBe(true);
+      });
+      // Must not resolve to a signed-out state — the refresh token may still work.
+      expect(getContext()?.session).toBeUndefined();
+      expect(authSessionStorage.clearAllSessionData).not.toHaveBeenCalled();
+    });
+
+    it('falls back to a signed-out state when nothing is persisted', async () => {
+      (supabase.auth.getSession as jest.Mock).mockImplementation(() => new Promise(() => {}));
+      goOffline();
+
+      (authSessionStorage.readPersistedSession as jest.Mock).mockResolvedValue(null);
+
+      const getContext = renderWithContext();
+
+      await waitFor(() => {
+        expect(supabase.auth.getSession).toHaveBeenCalled();
+      });
+
+      await act(async () => {
+        jest.advanceTimersByTime(20000);
+      });
+
+      await waitFor(() => {
+        expect(getContext()?.session).toBeNull();
+      });
+      expect(getContext()?.isAuthStale).toBe(false);
+    });
+  });
+
   describe('Environment guard failure (env-guard)', () => {
     // Regression tests for: production Android devices hitting the
     // checkEnvironmentIntegrity() guard (lib/config/env-guard.ts) — confirmed
@@ -1255,7 +1369,9 @@ describe('Authentication State Persistence', () => {
       supabaseEnv.mismatch = true;
 
       (supabase.auth.getSession as jest.Mock).mockRejectedValue(
-        new Error('[env-guard] Build channel "production" must use Supabase project "a", but this bundle resolved to "b".')
+        new Error(
+          '[env-guard] Build channel "production" must use Supabase project "a", but this bundle resolved to "b".'
+        )
       );
 
       const { useContext } = require('react');
@@ -1290,7 +1406,9 @@ describe('Authentication State Persistence', () => {
       const { supabaseEnv } = require('../../lib/supabase');
       supabaseEnv.mismatch = false;
 
-      (supabase.auth.getSession as jest.Mock).mockRejectedValue(new Error('network request failed'));
+      (supabase.auth.getSession as jest.Mock).mockRejectedValue(
+        new Error('network request failed')
+      );
 
       const { useContext } = require('react');
       const { AuthContext } = require('../../hooks/use-auth-context');

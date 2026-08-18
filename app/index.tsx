@@ -111,6 +111,11 @@ export default function Index() {
     // Still resolving auth or onboarding state — do nothing yet.
     if (bootstrap.status === 'loading') return;
 
+    // Session restore stalled but a persisted session may still be recoverable.
+    // The retry UI below is rendered instead; navigating to sign-in here would
+    // present a recoverable connectivity problem as a logout.
+    if (isAuthStale) return;
+
     // A banned/suspended account takes precedence over all other routing
     // decisions, same as password recovery below — the provider has already
     // force-signed the user out by the time this fires (see
@@ -241,6 +246,7 @@ export default function Index() {
     isPasswordRecovery,
     accountBlockedReason,
     environmentError,
+    isAuthStale,
     router,
     confirmedReturningUser,
   ]);

@@ -194,6 +194,77 @@ export async function getStartupTimeoutCount(): Promise<number> {
 }
 
 /**
+ * Reads the raw stored string for `key`, transparently reassembling the
+ * `__chunked__` format. Shared by the Supabase storage adapter's getItem and
+ * by readPersistedSession() so both see identical bytes.
+ */
+async function readRawItem(key: string): Promise<string | null> {
+  const cached = inMemorySessionCache.get(key);
+  if (cached) return cached;
+
+  const val = await withSecureStoreTimeout(
+    () => SecureStore.getItemAsync(key),
+    `getItemAsync(${key})`,
+    null
+  );
+
+  if (val === '__chunked__') {
+    const countStr = await withSecureStoreTimeout(
+      () => SecureStore.getItemAsync(key + CHUNK_META_SUFFIX),
+      `getItemAsync(${key}${CHUNK_META_SUFFIX})`,
+      null
+    );
+    const count = parseInt(countStr || '0', 10);
+    let out = '';
+    for (let i = 0; i < count; i++) {
+      const part = await withSecureStoreTimeout(
+        () => SecureStore.getItemAsync(`${key}__${i}`),
+        `getItemAsync(${key}__${i})`,
+        null
+      );
+      out += part ?? '';
+    }
+    if (out) inMemorySessionCache.set(key, out);
+    return out;
+  }
+
+  if (val) inMemorySessionCache.set(key, val);
+  return val;
+}
+
+/**
+ * Reads the persisted Supabase session straight from secure storage, bypassing
+ * the gotrue client entirely.
+ *
+ * Used as a startup fallback when `supabase.auth.getSession()` stalls (offline
+ * cold start, unreachable backend): the session bytes are on-device and valid,
+ * so the user must not be bounced to the login screen just because the network
+ * round-trip could not complete. Returns null for missing or malformed data —
+ * never throws.
+ */
+export async function readPersistedSession(key: string): Promise<{
+  access_token?: string;
+  refresh_token?: string;
+  expires_at?: number;
+  user?: { id?: string; email?: string };
+} | null> {
+  try {
+    const raw = await readRawItem(key);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    // gotrue v2 stores the session object directly; older builds wrapped it
+    // as { currentSession, expiresAt }.
+    const session = parsed?.currentSession ?? parsed;
+    if (!session || typeof session !== 'object') return null;
+    if (!session.access_token || !session.user?.id) return null;
+    return session;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Storage adapter for Supabase — always persists to secure storage.
  *
  * KEY BEHAVIOR:
@@ -225,49 +296,10 @@ export const createAuthSessionStorageAdapter = () => {
   return {
     getItem: async (key: string): Promise<string | null> => {
       try {
-        const cached = inMemorySessionCache.get(key);
-        if (cached) {
-          return cached;
-        }
-
-        // Cache miss, read from secure storage (bounded so a hung keychain
-        // read can never block session restoration / auth).
-        const val = await withSecureStoreTimeout(
-          () => SecureStore.getItemAsync(key),
-          `getItemAsync(${key})`,
-          null
-        );
-
-        // Handle chunked storage
-        if (val === '__chunked__') {
-          const countStr = await withSecureStoreTimeout(
-            () => SecureStore.getItemAsync(key + CHUNK_META_SUFFIX),
-            `getItemAsync(${key}${CHUNK_META_SUFFIX})`,
-            null
-          );
-          const count = parseInt(countStr || '0', 10);
-          let out = '';
-          for (let i = 0; i < count; i++) {
-            const part = await withSecureStoreTimeout(
-              () => SecureStore.getItemAsync(`${key}__${i}`),
-              `getItemAsync(${key}__${i})`,
-              null
-            );
-            out += part ?? '';
-          }
-
-          if (out) {
-            inMemorySessionCache.set(key, out);
-          }
-
-          return out;
-        }
-
-        if (val) {
-          inMemorySessionCache.set(key, val);
-        }
-
-        return val;
+        // Reads the in-memory cache first (performance), then secure storage
+        // bounded by withSecureStoreTimeout so a hung keychain read can never
+        // block session restoration / auth.
+        return await readRawItem(key);
       } catch (e) {
         console.error('[AuthSessionStorage] Error getting item:', e);
         // On error, return null to force re-authentication

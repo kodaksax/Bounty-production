@@ -18,6 +18,7 @@ import { clearBountyDraftForUser } from '../app/hooks/useBountyDraft';
 import {
     clearAllSessionData,
     incrementStartupTimeoutCount,
+    readPersistedSession,
     resetStartupTimeoutCount,
 } from '../lib/auth-session-storage';
 import { analyticsService } from '../lib/services/analytics-service';
@@ -525,7 +526,6 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           reportWarning(
             '[AuthProvider] Session initialization timed out; showing retryable connection state'
           );
-          if (isMountedRef.current) setIsAuthStale(true);
           // Increment the consecutive startup-timeout counter. Only purge the
           // stored session after STARTUP_TIMEOUT_PURGE_THRESHOLD consecutive
           // timeouts. One bad launch (transient network stall) doesn't force a
@@ -541,6 +541,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
           // itself. Only count/purge when we have positive evidence the
           // network was reachable (so a real stalled-refresh loop, which
           // happens against a reachable backend, still gets cleaned up).
+          let purged = false;
           try {
             const network = await getNetworkSnapshot();
             const isOffline =
@@ -557,11 +558,60 @@ export default function AuthProvider({ children }: PropsWithChildren) {
               if (count >= STARTUP_TIMEOUT_PURGE_THRESHOLD) {
                 await clearAllSessionData(PROJECT_STORAGE_KEY);
                 await resetStartupTimeoutCount();
+                purged = true;
                 reportWarning('[AuthProvider] Purged stalled session after consecutive timeouts');
               }
             }
           } catch (e) {
             reportWarning('[AuthProvider] Failed to handle startup timeout count:', e);
+          }
+
+          if (!isMountedRef.current) return;
+
+          // The gotrue round-trip stalled, but the session bytes live on this
+          // device. Read them directly so an offline / unreachable-backend
+          // cold start does not present as "you have been logged out."
+          if (!purged) {
+            const persisted = await readPersistedSession(PROJECT_STORAGE_KEY).catch(() => null);
+            if (!isMountedRef.current) return;
+
+            if (persisted) {
+              const expiresAtMs = (persisted.expires_at ?? 0) * 1000;
+              const stillValid = expiresAtMs > Date.now();
+
+              if (stillValid) {
+                // Locally valid access token — restore the authenticated
+                // experience and let auto-refresh reconcile with the server
+                // once connectivity returns.
+                reportWarning(
+                  '[AuthProvider] Restored session from local storage after startup timeout'
+                );
+                sessionFound = true;
+                const localSession = persisted as unknown as Session;
+                setSession(localSession);
+                setIsAuthStale(false);
+                sessionIdRef.current = localSession.user?.id ?? null;
+                previousUserIdRef.current = sessionIdRef.current;
+                profileFetchCompletedRef.current = true;
+                setIsEmailVerified(
+                  Boolean(
+                    (localSession.user as any)?.email_confirmed_at ||
+                    (localSession.user as any)?.confirmed_at
+                  )
+                );
+                setIsLoading(false);
+                scheduleTokenRefresh(localSession);
+                void authProfileService.setSession(localSession).catch(() => {});
+                return;
+              }
+
+              // Persisted but expired: the refresh token may still be good, so
+              // surface the retryable "connection interrupted" state instead of
+              // discarding a recoverable session.
+              setIsAuthStale(true);
+              setIsLoading(false);
+              return;
+            }
           }
         }
         if (!isMountedRef.current) return;
