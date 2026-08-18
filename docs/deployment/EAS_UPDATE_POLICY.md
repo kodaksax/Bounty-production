@@ -64,9 +64,9 @@ The job:
   tuning makes that safe.
 - Publishes with `eas update --branch production --environment production --message "..." --rollout-percentage N --non-interactive --json`.
 - Records triggering actor, commit SHA, branch, timestamp, channel, rollout percentage, and message
-  in the job summary *before* publishing, and the resulting update group JSON (update IDs, resolved
+  in the job summary _before_ publishing, and the resulting update group JSON (update IDs, resolved
   runtime version, manifest links) in the summary and as a 90-day-retention build artifact
-  *after*.
+  _after_.
 - Runs under `concurrency: { group: eas-update-production, cancel-in-progress: false }`, so two
   publishes can't race each other.
 
@@ -74,12 +74,19 @@ To check compatibility locally without publishing: `npm run update:production:ch
 
 ### Emergency manual publish (discouraged)
 
-`npm run update:production` (`eas update --branch production --environment production`) still
-works directly from a developer machine — it is not blocked. It should only be used when the
-GitHub Actions workflow itself is unavailable (e.g. GitHub is down) and the situation genuinely
-can't wait. If you do this, run `npm run update:production:check` first (the same guardrail the
-workflow runs), and post the command, message, and reasoning wherever the team tracks production
-changes, since it won't otherwise appear in the workflow's audit trail.
+`npm run update:production` still works directly from a developer machine — it is not blocked. It
+should only be used when the GitHub Actions workflow itself is unavailable (e.g. GitHub is down)
+and the situation genuinely can't wait. As of 2026-08-17 this script
+(`scripts/eas-update-production.js`) runs the same fingerprint guardrail the CI workflow runs
+before publishing, prints the project/commit/branch/channel being targeted, and prints the
+resulting update group afterward — it is no longer a bare `eas update` call. It still won't appear
+in the workflow's audit trail, so post the command, message, and reasoning wherever the team
+tracks production changes.
+
+**`npm run update:production:raw`** is the actual bare `eas update --branch production
+--environment production` command with _no_ guardrail, project check, or verification — it exists
+only for the case where the guardrail script itself is broken and you've manually confirmed
+compatibility another way. Do not use it as a shortcut to skip the fingerprint check.
 
 ## Staged rollout
 
@@ -148,16 +155,33 @@ invented:
 These require ongoing human discipline; nothing here fully automates them:
 
 - **The `confirm_production` checkbox and rollout-percentage choice are still human judgment
-  calls.** The workflow makes publishing reviewable and auditable; it does not decide *whether* a
+  calls.** The workflow makes publishing reviewable and auditable; it does not decide _whether_ a
   given change is safe to ship as an OTA update versus needing a native build/staged rollout — the
   fingerprint guardrail only catches native/JS incompatibility, not logic bugs.
   - The workflow does not gate on `--rollout-percentage` for its updates, but only one rollout can be
-  active on the branch at a time — publishing while a prior rollout is still in progress will error;
-  finish or revert it first (see Staged Rollout above).
+    active on the branch at a time — publishing while a prior rollout is still in progress will error;
+    finish or revert it first (see Staged Rollout above).
 - **GitHub environment protection is not configured yet.** The workflow declares
   `environment: production`; if that GitHub Environment doesn't have required reviewers configured
   in repo settings, `workflow_dispatch` still runs on demand for anyone with write access. Adding
   required reviewers there would add a second-person approval gate on top of what's here.
 - **The emergency manual-publish escape hatch (`npm run update:production`) bypasses the audit
   trail by design** — it still works, and still isn't blocked at the CLI/token level. It's a
-  process convention, not a technical control.
+  process convention, not a technical control. It does, however, run the same fingerprint guardrail
+  as CI as of 2026-08-17; only `npm run update:production:raw` truly bypasses everything.
+
+## 2026-08-17 audit finding: a real orphaned production update
+
+A production-OTA audit on 2026-08-17 found that the most recent update published to the
+`production` branch/channel at that time (group `9e86317a-...` iOS / `fcb0e9f6-...` Android,
+commit `37c6a5bf`, message "Wire location permission request in poster flow Step 3 (StepWhere)")
+had a `runtimeVersion` (fingerprint) that did not match **any** finished production build ever
+produced for either platform — including the latest one (iOS build 81 / Android build 68,
+fingerprints `d8ffbf27...` / `3247ae3c...`). That update was therefore unreachable by every
+installed production binary, current and historical, despite `eas update` having exited
+successfully. This is the same failure mode as the 2026-08-11 incident, and it recurred because
+`npm run update:production` had no enforcement of the guardrail script — only the CI workflow ran
+it. See `scripts/eas-update-production.js` for the fix (guardrail now runs on every local publish
+too). **A new native build from the commit you intend to ship next is required before the next
+OTA update can reach real users** — publishing more OTA updates on top of the current mismatch
+will not fix it; only a build whose fingerprint matches the code being published will.
