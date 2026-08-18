@@ -28,8 +28,9 @@ module.exports = function (api) {
       'react-native-reanimated/plugin',
     ],
     // NOTE: logical-assignment transforms (??= / ||= / &&=) removed —
-    // Hermes V1 (useHermesV1: true in expo-build-properties) supports
-    // these operators natively.  If you fall back to legacy Hermes,
+    // Hermes (useHermesV1: false in expo-build-properties) supports
+    // these operators natively.  If you need to support an older Hermes
+    // build without native logical-assignment support,
     // re-add @babel/plugin-transform-logical-assignment-operators here
     // and in a node_modules override.
   };

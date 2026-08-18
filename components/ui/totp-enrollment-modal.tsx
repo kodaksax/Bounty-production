@@ -62,7 +62,7 @@ function extractSvgXml(qrCode?: string): string | null {
     try {
       if (meta.includes(';base64')) {
         // `atob` is available globally on Hermes (the JS engine used by this
-        // app per `app.json` -> `expo-build-properties.useHermesV1: true`).
+        // app; see `app.json` -> `expo-build-properties` for engine settings).
         // `Buffer` is intentionally NOT used here because it is not part of
         // the React Native global scope without a polyfill.
         const globalAtob = (globalThis as { atob?: (s: string) => string }).atob;
