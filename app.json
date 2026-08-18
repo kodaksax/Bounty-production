@@ -128,11 +128,13 @@
       "expo-secure-store",
       "expo-web-browser",
       "expo-video",
+      "expo-asset",
+      "expo-sharing",
       [
         "expo-build-properties",
         {
           "ios": {
-            "useHermesV1": true,
+            "useHermesV1": false,
             "buildReactNativeFromSource": true,
             "extraPods": [
               { "name": "GoogleUtilities", "modular_headers": true },
@@ -140,7 +142,7 @@
             ]
           },
           "android": {
-            "useHermesV1": true,
+            "useHermesV1": false,
             "buildReactNativeFromSource": true
           }
         }
