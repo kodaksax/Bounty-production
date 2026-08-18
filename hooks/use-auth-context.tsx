@@ -8,6 +8,21 @@ export type AuthData = {
   isLoggedIn: boolean
   isEmailVerified: boolean
   isPasswordRecovery: boolean
+  // Called by app/auth/callback.tsx the moment a recovery link has been
+  // successfully exchanged for a session, and cleared once the new password is
+  // saved (or on sign-out).
+  //
+  // Supabase's own `PASSWORD_RECOVERY` event cannot be relied on here: auth-js
+  // only emits it from `_getSessionFromURL`, which is gated behind
+  // `isBrowser() && detectSessionInUrl`, and lib/supabase.ts sets
+  // `detectSessionInUrl: false` (correctly — the fragment is parsed explicitly
+  // in lib/auth/recovery-link.ts because native drops it). `setSession()` and
+  // `verifyOtp()` both emit plain `SIGNED_IN`, so without this the app has no
+  // way to tell a recovery session apart from an ordinary login.
+  //
+  // Intentionally in-memory only: a restart must NOT resume recovery mode.
+  beginPasswordRecovery?: () => void
+  endPasswordRecovery?: () => void
   // Indicates that the local session may be stale due to network/token refresh failures
   isAuthStale?: boolean
   // Allows callers to request an immediate token refresh attempt
@@ -42,6 +57,8 @@ export const AuthContext = createContext<AuthData>({
   isLoggedIn: false,
   isEmailVerified: false,
   isPasswordRecovery: false,
+  beginPasswordRecovery: () => {},
+  endPasswordRecovery: () => {},
   accountBlockedReason: null,
   clearAccountBlockedReason: () => {},
   environmentError: false,

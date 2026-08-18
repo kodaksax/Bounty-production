@@ -202,15 +202,52 @@ describe('Auth Service', () => {
       expect(result.success).toBe(true);
     });
 
-    it('should use custom redirect URL if provided', async () => {
+    it('should default to a redirect that actually reaches the app', async () => {
+      // The previous default was https://bountyfinder.app/auth/callback, which
+      // terminates no TLS — the link was unreachable in a browser and could not
+      // serve the AASA/assetlinks files a universal link needs either. The
+      // custom scheme is allowlisted in production and opens the app directly.
       supabase.auth.resetPasswordForEmail.mockResolvedValue({ error: null });
 
-      await requestPasswordReset('test@example.com', 'https://custom.app/reset');
+      await requestPasswordReset('test@example.com');
 
-      expect(supabase.auth.resetPasswordForEmail).toHaveBeenCalledWith(
-        'test@example.com',
-        { redirectTo: 'https://custom.app/reset' }
-      );
+      expect(supabase.auth.resetPasswordForEmail).toHaveBeenCalledWith('test@example.com', {
+        redirectTo: 'bountyexpo-workspace://auth/callback',
+      });
+    });
+
+    it('should use an allowlisted custom redirect URL if provided', async () => {
+      supabase.auth.resetPasswordForEmail.mockResolvedValue({ error: null });
+
+      await requestPasswordReset('test@example.com', 'https://bountyfinder.app/auth/callback');
+
+      expect(supabase.auth.resetPasswordForEmail).toHaveBeenCalledWith('test@example.com', {
+        redirectTo: 'https://bountyfinder.app/auth/callback',
+      });
+    });
+
+    it('should ignore a redirect URL pointing off-domain', async () => {
+      // Supabase silently falls back to the project Site URL for an unlisted
+      // redirect rather than erroring, so a caller-supplied host must never be
+      // forwarded unchecked — that is how a reset email becomes an open redirect.
+      supabase.auth.resetPasswordForEmail.mockResolvedValue({ error: null });
+
+      await requestPasswordReset('test@example.com', 'https://evil.example.com/steal');
+
+      expect(supabase.auth.resetPasswordForEmail).toHaveBeenCalledWith('test@example.com', {
+        redirectTo: 'bountyexpo-workspace://auth/callback',
+      });
+    });
+
+    it('should not put the email address in logs or analytics', async () => {
+      const log = jest.spyOn(console, 'log').mockImplementation(() => {});
+      supabase.auth.resetPasswordForEmail.mockResolvedValue({ error: null });
+
+      await requestPasswordReset('leak-check@example.com');
+
+      const logged = log.mock.calls.map((c: unknown[]) => JSON.stringify(c)).join('\n');
+      expect(logged).not.toContain('leak-check@example.com');
+      log.mockRestore();
     });
   });
 

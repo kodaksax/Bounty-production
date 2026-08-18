@@ -1,7 +1,9 @@
 "use client"
 import { MaterialIcons } from '@expo/vector-icons'
-import { useLocalSearchParams, useRouter } from 'expo-router'
-import { updatePassword, verifyResetToken } from 'lib/services/auth-service'
+import { useRouter } from 'expo-router'
+import { resetConsumedRecoveryLink } from 'lib/auth/consume-auth-link'
+import { updatePassword } from 'lib/services/auth-service'
+import { supabase } from 'lib/supabase'
 import {
     calculatePasswordStrength,
     getStrengthColor,
@@ -10,7 +12,7 @@ import {
     validatePasswordMatch,
     type PasswordStrengthResult
 } from 'lib/utils/password-validation'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
     ActivityIndicator,
     KeyboardAvoidingView,
@@ -22,6 +24,7 @@ import {
     View
 } from 'react-native'
 import { BrandingLogo } from '../../components/ui/branding-logo'
+import { useAuthContext } from '../../hooks/use-auth-context'
 import { ROUTES } from '../../lib/routes'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation'
@@ -32,8 +35,8 @@ export default function UpdatePasswordRoute() {
 
 export function UpdatePasswordScreen() {
   const router = useRouter()
-  const params = useLocalSearchParams<{ token?: string; type?: string }>()
   const { theme } = useAppThemeContext()
+  const { endPasswordRecovery } = useAuthContext()
 
   // State management
   const [password, setPassword] = useState('')
@@ -47,44 +50,59 @@ export function UpdatePasswordScreen() {
   const [success, setSuccess] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<{ password?: string; confirmPassword?: string }>({})
 
+  // Blocks a second in-flight updateUser() from a double tap. A ref, not state,
+  // because the guard has to hold within a single event-loop turn — a setState
+  // would not have landed yet.
+  const submittingRef = useRef(false)
+
   // Password strength tracking
   const [passwordStrength, setPasswordStrength] = useState<PasswordStrengthResult | null>(null)
 
-  // Verify the reset token on mount
+  /**
+   * Confirm there is a live session to update, by asking Supabase rather than
+   * inferring it from navigation state.
+   *
+   * This screen used to take `?token=` off the URL and call `verifyResetToken()`
+   * again — but app/auth/callback.tsx has already exchanged that token, and
+   * recovery tokens are single-use, so the second call was guaranteed to fail
+   * and show "Invalid Reset Link" on a perfectly good reset. Worse, when no
+   * token was present it set `tokenValid` to true unconditionally, so a user
+   * with no session at all reached the form and only discovered the problem
+   * after typing a new password twice.
+   *
+   * The session is the ground truth: `updateUser({ password })` needs exactly
+   * that and nothing else.
+   */
   useEffect(() => {
-    const verifyToken = async () => {
-      const token = params.token
-      // Type guard to ensure valid token type with fallback to 'recovery'
-      const validTypes = ['recovery', 'signup', 'invite', 'email'] as const
-      type TokenType = typeof validTypes[number]
-      const type: TokenType = validTypes.includes(params.type as TokenType)
-        ? (params.type as TokenType)
-        : 'recovery'
+    let cancelled = false
 
-      if (!token) {
-        // No token provided - user may have navigated here directly
-        // Allow them to proceed if they have a valid session from clicking the email link
-        setVerifying(false)
-        setTokenValid(true)
-        return
-      }
-
+    const confirmSession = async () => {
       try {
-        const result = await verifyResetToken(token, type)
-        setTokenValid(result.success)
-        if (!result.success) {
-          setError(result.message)
+        const { data, error: sessionError } = await supabase.auth.getSession()
+        if (cancelled) return
+
+        if (sessionError || !data?.session?.access_token) {
+          setTokenValid(false)
+          setError(
+            'This password reset link is no longer valid. Reset links expire after one hour and can only be used once.'
+          )
+        } else {
+          setTokenValid(true)
         }
       } catch {
-        setError('Failed to verify reset link. Please request a new one.')
+        if (cancelled) return
         setTokenValid(false)
+        setError('We could not verify your reset link. Please request a new one.')
       } finally {
-        setVerifying(false)
+        if (!cancelled) setVerifying(false)
       }
     }
 
-    verifyToken()
-  }, [params.token, params.type])
+    void confirmSession()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Update password strength as user types
   useEffect(() => {
@@ -96,6 +114,11 @@ export function UpdatePasswordScreen() {
   }, [password])
 
   const handleUpdatePassword = async () => {
+    // Duplicate-submission guard. `loading` alone is not enough: two taps in the
+    // same tick both read the pre-render value.
+    if (submittingRef.current) return
+    submittingRef.current = true
+
     setError(null)
     setFieldErrors({})
 
@@ -103,6 +126,7 @@ export function UpdatePasswordScreen() {
     const passwordError = validateNewPassword(password)
     if (passwordError) {
       setFieldErrors(prev => ({ ...prev, password: passwordError }))
+      submittingRef.current = false
       return
     }
 
@@ -110,6 +134,7 @@ export function UpdatePasswordScreen() {
     const matchError = validatePasswordMatch(password, confirmPassword)
     if (matchError) {
       setFieldErrors(prev => ({ ...prev, confirmPassword: matchError }))
+      submittingRef.current = false
       return
     }
 
@@ -118,15 +143,33 @@ export function UpdatePasswordScreen() {
       const result = await updatePassword(password)
 
       if (result.success) {
+        // Clear both halves of recovery state before showing success, so nothing
+        // can route the user back into the reset flow afterwards: the provider
+        // flag drives the root gate, and the module-level consumed marker is
+        // what lets a re-delivered link be recognised as a repeat.
+        try {
+          endPasswordRecovery?.()
+        } catch {
+          // Never let bookkeeping mask a successful password change.
+        }
+        resetConsumedRecoveryLink()
         setSuccess(true)
+      } else if (result.error === 'token_expired' || result.error === 'session_expired') {
+        // The recovery session lapsed between opening the link and submitting.
+        // Drop to the invalid-link screen, which offers a fresh reset — leaving
+        // the form up would just fail again on every retry.
+        setTokenValid(false)
+        setError(result.message)
       } else {
         setError(result.message)
       }
     } catch (e) {
       setError('An unexpected error occurred. Please try again.')
-      console.error(e)
+      // The thrown value is logged, never the password.
+      console.error('[update-password] Unexpected error updating password', e)
     } finally {
       setLoading(false)
+      submittingRef.current = false
     }
   }
 
@@ -164,7 +207,7 @@ export function UpdatePasswordScreen() {
           </Text>
           <TouchableOpacity
             onPress={() => {
-              router.push(ROUTES.AUTH.RESET_PASSWORD)
+              router.replace(ROUTES.AUTH.RESET_PASSWORD)
               try { markInitialNavigationDone(); } catch {}
             }}
             className="bg-[#059669] rounded-lg py-3 px-6 mb-4"
@@ -172,7 +215,7 @@ export function UpdatePasswordScreen() {
             <Text className="text-white font-medium">Request New Reset Link</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => {
-            router.push(ROUTES.AUTH.SIGN_IN)
+            router.replace(ROUTES.AUTH.SIGN_IN)
             try { markInitialNavigationDone(); } catch {}
           }}>
             <Text style={{ color: theme.text }}>Back to Sign In</Text>
@@ -417,7 +460,7 @@ export function UpdatePasswordScreen() {
 
             {/* Cancel Link */}
             <TouchableOpacity
-              onPress={() => router.push(ROUTES.AUTH.SIGN_IN)}
+              onPress={() => router.replace(ROUTES.AUTH.SIGN_IN)}
               className="py-3 items-center"
             >
               <Text style={{ color: theme.text }}>Cancel and return to Sign In</Text>
