@@ -210,6 +210,30 @@ function resolvePlugins(plugins = []) {
   });
 }
 
+/** Coerce a config/env value to a trimmed string, or '' for anything non-string. */
+function asString(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+/**
+ * Resolve the Edge Functions base URL deterministically.
+ * The value must be identical on a developer machine and on EAS or the
+ * fingerprint runtime version diverges and published updates stop matching
+ * the build. Deriving from EXPO_PUBLIC_SUPABASE_URL guarantees that whenever
+ * the explicit override is absent (or not a string) on one of the two sides.
+ */
+function resolveSupabaseFunctionsUrl(config) {
+  const explicit =
+    asString(process.env.EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL) ||
+    asString(config.extra && config.extra.EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL);
+  const supabaseUrl =
+    asString(process.env.EXPO_PUBLIC_SUPABASE_URL) ||
+    asString(config.extra && config.extra.EXPO_PUBLIC_SUPABASE_URL);
+  const derived = supabaseUrl ? `${supabaseUrl.replace(/\/+$/, '')}/functions/v1` : '';
+  const resolved = (explicit || derived).replace(/\/+$/, '');
+  return resolved || null;
+}
+
 module.exports = ({ config }) => {
   let result = {
     ...config,
@@ -254,25 +278,22 @@ module.exports = ({ config }) => {
       ...(config.extra || {}),
       APP_ENV,
       EXPO_PUBLIC_API_URL:
-        process.env.EXPO_PUBLIC_API_URL ||
-        process.env.EXPO_PUBLIC_API_BASE_URL ||
-        (config.extra && config.extra.EXPO_PUBLIC_API_URL) ||
+        asString(process.env.EXPO_PUBLIC_API_URL) ||
+        asString(process.env.EXPO_PUBLIC_API_BASE_URL) ||
+        asString(config.extra && config.extra.EXPO_PUBLIC_API_URL) ||
         null,
       EXPO_PUBLIC_SUPABASE_URL:
-        process.env.EXPO_PUBLIC_SUPABASE_URL ||
-        (config.extra && config.extra.EXPO_PUBLIC_SUPABASE_URL) ||
+        asString(process.env.EXPO_PUBLIC_SUPABASE_URL) ||
+        asString(config.extra && config.extra.EXPO_PUBLIC_SUPABASE_URL) ||
         null,
       EXPO_PUBLIC_SUPABASE_ANON_KEY:
-        process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
-        (config.extra && config.extra.EXPO_PUBLIC_SUPABASE_ANON_KEY) ||
+        asString(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY) ||
+        asString(config.extra && config.extra.EXPO_PUBLIC_SUPABASE_ANON_KEY) ||
         null,
-      EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL:
-        process.env.EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL ||
-        (config.extra && config.extra.EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL) ||
-        null,
+      EXPO_PUBLIC_SUPABASE_FUNCTIONS_URL: resolveSupabaseFunctionsUrl(config),
       EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY:
-        process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ||
-        (config.extra && config.extra.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY) ||
+        asString(process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY) ||
+        asString(config.extra && config.extra.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY) ||
         null,
     },
   };
