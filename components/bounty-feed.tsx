@@ -30,6 +30,7 @@ import {
     View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useActiveHunters } from '../hooks/useActiveHunters';
 import { useForegroundRefresh } from '../hooks/useForegroundRefresh';
 import { useValidUserId } from '../hooks/useValidUserId';
 import { consumeIsFirstBountyListViewOfSession } from '../lib/analytics/sessionFlags';
@@ -154,6 +155,16 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
 
   const { location: userLocation, permission } = useLocation();
   const validUserId = useValidUserId();
+
+  // "N active hunters in your area" pill. Also publishes this viewer's own
+  // coordinates, which is what makes the count non-zero for everyone else —
+  // see useActiveHunters.
+  const { count: activeHuntersCount, radiusMiles: activeHuntersRadius } = useActiveHunters({
+    userId: validUserId,
+    latitude: userLocation?.latitude,
+    longitude: userLocation?.longitude,
+    hasPermission: Boolean(permission?.granted),
+  });
 
   const categories = useMemo(
     () => [
@@ -837,6 +848,32 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       {/* Filter row — outside FlatList for non-grid; grid gets it inside listHeader */}
       {bountyFormat !== 'grid' && renderFilterBar()}
 
+      {/* Active-hunters pill — ambient "you're not shouting into an empty room"
+          signal. Outside the FlatList for the same reason as the pill below, so
+          it appears on all three feed layouts (grid/list/compact).
+          Informational, so it is text and not a button.
+
+          Hidden at 0 as well as at null: the hook returns null whenever the
+          number isn't known (permission off, no fix yet, RPC failed), and a
+          literal "0 active hunters in your area" is worse than silence for
+          someone deciding whether to post. */}
+      {activeHuntersCount != null && activeHuntersCount > 0 && (
+        <View
+          style={s.activeHuntersPill}
+          accessibilityRole="text"
+          accessibilityLabel={`${activeHuntersCount} active ${
+            activeHuntersCount === 1 ? 'hunter' : 'hunters'
+          } within ${activeHuntersRadius} miles of you`}
+          testID="feed-active-hunters-pill"
+        >
+          <View style={s.activeHuntersDot} />
+          <Text style={s.activeHuntersPillText} numberOfLines={1}>
+            {activeHuntersCount} active {activeHuntersCount === 1 ? 'hunter' : 'hunters'} in your
+            area
+          </Text>
+        </View>
+      )}
+
       {/* New-bounties pill — surfaces realtime INSERTs without splicing them into
           the paginated list mid-scroll. Sits above the list so it works across
           all three feed layouts (grid/list/compact). */}
@@ -1026,6 +1063,37 @@ function makeStyles(t: AppTheme) {
     filtersScrollContent: {
       paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
       alignItems: 'center',
+    },
+
+    // ── Active-hunters pill ──────────────────────────────────────────────────
+    // Deliberately quieter than newBountiesPill: that one is a call to action
+    // in primary green, this one is ambient context and should not compete
+    // with it when both are on screen at once.
+    activeHuntersPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'center',
+      backgroundColor: t.surfaceSecondary,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: t.border,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 999,
+      marginBottom: SPACING.COMPACT_GAP,
+      maxWidth: '100%',
+    },
+    activeHuntersDot: {
+      width: 7,
+      height: 7,
+      borderRadius: 999,
+      backgroundColor: t.primary,
+      marginRight: 7,
+    },
+    activeHuntersPillText: {
+      color: t.textSecondary,
+      fontSize: TYPOGRAPHY.SIZE_SMALL,
+      fontWeight: '600',
+      flexShrink: 1,
     },
 
     // ── New-bounties pill ────────────────────────────────────────────────────
