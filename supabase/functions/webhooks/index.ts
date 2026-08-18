@@ -3245,6 +3245,283 @@ Deno.serve(async (req: Request) => {
         break;
       }
 
+      // The public "Post a Bounty" web intake (see the bounty-checkout
+      // function). bounty-checkout validates the submission, stores it in
+      // pending_bounties as 'pending_payment' and sends the customer to
+      // Stripe Checkout; THIS is the only place that paid submission becomes
+      // a real account + bounty + captured escrow row.
+      //
+      // Stripe has always delivered this event to this endpoint, but there
+      // was no case for it, so it fell through to `default` and was dropped
+      // with a log line. That is why every pending_bounties row was still
+      // sitting at 'pending_payment' with resulting_bounty_id NULL.
+      //
+      // async_payment_succeeded shares the body: delayed methods (ACH,
+      // Klarna) complete the session while still unpaid and settle later.
+      case 'checkout.session.completed':
+      case 'checkout.session.async_payment_succeeded': {
+        const session = event.data.object as Stripe.Checkout.Session;
+
+        if (session.metadata?.flow_type !== 'bounty_creation') {
+          console.log(
+            `[webhooks] checkout.session ${session.id} flow_type="${session.metadata?.flow_type ?? 'none'}" — not a bounty submission, skipping`
+          );
+          break;
+        }
+
+        // Never create a funded bounty before the money is actually captured.
+        // The unpaid case comes back later as async_payment_succeeded.
+        if (session.payment_status !== 'paid') {
+          console.log(
+            `[webhooks] checkout.session ${session.id} payment_status="${session.payment_status}" — awaiting settlement`
+          );
+          break;
+        }
+
+        const pendingBountyId =
+          session.metadata?.pending_bounty_id ?? session.client_reference_id ?? null;
+        const checkoutEmail = (
+          session.metadata?.customer_email ??
+          session.customer_details?.email ??
+          ''
+        )
+          .trim()
+          .toLowerCase();
+        const paymentIntentId =
+          typeof session.payment_intent === 'string'
+            ? session.payment_intent
+            : (session.payment_intent?.id ?? null);
+
+        // Terminal failures only — the customer has been charged and nothing
+        // was created, so a human has to pick it up. Transient problems throw
+        // instead, so Stripe retries rather than logging a row here.
+        const recordCheckoutFailure = async (reason: string) => {
+          const { data: already } = await supabase
+            .from('checkout_processing_failures')
+            .select('id')
+            .eq('stripe_checkout_session_id', session.id)
+            .eq('resolved', false)
+            .maybeSingle();
+          if (already) return;
+
+          const { error: failErr } = await supabase.from('checkout_processing_failures').insert({
+            stripe_event_id: event.id,
+            stripe_checkout_session_id: session.id,
+            stripe_payment_intent_id: paymentIntentId,
+            pending_bounty_id: pendingBountyId,
+            customer_email: checkoutEmail || null,
+            amount: session.amount_total != null ? session.amount_total / 100 : null,
+            reason,
+            session_metadata: session.metadata ?? {},
+          });
+          if (failErr) {
+            console.error('[webhooks] Could not record checkout failure (non-fatal)', {
+              sessionId: session.id,
+              error: failErr,
+            });
+          }
+        };
+
+        if (!pendingBountyId) {
+          console.error(
+            `[webhooks] checkout.session ${session.id} is flow_type=bounty_creation but carries no pending_bounty_id`
+          );
+          await recordCheckoutFailure('missing_pending_bounty_id');
+          break;
+        }
+
+        // Resolve the poster. fn_create_bounty_from_pending requires a real
+        // owner, so an anonymous web payer has to be attached to an account:
+        // the id bounty-checkout captured for a signed-in caller, else an
+        // existing user with this address, else a new account. The lookup
+        // goes through auth.users (not profiles.email, which is populated for
+        // only a third of rows) so an existing customer is never handed a
+        // duplicate account for a bounty they just paid for.
+        let posterId: string | null = session.metadata?.supabase_user_id ?? null;
+
+        if (!posterId && checkoutEmail) {
+          const { data: existingId, error: findErr } = await supabase.rpc(
+            'fn_find_user_id_by_email',
+            { p_email: checkoutEmail }
+          );
+          if (findErr) {
+            console.error('[webhooks] Poster lookup failed — letting Stripe retry', {
+              sessionId: session.id,
+              error: findErr,
+            });
+            throw findErr;
+          }
+          posterId = (existingId as string | null) ?? null;
+        }
+
+        if (!posterId) {
+          if (!checkoutEmail) {
+            console.error(
+              `[webhooks] checkout.session ${session.id} has no email — cannot attach a poster`
+            );
+            await recordCheckoutFailure('no_email_to_resolve_poster');
+            break;
+          }
+
+          const { data: createdUser, error: createErr } = await supabase.auth.admin.createUser({
+            email: checkoutEmail,
+            email_confirm: true,
+            user_metadata: { source: 'bounty_checkout_web', pending_bounty_id: pendingBountyId },
+          });
+
+          if (createErr) {
+            // Either a concurrent delivery won the race or the address was
+            // registered between the lookup and here. Re-resolve rather than
+            // failing a payment that already succeeded.
+            const { data: racedId } = await supabase.rpc('fn_find_user_id_by_email', {
+              p_email: checkoutEmail,
+            });
+            posterId = (racedId as string | null) ?? null;
+            if (!posterId) {
+              console.error('[webhooks] Could not create or resolve a poster account', {
+                sessionId: session.id,
+                error: createErr,
+              });
+              await recordCheckoutFailure(
+                `account_creation_failed: ${createErr.message ?? 'unknown'}`
+              );
+              break;
+            }
+          } else {
+            posterId = createdUser?.user?.id ?? null;
+            if (!posterId) {
+              console.error('[webhooks] createUser returned no id', { sessionId: session.id });
+              await recordCheckoutFailure('account_creation_returned_no_id');
+              break;
+            }
+            // on_auth_user_created builds the profile row but does not copy
+            // the address across; set it so this account is resolvable by
+            // email next time and receipts have somewhere to go.
+            const { error: emailErr } = await supabase
+              .from('profiles')
+              .update({ email: checkoutEmail })
+              .eq('id', posterId);
+            if (emailErr) {
+              console.error('[webhooks] Could not backfill profile email (non-fatal)', {
+                posterId,
+                error: emailErr,
+              });
+            }
+
+            // This account belongs to someone who paid on the web and has no
+            // password, and ONLY the poster can release funds to a hunter
+            // (bounty-payments/release enforces bp.poster_id === userId, with
+            // no admin override). Without a way in they would fund a bounty,
+            // let a hunter complete it, and have no way to pay them — so the
+            // way in has to go out now, not as a later follow-up.
+            //
+            // Deliberately uses Supabase Auth's own delivery rather than the
+            // send-notification-email function: that one still has no provider
+            // key and only logs to console, so it would deliver nothing. This
+            // is the same mechanism and template as the app's existing
+            // forgot-password flow (lib/services/auth-service.ts), and the
+            // redirect matches its convention — a universal link that opens
+            // the app on mobile and a web reset form on desktop.
+            const authRedirectUrl =
+              Deno.env.get('BOUNTY_AUTH_REDIRECT_URL') ?? 'https://bountyfinder.app/auth/callback';
+            const { error: signInEmailErr } = await supabase.auth.resetPasswordForEmail(
+              checkoutEmail,
+              { redirectTo: authRedirectUrl }
+            );
+            if (signInEmailErr) {
+              // Non-fatal on purpose: the payment succeeded and the bounty must
+              // still be created. But log loudly — until this person gets into
+              // the account, the hunter on their bounty cannot be paid. The
+              // fallback is that "forgot password" in the app on this same
+              // address also works, since the account is already confirmed.
+              console.error(
+                '[webhooks] CRITICAL: created a web poster account but could not send its sign-in email — poster cannot release funds until they recover access',
+                { posterId, sessionId: session.id, error: signInEmailErr }
+              );
+            } else {
+              console.log('[webhooks] Sent account-access email to new web poster', { posterId });
+            }
+          }
+        }
+
+        // Record the charge now: nothing else will backfill it. The existing
+        // payment_intent.succeeded branch only touches purpose==='bounty_escrow'
+        // rows and bails when metadata.user_id is absent, and a checkout PI
+        // carries neither.
+        let chargeId: string | null = null;
+        if (paymentIntentId) {
+          try {
+            const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+            chargeId = (pi.latest_charge as string) ?? null;
+          } catch (piErr) {
+            console.error('[webhooks] Could not read charge id off the intent (non-fatal)', {
+              paymentIntentId,
+              piErr,
+            });
+          }
+        }
+
+        // Adaptive Pricing is enabled on this account, so an international
+        // customer can settle in their own currency — amount_total/currency
+        // then come back as EUR/GBP/etc. Both the escrow ledger and the payout
+        // transfer in bounty-payments are USD (transfers.create hardcodes
+        // currency:'usd' and derives the hunter's cut from bounty_payments.amount),
+        // so writing a foreign-currency total here would pay the hunter that
+        // number of DOLLARS. Only trust amount_total when Stripe actually
+        // charged USD; otherwise pass null and let the RPC fall back to the
+        // authoritative USD amount already validated onto the pending row.
+        const settledUsd =
+          session.currency === 'usd' && session.amount_total != null
+            ? session.amount_total / 100
+            : null;
+
+        // One atomic, replay-safe step: inserts the bounty and its captured
+        // bounty_payments escrow row and flips the pending row to 'created'.
+        // Returns created=false when it recognises a replay.
+        const { data: rpcRows, error: rpcErr } = await supabase.rpc(
+          'fn_create_bounty_from_pending',
+          {
+            p_pending_id: pendingBountyId,
+            p_poster_id: posterId,
+            p_session_id: session.id,
+            p_payment_intent_id: paymentIntentId,
+            p_charge_id: chargeId,
+            p_customer_id: typeof session.customer === 'string' ? session.customer : null,
+            p_amount_paid: settledUsd,
+            // The ledger is denominated in USD regardless of what the customer
+            // settled in; the actual settlement currency is kept in metadata.
+            p_currency: 'usd',
+            p_metadata: {
+              stripe_event_id: event.id,
+              source: eventType,
+              settlement_currency: session.currency ?? null,
+              settlement_amount_total: session.amount_total ?? null,
+            },
+          }
+        );
+
+        if (rpcErr) {
+          console.error('[webhooks] fn_create_bounty_from_pending failed — letting Stripe retry', {
+            sessionId: session.id,
+            pendingBountyId,
+            error: rpcErr,
+          });
+          await recordCheckoutFailure(`bounty_creation_failed: ${rpcErr.message ?? 'unknown'}`);
+          throw rpcErr;
+        }
+
+        const created = Array.isArray(rpcRows) ? rpcRows[0] : rpcRows;
+        console.log('[webhooks] bounty_creation checkout processed', {
+          sessionId: session.id,
+          pendingBountyId,
+          posterId,
+          bountyId: created?.bounty_id,
+          bountyPaymentId: created?.bounty_payment_id,
+          newlyCreated: created?.created,
+        });
+        break;
+      }
+
       default:
         console.log(`[webhooks] Unhandled event type: ${event.type}`);
     }
