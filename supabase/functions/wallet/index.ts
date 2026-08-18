@@ -10,6 +10,10 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import type { ApplyDepositResult, Profile, WalletTransaction } from '../_shared/types.ts';
+import {
+  resolveReleasePayee,
+  type ReleaseBountyLookupClient,
+} from '../_shared/release-authorization.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -564,24 +568,38 @@ Deno.serve(async (req: Request) => {
         }
 
         const bountyId = typeof body.bountyId === 'string' ? body.bountyId.trim() : '';
-        const hunterId = typeof body.hunterId === 'string' ? body.hunterId.trim() : '';
         const idempotencyKey =
           typeof body.idempotencyKey === 'string' ? body.idempotencyKey.trim() : undefined;
 
         if (!bountyId) return jsonResponse({ error: 'bountyId is required' }, 400);
-        if (!hunterId) return jsonResponse({ error: 'hunterId is required' }, 400);
 
-        // Verify the caller is the bounty creator
-        const { data: bountyRow, error: bountyErr } = await supabase
-          .from('bounties')
-          .select('user_id, amount, is_for_honor')
-          .eq('id', bountyId)
-          .single();
-        if (bountyErr || !bountyRow) return jsonResponse({ error: 'Bounty not found' }, 404);
-        const posterId = (bountyRow as { user_id: string }).user_id;
-        if (posterId !== userId) {
-          return jsonResponse({ error: 'Unauthorized to release funds' }, 403);
+        // Single authorization gate: confirms the caller owns the bounty and
+        // resolves the payee from bounties.accepted_by. Everything below this
+        // point writes money, so nothing may write before it returns ok.
+        // Cast narrows the fully-generic SupabaseClient to the small read-only
+        // surface the gate needs; matching the generic type directly blows TS's
+        // instantiation depth limit.
+        const auth = await resolveReleasePayee(supabase as unknown as ReleaseBountyLookupClient, {
+          bountyId,
+          callerId: userId,
+          requestedHunterId: body.hunterId,
+        });
+        if (!auth.ok) {
+          if (auth.code === 'hunter_mismatch') {
+            // An attempt to redirect escrow to an account that did not claim the
+            // bounty. Log loudly — this is not a routine 403.
+            console.error('[wallet] release payee mismatch; refusing to credit:', {
+              bountyId,
+              callerId: userId,
+              requestedHunterId: body.hunterId,
+            });
+          }
+          return jsonResponse({ error: auth.error, code: auth.code }, auth.status);
         }
+        // Both derived server-side. Neither is ever taken from the request body.
+        const hunterId = auth.hunterId;
+        const posterId = auth.posterId;
+        const bountyRow = auth.bounty;
 
         // Prevent double-release / double-refund
         const { data: settlementRows, error: existingSettlementErr } = await supabase
