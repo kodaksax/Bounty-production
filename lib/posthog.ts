@@ -228,6 +228,53 @@ export const flush = async (): Promise<void> => {
   }
 };
 
+/** A PostHog flag value: `true`/`false` for a boolean flag, or the variant key. */
+export type FeatureFlagValue = string | boolean;
+
+/**
+ * Read a feature flag outside React — services, startup code, and anything
+ * else that can't call a hook. The imperative counterpart to `useFeatureFlag`
+ * below (`posthog.getFeatureFlag(key)` in PostHog's own docs).
+ *
+ * Returns `undefined` when the flag hasn't resolved yet (first launch, before
+ * the initial /flags response), when the key doesn't exist, or when PostHog is
+ * unavailable — so `undefined` means "unknown", never "off". After the first
+ * launch values come from the SDK's local cache, so this is synchronous.
+ *
+ * The first call for a given key records `$feature_flag_called`, which is what
+ * a PostHog experiment counts as an exposure; the SDK re-arms that report
+ * whenever a fresh flags response arrives, so reading before flags have loaded
+ * only costs one throwaway event, it doesn't poison the experiment.
+ */
+export const getFeatureFlag = (key: string): FeatureFlagValue | undefined => {
+  try {
+    if (!_posthog || typeof _posthog.getFeatureFlag !== 'function') return undefined;
+    return _posthog.getFeatureFlag(key);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error('[posthog] getFeatureFlag failed', e);
+    return undefined;
+  }
+};
+
+/**
+ * Subscribe to feature-flag (re)loads — pairs with `getFeatureFlag` when a
+ * non-React caller needs to wait for the first flags response instead of
+ * treating an unresolved flag as absent.
+ *
+ * @returns An unsubscribe function (a no-op when PostHog is unavailable).
+ */
+export const onFeatureFlags = (callback: () => void): (() => void) => {
+  try {
+    if (!_posthog || typeof _posthog.onFeatureFlags !== 'function') return () => {};
+    return _posthog.onFeatureFlags(callback) ?? (() => {});
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error('[posthog] onFeatureFlags failed', e);
+    return () => {};
+  }
+};
+
 /**
  * Reads a feature flag value inside a component tree wrapped by
  * `PostHogProvider` (see app/_layout.tsx). Re-exported here so call sites use

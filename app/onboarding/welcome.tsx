@@ -22,8 +22,9 @@ import type { AppTheme } from '../../lib/themes/types';
 // 'onboarding-skip-role-selection' PostHog experiment. Resolved once here and
 // persisted onto the onboarding draft (onboarding-context.tsx) so every later
 // screen reads the same value instead of re-checking the flag mid-flow. This
-// is independent of the first_screen_variant A/B below — it only applies
-// within the control (unchanged) layout.
+// is independent of the 'welcome-page-redesign' arm below (see
+// lib/experiments/first-screen-variant.ts) — it only applies within the
+// control (unchanged) layout.
 const ROLE_SELECTION_FLAG_KEY = 'onboarding-skip-role-selection';
 
 export default function OnboardingWelcome() {
@@ -43,8 +44,15 @@ export default function OnboardingWelcome() {
 
   useEffect(() => {
     analyticsService.trackEvent('onboarding_welcome_viewed');
+  }, []);
+
+  // Fade in once the arm is known — the screen renders an empty background
+  // until then (see the render guard below), so starting the fade earlier
+  // would burn it on a blank view.
+  useEffect(() => {
+    if (!firstScreenVariantReady) return;
     Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
-  }, [fadeAnim]);
+  }, [firstScreenVariantReady, fadeAnim]);
 
   // first_screen_viewed fires once, after the variant assignment is
   // confirmed (not on the transient 'control' default guess), so every
@@ -97,6 +105,13 @@ export default function OnboardingWelcome() {
     trackCtaTapped('login');
     router.push('/auth/sign-in-form');
   };
+
+  // Hold the first paint until the 'welcome-page-redesign' arm is resolved, so
+  // a device PostHog buckets into 'test' never sees the control screen flash
+  // first. useFirstScreenVariant gives up after ~400ms, so this is bounded.
+  if (!firstScreenVariantReady) {
+    return <View style={styles.container} />;
+  }
 
   if (isPosterFirst) {
     return (

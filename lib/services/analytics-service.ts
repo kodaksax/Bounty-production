@@ -32,8 +32,9 @@ export type AnalyticsEvent =
   // (profile_submitted | step_skipped)* -> completed
   | 'onboarding_welcome_viewed'
   | 'onboarding_role_selected'
-  // first_screen_variant A/B (lib/experiments/first-screen-variant.ts):
-  // control vs poster_first arm of app/onboarding/welcome.tsx. Fired
+  // 'welcome-page-redesign' PostHog experiment (see
+  // lib/experiments/first-screen-variant.ts): control vs poster_first arm of
+  // app/onboarding/welcome.tsx ('poster_first' is the flag's 'test'). Fired
   // identically by both arms (in addition to the funnel events above, which
   // both arms also still fire) so poster-tap-rate can be compared cleanly:
   // poster taps ÷ total first_screen_cta_tapped where side != 'login'.
