@@ -3315,10 +3315,11 @@ Deno.serve(async (req: Request) => {
             session_metadata: session.metadata ?? {},
           });
           if (failErr) {
-            console.error('[webhooks] Could not record checkout failure (non-fatal)', {
-              sessionId: session.id,
-              error: failErr,
-            });
+            console.error(
+              '[webhooks] Could not record checkout failure — rethrowing so Stripe retries',
+              { sessionId: session.id, error: failErr }
+            );
+            throw failErr;
           }
         };
 
@@ -3370,12 +3371,37 @@ Deno.serve(async (req: Request) => {
           });
 
           if (createErr) {
+            // "User already registered / already exists" signals a concurrent
+            // delivery won the race and the account is now there; re-resolve.
+            // Everything else (rate limits, network errors, 5xx) is transient:
+            // throw so Stripe retries rather than permanently failing a paid
+            // checkout.
+            const isEmailConflict =
+              (createErr as { status?: number }).status === 422 ||
+              /already (registered|exists)/i.test(createErr.message ?? '');
+
+            if (!isEmailConflict) {
+              console.error(
+                '[webhooks] Transient error creating poster account — letting Stripe retry',
+                { sessionId: session.id, error: createErr }
+              );
+              throw createErr;
+            }
+
             // Either a concurrent delivery won the race or the address was
             // registered between the lookup and here. Re-resolve rather than
             // failing a payment that already succeeded.
-            const { data: racedId } = await supabase.rpc('fn_find_user_id_by_email', {
-              p_email: checkoutEmail,
-            });
+            const { data: racedId, error: raceErr } = await supabase.rpc(
+              'fn_find_user_id_by_email',
+              { p_email: checkoutEmail }
+            );
+            if (raceErr) {
+              console.error(
+                '[webhooks] Transient error re-resolving poster after creation race — letting Stripe retry',
+                { sessionId: session.id, error: raceErr }
+              );
+              throw raceErr;
+            }
             posterId = (racedId as string | null) ?? null;
             if (!posterId) {
               console.error('[webhooks] Could not create or resolve a poster account', {
@@ -3506,7 +3532,10 @@ Deno.serve(async (req: Request) => {
             pendingBountyId,
             error: rpcErr,
           });
-          await recordCheckoutFailure(`bounty_creation_failed: ${rpcErr.message ?? 'unknown'}`);
+          // Do not record a checkout_processing_failure here: this path throws
+          // so Stripe will retry, and if the retry succeeds the failure row would
+          // never be resolved. Reserve checkout_processing_failures for terminal
+          // paths that return 200; let stripe_events retry tracking cover this.
           throw rpcErr;
         }
 
