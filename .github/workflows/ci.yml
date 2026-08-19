@@ -248,14 +248,19 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    # Visibility only for now (continue-on-error below): this is the first
-    # automated check ever run against the actual production Deno Edge
-    # Function source (supabase/functions/**) — previously only the jest
-    # suite's pure-helper contract test touched any of this code, and the
-    # real connect/webhooks/wallet/admin-withdrawals functions themselves
-    # had zero CI coverage. Promote to blocking once a clean run is
-    # confirmed; until then this surfaces issues without becoming a new
-    # source of unrelated CI breakage.
+    # Pre-merge counterpart to the verify job in deploy-edge-functions.yml:
+    # that one only runs on push to main under a supabase/functions/**
+    # path filter, so without this job a broken function is only caught on
+    # the way to production. Both must run the *same* commands against the
+    # *same* Deno major, or this job stops being a meaningful gate.
+    #
+    # This job used to be pinned to v1.x and invoked bare `deno check`
+    # without --config/--node-modules-dir, which cannot resolve the npm:
+    # imports these functions use (the repo-root package.json is an
+    # ancestor of every function dir, so Deno treats them as part of the
+    # Expo app's npm workspace and every `npm:stripe@14`-style specifier
+    # fails). continue-on-error meant that failure was never surfaced, so
+    # the check had never actually validated anything since it was added.
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -263,22 +268,41 @@ jobs:
       - name: Setup Deno
         uses: denoland/setup-deno@v2
         with:
-          deno-version: v1.x
+          # Must match deploy-edge-functions.yml and the Supabase Edge
+          # Runtime default (deno_version = 2). Checking against a
+          # different major than what runs in production proves nothing.
+          deno-version: v2.x
 
-      - name: deno check (type-check) withdrawal-relevant functions
+      - name: Discover function directories
+        id: discover
         run: |
-          deno check supabase/functions/connect/index.ts
-          deno check supabase/functions/connect/withdrawal-validation.ts
-          deno check supabase/functions/connect/instant-payout-validation.ts
-          deno check supabase/functions/webhooks/index.ts
-          deno check supabase/functions/wallet/index.ts
-          deno check supabase/functions/admin-withdrawals/index.ts
-        continue-on-error: true
+          cd supabase/functions
+          FUNCS=$(find . -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | grep -v '^_' | grep -v '^node_modules$' | sort | tr '\n' ' ')
+          echo "Discovered: $FUNCS"
+          echo "functions=$FUNCS" >> "$GITHUB_OUTPUT"
 
-      - name: deno lint withdrawal-relevant functions
+      # --config + --node-modules-dir=auto are both required — see the
+      # matching step in deploy-edge-functions.yml for the full rationale.
+      - name: deno check every discovered function's entrypoint
         run: |
-          deno lint supabase/functions/connect supabase/functions/webhooks supabase/functions/wallet supabase/functions/admin-withdrawals
-        continue-on-error: true
+          for fn in ${{ steps.discover.outputs.functions }}; do
+            entry="supabase/functions/$fn/index.ts"
+            if [ -f "$entry" ]; then
+              echo "::group::deno check $fn"
+              deno check --config supabase/functions/deno.json --node-modules-dir=auto "$entry"
+              echo "::endgroup::"
+            else
+              echo "::warning::$fn has no index.ts entrypoint, skipping deno check"
+            fi
+          done
+
+      - name: deno lint every discovered function
+        run: |
+          for fn in ${{ steps.discover.outputs.functions }}; do
+            echo "::group::deno lint $fn"
+            deno lint --config supabase/functions/deno.json "supabase/functions/$fn"
+            echo "::endgroup::"
+          done
 
   report:
     name: Test Summary

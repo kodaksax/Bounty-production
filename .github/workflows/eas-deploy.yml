@@ -59,33 +59,45 @@ jobs:
       - name: Install EAS CLI
         run: npm install -g eas-cli
 
+      # Exports BOTH names from the single resolved token: later steps read
+      # $EAS_TOKEN, while eas-cli itself picks up EXPO_TOKEN from the
+      # environment. Doing it here (rather than re-declaring the raw secret
+      # in a step-level `env:`) is what makes the EXPO_TOKEN fallback
+      # actually work — see the comment on "Verify EAS token" below.
       - name: Normalize tokens
         run: |
           echo "Normalizing tokens: prefer EAS_TOKEN, fall back to EXPO_TOKEN"
           if [ -n "${{ secrets.EAS_TOKEN }}" ]; then
             echo "EAS_TOKEN is provided at secret level"
-            echo "EAS_TOKEN=${{ secrets.EAS_TOKEN }}" >> $GITHUB_ENV
+            RESOLVED='${{ secrets.EAS_TOKEN }}'
           elif [ -n "${{ secrets.EXPO_TOKEN }}" ]; then
             echo "EAS_TOKEN secret missing; using EXPO_TOKEN as fallback"
-            echo "EAS_TOKEN=${{ secrets.EXPO_TOKEN }}" >> $GITHUB_ENV
+            RESOLVED='${{ secrets.EXPO_TOKEN }}'
           else
             echo "No EAS_TOKEN or EXPO_TOKEN secret provided"
+            RESOLVED=''
+          fi
+          if [ -n "$RESOLVED" ]; then
+            echo "EAS_TOKEN=$RESOLVED" >> "$GITHUB_ENV"
+            echo "EXPO_TOKEN=$RESOLVED" >> "$GITHUB_ENV"
           fi
 
       - name: Check token
         run: |
           if [ -z "$EAS_TOKEN" ]; then echo "Missing EAS_TOKEN/EXPO_TOKEN secret"; exit 1; fi
 
+      # No step-level `env: EAS_TOKEN:` on this step or the build below, on
+      # purpose. A step-level env entry takes precedence over whatever
+      # "Normalize tokens" wrote to $GITHUB_ENV, so re-declaring
+      # `EAS_TOKEN: ${{ secrets.EAS_TOKEN }}` overwrote the normalized value
+      # with an empty string whenever only EXPO_TOKEN was configured — which
+      # made the EXPO_TOKEN fallback dead code and failed this step (and the
+      # build) even though a usable token was present.
       - name: Verify EAS token
         run: |
           echo "Verifying EAS token..."
           eas whoami --token "$EAS_TOKEN" || (echo "EAS_TOKEN is invalid or expired"; exit 1)
-        env:
-          EAS_TOKEN: ${{ secrets.EAS_TOKEN }}
 
       - name: Build and Push
         if: ${{ env.EAS_PROFILE != '' }}
         run: eas build --platform ${{ matrix.platform }} --profile $EAS_PROFILE
-        env:
-          EAS_TOKEN: ${{ secrets.EAS_TOKEN }}
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
