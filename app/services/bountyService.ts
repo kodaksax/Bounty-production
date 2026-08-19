@@ -322,6 +322,72 @@ export const bountyService = {
   },
 
   /**
+   * Apply the optional detail fields to a bounty that is ALREADY LIVE.
+   *
+   * The two-step posting flow publishes after title + amount, then offers the
+   * remaining fields (photos/details, location, schedule) on its confirmation
+   * screen. Those screens still edit a BountyDraft-shaped object, so this maps
+   * that shape onto the bounty columns — deliberately mirroring createBounty's
+   * payload mapping above so the two never drift.
+   *
+   * Only the detail fields are writable here. `amount`/`is_for_honor` are NOT:
+   * escrow is funded at publish time against the published amount, so changing
+   * it afterwards would desync the bounty from its escrow row.
+   *
+   * IMPORTANT — adding a location here does NOT notify nearby hunters. Both
+   * proximity triggers (trg_bounties_notify_zip_matched_users and
+   * trg_bounties_notify_service_area) are AFTER INSERT only, so a bounty that
+   * is published without coordinates and geocoded afterwards becomes findable
+   * in the radius feed but never fires its "New Bounty Near You" notification.
+   */
+  async updateBountyDetails(
+    bountyId: string | number,
+    draft: BountyDraft
+  ): Promise<Bounty | null> {
+    const isInPerson = draft.workType === 'in_person';
+
+    const updates: Partial<Omit<Bounty, 'id' | 'created_at'>> = {
+      title: draft.title,
+      description: draft.description,
+      // Mirrors createBounty: an online bounty carries no address/coordinates.
+      location: isInPerson ? draft.location : '',
+      zip_code: isInPerson ? draft.zipCode || undefined : undefined,
+      latitude: isInPerson ? draft.latitude ?? undefined : undefined,
+      longitude: isInPerson ? draft.longitude ?? undefined : undefined,
+      unit: isInPerson ? draft.unit || undefined : undefined,
+      neighborhood: isInPerson ? draft.neighborhood || undefined : undefined,
+      work_type: draft.workType,
+      timeline: draft.timeline || '',
+      skills_required: draft.skills || '',
+      schedule_type: draft.scheduleType,
+      start_date: draft.startDate,
+      end_date: draft.endDate,
+      latest_arrival_time: draft.latestArrivalTime,
+      duration_minutes: draft.durationMinutes,
+      conditional_end_note: draft.conditionalEndNote,
+      is_time_sensitive: draft.scheduleType === 'asap' ? true : undefined,
+      attachments_json: JSON.stringify(draft.attachments || []),
+    };
+
+    try {
+      const updated = await baseBountyService.update(bountyId, updates);
+
+      await analyticsService.trackEvent('bounty_details_added', {
+        bountyId: String(bountyId),
+        hasLocation: isInPerson && draft.latitude != null && draft.longitude != null,
+        hasSchedule: !!draft.scheduleType,
+        hasDescription: (draft.description || '').trim().length > 0,
+        attachmentCount: draft.attachments?.length || 0,
+      });
+
+      return updated;
+    } catch (error) {
+      console.error('Error updating bounty details:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Check network connectivity (simple check)
    */
   async checkConnectivity(): Promise<boolean> {

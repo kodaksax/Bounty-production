@@ -207,6 +207,10 @@ export type AnalyticsEvent =
   // Bounty events
   | 'bounty_created'
   | 'bounty_queued'
+  // Optional details (photos, location, schedule) added to an ALREADY-LIVE
+  // bounty from the two-step flow's confirmation screen. Measures how many
+  // posters enrich a bounty after publishing versus leaving it bare.
+  | 'bounty_details_added'
   | 'bounty_viewed'
   // NOTE ON NAMING COLLISION: `bounty_accepted`/`bounty_claimed` below are
   // fired from hooks/useAcceptRequest.ts when the POSTER accepts a hunter's

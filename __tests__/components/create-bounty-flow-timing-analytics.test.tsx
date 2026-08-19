@@ -184,22 +184,30 @@ jest.mock('app/screens/CreateBounty/quick/StepWhen', () => ({
     );
   },
 }));
+// StepPay is the flow's terminal step: its onNext publishes rather than
+// advancing, so this stub also exposes a back control for the cases that need
+// to leave and re-enter a step.
 jest.mock('app/screens/CreateBounty/quick/StepPay', () => ({
   StepPay: (props: any) => {
-    const { TouchableOpacity, Text } = require('react-native');
+    const { TouchableOpacity, Text, View } = require('react-native');
     return (
-      <TouchableOpacity accessibilityLabel="stub-next" onPress={props.onNext}>
-        <Text>StepPay</Text>
-      </TouchableOpacity>
+      <View>
+        <TouchableOpacity accessibilityLabel="stub-next" onPress={props.onNext}>
+          <Text>StepPay</Text>
+        </TouchableOpacity>
+        <TouchableOpacity accessibilityLabel="stub-back" onPress={props.onBack}>
+          <Text>Back</Text>
+        </TouchableOpacity>
+      </View>
     );
   },
 }));
-jest.mock('app/screens/CreateBounty/quick/StepReviewQuick', () => ({
-  StepReviewQuick: (props: any) => {
+jest.mock('app/screens/CreateBounty/quick/StepPostPublish', () => ({
+  StepPostPublish: (props: any) => {
     const { TouchableOpacity, Text } = require('react-native');
     return (
-      <TouchableOpacity accessibilityLabel="stub-publish" onPress={props.onSubmit}>
-        <Text>Publish</Text>
+      <TouchableOpacity accessibilityLabel="stub-finish" onPress={props.onContinue}>
+        <Text>StepPostPublish</Text>
       </TouchableOpacity>
     );
   },
@@ -362,14 +370,19 @@ describe('CreateBountyFlow — posting-funnel timing analytics', () => {
   it('times each step independently — the step timer resets on entry', () => {
     render(<CreateBountyFlow />);
 
+    // Step 2 is terminal (its CTA publishes), so a second forward advance
+    // isn't available. Leaving step 1 and returning exercises the same
+    // invariant: the second visit must be timed from its own entry, not
+    // carry the first visit's 5s forward.
     advance(5_000);
-    fireEvent.press(screen.getByLabelText('stub-next')); // step 1 (5s)
+    fireEvent.press(screen.getByLabelText('stub-next')); // leaves step 1 (5s)
+    fireEvent.press(screen.getByLabelText('stub-back')); // back to step 1
     advance(9_000);
-    fireEvent.press(screen.getByLabelText('stub-next')); // step 2 (9s)
+    fireEvent.press(screen.getByLabelText('stub-next')); // leaves step 1 again (9s)
 
     const completed = eventsNamed('post_step_completed');
     expect(completed[0]).toMatchObject({ step_index: 1, seconds_on_step: 5 });
-    expect(completed[1]).toMatchObject({ step_index: 2, seconds_on_step: 9 });
+    expect(completed[1]).toMatchObject({ step_index: 1, seconds_on_step: 9 });
   });
 
   it('reports background_seconds on post_step_abandoned for the current step only', () => {
@@ -476,7 +489,11 @@ describe('CreateBountyFlow — post_step_viewed fires once per step entry', () =
     const viewed = eventsNamed('post_step_viewed');
     expect(viewed).toHaveLength(2);
     expect(viewed[0]).toMatchObject({ step_index: 1, step_name: 'Task', direction: 'forward' });
-    expect(viewed[1]).toMatchObject({ step_index: 2, step_name: 'Photos', direction: 'forward' });
+    expect(viewed[1]).toMatchObject({
+      step_index: 2,
+      step_name: 'Compensation',
+      direction: 'forward',
+    });
   });
 
   it('emits only the canonical step properties (step_index number + step_name)', () => {

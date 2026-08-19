@@ -5,8 +5,8 @@
  * Covers the seamless-continuation contract from both trigger points:
  *  - the Compensation step (StepPay), when a poster commits to an amount
  *    their wallet can't yet cover
- *  - the final Publish tap (StepReviewQuick), as a safety net if balance
- *    changed since the amount was chosen
+ *  - that same step's "Post Bounty" tap, as a safety net if balance changed
+ *    since the amount was chosen
  *
  * Heavy leaf dependencies (bounty creation service calls, Stripe SDK, the
  * step screens' own internals) are stubbed so this suite exercises purely
@@ -216,12 +216,12 @@ jest.mock('app/screens/CreateBounty/quick/StepPay', () => ({
     );
   },
 }));
-jest.mock('app/screens/CreateBounty/quick/StepReviewQuick', () => ({
-  StepReviewQuick: (props: any) => {
+jest.mock('app/screens/CreateBounty/quick/StepPostPublish', () => ({
+  StepPostPublish: (props: any) => {
     const { TouchableOpacity, Text } = require('react-native');
     return (
-      <TouchableOpacity accessibilityLabel="stub-publish" onPress={props.onSubmit}>
-        <Text>Publish</Text>
+      <TouchableOpacity accessibilityLabel="stub-finish" onPress={props.onContinue}>
+        <Text>StepPostPublish</Text>
       </TouchableOpacity>
     );
   },
@@ -293,18 +293,9 @@ jest.mock('components/add-money-screen', () => ({
 
 import { CreateBountyFlow } from 'app/screens/CreateBounty/index';
 
-/** Steps 1-4 (Task/Photos/Where/When) are stubbed identically — advance through them to reach Compensation (step 5). */
+/** Compensation is step 2 of 2 — a single advance off the Task step. */
 function goToStepPay() {
-  fireEvent.press(screen.getByLabelText('stub-next')); // Task -> Photos
-  fireEvent.press(screen.getByLabelText('stub-next')); // Photos -> Where
-  fireEvent.press(screen.getByLabelText('stub-next')); // Where -> When
-  fireEvent.press(screen.getByLabelText('stub-next')); // When -> Pay
-}
-
-/** Advances all the way to Review (step 6) via the stubbed Compensation "Continue". */
-function goToReview() {
-  goToStepPay();
-  fireEvent.press(screen.getByLabelText('stub-continue')); // Pay -> Review
+  fireEvent.press(screen.getByLabelText('stub-next')); // Task -> Pay
 }
 
 describe('CreateBountyFlow — insufficient balance → top-up gate', () => {
@@ -318,9 +309,9 @@ describe('CreateBountyFlow — insufficient balance → top-up gate', () => {
     mockBalance = 50;
     resetDraft({ amount: 50 });
     render(<CreateBountyFlow />);
-    goToReview();
+    goToStepPay();
 
-    fireEvent.press(screen.getByLabelText('stub-publish'));
+    fireEvent.press(screen.getByLabelText('stub-continue'));
 
     expect(mockSubmit).toHaveBeenCalledTimes(1);
     expect(screen.queryByText('Add Funds to Post')).toBeNull();
@@ -330,9 +321,9 @@ describe('CreateBountyFlow — insufficient balance → top-up gate', () => {
     mockBalance = 25;
     resetDraft({ amount: 25 });
     render(<CreateBountyFlow />);
-    goToReview();
+    goToStepPay();
 
-    fireEvent.press(screen.getByLabelText('stub-publish'));
+    fireEvent.press(screen.getByLabelText('stub-continue'));
 
     expect(mockSubmit).toHaveBeenCalledTimes(1);
     expect(screen.queryByText('Add Funds to Post')).toBeNull();
@@ -342,9 +333,9 @@ describe('CreateBountyFlow — insufficient balance → top-up gate', () => {
     mockBalance = 10;
     resetDraft({ amount: 30 });
     render(<CreateBountyFlow />);
-    goToReview();
+    goToStepPay();
 
-    fireEvent.press(screen.getByLabelText('stub-publish'));
+    fireEvent.press(screen.getByLabelText('stub-continue'));
 
     expect(mockSubmit).not.toHaveBeenCalled();
     expect(screen.getByText('Add Funds to Post')).toBeTruthy();
@@ -367,9 +358,9 @@ describe('CreateBountyFlow — insufficient balance → top-up gate', () => {
     mockBalance = 10;
     resetDraft({ amount: 30 });
     render(<CreateBountyFlow />);
-    goToReview();
+    goToStepPay();
 
-    fireEvent.press(screen.getByLabelText('stub-publish'));
+    fireEvent.press(screen.getByLabelText('stub-continue'));
     fireEvent.press(screen.getByLabelText(/Add \$20\.00 and continue/i));
 
     expect(screen.getByTestId('topup-initial-amount').props.children).toBe('20.00');
@@ -381,9 +372,9 @@ describe('CreateBountyFlow — insufficient balance → top-up gate', () => {
     mockBalance = 10;
     resetDraft({ amount: 30 });
     const { rerender } = render(<CreateBountyFlow />);
-    goToReview();
+    goToStepPay();
 
-    fireEvent.press(screen.getByLabelText('stub-publish'));
+    fireEvent.press(screen.getByLabelText('stub-continue'));
     fireEvent.press(screen.getByLabelText(/Add \$20\.00 and continue/i));
     fireEvent.press(screen.getByLabelText('stub-topup-deposit-full'));
     rerender(<CreateBountyFlow />); // propagate the updated balance, as the real WalletContext would
@@ -415,9 +406,9 @@ describe('CreateBountyFlow — insufficient balance → top-up gate', () => {
     mockBalance = 0;
     resetDraft({ amount: 40 });
     const { rerender } = render(<CreateBountyFlow />);
-    goToReview();
+    goToStepPay();
 
-    fireEvent.press(screen.getByLabelText('stub-publish'));
+    fireEvent.press(screen.getByLabelText('stub-continue'));
     fireEvent.press(screen.getByLabelText(/Add \$40\.00 and continue/i));
     fireEvent.press(screen.getByLabelText('stub-topup-deposit-partial')); // tops up $10 of $40
     rerender(<CreateBountyFlow />);
@@ -432,9 +423,9 @@ describe('CreateBountyFlow — insufficient balance → top-up gate', () => {
     mockBalance = 10;
     resetDraft({ amount: 30 });
     render(<CreateBountyFlow />);
-    goToReview();
+    goToStepPay();
 
-    fireEvent.press(screen.getByLabelText('stub-publish'));
+    fireEvent.press(screen.getByLabelText('stub-continue'));
     fireEvent.press(screen.getByLabelText(/Add \$20\.00 and continue/i));
     fireEvent.press(screen.getByLabelText('stub-topup-cancel'));
 
@@ -492,9 +483,9 @@ describe('CreateBountyFlow — insufficient balance → top-up gate', () => {
       mockBalance = 0;
       resetDraft({ amount: 10 });
       const { rerender } = render(<CreateBountyFlow />);
-      goToReview();
+      goToStepPay();
 
-      fireEvent.press(screen.getByLabelText('stub-publish'));
+      fireEvent.press(screen.getByLabelText('stub-continue'));
       fireEvent.press(screen.getByLabelText(/Add \$10\.00 and continue/i));
       fireEvent.press(screen.getByLabelText('stub-topup-deposit-5'));
       rerender(<CreateBountyFlow />);
@@ -518,9 +509,9 @@ describe('CreateBountyFlow — insufficient balance → top-up gate', () => {
     mockBalance = 0;
     resetDraft({ amount: 10 });
     const { rerender } = render(<CreateBountyFlow />);
-    goToReview();
+    goToStepPay();
 
-    fireEvent.press(screen.getByLabelText('stub-publish'));
+    fireEvent.press(screen.getByLabelText('stub-continue'));
     fireEvent.press(screen.getByLabelText(/Add \$10\.00 and continue/i));
     fireEvent.press(screen.getByLabelText('stub-topup-deposit-full'));
     rerender(<CreateBountyFlow />);
@@ -534,9 +525,9 @@ describe('CreateBountyFlow — insufficient balance → top-up gate', () => {
     mockBalance = 0;
     resetDraft({ amount: 7 });
     const { rerender } = render(<CreateBountyFlow />);
-    goToReview();
+    goToStepPay();
 
-    fireEvent.press(screen.getByLabelText('stub-publish'));
+    fireEvent.press(screen.getByLabelText('stub-continue'));
     fireEvent.press(screen.getByLabelText(/Add \$7\.00 and continue/i));
     fireEvent.press(screen.getByLabelText('stub-topup-deposit-overfund')); // adds $10 for a $7 shortfall
     rerender(<CreateBountyFlow />);
@@ -550,9 +541,9 @@ describe('CreateBountyFlow — insufficient balance → top-up gate', () => {
     mockBalance = 0;
     resetDraft({ amount: 9 });
     const { rerender } = render(<CreateBountyFlow />);
-    goToReview();
+    goToStepPay();
 
-    fireEvent.press(screen.getByLabelText('stub-publish'));
+    fireEvent.press(screen.getByLabelText('stub-continue'));
 
     for (let i = 0; i < 2; i++) {
       const before = mockBalance;
@@ -577,9 +568,9 @@ describe('CreateBountyFlow — insufficient balance → top-up gate', () => {
     mockBalance = 0;
     resetDraft({ amount: 0.3 });
     const { rerender } = render(<CreateBountyFlow />);
-    goToReview();
+    goToStepPay();
 
-    fireEvent.press(screen.getByLabelText('stub-publish'));
+    fireEvent.press(screen.getByLabelText('stub-continue'));
     // Bounty Amount and Amount Needed are both $0.30 at $0 balance — assert
     // via the CTA label instead of getByText to avoid ambiguity.
     expect(screen.getByLabelText(/Add \$0\.30 and continue/i)).toBeTruthy();
