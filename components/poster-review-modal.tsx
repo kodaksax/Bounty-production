@@ -1,7 +1,7 @@
 // components/poster-review-modal.tsx - Modal for poster to review hunter's submission
 import { MaterialIcons } from '@expo/vector-icons';
 import { userProfileService } from 'lib/services/userProfile';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -57,13 +57,12 @@ const SLIDER_HANDLE_INSET = 2;
 // so near-complete drags were discarded; 0.75 still requires a deliberate
 // sweep well past halfway.
 const SLIDER_CONFIRM_THRESHOLD = 0.75;
-// Horizontal movement (px) needed before the slider claims the touch. Keeps
-// vertical scrolling in the modal working: a mostly-vertical drag is left to
-// the parent ScrollView instead of being swallowed by the handle.
-const SLIDER_CLAIM_DISTANCE = 3;
 // Snap-back: no overshoot and a gentler speed. The old bounciness:8/speed:12
 // recoil read as the control actively rejecting the drag.
 const SLIDER_SPRING_BACK = { bounciness: 0, speed: 8 } as const;
+// Grows the handle's touch target without changing how it looks. Extra room on
+// the right because that is the direction the finger travels.
+const SLIDER_HANDLE_HIT_SLOP = { top: 12, bottom: 12, left: 12, right: 24 } as const;
 
 interface SlideToConfirmProps {
   label: string;
@@ -88,6 +87,43 @@ const SlideToConfirm: React.FC<SlideToConfirmProps> = React.memo(function SlideT
   const handleOffset = useRef(new Animated.Value(SLIDER_HANDLE_WIDTH + SLIDER_HANDLE_INSET));
   const accessibilityLabelText = isProcessing ? 'Processing payout' : label;
 
+  // Maximum translate: leave SLIDER_HANDLE_INSET gap on the right so the
+  // handle stops symmetrically with its left-edge inset.
+  const maxTranslate = Math.max(trackWidth - SLIDER_HANDLE_WIDTH - SLIDER_HANDLE_INSET * 2, 0);
+
+  // The PanResponder below is created exactly once. It used to be rebuilt by a
+  // useMemo keyed on onConfirmed, which the parent passes as a fresh arrow on
+  // every render: any re-render mid-drag swapped in an instance whose
+  // gestureState was zeroed and had never seen the grant, so dx restarted from
+  // 0 and the handle jumped back to the origin. Anything the handlers need
+  // that can change between renders is read through this ref instead.
+  const latest = useRef({ disabled, isProcessing, maxTranslate, onConfirmed });
+  latest.current = { disabled, isProcessing, maxTranslate, onConfirmed };
+
+  // translateX at the moment the drag was granted. Dragging from this offset
+  // instead of from 0 keeps the handle under the finger even if the responder
+  // is granted part-way along the track.
+  const startXRef = useRef(0);
+
+  const settleBack = useCallback(() => {
+    Animated.spring(translateX, {
+      toValue: 0,
+      useNativeDriver: false,
+      ...SLIDER_SPRING_BACK,
+    }).start(() => { hasConfirmedRef.current = false; });
+  }, [translateX]);
+
+  const runConfirm = useCallback(() => {
+    const { maxTranslate: max, onConfirmed: confirm } = latest.current;
+    hasConfirmedRef.current = true;
+    if (max <= 0) { confirm(); return; }
+    Animated.timing(translateX, {
+      toValue: max,
+      duration: 180,
+      useNativeDriver: false,
+    }).start(() => { confirm(); });
+  }, [translateX]);
+
   useEffect(() => {
     if (!isProcessing && !disabled && hasConfirmedRef.current) {
       Animated.timing(translateX, {
@@ -100,73 +136,58 @@ const SlideToConfirm: React.FC<SlideToConfirmProps> = React.memo(function SlideT
     }
   }, [disabled, isProcessing, translateX]);
 
-  // Maximum translate: leave SLIDER_HANDLE_INSET gap on the right so the
-  // handle stops symmetrically with its left-edge inset.
-  const maxTranslate = Math.max(trackWidth - SLIDER_HANDLE_WIDTH - SLIDER_HANDLE_INSET * 2, 0);
-
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        // Do not claim on tap-start; let onMoveShouldSetPanResponder decide
-        // once the direction is known, so a vertical scroll is never blocked.
-        onStartShouldSetPanResponder: () => false,
-        // Claim the touch only once it reads as horizontal, so a vertical
-        // scroll of the modal body is not intercepted by the handle.
-        onMoveShouldSetPanResponder: (_evt, gestureState) =>
-          !disabled &&
-          !isProcessing &&
-          Math.abs(gestureState.dx) > SLIDER_CLAIM_DISTANCE &&
-          Math.abs(gestureState.dx) > Math.abs(gestureState.dy),
-        // Capture-phase mirror of the above.  The ScrollView's own PanResponder
-        // also competes in the bubble phase; adding the capture-phase handler
-        // means we win the responder negotiation before the ScrollView's bubble
-        // handler even runs, which is the root cause of the slider appearing
-        // frozen inside a scrollable container.
-        onMoveShouldSetPanResponderCapture: (_evt, gestureState) =>
-          !disabled &&
-          !isProcessing &&
-          Math.abs(gestureState.dx) > SLIDER_CLAIM_DISTANCE &&
-          Math.abs(gestureState.dx) > Math.abs(gestureState.dy),
-        // Once the drag is ours, keep it. Without this the enclosing ScrollView
-        // could take the responder the moment a finger drifted vertically,
-        // firing onPanResponderTerminate and snapping the handle back
-        // mid-gesture — the single biggest reason this slider felt impossible
-        // to complete.
-        onPanResponderTerminationRequest: () => false,
-        onPanResponderGrant: () => {
-          translateX.stopAnimation();
-        },
-        onPanResponderMove: (_evt, gestureState) => {
-          const newX = Math.max(0, Math.min(gestureState.dx, maxTranslate));
-          translateX.setValue(newX);
-        },
-        onPanResponderRelease: (_evt, gestureState) => {
-          const releaseX = Math.max(0, Math.min(gestureState.dx, maxTranslate));
-          if (releaseX >= maxTranslate * SLIDER_CONFIRM_THRESHOLD && !hasConfirmedRef.current) {
-            hasConfirmedRef.current = true;
-            Animated.timing(translateX, {
-              toValue: maxTranslate,
-              duration: 180,
-              useNativeDriver: false,
-            }).start(() => { onConfirmed(); });
-          } else {
-            Animated.spring(translateX, {
-              toValue: 0,
-              useNativeDriver: false,
-              ...SLIDER_SPRING_BACK,
-            }).start(() => { hasConfirmedRef.current = false; });
-          }
-        },
-        onPanResponderTerminate: () => {
-          Animated.spring(translateX, {
-            toValue: 0,
-            useNativeDriver: false,
-            ...SLIDER_SPRING_BACK,
-          }).start(() => { hasConfirmedRef.current = false; });
-        },
-      }),
-    [disabled, isProcessing, maxTranslate, onConfirmed, translateX]
-  );
+  const panResponderRef = useRef<ReturnType<typeof PanResponder.create> | null>(null);
+  if (panResponderRef.current === null) {
+    panResponderRef.current = PanResponder.create({
+      // Claim the touch the moment it lands on the handle. This previously
+      // returned false and left the decision to onMoveShouldSetPanResponder so
+      // that a vertical drag could still scroll the modal — but the handle is a
+      // 56px target inside a ScrollView, and by the time the direction was
+      // known the ScrollView had already won the responder, so the handle
+      // never moved. Claiming on start is what the working swipe-to-confirm in
+      // bounty-confirmation-card.tsx does; the ScrollView still scrolls
+      // normally anywhere off the handle.
+      onStartShouldSetPanResponder: () => !latest.current.disabled && !latest.current.isProcessing,
+      onMoveShouldSetPanResponder: () => !latest.current.disabled && !latest.current.isProcessing,
+      // Deliberately no onMoveShouldSetPanResponderCapture. Capture propagates
+      // root -> target, so a capture handler here runs *after* an ancestor
+      // ScrollView's and cannot pre-empt it; all it did was make PanResponder
+      // run _updateGestureStateOnMove twice per event (dt === 0 on the second
+      // pass, leaving vx/vy NaN and moveX/moveY at -1).
+      //
+      // Once the drag is ours, keep it. Without this the enclosing ScrollView
+      // could take the responder the moment a finger drifted vertically,
+      // firing onPanResponderTerminate and snapping the handle back
+      // mid-gesture.
+      onPanResponderTerminationRequest: () => false,
+      // Android: keep the native ScrollView recognizer out of this touch.
+      onShouldBlockNativeResponder: () => true,
+      onPanResponderGrant: () => {
+        translateX.stopAnimation((value) => {
+          startXRef.current = typeof value === 'number' ? value : 0;
+        });
+      },
+      onPanResponderMove: (_evt, gestureState) => {
+        const { maxTranslate: max } = latest.current;
+        translateX.setValue(Math.max(0, Math.min(startXRef.current + gestureState.dx, max)));
+      },
+      onPanResponderRelease: (_evt, gestureState) => {
+        const { maxTranslate: max } = latest.current;
+        const releaseX = Math.max(0, Math.min(startXRef.current + gestureState.dx, max));
+        startXRef.current = 0;
+        if (max > 0 && releaseX >= max * SLIDER_CONFIRM_THRESHOLD && !hasConfirmedRef.current) {
+          runConfirm();
+        } else {
+          settleBack();
+        }
+      },
+      onPanResponderTerminate: () => {
+        startXRef.current = 0;
+        settleBack();
+      },
+    });
+  }
+  const panResponder = panResponderRef.current;
 
   const fillWidth = useMemo(() => Animated.add(translateX, handleOffset.current), [handleOffset, translateX]);
 
@@ -181,6 +202,7 @@ const SlideToConfirm: React.FC<SlideToConfirmProps> = React.memo(function SlideT
         <Animated.View
           style={[ss.sliderHandle, { transform: [{ translateX }] }]}
           {...panResponder.panHandlers}
+          hitSlop={SLIDER_HANDLE_HIT_SLOP}
           accessible
           accessibilityRole="button"
           accessibilityLabel={accessibilityLabelText}
@@ -188,13 +210,7 @@ const SlideToConfirm: React.FC<SlideToConfirmProps> = React.memo(function SlideT
           accessibilityActions={[{ name: 'activate', label: 'Confirm payout' }]}
           onAccessibilityAction={(event) => {
             if (event.nativeEvent.actionName === 'activate' && !disabled && !isProcessing && !hasConfirmedRef.current) {
-              hasConfirmedRef.current = true;
-              if (maxTranslate <= 0) { onConfirmed(); return; }
-              Animated.timing(translateX, {
-                toValue: maxTranslate,
-                duration: 180,
-                useNativeDriver: false,
-              }).start(() => { onConfirmed(); });
+              runConfirm();
             }
           }}
         >
@@ -500,7 +516,13 @@ export function PosterReviewModal({
             <ScrollView
               style={s.scrollView}
               contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 20 }]}
-              scrollEnabled={false}
+              // Scrolling stays on here. It was disabled as a workaround for the
+              // slide-to-confirm handle losing every gesture to this ScrollView;
+              // the handle now claims the responder on touch-down and refuses
+              // termination, so the two no longer fight and the payout copy can
+              // still scroll on short screens.
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
             >
               <View style={s.payoutWarningContainer}>
                 <View style={s.warningIcon}>
