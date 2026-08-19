@@ -849,27 +849,35 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
       {bountyFormat !== 'grid' && renderFilterBar()}
 
       {/* Active-hunters pill — ambient "you're not shouting into an empty room"
-          signal. Outside the FlatList for the same reason as the pill below, so
-          it appears on all three feed layouts (grid/list/compact).
-          Informational, so it is text and not a button.
+          signal. Informational, so it is text and not a button.
+
+          Grid is excluded: that layout has a hero banner whose sub-row already
+          exists to carry area context, so the stat goes inline there instead of
+          floating above the cards and pushing the whole grid down. See the
+          gridBannerSubRow block below.
 
           Hidden at 0 as well as at null: the hook returns null whenever the
           number isn't known (permission off, no fix yet, RPC failed), and a
           literal "0 active hunters in your area" is worse than silence for
           someone deciding whether to post. */}
-      {activeHuntersCount != null && activeHuntersCount > 0 && (
+      {bountyFormat !== 'grid' && activeHuntersCount != null && activeHuntersCount > 0 && (
         <View
-          style={s.activeHuntersPill}
+          style={s.activeHuntersRow}
           accessibilityRole="text"
           accessibilityLabel={`${activeHuntersCount} active ${
             activeHuntersCount === 1 ? 'hunter' : 'hunters'
           } within ${activeHuntersRadius} miles of you`}
-          testID="feed-active-hunters-pill"
+          testID="feed-active-hunters-caption"
         >
-          <View style={s.activeHuntersDot} />
-          <Text style={s.activeHuntersPillText} numberOfLines={1}>
-            {activeHuntersCount} active {activeHuntersCount === 1 ? 'hunter' : 'hunters'} in your
-            area
+          <MaterialIcons
+            name="people"
+            size={14}
+            color={theme.textSecondary}
+            style={s.activeHuntersIcon}
+          />
+          <Text style={s.activeHuntersText} numberOfLines={1}>
+            <Text style={s.activeHuntersCount}>{activeHuntersCount}</Text> active{' '}
+            {activeHuntersCount === 1 ? 'hunter' : 'hunters'} in your area
           </Text>
         </View>
       )}
@@ -912,7 +920,39 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                   />
                   <Text style={s.gridBannerTitle}>Find a Bounty</Text>
                   <View style={s.gridBannerSubRow}>
-                    <Text style={s.gridBannerSubtitle}>Explore tasks near you</Text>
+                    {/* Left half of a deliberate supply/demand pair: hunters
+                        here, open bounties in the badge opposite. Together they
+                        answer "is this market liquid enough to be worth
+                        posting?" on the highest-attention line in the layout,
+                        without costing any extra height.
+
+                        Falls back to the original static subtitle whenever the
+                        count isn't known or is zero — same rule as the pill in
+                        the other layouts, so an empty area reads as ordinary
+                        copy rather than a broken stat. */}
+                    {activeHuntersCount != null && activeHuntersCount > 0 ? (
+                      <View
+                        style={s.gridBannerHunters}
+                        accessibilityRole="text"
+                        accessibilityLabel={`${activeHuntersCount} active ${
+                          activeHuntersCount === 1 ? 'hunter' : 'hunters'
+                        } within ${activeHuntersRadius} miles of you`}
+                        testID="feed-active-hunters-banner"
+                      >
+                        <MaterialIcons
+                          name="people"
+                          size={14}
+                          color="rgba(255,255,255,0.9)"
+                          style={s.gridBannerHuntersIcon}
+                        />
+                        <Text style={s.gridBannerSubtitle} numberOfLines={1}>
+                          {activeHuntersCount} {activeHuntersCount === 1 ? 'hunter' : 'hunters'}{' '}
+                          nearby
+                        </Text>
+                      </View>
+                    ) : (
+                      <Text style={s.gridBannerSubtitle}>Explore tasks near you</Text>
+                    )}
                     <View style={s.gridBannerCountBadge}>
                       {/* Stable server count of open bounties in this category
                           (independent of pagination). Falls back to the loaded
@@ -1065,35 +1105,33 @@ function makeStyles(t: AppTheme) {
       alignItems: 'center',
     },
 
-    // ── Active-hunters pill ──────────────────────────────────────────────────
-    // Deliberately quieter than newBountiesPill: that one is a call to action
-    // in primary green, this one is ambient context and should not compete
-    // with it when both are on screen at once.
-    activeHuntersPill: {
+    // ── Active-hunters caption (card / compact layouts) ──────────────────────
+    // Intentionally NOT a pill. newBountiesPill directly below is a centered,
+    // primary-green, tappable call to action; a second centered pill stacked
+    // above it reads as another button and competes for the same attention.
+    // This is ambient context about the list, so it is styled as a caption:
+    // left-aligned to the same gutter as the search bar and filter chips, so
+    // it lines up with the content it describes rather than floating over it.
+    activeHuntersRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      alignSelf: 'center',
-      backgroundColor: t.surfaceSecondary,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: t.border,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 999,
-      marginBottom: SPACING.COMPACT_GAP,
-      maxWidth: '100%',
+      paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
+      paddingBottom: SPACING.COMPACT_GAP,
     },
-    activeHuntersDot: {
-      width: 7,
-      height: 7,
-      borderRadius: 999,
-      backgroundColor: t.primary,
-      marginRight: 7,
+    activeHuntersIcon: {
+      marginRight: 6,
     },
-    activeHuntersPillText: {
+    activeHuntersText: {
       color: t.textSecondary,
       fontSize: TYPOGRAPHY.SIZE_SMALL,
-      fontWeight: '600',
+      fontWeight: '500',
       flexShrink: 1,
+    },
+    // Only the number carries emphasis — the surrounding words stay secondary
+    // so the stat scans at a glance without shouting.
+    activeHuntersCount: {
+      color: t.text,
+      fontWeight: '800',
     },
 
     // ── New-bounties pill ────────────────────────────────────────────────────
@@ -1169,6 +1207,18 @@ function makeStyles(t: AppTheme) {
       color: 'rgba(255,255,255,0.72)',
       fontSize: 14,
       fontWeight: '500',
+    },
+    // Occupies the subtitle's slot in the sub-row when a live count exists.
+    // flexShrink so a long count can never push the bounty-count badge off the
+    // right edge on a narrow screen.
+    gridBannerHunters: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexShrink: 1,
+      marginRight: 8,
+    },
+    gridBannerHuntersIcon: {
+      marginRight: 5,
     },
     gridBannerCountBadge: {
       backgroundColor: 'rgba(255,255,255,0.18)',
