@@ -117,6 +117,14 @@ function nearbyToBounty(nb: NearbyBounty): Bounty {
 }
 
 /**
+ * Minimum nearby-hunter count worth showing. Below this the number reads as
+ * noise rather than a live market ("2 hunters nearby" makes the area look
+ * dead), so the pill hides entirely and the layouts fall back to their
+ * neutral copy.
+ */
+const MIN_ACTIVE_HUNTERS_TO_SHOW = 5;
+
+/**
  * Small green "someone is actually here right now" indicator for the
  * active-hunters pill: a solid dot with a halo that expands and fades on a
  * slow loop, the same breathing-pulse language WorkInProgressBanner uses.
@@ -230,7 +238,8 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
     longitude: userLocation?.longitude,
     hasPermission: Boolean(permission?.granted),
   });
-  const showActiveHunters = activeHuntersCount != null && activeHuntersCount > 0;
+  const showActiveHunters =
+    activeHuntersCount != null && activeHuntersCount >= MIN_ACTIVE_HUNTERS_TO_SHOW;
 
   const categories = useMemo(
     () => [
@@ -898,10 +907,10 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
           "people are here right now" signal sits in the header chrome the eye
           already lands on, and costs no vertical space above the cards.
 
-          Hidden at 0 as well as at null: the hook returns null whenever the
-          number isn't known (permission off, no fix yet, RPC failed), and a
-          literal "0 nearby" is worse than silence for someone deciding whether
-          to post. */}
+          Hidden below MIN_ACTIVE_HUNTERS_TO_SHOW as well as at null: the hook
+          returns null whenever the number isn't known (permission off, no fix
+          yet, RPC failed), and a near-empty count is worse than silence for
+          someone deciding whether to post. */}
       {bountyFormat !== 'grid' && (
         <View style={[s.searchWrapper, s.searchRow]}>
           <TouchableOpacity
@@ -928,14 +937,32 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
               style={s.huntersPill}
               accessibilityRole="text"
               accessibilityLabel={`${activeHuntersCount} active ${
-                activeHuntersCount === 1 ? 'hunter' : 'hunters'
+                activeHuntersCount === 1 ? 'user' : 'users'
               } within ${activeHuntersRadius} miles of you`}
               testID="feed-active-hunters-caption"
             >
               <LiveDot color={theme.success} />
-              <Text style={s.huntersPillText} numberOfLines={1}>
-                <Text style={s.huntersPillCount}>{activeHuntersCount}</Text> nearby
-              </Text>
+              {/* Stacked rather than one line: "5 Active users" set inline is
+                  ~40pt wider than the old "5 nearby" and would push the search
+                  field into truncating its own placeholder. Broken over two
+                  lines the pill stays narrow and the count still leads. */}
+              <View style={s.huntersPillLabel}>
+                <Text style={s.huntersPillCount} numberOfLines={1}>
+                  {activeHuntersCount}
+                </Text>
+                {/* The count is its own column so "users" hangs under "Active"
+                    at any digit count. A fixed indent (or leading spaces in the
+                    JSX, which RN strips) would drift the moment the number goes
+                    double- or triple-digit. */}
+                <View style={s.huntersPillWords}>
+                  <Text style={s.huntersPillText} numberOfLines={1}>
+                    Active
+                  </Text>
+                  <Text style={s.huntersPillSubtext} numberOfLines={1}>
+                    {activeHuntersCount === 1 ? 'user' : 'users'}
+                  </Text>
+                </View>
+              </View>
             </View>
           )}
 
@@ -991,10 +1018,10 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                         without costing any extra height.
 
                         Falls back to the original static subtitle whenever the
-                        count isn't known or is zero — same rule as the pill in
-                        the other layouts, so an empty area reads as ordinary
-                        copy rather than a broken stat. */}
-                    {activeHuntersCount != null && activeHuntersCount > 0 ? (
+                        count isn't known or is below MIN_ACTIVE_HUNTERS_TO_SHOW
+                        — same rule as the pill in the other layouts, so a quiet
+                        area reads as ordinary copy rather than a broken stat. */}
+                    {showActiveHunters ? (
                       <View
                         style={s.gridBannerHunters}
                         accessibilityRole="text"
@@ -1181,7 +1208,8 @@ function makeStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       height: SIZING.MIN_TOUCH_TARGET,
-      paddingHorizontal: 11,
+      paddingLeft: 8,
+      paddingRight: 11,
       borderRadius: 999,
       backgroundColor: t.surfaceSecondary,
       borderWidth: 1,
@@ -1189,20 +1217,44 @@ function makeStyles(t: AppTheme) {
       // Never let the pill squeeze the bell or grow past its own content.
       flexShrink: 0,
     },
+    // Count on the left, the two stacked words to its right. flex-start pins
+    // the count's line box to the first line so it sits level with "Active"
+    // rather than centring itself across both lines.
+    huntersPillLabel: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      marginLeft: 3,
+    },
+    huntersPillWords: {
+      marginLeft: 3,
+    },
     huntersPillText: {
       // A step below the search placeholder: this is a stat chip, and the
       // smaller type is also what keeps all three items on one line on a
-      // narrow screen.
+      // narrow screen. Explicit lineHeight so the two lines pack tightly
+      // enough to clear the 44pt pill on large system font settings.
       color: t.textSecondary,
       fontSize: TYPOGRAPHY.SIZE_XSMALL,
       fontWeight: '600',
-      marginLeft: 7,
+      lineHeight: 14,
+    },
+    // The quieter half of the stack — smaller and secondary so the eye lands
+    // on the count first and picks up "nearby" as the qualifier.
+    huntersPillSubtext: {
+      color: t.textSecondary,
+      fontSize: TYPOGRAPHY.SIZE_XSMALL - 2,
+      fontWeight: '600',
+      lineHeight: 12,
+      letterSpacing: 0.2,
+      opacity: 0.85,
     },
     // Only the number carries emphasis — the surrounding word stays secondary
     // so the stat scans at a glance without shouting.
     huntersPillCount: {
       color: t.text,
+      fontSize: TYPOGRAPHY.SIZE_XSMALL,
       fontWeight: '800',
+      lineHeight: 14,
     },
 
     // ── New-bounties pill ────────────────────────────────────────────────────
