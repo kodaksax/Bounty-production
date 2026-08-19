@@ -1,4 +1,3 @@
-import { analytics, HeyCatchProvider } from '@heycatch/sdk';
 import { ThemeProvider } from 'components/theme-provider';
 import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
@@ -46,14 +45,24 @@ import { safeCleanup } from '../lib/utils/lifecycle';
 
 import { registerDeviceSession } from '../lib/services/auth-service';
 
-analytics.init({
-  projectKey: 'hck_pk_L0Qj5d0kLrDm_dwGl8j4tSnUlMFnR5vc',
-  install: {
-    framework: 'react-native',
-    frameworkVersion: '19',
-    agent: 'claude-code',
-  },
-});
+// HeyCatch analytics is intentionally NOT initialized here.
+//
+// It was added at module scope of this file in 9b1b9276 and shipped in 2.0.5
+// (iOS build 85), which froze on the splash screen. Anything that throws while
+// this module is evaluated kills the root route before React mounts, so the
+// native splash is never hidden and neither a Sentry event nor a crash report
+// is produced -- exactly the failure that was observed.
+//
+// Two specific hazards, both unresolved upstream:
+//   1. analytics.init() is not guarded by the SDK (its internal `new PostHog()`
+//      is not wrapped in try/catch), and a static import cannot be guarded from
+//      here at all -- the nested dependency tree evaluates on import.
+//   2. @heycatch/sdk bundles its own posthog-react-native (4.63.2) alongside
+//      this app's (4.46.21), so two PostHog clients initialize at startup and
+//      share storage. Confirmed present in the shipped main.jsbundle.
+//
+// Re-introduce only behind a lazy import() inside an effect, wrapped in
+// try/catch, and after deduping posthog-react-native.
 
 // Lazily require Sentry to avoid importing native module at module-evaluation time
 let Sentry: any = null;
@@ -352,19 +361,17 @@ function RootLayout({ children }: { children: React.ReactNode }) {
         captureTouches: false,
       }}
     >
-      <HeyCatchProvider>
-        <SafeAreaProvider>
-          <GestureHandlerRootView style={styles.gestureRoot}>
-            <AppThemeProvider>
-              <BountyFormatProvider>
-                <BackgroundColorProvider>
-                  <LayoutContent />
-                </BackgroundColorProvider>
-              </BountyFormatProvider>
-            </AppThemeProvider>
-          </GestureHandlerRootView>
-        </SafeAreaProvider>
-      </HeyCatchProvider>
+      <SafeAreaProvider>
+        <GestureHandlerRootView style={styles.gestureRoot}>
+          <AppThemeProvider>
+            <BountyFormatProvider>
+              <BackgroundColorProvider>
+                <LayoutContent />
+              </BackgroundColorProvider>
+            </BountyFormatProvider>
+          </AppThemeProvider>
+        </GestureHandlerRootView>
+      </SafeAreaProvider>
     </PostHogProvider>
   );
 }

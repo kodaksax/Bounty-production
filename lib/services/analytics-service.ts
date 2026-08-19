@@ -5,7 +5,7 @@
 // `lib/posthog.ts`, so non-React surfaces (services, hooks, startup) emit the
 // exact same events into the exact same PostHog project as the React
 // `usePostHog()` hook and autocapture.
-import { analytics as heycatch } from '@heycatch/sdk';
+import type { analytics as HeyCatchAnalytics } from '@heycatch/sdk';
 import { Platform } from 'react-native';
 import {
     isPostHogReady,
@@ -16,6 +16,36 @@ import {
     screen as posthogScreen,
     setPersonProperties as posthogSetPersonProperties,
 } from '../posthog';
+
+// @heycatch/sdk is resolved lazily and defensively instead of being imported
+// at module scope.
+//
+// app/_layout.tsx imports this service, so a static import here is evaluated
+// as part of the root layout module. Anything the SDK -- or the separate copy
+// of posthog-react-native it bundles -- throws on import would then take the
+// app down before React ever mounts, leaving it frozen on the splash screen
+// with no crash report and no Sentry event. See the note in app/_layout.tsx.
+//
+// Deferring it means the first failure surfaces at an ordinary call site
+// (all of which already swallow errors) rather than at startup.
+type HeyCatchApi = typeof HeyCatchAnalytics;
+
+let heycatchModule: HeyCatchApi | null | undefined;
+
+const heycatch = (): HeyCatchApi | null => {
+  if (heycatchModule !== undefined) return heycatchModule;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
+    // Cast through unknown: @heycatch/sdk ships separate declaration files per
+    // export condition, so the type require() resolves to is structurally
+    // identical to the imported one but not identical by nominal identity.
+    heycatchModule =
+      ((require('@heycatch/sdk').analytics ?? null) as unknown) as HeyCatchApi | null;
+  } catch {
+    heycatchModule = null;
+  }
+  return heycatchModule;
+};
 
 // Track key user events according to requirements
 export type AnalyticsEvent =
@@ -378,7 +408,7 @@ class AnalyticsService {
       }
 
       try {
-        heycatch.setIdentity(userId, properties);
+        heycatch()?.setIdentity(userId, properties);
       } catch {
         // ignore — HeyCatch may not be ready
       }
@@ -428,7 +458,7 @@ class AnalyticsService {
       }
 
       try {
-        heycatch.trackEvent(event, toHeyCatchProperties(enrichedProperties));
+        heycatch()?.trackEvent(event, toHeyCatchProperties(enrichedProperties));
       } catch {
         // ignore — HeyCatch may not be ready
       }
@@ -471,7 +501,7 @@ class AnalyticsService {
       }
 
       try {
-        heycatch.setPersonProperties(properties);
+        heycatch()?.setPersonProperties(properties);
       } catch {
         // ignore — HeyCatch may not be ready
       }
@@ -618,7 +648,7 @@ class AnalyticsService {
       }
 
       try {
-        heycatch.resetIdentity();
+        heycatch()?.resetIdentity();
       } catch {
         // ignore — HeyCatch may not be ready
       }
