@@ -15,7 +15,10 @@ import { hapticFeedback } from '../../lib/haptic-feedback';
 import { useOnboarding } from '../../lib/context/onboarding-context';
 import { analyticsService } from '../../lib/services/analytics-service';
 import { useFeatureFlag } from '../../lib/posthog';
-import { useFirstScreenVariant } from '../../lib/experiments/first-screen-variant';
+import {
+  useFirstScreenVariant,
+  type FirstScreenVariant,
+} from '../../lib/experiments/first-screen-variant';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 
@@ -27,6 +30,17 @@ import type { AppTheme } from '../../lib/themes/types';
 // control (unchanged) layout.
 const ROLE_SELECTION_FLAG_KEY = 'onboarding-skip-role-selection';
 
+/**
+ * Local preview switch. Set to true to render the redesigned poster-first
+ * screen on every launch regardless of the experiment assignment — useful for
+ * seeing the screen on a simulator without a PostHog flag in the loop.
+ *
+ * MUST stay false on any shipped build: true is a hard swap that sends the
+ * redesign to 100% of installs and destroys the A/B comparison, which is the
+ * only way §7's conversion number can be read.
+ */
+const FORCE_POSTER_FIRST = false;
+
 export default function OnboardingWelcome() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -36,7 +50,13 @@ export default function OnboardingWelcome() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const flagValue = useFeatureFlag(ROLE_SELECTION_FLAG_KEY);
   const { variant: firstScreenVariant, ready: firstScreenVariantReady } = useFirstScreenVariant();
-  const isPosterFirst = firstScreenVariant === 'poster_first';
+  const isPosterFirst = FORCE_POSTER_FIRST || firstScreenVariant === 'poster_first';
+
+  // With FORCE_POSTER_FIRST on, the assigned arm and the rendered one can
+  // disagree. Every first_screen_* event reports the screen the user actually
+  // saw — an event claiming 'control' next to a poster-first screenshot would
+  // poison the very comparison these events exist to support.
+  const renderedVariant: FirstScreenVariant = isPosterFirst ? 'poster_first' : 'control';
 
   const mountedAtRef = useRef(Date.now());
   const activeProofRef = useRef<ProofCardActiveItem>({ index: 0, proofState: 'fallback', bountyId: null });
@@ -58,9 +78,12 @@ export default function OnboardingWelcome() {
   // confirmed (not on the transient 'control' default guess), so every
   // impression is attributed to the arm that actually rendered.
   useEffect(() => {
-    if (!firstScreenVariantReady) return;
-    analyticsService.trackEvent('first_screen_viewed', { variant: firstScreenVariant });
-  }, [firstScreenVariantReady, firstScreenVariant]);
+    // When forced, the rendered arm is known at mount, so there's nothing to
+    // wait for — and waiting would drop the impression entirely for anyone who
+    // taps a CTA inside the first 400ms.
+    if (!FORCE_POSTER_FIRST && !firstScreenVariantReady) return;
+    analyticsService.trackEvent('first_screen_viewed', { variant: renderedVariant });
+  }, [firstScreenVariantReady, renderedVariant]);
 
   // Resolve the experiment arm exactly once per draft. A resumed draft that
   // already recorded an arm keeps it, even if the flag were to re-evaluate
@@ -77,7 +100,7 @@ export default function OnboardingWelcome() {
     const secondsOnScreen = (Date.now() - mountedAtRef.current) / 1000;
     analyticsService.trackEvent('first_screen_cta_tapped', {
       side,
-      variant: firstScreenVariant,
+      variant: renderedVariant,
       seconds_on_screen: secondsOnScreen,
       ...(isPosterFirst ? { proof_index_at_tap: activeProofRef.current.index } : {}),
     });
@@ -109,7 +132,11 @@ export default function OnboardingWelcome() {
   // Hold the first paint until the 'welcome-page-redesign' arm is resolved, so
   // a device PostHog buckets into 'test' never sees the control screen flash
   // first. useFirstScreenVariant gives up after ~400ms, so this is bounded.
-  if (!firstScreenVariantReady) {
+  //
+  // Skipped entirely while FORCE_POSTER_FIRST is on: the arm no longer picks
+  // the layout, so waiting on it would just be up to 400ms of blank screen
+  // before a result that was never in doubt.
+  if (!FORCE_POSTER_FIRST && !firstScreenVariantReady) {
     return <View style={styles.container} />;
   }
 

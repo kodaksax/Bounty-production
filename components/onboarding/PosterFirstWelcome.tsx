@@ -92,10 +92,13 @@ export function PosterFirstWelcome({
   );
 }
 
+// size="large" matches what the control screen renders — the spec keeps the
+// wordmark unchanged and only respaces it (48px gap below, per §1).
+//
 // accessibilityRole overridden to "image" — BrandingLogo defaults to "header",
 // which would collide with the headline text below being the real page header.
 function BrandingLogoRow() {
-  return <BrandingLogo size="medium" accessibilityRole="image" containerStyle={{ marginBottom: 48 }} />;
+  return <BrandingLogo size="large" accessibilityRole="image" containerStyle={{ marginBottom: 48 }} />;
 }
 
 function makeStyles(theme: AppTheme) {
@@ -145,7 +148,11 @@ function makeStyles(theme: AppTheme) {
       justifyContent: 'center',
       marginHorizontal: 24,
       borderWidth: 1.5,
-      borderColor: theme.border,
+      // Spec calls for rgba(255,255,255,0.25) — a hairline of the foreground,
+      // not theme.border (#374151), which reads as a solid slab next to the
+      // filled primary and flattens the visual hierarchy the inversion depends
+      // on. Mirrored for light mode so the outline survives a theme toggle.
+      borderColor: theme.isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.25)',
       backgroundColor: 'transparent',
     },
     secondaryButtonText: {

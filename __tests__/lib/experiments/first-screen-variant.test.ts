@@ -4,7 +4,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const STORAGE_KEY = '@bounty_first_screen_variant';
+const STORAGE_KEY = '@bounty_first_screen_variant_v3';
 
 type FlagValue = string | boolean | undefined;
 
