@@ -17,7 +17,7 @@
         "resourceClass": "large"
       },
       "cache": {
-        "key": "expo-55-hermesv1-rn083-v3-stripe2515"
+        "key": "expo-55-hermes0141-rn083-v4-stripe2515"
       },
       "channel": "development",
       "env": {
@@ -35,7 +35,7 @@
       },
       "autoIncrement": true,
       "cache": {
-        "key": "expo-55-hermesv1-rn083-v3-stripe2515"
+        "key": "expo-55-hermes0141-rn083-v4-stripe2515"
       },
       "env": {
         "APP_ENV": "preview",
@@ -58,7 +58,7 @@
         "resourceClass": "large"
       },
       "cache": {
-        "key": "expo-55-hermesv1-rn083-v3-stripe2515-production"
+        "key": "expo-55-hermes0141-rn083-v4-stripe2515-production"
       },
       "env": {
         "APP_ENV": "production",

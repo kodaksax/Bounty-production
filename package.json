@@ -79,6 +79,7 @@
     "build:dev-ios": "eas build --profile development -p ios",
     "update:production": "cross-env APP_ENV=production node scripts/eas-update-production.js",
     "update:production:raw": "cross-env APP_ENV=production eas update --branch production --environment production",
+    "verify:bundle-bytecode": "node scripts/verify-bundle-bytecode.js",
     "update:production:check": "cross-env APP_ENV=production node scripts/eas-update-guardrails.js --channel=production --environment=production --platforms=ios,android",
     "update:preview": "cross-env APP_ENV=staging eas update --branch beta --environment preview",
     "update:development": "cross-env APP_ENV=development eas update --branch development --environment development",
@@ -165,7 +166,6 @@
     "express-rate-limit": "^8.2.1",
     "express-session": "^1.19.0",
     "fastlane": "^0.0.9",
-    "hermes-compiler": "250829098.0.10",
     "lucide-react-native": "^0.563.0",
     "mysql2": "^3.16.1",
     "nativewind": "^4.2.1",
@@ -241,12 +241,8 @@
   "engines": {
     "node": ">=18 <24"
   },
-  "resolutions": {
-    "hermes-compiler": "250829098.0.10"
-  },
-  "overrides": {
-    "hermes-compiler": "250829098.0.10"
-  },
+  "resolutions": {},
+  "overrides": {},
   "overrides_backup": {
     "react-native-safe-area-context": "~5.6.2",
     "@react-native-async-storage/async-storage": "2.2.0",
