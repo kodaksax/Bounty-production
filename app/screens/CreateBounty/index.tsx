@@ -325,7 +325,15 @@ export function CreateBountyFlow({
 
   /** Confirmation screen's CTA — leaves the flow for the bounty feed. */
   const handleFinish = () => {
-    if (postedBountyId) onComplete?.(postedBountyId);
+    if (postedBountyId && onComplete) {
+      onComplete(postedBountyId);
+      return true;
+    }
+    if (onCancel) {
+      onCancel();
+      return true;
+    }
+    return false;
   };
 
   const handleCancel = () => {
@@ -364,10 +372,10 @@ export function CreateBountyFlow({
     if (postedBountyId) {
       if (detailTarget) {
         handleCancelDetail();
+        return true;
       } else {
-        handleFinish();
+        return handleFinish();
       }
-      return true;
     }
     if (currentStep > 1) {
       handleBack();
