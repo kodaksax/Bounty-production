@@ -372,6 +372,7 @@ export function CreateBountyFlow({
     if (postedBountyId) {
       if (detailTarget) {
         handleCancelDetail();
+        return true;
       } else {
         return handleFinish();
       }
