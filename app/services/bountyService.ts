@@ -365,7 +365,7 @@ export const bountyService = {
       latest_arrival_time: draft.latestArrivalTime,
       duration_minutes: draft.durationMinutes,
       conditional_end_note: draft.conditionalEndNote,
-      is_time_sensitive: draft.scheduleType === 'asap' ? true : undefined,
+      is_time_sensitive: draft.scheduleType === 'asap',
       attachments_json: JSON.stringify(draft.attachments || []),
     };
 

@@ -187,7 +187,7 @@ const SlideToConfirm: React.FC<SlideToConfirmProps> = React.memo(function SlideT
       },
     });
   }
-  const panResponder = panResponderRef.current;
+  const panResponder = panResponderRef.current!;
 
   const fillWidth = useMemo(() => Animated.add(translateX, handleOffset.current), [handleOffset, translateX]);
 
