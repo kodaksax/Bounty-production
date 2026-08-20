@@ -1,13 +1,16 @@
+import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import { useBountyDraft } from 'app/hooks/useBountyDraft';
 import { PublishFundingGate } from 'app/screens/CreateBounty/PublishFundingGate';
 import { StepDirectionContext } from 'app/screens/CreateBounty/quick/QuickStepLayout';
 import { StepPay } from 'app/screens/CreateBounty/quick/StepPay';
 import { StepPhotos } from 'app/screens/CreateBounty/quick/StepPhotos';
-import { StepReviewQuick } from 'app/screens/CreateBounty/quick/StepReviewQuick';
+import type { DetailTarget } from 'app/screens/CreateBounty/quick/StepPostPublish';
+import { StepPostPublish } from 'app/screens/CreateBounty/quick/StepPostPublish';
 import { StepTask } from 'app/screens/CreateBounty/quick/StepTask';
 import { StepWhen } from 'app/screens/CreateBounty/quick/StepWhen';
 import { StepWhere } from 'app/screens/CreateBounty/quick/StepWhere';
 import { useBountyPublish } from 'app/screens/CreateBounty/useBountyPublish';
+import { bountyService } from 'app/services/bountyService';
 import { ErrorBanner } from 'components/error-banner';
 import { EmailVerificationBanner } from 'components/ui/email-verification-banner';
 import { useAuthContext } from 'hooks/use-auth-context';
@@ -41,8 +44,12 @@ interface CreateBountyFlowProps {
   entryPoint?: string;
 }
 
-const TOTAL_STEPS = 6;
-const STEP_TITLES = ['Task', 'Photos', 'Location', 'Schedule', 'Compensation', 'Review & Confirm'];
+/**
+ * The two-step flow publishes after the title and the amount — everything
+ * else is offered afterwards, on StepPostPublish, against the live bounty.
+ */
+const TOTAL_STEPS = 2;
+const STEP_TITLES = ['Task', 'Compensation'];
 
 /**
  * Identifies this posting surface in the shared posting funnel. The onboarding
@@ -53,11 +60,13 @@ const POST_SURFACE = 'create_flow';
 
 /**
  * The `variant` prop on the post-flow "graveyard" funnel events (see
- * analytics-service.ts). Hardcoded until the redesigned fast-path flow
- * (chips, price anchor, deferred detail fields) exists as a second arm —
- * see useBountyPublish.ts's "6-step (control) and 2-step (two_step)" note.
+ * analytics-service.ts). This surface is now the deferred-detail fast path
+ * described in useBountyPublish.ts's "6-step (control) and 2-step (two_step)"
+ * note, so it reports as `two_step` — funnel comparisons against the old
+ * six-step numbers must filter on this, since step_index/step_name no longer
+ * mean the same thing.
  */
-const POST_FLOW_VARIANT = 'control';
+const POST_FLOW_VARIANT = 'two_step';
 
 /**
  * A poster can leave the app open on a step for a very long time without
@@ -85,6 +94,24 @@ export function CreateBountyFlow({
   // 1 = advancing, -1 = going back. Read by each step's layout to pick the side
   // it slides in from.
   const [stepDirection, setStepDirection] = useState(1);
+
+  // --- Post-publish phase -------------------------------------------------
+  // Non-null once the bounty is live. From here on the flow is no longer
+  // editing a draft: `postedDraft` is the published snapshot plus whatever
+  // optional details have since been persisted onto the real row.
+  const [postedBountyId, setPostedBountyId] = useState<string | null>(null);
+  const [postedDraft, setPostedDraft] = useState<BountyDraft | null>(null);
+  // Which optional-detail screen is open over the confirmation screen, and the
+  // working copy it edits. Kept separate from `postedDraft` so backing out of a
+  // detail screen discards its edits instead of leaving the confirmation
+  // screen showing something that was never saved.
+  const [detailTarget, setDetailTarget] = useState<DetailTarget | null>(null);
+  const [detailDraft, setDetailDraft] = useState<BountyDraft | null>(null);
+  const [isSavingDetail, setIsSavingDetail] = useState(false);
+  // Snapshot of the draft taken when publishing starts, since useBountyPublish
+  // calls clearDraft() before it reports back — by the time onPublished runs,
+  // `draft` itself has been reset to defaults.
+  const publishedDraftRef = useRef<BountyDraft | null>(null);
   const { session } = useAuthContext();
   const { draft, saveDraft, clearDraft, isLoading } = useBountyDraft(session?.user?.id);
   const insets = useSafeAreaInsets();
@@ -193,6 +220,9 @@ export function CreateBountyFlow({
     paymentMethods,
     sessionUserId: session?.user?.id,
     canPostBounties,
+    // StepPostPublish IS the success confirmation, so the native
+    // "Bounty Posted!" alert would be a redundant second one.
+    suppressSuccessAlert: true,
     onPublished: (bountyId, meta) => {
       const { seconds: secondsTotal, capped: secondsCapped } = capSeconds(
         flowTimerRef.current.elapsedSeconds()
@@ -200,15 +230,19 @@ export function CreateBountyFlow({
       analyticsService.trackEvent('bounty_published', {
         category: meta.category,
         amount_cents: meta.amountCents,
-        // No category-chip UI exists yet on the control arm — always false.
+        // No category-chip UI exists yet on this arm — always false.
         used_chip: false,
         seconds_total: secondsTotal,
         seconds_capped: secondsCapped,
         variant: POST_FLOW_VARIANT,
       });
-      onComplete?.(bountyId);
+      // Hand off to the confirmation screen rather than leaving the flow —
+      // onComplete now fires from its Continue button, so the host screen
+      // still navigates to the feed, just one screen later.
+      setPostedBountyId(bountyId);
+      setPostedDraft(publishedDraftRef.current ?? draft);
     },
-    onEditAmount: () => handleGoToStep(5),
+    onEditAmount: () => handleGoToStep(2),
     onCancelGate: onCancel,
   });
 
@@ -239,6 +273,59 @@ export function CreateBountyFlow({
       setStepDirection(-1);
       setCurrentStep(prev);
     }
+  };
+
+  /** Step 2's CTA. Snapshots the draft first — publishing clears it. */
+  const handlePublishFromAmountStep = () => {
+    publishedDraftRef.current = draft;
+    handlePublish();
+  };
+
+  /** Open one of the optional-detail screens over the confirmation screen. */
+  const handleAddDetail = (target: DetailTarget) => {
+    if (!postedDraft) return;
+    setDetailDraft(postedDraft);
+    setDetailTarget(target);
+    setStepDirection(1);
+  };
+
+  /** Back out of a detail screen, discarding its unsaved edits. */
+  const handleCancelDetail = () => {
+    setDetailTarget(null);
+    setDetailDraft(null);
+    setStepDirection(-1);
+  };
+
+  /**
+   * Persist a detail screen's edits onto the LIVE bounty. On failure the
+   * working copy is kept and the screen stays open so the poster can retry —
+   * nothing here can leave the bounty itself in a bad state, since the row
+   * already exists and only optional columns are being written.
+   */
+  const handleSaveDetail = async () => {
+    if (!postedBountyId || !detailDraft || isSavingDetail) return;
+    setIsSavingDetail(true);
+    try {
+      await bountyService.updateBountyDetails(postedBountyId, detailDraft);
+      setPostedDraft(detailDraft);
+      setDetailTarget(null);
+      setDetailDraft(null);
+      setStepDirection(-1);
+    } catch (error) {
+      const userError = getUserFriendlyError(error);
+      if (Platform.OS !== 'web') {
+        Alert.alert(userError.title, `${userError.message}\n\nYour bounty is still posted.`, [
+          { text: 'OK' },
+        ]);
+      }
+    } finally {
+      setIsSavingDetail(false);
+    }
+  };
+
+  /** Confirmation screen's CTA — leaves the flow for the bounty feed. */
+  const handleFinish = () => {
+    if (postedBountyId) onComplete?.(postedBountyId);
   };
 
   const handleCancel = () => {
@@ -272,6 +359,16 @@ export function CreateBountyFlow({
   };
 
   useBackHandler(() => {
+    // Once published there is nothing to discard and no step to return to —
+    // back closes an open detail screen, or leaves for the feed.
+    if (postedBountyId) {
+      if (detailTarget) {
+        handleCancelDetail();
+      } else {
+        handleFinish();
+      }
+      return true;
+    }
     if (currentStep > 1) {
       handleBack();
       return true;
@@ -424,7 +521,8 @@ export function CreateBountyFlow({
 
         <StepDirectionContext.Provider value={stepDirection}>
           <View className="flex-1">
-            {currentStep === 1 && (
+            {/* --- Pre-publish: the two steps that gate posting --- */}
+            {!postedBountyId && currentStep === 1 && (
               <StepTask
                 draft={draft}
                 onUpdate={saveDraft}
@@ -433,55 +531,60 @@ export function CreateBountyFlow({
                 totalSteps={TOTAL_STEPS}
               />
             )}
-            {currentStep === 2 && (
-              <StepPhotos
-                draft={draft}
-                onUpdate={saveDraft}
-                onNext={handleNext}
-                onBack={handleBack}
-                step={2}
-                totalSteps={TOTAL_STEPS}
-              />
-            )}
-            {currentStep === 3 && (
-              <StepWhere
-                draft={draft}
-                onUpdate={saveDraft}
-                onNext={handleNext}
-                onBack={handleBack}
-                step={3}
-                totalSteps={TOTAL_STEPS}
-              />
-            )}
-            {currentStep === 4 && (
-              <StepWhen
-                draft={draft}
-                onUpdate={saveDraft}
-                onNext={handleNext}
-                onBack={handleBack}
-                step={4}
-                totalSteps={TOTAL_STEPS}
-              />
-            )}
-            {currentStep === 5 && (
+            {!postedBountyId && currentStep === 2 && (
               <StepPay
                 draft={draft}
                 onUpdate={saveDraft}
-                onNext={handleNext}
+                onNext={handlePublishFromAmountStep}
                 onBack={handleBack}
-                step={5}
+                step={2}
                 totalSteps={TOTAL_STEPS}
                 onInsufficientBalance={showInsufficientBalanceFromAmountStep}
+                ctaLabel="Post Bounty"
+                isSubmitting={isSubmitting}
               />
             )}
-            {currentStep === 6 && (
-              <StepReviewQuick
-                draft={draft}
-                onSubmit={handlePublish}
-                onBack={handleBack}
-                onEdit={handleGoToStep}
-                isSubmitting={isSubmitting}
-                step={6}
+
+            {/* --- Post-publish: confirmation, plus the optional detail
+                screens it opens. These edit `detailDraft` (a working copy) and
+                persist onto the live bounty via handleSaveDetail, NOT the
+                draft — the draft was cleared at publish. --- */}
+            {postedBountyId && postedDraft && !detailTarget && (
+              <StepPostPublish
+                draft={postedDraft}
+                onAddDetail={handleAddDetail}
+                onContinue={handleFinish}
+                step={TOTAL_STEPS}
+                totalSteps={TOTAL_STEPS}
+              />
+            )}
+            {postedBountyId && detailDraft && detailTarget === 'photos' && (
+              <StepPhotos
+                draft={detailDraft}
+                onUpdate={patch => setDetailDraft(prev => (prev ? { ...prev, ...patch } : prev))}
+                onNext={handleSaveDetail}
+                onBack={handleCancelDetail}
+                step={TOTAL_STEPS}
+                totalSteps={TOTAL_STEPS}
+              />
+            )}
+            {postedBountyId && detailDraft && detailTarget === 'where' && (
+              <StepWhere
+                draft={detailDraft}
+                onUpdate={patch => setDetailDraft(prev => (prev ? { ...prev, ...patch } : prev))}
+                onNext={handleSaveDetail}
+                onBack={handleCancelDetail}
+                step={TOTAL_STEPS}
+                totalSteps={TOTAL_STEPS}
+              />
+            )}
+            {postedBountyId && detailDraft && detailTarget === 'when' && (
+              <StepWhen
+                draft={detailDraft}
+                onUpdate={patch => setDetailDraft(prev => (prev ? { ...prev, ...patch } : prev))}
+                onNext={handleSaveDetail}
+                onBack={handleCancelDetail}
+                step={TOTAL_STEPS}
                 totalSteps={TOTAL_STEPS}
               />
             )}

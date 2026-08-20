@@ -27,6 +27,14 @@ interface StepPayProps {
    * returning here once resolved — see app/screens/CreateBounty/index.tsx.
    */
   onInsufficientBalance: (amount: number) => void;
+  /**
+   * Label for the bottom CTA. Defaults to 'Continue'. The two-step flow makes
+   * this the final step and passes 'Post Bounty', since `onNext` publishes
+   * rather than advancing.
+   */
+  ctaLabel?: string;
+  /** Publish in flight — shows the CTA spinner and blocks a second tap. */
+  isSubmitting?: boolean;
 }
 
 const AMOUNT_PRESETS = [20, 40, 60, 100, 150];
@@ -49,6 +57,8 @@ export function StepPay({
   step,
   totalSteps,
   onInsufficientBalance,
+  ctaLabel = 'Continue',
+  isSubmitting = false,
 }: StepPayProps) {
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -157,8 +167,9 @@ export function StepPay({
       totalSteps={totalSteps}
       onBack={onBack}
       title="How much will you pay?"
-      ctaLabel="Continue"
+      ctaLabel={isSubmitting ? 'Posting…' : ctaLabel}
       ctaDisabled={!isValid}
+      ctaBusy={isSubmitting}
       onCta={handleContinue}
     >
       {/* Amount display / custom entry */}
