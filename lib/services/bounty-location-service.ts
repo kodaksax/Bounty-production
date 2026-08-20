@@ -82,3 +82,78 @@ export async function searchBountiesNearby(params: {
     return [];
   }
 }
+
+/**
+ * Radius, in miles, behind the feed's "N active hunters in your area" pill.
+ * The RPC clamps to 5-100 regardless of what is sent, so changing this alone
+ * cannot widen the window past the server's ceiling.
+ */
+export const ACTIVE_HUNTERS_RADIUS_MILES = 30;
+
+/**
+ * How many recently-active hunters are within ACTIVE_HUNTERS_RADIUS_MILES of a
+ * point, excluding the caller.
+ *
+ * Returns a count and never any rows — the underlying function is definer-only
+ * precisely so this can be answered without exposing anyone's coordinates.
+ * Resolves to null (not 0) when the count cannot be determined, so the caller
+ * can hide the pill instead of claiming an empty area.
+ */
+export async function countActiveHuntersNearby(params: {
+  latitude: number;
+  longitude: number;
+  radiusMiles?: number;
+  activeWithinDays?: number;
+}): Promise<number | null> {
+  try {
+    const { data, error } = await supabase.rpc('fn_count_active_hunters_nearby', {
+      p_lat: params.latitude,
+      p_lng: params.longitude,
+      p_radius_miles: params.radiusMiles ?? ACTIVE_HUNTERS_RADIUS_MILES,
+      p_active_within: `${params.activeWithinDays ?? 7} days`,
+    });
+    if (error) {
+      logger.error('fn_count_active_hunters_nearby rpc error', { error, params });
+      return null;
+    }
+    return typeof data === 'number' ? data : null;
+  } catch (error) {
+    logger.error('fn_count_active_hunters_nearby threw', { error, params });
+    return null;
+  }
+}
+
+/**
+ * Persists the signed-in user's coordinates so they can be counted by other
+ * people's nearby queries.
+ *
+ * This exists because nothing else in the app writes profiles.latitude /
+ * longitude — all 249 production rows are NULL, so any radius feature reads
+ * zero until coordinates start landing. Callers must only invoke this when
+ * location permission is granted.
+ *
+ * latitude/longitude are not in the protected-column set enforced by
+ * prevent_client_writes_to_protected_profile_columns, so an own-row update is
+ * allowed. Coordinates are not exposed by public_profiles, so storing them does
+ * not make them readable by other users — only the aggregate count is.
+ */
+export async function updateMyCoordinates(params: {
+  userId: string;
+  latitude: number;
+  longitude: number;
+}): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ latitude: params.latitude, longitude: params.longitude })
+      .eq('id', params.userId);
+    if (error) {
+      logger.error('updateMyCoordinates failed', { error, userId: params.userId });
+      return false;
+    }
+    return true;
+  } catch (error) {
+    logger.error('updateMyCoordinates threw', { error, userId: params.userId });
+    return false;
+  }
+}
