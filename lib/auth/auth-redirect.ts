@@ -55,7 +55,7 @@ export const WEB_AUTH_CALLBACK_URL = 'https://bountyfinder.app/auth/callback';
  * `https://bountyfinder.app.evil.com` cannot pass by sharing a prefix.
  */
 const ALLOWED_REDIRECT_ORIGINS: readonly string[] = [
-  'bountyexpo-workspace://',
+  'bountyexpo-workspace://auth',
   'https://bountyfinder.app',
   // Expo Go / dev-client and local web dev. Harmless in production builds:
   // Supabase's own allowlist still has to accept whatever is requested, and

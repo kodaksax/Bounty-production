@@ -204,15 +204,20 @@ export default function AuthCallbackScreen() {
   };
 
   const handleOpenEmail = async () => {
-    // Try to open default email app
-    const emailUrl = 'message://';
-    const canOpen = await Linking.canOpenURL(emailUrl);
+    try {
+      // Try to open default email app
+      const emailUrl = 'message://';
+      const canOpen = await Linking.canOpenURL(emailUrl);
 
-    if (canOpen) {
-      await Linking.openURL(emailUrl);
-    } else {
-      // Fallback for Android
-      await Linking.openURL('mailto:');
+      if (canOpen) {
+        await Linking.openURL(emailUrl);
+      } else {
+        // Fallback for Android
+        await Linking.openURL('mailto:');
+      }
+    } catch {
+      // Silently ignore errors — opening the email app is best-effort;
+      // the user can still act on the surrounding UI.
     }
   };
 

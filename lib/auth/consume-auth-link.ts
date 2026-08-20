@@ -54,11 +54,10 @@ function classifyAuthError(error: { message?: string; status?: number } | null):
   const message = (error?.message ?? '').toLowerCase();
   const status = error?.status;
 
-  if (message.includes('expired')) return 'expired';
+  if (message.includes('expired') || message.includes('already been used')) return 'expired';
   if (
     message.includes('invalid') ||
     message.includes('not found') ||
-    message.includes('already been used') ||
     status === 401 ||
     status === 403 ||
     status === 404
