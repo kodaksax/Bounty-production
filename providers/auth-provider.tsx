@@ -1199,6 +1199,20 @@ export default function AuthProvider({ children }: PropsWithChildren) {
     setAccountBlockedReason(null);
   }, []);
 
+  // Explicit recovery-mode entry/exit for app/auth/callback.tsx and
+  // app/auth/update-password.tsx. See the comment on these fields in
+  // hooks/use-auth-context.tsx for why the PASSWORD_RECOVERY event is not
+  // usable in this client. The PASSWORD_RECOVERY branch in the listener above
+  // is left in place so the flag is still set if `detectSessionInUrl` is ever
+  // turned on for web.
+  const beginPasswordRecovery = useCallback(() => {
+    setIsPasswordRecovery(true);
+  }, []);
+
+  const endPasswordRecovery = useCallback(() => {
+    setIsPasswordRecovery(false);
+  }, []);
+
   const value = useMemo(
     () => ({
       session,
@@ -1207,6 +1221,8 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       isLoggedIn: Boolean(session),
       isEmailVerified,
       isPasswordRecovery,
+      beginPasswordRecovery,
+      endPasswordRecovery,
       isAuthStale,
       attemptRefresh,
       accountBlockedReason,
@@ -1219,6 +1235,8 @@ export default function AuthProvider({ children }: PropsWithChildren) {
       profile,
       isEmailVerified,
       isPasswordRecovery,
+      beginPasswordRecovery,
+      endPasswordRecovery,
       isAuthStale,
       attemptRefresh,
       accountBlockedReason,

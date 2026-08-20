@@ -19,6 +19,7 @@ import { SettingsRow } from '../ui/settings-row';
 import { SettingsScreenHeader } from '../ui/settings-screen-header';
 import { SettingsSection } from '../ui/settings-section';
 import { MfaCodeModal } from '../ui/mfa-code-modal';
+import { requestPasswordReset } from '../../lib/services/auth-service';
 import { supabase } from '../../lib/supabase';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
@@ -218,12 +219,26 @@ export function SecuritySettings({ onBack }: SecuritySettingsProps) {
               const { data: { user } } = await supabase.auth.getUser();
               if (!user?.email) throw new Error('No email found');
 
-              const { error } = await supabase.auth.resetPasswordForEmail(user.email);
-              if (error) throw error;
+              // Routed through the service rather than calling
+              // resetPasswordForEmail directly. The direct call passed no
+              // `redirectTo`, so Supabase fell back to the project Site URL
+              // (`bountyexpo-workspace://auth` in production) — a different
+              // destination from the one the forgot-password screen produces,
+              // and one that never reached the callback handler. Going through
+              // requestPasswordReset keeps both entry points on the same
+              // contract and gets the allowlist-validated redirect for free.
+              const result = await requestPasswordReset(user.email);
 
-              Alert.alert('Email Sent', 'Check your inbox for password reset instructions.');
+              if (result.success) {
+                Alert.alert('Email Sent', 'Check your inbox for password reset instructions.');
+              } else {
+                // result.message is already user-facing copy; the raw Supabase
+                // error text is deliberately not surfaced here.
+                Alert.alert('Error', result.message);
+              }
             } catch (error: any) {
-              Alert.alert('Error', error.message || 'Failed to send reset email');
+              console.error('[security-settings] Password reset request failed:', error);
+              Alert.alert('Error', 'Failed to send reset email. Please try again.');
             }
           },
         },

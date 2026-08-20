@@ -1,14 +1,29 @@
 /**
  * Auth Callback Screen
- * Handles deep links from email confirmation, password reset, and other auth flows
- * Universal Link: https://bountyfinder.app/auth/callback
+ *
+ * Single entry point for every auth email link: password recovery, email
+ * confirmation, and magic links. Reached as
+ * `bountyexpo-workspace://auth/callback` (and, once that domain serves the app
+ * over HTTPS, `https://bountyfinder.app/auth/callback`).
+ *
+ * The link's credentials arrive in the URL **fragment**, which expo-router
+ * discards on native — so this screen reads the raw URL from `expo-linking`
+ * (see lib/auth/use-incoming-auth-url.ts) and parses it explicitly
+ * (lib/auth/recovery-link.ts) instead of trusting `useLocalSearchParams()`.
+ * Router params are still consulted as a secondary source because on web the
+ * fragment survives as the reserved `'#'` param, and `app/auth/index.tsx`
+ * forwards it that way when it bounces `/auth` here.
+ *
+ * Sequencing is deterministic, not timed: nothing is concluded until the
+ * cold-start URL lookup reports `resolved`, and navigation happens only after
+ * Supabase confirms a session exists.
  */
 
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
 import type { Href } from 'expo-router';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     ScrollView,
@@ -19,165 +34,164 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
+import { useAuthContext } from '../../hooks/use-auth-context';
+import { consumeAuthLink } from '../../lib/auth/consume-auth-link';
+import type { AuthLinkType } from '../../lib/auth/recovery-link';
+import { parseAuthLink, redactAuthUrl } from '../../lib/auth/recovery-link';
+import { useIncomingAuthUrl } from '../../lib/auth/use-incoming-auth-url';
 import { ROUTES } from '../../lib/routes';
-import { supabase } from '../../lib/supabase';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
 import { markInitialNavigationDone } from '../initial-navigation/initialNavigation';
 
-type CallbackStatus = 'loading' | 'success' | 'error' | 'expired';
+type CallbackStatus = 'verifying' | 'success' | 'expired' | 'invalid' | 'failed';
+
+/** Where each link type lands once its session is established. */
+const DESTINATIONS: Record<AuthLinkType, Href> = {
+  recovery: ROUTES.AUTH.UPDATE_PASSWORD as Href,
+  // A freshly confirmed signup still has a profile to set up.
+  signup: '/onboarding' as Href,
+  invite: '/onboarding' as Href,
+  email: ROUTES.ROOT as Href,
+  email_change: ROUTES.ROOT as Href,
+  magiclink: ROUTES.ROOT as Href,
+};
+
+/**
+ * How long a success confirmation stays on screen before forwarding. Purely
+ * cosmetic — the session already exists by this point, so nothing depends on
+ * the delay. Recovery skips it entirely: there is no reason to make someone
+ * wait to type their new password.
+ */
+const CONFIRMATION_DWELL_MS = 1500;
 
 export default function AuthCallbackScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams();
+  const params = useLocalSearchParams<Record<string, string | string[]>>();
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
+  const { beginPasswordRecovery } = useAuthContext();
 
-  const [status, setStatus] = useState<CallbackStatus>('loading');
-  const [message, setMessage] = useState('Processing your request...');
-  const [errorDetails, setErrorDetails] = useState('');
-  const [callbackType, setCallbackType] = useState<string>('');
+  const incoming = useIncomingAuthUrl();
 
-  const handleAuthCallback = useCallback(async () => {
-    try {
-      // Get URL parameters from deep link
-      // Supabase sends: ?token=xxx&type=signup|recovery|invite|email_change|magiclink
-      const token = Array.isArray(params.token) ? params.token[0] : params.token;
-      const type = Array.isArray(params.type) ? params.type[0] : params.type;
-      const access_token = Array.isArray(params.access_token) ? params.access_token[0] : params.access_token;
-      const refresh_token = Array.isArray(params.refresh_token) ? params.refresh_token[0] : params.refresh_token;
+  const [status, setStatus] = useState<CallbackStatus>('verifying');
+  const [linkType, setLinkType] = useState<AuthLinkType | null>(null);
+  const [retryNonce, setRetryNonce] = useState(0);
 
-      console.log('[auth-callback] Received parameters:', {
-        hasToken: !!token,
-        type,
-        hasAccessToken: !!access_token,
-        hasRefreshToken: !!refresh_token
-      });
+  // Which link has already been put through session establishment. Keyed rather
+  // than a plain boolean so that a *different* link arriving later (the user is
+  // sitting on the expired-link screen and taps a freshly mailed one) is still
+  // handled, while the *same* link being redelivered — React 18's double effect
+  // mount, or iOS re-emitting the launch URL on resume — is not consumed twice.
+  const handledKeyRef = useRef<string | null>(null);
+  // Once a session exists there is nothing left to establish; a late URL must
+  // not restart the flow underneath the navigation already in progress.
+  const succeededRef = useRef(false);
+  const dwellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-      // Handle different auth callback types
-      if (type === 'signup' || type === 'email_change') {
-        // Email confirmation
-        setCallbackType('email_confirmation');
-        if (token) {
-          const { error } = await supabase.auth.verifyOtp({
-            token_hash: token as string,
-            type: type === 'signup' ? 'signup' : 'email_change',
-          });
-
-          if (error) {
-            console.error('[auth-callback] Email confirmation error:', error);
-            setStatus('error');
-            setMessage('Email Confirmation Failed');
-            setErrorDetails(error.message || 'The confirmation link may have expired.');
-            return;
-          }
-
-          setStatus('success');
-          setMessage('Email Confirmed!');
-
-          // Wait a moment to show success, then redirect to onboarding
-          // (new users need to complete profile setup before accessing the app)
-          setTimeout(() => {
-            router.replace('/onboarding' as Href);
-            try { markInitialNavigationDone(); } catch {}
-          }, 2000);
-          return;
-        }
-      } else if (type === 'recovery') {
-        // Password reset flow - must establish a session before navigating
-        setCallbackType('recovery');
-        if (access_token && refresh_token) {
-          // Implicit flow: Supabase sent access_token + refresh_token
-          const { error } = await supabase.auth.setSession({
-            access_token: access_token as string,
-            refresh_token: refresh_token as string,
-          });
-
-          if (error) {
-            console.error('[auth-callback] Recovery setSession error:', error);
-            setStatus('error');
-            setMessage('Password Reset Failed');
-            setErrorDetails(error.message || 'The reset link may have expired.');
-            return;
-          }
-
-          setStatus('success');
-          setMessage('Redirecting to Password Reset...');
-
-          setTimeout(() => {
-            router.replace('/auth/update-password' as Href);
-            try { markInitialNavigationDone(); } catch {}
-          }, 1500);
-          return;
-        } else if (token) {
-          // Token-hash flow: verify the OTP to establish a session
-          const { error } = await supabase.auth.verifyOtp({
-            token_hash: token as string,
-            type: 'recovery',
-          });
-
-          if (error) {
-            console.error('[auth-callback] Recovery verifyOtp error:', error);
-            setStatus('error');
-            setMessage('Password Reset Failed');
-            setErrorDetails(error.message || 'The reset link may have expired.');
-            return;
-          }
-
-          setStatus('success');
-          setMessage('Redirecting to Password Reset...');
-
-          setTimeout(() => {
-            router.replace('/auth/update-password' as Href);
-            try { markInitialNavigationDone(); } catch {}
-          }, 1500);
-          return;
-        }
-      } else if (type === 'magiclink') {
-        // Magic link sign in
-        if (access_token && refresh_token) {
-          const { error } = await supabase.auth.setSession({
-            access_token: access_token as string,
-            refresh_token: refresh_token as string,
-          });
-
-          if (error) {
-            console.error('[auth-callback] Magic link error:', error);
-            setStatus('error');
-            setMessage('Sign In Failed');
-            setErrorDetails(error.message || 'The magic link may have expired.');
-            return;
-          }
-
-          setStatus('success');
-          setMessage('Successfully Signed In!');
-
-          setTimeout(() => {
-            router.replace('/tabs/bounty-app' as Href);
-            try { markInitialNavigationDone(); } catch {}
-          }, 2000);
-          return;
-        }
-      }
-
-      // If we get here, the link might be invalid or expired
-      console.warn('[auth-callback] Unknown or invalid callback parameters:', params);
-      setStatus('error');
-      setMessage('Invalid Confirmation Link');
-      setErrorDetails('This link may have expired or is invalid. Please request a new confirmation email.');
-
-    } catch (error) {
-      console.error('[auth-callback] Error processing callback:', error);
-      setStatus('error');
-      setMessage('Something Went Wrong');
-      setErrorDetails('An unexpected error occurred. Please try again.');
-    }
-  }, [params, router]);
+  // `useLocalSearchParams()` returns a fresh object every render, so the raw
+  // value cannot be an effect dependency. Serialising it gives a stable key.
+  const paramSignature = JSON.stringify(params ?? {});
 
   useEffect(() => {
-    handleAuthCallback();
-  }, [handleAuthCallback]);
+    if (succeededRef.current) return;
+    // Do not conclude anything until the cold-start URL lookup has settled —
+    // deciding early is exactly how this flow used to report a valid link as
+    // invalid.
+    if (!incoming.resolved) return;
+
+    // `retryNonce` participates so the Try Again button can re-run the same link.
+    const handledKey = `${retryNonce}|${incoming.url ?? paramSignature}`;
+    if (handledKeyRef.current === handledKey) return;
+    handledKeyRef.current = handledKey;
+
+    let cancelled = false;
+
+    void (async () => {
+      const routerParams = JSON.parse(paramSignature) as Record<string, string | string[]>;
+      const link = parseAuthLink(incoming.url, routerParams);
+
+      // Shape only — never values. redactAuthUrl keeps the key names and drops
+      // every credential so this line is safe in a release log.
+      console.log('[auth-callback] Handling link', {
+        kind: link.kind,
+        type: 'type' in link ? link.type : null,
+        url: redactAuthUrl(incoming.url),
+      });
+
+      const outcome = await consumeAuthLink(link);
+      if (cancelled) return;
+
+      if (outcome.status === 'established' || outcome.status === 'already_established') {
+        succeededRef.current = true;
+        const type = outcome.type ?? 'recovery';
+        setLinkType(type);
+        setStatus('success');
+
+        // Flag recovery *before* navigating so the root gate and the
+        // update-password screen both see a consistent state if anything
+        // re-evaluates routing in between.
+        if (type === 'recovery') {
+          try {
+            beginPasswordRecovery?.();
+          } catch {
+            // A missing provider must not block the reset itself.
+          }
+        }
+
+        const destination = DESTINATIONS[type] ?? (ROUTES.ROOT as Href);
+        const go = () => {
+          router.replace(destination);
+          try {
+            markInitialNavigationDone();
+          } catch {}
+        };
+
+        if (type === 'recovery') {
+          go();
+        } else {
+          dwellTimerRef.current = setTimeout(go, CONFIRMATION_DWELL_MS);
+        }
+        return;
+      }
+
+      setLinkType('type' in link ? link.type : null);
+
+      switch (outcome.status) {
+        case 'expired':
+          setStatus('expired');
+          break;
+        case 'failed':
+          setStatus('failed');
+          break;
+        // 'invalid' and 'none' both mean "this link carries nothing we can use".
+        default:
+          setStatus('invalid');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [incoming.resolved, incoming.url, paramSignature, retryNonce]);
+
+  // A cosmetic timer must never fire into an unmounted tree.
+  useEffect(
+    () => () => {
+      if (dwellTimerRef.current) clearTimeout(dwellTimerRef.current);
+    },
+    []
+  );
+
+  // Only offered for the transient 'failed' state. Re-arms the one-shot guard
+  // and bumps the nonce so the effect runs again with the same link — safe
+  // because a genuine network failure never consumed the token.
+  const handleRetry = useCallback(() => {
+    setStatus('verifying');
+    setRetryNonce(n => n + 1);
+  }, []);
 
   const handleGoToSignIn = () => {
     router.replace(ROUTES.AUTH.SIGN_IN as Href);
@@ -190,27 +204,59 @@ export default function AuthCallbackScreen() {
   };
 
   const handleOpenEmail = async () => {
-    // Try to open default email app
-    const emailUrl = 'message://';
-    const canOpen = await Linking.canOpenURL(emailUrl);
+    try {
+      // Try to open default email app
+      const emailUrl = 'message://';
+      const canOpen = await Linking.canOpenURL(emailUrl);
 
-    if (canOpen) {
-      await Linking.openURL(emailUrl);
-    } else {
-      // Fallback for Android
-      await Linking.openURL('mailto:');
+      if (canOpen) {
+        await Linking.openURL(emailUrl);
+      } else {
+        // Fallback for Android
+        await Linking.openURL('mailto:');
+      }
+    } catch {
+      // Silently ignore errors — opening the email app is best-effort;
+      // the user can still act on the surrounding UI.
     }
   };
 
-  const isRecovery = callbackType === 'recovery';
+  // A link that carried no readable type is treated as recovery for copy
+  // purposes: that is the only flow a user actively drives, so "request a new
+  // reset link" is the most useful escape hatch to offer.
+  const isRecovery = linkType === 'recovery' || linkType === null;
+
+  /**
+   * User-facing copy per failure state. Supabase's own `error_description` is
+   * deliberately never shown — it leaks implementation detail and reads like a
+   * bug report ("Email link is invalid or has expired").
+   */
+  const FAILURE_COPY: Record<'expired' | 'invalid' | 'failed', { title: string; body: string }> = {
+    expired: {
+      title: isRecovery ? 'Reset Link Expired' : 'Link Expired',
+      body: isRecovery
+        ? 'This reset link has expired or has already been used. Reset links last one hour and work only once.'
+        : 'This link has expired or has already been used. Please request a new one.',
+    },
+    invalid: {
+      title: isRecovery ? 'Reset Link Invalid' : 'Link Invalid',
+      body: isRecovery
+        ? "We couldn't read this reset link. It may have been altered or truncated by your email app."
+        : "We couldn't read this link. It may have been altered or truncated by your email app.",
+    },
+    failed: {
+      title: 'Something Went Wrong',
+      body: "We couldn't verify your link just now. Check your connection and try again.",
+    },
+  };
 
   const renderContent = () => {
     switch (status) {
-      case 'loading':
+      case 'verifying':
         return (
           <View style={styles.centerContent}>
             <ActivityIndicator size="large" color={theme.primary} />
-            <Text style={styles.title}>{message}</Text>
+            <Text style={styles.title}>Verifying your link</Text>
             <Text style={styles.description}>
               {isRecovery
                 ? 'Please wait while we verify your reset link...'
@@ -225,23 +271,29 @@ export default function AuthCallbackScreen() {
             <View style={styles.successIconCircle}>
               <MaterialIcons name="check-circle" size={64} color="#059669" />
             </View>
-            <Text style={styles.title}>{message}</Text>
+            <Text style={styles.title}>
+              {linkType === 'recovery' ? 'Link Verified' : 'Email Confirmed!'}
+            </Text>
             <Text style={styles.description}>
-              {isRecovery
-                ? 'Your reset link has been verified. You will be redirected to set your new password.'
+              {linkType === 'recovery'
+                ? 'Taking you to set your new password...'
                 : 'Your email has been verified. You can now access all features of BOUNTY.'}
             </Text>
           </View>
         );
 
-      case 'error':
+      case 'expired':
+      case 'invalid':
+      case 'failed': {
+        const copy = FAILURE_COPY[status];
+        const isRetryable = status === 'failed';
         return (
           <View style={styles.centerContent}>
             <View style={styles.errorIconCircle}>
               <MaterialIcons name="error-outline" size={64} color="#7f1d1d" />
             </View>
-            <Text style={styles.title}>{message}</Text>
-            <Text style={styles.description}>{errorDetails}</Text>
+            <Text style={styles.title}>{copy.title}</Text>
+            <Text style={styles.description}>{copy.body}</Text>
 
             {/* Help section */}
             <View style={styles.helpBox}>
@@ -260,11 +312,26 @@ export default function AuthCallbackScreen() {
 
             {/* Actions */}
             <View style={styles.errorActions}>
+              {isRetryable && (
+                <TouchableOpacity style={styles.primaryButton} onPress={handleRetry}>
+                  <Text style={styles.primaryButtonText}>Try Again</Text>
+                  <MaterialIcons name="refresh" size={20} color="#ffffff" />
+                </TouchableOpacity>
+              )}
               {isRecovery ? (
                 <>
-                  <TouchableOpacity style={styles.primaryButton} onPress={handleRequestNewResetLink}>
-                    <Text style={styles.primaryButtonText}>Request New Reset Link</Text>
-                    <MaterialIcons name="arrow-forward" size={20} color="#ffffff" />
+                  <TouchableOpacity
+                    style={isRetryable ? styles.secondaryButton : styles.primaryButton}
+                    onPress={handleRequestNewResetLink}
+                  >
+                    <Text style={isRetryable ? styles.secondaryButtonText : styles.primaryButtonText}>
+                      Request New Reset Link
+                    </Text>
+                    <MaterialIcons
+                      name="arrow-forward"
+                      size={20}
+                      color={isRetryable ? theme.text : '#ffffff'}
+                    />
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.secondaryButton} onPress={handleGoToSignIn}>
                     <MaterialIcons name="login" size={20} color={theme.text} />
@@ -286,6 +353,7 @@ export default function AuthCallbackScreen() {
             </View>
           </View>
         );
+      }
 
       default:
         return null;

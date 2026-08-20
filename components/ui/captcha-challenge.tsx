@@ -1,6 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons'
 import { useEffect, useRef, useState } from 'react'
 import { Text, TextInput, TouchableOpacity, View } from 'react-native'
+import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
 
 /**
  * Generates a simple arithmetic challenge (addition or subtraction with positive result).
@@ -40,6 +41,7 @@ interface CaptchaChallengeProps {
 export { generateChallenge }
 
 export function CaptchaChallenge({ onVerified, onReset }: CaptchaChallengeProps) {
+  const { theme } = useAppThemeContext()
   const [challenge, setChallenge] = useState(generateChallenge)
   const [input, setInput] = useState('')
   const [verified, setVerified] = useState(false)
@@ -85,24 +87,32 @@ export function CaptchaChallenge({ onVerified, onReset }: CaptchaChallengeProps)
 
   return (
     <View
-      className="rounded-lg border border-white/20 bg-white/5 px-4 py-3"
+      className="rounded-lg border px-4 py-3"
+      style={{ backgroundColor: theme.surface, borderColor: theme.border }}
       accessibilityLabel="Security verification"
     >
-      <Text className="text-xs text-white/60 mb-2 font-medium uppercase tracking-wide">
+      <Text
+        className="text-xs mb-2 font-medium uppercase tracking-wide"
+        style={{ color: theme.textSecondary }}
+      >
         Security Check
       </Text>
 
       {verified ? (
         <View className="flex-row items-center gap-2">
-          <MaterialIcons name="check-circle" size={18} color="#059669" />
-          <Text className="text-[#6ee7b7] text-sm">Verification passed</Text>
+          <MaterialIcons name="check-circle" size={18} color={theme.success} />
+          <Text className="text-sm" style={{ color: theme.success }}>
+            Verification passed
+          </Text>
         </View>
       ) : (
         <>
           <View className="flex-row items-center justify-between mb-2">
-            <Text className="text-white text-sm">
+            <Text className="text-sm" style={{ color: theme.text }}>
               What is{' '}
-              <Text className="font-bold text-[#6ee7b7]">{challenge.question}</Text>
+              <Text className="font-bold" style={{ color: theme.primaryLight }}>
+                {challenge.question}
+              </Text>
               {'?'}
             </Text>
             <TouchableOpacity
@@ -110,7 +120,7 @@ export function CaptchaChallenge({ onVerified, onReset }: CaptchaChallengeProps)
               accessibilityLabel="Get a new challenge"
               hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
             >
-              <MaterialIcons name="refresh" size={18} color="rgba(255,255,255,0.5)" />
+              <MaterialIcons name="refresh" size={18} color={theme.textSecondary} />
             </TouchableOpacity>
           </View>
 
@@ -119,15 +129,23 @@ export function CaptchaChallenge({ onVerified, onReset }: CaptchaChallengeProps)
             value={input}
             onChangeText={handleChange}
             placeholder="Enter answer"
-            placeholderTextColor="rgba(255,255,255,0.3)"
+            placeholderTextColor={theme.textDisabled}
             keyboardType="number-pad"
             maxLength={3} // max possible answer: 9+9=18 (2 digits); 3 gives room for any future range change
-            className={`w-full bg-white/5 rounded px-3 py-2 text-white ${wrong ? 'border border-red-400' : ''}`}
+            className="w-full rounded px-3 py-2"
+            style={{
+              backgroundColor: theme.surfaceSecondary,
+              color: theme.text,
+              borderWidth: wrong ? 1 : 0,
+              borderColor: theme.error,
+            }}
             accessibilityLabel={`Enter the answer to ${challenge.question}`}
           />
 
           {wrong && (
-            <Text className="text-xs text-red-400 mt-1">Incorrect answer. Please try again.</Text>
+            <Text className="text-xs mt-1" style={{ color: theme.error }}>
+              Incorrect answer. Please try again.
+            </Text>
           )}
         </>
       )}

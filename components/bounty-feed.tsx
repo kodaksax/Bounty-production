@@ -30,6 +30,8 @@ import {
     View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAccessibleAnimation } from '../hooks/use-accessible-animation';
+import { useActiveHunters } from '../hooks/useActiveHunters';
 import { useForegroundRefresh } from '../hooks/useForegroundRefresh';
 import { useValidUserId } from '../hooks/useValidUserId';
 import { consumeIsFirstBountyListViewOfSession } from '../lib/analytics/sessionFlags';
@@ -114,6 +116,78 @@ function nearbyToBounty(nb: NearbyBounty): Bounty {
   };
 }
 
+/**
+ * Minimum nearby-hunter count worth showing. Below this the number reads as
+ * noise rather than a live market ("2 hunters nearby" makes the area look
+ * dead), so the pill hides entirely and the layouts fall back to their
+ * neutral copy.
+ */
+const MIN_ACTIVE_HUNTERS_TO_SHOW = 5;
+
+/**
+ * Small green "someone is actually here right now" indicator for the
+ * active-hunters pill: a solid dot with a halo that expands and fades on a
+ * slow loop, the same breathing-pulse language WorkInProgressBanner uses.
+ *
+ * The dot itself never blinks fully out — a disappearing dot reads as a
+ * rendering glitch, while a steady core with a pulsing halo reads as a live
+ * signal. Honours Reduce Motion by rendering the static core only, since this
+ * animation loops forever and would otherwise never stop moving.
+ */
+function LiveDot({ color }: { color: string }) {
+  const { prefersReducedMotion } = useAccessibleAnimation();
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (prefersReducedMotion) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 1100, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 1100, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse, prefersReducedMotion]);
+
+  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 2] });
+  const opacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.45, 0] });
+
+  return (
+    <View style={liveDotStyles.wrap}>
+      {!prefersReducedMotion && (
+        <Animated.View
+          pointerEvents="none"
+          style={[liveDotStyles.halo, { backgroundColor: color, transform: [{ scale }], opacity }]}
+        />
+      )}
+      <View style={[liveDotStyles.core, { backgroundColor: color }]} />
+    </View>
+  );
+}
+
+const liveDotStyles = StyleSheet.create({
+  // Sized to the halo at full expansion (8 x 2), not to the core, so the pulse
+  // never paints outside its parent — Android clips overflowing children.
+  wrap: {
+    width: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  halo: {
+    position: 'absolute',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  core: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+});
+
 export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function BountyFeed(
   { activeScreen, setActiveScreen, currentUserId },
   ref
@@ -154,6 +228,18 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
 
   const { location: userLocation, permission } = useLocation();
   const validUserId = useValidUserId();
+
+  // "N active hunters in your area" pill. Also publishes this viewer's own
+  // coordinates, which is what makes the count non-zero for everyone else —
+  // see useActiveHunters.
+  const { count: activeHuntersCount, radiusMiles: activeHuntersRadius } = useActiveHunters({
+    userId: validUserId,
+    latitude: userLocation?.latitude,
+    longitude: userLocation?.longitude,
+    hasPermission: Boolean(permission?.granted),
+  });
+  const showActiveHunters =
+    activeHuntersCount != null && activeHuntersCount >= MIN_ACTIVE_HUNTERS_TO_SHOW;
 
   const categories = useMemo(
     () => [
@@ -813,7 +899,18 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
 
   return (
     <View style={s.dashboardArea}>
-      {/* Search bar — non-grid only (grid has it inside the banner block below) */}
+      {/* Search row — non-grid only (grid has its search inside the banner block
+          below). Carries three things on one line: search, the live
+          active-hunters pill, and the notification bell.
+
+          The pill shares this row rather than owning a line beneath it so the
+          "people are here right now" signal sits in the header chrome the eye
+          already lands on, and costs no vertical space above the cards.
+
+          Hidden below MIN_ACTIVE_HUNTERS_TO_SHOW as well as at null: the hook
+          returns null whenever the number isn't known (permission off, no fix
+          yet, RPC failed), and a near-empty count is worse than silence for
+          someone deciding whether to post. */}
       {bountyFormat !== 'grid' && (
         <View style={[s.searchWrapper, s.searchRow]}>
           <TouchableOpacity
@@ -828,8 +925,47 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
               color={theme.textDisabled}
               style={s.searchIcon}
             />
-            <Text style={s.searchText}>Search bounties or users...</Text>
+            {/* Placeholder shortens when the pill is present so the three items
+                fit on one line without the search label truncating mid-word. */}
+            <Text style={s.searchText} numberOfLines={1}>
+              {showActiveHunters ? 'Search bounties...' : 'Search bounties or users...'}
+            </Text>
           </TouchableOpacity>
+
+          {showActiveHunters && (
+            <View
+              style={s.huntersPill}
+              accessibilityRole="text"
+              accessibilityLabel={`${activeHuntersCount} active ${
+                activeHuntersCount === 1 ? 'hunter' : 'hunters'
+              } within ${activeHuntersRadius} miles of you`}
+              testID="feed-active-hunters-caption"
+            >
+              <LiveDot color={theme.success} />
+              {/* Stacked rather than one line: "5 Active users" set inline is
+                  ~40pt wider than the old "5 nearby" and would push the search
+                  field into truncating its own placeholder. Broken over two
+                  lines the pill stays narrow and the count still leads. */}
+              <View style={s.huntersPillLabel}>
+                <Text style={s.huntersPillCount} numberOfLines={1}>
+                  {activeHuntersCount}
+                </Text>
+                {/* The count is its own column so "users" hangs under "Active"
+                    at any digit count. A fixed indent (or leading spaces in the
+                    JSX, which RN strips) would drift the moment the number goes
+                    double- or triple-digit. */}
+                <View style={s.huntersPillWords}>
+                  <Text style={s.huntersPillText} numberOfLines={1}>
+                    Active
+                  </Text>
+                  <Text style={s.huntersPillSubtext} numberOfLines={1}>
+                    {activeHuntersCount === 1 ? 'hunter' : 'hunters'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
+
           <NotificationBell />
         </View>
       )}
@@ -875,7 +1011,39 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                   />
                   <Text style={s.gridBannerTitle}>Find a Bounty</Text>
                   <View style={s.gridBannerSubRow}>
-                    <Text style={s.gridBannerSubtitle}>Explore tasks near you</Text>
+                    {/* Left half of a deliberate supply/demand pair: hunters
+                        here, open bounties in the badge opposite. Together they
+                        answer "is this market liquid enough to be worth
+                        posting?" on the highest-attention line in the layout,
+                        without costing any extra height.
+
+                        Falls back to the original static subtitle whenever the
+                        count isn't known or is below MIN_ACTIVE_HUNTERS_TO_SHOW
+                        — same rule as the pill in the other layouts, so a quiet
+                        area reads as ordinary copy rather than a broken stat. */}
+                    {showActiveHunters ? (
+                      <View
+                        style={s.gridBannerHunters}
+                        accessibilityRole="text"
+                        accessibilityLabel={`${activeHuntersCount} active ${
+                          activeHuntersCount === 1 ? 'hunter' : 'hunters'
+                        } within ${activeHuntersRadius} miles of you`}
+                        testID="feed-active-hunters-banner"
+                      >
+                        <MaterialIcons
+                          name="people"
+                          size={14}
+                          color="rgba(255,255,255,0.9)"
+                          style={s.gridBannerHuntersIcon}
+                        />
+                        <Text style={s.gridBannerSubtitle} numberOfLines={1}>
+                          {activeHuntersCount} {activeHuntersCount === 1 ? 'hunter' : 'hunters'}{' '}
+                          nearby
+                        </Text>
+                      </View>
+                    ) : (
+                      <Text style={s.gridBannerSubtitle}>Explore tasks near you</Text>
+                    )}
                     <View style={s.gridBannerCountBadge}>
                       {/* Stable server count of open bounties in this category
                           (independent of pagination). Falls back to the loaded
@@ -1028,6 +1196,67 @@ function makeStyles(t: AppTheme) {
       alignItems: 'center',
     },
 
+    // ── Active-hunters pill (card / compact layouts) ─────────────────────────
+    // Rides the search row between the search field and the notification bell,
+    // so it reads as part of the same header chrome: identical pill radius,
+    // secondary surface and hairline border as the search field and the bell,
+    // and the same 44pt height so all three items share one baseline.
+    //
+    // Not tappable, by design — it is ambient context about the room, not a
+    // control, and the newBountiesPill below is the row-adjacent green CTA.
+    huntersPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      height: SIZING.MIN_TOUCH_TARGET,
+      paddingLeft: 8,
+      paddingRight: 11,
+      borderRadius: 999,
+      backgroundColor: t.surfaceSecondary,
+      borderWidth: 1,
+      borderColor: t.border,
+      // Never let the pill squeeze the bell or grow past its own content.
+      flexShrink: 0,
+    },
+    // Count on the left, the two stacked words to its right. flex-start pins
+    // the count's line box to the first line so it sits level with "Active"
+    // rather than centring itself across both lines.
+    huntersPillLabel: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      marginLeft: 3,
+    },
+    huntersPillWords: {
+      marginLeft: 3,
+    },
+    huntersPillText: {
+      // A step below the search placeholder: this is a stat chip, and the
+      // smaller type is also what keeps all three items on one line on a
+      // narrow screen. Explicit lineHeight so the two lines pack tightly
+      // enough to clear the 44pt pill on large system font settings.
+      color: t.textSecondary,
+      fontSize: TYPOGRAPHY.SIZE_XSMALL,
+      fontWeight: '600',
+      lineHeight: 14,
+    },
+    // The quieter half of the stack — smaller and secondary so the eye lands
+    // on the count first and picks up "nearby" as the qualifier.
+    huntersPillSubtext: {
+      color: t.textSecondary,
+      fontSize: TYPOGRAPHY.SIZE_XSMALL - 2,
+      fontWeight: '600',
+      lineHeight: 12,
+      letterSpacing: 0.2,
+      opacity: 0.85,
+    },
+    // Only the number carries emphasis — the surrounding word stays secondary
+    // so the stat scans at a glance without shouting.
+    huntersPillCount: {
+      color: t.text,
+      fontSize: TYPOGRAPHY.SIZE_XSMALL,
+      fontWeight: '800',
+      lineHeight: 14,
+    },
+
     // ── New-bounties pill ────────────────────────────────────────────────────
     newBountiesPill: {
       flexDirection: 'row',
@@ -1101,6 +1330,18 @@ function makeStyles(t: AppTheme) {
       color: 'rgba(255,255,255,0.72)',
       fontSize: 14,
       fontWeight: '500',
+    },
+    // Occupies the subtitle's slot in the sub-row when a live count exists.
+    // flexShrink so a long count can never push the bounty-count badge off the
+    // right edge on a narrow screen.
+    gridBannerHunters: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexShrink: 1,
+      marginRight: 8,
+    },
+    gridBannerHuntersIcon: {
+      marginRight: 5,
     },
     gridBannerCountBadge: {
       backgroundColor: 'rgba(255,255,255,0.18)',
