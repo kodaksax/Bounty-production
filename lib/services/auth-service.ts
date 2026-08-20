@@ -5,6 +5,7 @@
 
 import { supabase } from '../supabase';
 import { Platform } from 'react-native';
+import { getAuthCallbackUrl, isAllowedAuthRedirect } from '../auth/auth-redirect';
 import { generateCorrelationId } from '../utils/auth-errors';
 import { isValidEmail, validateNewPassword } from '../utils/password-validation';
 import { deviceService } from './device-service';
@@ -53,7 +54,7 @@ export async function resendVerification(email: string): Promise<AuthResult> {
   const correlationId = generateCorrelationId('resend_verification');
 
   try {
-    console.log('[auth-service] Resending verification email', { email: email.trim().toLowerCase(), correlationId });
+    console.log('[auth-service] Resending verification email', { correlationId });
 
     // Supabase provides a built-in resend method
     const { error } = await supabase.auth.resend({
@@ -67,7 +68,6 @@ export async function resendVerification(email: string): Promise<AuthResult> {
       // Track failed attempt (no need to check for null with no-op stub)
       try {
         await analyticsService.trackEvent('auth_resend_verification_failed', {
-          email: email.trim().toLowerCase(),
           error: error.message,
           correlation_id: correlationId,
         });
@@ -86,7 +86,6 @@ export async function resendVerification(email: string): Promise<AuthResult> {
     // Track successful send
     try {
       await analyticsService.trackEvent('auth_resend_verification_success', {
-        email: email.trim().toLowerCase(),
         correlation_id: correlationId,
       });
     } catch { /* Swallow analytics errors */ }
@@ -102,7 +101,6 @@ export async function resendVerification(email: string): Promise<AuthResult> {
     // Track unexpected error
     try {
       await analyticsService.trackEvent('auth_resend_verification_error', {
-        email: email.trim().toLowerCase(),
         error: error?.message,
         correlation_id: correlationId,
       });
@@ -144,9 +142,15 @@ export async function checkEmailVerified(): Promise<boolean> {
  * - Always returns success message to prevent email enumeration
  * - Uses Supabase's built-in rate limiting
  * - Token expires after configured time (default 1 hour in Supabase)
- * 
+ * - The email address is never logged and never sent to analytics; only a
+ *   correlation id and the platform are recorded, which is enough to trace a
+ *   support report without putting an account identifier in PostHog or in
+ *   device logs that crash reporters collect.
+ *
  * @param email - User's email address
- * @param redirectTo - Optional redirect URL after password reset (for deep linking)
+ * @param redirectTo - Optional redirect override. Validated against the
+ *   allowlist in lib/auth/auth-redirect.ts and ignored if it does not pass, so
+ *   a caller cannot turn the reset email into an open redirect.
  * @returns Promise with result of the operation
  */
 export async function requestPasswordReset(
@@ -157,7 +161,7 @@ export async function requestPasswordReset(
 
   try {
     const platform = Platform.OS ?? 'unknown'
-    console.log('[auth-service] Requesting password reset', { email: email.trim().toLowerCase(), correlationId, platform });
+    console.log('[auth-service] Requesting password reset', { correlationId, platform });
 
     // Validate email format using pre-compiled regex
     const normalizedEmail = email.trim().toLowerCase()
@@ -170,14 +174,17 @@ export async function requestPasswordReset(
       }
     }
 
-    // Use environment variable for redirect URL, with fallback to web URL.
-    // The web URL (bountyfinder.app) works on both mobile (via universal links
-    // the OS opens the app) and desktop (loads a web-based password reset form).
-    // This replaces the custom-scheme-only approach so users who open the
-    // reset email on a desktop browser get a working password update page.
-    const resetRedirectUrl = redirectTo ||
-      process.env.EXPO_PUBLIC_AUTH_REDIRECT_URL ||
-      'https://bountyfinder.app/auth/callback'
+    // Resolved per-platform and allowlist-checked. See lib/auth/auth-redirect.ts
+    // for the production allowlist probe and why the native default is the
+    // custom scheme rather than the web URL.
+    let resetRedirectUrl = getAuthCallbackUrl()
+    if (redirectTo) {
+      if (isAllowedAuthRedirect(redirectTo)) {
+        resetRedirectUrl = redirectTo
+      } else {
+        console.warn('[auth-service] Ignoring disallowed redirectTo override', { correlationId })
+      }
+    }
 
     const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
       redirectTo: resetRedirectUrl,
@@ -189,7 +196,6 @@ export async function requestPasswordReset(
       // Track failed attempt
       try {
         await analyticsService.trackEvent('auth_password_reset_failed', {
-          email: normalizedEmail,
           error: error.message,
           correlation_id: correlationId,
         });
@@ -220,7 +226,6 @@ export async function requestPasswordReset(
     // Track successful request (even if email doesn't exist, for security)
     try {
       await analyticsService.trackEvent('auth_password_reset_requested', {
-        email: normalizedEmail,
         correlation_id: correlationId,
         platform,
       });
@@ -238,7 +243,6 @@ export async function requestPasswordReset(
     // Track unexpected error
     try {
       await analyticsService.trackEvent('auth_password_reset_error', {
-        email: email.trim().toLowerCase(),
         error: error?.message,
         correlation_id: correlationId,
       });

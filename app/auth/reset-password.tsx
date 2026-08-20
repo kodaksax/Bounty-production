@@ -9,7 +9,7 @@ import { ROUTES } from 'lib/routes'
 import { requestPasswordReset } from 'lib/services/auth-service'
 import { useAppThemeContext } from 'lib/themes/AppThemeContext'
 import { isValidEmail } from 'lib/utils/password-validation'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native'
 
 /** Seconds to wait between reset requests */
@@ -38,6 +38,11 @@ export function ResetPasswordScreen() {
   const [resetAttempts, setResetAttempts] = useState(0)
   const [lockoutUntil, setLockoutUntil] = useState<number | null>(null)
 
+  // Guards against a double tap firing two resetPasswordForEmail calls, which
+  // would burn the first link before the user ever saw it (each request
+  // invalidates the previous one).
+  const submittingRef = useRef(false)
+
   // Cooldown countdown effect
   useEffect(() => {
     if (resendCooldown <= 0) return
@@ -47,18 +52,32 @@ export function ResetPasswordScreen() {
     return () => clearTimeout(timer)
   }, [resendCooldown])
 
-  const isLockedOut = useCallback((): boolean => {
-    if (!lockoutUntil) return false
-    if (Date.now() < lockoutUntil) return true
-    // Lockout expired — reset
-    setLockoutUntil(null)
-    setResetAttempts(0)
-    return false
+  // Lockout expiry, driven by a timer rather than by whoever happens to read the
+  // flag next. The previous version cleared it from inside a function that the
+  // render body called directly (`disabled={... isLockedOut()}`), which meant a
+  // setState during render — React either warns and discards it or re-renders
+  // in a loop, and either way the button's disabled state was decided by a
+  // value that was being mutated while it was read.
+  const isLockedOut = Boolean(lockoutUntil && Date.now() < lockoutUntil)
+
+  useEffect(() => {
+    if (!lockoutUntil) return
+    const remaining = lockoutUntil - Date.now()
+    if (remaining <= 0) {
+      setLockoutUntil(null)
+      setResetAttempts(0)
+      return
+    }
+    const timer = setTimeout(() => {
+      setLockoutUntil(null)
+      setResetAttempts(0)
+    }, remaining)
+    return () => clearTimeout(timer)
   }, [lockoutUntil])
 
   const lockoutMessage = useCallback((): string => {
     const remainingSec = Math.ceil(((lockoutUntil ?? 0) - Date.now()) / 1000)
-    const remainingMin = Math.ceil(remainingSec / 60)
+    const remainingMin = Math.max(1, Math.ceil(remainingSec / 60))
     return `Too many attempts. Please try again in ${remainingMin} minute${remainingMin !== 1 ? 's' : ''}.`
   }, [lockoutUntil])
 
@@ -76,12 +95,16 @@ export function ResetPasswordScreen() {
   }
 
   const handleReset = async () => {
+    // Duplicate-submission guard. A ref is required because two taps landing in
+    // the same tick both observe the pre-render `loading` value.
+    if (submittingRef.current) return
+
     setMessage(null)
     setError(null)
     setFieldError(null)
 
     // Check lockout
-    if (isLockedOut()) {
+    if (isLockedOut) {
       setError(lockoutMessage())
       return
     }
@@ -94,22 +117,27 @@ export function ResetPasswordScreen() {
 
     if (!validateEmail(email)) return
 
-    // Track attempt
-    const newAttempts = resetAttempts + 1
-    setResetAttempts(newAttempts)
-
-    if (newAttempts >= MAX_RESET_ATTEMPTS) {
+    // Lock out on the attempt *after* the allowance is used up. The previous
+    // check incremented first and bailed at `>= MAX`, so the fifth request was
+    // swallowed rather than sent — users got four emails from a limit of five.
+    //
+    // This is UX throttling only: it lives in component state, so it does not
+    // survive a remount and is not a security control. Supabase's own per-email
+    // and per-IP limits are what actually cap request volume.
+    if (resetAttempts >= MAX_RESET_ATTEMPTS) {
       const lockout = Date.now() + LOCKOUT_DURATION_SECONDS * 1000
       setLockoutUntil(lockout)
       setError(`Too many attempts. Please try again in ${Math.ceil(LOCKOUT_DURATION_SECONDS / 60)} minutes.`)
-      console.warn('[reset-password] Lockout triggered', { attempts: newAttempts })
+      console.warn('[reset-password] Lockout triggered', { attempts: resetAttempts })
       return
     }
 
+    submittingRef.current = true
     try {
       setLoading(true)
 
       const result = await requestPasswordReset(email.trim().toLowerCase())
+      setResetAttempts(prev => prev + 1)
 
       if (result.success) {
         setMessage(result.message)
@@ -123,17 +151,19 @@ export function ResetPasswordScreen() {
       }
     } catch (e) {
       setError('An unexpected error occurred. Please try again.')
-      console.error(e)
+      // Log the failure, never the address that was submitted.
+      console.error('[reset-password] Reset request failed', e)
     } finally {
       setLoading(false)
+      submittingRef.current = false
     }
   }
 
   const handleResend = () => {
-    if (resendCooldown > 0 || isLockedOut()) return
+    if (loading || resendCooldown > 0 || isLockedOut) return
     setEmailSent(false)
     setMessage(null)
-    handleReset()
+    void handleReset()
   }
 
   const handleOpenEmailApp = async () => {
@@ -254,7 +284,7 @@ export function ResetPasswordScreen() {
                 {/* Resend Email */}
                 <TouchableOpacity
                   onPress={handleResend}
-                  disabled={loading || resendCooldown > 0 || isLockedOut()}
+                  disabled={loading || resendCooldown > 0 || isLockedOut}
                   className="py-3 items-center"
                 >
                   {loading ? (
@@ -286,10 +316,10 @@ export function ResetPasswordScreen() {
               </View>
             ) : (
               <TouchableOpacity
-                disabled={loading || resendCooldown > 0 || isLockedOut()}
+                disabled={loading || resendCooldown > 0 || isLockedOut}
                 onPress={handleReset}
                 className={`w-full rounded-lg py-3 items-center ${
-                  loading || resendCooldown > 0 || isLockedOut()
+                  loading || resendCooldown > 0 || isLockedOut
                     ? 'bg-[#059669]/50'
                     : 'bg-[#059669]'
                 }`}

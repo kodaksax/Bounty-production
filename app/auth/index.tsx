@@ -1,68 +1,26 @@
 /**
  * Auth Index Route — Deep Link Entry Point
  *
- * Supabase magic links (and some other auth emails) redirect to
- * `bountyexpo-workspace://auth` (the bare `/auth` path) rather than
- * `bountyexpo-workspace://auth/callback`.
+ * Supabase falls back to the project's Site URL whenever a link's `redirect_to`
+ * is absent or not allowlisted. In production that Site URL is
+ * `bountyexpo-workspace://auth` — the bare `/auth` path — so recovery and magic
+ * links can legitimately land here rather than on `/auth/callback`. Verified
+ * against production: an unlisted `redirect_to` redirects to
+ * `bountyexpo-workspace://auth#error=...`, and a link minted with no
+ * `redirect_to` at all redirects to `bountyexpo-workspace://auth#access_token=…`.
  *
- * This screen catches that unmatched route and immediately forwards the
- * user — with all incoming query / hash-fragment params preserved — to
- * the real auth-callback handler at `/auth/callback`.
+ * This route therefore renders the auth-callback handler directly instead of
+ * forwarding to it. It used to rebuild a query string from
+ * `useLocalSearchParams()` and `router.replace` into `/auth/callback`, which
+ * silently destroyed the credentials on native: expo-router drops the URL
+ * fragment from deep links before the params are populated, and Supabase puts
+ * the tokens in the fragment. Rendering the handler in place lets it read the
+ * untouched URL from `expo-linking` itself, so `/auth` and `/auth/callback`
+ * behave identically no matter which one the link points at.
  */
 
-import type { Href } from 'expo-router';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useRef, useMemo } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
-import type { AppTheme } from '../../lib/themes/types';
+import AuthCallbackScreen from './callback';
 
 export default function AuthIndex() {
-  const router = useRouter();
-  // Use default typing so values are correctly typed as string | string[].
-  const params = useLocalSearchParams<Record<string, string | string[]>>();
-  // Guard so we only redirect once, even if params reference changes on re-renders.
-  const redirected = useRef(false);
-  const { theme } = useAppThemeContext();
-  const styles = useMemo(() => makeStyles(theme), [theme]);
-
-  useEffect(() => {
-    if (redirected.current) return;
-    redirected.current = true;
-
-    // Normalize each param to a single non-empty string, then build the query
-    // string so the callback screen receives the same tokens / type Supabase sent.
-    const qs = Object.entries(params)
-      .map(([k, v]): [string, string] => {
-        // Pick the first element when the router hands us an array.
-        const normalized = Array.isArray(v) ? v[0] : v;
-        return [k, normalized ?? ''];
-      })
-      .filter(([, v]) => v !== '')
-      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-      .join('&');
-
-    const target: Href = qs ? (`/auth/callback?${qs}` as Href) : '/auth/callback';
-
-    // Use replace so the blank index screen doesn't sit in the back-stack.
-    router.replace(target);
-  }, [params, router]);
-
-  // Show a minimal loading indicator while the redirect takes effect.
-  return (
-    <View style={styles.container}>
-      <ActivityIndicator size="large" color={theme.primary} />
-    </View>
-  );
-}
-
-function makeStyles(theme: AppTheme) {
-  return StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: theme.background,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-  });
+  return <AuthCallbackScreen />;
 }
