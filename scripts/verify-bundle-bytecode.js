@@ -91,8 +91,14 @@ function resolveProjectHermesc() {
     );
   }
   const version = require(path.join(pkgDir, 'package.json')).version;
-  const binDir = process.platform === 'darwin' ? 'osx-bin' : 'linux64-bin';
-  const hermesc = path.join(pkgDir, 'hermesc', binDir, 'hermesc');
+  // hermes-compiler ships osx-bin, linux64-bin and win64-bin. Windows has to be
+  // handled explicitly: OTA updates are published from a developer machine as
+  // well as from CI, and a check that can't run where the bundle is compiled is
+  // no check at all.
+  const BIN_DIRS = { darwin: 'osx-bin', win32: 'win64-bin' };
+  const binDir = BIN_DIRS[process.platform] || 'linux64-bin';
+  const exe = process.platform === 'win32' ? 'hermesc.exe' : 'hermesc';
+  const hermesc = path.join(pkgDir, 'hermesc', binDir, exe);
   if (!fs.existsSync(hermesc)) {
     fail(`Resolved hermes-compiler@${version} but no hermesc binary at ${hermesc}`);
   }
