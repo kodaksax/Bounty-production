@@ -937,7 +937,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
               style={s.huntersPill}
               accessibilityRole="text"
               accessibilityLabel={`${activeHuntersCount} active ${
-                activeHuntersCount === 1 ? 'user' : 'users'
+                activeHuntersCount === 1 ? 'hunter' : 'hunters'
               } within ${activeHuntersRadius} miles of you`}
               testID="feed-active-hunters-caption"
             >
@@ -959,7 +959,7 @@ export const BountyFeed = forwardRef<BountyFeedHandle, BountyFeedProps>(function
                     Active
                   </Text>
                   <Text style={s.huntersPillSubtext} numberOfLines={1}>
-                    {activeHuntersCount === 1 ? 'user' : 'users'}
+                    {activeHuntersCount === 1 ? 'hunter' : 'hunters'}
                   </Text>
                 </View>
               </View>

@@ -91,7 +91,7 @@ export async function searchBountiesNearby(params: {
 export const ACTIVE_HUNTERS_RADIUS_MILES = 30;
 
 /**
- * How many recently-active users are within ACTIVE_HUNTERS_RADIUS_MILES of a
+ * How many recently-active hunters are within ACTIVE_HUNTERS_RADIUS_MILES of a
  * point, excluding the caller.
  *
  * Returns a count and never any rows — the underlying function is definer-only
@@ -128,15 +128,14 @@ export async function countActiveHuntersNearby(params: {
  * people's nearby queries.
  *
  * This exists because nothing else in the app writes profiles.latitude /
- * longitude — all 249 production rows are NULL, which is why geom is NULL for
- * every row and why any radius feature reads zero until coordinates start
- * landing. Callers must only invoke this when location permission is granted.
+ * longitude — all 249 production rows are NULL, so any radius feature reads
+ * zero until coordinates start landing. Callers must only invoke this when
+ * location permission is granted.
  *
  * latitude/longitude are not in the protected-column set enforced by
  * prevent_client_writes_to_protected_profile_columns, so an own-row update is
- * allowed; geom is then derived by fn_profiles_sync_geom. Coordinates are not
- * exposed by public_profiles, so storing them does not make them readable by
- * other users — only the aggregate count is.
+ * allowed. Coordinates are not exposed by public_profiles, so storing them does
+ * not make them readable by other users — only the aggregate count is.
  */
 export async function updateMyCoordinates(params: {
   userId: string;
