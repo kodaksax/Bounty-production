@@ -3,10 +3,11 @@
 import { MaterialIcons } from "@expo/vector-icons"
 import { BrandingLogo } from "components/ui/branding-logo"
 import { useMemo, useState } from "react"
-import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { buildDepositSuccessMessage, useWalletDeposit } from '../hooks/use-wallet-deposit'
 import { SIZING, SPACING, TYPOGRAPHY } from '../lib/constants/accessibility'
+import { getBottomNavBaseClearance } from '../lib/constants/navigation'
 import { hapticFeedback } from '../lib/haptic-feedback'
 import { useAppThemeContext } from '../lib/themes/AppThemeContext'
 import type { AppTheme } from '../lib/themes/types'
@@ -33,6 +34,40 @@ const ON_PRIMARY_TEXT = '#052e1b'
 
 const KEYPAD_ROWS: number[][] = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
 
+const clamp = (value: number, min: number, max: number) => Math.round(Math.min(max, Math.max(min, value)))
+
+/**
+ * Derives the amount/keypad/action sizes from the viewport instead of
+ * hardcoding them, mirroring BottomNav's `getCenterMetrics`. The same layout
+ * has to fit a 320pt SE and a 430pt Pro Max: fixed 52pt keys plus a fixed 42pt
+ * amount pushed the action buttons past the bottom of a short screen, while on
+ * a tall one everything sat clustered in the middle.
+ *
+ * Keys are sized off BOTH axes — width so three keys plus their gaps always fit
+ * inside the screen padding, height so four rows can't grow taller than the
+ * room left over once the header, amount and action buttons have taken theirs.
+ */
+function getScreenMetrics(width: number, height: number) {
+  const horizontalPadding = clamp(width * 0.07, SPACING.SCREEN_HORIZONTAL, 32)
+  const keySize = clamp(Math.min(width * 0.17, height * 0.085), 44, 68)
+  // Whatever horizontal room the three keys leave over, capped so the keypad
+  // never spreads into a sparse grid on a wide device.
+  const gapRoom = (width - horizontalPadding * 2 - keySize * 3) / 2
+  const keyGap = clamp(Math.min(width * 0.06, gapRoom), 8, 28)
+  return {
+    horizontalPadding,
+    keySize,
+    keyGap,
+    keyFontSize: clamp(keySize * 0.38, 18, 26),
+    keyIconSize: clamp(keySize * 0.42, 20, 28),
+    rowGap: clamp(height * 0.012, 6, 16),
+    amountFontSize: clamp(Math.min(width * 0.12, height * 0.06), 32, 56),
+    buttonHeight: clamp(height * 0.065, SIZING.BUTTON_HEIGHT_DEFAULT, SIZING.BUTTON_HEIGHT_LARGE),
+  }
+}
+
+type ScreenMetrics = ReturnType<typeof getScreenMetrics>
+
 export function AddMoneyScreen({ onBack, onAddMoney, initialAmount, headerLabel, primaryCtaLabel }: AddMoneyScreenProps) {
   const [amount, setAmount] = useState<string>(initialAmount || "0")
   const {
@@ -46,7 +81,9 @@ export function AddMoneyScreen({ onBack, onAddMoney, initialAmount, headerLabel,
   } = useWalletDeposit()
   const { theme } = useAppThemeContext()
   const insets = useSafeAreaInsets()
-  const styles = useMemo(() => makeStyles(theme), [theme])
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions()
+  const metrics = useMemo(() => getScreenMetrics(windowWidth, windowHeight), [windowWidth, windowHeight])
+  const styles = useMemo(() => makeStyles(theme, metrics), [theme, metrics])
 
   const handleNumberPress = (num: number) => {
     hapticFeedback.selection()
@@ -132,7 +169,7 @@ export function AddMoneyScreen({ onBack, onAddMoney, initialAmount, headerLabel,
       >
         {/* Amount Display */}
         <View style={styles.amountSection}>
-          <Text style={styles.amountLabel}>{headerLabel || 'ADD CASH'}</Text>
+          <Text style={styles.amountLabel}>{headerLabel || 'ADD CASh'}</Text>
           <Text
             style={styles.amountText}
             accessibilityRole="text"
@@ -200,14 +237,18 @@ export function AddMoneyScreen({ onBack, onAddMoney, initialAmount, headerLabel,
               accessibilityRole="button"
               accessibilityLabel="Delete last digit"
             >
-              <MaterialIcons name="backspace" size={24} color={theme.textSecondary} />
+              <MaterialIcons name="backspace" size={metrics.keyIconSize} color={theme.textSecondary} />
             </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
 
-      {/* Actions */}
-      <View style={[styles.actions, { paddingBottom: insets.bottom + 16 }]}>
+      {/* Actions. The floating BottomNav is position:absolute and overlays this
+          screen, so the footer has to clear its visible height as well as the
+          device safe area — same treatment as withdraw-with-bank-screen and
+          instant-cash-out-screen. Padding it with only insets.bottom left both
+          buttons hidden underneath the nav bar. */}
+      <View style={[styles.actions, { paddingBottom: getBottomNavBaseClearance(insets.bottom, 16) }]}>
         {/* Apple Pay button (iOS only).
             Always rendered on iOS — even when no card is provisioned in the
             Wallet app — so the Apple Pay integration is discoverable (the tap
@@ -326,7 +367,7 @@ export function AddMoneyScreen({ onBack, onAddMoney, initialAmount, headerLabel,
   )
 }
 
-function makeStyles(theme: AppTheme) {
+function makeStyles(theme: AppTheme, metrics: ScreenMetrics) {
   return StyleSheet.create({
     container: {
       flex: 1,
@@ -368,7 +409,7 @@ function makeStyles(theme: AppTheme) {
     },
     amountText: {
       color: theme.text,
-      fontSize: 42,
+      fontSize: metrics.amountFontSize,
       fontWeight: '800',
     },
     errorWrapper: {
@@ -382,9 +423,9 @@ function makeStyles(theme: AppTheme) {
     // is handled by the parent ScrollView's contentContainerStyle instead,
     // which centers when there's extra room and scrolls when there isn't.
     keypadSection: {
-      paddingHorizontal: 24,
+      paddingHorizontal: metrics.horizontalPadding,
       paddingVertical: SPACING.COMPACT_GAP,
-      gap: 8,
+      gap: metrics.rowGap,
     },
     // Centered with a fixed inter-key gap (not space-between) so key spacing
     // stays proportional to key size regardless of screen width — on a wide
@@ -393,32 +434,32 @@ function makeStyles(theme: AppTheme) {
     keypadRow: {
       flexDirection: 'row',
       justifyContent: 'center',
-      gap: 22,
+      gap: metrics.keyGap,
     },
     keypadKey: {
-      width: 52,
-      height: 52,
-      borderRadius: 26,
+      width: metrics.keySize,
+      height: metrics.keySize,
+      borderRadius: metrics.keySize / 2,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.surfaceSecondary,
     },
     keypadKeyText: {
       color: theme.text,
-      fontSize: 20,
+      fontSize: metrics.keyFontSize,
       fontWeight: '600',
     },
     actions: {
-      paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
+      paddingHorizontal: metrics.horizontalPadding,
       paddingTop: SPACING.COMPACT_GAP,
     },
     applePayButton: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      minHeight: SIZING.BUTTON_HEIGHT_DEFAULT,
+      minHeight: metrics.buttonHeight,
       borderRadius: 999,
-      marginBottom: SPACING.COMPACT_GAP,
+      marginBottom: SPACING.ELEMENT_GAP,
     },
     applePayButtonText: {
       fontSize: TYPOGRAPHY.SIZE_BODY,
@@ -428,7 +469,7 @@ function makeStyles(theme: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      minHeight: SIZING.BUTTON_HEIGHT_DEFAULT,
+      minHeight: metrics.buttonHeight,
       borderRadius: 999,
       backgroundColor: theme.primary,
     },

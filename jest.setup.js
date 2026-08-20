@@ -169,6 +169,12 @@ jest.mock('react-native', () => {
     Dimensions: {
       get: jest.fn().mockReturnValue({ width: 375, height: 812 }),
     },
+    // Hook form of Dimensions.get('window'), kept in sync with the mock above.
+    // Components that size themselves off the viewport (BottomNav,
+    // AddMoneyScreen) call this on every render, so it has to exist or they
+    // throw before rendering anything. Declared with an implementation rather
+    // than mockReturnValue so a suite's jest.clearAllMocks() can't strip it.
+    useWindowDimensions: jest.fn(() => ({ width: 375, height: 812, scale: 2, fontScale: 1 })),
     NativeModules: {
       StatusBarManager: {
         HEIGHT: 20,
