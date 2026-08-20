@@ -528,11 +528,13 @@ export function SignInForm() {
         ]);
         const lockout = savedLockout ? parseInt(savedLockout, 10) : NaN;
         if (Number.isFinite(lockout) && Date.now() < lockout) {
-          setLockoutUntil(lockout);
+          setLockoutUntil((currentLockout) =>
+            currentLockout === null ? lockout : Math.max(currentLockout, lockout)
+          );
         }
         const attempts = savedAttempts ? parseInt(savedAttempts, 10) : NaN;
         if (Number.isFinite(attempts) && attempts > 0) {
-          setLoginAttempts(attempts);
+          setLoginAttempts((currentAttempts) => Math.max(currentAttempts, attempts));
         }
       } catch (error) {
         console.error('[sign-in] Failed to load login throttle:', error);
@@ -547,18 +549,18 @@ export function SignInForm() {
   useEffect(() => {
     if (!throttleHydrated) return;
     if (loginAttempts > 0) {
-      storage.setItem(LOGIN_ATTEMPTS_KEY, String(loginAttempts));
+      void storage.setItem(LOGIN_ATTEMPTS_KEY, String(loginAttempts));
     } else {
-      storage.removeItem(LOGIN_ATTEMPTS_KEY);
+      void storage.removeItem(LOGIN_ATTEMPTS_KEY);
     }
   }, [loginAttempts, throttleHydrated]);
 
   useEffect(() => {
     if (!throttleHydrated) return;
     if (lockoutUntil !== null) {
-      storage.setItem(LOCKOUT_UNTIL_KEY, String(lockoutUntil));
+      void storage.setItem(LOCKOUT_UNTIL_KEY, String(lockoutUntil));
     } else {
-      storage.removeItem(LOCKOUT_UNTIL_KEY);
+      void storage.removeItem(LOCKOUT_UNTIL_KEY);
     }
   }, [lockoutUntil, throttleHydrated]);
 
