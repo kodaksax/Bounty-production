@@ -1,0 +1,44 @@
+# Line endings are a fingerprint input.
+#
+# `runtimeVersion` uses the "fingerprint" policy, and @expo/fingerprint hashes
+# the raw bytes of a number of tracked text files (.gitignore, eas.json,
+# plugins/*.js, patches/*.patch, config-plugin inputs such as
+# lib/config/apple-pay.json). A CRLF checkout therefore produces a completely
+# different runtimeVersion than an LF checkout of the same commit — see
+# docs/deployment/EAS_UPDATE_POLICY.md.
+#
+# That is not hypothetical: iOS build 2.0.5(85) (Windows, core.autocrlf=true)
+# and 2.0.5(86) (Linux) were the same commit and got different fingerprints,
+# purely because of CRLF vs LF. EAS Build and the GitHub Actions OTA workflow
+# both run on Linux, so LF is the only checkout that can ever agree with them.
+#
+# The repository index has always been LF, so this file changes nothing that is
+# committed — it only stops Git from rewriting to CRLF on checkout.
+* text=auto eol=lf
+
+# Windows batch files genuinely require CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Never touch binary assets.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.icns binary
+*.pdf binary
+*.zip binary
+*.jar binary
+*.keystore binary
+*.p8 binary
+*.p12 binary
+*.mobileprovision binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.mp4 binary
+*.mov binary
+*.lottie binary

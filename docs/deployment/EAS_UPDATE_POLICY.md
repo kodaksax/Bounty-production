@@ -32,6 +32,44 @@ to prefer `fingerprint` when native code/config can change without a version bum
 surface, not a number someone has to remember to bump. An OTA update published for one runtime
 version physically cannot land on a build with a different one.
 
+## Keeping fingerprints reproducible
+
+The fingerprint policy only works if the same commit produces the same hash everywhere. Three
+things broke that in August 2026 and left production un-updatable; all three are now guarded.
+
+**Line endings.** `@expo/fingerprint` hashes the raw bytes of tracked text files — `.gitignore`,
+`eas.json`, `plugins/*.js`, `patches/*.patch`, and config-plugin inputs such as
+`lib/config/apple-pay.json` and `lib/config/supabase-refs.json`. With `core.autocrlf=true` on
+Windows, those files are CRLF in the working tree, while EAS Build and the GitHub Actions workflow
+check them out as LF on Linux — so the *same commit* fingerprints differently depending on who
+runs it. iOS builds 2.0.5(85) and 2.0.5(86) were the same commit and got different fingerprints for
+exactly this reason. `.gitattributes` now pins `eol=lf`, which makes a Windows checkout
+byte-identical to the Linux one. The index was already 100% LF, so nothing tracked changed content.
+
+If your working copy predates `.gitattributes`, refresh it once:
+
+```bash
+git config core.autocrlf false
+git rm --cached -r . && git reset --hard   # requires a clean tree
+npm ci                                     # re-applies patches/ against LF sources
+```
+
+`npm ci` matters: `patch-package` writes the patch's line endings into `node_modules`, and
+`node_modules/expo-updates/ios` is itself a fingerprint source.
+
+**`expo.version` is a fingerprint input.** Builds 2.0.5(86) and 2.0.6(87) are the same commit and
+differ *only* by the version string, and still got different fingerprints. Every version bump
+therefore invalidates OTA compatibility with every build already in the field. The remedy is a
+`fingerprint.config.js` declaring `SourceSkips.ExpoConfigVersions` (plus `PackageJsonScriptsAll`,
+since adding any unrelated npm script has the same effect) — but adding it *changes* the hash, so
+it can only land together with a native build for both platforms, not on its own.
+
+**Build only from committed, merged code.** `eas build` uploads the working tree, not the commit.
+Build 2.0.6(87) — the binary currently in the App Store — was produced from branch
+`fix/hermes-compiler-bytecode-mismatch`, which was not on `main`, plus an uncommitted `app.json`
+version bump. Nothing in git reproduced it, so no OTA update could reach it until `main` was
+reconciled with what actually shipped. Build from `main`, with a clean `git status`.
+
 ## How to publish a production OTA update
 
 Production OTA updates are published **only** through the
@@ -71,6 +109,25 @@ The job:
   publishes can't race each other.
 
 To check compatibility locally without publishing: `npm run update:production:check`.
+
+### When the two stores hold different builds
+
+The guardrail checks every platform and fails if any one of them mismatches. If the latest iOS
+build and the latest Android build came from different commits, no working tree is compatible with
+both and every publish is blocked until the lagging platform is rebuilt.
+
+Narrow the publish instead of reaching for `update:production:raw`:
+
+```bash
+npm run update:production -- --platforms=ios
+```
+
+The selected platforms are passed to *both* the guardrail and `eas update`, so an unverified
+platform is never published. That restriction matters: an update published for a platform whose
+installed builds match no runtime version reaches nobody, while `eas update` still exits 0 and the
+group still shows up in `eas update:list` — an OTA that looks shipped and isn't. The excluded
+platform stays on the JS baked into its installed build until it gets a native build from the same
+commit.
 
 ### Emergency manual publish (discouraged)
 

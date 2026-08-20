@@ -15,6 +15,10 @@
  * CI workflow does, prints exactly what is about to be published, and prints
  * what actually landed afterward so success can be verified rather than assumed.
  *
+ * Usage:
+ *   npm run update:production
+ *   npm run update:production -- --platforms=ios      # only publish/verify iOS
+ *
  * See docs/deployment/EAS_UPDATE_POLICY.md.
  */
 
@@ -29,6 +33,43 @@ const ENVIRONMENT = 'production';
 // app.json -> expo.extra.eas.projectId. Kept in sync manually; this is a sanity
 // check, not the source of truth (app.json/eas.json remain that).
 const EXPECTED_PROJECT_ID = 'b5485f88-0b1f-4622-bbed-b1ae142dcb46';
+const ALL_PLATFORMS = ['ios', 'android'];
+
+/**
+ * Resolve which platforms this publish covers, from `--platforms=ios,android`.
+ *
+ * Defaults to both. A narrower scope exists because the two stores can drift
+ * apart: if the latest iOS build and the latest Android build were produced
+ * from different commits, no single working tree can be fingerprint-compatible
+ * with both, and a both-platforms run is unpublishable until the lagging
+ * platform is rebuilt. The escape hatch has to be a first-class, guardrailed
+ * option — otherwise the only way out is `update:production:raw`, which skips
+ * the compatibility check entirely and is exactly how the 2026-08-11 incident
+ * happened.
+ *
+ * Whatever is chosen here is applied to BOTH the guardrail and `eas update`,
+ * so an unverified platform is never published rather than published blind.
+ */
+function parsePlatforms(argv) {
+  const flag = argv.find(arg => arg.startsWith('--platforms='));
+  if (!flag) return ALL_PLATFORMS;
+
+  const platforms = flag
+    .slice('--platforms='.length)
+    .split(',')
+    .map(p => p.trim().toLowerCase())
+    .filter(Boolean);
+
+  const invalid = platforms.filter(p => !ALL_PLATFORMS.includes(p));
+  if (platforms.length === 0 || invalid.length > 0) {
+    console.error(
+      `[update:production] BLOCKED: invalid --platforms value "${flag}". ` +
+        `Expected a comma-separated subset of: ${ALL_PLATFORMS.join(',')}.`
+    );
+    process.exit(1);
+  }
+  return [...new Set(platforms)];
+}
 
 function runInherited(cmd, args, extraEnv) {
   const result = spawnSync(cmd, args, {
@@ -50,12 +91,28 @@ function runCaptured(cmd, args) {
 }
 
 function main() {
+  const platforms = parsePlatforms(process.argv.slice(2));
+
   console.log('='.repeat(72));
   console.log('[update:production] Publishing a PRODUCTION EAS Update (OTA JS update)');
   console.log(`  branch:      ${BRANCH}`);
   console.log(`  channel:     ${CHANNEL}`);
   console.log(`  environment: ${ENVIRONMENT}`);
+  console.log(
+    `  platforms:   ${platforms.join(',')}${
+      platforms.length === ALL_PLATFORMS.length ? '' : '  (narrowed via --platforms)'
+    }`
+  );
   console.log('='.repeat(72));
+
+  if (platforms.length !== ALL_PLATFORMS.length) {
+    const excluded = ALL_PLATFORMS.filter(p => !platforms.includes(p));
+    console.warn(
+      `\n[update:production] NOTE: ${excluded.join(', ')} is excluded from this publish. Users on ` +
+        `${excluded.join(', ')} will NOT receive this update and will stay on the JS baked into their ` +
+        `installed build until a new native build is made from this commit and they update.`
+    );
+  }
 
   // 1. Verify this CLI/account actually resolves to the expected project.
   //    A wrong-account login would otherwise publish to (or fail against) a
@@ -101,7 +158,7 @@ function main() {
       path.join(__dirname, 'eas-update-guardrails.js'),
       `--channel=${CHANNEL}`,
       `--environment=${ENVIRONMENT}`,
-      '--platforms=ios,android',
+      `--platforms=${platforms.join(',')}`,
     ],
     { APP_ENV: ENVIRONMENT }
   );
@@ -117,7 +174,19 @@ function main() {
   console.log('\n[update:production] Guardrails passed. Publishing...\n');
   const publishStatus = runInherited(
     'eas',
-    ['update', '--branch', BRANCH, '--environment', ENVIRONMENT],
+    [
+      'update',
+      '--branch',
+      BRANCH,
+      '--environment',
+      ENVIRONMENT,
+      // Publish exactly what was verified above. Passing 'all' when only one
+      // platform cleared the guardrail would publish an update the other
+      // platform's installed builds can never match — a silent no-op that
+      // still looks like a successful publish in `eas update:list`.
+      '--platform',
+      platforms.length === ALL_PLATFORMS.length ? 'all' : platforms[0],
+    ],
     {
       APP_ENV: ENVIRONMENT,
     }
