@@ -334,21 +334,33 @@ export const bountyService = {
    * escrow is funded at publish time against the published amount, so changing
    * it afterwards would desync the bounty from its escrow row.
    *
-   * IMPORTANT — adding a location here does NOT notify nearby hunters. Both
-   * proximity triggers (trg_bounties_notify_zip_matched_users and
-   * trg_bounties_notify_service_area) are AFTER INSERT only, so a bounty that
-   * is published without coordinates and geocoded afterwards becomes findable
-   * in the radius feed but never fires its "New Bounty Near You" notification.
+   * Adding a location here DOES notify nearby hunters: the proximity
+   * dispatchers also run on the update that first gives a bounty coordinates
+   * or a zip code (20260821120000_notify_nearby_when_location_added.sql).
+   * That dispatch is one-shot per bounty and only for a bounty still open and
+   * posted within the last 24 hours, so editing an address later never
+   * re-notifies the neighbourhood.
    */
   async updateBountyDetails(
     bountyId: string | number,
     draft: BountyDraft
   ): Promise<Bounty | null> {
+    // Offline publishes hand back a synthetic `temp-...` id (see createBounty)
+    // — the row does not exist yet, so an update would silently match nothing.
+    // Fail loudly instead, so the confirmation screen keeps the poster's edits
+    // and tells them the truth rather than reporting a save that never landed.
+    if (typeof bountyId === 'string' && bountyId.startsWith('temp-')) {
+      throw new Error(
+        "This bounty hasn't finished posting yet. Reconnect and add these details from My Postings once it's live."
+      );
+    }
+
     const isInPerson = draft.workType === 'in_person';
 
     const updates: Partial<Omit<Bounty, 'id' | 'created_at'>> = {
       title: draft.title,
-      description: draft.description,
+      // description is NOT NULL in the database — never send an explicit null.
+      description: draft.description ?? '',
       // Mirrors createBounty: an online bounty carries no address/coordinates.
       // Use null (not undefined) so Supabase explicitly clears these columns
       // when switching from in-person to online or removing location/schedule.
@@ -367,12 +379,31 @@ export const bountyService = {
       latest_arrival_time: draft.latestArrivalTime ?? null,
       duration_minutes: draft.durationMinutes ?? null,
       conditional_end_note: draft.conditionalEndNote ?? null,
-      is_time_sensitive: draft.scheduleType === 'asap' ? true : null,
+      // MUST stay a boolean: bounties.is_time_sensitive is NOT NULL DEFAULT
+      // false. createBounty gets away with `undefined` (the key is dropped
+      // before it reaches PostgREST), but on an UPDATE an explicit null is
+      // sent and Postgres rejects the whole statement with 23502 — which
+      // silently dropped every non-ASAP detail save, photos and location
+      // included, since they go out in the same payload.
+      is_time_sensitive: draft.scheduleType === 'asap',
       attachments_json: JSON.stringify(draft.attachments || []),
-    };
+      // Keep the legacy `attachments` jsonb column in step with
+      // attachments_json — components/bountydetailmodal.tsx reads it first
+      // and only falls through to attachments_json when it is empty.
+      attachments: draft.attachments || [],
+    } as Partial<Omit<Bounty, 'id' | 'created_at'>> & { attachments?: unknown[] };
 
     try {
       const updated = await baseBountyService.update(bountyId, updates);
+
+      // baseBountyService.update swallows its errors and resolves to null, so
+      // a rejected write (RLS, network, bad column) would otherwise look like
+      // a success here and the confirmation screen would show details that
+      // were never persisted. Convert it back into a throw so the caller's
+      // retry path runs.
+      if (!updated) {
+        throw new Error('Could not save these details. Please try again.');
+      }
 
       await analyticsService.trackEvent('bounty_details_added', {
         bountyId: String(bountyId),
