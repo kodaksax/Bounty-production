@@ -1,12 +1,8 @@
 /**
- * poster_first variant of the onboarding welcome screen — see
- * app/onboarding/welcome.tsx (which resolves the first_screen_variant flag
- * and picks between this component and the original control layout) and
- * lib/experiments/first-screen-variant.ts.
- *
- * Brand green lives on the Poster CTA here (inverted from the control
- * screen, where it's on the Hunter CTA) — that inversion is the point of
- * this variant.
+ * The onboarding welcome screen — see app/onboarding/welcome.tsx, which
+ * renders this unconditionally. Originally the 'poster_first' arm of the
+ * 'welcome-page-redesign' PostHog experiment (the control layout it won
+ * against was deleted 2026-08-24 once the flag rolled out to 100% test).
  */
 
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';

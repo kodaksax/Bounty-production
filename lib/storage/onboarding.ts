@@ -10,7 +10,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /** Prefix for the per-user AsyncStorage key for the onboarding-completed flag. */
-const ONBOARDING_COMPLETED_KEY_PREFIX = '@bounty_onboarding_completed:';
+export const ONBOARDING_COMPLETED_KEY_PREFIX = '@bounty_onboarding_completed:';
 
 /**
  * Device-wide (not per-user) flag: has anyone ever successfully signed in or
@@ -19,7 +19,7 @@ const ONBOARDING_COMPLETED_KEY_PREFIX = '@bounty_onboarding_completed:';
  * now — the former sees the onboarding welcome screen instead of the log-in
  * form; the latter sees the normal log-in form.
  */
-const HAS_SIGNED_IN_BEFORE_KEY = '@bounty_has_signed_in_before';
+export const HAS_SIGNED_IN_BEFORE_KEY = '@bounty_has_signed_in_before';
 
 /** Marks this device as having completed at least one sign-in/sign-up. */
 export async function markDeviceHasSignedIn(): Promise<void> {

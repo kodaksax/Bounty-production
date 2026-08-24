@@ -87,21 +87,17 @@ export type AnalyticsEvent =
   | 'onboarding_started'
   | 'onboarding_resumed'
   | 'onboarding_role_selected'
-  // 'welcome-page-redesign' PostHog experiment (see
-  // lib/experiments/first-screen-variant.ts): control vs poster_first arm of
-  // app/onboarding/welcome.tsx ('poster_first' is the flag's 'test'). Fired
-  // identically by both arms (in addition to the funnel events above, which
-  // both arms also still fire) so poster-tap-rate can be compared cleanly:
-  // poster taps ÷ total first_screen_cta_tapped where side != 'login'.
-  // first_screen_proof_impression only applies to the poster_first arm
-  // (control has no proof card).
+  // Fired by app/onboarding/welcome.tsx (the poster_first design, formerly
+  // the 'test' arm of the now-concluded 'welcome-page-redesign' PostHog
+  // experiment — the 'control' layout it was compared against was deleted
+  // 2026-08-24). `variant` is always 'poster_first' now; kept as a payload
+  // field for continuity with historical events grouped by it.
   | 'first_screen_viewed'
   | 'first_screen_proof_impression'
   | 'first_screen_cta_tapped'
-  // 'onboarding-skip-role-selection' PostHog experiment, test arm only: fired
-  // from the single "Get started" CTA that replaces the two intent buttons.
-  // Role is deferred to CombinedActivationPrompt (or inferred later from a
-  // real first action) instead of being picked here.
+  // Historical only — fired by the "Get started" CTA of the now-deleted
+  // 'onboarding-skip-role-selection' test arm. No longer emitted; kept so
+  // past events remain queryable under this type.
   | 'onboarding_role_selection_skipped'
   | 'onboarding_intent_switched'
   | 'onboarding_login_tapped'

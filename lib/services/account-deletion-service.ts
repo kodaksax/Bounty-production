@@ -15,35 +15,67 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApiBaseUrl } from '../config/api';
+import { storageKeyFor as onboardingDraftKeyFor } from '../context/onboarding-context';
+import {
+  getOnboardingCompleteKey,
+  HAS_SIGNED_IN_BEFORE_KEY,
+  ONBOARDING_COMPLETED_KEY_PREFIX,
+} from '../storage/onboarding';
 import { supabase } from '../supabase';
 
 /**
- * Clear all local storage data for the user
- * This should be called after successful account deletion to ensure
- * a fresh state for any future sign-ups with the same device
+ * Clear all local storage data for the deleted account so a later sign-up on
+ * this device — same email/new email, doesn't matter — starts genuinely
+ * fresh instead of resuming this account's state.
+ *
+ * Deliberately imports the real key names/helpers from the modules that own
+ * them (lib/storage/onboarding.ts, lib/context/onboarding-context.tsx)
+ * instead of re-typing them here: a prior hardcoded copy of this list
+ * (`@bounty_onboarding_complete`, `@bounty_onboarding_completed` with no
+ * `:userId` suffix) had drifted out of sync with the keys those modules
+ * actually write, so this function was silently a no-op for onboarding state
+ * — a deleted-and-recreated account on the same device could resume the
+ * deleted account's in-progress onboarding draft and welcome-screen
+ * experiment arm instead of starting over.
+ *
+ * `HAS_SIGNED_IN_BEFORE_KEY` is device-wide, not account-scoped, but is
+ * cleared here too: deleting the only account this device ever had should
+ * make the device behave like a first-time install again (onboarding
+ * welcome, not the returning-user sign-in form) rather than leaving a stale
+ * "this device has signed in before" flag pointed at an account that no
+ * longer exists.
  */
-async function clearLocalUserData(): Promise<void> {
+async function clearLocalUserData(userId: string): Promise<void> {
   try {
-    // Clear all profile and onboarding related keys
     const keysToRemove = [
-      '@bounty_onboarding_complete',
-      '@bounty_onboarding_completed',
+      getOnboardingCompleteKey(userId),
+      onboardingDraftKeyFor(userId),
+      onboardingDraftKeyFor(null), // anon pre-auth draft, in case it never migrated
+      HAS_SIGNED_IN_BEFORE_KEY,
+      // Legacy / non-onboarding local caches.
       'BE:userProfile',
       'BE:allProfiles',
       'BE:acceptedLegal',
+      'BE:isAdmin',
+      'BE:adminTabEnabled',
+      'BE:adminVerifiedAt',
       'profileData',
       'profileSkills',
     ];
-    
-    // Also clear any user-specific keys (those with userId in them)
+
+    // Also clear any user-specific keys (those with userId in them),
+    // including other accounts' leftovers on a shared device and any
+    // onboarding-completed/draft flag not already covered above.
     const allKeys = await AsyncStorage.getAllKeys();
-    const userSpecificKeys = allKeys.filter(key => 
-      key.includes('BE:userProfile:') || 
-      key.includes('profileData:') || 
-      key.includes('profileSkills:')
+    const userSpecificKeys = allKeys.filter(key =>
+      key.includes('BE:userProfile:') ||
+      key.includes('profileData:') ||
+      key.includes('profileSkills:') ||
+      key.startsWith(ONBOARDING_COMPLETED_KEY_PREFIX) ||
+      key.startsWith(`${onboardingDraftKeyFor(null)}:`)
     );
-    
-    await AsyncStorage.multiRemove([...keysToRemove, ...userSpecificKeys]);
+
+    await AsyncStorage.multiRemove([...new Set([...keysToRemove, ...userSpecificKeys])]);
   } catch (error) {
     console.error('[AccountDeletion] Error clearing local data:', error);
   }
@@ -256,8 +288,22 @@ export async function deleteUserAccount(): Promise<{
         };
       }
 
+      // The backend's admin.deleteUser can itself fail and fall back to a
+      // profile-only deletion (supabase/functions/auth/index.ts) — the auth
+      // identity survives, so this email can never be re-registered and,
+      // more importantly, the account can still authenticate. Surface this
+      // loudly instead of reporting a silent full success: this is what a
+      // later "email already registered" on an email the user believes was
+      // deleted traces back to.
+      if (result.warning === 'partial_deletion_auth_identity_retained') {
+        console.error(
+          '[AccountDeletion] PARTIAL DELETION: profile removed but auth identity retained for user',
+          userId
+        );
+      }
+
       // Clear all local user data before signing out
-      await clearLocalUserData();
+      await clearLocalUserData(userId);
 
       // Sign out the user after successful deletion
       // Note: supabase.auth.signOut() calls the storage adapter's removeItem,
@@ -266,8 +312,11 @@ export async function deleteUserAccount(): Promise<{
 
       return {
         success: true,
-        message: 'Account deleted successfully.\n\n' + 
-                 (cleanupDetails.length > 0 ? 'The following actions were taken:\n- ' + cleanupDetails.join('\n- ') : ''),
+        message: 'Account deleted successfully.\n\n' +
+                 (cleanupDetails.length > 0 ? 'The following actions were taken:\n- ' + cleanupDetails.join('\n- ') : '') +
+                 (result.warning === 'partial_deletion_auth_identity_retained'
+                   ? '\n\nNote: some account data could not be fully removed. Contact support if you plan to sign up again with the same email.'
+                   : ''),
         info,
       };
     } catch (fetchError: any) {
@@ -372,7 +421,7 @@ export async function deleteUserAccount(): Promise<{
         }
 
         // Clear all local user data before signing out
-        await clearLocalUserData();
+        await clearLocalUserData(userId);
 
         // Sign out the user
         // Note: supabase.auth.signOut() calls the storage adapter's removeItem,

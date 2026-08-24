@@ -213,12 +213,10 @@ export default function DetailsScreen() {
   // Initial (pre-location) preview: recent local bounties, recency-sorted —
   // matches what the location prompt shows before we know where the hunter
   // is. Once location/ZIP resolves, resolveNearby() re-ranks a fresh fetch by
-  // real distance instead. Also runs pre-choice for the 'onboarding-skip-role-
-  // selection' test arm, since CombinedActivationPrompt shows the same
-  // preview before intent is even set.
-  const needsPreviewFetch =
-    onboardingData.intent === 'hunter' ||
-    (onboardingData.experimentVariant === 'test' && !onboardingData.intent);
+  // real distance instead. Also runs pre-choice when intent isn't set yet,
+  // since CombinedActivationPrompt shows the same preview before intent is
+  // picked (see the no-intent fallback below).
+  const needsPreviewFetch = onboardingData.intent === 'hunter' || !onboardingData.intent;
   useEffect(() => {
     if (!needsPreviewFetch) return;
     let cancelled = false;
@@ -1085,11 +1083,12 @@ export default function DetailsScreen() {
     );
   }
 
-  // 'onboarding-skip-role-selection' experiment, test arm: welcome.tsx sent
-  // this user here with intent still null. Show the combined chooser instead
-  // of the generic profile-only form; picking a card sets intent and the
-  // branches above take over on the next render, unchanged.
-  if (onboardingData.experimentVariant === 'test') {
+  // Defensive fallback for a resumed draft that never got an intent (e.g. one
+  // persisted by an older build, before role selection became mandatory on
+  // welcome.tsx). Show the combined chooser instead of the generic
+  // profile-only form; picking a card sets intent and the branches above
+  // take over on the next render, unchanged.
+  if (!onboardingData.intent) {
     return (
       <CombinedActivationPrompt
         theme={theme}

@@ -57,11 +57,14 @@ The headline bug. **Do this on a freshly reinstalled app.**
 | A4 | PostHog: `auth_signup_success` then `onboarding_started` with `authenticated: true`. |
 | A5 | Complete onboarding through to the app. |
 
-> **Also run A with the role step skipped.** The `onboarding-skip-role-selection` test arm
-> ("Get started" instead of two role buttons) never records an intent, and that is the arm where
-> this failed 100% of the time. If PostHog buckets you into control, force the test arm from the
-> PostHog UI, or verify via the automated equivalent
-> (`__tests__/components/onboarding/onboarding-gate.test.tsx`, first case).
+> **Historical note (2026-08-24):** this used to also call out running A with the role step
+> skipped, via the `onboarding-skip-role-selection` PostHog test arm ("Get started" instead of two
+> role buttons) — that arm never recorded an intent, and is where this bug failed 100% of the
+> time. That arm's code was deleted once the flag was confirmed disabled in PostHog (see
+> `app/onboarding/welcome.tsx`'s top comment), so there is no longer a "skip role selection" path
+> to force. The automated equivalent, `__tests__/components/onboarding/onboarding-gate.test.tsx`
+> (first case), still covers a signed-in user with no recorded intent — that scenario can still
+> happen for a resumed draft from an older build.
 
 ### B. Wrong password is fully recoverable
 
@@ -189,6 +192,31 @@ Use iOS Network Link Conditioner ("Very Bad Network" / 3G) or Android emulator t
 | J2 | Taken username → clear message, form still usable. |
 | J3 | Kill the network **right after** tapping Create Account → either you land in onboarding, or you get the **"Your account is ready — Sign In"** recovery screen. Never a dead end, and never "sign-up failed" for an account that exists. |
 | J4 | From J3's recovery screen, **Sign In** works and the email is **prefilled**. |
+
+### K. Delete account → recreate on the same device (P0)
+
+Added 2026-08-24 after a report that a deleted-and-recreated account landed in an "old/legacy"
+onboarding experience. Root cause: `clearLocalUserData()` in
+`lib/services/account-deletion-service.ts` was clearing a hardcoded list of AsyncStorage key names
+that no longer matched what the app actually writes, so **in-app account deletion was a near
+no-op for local state** — unlike the delete-and-reinstall reset used in "Before you start" above,
+which wipes AsyncStorage entirely by construction. See `app/onboarding/welcome.tsx`'s top comment
+for the related welcome-screen-experiment-arm caching bug fixed at the same time.
+
+1. Sign in as `OLD@…` (or any account), get partway or all the way through onboarding.
+2. **Settings → Delete Account** (in-app deletion — do *not* reinstall the app for this test; the
+   whole point is that in-app deletion must clean up as thoroughly as a reinstall does).
+3. Immediately register a **brand-new** account (`NEW@…`) on the same device, same session.
+
+| Check | Expected |
+|---|---|
+| K1 | Step 1's app opens on **Welcome**, not the log-in form — `@bounty_has_signed_in_before` was cleared. |
+| K2 | The new account lands on the **current** welcome screen (proof-card / poster-first layout) — there is no other design left for it to fall back to. |
+| K3 | Onboarding starts genuinely fresh: no leftover bio/skills/task text, no role pre-selected from the deleted account's draft. |
+| K4 | `AsyncStorage` has no lingering `@bounty_onboarding_state`, `@bounty_onboarding_state:<oldUserId>`, or `@bounty_onboarding_completed:<oldUserId>` keys (inspect via Flipper/React Native debugger if available). |
+| K5 | If the deletion response logged `PARTIAL DELETION` (Metro/device console), re-registering with the **same** email correctly fails with "already registered" rather than silently succeeding — file that as its own bug, it means the backend's `admin.deleteUser` failed and only the profile row was removed. |
+
+Automated equivalent: `__tests__/lib/services/account-deletion-service.test.ts`.
 
 ---
 
