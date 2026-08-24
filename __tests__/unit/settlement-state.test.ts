@@ -242,9 +242,24 @@ describe('the derive trigger mirrors the shared module', () => {
   });
 
   test('the trigger encodes the same four outcomes as the module', () => {
-    expect(deriveTriggerSql).toMatch(/stripe_payout_status = 'paid'[\s\S]*?'stripe_settled'/);
+    expect(deriveTriggerSql).toMatch(/p_payout_status = 'paid'[\s\S]*?'stripe_settled'/);
     expect(deriveTriggerSql).toMatch(/IN \('failed', 'canceled'\)[\s\S]*?'stripe_failed'/);
-    expect(deriveTriggerSql).toMatch(/stripe_payout_id.*?IS NULL[\s\S]*?'ledger_only'/);
+    expect(deriveTriggerSql).toMatch(/p_payout_id.*?IS NULL[\s\S]*?'ledger_only'/);
+  });
+
+  test('the shared rule takes no LEDGER status parameter', () => {
+    // The signature is the guardrail. `p_payout_status` is permitted and
+    // required — that is Stripe's own payout.status, i.e. evidence. What must
+    // never appear is the ledger's own `status`, which is the application's
+    // belief and is what the 25 historical rows prove cannot be trusted.
+    const signature = deriveTriggerSql.slice(
+      deriveTriggerSql.indexOf('FUNCTION public.fn_settlement_state_for('),
+      deriveTriggerSql.indexOf('RETURNS public.settlement_state_enum')
+    );
+    expect(signature.length).toBeGreaterThan(50);
+    expect(signature).toMatch(/p_payout_status\s+text/); // evidence: required
+    expect(signature).not.toMatch(/\bp_status\b/); // belief: forbidden
+    expect(signature).not.toMatch(/\bp_ledger_status\b/);
   });
 });
 
@@ -402,11 +417,44 @@ describe('migration set', () => {
     expect(expected).toEqual([...expected].sort());
   });
 
-  test('the backfill re-derives through the trigger rather than duplicating the CASE', () => {
+  test('the backfill calls the shared rule rather than duplicating the CASE', () => {
     const backfill = read('supabase/migrations/20260824010300_backfill_settlement_state.sql');
-    expect(backfill).toMatch(/UPDATE public\.wallet_transactions SET updated_at = updated_at/);
+    expect(backfill).toMatch(/SET settlement_state = public\.fn_settlement_state_for\(/);
     // A second implementation of the rule is a second thing that can be wrong.
-    expect(backfill).not.toMatch(/stripe_payout_status = 'paid'\s+THEN/);
+    const executable = backfill
+      .split('\n')
+      .map(l => l.replace(/--.*$/, ''))
+      .join('\n');
+    expect(executable).not.toMatch(/WHEN p_payout_status = 'paid'/);
+  });
+
+  test('the backfill does not silently rewrite updated_at on a financial ledger', () => {
+    // set_updated_at() is `NEW.updated_at = NOW()` unconditionally, so ANY
+    // update to this table rewrites the audit timestamp unless the trigger is
+    // suppressed. An earlier draft used `SET updated_at = updated_at` believing
+    // it a no-op; it was not.
+    const backfill = read('supabase/migrations/20260824010300_backfill_settlement_state.sql');
+    expect(backfill).not.toMatch(
+      /UPDATE public\.wallet_transactions\s+SET updated_at = updated_at/
+    );
+    expect(backfill).toMatch(
+      /DISABLE TRIGGER trg_wallet_transactions_updated_at/
+    );
+    expect(backfill).toMatch(/ENABLE TRIGGER trg_wallet_transactions_updated_at/);
+  });
+
+  test('the backfill does not broadcast fabricated change events', () => {
+    const backfill = read('supabase/migrations/20260824010300_backfill_settlement_state.sql');
+    expect(backfill).toMatch(/DISABLE TRIGGER wallet_transactions_broadcast_trigger/);
+    expect(backfill).toMatch(/ENABLE TRIGGER wallet_transactions_broadcast_trigger/);
+  });
+
+  test('every disabled trigger is re-enabled', () => {
+    const backfill = read('supabase/migrations/20260824010300_backfill_settlement_state.sql');
+    const disabled = [...backfill.matchAll(/DISABLE TRIGGER (\w+)/g)].map(m => m[1]);
+    const enabled = [...backfill.matchAll(/ENABLE TRIGGER (\w+)/g)].map(m => m[1]);
+    expect(disabled.length).toBeGreaterThan(0);
+    expect([...disabled].sort()).toEqual([...enabled].sort());
   });
 
   test('the backfill asserts its own invariants instead of trusting the run', () => {

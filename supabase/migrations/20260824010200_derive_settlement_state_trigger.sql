@@ -20,55 +20,93 @@
 -- settlement-state.test.ts asserts the two agree; if you edit one, edit both.
 -- =====================================================================
 
+-- ─── The rule, as a callable function ───────────────────────────────────────
+-- Extracted from the trigger body so the backfill can invoke the SAME code
+-- rather than restating the CASE. A backfill that computes the value
+-- independently is a second implementation that can disagree with the first,
+-- and a settlement classification that disagrees with itself is worse than
+-- none.
+--
+-- IMMUTABLE: output depends only on the arguments, so Postgres may inline it
+-- into the trigger and the backfill alike.
+CREATE OR REPLACE FUNCTION public.fn_settlement_state_for(
+  p_type              text,
+  p_payout_id         text,
+  p_payout_status     text,
+  p_transfer_id       text,
+  p_charge_id         text,
+  p_payment_intent_id text,
+  p_refund_id         text
+)
+RETURNS public.settlement_state_enum
+LANGUAGE sql
+IMMUTABLE
+SET search_path = public
+AS $$
+  -- NOTE: there is no `status` parameter, and that is the point. `status` is
+  -- what the application believes; a Stripe id is what Stripe can prove. Of the
+  -- 27 withdrawals marked completed before 2026-08-16, 25 have no payout id —
+  -- a rule that trusted `status` would certify exactly those as settled, which
+  -- is the defect this whole migration set exists to close. Adding the
+  -- parameter would be the regression.
+  SELECT (
+    CASE p_type
+      WHEN 'withdrawal' THEN
+        CASE
+          WHEN NULLIF(TRIM(COALESCE(p_payout_id, '')), '') IS NULL
+            THEN 'ledger_only'
+          WHEN p_payout_status = 'paid'
+            THEN 'stripe_settled'
+          -- A payout Stripe rejected is neither settled nor in flight. Without
+          -- this branch it would derive as 'stripe_pending', which the UI
+          -- renders as "On its way" — false in the same direction as the bug
+          -- this function exists to prevent.
+          WHEN p_payout_status IN ('failed', 'canceled')
+            THEN 'stripe_failed'
+          ELSE 'stripe_pending'
+        END
+      WHEN 'deposit' THEN
+        CASE
+          WHEN NULLIF(TRIM(COALESCE(p_payment_intent_id, '')), '') IS NOT NULL
+            OR NULLIF(TRIM(COALESCE(p_charge_id, '')), '') IS NOT NULL
+            THEN 'stripe_settled'
+          ELSE 'ledger_only'
+        END
+      WHEN 'release' THEN
+        CASE
+          WHEN NULLIF(TRIM(COALESCE(p_transfer_id, '')), '') IS NOT NULL
+            THEN 'stripe_settled'
+          ELSE 'ledger_only'
+        END
+      WHEN 'refund' THEN
+        CASE
+          WHEN NULLIF(TRIM(COALESCE(p_refund_id, '')), '') IS NOT NULL
+            THEN 'stripe_settled'
+          ELSE 'ledger_only'
+        END
+      ELSE 'ledger_only'
+    END
+  )::public.settlement_state_enum;
+$$;
+
+COMMENT ON FUNCTION public.fn_settlement_state_for IS
+  'The settlement classification rule. Takes only Stripe evidence — deliberately no `status` parameter. Called by both fn_derive_settlement_state() and the backfill so there is exactly one implementation. Mirrors deriveSettlementState() in supabase/functions/_shared/settlement-state.ts.';
+
 CREATE OR REPLACE FUNCTION public.fn_derive_settlement_state()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 SET search_path = public
 AS $$
 BEGIN
-  -- NOTE: NEW.status is deliberately never read. `status` is what the
-  -- application believes; a Stripe id is what Stripe can prove. Of the 27
-  -- withdrawals marked completed before 2026-08-16, 25 have no payout id — a
-  -- rule that trusted `status` would certify exactly those as settled, which
-  -- is the defect this whole migration set exists to close.
-  NEW.settlement_state :=
-    CASE NEW.type
-      WHEN 'withdrawal' THEN
-        CASE
-          WHEN NULLIF(TRIM(COALESCE(NEW.stripe_payout_id, '')), '') IS NULL
-            THEN 'ledger_only'
-          WHEN NEW.stripe_payout_status = 'paid'
-            THEN 'stripe_settled'
-          -- A payout Stripe rejected is neither settled nor in flight. Without
-          -- this branch it would derive as 'stripe_pending', which the UI
-          -- renders as "On its way" — false in the same direction as the bug
-          -- this trigger exists to prevent.
-          WHEN NEW.stripe_payout_status IN ('failed', 'canceled')
-            THEN 'stripe_failed'
-          ELSE 'stripe_pending'
-        END
-      WHEN 'deposit' THEN
-        CASE
-          WHEN NULLIF(TRIM(COALESCE(NEW.stripe_payment_intent_id, '')), '') IS NOT NULL
-            OR NULLIF(TRIM(COALESCE(NEW.stripe_charge_id, '')), '') IS NOT NULL
-            THEN 'stripe_settled'
-          ELSE 'ledger_only'
-        END
-      WHEN 'release' THEN
-        CASE
-          WHEN NULLIF(TRIM(COALESCE(NEW.stripe_transfer_id, '')), '') IS NOT NULL
-            THEN 'stripe_settled'
-          ELSE 'ledger_only'
-        END
-      WHEN 'refund' THEN
-        CASE
-          WHEN NULLIF(TRIM(COALESCE(NEW.stripe_refund_id, '')), '') IS NOT NULL
-            THEN 'stripe_settled'
-          ELSE 'ledger_only'
-        END
-      ELSE 'ledger_only'
-    END::public.settlement_state_enum;
-
+  NEW.settlement_state := public.fn_settlement_state_for(
+    NEW.type::text,
+    NEW.stripe_payout_id,
+    NEW.stripe_payout_status,
+    NEW.stripe_transfer_id,
+    NEW.stripe_charge_id,
+    NEW.stripe_payment_intent_id,
+    NEW.stripe_refund_id
+  );
   RETURN NEW;
 END;
 $$;

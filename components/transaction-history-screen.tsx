@@ -15,11 +15,10 @@ import { TransactionDetailModal } from "./transaction-detail-modal"
 import { BrandingLogo } from "./ui/branding-logo"
 import { EmptyState } from "./ui/empty-state"
 import { TransactionsListSkeleton } from "./ui/skeleton-loaders"
+import type { SettlementState } from "../lib/utils/settlement-vocabulary"
 
 // Constants for transaction display
 const DEFAULT_TITLE = 'Transaction'
-
-import type { SettlementState } from "../lib/utils/settlement-vocabulary"
 
 export interface Transaction {
   id: string

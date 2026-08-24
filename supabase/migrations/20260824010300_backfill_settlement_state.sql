@@ -1,10 +1,32 @@
 -- =====================================================================
 -- ADR 0001 §5.2 Stage 1 — backfill.
 --
--- Runs AFTER the derive trigger exists, and deliberately re-derives through
--- it rather than duplicating the CASE here. A backfill that computes the value
--- independently is a second implementation that can disagree with the first;
--- a no-op UPDATE fires the trigger and guarantees they cannot.
+-- Calls fn_settlement_state_for() — the same function the derive trigger calls
+-- — rather than restating the CASE. A backfill that computes the value
+-- independently is a second implementation that can disagree with the first.
+--
+-- WHY THIS IS NOT A `SET updated_at = updated_at` NO-OP
+-- An earlier draft did exactly that, on the theory that firing the BEFORE
+-- trigger was the tidiest way to re-derive. It is not a no-op. Two other
+-- triggers already live on this table:
+--
+--   trg_wallet_transactions_updated_at   BEFORE UPDATE -> set_updated_at(),
+--       whose body is unconditionally `NEW.updated_at = NOW()`. It overwrites
+--       whatever the statement assigns, so the "no-op" would have silently
+--       rewritten updated_at on every row in a financial ledger — destroying
+--       the audit timestamp the column exists to provide.
+--
+--   wallet_transactions_broadcast_trigger  AFTER INSERT OR UPDATE, which
+--       publishes a realtime change event per row. A mass UPDATE would emit a
+--       fabricated "this transaction changed" event for every historical row
+--       to any subscribed client.
+--
+-- Both are disabled for the duration of the backfill and restored immediately.
+-- If this migration fails partway, the whole thing — trigger states included —
+-- rolls back with the transaction.
+--
+-- (trg_capture_release_analytics_facts is AFTER INSERT OR UPDATE **OF status**,
+-- so it does not fire here: this statement never touches `status`.)
 --
 -- EXPECTED RESULT (verified against production 2026-08-24, read-only):
 --
@@ -40,9 +62,29 @@ DECLARE
   v_withdrawal_pending   int;
   v_withdrawal_settled   int;
 BEGIN
-  -- Re-derive every row by firing the trigger with a no-op write.
-  UPDATE public.wallet_transactions SET updated_at = updated_at;
-  UPDATE public.bounty_payments      SET updated_at = updated_at;
+  -- Suppress the two incidental triggers (see header) so the backfill changes
+  -- exactly one column and publishes nothing.
+  ALTER TABLE public.wallet_transactions DISABLE TRIGGER trg_wallet_transactions_updated_at;
+  ALTER TABLE public.wallet_transactions DISABLE TRIGGER wallet_transactions_broadcast_trigger;
+
+  UPDATE public.wallet_transactions
+  SET settlement_state = public.fn_settlement_state_for(
+        type::text,
+        stripe_payout_id,
+        stripe_payout_status,
+        stripe_transfer_id,
+        stripe_charge_id,
+        stripe_payment_intent_id,
+        stripe_refund_id
+      );
+
+  ALTER TABLE public.wallet_transactions ENABLE TRIGGER wallet_transactions_broadcast_trigger;
+  ALTER TABLE public.wallet_transactions ENABLE TRIGGER trg_wallet_transactions_updated_at;
+
+  -- bounty_payments carries no updated_at or broadcast trigger of its own, so
+  -- its derive trigger can simply be fired. Verified against production
+  -- 2026-08-24: the table has no non-internal triggers today.
+  UPDATE public.bounty_payments SET settlement_state = settlement_state;
 
   SELECT
     count(*) FILTER (WHERE type = 'release'    AND settlement_state = 'ledger_only'),
