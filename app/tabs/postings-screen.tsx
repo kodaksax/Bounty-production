@@ -4,7 +4,7 @@ import { MaterialIcons } from "@expo/vector-icons"
 // DateTimePicker removed from inline usage; dedicated screen handles picking
 import { CreateBountyFlow } from "app/screens/CreateBounty"
 import { BrandingLogo } from "components/ui/branding-logo"
-import { useRouter } from "expo-router"
+import { useLocalSearchParams, useRouter } from "expo-router"
 import { analyticsService } from "lib/services/analytics-service"
 import type { BountyRequestWithDetails } from "lib/services/bounty-request-service"
 import { bountyRequestService } from "lib/services/bounty-request-service"
@@ -99,6 +99,12 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   const rawUserId = useValidUserId()
   const currentUserId = rawUserId ?? undefined
   const router = useRouter()
+  // Set by lib/moments/registry.ts's post_first_bounty/bounty_completed_followup
+  // CTAs when they route here directly (see the query-param comment there) —
+  // that tap on the moment sheet IS the deliberate "Post a bounty" action,
+  // even though it lands on the default-selected New Bounty tab with no
+  // further in-screen tap to observe.
+  const { deliberateTap: deliberateTapParam } = useLocalSearchParams<{ deliberateTap?: string }>()
 
   const [activeTab, setActiveTab] = useState(initialTab ?? "new")
   const [showArchivedBounties, setShowArchivedBounties] = useState(false)
@@ -143,6 +149,15 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
   // Refs for lists so we can scroll items into view when expanded
   const inProgressListRef = useRef<any>(null)
   const myPostingsListRef = useRef<any>(null)
+  // Attests that the New Bounty tab was reached via an explicit tap, not by
+  // defaulting to it (activeTab starts as "new" whenever no initialTab is
+  // passed). Seeded from `deliberateTapParam` so a moments CTA that routes
+  // straight here (see lib/moments/registry.ts) still counts as deliberate
+  // even though it never presses the in-screen segmented-control tab; every
+  // other arrival starts false and requires an explicit tap below. Read once
+  // by CreateBountyFlow at mount to gate post_flow_started; see
+  // CreateBountyFlowProps' `deliberateTap`.
+  const deliberateTapRef = useRef(deliberateTapParam === '1')
 
   // Per-item native refs so we can measure exact layout relative to the list
   const itemRefs = useRef<Record<string, any>>({})
@@ -318,6 +333,16 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
     () => bountyRequests.filter((r) => r.status === 'pending').length,
     [bountyRequests]
   )
+
+  // Rearm deliberateTapRef whenever the New Bounty tab isn't active, so a
+  // later return to it (whether by re-tapping the pill or the "Post a
+  // Bounty" empty-state CTA) requires a fresh tap rather than inheriting a
+  // stale true left over from an earlier visit.
+  useEffect(() => {
+    if (activeTab !== 'new') {
+      deliberateTapRef.current = false
+    }
+  }, [activeTab])
 
   // Fetch data from the API
   useEffect(() => {
@@ -922,7 +947,10 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                 return (
                   <TouchableOpacity
                     key={tab.id}
-                    onPress={() => setActiveTab(tab.id)}
+                    onPress={() => {
+                      if (tab.id === 'new') deliberateTapRef.current = true
+                      setActiveTab(tab.id)
+                    }}
                     activeOpacity={0.85}
                     className="flex-1 py-2 mx-0.5 rounded-full items-center justify-center touch-target-min"
                     style={{
@@ -1006,6 +1034,7 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
               <View className="flex-1">
                 <CreateBountyFlow
                   entryPoint="postings_new_tab"
+                  deliberateTap={deliberateTapRef.current}
                   onComplete={(bountyId) => {
                     // After creation, go to main feed and refresh publicly visible list
                     setShowBottomNav?.(true)
@@ -1244,7 +1273,10 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
                           { icon: 'task-alt', label: 'Track completed work' },
                         ]}
                         actionLabel="Post a Bounty"
-                        onAction={() => setActiveTab('new')}
+                        onAction={() => {
+                          deliberateTapRef.current = true
+                          setActiveTab('new')
+                        }}
                       />
                     )
                   }

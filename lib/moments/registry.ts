@@ -323,7 +323,12 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
       primaryLabel: 'Post a bounty',
       secondaryLabel: 'Not right now',
     }),
-    action: { type: 'navigate', route: '/tabs/postings-screen' },
+    // `deliberateTap=1` tells postings-screen.tsx that this navigation IS
+    // the deliberate "Post a bounty" tap (the moment's primary button, just
+    // pressed) even though it lands straight on the default-selected New
+    // Bounty tab with no further in-screen tap — see the `deliberateTap`
+    // query-param handling there and CreateBountyFlowProps' `deliberateTap`.
+    action: { type: 'navigate', route: '/tabs/postings-screen?deliberateTap=1' },
   },
   {
     type: 'accept_first_bounty',
@@ -406,7 +411,12 @@ export const MOMENT_REGISTRY: MomentDefinition[] = [
       primaryLabel: 'Post another bounty',
       secondaryLabel: 'Not now',
     }),
-    action: { type: 'navigate', route: '/tabs/postings-screen' },
+    // `deliberateTap=1` tells postings-screen.tsx that this navigation IS
+    // the deliberate "Post a bounty" tap (the moment's primary button, just
+    // pressed) even though it lands straight on the default-selected New
+    // Bounty tab with no further in-screen tap — see the `deliberateTap`
+    // query-param handling there and CreateBountyFlowProps' `deliberateTap`.
+    action: { type: 'navigate', route: '/tabs/postings-screen?deliberateTap=1' },
   },
   {
     type: 'dispute_resolved_followup',

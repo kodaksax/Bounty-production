@@ -146,6 +146,7 @@ jest.mock('app/screens/CreateBounty/quick/StepTask', () => ({
         <TextInput
           accessibilityLabel="stub-title-input"
           onChangeText={(t: string) => props.onUpdate({ title: t })}
+          onFocus={props.onFieldFocus}
         />
         <TouchableOpacity accessibilityLabel="stub-next" onPress={props.onNext}>
           <Text>StepTask</Text>
@@ -514,5 +515,87 @@ describe('CreateBountyFlow — post_step_viewed fires once per step entry', () =
     expect(started).toHaveProperty('resumed_draft');
     expect(started).not.toHaveProperty('resumedDraft');
     expect(started).not.toHaveProperty('resumeddraft');
+  });
+});
+
+// `deliberateTap` gates post_flow_started (a screen defaulting to showing the
+// composer, or a bare bottom-nav tab focus, must NOT count as a funnel start —
+// see the property's doc comment on CreateBountyFlowProps). post_field_focused
+// is the companion composer-engagement signal and must fire regardless of it.
+describe('CreateBountyFlow — deliberateTap gating', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockNow = 0;
+    mockIsLoading = false;
+    appStateHandlers = [];
+    installPerformanceNowMock();
+    installAppStateMock();
+  });
+
+  afterEach(() => {
+    restorePerformanceNow();
+    jest.restoreAllMocks();
+  });
+
+  it('fires post_flow_started when deliberateTap is true', () => {
+    render(<CreateBountyFlow deliberateTap />);
+
+    expect(eventsNamed('post_flow_started')).toHaveLength(1);
+    expect(lastEventNamed('post_flow_started')).toMatchObject({ deliberate_entry: true });
+    // post_started (the older, unconditional funnel event) is unaffected.
+    expect(eventsNamed('post_started')).toHaveLength(1);
+  });
+
+  it('does not fire post_flow_started when deliberateTap is false (the default)', () => {
+    render(<CreateBountyFlow />);
+
+    expect(eventsNamed('post_flow_started')).toHaveLength(0);
+    // post_started still fires — only the deliberate-tap-gated event is suppressed.
+    expect(eventsNamed('post_started')).toHaveLength(1);
+  });
+
+  it('does not retroactively fire post_flow_started if deliberateTap flips true on a later re-render', () => {
+    const { rerender } = render(<CreateBountyFlow deliberateTap={false} />);
+    expect(eventsNamed('post_flow_started')).toHaveLength(0);
+
+    rerender(<CreateBountyFlow deliberateTap={true} />);
+    expect(eventsNamed('post_flow_started')).toHaveLength(0);
+  });
+
+  it('fires post_field_focused exactly once on the title field\'s first focus when deliberateTap is true', () => {
+    render(<CreateBountyFlow deliberateTap />);
+
+    const input = screen.getByLabelText('stub-title-input');
+    fireEvent(input, 'focus');
+    fireEvent(input, 'focus');
+
+    expect(eventsNamed('post_field_focused')).toHaveLength(1);
+    expect(lastEventNamed('post_field_focused')).toMatchObject({
+      step_index: 1,
+      deliberate_entry: true,
+    });
+  });
+
+  it('fires post_field_focused exactly once even when deliberateTap is false', () => {
+    render(<CreateBountyFlow />);
+
+    const input = screen.getByLabelText('stub-title-input');
+    fireEvent(input, 'focus');
+    fireEvent(input, 'focus');
+
+    expect(eventsNamed('post_field_focused')).toHaveLength(1);
+    expect(lastEventNamed('post_field_focused')).toMatchObject({
+      step_index: 1,
+      deliberate_entry: false,
+    });
+  });
+
+  it('includes entry_point on post_field_focused, matching post_flow_started', () => {
+    render(<CreateBountyFlow deliberateTap entryPoint="need_help_tab" />);
+
+    fireEvent(screen.getByLabelText('stub-title-input'), 'focus');
+
+    expect(lastEventNamed('post_field_focused')).toMatchObject({ entry_point: 'need_help_tab' });
+    expect(lastEventNamed('post_flow_started')).toMatchObject({ entry_point: 'need_help_tab' });
   });
 });

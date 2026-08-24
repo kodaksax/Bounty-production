@@ -180,7 +180,20 @@ export type AnalyticsEvent =
   // app/screens/CreateBounty/index.tsx) — `variant` is hardcoded 'control'
   // until a second arm exists to compare against. The key ratio this funnel
   // exists to expose: bounty_published ÷ post_flow_started.
+  //
+  // `post_flow_started` fires only for a mount that a call site attests was
+  // caused by a deliberate "Post a bounty" tap (see CreateBountyFlowProps'
+  // `deliberateTap`) — NOT for every time the composer happens to render,
+  // which also includes plain bottom-nav tab focus and (on the legacy
+  // app/tabs/postings-screen.tsx route, still reachable from moments —
+  // see lib/moments/registry.ts) a default-selected tab nobody tapped into.
+  // Counting those mounts inflated the denominator without any matching
+  // engagement, so `bounty_published ÷ post_flow_started` understated
+  // conversion. `post_field_focused` (below) is the composer-engagement
+  // signal to pair it with — it fires on the first real interaction
+  // (the title field's first focus) regardless of how the poster arrived.
   | 'post_flow_started'
+  | 'post_field_focused'
   | 'post_step_completed'
   | 'post_step_abandoned'
   | 'post_title_typed'

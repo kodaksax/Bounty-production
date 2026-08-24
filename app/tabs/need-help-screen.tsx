@@ -46,6 +46,13 @@ export function NeedHelpScreen({ activeScreen, setActiveScreen, onBountyPosted, 
       <CreateBountyFlow
         key={flowKey}
         entryPoint="need_help_tab"
+        // NeedHelpScreen only ever mounts as a direct result of navigating
+        // to the "postings" tab (see app/tabs/bounty-app.tsx), so the very
+        // first flow instance (flowKey === 0) is always the deliberate tap
+        // that got the poster here. A later flowKey bump (see the state
+        // comment above) happens on exit, not a fresh tap, so it must not
+        // re-count.
+        deliberateTap={flowKey === 0}
         onComplete={() => {
           // After creation, go to the main feed and refresh the public list
           setShowBottomNav?.(true)

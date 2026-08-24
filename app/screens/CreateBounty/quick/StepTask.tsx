@@ -22,6 +22,9 @@ interface StepTaskProps {
   draft: BountyDraft;
   onUpdate: (data: Partial<BountyDraft>) => void;
   onNext: () => void;
+  /** Fired on this field's first focus — the composer's first real
+   * interaction. Optional so tests/older call sites don't need to pass it. */
+  onFieldFocus?: () => void;
   step: number;
   totalSteps: number;
 }
@@ -35,7 +38,7 @@ const MAX_LENGTH = 120;
  * optional and lives on step 2, so this field stays scannable in the feed and
  * comfortably inside validateTitle's 120-character cap.
  */
-export function StepTask({ draft, onUpdate, onNext, step, totalSteps }: StepTaskProps) {
+export function StepTask({ draft, onUpdate, onNext, onFieldFocus, step, totalSteps }: StepTaskProps) {
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const [focused, setFocused] = useState(false);
@@ -62,7 +65,10 @@ export function StepTask({ draft, onUpdate, onNext, step, totalSteps }: StepTask
         <TextInput
           value={draft.title}
           onChangeText={handleChange}
-          onFocus={() => setFocused(true)}
+          onFocus={() => {
+            setFocused(true);
+            onFieldFocus?.();
+          }}
           onBlur={() => {
             setFocused(false);
             setTouched(true);

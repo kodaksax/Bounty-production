@@ -42,6 +42,16 @@ interface CreateBountyFlowProps {
    * Defaults to 'unknown' rather than being required, since a couple of
    * older/test call sites don't pass it. */
   entryPoint?: string;
+  /**
+   * Attests that THIS mount was caused by an explicit "Post a bounty" tap
+   * (a bottom-nav press, a segmented-control tab press, an empty-state CTA
+   * — not a screen simply defaulting to showing the composer). Gates
+   * `post_flow_started` — see the event's doc comment in
+   * lib/services/analytics-service.ts for why this exists. Defaults to
+   * false so an unaudited call site under-reports rather than silently
+   * re-introducing the leak.
+   */
+  deliberateTap?: boolean;
 }
 
 /**
@@ -89,6 +99,7 @@ export function CreateBountyFlow({
   onCancel,
   onStepChange,
   entryPoint = 'unknown',
+  deliberateTap = false,
 }: CreateBountyFlowProps) {
   const [currentStep, setCurrentStep] = useState(1);
   // 1 = advancing, -1 = going back. Read by each step's layout to pick the side
@@ -148,6 +159,16 @@ export function CreateBountyFlow({
   const stepBackgroundMsRef = useRef(0);
   const backgroundedAtRef = useRef<number | null>(null);
   const titleTypedFiredRef = useRef(false);
+  // Snapshots `deliberateTap` at construction — a ref initializer runs only
+  // on this instance's first render, so a later prop change (or a parent
+  // re-render that leaves this component mounted) can't retroactively flip
+  // whether the mount that already fired post_flow_started counted as
+  // deliberate.
+  const deliberateTapRef = useRef(deliberateTap);
+  // Guards post_field_focused against firing more than once per flow
+  // instance — the composer-engagement signal only cares about the FIRST
+  // real interaction.
+  const fieldFocusedFiredRef = useRef(false);
   // Set right before an explicit exit path runs, so the post_step_abandoned
   // cleanup below can attribute *why* the flow was left. Left null when the
   // unmount is caused by something this component can't see directly (e.g.
@@ -258,6 +279,7 @@ export function CreateBountyFlow({
         used_chip: false,
         char_count: (draft.title || '').trim().length,
         variant: POST_FLOW_VARIANT,
+        deliberate_entry: deliberateTapRef.current,
       });
     }
     if (currentStep < TOTAL_STEPS) {
@@ -409,11 +431,31 @@ export function CreateBountyFlow({
       surface: POST_SURFACE,
       resumed_draft: Boolean(draft.title?.trim()),
     });
-    analyticsService.trackEvent('post_flow_started', {
+    if (deliberateTapRef.current) {
+      analyticsService.trackEvent('post_flow_started', {
+        variant: POST_FLOW_VARIANT,
+        entry_point: entryPoint,
+        deliberate_entry: true,
+      });
+    }
+  }, [isLoading, draft.title, entryPoint]);
+
+  /** post_field_focused — the composer-engagement signal, fired once per
+   * flow instance on the first real interaction with the title field (the
+   * flow's first screen), regardless of `deliberateTap`. `deliberate_entry`
+   * lets this be segmented the same way as the rest of the funnel below —
+   * see the `deliberate_entry` note above `bounty_published`. */
+  const handleFieldFocused = () => {
+    if (fieldFocusedFiredRef.current) return;
+    fieldFocusedFiredRef.current = true;
+    analyticsService.trackEvent('post_field_focused', {
+      surface: POST_SURFACE,
+      step_index: 1,
       variant: POST_FLOW_VARIANT,
       entry_point: entryPoint,
+      deliberate_entry: deliberateTapRef.current,
     });
-  }, [isLoading, draft.title, entryPoint]);
+  };
 
   // post_step_viewed — per-step drop-off. Emitted exactly ONCE per step
   // entry, including backwards navigation (`direction` disambiguates).
@@ -438,6 +480,7 @@ export function CreateBountyFlow({
       step_index: currentStep,
       step_name: STEP_TITLES[currentStep - 1],
       variant: POST_FLOW_VARIANT,
+      deliberate_entry: deliberateTapRef.current,
     });
 
     if (!isFirstEntry && currentStep > previousStep) {
@@ -448,6 +491,7 @@ export function CreateBountyFlow({
         seconds_on_step: seconds,
         seconds_capped: capped,
         variant: POST_FLOW_VARIANT,
+        deliberate_entry: deliberateTapRef.current,
       });
     }
 
@@ -495,6 +539,7 @@ export function CreateBountyFlow({
         background_seconds: Math.round(backgroundMs / 1000),
         exit_method: exitMethod,
         variant: POST_FLOW_VARIANT,
+        deliberate_entry: deliberateTapRef.current,
       });
     };
   }, []);
@@ -535,6 +580,7 @@ export function CreateBountyFlow({
                 draft={draft}
                 onUpdate={saveDraft}
                 onNext={handleNext}
+                onFieldFocus={handleFieldFocused}
                 step={1}
                 totalSteps={TOTAL_STEPS}
               />
