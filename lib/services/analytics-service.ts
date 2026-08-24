@@ -351,10 +351,31 @@ export type AnalyticsEvent =
   // escrow_refunded above are reused for both architectures (properties
   // carry `architecture: 'v1' | 'v2'`); this event is v2-routing-specific.
   | 'payment_architecture_routed'
-  // Payout (withdrawal) events
+  // Payout (withdrawal) events. `payout_failed` means Stripe was actually
+  // asked to move money and the attempt failed — see classifyPayoutFailure()
+  // in lib/utils/payout-analytics.ts, the single place both withdrawal paths
+  // (legacy bank transfer and Connect-native payout/instant-payout) decide
+  // which of these three fires. A pre-flight rejection by a Bounty business
+  // rule (validation, insufficient balance, disabled payouts, etc.) must
+  // fire `payout_rejected`, never `payout_failed` — conflating the two is
+  // what made a single hunter's 36 retries against an already-pending
+  // withdrawal look like 36 independent provider failures (2026-08-24).
   | 'payout_initiated'
   | 'payout_success'
   | 'payout_failed'
+  // The hunter already had a withdrawal in flight (409
+  // withdrawal_already_in_progress) and the backend refused to start a
+  // second one before ever contacting Stripe. Broken out from
+  // `payout_rejected` because it is the single highest-signal case for
+  // "duplicate/pending attempt rate" and is expected to fire more than once
+  // per underlying pending withdrawal — that repetition is the metric, not
+  // a bug in it.
+  | 'payout_already_pending'
+  // Any other pre-flight business-rule rejection: validation failure,
+  // insufficient balance, account not eligible, payouts disabled, no bank
+  // account/debit card linked, instant-payout limits, etc. Stripe was never
+  // called for this attempt.
+  | 'payout_rejected'
   // SetupIntent events
   | 'setup_intent_created'
   | 'setup_intent_confirmed'

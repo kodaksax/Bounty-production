@@ -78,6 +78,11 @@ const MANAGE_PAYOUT_METHODS_ERROR_CODES = new Set([
 ]);
 
 function resolveErrorCopy(errorCode: string | null | undefined, errorMessage: string | null | undefined): string {
+  // withdrawal_already_in_progress is the one code where the server-crafted
+  // message is strictly better than the static copy below: it names the
+  // actual pending amount ("You already have a withdrawal of $96.00...")
+  // instead of the generic "a withdrawal". Prefer it when present.
+  if (errorCode === 'withdrawal_already_in_progress' && errorMessage) return errorMessage;
   if (errorCode && REQUEST_ERROR_MESSAGES[errorCode]) return REQUEST_ERROR_MESSAGES[errorCode];
   if (errorCode && FAILURE_CODE_MESSAGES[errorCode]) return FAILURE_CODE_MESSAGES[errorCode];
   if (errorCode) return getFailureMessage(errorCode, errorMessage ?? undefined);

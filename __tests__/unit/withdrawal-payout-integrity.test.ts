@@ -429,3 +429,96 @@ describe('database invariant', () => {
     expect(auditMigration).toContain('ENABLE ROW LEVEL SECURITY');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Analytics taxonomy — the 2026-08-24 payout_failed misclassification
+//
+// A single hunter with a stuck $96 pending withdrawal retried 36 times over
+// six days. Every retry hit the exact 409 this section pins, and the client
+// tracked every one of them as `payout_failed` because the response carried
+// no signal distinguishing "the backend refused to call Stripe" from "Stripe
+// was called and failed". These tests pin the `stripeAttempted` contract that
+// fixes it: `false` (or absent) on every pre-flight rejection, `true` only on
+// the handful of catch blocks that follow an actual
+// stripe.transfers.create()/payouts.create() call. See
+// classifyPayoutFailure() in lib/utils/payout-analytics.ts, which both
+// withdrawal paths key off of.
+// ---------------------------------------------------------------------------
+
+describe('connect Edge Function — stripeAttempted marks genuine provider failures only', () => {
+  const stripped = stripComments(connectSource);
+
+  test('the in-flight-withdrawal 409 is explicitly marked as not having called Stripe', () => {
+    const fn = regionBetween(
+      stripped,
+      'function inFlightWithdrawalResponse(',
+      'function normalizePayoutStatusForLedger('
+    );
+    expect(fn).toContain('stripeAttempted: false');
+    expect(fn).toContain('pendingAmount');
+  });
+
+  // Bounded by route-dispatch tokens (`if (subPath === '...')`), not by log
+  // strings — a route's console.log/console.error wording can change for
+  // purely cosmetic reasons and must not be able to break these contract
+  // tests. This mirrors the boundary style the pre-existing "both legacy
+  // money-moving routes reserve..." test above already uses.
+  test('the legacy /transfer route marks its post-transfer-attempt failures as stripeAttempted', () => {
+    const transferRoute = regionBetween(
+      stripped,
+      "if (subPath === '/transfer')",
+      "if (subPath === '/retry-transfer')"
+    );
+    const stripeAttemptedFlags = transferRoute.match(/stripeAttempted:\s*true/g) ?? [];
+    // Two exits from the stripe.transfers.create() catch block are
+    // client-facing failure responses: the refund-also-failed case and the
+    // mapped Stripe error case. Nothing else in this route may carry the flag.
+    expect(stripeAttemptedFlags.length).toBe(2);
+  });
+
+  test('the same contract holds for /retry-transfer', () => {
+    const retryRoute = regionBetween(
+      stripped,
+      "if (subPath === '/retry-transfer')",
+      "if (subPath === '/payout')"
+    );
+    const stripeAttemptedFlags = retryRoute.match(/stripeAttempted:\s*true/g) ?? [];
+    expect(stripeAttemptedFlags.length).toBe(2);
+  });
+
+  test('the /instant-payout platform-transfer step marks its failures as stripeAttempted', () => {
+    const instantRoute = regionBetween(
+      stripped,
+      "if (subPath === '/instant-payout')",
+      "if (req.method === 'GET' && subPath === '/bank-accounts')"
+    );
+    const stripeAttemptedFlags = instantRoute.match(/stripeAttempted:\s*true/g) ?? [];
+    // The platform-transfer step's catch block accounts for both of these;
+    // the later instant-payout-falls-back-to-standard path never returns a
+    // client-facing error (it always leaves the row pending), so it must not
+    // add any more.
+    expect(stripeAttemptedFlags.length).toBe(2);
+  });
+
+  test('handleConnectNativePayout marks only its post-payouts.create() catch as stripeAttempted', () => {
+    const handlerBody = (() => {
+      const start = stripped.indexOf('async function handleConnectNativePayout(');
+      const bodyStart = stripped.indexOf('{', start);
+      let depth = 0;
+      for (let i = bodyStart; i < stripped.length; i++) {
+        if (stripped[i] === '{') depth++;
+        if (stripped[i] === '}') {
+          depth--;
+          if (depth === 0) return stripped.slice(bodyStart, i + 1);
+        }
+      }
+      throw new Error('unterminated handleConnectNativePayout body');
+    })();
+    const stripeAttemptedFlags = handlerBody.match(/stripeAttempted:\s*true/g) ?? [];
+    // Every other error exit in this function (validation, eligibility,
+    // insufficient balance, no in-flight check needed here since the caller
+    // does it, account/balance read failures) is pre-flight and must not
+    // carry the flag — only the payouts.create() catch does.
+    expect(stripeAttemptedFlags.length).toBe(1);
+  });
+});

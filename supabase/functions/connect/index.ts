@@ -475,12 +475,26 @@ async function findInFlightWithdrawal(
   return (data as { id: string; amount: number; created_at: string } | null) ?? null;
 }
 
-/** Shared 409 for a hunter who already has a withdrawal settling. */
+/**
+ * Shared 409 for a hunter who already has a withdrawal settling.
+ *
+ * `stripeAttempted: false` marks this as a pre-flight business-rule rejection
+ * for the client's analytics layer — Stripe was never asked to move money
+ * for THIS request, so it must not be counted as a payout failure (see the
+ * 2026-08-24 incident where a single hunter's 36 retries against this exact
+ * block inflated the payout_failed metric 5x). `pendingAmount` is the numeric
+ * amount of the withdrawal already in flight, exposed structurally (not just
+ * interpolated into `error`) so the client can build UI copy and analytics
+ * properties without parsing prose out of an error string.
+ */
 function inFlightWithdrawalResponse(inFlight: { amount: number }): Response {
+  const pendingAmount = Math.abs(inFlight.amount);
   return jsonResponse(
     {
-      error: `You already have a withdrawal of $${Math.abs(inFlight.amount).toFixed(2)} on its way to your bank. You can start another one once it lands — usually within 1-2 business days.`,
+      error: `You already have a withdrawal of $${pendingAmount.toFixed(2)} on its way to your bank. You can start another one once it lands — usually within 1-2 business days.`,
       code: 'withdrawal_already_in_progress',
+      pendingAmount,
+      stripeAttempted: false,
     },
     409
   );
@@ -1093,8 +1107,13 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
     });
     // No compensating action is needed or correct here: nothing was debited
     // anywhere. The money never left the connected account.
+    //
+    // stripeAttempted: true — the payout-creation call just above was actually
+    // made and Stripe rejected or failed to process it. This is the one
+    // genuine provider-failure exit from this function; every other error
+    // return above happens before that call and must not carry the flag.
     const mapped = mapStripePayoutError(errInfo);
-    return jsonResponse({ error: mapped.error, code: mapped.code }, mapped.status);
+    return jsonResponse({ error: mapped.error, code: mapped.code, stripeAttempted: true }, mapped.status);
   }
 
   await writePayoutAudit(supabase, {
@@ -2294,17 +2313,23 @@ Deno.serve(async (req: Request) => {
               error: refundError,
             }
           );
+          // stripeAttempted: true on both exits from this catch block —
+          // stripe.transfers.create() was actually called and rejected the
+          // request; the refund-RPC failure is a second, independent problem
+          // on top of that genuine provider failure, not a reason to treat it
+          // as unattempted.
           return jsonResponse(
             {
               error:
                 'Transfer failed and your balance may have been affected. Please contact support for assistance.',
               code: 'transfer_failed_refund_failed',
+              stripeAttempted: true,
             },
             500
           );
         }
         const mapped = mapStripeTransferError(errInfo);
-        return jsonResponse({ error: mapped.error, code: mapped.code }, mapped.status);
+        return jsonResponse({ error: mapped.error, code: mapped.code, stripeAttempted: true }, mapped.status);
       }
 
       console.log('[connect/transfer] Stripe transfer created', {
@@ -2628,11 +2653,15 @@ Deno.serve(async (req: Request) => {
               error: retryRefundError,
             }
           );
+          // stripeAttempted: true on both exits — stripe.transfers.create()
+          // was actually called and rejected the request. See the identical
+          // rationale on the primary /transfer route above.
           return jsonResponse(
             {
               error:
                 'Transfer failed and your balance may have been affected. Please contact support for assistance.',
               code: 'transfer_failed_refund_failed',
+              stripeAttempted: true,
             },
             500
           );
@@ -2640,7 +2669,7 @@ Deno.serve(async (req: Request) => {
         const mapped = mapStripeTransferError(
           stripeError as { code?: string; type?: string; message?: string }
         );
-        return jsonResponse({ error: mapped.error, code: mapped.code }, mapped.status);
+        return jsonResponse({ error: mapped.error, code: mapped.code, stripeAttempted: true }, mapped.status);
       }
 
       // Same two-hop rule as the primary /transfer path: the retry re-ran hop
@@ -3380,17 +3409,23 @@ Deno.serve(async (req: Request) => {
               error: refundError,
             }
           );
+          // stripeAttempted: true on both exits from this catch block —
+          // stripe.transfers.create() was actually called and rejected the
+          // request; the refund-RPC failure is a second, independent problem
+          // on top of that genuine provider failure, not a reason to treat it
+          // as unattempted.
           return jsonResponse(
             {
               error:
                 'Transfer failed and your balance may have been affected. Please contact support for assistance.',
               code: 'transfer_failed_refund_failed',
+              stripeAttempted: true,
             },
             500
           );
         }
         const mapped = mapStripeTransferError(errInfo);
-        return jsonResponse({ error: mapped.error, code: mapped.code }, mapped.status);
+        return jsonResponse({ error: mapped.error, code: mapped.code, stripeAttempted: true }, mapped.status);
       }
 
       console.log('[connect/instant-payout] platform transfer created', {

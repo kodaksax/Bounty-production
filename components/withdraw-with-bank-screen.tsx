@@ -19,6 +19,7 @@ import { usePayoutMethods } from '../hooks/use-payout-methods';
 import { getBottomNavBaseClearance } from '../lib/constants/navigation';
 import { API_BASE_URL } from '../lib/config/api';
 import { analyticsService } from '../lib/services/analytics-service';
+import { classifyPayoutFailure } from '../lib/utils/payout-analytics';
 import { formatCurrency } from '../lib/utils';
 import { useAppThemeContext } from '../lib/themes/AppThemeContext';
 import type { AppTheme } from '../lib/themes/types';
@@ -283,16 +284,17 @@ export function WithdrawWithBankScreen({
       const idempotencyKey = idempotencyKeyRef.current;
 
       // Funnel: payout initiated. Tracked before the network call so we can
-      // also measure failure/abandonment rates.
-      try {
-        await analyticsService.trackEvent('payout_initiated', {
+      // also measure failure/abandonment rates. Fire-and-forget — analytics
+      // must never add latency to the payout request itself.
+      void analyticsService
+        .trackEvent('payout_initiated', {
           amount,
           currency: 'usd',
           method: 'stripe_connect_bank',
+        })
+        .catch(() => {
+          /* analytics is best-effort */
         });
-      } catch {
-        /* analytics is best-effort */
-      }
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 20000);
@@ -324,8 +326,13 @@ export function WithdrawWithBankScreen({
         const errorData = await response.json().catch(() => ({}));
         const requestError = new Error(errorData.error || 'Failed to initiate transfer') as Error & {
           code?: string;
+          stripeAttempted?: boolean;
+          pendingAmount?: number;
         };
-        requestError.code = errorData.code;
+        requestError.code = typeof errorData.code === 'string' ? errorData.code : undefined;
+        requestError.stripeAttempted = errorData.stripeAttempted === true;
+        requestError.pendingAmount =
+          typeof errorData.pendingAmount === 'number' ? errorData.pendingAmount : undefined;
         throw requestError;
       }
 
@@ -343,30 +350,40 @@ export function WithdrawWithBankScreen({
       idempotencyKeyRef.current = `withdraw_${session?.user?.id ?? 'u'}_${Date.now()}`;
 
       // Funnel: Stripe accepted the transfer. Final bank settlement is async.
-      try {
-        await analyticsService.trackEvent('payout_success', {
+      // Fire-and-forget — see the payout_initiated tracking above.
+      void analyticsService
+        .trackEvent('payout_success', {
           amount,
           currency: 'usd',
           method: 'stripe_connect_bank',
           transferId: transferId ? String(transferId) : undefined,
+        })
+        .catch(() => {
+          /* analytics is best-effort */
         });
-      } catch {
-        /* analytics is best-effort */
-      }
 
       setWithdrawalResult({ status: 'success', transferId: transferId ?? null });
     } catch (error: any) {
       console.error('Withdrawal error:', error);
-      try {
-        await analyticsService.trackEvent('payout_failed', {
+      // error.code is already normalized to string | undefined at the throw
+      // site above, so classification never sees a stray non-string value.
+      const eventName = classifyPayoutFailure({
+        code: error?.code,
+        stripeAttempted: error?.stripeAttempted,
+      });
+      void analyticsService
+        .trackEvent(eventName, {
           amount,
           currency: 'usd',
           method: 'stripe_connect_bank',
+          code: error?.code ?? 'unknown',
+          stripeAttempted: error?.stripeAttempted === true,
+          ...(typeof error?.pendingAmount === 'number' ? { pendingAmount: error.pendingAmount } : {}),
           reason: error?.message ? String(error.message).slice(0, 200) : 'unknown',
+        })
+        .catch(() => {
+          /* analytics is best-effort */
         });
-      } catch {
-        /* analytics is best-effort */
-      }
       if (error?.name === 'AbortError') {
         setWithdrawalResult({
           status: 'failure',

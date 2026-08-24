@@ -12,6 +12,8 @@ import { useCallback, useRef, useState } from 'react';
 import { useAuthContext } from './use-auth-context';
 import { config } from '../lib/config';
 import { API_BASE_URL } from '../lib/config/api';
+import { analyticsService } from '../lib/services/analytics-service';
+import { classifyPayoutFailure } from '../lib/utils/payout-analytics';
 
 export type PayoutMethod = 'instant' | 'standard';
 
@@ -126,6 +128,20 @@ export function useConnectPayout(): UseConnectPayoutResult {
 
       const endpoint = input.method === 'instant' ? '/connect/instant-payout' : '/connect/payout';
 
+      // Mirrors withdraw-with-bank-screen.tsx's legacy-path tracking so both
+      // withdrawal routes report through the same funnel. Fire-and-forget —
+      // analytics must never add latency to the payout request itself, and
+      // must not extend how long inFlightRef blocks a second submission.
+      void analyticsService
+        .trackEvent('payout_initiated', {
+          amount: input.amountCents / 100,
+          currency: 'usd',
+          method: input.method === 'instant' ? 'stripe_connect_instant' : 'stripe_connect_native',
+        })
+        .catch(() => {
+          /* analytics is best-effort */
+        });
+
       try {
         const response = await fetch(`${API_BASE_URL}${endpoint}`, {
           method: 'POST',
@@ -146,7 +162,19 @@ export function useConnectPayout(): UseConnectPayoutResult {
         const data = await response.json().catch(() => ({}));
 
         if (!response.ok) {
-          const code = typeof data?.code === 'string' ? data.code : 'payout_failed';
+          // rawCode is what actually came back from the server — kept as
+          // undefined rather than defaulted, because classifyPayoutFailure()
+          // treats any truthy code (with stripeAttempted !== true) as a
+          // business-rule rejection. Defaulting a missing/malformed code to
+          // the string 'payout_failed' before classifying would make that
+          // string look like a real business-rule code and misclassify a
+          // genuinely unknown failure as payout_rejected. `code` below is the
+          // separate UI-facing fallback used for PayoutError.code display and
+          // the NON_RETRYABLE_CODES lookup, which has always needed a
+          // non-empty string.
+          const rawCode = typeof data?.code === 'string' ? data.code : undefined;
+          const code = rawCode ?? 'payout_failed';
+          const stripeAttempted = data?.stripeAttempted === true;
           const payoutError: PayoutError = {
             code,
             message:
@@ -158,6 +186,20 @@ export function useConnectPayout(): UseConnectPayoutResult {
           // A non-retryable failure means this attempt is closed; drop the key
           // so a corrected attempt is treated as genuinely new.
           if (!payoutError.retryable) idempotencyKeyRef.current = null;
+          const eventName = classifyPayoutFailure({ code: rawCode, stripeAttempted });
+          void analyticsService
+            .trackEvent(eventName, {
+              amount: input.amountCents / 100,
+              currency: 'usd',
+              method: input.method === 'instant' ? 'stripe_connect_instant' : 'stripe_connect_native',
+              code,
+              stripeAttempted,
+              ...(typeof data?.pendingAmount === 'number' ? { pendingAmount: data.pendingAmount } : {}),
+              reason: payoutError.message.slice(0, 200),
+            })
+            .catch(() => {
+              /* analytics is best-effort */
+            });
           setError(payoutError);
           setPhase('failed');
           return null;
@@ -178,13 +220,37 @@ export function useConnectPayout(): UseConnectPayoutResult {
         };
 
         idempotencyKeyRef.current = null;
+        void analyticsService
+          .trackEvent('payout_success', {
+            amount: payoutResult.amountCents / 100,
+            currency: payoutResult.currency,
+            method: input.method === 'instant' ? 'stripe_connect_instant' : 'stripe_connect_native',
+            payoutId: payoutResult.payoutId ?? undefined,
+          })
+          .catch(() => {
+            /* analytics is best-effort */
+          });
         setResult(payoutResult);
         setPhase('completed');
         return payoutResult;
       } catch (networkError) {
         console.error('[use-connect-payout] withdrawal request failed:', networkError);
-        // The request may or may not have reached Stripe. The idempotency key
-        // is deliberately RETAINED so a retry replays rather than double-pays.
+        // The request may or may not have reached Stripe, so whether a
+        // payout was actually attempted is genuinely unknown — this stays
+        // payout_failed rather than being downgraded to a rejection.
+        void analyticsService
+          .trackEvent('payout_failed', {
+            amount: input.amountCents / 100,
+            currency: 'usd',
+            method: input.method === 'instant' ? 'stripe_connect_instant' : 'stripe_connect_native',
+            code: 'network_error',
+            reason: 'network_error',
+          })
+          .catch(() => {
+            /* analytics is best-effort */
+          });
+        // The idempotency key is deliberately RETAINED so a retry replays
+        // rather than double-pays.
         setError({
           code: 'network_error',
           message:
