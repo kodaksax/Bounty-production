@@ -12,6 +12,8 @@ interface StepWhereProps {
   onUpdate: (data: Partial<BountyDraft>) => void;
   onNext: () => void;
   onBack: () => void;
+  /** True while the parent persists this step onto a live bounty. */
+  isSaving?: boolean;
   step: number;
   totalSteps: number;
 }
@@ -24,7 +26,7 @@ interface StepWhereProps {
  * a typed address is forward-geocoded before advancing — the same guard the
  * previous location step applied.
  */
-export function StepWhere({ draft, onUpdate, onNext, onBack, step, totalSteps }: StepWhereProps) {
+export function StepWhere({ draft, onUpdate, onNext, onBack, isSaving = false, step, totalSteps }: StepWhereProps) {
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
 
@@ -187,9 +189,9 @@ export function StepWhere({ draft, onUpdate, onNext, onBack, step, totalSteps }:
       totalSteps={totalSteps}
       onBack={onBack}
       title={'Where does this\nneed to happen?'}
-      ctaLabel={isResolving ? 'Locating…' : 'Continue'}
+      ctaLabel={isResolving ? 'Locating…' : isSaving ? 'Saving…' : 'Continue'}
       ctaDisabled={!canContinue}
-      ctaBusy={isResolving}
+      ctaBusy={isResolving || isSaving}
       onCta={handleContinue}
     >
       {/* Use current location */}
