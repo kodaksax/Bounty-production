@@ -6,8 +6,11 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useAuthContext } from '../../hooks/use-auth-context';
 import { useAuthProfile } from '../../hooks/useAuthProfile';
 import { useOnboarding } from '../../lib/context/onboarding-context';
+import { analyticsService } from '../../lib/services/analytics-service';
+import { hasLocalOnboardingFlag } from '../../lib/storage/onboarding';
 import { logger } from '../../lib/utils/error-logger';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../lib/themes/types';
@@ -23,6 +26,7 @@ const MAX_FETCH_RETRIES = 2;
 export default function OnboardingIndex() {
   const router = useRouter();
   const { profile, loading, profileFetchError, refreshProfile } = useAuthProfile();
+  const { session, isLoading: authLoading } = useAuthContext();
   const { data: onboardingData, loading: onboardingLoading } = useOnboarding();
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -30,13 +34,26 @@ export default function OnboardingIndex() {
   const [showRetryError, setShowRetryError] = useState(false);
   const [retrying, setRetrying] = useState(false);
 
+  const userId = session?.user?.id ?? null;
+  const isAuthenticated = !!userId;
+
   useEffect(() => {
-    // Wait until auth profile service and the local onboarding-context cache
-    // have both resolved their initial state.
-    if (loading || onboardingLoading) return;
+    // Wait until auth, the auth profile service, and the local
+    // onboarding-context cache have all resolved their initial state. Routing
+    // before auth settles is what let a signed-in user be treated as a
+    // first-time visitor.
+    if (authLoading || loading || onboardingLoading) return;
     checkOnboardingStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, onboardingLoading, profile, onboardingData.intent, profileFetchError]);
+  }, [
+    authLoading,
+    loading,
+    onboardingLoading,
+    isAuthenticated,
+    profile,
+    onboardingData.intent,
+    profileFetchError,
+  ]);
 
   const checkOnboardingStatus = async () => {
     try {
@@ -45,6 +62,15 @@ export default function OnboardingIndex() {
       // guard it directly in case this screen is ever reached via a stale deep
       // link or race between profile/bootstrap state.
       if (profile && profile.username && profile.onboarding_completed === true) {
+        router.replace('/tabs/bounty-app');
+        return;
+      }
+
+      // Same, via the per-user local flag: the Supabase write can fail (bad
+      // network on the done step) and leave onboarding_completed false in the
+      // DB even though the user genuinely finished. Without this an onboarded
+      // user re-entering this route is walked through onboarding again.
+      if (isAuthenticated && profile?.username && (await hasLocalOnboardingFlag(userId!))) {
         router.replace('/tabs/bounty-app');
         return;
       }
@@ -73,19 +99,43 @@ export default function OnboardingIndex() {
       retryCountRef.current = 0;
       setShowRetryError(false);
 
-      // Already picked poster/hunter earlier (e.g. went to create an account
-      // from the sign-in step and landed back here) — resume that flow
-      // instead of re-showing the welcome/intent screen.
-      if (onboardingData.intent) {
+      // ── Authenticated, onboarding not finished ────────────────────────────
+      // NEVER send a signed-in user to /onboarding/welcome. That screen is the
+      // pre-auth entry point: it offers "Log In" and the role CTAs, so landing
+      // there after a successful registration reads as "your account wasn't
+      // created, sign in again" — the reported beta failure. A signed-in user
+      // always resumes at the first post-auth step instead.
+      //
+      // `intent` (poster/hunter) is deliberately NOT required here: the
+      // 'onboarding-skip-role-selection' test arm never sets one (welcome.tsx
+      // handleGetStarted), and a draft write can always be lost. Role is
+      // optional for the rest of the flow — totalStepsFor(null) in
+      // username.tsx already covers the no-intent variant.
+      if (isAuthenticated) {
+        analyticsService.trackEvent(
+          onboardingData.intent ? 'onboarding_resumed' : 'onboarding_started',
+          { intent: onboardingData.intent ?? 'none', authenticated: true }
+        );
         router.replace('/onboarding/style');
         return;
       }
 
+      // ── Not authenticated ─────────────────────────────────────────────────
+      // A role was already picked, so resume at the sign-in/create-account
+      // step rather than re-asking for the role.
+      if (onboardingData.intent) {
+        router.replace('/onboarding/username');
+        return;
+      }
+
       // Otherwise this is a genuinely fresh onboarding — start at welcome.
+      analyticsService.trackEvent('onboarding_started', { intent: 'none', authenticated: false });
       router.replace('/onboarding/welcome');
     } catch (error) {
       logger.error('[onboarding] checkOnboardingStatus threw', { error });
-      router.replace('/onboarding/welcome');
+      // Even the failure path must not eject a signed-in user to the pre-auth
+      // welcome screen.
+      router.replace(isAuthenticated ? '/onboarding/style' : '/onboarding/welcome');
     }
   };
 

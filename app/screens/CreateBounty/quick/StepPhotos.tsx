@@ -1,6 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useAttachmentUpload } from '../../../../hooks/use-attachment-upload';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
@@ -12,6 +12,8 @@ interface StepPhotosProps {
   onUpdate: (data: Partial<BountyDraft>) => void;
   onNext: () => void;
   onBack: () => void;
+  /** True while the parent persists this step onto a live bounty. */
+  isSaving?: boolean;
   step: number;
   totalSteps: number;
 }
@@ -25,7 +27,7 @@ interface StepPhotosProps {
  * description; it is optional because nothing on the create path validates it,
  * and step 1's title already carries the essential ask.
  */
-export function StepPhotos({ draft, onUpdate, onNext, onBack, step, totalSteps }: StepPhotosProps) {
+export function StepPhotos({ draft, onUpdate, onNext, onBack, isSaving = false, step, totalSteps }: StepPhotosProps) {
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
 
@@ -35,6 +37,14 @@ export function StepPhotos({ draft, onUpdate, onNext, onBack, step, totalSteps }
   // Drives "Skip for now" vs "Continue" — either kind of context counts.
   const hasContext = attachments.length > 0 || (draft.description || '').trim().length > 0;
 
+  // onUploaded fires once per file, in a synchronous loop, from a callback
+  // captured on an earlier render — so appending to the `attachments` prop
+  // would build every new list from the same pre-upload snapshot and keep
+  // only the last photo of a multi-select. Track the running list here
+  // instead, seeded from the prop on every render so removals stay in sync.
+  const attachmentsRef = useRef(attachments);
+  attachmentsRef.current = attachments;
+
   const { isUploading, isPicking, progress, pickAttachment, error: uploadError, clearError } =
     useAttachmentUpload({
       bucket: 'bounty-attachments',
@@ -43,14 +53,16 @@ export function StepPhotos({ draft, onUpdate, onNext, onBack, step, totalSteps }
       maxSizeMB: 10,
       allowsMultiple: true,
       onUploaded: (attachment) => {
-        onUpdate({ attachments: [...(draft.attachments || []), attachment] });
+        const next = [...attachmentsRef.current, attachment];
+        attachmentsRef.current = next;
+        onUpdate({ attachments: next });
       },
       onError: (error) => {
         Alert.alert('Upload Error', error.message);
       },
     });
 
-  const busy = isUploading || isPicking;
+  const busy = isUploading || isPicking || isSaving;
 
   const handleRemove = (attachmentId: string) => {
     onUpdate({ attachments: attachments.filter((a) => a.id !== attachmentId) });

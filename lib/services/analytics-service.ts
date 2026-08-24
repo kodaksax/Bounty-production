@@ -56,11 +56,36 @@ export type AnalyticsEvent =
   | 'user_logged_in'
   | 'user_logged_out'
   | 'email_verified'
+  // Registration lifecycle. `user_signed_up` above stays the single conversion
+  // event; these describe HOW a registration attempt ended so a future
+  // "new users can't get in" report is traceable without a device in hand.
+  // Deliberately NOT one event per auth stage — the per-stage traces stay
+  // local (see lib/utils/auth-diagnostics.ts) to avoid drowning PostHog.
+  | 'auth_signup_started'
+  | 'auth_signup_success'
+  | 'auth_signup_failed'
+  // Registration succeeded but the immediate sign-in that follows it did not,
+  // so the account exists with no session. The user is NOT in the app.
+  | 'auth_signup_session_failed'
+  // The backend created the account without an active session because email
+  // confirmation is required.
+  | 'auth_signup_requires_confirmation'
+  // A sign-in tap was rejected locally (CAPTCHA required / lockout active)
+  // before any request was made. Previously invisible — the user experiences
+  // it as "the Sign In button stopped working".
+  | 'auth_signin_blocked'
   // Onboarding funnel — see app/onboarding/*. Fired in order for a fresh
   // signup: welcome_viewed -> role_selected -> auth_started -> auth_completed
   // -> style_step_viewed -> (style_selected)* -> profile_step_viewed ->
   // (profile_submitted | step_skipped)* -> completed
   | 'onboarding_welcome_viewed'
+  // Fired by the onboarding gate (app/onboarding/index.tsx) each time it
+  // resolves a destination: `onboarding_started` for a fresh entry,
+  // `onboarding_resumed` when an in-progress draft is picked back up. Both
+  // carry `authenticated`, which is what distinguishes "new user continuing
+  // straight from registration" from "logged-out visitor browsing the intro".
+  | 'onboarding_started'
+  | 'onboarding_resumed'
   | 'onboarding_role_selected'
   // 'welcome-page-redesign' PostHog experiment (see
   // lib/experiments/first-screen-variant.ts): control vs poster_first arm of

@@ -82,9 +82,14 @@ export class AuthProfileService {
   private isNotifying = false;
   private hasPendingNotification = false;
   private pendingProfile: AuthProfile | null = null;
-  // Track the timestamp of the most recent fetchAndSyncProfile call to prevent
-  // race conditions where background fetches complete out of order
-  private latestFetchTimestamp: number = 0;
+  // Monotonic id of the most recent fetchAndSyncProfile call, used to discard
+  // results from fetches that have been superseded.
+  //
+  // This was a Date.now() timestamp, which two calls in the same millisecond
+  // (a sign-out immediately followed by a sign-in, say) would share -- making
+  // the "is this result stale?" comparison silently useless in exactly the
+  // account-switch race it exists to catch. A counter cannot collide.
+  private latestFetchSequence: number = 0;
   // Set when the most recent fetch failed (network/permission/RPC error) as
   // opposed to genuinely finding no row for this user. Consumers (onboarding
   // gate, profile screen) must not treat a fetch failure the same as "new
@@ -94,6 +99,17 @@ export class AuthProfileService {
   // client still on the pre-get_my_profile() bundle got 403s on its own
   // profile reads. See docs/onboarding/ for the incident writeup.
   private lastFetchError: string | null = null;
+  // The user id whose profile fetch has run to completion (successfully, with
+  // a confirmed-missing row, or with an error that was fully handled).
+  //
+  // `subscribe()` notifies new listeners synchronously with whatever
+  // `currentProfile` happens to be -- which is `null` for the entire window
+  // between "a session exists" and "the profile query came back". Consumers
+  // that make a ROUTING decision from the profile (app/onboarding/index.tsx)
+  // must be able to tell that null apart from a resolved "this user has no
+  // profile", or they route a freshly-signed-in user as if they were brand
+  // new. See isProfileResolved().
+  private profileResolvedForUserId: string | null = null;
 
   private constructor() {}
 
@@ -335,6 +351,9 @@ export class AuthProfileService {
     if (!session) {
       console.log('[authProfileService] No session, clearing profile');
       this.currentProfile = null;
+      // No session means "nothing left to resolve" — see isProfileResolved().
+      this.profileResolvedForUserId = null;
+      this.lastFetchError = null;
       // Clear cache for the previous user if switching users
       if (previousUserId) {
         await this.clearCache(previousUserId);
@@ -343,8 +362,18 @@ export class AuthProfileService {
       return;
     }
 
+    // A different user (or the first user of this launch) — the previous
+    // resolution says nothing about this one, so re-arm the gate before the
+    // fetch starts. Consumers stay in "loading" until it completes rather than
+    // routing off the outgoing user's (or a null) profile.
+    if (this.profileResolvedForUserId !== session.user.id) {
+      this.profileResolvedForUserId = null;
+      this.lastFetchError = null;
+    }
+
     // If switching users, clear the previous user's cache
     if (previousUserId && previousUserId !== session.user.id) {
+      this.currentProfile = null;
       await this.clearCache(previousUserId);
     }
 
@@ -384,18 +413,71 @@ export class AuthProfileService {
   }
 
   /**
+   * Has the profile for the currently-signed-in user finished resolving?
+   *
+   * - No session  -> true (there is nothing to resolve).
+   * - Session but the fetch for THAT user id has not completed -> false.
+   *
+   * `getCurrentProfile()` returns `null` both before the first fetch completes
+   * and (transiently) on a failed one, so it cannot answer this on its own.
+   * Routing gates must wait for this to be true before treating a null/
+   * incomplete profile as the truth about the user.
+   */
+  isProfileResolved(): boolean {
+    const userId = this.getAuthUserId();
+    if (!userId) return true;
+    return this.profileResolvedForUserId === userId;
+  }
+
+  /**
    * Fetch profile from Supabase and sync with local cache
    * OPTIMIZATION: Check cache first for faster session restoration on app reopen
+   *
+   * Wrapper: opens the isProfileResolved() gate for `userId` on every exit path
+   * (success, confirmed-missing row, cache hit, thrown error) and re-notifies
+   * listeners afterwards, so subscribers observing that gate re-render once the
+   * answer is actually known. The inner implementation does its own
+   * notifyListeners() calls first; the extra notification here is idempotent
+   * (listeners only setState) and is what flips consumers out of "loading".
+   *
+   * Both are gated on the fetch still being CURRENT. A superseded fetch --
+   * a slow request for the outgoing account landing after a fast one for the
+   * incoming account, or after a sign-out -- must not touch either:
+   *
+   *   - writing `profileResolvedForUserId = <outgoing user>` would move the
+   *     gate off the user who is actually signed in, leaving that user's
+   *     consumers stuck loading until the safety timeout,
+   *   - notifying would re-broadcast a profile that is no longer the answer
+   *     to the question anyone is asking.
    */
   async fetchAndSyncProfile(userId: string): Promise<AuthProfile | null> {
-    // Track this fetch attempt with a timestamp to prevent race conditions
-    const fetchTimestamp = Date.now();
-    this.latestFetchTimestamp = fetchTimestamp;
+    const fetchSequence = ++this.latestFetchSequence;
+    try {
+      return await this.fetchAndSyncProfileInner(userId, fetchSequence);
+    } finally {
+      const isLatestFetch = fetchSequence === this.latestFetchSequence;
+      // A sign-out or account switch during the request makes this answer
+      // irrelevant regardless of ordering. (getAuthUserId() is null for the
+      // few callers that fetch without an installed session; isProfileResolved()
+      // already reports "resolved" in that case, so skipping is a no-op.)
+      if (isLatestFetch && this.getAuthUserId() === userId) {
+        this.profileResolvedForUserId = userId;
+      }
+      if (isLatestFetch) {
+        this.notifyListeners(this.currentProfile);
+      }
+    }
+  }
 
+  /** @param fetchSequence - id of this fetch, assigned by the public wrapper. */
+  private async fetchAndSyncProfileInner(
+    userId: string,
+    fetchSequence: number
+  ): Promise<AuthProfile | null> {
     console.log('[authProfileService] fetchAndSyncProfile START', {
       userId,
       isSupabaseConfigured,
-      fetchTimestamp,
+      fetchSequence,
     });
 
     if (!isSupabaseConfigured) {
@@ -433,9 +515,9 @@ export class AuthProfileService {
       // Notify listeners immediately with cached data
       this.notifyListeners(cachedProfile);
       // Continue to fetch fresh data in background (don't await to avoid blocking)
-      // Pass the fetchTimestamp to enable race condition detection
+      // Pass the fetchSequence to enable race condition detection
       // Use void to explicitly indicate intentional fire-and-forget behavior
-      void this.fetchFreshProfileInBackground(userId, fetchTimestamp).catch(error => {
+      void this.fetchFreshProfileInBackground(userId, fetchSequence).catch(error => {
         console.log(
           '[authProfileService] Background fetch failed (non-critical, using cached data):',
           error
@@ -615,12 +697,12 @@ export class AuthProfileService {
    * Fetch fresh profile data in background without blocking
    * Used after returning cached data for instant UI update
    * @param userId - The user ID to fetch profile for
-   * @param callerFetchTimestamp - The timestamp from the calling fetchAndSyncProfile to detect race conditions
+   * @param callerFetchSequence - This background fetch's originating fetchAndSyncProfile id, used to discard superseded results
    * @private
    */
   private async fetchFreshProfileInBackground(
     userId: string,
-    callerFetchTimestamp: number
+    callerFetchSequence: number
   ): Promise<void> {
     try {
       console.log('[authProfileService] Fetching fresh profile in background for userId:', userId);
@@ -642,7 +724,7 @@ export class AuthProfileService {
       // Check if a newer fetch has started since we began
       // This prevents race conditions where multiple background fetches complete out of order
       // Only apply results if no newer fetch has been initiated
-      if (callerFetchTimestamp < this.latestFetchTimestamp) {
+      if (callerFetchSequence < this.latestFetchSequence) {
         console.log(
           '[authProfileService] Discarding stale background fetch result (newer fetch has started)'
         );

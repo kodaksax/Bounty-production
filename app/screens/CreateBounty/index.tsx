@@ -119,6 +119,15 @@ export function CreateBountyFlow({
   const [detailTarget, setDetailTarget] = useState<DetailTarget | null>(null);
   const [detailDraft, setDetailDraft] = useState<BountyDraft | null>(null);
   const [isSavingDetail, setIsSavingDetail] = useState(false);
+  // The authoritative copy of the in-progress detail edits. `detailDraft`
+  // state drives rendering; this ref is what actually gets persisted. They
+  // exist separately because the step screens patch and advance within a
+  // single tick — StepWhere geocodes the typed address, calls onUpdate with
+  // the coordinates, then immediately calls onNext — and `detailDraft` read
+  // during that same tick is still the pre-patch value, so the last edit
+  // before Continue (coordinates, a batch of uploaded photos) would never
+  // reach the bounty row.
+  const detailDraftRef = useRef<BountyDraft | null>(null);
   // Snapshot of the draft taken when publishing starts, since useBountyPublish
   // calls clearDraft() before it reports back — by the time onPublished runs,
   // `draft` itself has been reset to defaults.
@@ -306,13 +315,29 @@ export function CreateBountyFlow({
   /** Open one of the optional-detail screens over the confirmation screen. */
   const handleAddDetail = (target: DetailTarget) => {
     if (!postedDraft) return;
+    detailDraftRef.current = postedDraft;
     setDetailDraft(postedDraft);
     setDetailTarget(target);
     setStepDirection(1);
   };
 
+  /**
+   * Apply one step screen's edit to the working copy. Patches compose off the
+   * ref rather than off React state so several updates dispatched in the same
+   * tick (the upload hook fires onUploaded once per photo in a synchronous
+   * loop) all survive instead of the last one clobbering the rest.
+   */
+  const applyDetailPatch = (patch: Partial<BountyDraft>) => {
+    const base = detailDraftRef.current;
+    if (!base) return;
+    const next = { ...base, ...patch };
+    detailDraftRef.current = next;
+    setDetailDraft(next);
+  };
+
   /** Back out of a detail screen, discarding its unsaved edits. */
   const handleCancelDetail = () => {
+    detailDraftRef.current = null;
     setDetailTarget(null);
     setDetailDraft(null);
     setStepDirection(-1);
@@ -325,11 +350,15 @@ export function CreateBountyFlow({
    * already exists and only optional columns are being written.
    */
   const handleSaveDetail = async () => {
-    if (!postedBountyId || !detailDraft || isSavingDetail) return;
+    // Read the ref, not `detailDraft` — see detailDraftRef's note above: a
+    // screen that patches and advances in one tick has not re-rendered yet.
+    const pendingDraft = detailDraftRef.current;
+    if (!postedBountyId || !pendingDraft || isSavingDetail) return;
     setIsSavingDetail(true);
     try {
-      await bountyService.updateBountyDetails(postedBountyId, detailDraft);
-      setPostedDraft(detailDraft);
+      await bountyService.updateBountyDetails(postedBountyId, pendingDraft);
+      setPostedDraft(pendingDraft);
+      detailDraftRef.current = null;
       setDetailTarget(null);
       setDetailDraft(null);
       setStepDirection(-1);
@@ -615,9 +644,10 @@ export function CreateBountyFlow({
             {postedBountyId && detailDraft && detailTarget === 'photos' && (
               <StepPhotos
                 draft={detailDraft}
-                onUpdate={patch => setDetailDraft(prev => (prev ? { ...prev, ...patch } : prev))}
+                onUpdate={applyDetailPatch}
                 onNext={handleSaveDetail}
                 onBack={handleCancelDetail}
+                isSaving={isSavingDetail}
                 step={TOTAL_STEPS}
                 totalSteps={TOTAL_STEPS}
               />
@@ -625,9 +655,10 @@ export function CreateBountyFlow({
             {postedBountyId && detailDraft && detailTarget === 'where' && (
               <StepWhere
                 draft={detailDraft}
-                onUpdate={patch => setDetailDraft(prev => (prev ? { ...prev, ...patch } : prev))}
+                onUpdate={applyDetailPatch}
                 onNext={handleSaveDetail}
                 onBack={handleCancelDetail}
+                isSaving={isSavingDetail}
                 step={TOTAL_STEPS}
                 totalSteps={TOTAL_STEPS}
               />
@@ -635,9 +666,10 @@ export function CreateBountyFlow({
             {postedBountyId && detailDraft && detailTarget === 'when' && (
               <StepWhen
                 draft={detailDraft}
-                onUpdate={patch => setDetailDraft(prev => (prev ? { ...prev, ...patch } : prev))}
+                onUpdate={applyDetailPatch}
                 onNext={handleSaveDetail}
                 onBack={handleCancelDetail}
+                isSaving={isSavingDetail}
                 step={TOTAL_STEPS}
                 totalSteps={TOTAL_STEPS}
               />

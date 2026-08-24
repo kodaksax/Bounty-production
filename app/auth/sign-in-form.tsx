@@ -27,6 +27,7 @@ import { useFormSubmission } from '../../hooks/useFormSubmission';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
 import { capture as posthogCapture, identify as posthogIdentify } from '../../lib/posthog';
 import { ROUTES } from '../../lib/routes';
+import { analyticsService } from '../../lib/services/analytics-service';
 import { storage } from '../../lib/storage';
 import { hasLocalOnboardingFlag } from '../../lib/storage/onboarding';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
@@ -49,7 +50,24 @@ WebBrowser.maybeCompleteAuthSession();
 // Storage keys that persist the failed-attempt throttle across remounts of the
 // sign-in screen, so the CAPTCHA and lockout survive a navigation or reload.
 const LOGIN_ATTEMPTS_KEY = 'loginAttempts';
+const LOGIN_ATTEMPTS_AT_KEY = 'loginAttemptsAt';
 const LOCKOUT_UNTIL_KEY = 'lockoutUntil';
+
+/**
+ * How long a persisted failed-attempt count stays meaningful.
+ *
+ * The throttle exists to slow down an active guessing burst, not to gate a
+ * legitimate user forever. Without this the counter only ever reset on a
+ * SUCCESSFUL sign-in, so three fumbled passwords at any point in the app's
+ * lifetime left the CAPTCHA permanently armed across restarts — and because
+ * an unsolved CAPTCHA makes the Sign In button reject the attempt locally
+ * before any request is sent, that presented as "sign-in stopped working".
+ */
+const LOGIN_THROTTLE_TTL_MS = 15 * 60 * 1000;
+
+/** Failed attempts before the CAPTCHA appears is CAPTCHA_THRESHOLD; this is the lockout point. */
+const LOCKOUT_AFTER_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 5 * 60 * 1000;
 
 export default function SignInRoute() {
   return <SignInForm />;
@@ -141,12 +159,29 @@ export function SignInForm() {
       // the CAPTCHA error below is intentionally unreachable in the lockout state.
       if (isLockoutActive) {
         const remainingSeconds = Math.ceil((lockoutUntil! - Date.now()) / 1000);
+        analyticsService.trackEvent('auth_signin_blocked', {
+          reason: 'lockout',
+          remaining_seconds: remainingSeconds,
+        });
         throw new Error(`Too many failed attempts. Please wait ${remainingSeconds} seconds.`);
       }
 
-      // Require CAPTCHA to be solved after the threshold
+      // Require CAPTCHA to be solved after the threshold.
+      //
+      // This rejects the tap locally — no request is made — so it MUST be
+      // unmistakable in the UI, otherwise it reads as a broken button. The
+      // field error anchors the message to the challenge itself in addition to
+      // the banner, and the event makes the block visible in analytics.
       if (captchaRequired && !captchaVerified) {
-        throw new Error('Please complete the security check before signing in.');
+        analyticsService.trackEvent('auth_signin_blocked', {
+          reason: 'captcha_required',
+          attempts: loginAttempts,
+        });
+        setFieldErrors(prev => ({
+          ...prev,
+          captcha: 'Answer the security question below, then tap Sign In again.',
+        }));
+        throw new Error('Please complete the security check below before signing in.');
       }
 
       if (!validateForm()) {
@@ -204,15 +239,25 @@ export function SignInForm() {
 
           // Track failed login attempts
           const newAttempts = loginAttempts + 1;
-          setLoginAttempts(newAttempts);
 
-          // Lock out after 5 failed attempts for 5 minutes
-          if (newAttempts >= 5) {
-            const lockout = Date.now() + 5 * 60 * 1000; // 5 minutes
+          // Lock out after LOCKOUT_AFTER_ATTEMPTS consecutive failures.
+          //
+          // The counter is reset at the same time: the lockout IS the penalty
+          // for this burst, and leaving the count at/above the threshold meant
+          // every later failure re-armed another full lockout, so a user who
+          // kept trying could never get back in. Serving the lockout now
+          // returns them to a clean slate.
+          if (newAttempts >= LOCKOUT_AFTER_ATTEMPTS) {
+            const lockout = Date.now() + LOCKOUT_DURATION_MS;
+            setLoginAttempts(0);
             setLockoutUntil(lockout);
             setCaptchaVerified(false);
-            throw new Error('Too many failed attempts. Please try again in 5 minutes.');
+            throw new Error(
+              `Too many failed attempts. Please try again in ${LOCKOUT_DURATION_MS / 60000} minutes.`
+            );
           }
+
+          setLoginAttempts(newAttempts);
 
           // Use centralized error message
           throw new Error(authError.userMessage);
@@ -460,7 +505,12 @@ export function SignInForm() {
       }
     },
     {
-      debounceMs: 500, // Prevent double-submissions
+      // No time-based cooldown: duplicate submissions are already impossible
+      // while one is in flight (useFormSubmission's concurrency guard), and a
+      // cooldown here would silently swallow the retry tap that follows a
+      // fast local rejection (validation error, CAPTCHA required, lockout) —
+      // the "Sign In / Try Again stops working" beta report.
+      debounceMs: 0,
     }
   );
 
@@ -519,22 +569,49 @@ export function SignInForm() {
 
   // Restore the persisted failed-attempt throttle on mount so a remount does
   // not reset the count and let the CAPTCHA silently never appear.
+  //
+  // The count is only honoured while it is still FRESH (LOGIN_THROTTLE_TTL_MS).
+  // A stale count is discarded: an attempt counter that only ever cleared on a
+  // successful sign-in meant a user who once mistyped their password three
+  // times carried an armed CAPTCHA forever, and every Sign In tap after that
+  // was rejected locally before any request went out.
   useEffect(() => {
     const loadThrottle = async () => {
       try {
-        const [savedAttempts, savedLockout] = await Promise.all([
+        const [savedAttempts, savedAttemptsAt, savedLockout] = await Promise.all([
           storage.getItem(LOGIN_ATTEMPTS_KEY),
+          storage.getItem(LOGIN_ATTEMPTS_AT_KEY),
           storage.getItem(LOCKOUT_UNTIL_KEY),
         ]);
+
         const lockout = savedLockout ? parseInt(savedLockout, 10) : NaN;
-        if (Number.isFinite(lockout) && Date.now() < lockout) {
+        const lockoutStillActive = Number.isFinite(lockout) && Date.now() < lockout;
+        if (lockoutStillActive) {
           setLockoutUntil((currentLockout) =>
             currentLockout === null ? lockout : Math.max(currentLockout, lockout)
           );
+        } else if (Number.isFinite(lockout)) {
+          // Lockout already served — drop it, along with the attempt count that
+          // caused it. The lockout WAS the penalty for that burst; carrying the
+          // count forward would drop the user straight from a served lockout
+          // into a permanently-required CAPTCHA.
+          void storage.removeItem(LOCKOUT_UNTIL_KEY);
+          void storage.removeItem(LOGIN_ATTEMPTS_KEY);
+          void storage.removeItem(LOGIN_ATTEMPTS_AT_KEY);
+          setThrottleHydrated(true);
+          return;
         }
+
         const attempts = savedAttempts ? parseInt(savedAttempts, 10) : NaN;
-        if (Number.isFinite(attempts) && attempts > 0) {
+        const attemptsAt = savedAttemptsAt ? parseInt(savedAttemptsAt, 10) : NaN;
+        const attemptsAreFresh =
+          Number.isFinite(attemptsAt) && Date.now() - attemptsAt < LOGIN_THROTTLE_TTL_MS;
+
+        if (Number.isFinite(attempts) && attempts > 0 && attemptsAreFresh) {
           setLoginAttempts((currentAttempts) => Math.max(currentAttempts, attempts));
+        } else if (Number.isFinite(attempts)) {
+          void storage.removeItem(LOGIN_ATTEMPTS_KEY);
+          void storage.removeItem(LOGIN_ATTEMPTS_AT_KEY);
         }
       } catch (error) {
         console.error('[sign-in] Failed to load login throttle:', error);
@@ -545,15 +622,39 @@ export function SignInForm() {
     loadThrottle();
   }, []);
 
-  // Persist the throttle whenever it changes, once hydrated.
+  // Persist the throttle whenever it changes, once hydrated. The timestamp is
+  // written alongside the count so the TTL above can age it out.
   useEffect(() => {
     if (!throttleHydrated) return;
     if (loginAttempts > 0) {
       void storage.setItem(LOGIN_ATTEMPTS_KEY, String(loginAttempts));
+      void storage.setItem(LOGIN_ATTEMPTS_AT_KEY, String(Date.now()));
     } else {
       void storage.removeItem(LOGIN_ATTEMPTS_KEY);
+      void storage.removeItem(LOGIN_ATTEMPTS_AT_KEY);
     }
   }, [loginAttempts, throttleHydrated]);
+
+  // A lockout that has elapsed must not leave the counter sitting at the
+  // CAPTCHA threshold: the user has served the penalty and should get a clean
+  // form back. Without this the screen came out of a lockout straight into a
+  // permanently-required CAPTCHA.
+  useEffect(() => {
+    if (lockoutUntil === null) return;
+    const remaining = lockoutUntil - Date.now();
+    if (remaining <= 0) {
+      setLockoutUntil(null);
+      setLoginAttempts(0);
+      setCaptchaVerified(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setLockoutUntil(null);
+      setLoginAttempts(0);
+      setCaptchaVerified(false);
+    }, remaining);
+    return () => clearTimeout(timer);
+  }, [lockoutUntil]);
 
   useEffect(() => {
     if (!throttleHydrated) return;
@@ -828,6 +929,10 @@ export function SignInForm() {
                     if (fieldErrors.identifier) {
                       setFieldErrors(prev => ({ ...prev, identifier: '' }));
                     }
+                    // Editing a credential invalidates the previous failure —
+                    // leaving the banner up makes a corrected attempt look
+                    // like it failed again before it has even been tried.
+                    if (authError) resetError();
                     setEmailSuggestion(suggestEmailCorrection(text));
                   }}
                   placeholder="you@example.com"
@@ -889,6 +994,7 @@ export function SignInForm() {
                       if (fieldErrors.password) {
                         setFieldErrors(prev => ({ ...prev, password: '' }));
                       }
+                      if (authError) resetError();
                     }}
                     placeholder="Password"
                     secureTextEntry={!showPassword}
@@ -925,9 +1031,14 @@ export function SignInForm() {
                   <Text className="text-xs mb-2" style={{ color: theme.text }}>
                     Please complete the security check below to continue signing in.
                   </Text>
+                  {getFieldError('captcha') ? (
+                    <ValidationMessage message={getFieldError('captcha')} />
+                  ) : null}
                   <CaptchaChallenge
                     onVerified={() => {
                       setCaptchaVerified(true);
+                      setFieldErrors(prev => ({ ...prev, captcha: '' }));
+                      if (authError) resetError();
                       posthogCapture('AUTH_CAPTCHA_SOLVED', { attempts: loginAttempts });
                     }}
                     onReset={() => setCaptchaVerified(false)}

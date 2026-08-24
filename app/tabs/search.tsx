@@ -1,9 +1,12 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
+    Animated,
+    Easing,
     FlatList,
+    Keyboard,
     Modal,
     ScrollView,
     StyleSheet,
@@ -12,11 +15,21 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { BountyMapView } from '../../components/location/BountyMapView';
+import {
+    ActiveHuntersPill,
+    MIN_ACTIVE_HUNTERS_TO_SHOW,
+} from '../../components/ui/active-hunters-pill';
 import { EmptyState } from '../../components/ui/empty-state';
+import {
+    SEARCH_FIELD_MAX_FONT_SCALE,
+    SEARCH_FIELD_TEXT,
+    SearchBarRow,
+    SearchRowIconButton,
+} from '../../components/ui/search-bar-row';
 import { Skeleton } from '../../components/ui/skeleton';
+import { useAccessibleAnimation } from '../../hooks/use-accessible-animation';
 import { consumeIsFirstBountyListViewOfSession } from '../../lib/analytics/sessionFlags';
-import { SPACING } from '../../lib/constants/accessibility';
+import { A11Y, SPACING } from '../../lib/constants/accessibility';
 import { analyticsService } from '../../lib/services/analytics-service';
 import { authProfileService } from '../../lib/services/auth-profile-service';
 import { bountyService } from '../../lib/services/bounty-service';
@@ -35,10 +48,30 @@ import type {
 } from '../../lib/types';
 import { logger } from '../../lib/utils/error-logger';
 import { coarseRegionFromLocationText, getDeviceServiceabilityContext } from '../../lib/utils/serviceable-region';
+/**
+ * react-native-maps and its clustering wrapper are heavy modules, and a static
+ * import runs their initialisation the first time this screen's module is
+ * required — i.e. on the way in from the feed, for every user, including the
+ * majority who never open the map at all. That work landed in the same frames
+ * as the arrival animation and showed as a hitch. Deferred here to the first
+ * time the map is actually asked for.
+ */
+const BountyMapView = lazy(() =>
+  import('../../components/location/BountyMapView').then(m => ({ default: m.BountyMapView }))
+);
+
 type SearchTab = 'bounties' | 'users';
 
 // Debounce delay for autocomplete (500ms as per requirements)
 const AUTOCOMPLETE_DEBOUNCE_MS = 500;
+
+/**
+ * How long the arrival animation will wait for the screen's initial data
+ * before playing anyway. Long enough for the two AsyncStorage reads and a
+ * healthy trending fetch, short enough that a stalled network reads as a
+ * beat rather than a hang.
+ */
+const ENTRANCE_MAX_WAIT_MS = 300;
 
 interface BountyRowItem {
   id: string;
@@ -68,7 +101,22 @@ export default function EnhancedSearchScreen() {
   const router = useRouter();
   const { theme } = useAppThemeContext();
   const s = useMemo(() => makeStyles(theme), [theme]);
-  const { q } = useLocalSearchParams<{ q?: string }>();
+  // `hunters`/`radius` are passed by the feed's search bar so this screen can
+  // redraw the same active-hunters pill without re-running the location query.
+  // Absent (e.g. arriving from saved searches) simply means no pill.
+  const { q, hunters, radius } = useLocalSearchParams<{
+    q?: string;
+    hunters?: string;
+    radius?: string;
+  }>();
+  const activeHuntersCount = useMemo(() => {
+    const parsed = Number(hunters);
+    return Number.isFinite(parsed) && parsed >= MIN_ACTIVE_HUNTERS_TO_SHOW ? parsed : null;
+  }, [hunters]);
+  const activeHuntersRadius = useMemo(() => {
+    const parsed = Number(radius);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  }, [radius]);
   const [activeTab, setActiveTab] = useState<SearchTab>('bounties');
   const [query, setQuery] = useState('');
   const [bountyResults, setBountyResults] = useState<BountyRowItem[]>([]);
@@ -93,6 +141,78 @@ export default function EnhancedSearchScreen() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [filtersLoaded, setFiltersLoaded] = useState(false);
+
+  // ── Arrival animation ─────────────────────────────────────────────────────
+  // The bar is pinned in place by design (see SearchBarRow), which on its own
+  // makes arriving here read as nothing happening. So the screen announces
+  // itself with what sits *under* the bar instead: the tab row and then the
+  // results area rise and fade in, a beat apart, while the field's ring lights
+  // up. The exit runs the same thing backwards before the pop, so closing
+  // doesn't cut. Reduced motion collapses every duration to 0 via createTiming.
+  const { createTiming } = useAccessibleAnimation();
+  const chromeAnim = useRef(new Animated.Value(0)).current;
+  const bodyAnim = useRef(new Animated.Value(0)).current;
+  const isClosingRef = useRef(false);
+
+  // Everything the first frame draws — saved filters, recent searches,
+  // trending — arrives from an async load, and each one that lands late
+  // changes the layout: a section appears, the skeletons swap for cards, the
+  // results list shifts down. Animating before they settle means the content
+  // slides in and *then* rearranges itself, which is the flicker this gate
+  // exists to remove. Capped, so a slow trending fetch delays the screen by
+  // ENTRANCE_MAX_WAIT_MS at worst instead of holding it indefinitely.
+  const [recentsLoaded, setRecentsLoaded] = useState(false);
+  const [waitedForContent, setWaitedForContent] = useState(false);
+  const hasEnteredRef = useRef(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setWaitedForContent(true), ENTRANCE_MAX_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const readyToEnter =
+    (filtersLoaded && recentsLoaded && !isLoadingTrending) || waitedForContent;
+
+  useEffect(() => {
+    if (!readyToEnter || hasEnteredRef.current) return;
+    hasEnteredRef.current = true;
+    Animated.stagger(60, [
+      createTiming(chromeAnim, 1, A11Y.ANIMATION_NORMAL, Easing.out(Easing.cubic)),
+      createTiming(bodyAnim, 1, A11Y.ANIMATION_NORMAL, Easing.out(Easing.cubic)),
+    ]).start();
+  }, [readyToEnter, createTiming, chromeAnim, bodyAnim]);
+
+  const enterStyle = useCallback(
+    (value: Animated.Value, distance: number) => ({
+      opacity: value,
+      transform: [
+        { translateY: value.interpolate({ inputRange: [0, 1], outputRange: [distance, 0] }) },
+      ],
+    }),
+    []
+  );
+
+  // Close on our terms rather than letting the route pop under a static
+  // screen: play the entrance backwards, then go. The hardware/gesture back
+  // still pops immediately — this only covers the button we own. The
+  // canGoBack fallback matters more here than it would for a plain back
+  // button: on a cold deep link into search there is nothing to pop, and
+  // without it the screen would sit there animated-out and empty.
+  const closeSearch = useCallback(() => {
+    if (isClosingRef.current) return;
+    isClosingRef.current = true;
+    Keyboard.dismiss();
+    Animated.parallel([
+      createTiming(bodyAnim, 0, A11Y.ANIMATION_FAST, Easing.in(Easing.cubic)),
+      createTiming(chromeAnim, 0, A11Y.ANIMATION_FAST, Easing.in(Easing.cubic)),
+    ]).start(() => {
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/tabs/bounty-app');
+      }
+    });
+  }, [createTiming, bodyAnim, chromeAnim, router]);
   // Load trending bounties
   const loadTrendingBounties = useCallback(async () => {
     setIsLoadingTrending(true);
@@ -155,10 +275,18 @@ export default function EnhancedSearchScreen() {
 
   // Load recent searches function - memoized to be used in dependency arrays
   const loadRecentSearches = useCallback(async () => {
-    const searches = await recentSearchService.getRecentSearchesByType(
-      activeTab === 'bounties' ? 'bounty' : 'user'
-    );
-    setRecentSearches(searches);
+    try {
+      const searches = await recentSearchService.getRecentSearchesByType(
+        activeTab === 'bounties' ? 'bounty' : 'user'
+      );
+      setRecentSearches(searches);
+    } catch (error) {
+      logger.warning('Recent searches failed to load', { error });
+    } finally {
+      // Signals the arrival animation, so a failed read can't leave the
+      // screen waiting on the cap for nothing.
+      setRecentsLoaded(true);
+    }
   }, [activeTab]);
 
   // Load recent searches on mount and when activeTab changes
@@ -517,39 +645,50 @@ export default function EnhancedSearchScreen() {
 
   return (
     <View style={s.container}>
-      <View style={s.header}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={s.backBtn}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          accessibilityHint="Returns to previous screen"
-        >
-          <MaterialIcons
-            name="arrow-back"
-            size={22}
-            color={theme.text}
-            accessibilityElementsHidden={true}
-          />
-        </TouchableOpacity>
-        <Text style={s.headerTitle} accessibilityRole="header">
-          Search
-        </Text>
-      </View>
-
-      {/* Search bar */}
-      <View style={s.searchRow}>
-        <MaterialIcons
-          name="search"
-          size={20}
-          color={theme.primaryLight}
-          style={s.iconMarginHorizontal8}
-          accessibilityElementsHidden={true}
-        />
+      {/* The feed's search bar navigates here, so this row is deliberately the
+          same component at the same offset: same 44pt field, same gutters,
+          same 44pt trailing slot (the feed's bell, this screen's close
+          button). Nothing about the bar moves or resizes on arrival — only
+          what sits below it changes, from the feed's cards to results. That is
+          also why the map / saved / filter controls live in the row beneath
+          rather than inside the field: inside, they would widen the bar. */}
+      <SearchBarRow
+        emphasis
+        middle={
+          activeHuntersCount != null ? (
+            <ActiveHuntersPill
+              count={activeHuntersCount}
+              radiusMiles={activeHuntersRadius}
+              testID="search-active-hunters-caption"
+            />
+          ) : null
+        }
+        trailing={
+          // Cross-fades in over where the feed's bell was standing, so the
+          // slot swaps its occupant instead of snapping to a different icon.
+          <Animated.View style={{ opacity: chromeAnim }}>
+            <SearchRowIconButton
+              icon="close"
+              onPress={closeSearch}
+              accessibilityLabel="Close search"
+              accessibilityHint="Returns to the previous screen"
+            />
+          </Animated.View>
+        }
+      >
         <TextInput
           value={query}
-          placeholder={activeTab === 'bounties' ? 'Search bounties...' : 'Search users...'}
-          placeholderTextColor="#6B7280"
+          placeholder={
+            activeTab === 'users'
+              ? 'Search users...'
+              : // Same rule as the feed's placeholder, so the wording doesn't
+                // change under the cursor when the bar becomes editable.
+                activeHuntersCount != null
+                ? 'Search bounties...'
+                : 'Search bounties or users...'
+          }
+          placeholderTextColor={theme.textDisabled}
+          maxFontSizeMultiplier={SEARCH_FIELD_MAX_FONT_SCALE}
           onChangeText={text => {
             setQuery(text);
             if (!text.trim()) {
@@ -561,6 +700,9 @@ export default function EnhancedSearchScreen() {
               setShowSuggestions(true);
             }
           }}
+          // The bar looks identical to the one just tapped, so it has to behave
+          // like it was tapped: land here ready to type, not needing a second tap.
+          autoFocus
           returnKeyType="search"
           style={s.input}
           accessibilityRole="search"
@@ -594,57 +736,10 @@ export default function EnhancedSearchScreen() {
             accessibilityLabel="Loading search results"
           />
         )}
-        {activeTab === 'bounties' && (
-          <>
-            <TouchableOpacity
-              onPress={() => setShowMap(v => !v)}
-              style={s.filterBtn}
-              accessibilityRole="button"
-              accessibilityLabel={showMap ? 'Show list view' : 'Show map view'}
-              accessibilityHint="Toggles between list and map view of bounty results"
-              accessibilityState={{ selected: showMap }}
-            >
-              <MaterialIcons
-                name={showMap ? 'view-list' : 'map'}
-                size={20}
-                color={theme.primaryLight}
-                accessibilityElementsHidden={true}
-              />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => router.push('/search/saved-searches')}
-              style={s.filterBtn}
-              accessibilityRole="button"
-              accessibilityLabel="Saved searches"
-              accessibilityHint="View and manage saved searches"
-            >
-              <MaterialIcons
-                name="bookmark-outline"
-                size={20}
-                color={theme.primaryLight}
-                accessibilityElementsHidden={true}
-              />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setShowFilters(true)}
-              style={s.filterBtn}
-              accessibilityRole="button"
-              accessibilityLabel={hasActiveFilters ? 'Filter (active)' : 'Filter'}
-              accessibilityHint="Opens filter options for bounty search"
-            >
-              <MaterialIcons
-                name="tune"
-                size={20}
-                color={hasActiveFilters ? '#fcd34d' : theme.primaryLight}
-                accessibilityElementsHidden={true}
-              />
-              {hasActiveFilters && <View style={s.filterDot} />}
-            </TouchableOpacity>
-          </>
-        )}
-      </View>
+      </SearchBarRow>
+
       {/* Tab switcher */}
-      <View style={s.tabRow}>
+      <Animated.View style={[s.tabRow, enterStyle(chromeAnim, 10)]}>
         <TouchableOpacity
           style={[s.tab, activeTab === 'bounties' && s.tabActive]}
           onPress={() => setActiveTab('bounties')}
@@ -665,195 +760,269 @@ export default function EnhancedSearchScreen() {
         >
           <Text style={[s.tabText, activeTab === 'users' && s.tabTextActive]}>Users</Text>
         </TouchableOpacity>
-      </View>
-      {/* Autocomplete Suggestions */}
-      {showSuggestions && suggestions.length > 0 && (
-        <View style={s.suggestionsContainer}>
-          {suggestions.map(suggestion => (
+
+        {/* Result-shaping controls. They sit here, on the first line of the
+            content, rather than inside the search field: the field has to stay
+            the width the feed's does, and these three only apply to bounty
+            results anyway. */}
+        {activeTab === 'bounties' && (
+          <View style={s.tabActions}>
             <TouchableOpacity
-              key={suggestion.id}
-              style={s.suggestionItem}
-              onPress={() => handleSuggestionPress(suggestion)}
+              onPress={() => setShowMap(v => !v)}
+              style={s.actionBtn}
               accessibilityRole="button"
-              accessibilityLabel={`${suggestion.type === 'bounty' ? 'Bounty' : suggestion.type === 'user' ? 'User' : 'Skill'}: ${suggestion.text}${suggestion.subtitle ? ', ' + suggestion.subtitle : ''}`}
-              accessibilityHint={
-                suggestion.type === 'bounty'
-                  ? 'Opens bounty details'
-                  : suggestion.type === 'user'
-                    ? 'Opens user profile'
-                    : 'Searches for bounties with this skill'
-              }
+              accessibilityLabel={showMap ? 'Show list view' : 'Show map view'}
+              accessibilityHint="Toggles between list and map view of bounty results"
+              accessibilityState={{ selected: showMap }}
             >
               <MaterialIcons
-                name={(suggestion.icon as any) || 'search'}
-                size={18}
+                name={showMap ? 'view-list' : 'map'}
+                size={20}
                 color={theme.primaryLight}
-                style={s.iconMarginRight10}
+                accessibilityElementsHidden={true}
               />
-              <View style={s.flex1}>
-                <Text style={s.suggestionText}>{suggestion.text}</Text>
-                {suggestion.subtitle && (
-                  <Text style={s.suggestionSubtext}>{suggestion.subtitle}</Text>
-                )}
-              </View>
-              <View style={s.suggestionTypeBadge}>
-                <Text style={s.suggestionTypeText}>
-                  {suggestion.type === 'bounty'
-                    ? 'Bounty'
-                    : suggestion.type === 'user'
-                      ? 'User'
-                      : 'Skill'}
-                </Text>
-              </View>
             </TouchableOpacity>
-          ))}
-        </View>
-      )}
-
-      {error && (
-        <View style={s.errorBox}>
-          <Text style={s.errorText}>⚠ {error}</Text>
-          <TouchableOpacity
-            onPress={() => {
-              if (activeTab === 'bounties') {
-                performBountySearch(query, filters);
-              } else {
-                performUserSearch(query);
-              }
-            }}
-            style={s.retryBtn}
-          >
-            <Text style={s.retryText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Recent searches */}
-      {!query && recentSearches.length > 0 && (
-        <View style={s.recentSection}>
-          <View style={s.recentHeader}>
-            <Text style={s.recentTitle}>Recent Searches</Text>
             <TouchableOpacity
-              onPress={() => recentSearchService.clearAll().then(loadRecentSearches)}
+              onPress={() => router.push('/search/saved-searches')}
+              style={s.actionBtn}
               accessibilityRole="button"
-              accessibilityLabel="Clear recent searches"
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel="Saved searches"
+              accessibilityHint="View and manage saved searches"
             >
-              <Text style={s.clearText}>Clear</Text>
+              <MaterialIcons
+                name="bookmark-outline"
+                size={20}
+                color={theme.primaryLight}
+                accessibilityElementsHidden={true}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setShowFilters(true)}
+              style={s.actionBtn}
+              accessibilityRole="button"
+              accessibilityLabel={hasActiveFilters ? 'Filter (active)' : 'Filter'}
+              accessibilityHint="Opens filter options for bounty search"
+            >
+              <MaterialIcons
+                name="tune"
+                size={20}
+                color={hasActiveFilters ? '#fcd34d' : theme.primaryLight}
+                accessibilityElementsHidden={true}
+              />
+              {hasActiveFilters && <View style={s.filterDot} />}
             </TouchableOpacity>
           </View>
-          <FlatList
-            data={recentSearches}
-            keyExtractor={keyExtractorRecent}
-            renderItem={renderRecentSearch}
-            scrollEnabled={false}
-            removeClippedSubviews={true}
-            maxToRenderPerBatch={10}
-            windowSize={3}
-            initialNumToRender={5}
-          />
-        </View>
-      )}
+        )}
+      </Animated.View>
 
-      {/* Trending Bounties — loading skeleton, shown while the initial fetch is in flight */}
-      {!query && !isSearching && isLoadingTrending && (
-        <View style={s.trendingSection}>
-          <View style={s.trendingHeader}>
-            <MaterialIcons name="local-fire-department" size={18} color={theme.primary} />
-            <Text style={s.trendingTitle}>Trending</Text>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {[0, 1, 2].map(i => (
-              <View key={`trending-skeleton-${i}`} style={s.trendingCard}>
-                <Skeleton style={s.trendingSkeletonLine} />
-                <Skeleton style={s.trendingSkeletonAmount} />
-              </View>
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {/* Trending Bounties — shown only when search is empty */}
-      {!query && !isSearching && !isLoadingTrending && trendingBounties.length > 0 && (
-        <View style={s.trendingSection}>
-          <View style={s.trendingHeader}>
-            <MaterialIcons name="local-fire-department" size={18} color={theme.primary} />
-            <Text style={s.trendingTitle}>Trending</Text>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {trendingBounties.map(bounty => (
+      {/* Everything under the bar — suggestions, recents, trending, results —
+          is the part that actually replaced the feed, so it's what moves. */}
+      <Animated.View style={[s.body, enterStyle(bodyAnim, 18)]}>
+        {/* Autocomplete Suggestions */}
+        {showSuggestions && suggestions.length > 0 && (
+          <View style={s.suggestionsContainer}>
+            {suggestions.map(suggestion => (
               <TouchableOpacity
-                key={String(bounty.id)}
-                style={s.trendingCard}
-                onPress={() => router.push(`/bounty/${bounty.id}/public?source=search`)}
+                key={suggestion.id}
+                style={s.suggestionItem}
+                onPress={() => handleSuggestionPress(suggestion)}
                 accessibilityRole="button"
-                accessibilityLabel={bounty.title}
-                accessibilityHint="Opens bounty details"
+                accessibilityLabel={`${suggestion.type === 'bounty' ? 'Bounty' : suggestion.type === 'user' ? 'User' : 'Skill'}: ${suggestion.text}${suggestion.subtitle ? ', ' + suggestion.subtitle : ''}`}
+                accessibilityHint={
+                  suggestion.type === 'bounty'
+                    ? 'Opens bounty details'
+                    : suggestion.type === 'user'
+                      ? 'Opens user profile'
+                      : 'Searches for bounties with this skill'
+                }
               >
-                <Text style={s.trendingCardTitle} numberOfLines={2}>
-                  {bounty.title}
-                </Text>
-                {bounty.isForHonor ? (
-                  <View style={s.trendingHonorBadge}>
-                    <Text style={s.trendingHonorText}>For Honor</Text>
-                  </View>
-                ) : (
-                  <Text style={s.trendingAmount}>${bounty.amount ?? 0}</Text>
-                )}
+                <MaterialIcons
+                  name={(suggestion.icon as any) || 'search'}
+                  size={18}
+                  color={theme.primaryLight}
+                  style={s.iconMarginRight10}
+                />
+                <View style={s.flex1}>
+                  <Text style={s.suggestionText}>{suggestion.text}</Text>
+                  {suggestion.subtitle && (
+                    <Text style={s.suggestionSubtext}>{suggestion.subtitle}</Text>
+                  )}
+                </View>
+                <View style={s.suggestionTypeBadge}>
+                  <Text style={s.suggestionTypeText}>
+                    {suggestion.type === 'bounty'
+                      ? 'Bounty'
+                      : suggestion.type === 'user'
+                        ? 'User'
+                        : 'Skill'}
+                  </Text>
+                </View>
               </TouchableOpacity>
             ))}
-          </ScrollView>
-        </View>
-      )}
+          </View>
+        )}
 
-      {/* Results */}
-      {activeTab === 'bounties' && showMap ? (
-        <BountyMapView height={400} />
-      ) : activeTab === 'bounties' ? (
-        <FlatList
-          data={bountyResults}
-          keyExtractor={keyExtractorBounty}
-          renderItem={renderBountyItem}
-          contentContainerStyle={s.resultsContainer}
-          keyboardDismissMode="on-drag"
-          ListEmptyComponent={
-            query && !isSearching && !error ? (
-              <EmptyState
-                icon="search-off"
-                title="No bounties found"
-                description={`No bounties matched "${query}". Try a different keyword or check your spelling.`}
-                size="sm"
-              />
-            ) : null
-          }
-          removeClippedSubviews={true}
-          maxToRenderPerBatch={10}
-          windowSize={5}
-          initialNumToRender={8}
-        />
-      ) : (
-        <FlatList
-          data={userResults}
-          keyExtractor={keyExtractorUser}
-          renderItem={renderUserItem}
-          contentContainerStyle={s.resultsContainer}
-          keyboardDismissMode="on-drag"
-          ListEmptyComponent={
-            query && !isSearching && !error ? (
-              <EmptyState
-                icon="person-search"
-                title="No users found"
-                description={`No users matched "${query}". Try a different name or username.`}
-                size="sm"
-              />
-            ) : null
-          }
-          removeClippedSubviews={true}
-          maxToRenderPerBatch={10}
-          windowSize={5}
-          initialNumToRender={8}
-        />
-      )}
+        {error && (
+          <View style={s.errorBox}>
+            <Text style={s.errorText}>⚠ {error}</Text>
+            <TouchableOpacity
+              onPress={() => {
+                if (activeTab === 'bounties') {
+                  performBountySearch(query, filters);
+                } else {
+                  performUserSearch(query);
+                }
+              }}
+              style={s.retryBtn}
+            >
+              <Text style={s.retryText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Recent searches */}
+        {!query && recentSearches.length > 0 && (
+          <View style={s.recentSection}>
+            <View style={s.recentHeader}>
+              <Text style={s.recentTitle}>Recent Searches</Text>
+              <TouchableOpacity
+                onPress={() => recentSearchService.clearAll().then(loadRecentSearches)}
+                accessibilityRole="button"
+                accessibilityLabel="Clear recent searches"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={s.clearText}>Clear</Text>
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={recentSearches}
+              keyExtractor={keyExtractorRecent}
+              renderItem={renderRecentSearch}
+              scrollEnabled={false}
+              // Off deliberately: these lists live inside the animated body
+              // wrapper, and clipping is computed against an ancestor that is
+              // mid-transform during the arrival animation — on Android that
+              // drops rows to blank. The lists are short enough not to need it.
+              removeClippedSubviews={false}
+              maxToRenderPerBatch={10}
+              windowSize={3}
+              initialNumToRender={5}
+            />
+          </View>
+        )}
+
+        {/* Trending Bounties — loading skeleton, shown while the initial fetch is in flight */}
+        {!query && !isSearching && isLoadingTrending && (
+          <View style={s.trendingSection}>
+            <View style={s.trendingHeader}>
+              <MaterialIcons name="local-fire-department" size={18} color={theme.primary} />
+              <Text style={s.trendingTitle}>Trending</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {[0, 1, 2].map(i => (
+                <View key={`trending-skeleton-${i}`} style={s.trendingCard}>
+                  <Skeleton style={s.trendingSkeletonLine} />
+                  <Skeleton style={s.trendingSkeletonAmount} />
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Trending Bounties — shown only when search is empty */}
+        {!query && !isSearching && !isLoadingTrending && trendingBounties.length > 0 && (
+          <View style={s.trendingSection}>
+            <View style={s.trendingHeader}>
+              <MaterialIcons name="local-fire-department" size={18} color={theme.primary} />
+              <Text style={s.trendingTitle}>Trending</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {trendingBounties.map(bounty => (
+                <TouchableOpacity
+                  key={String(bounty.id)}
+                  style={s.trendingCard}
+                  onPress={() => router.push(`/bounty/${bounty.id}/public?source=search`)}
+                  accessibilityRole="button"
+                  accessibilityLabel={bounty.title}
+                  accessibilityHint="Opens bounty details"
+                >
+                  <Text style={s.trendingCardTitle} numberOfLines={2}>
+                    {bounty.title}
+                  </Text>
+                  {bounty.isForHonor ? (
+                    <View style={s.trendingHonorBadge}>
+                      <Text style={s.trendingHonorText}>For Honor</Text>
+                    </View>
+                  ) : (
+                    <Text style={s.trendingAmount}>${bounty.amount ?? 0}</Text>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Results */}
+        {activeTab === 'bounties' && showMap ? (
+          <Suspense
+            fallback={
+              <View style={s.mapFallback}>
+                <ActivityIndicator color={theme.primaryLight} accessibilityLabel="Loading map" />
+              </View>
+            }
+          >
+            <BountyMapView height={400} />
+          </Suspense>
+        ) : activeTab === 'bounties' ? (
+          <FlatList
+            data={bountyResults}
+            keyExtractor={keyExtractorBounty}
+            renderItem={renderBountyItem}
+            contentContainerStyle={s.resultsContainer}
+            keyboardDismissMode="on-drag"
+            ListEmptyComponent={
+              query && !isSearching && !error ? (
+                <EmptyState
+                  icon="search-off"
+                  title="No bounties found"
+                  description={`No bounties matched "${query}". Try a different keyword or check your spelling.`}
+                  size="sm"
+                />
+              ) : null
+            }
+            // See the recent-searches list: clipping misbehaves under the
+            // animated wrapper's transform.
+            removeClippedSubviews={false}
+            maxToRenderPerBatch={10}
+            windowSize={5}
+            initialNumToRender={8}
+          />
+        ) : (
+          <FlatList
+            data={userResults}
+            keyExtractor={keyExtractorUser}
+            renderItem={renderUserItem}
+            contentContainerStyle={s.resultsContainer}
+            keyboardDismissMode="on-drag"
+            ListEmptyComponent={
+              query && !isSearching && !error ? (
+                <EmptyState
+                  icon="person-search"
+                  title="No users found"
+                  description={`No users matched "${query}". Try a different name or username.`}
+                  size="sm"
+                />
+              ) : null
+            }
+            // See the recent-searches list: clipping misbehaves under the
+            // animated wrapper's transform.
+            removeClippedSubviews={false}
+            maxToRenderPerBatch={10}
+            windowSize={5}
+            initialNumToRender={8}
+          />
+        )}
+      </Animated.View>
 
       {/* Filter Modal */}
       <Modal visible={showFilters} animationType="slide" transparent>
@@ -965,6 +1134,7 @@ export default function EnhancedSearchScreen() {
                   style={s.amountInput}
                   placeholder="Min"
                   placeholderTextColor={theme.textDisabled}
+          maxFontSizeMultiplier={SEARCH_FIELD_MAX_FONT_SCALE}
                   keyboardType="numeric"
                   value={filters.minAmount?.toString() || ''}
                   onChangeText={text =>
@@ -976,6 +1146,7 @@ export default function EnhancedSearchScreen() {
                   style={s.amountInput}
                   placeholder="Max"
                   placeholderTextColor={theme.textDisabled}
+          maxFontSizeMultiplier={SEARCH_FIELD_MAX_FONT_SCALE}
                   keyboardType="numeric"
                   value={filters.maxAmount?.toString() || ''}
                   onChangeText={text =>
@@ -1018,29 +1189,30 @@ function makeStyles(t: AppTheme) {
       flex: 1,
       backgroundColor: t.background,
     },
-    header: {
-      flexDirection: 'row',
+    // Takes the space the results list used to claim directly, so wrapping the
+    // content in an animated view doesn't collapse the list to its content.
+    body: {
+      flex: 1,
+    },
+    // Same height the map itself renders at, so loading it doesn't resize the
+    // area underneath the toggle.
+    mapFallback: {
+      height: 400,
       alignItems: 'center',
-      paddingTop: 54,
-      paddingHorizontal: SPACING.ELEMENT_GAP,
-      paddingBottom: SPACING.ELEMENT_GAP,
-      backgroundColor: t.background,
-    },
-    backBtn: {
-      padding: SPACING.COMPACT_GAP,
-      marginRight: 4,
-    },
-    headerTitle: {
-      color: t.text,
-      fontSize: 18,
-      fontWeight: '700',
-      marginLeft: 4,
+      justifyContent: 'center',
     },
     tabRow: {
       flexDirection: 'row',
-      paddingHorizontal: SPACING.ELEMENT_GAP,
+      alignItems: 'center',
+      paddingHorizontal: SPACING.SCREEN_HORIZONTAL,
       marginBottom: SPACING.COMPACT_GAP,
       gap: SPACING.COMPACT_GAP,
+    },
+    tabActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      flexShrink: 0,
     },
     tab: {
       flex: 1,
@@ -1063,35 +1235,30 @@ function makeStyles(t: AppTheme) {
     tabTextActive: {
       color: t.primaryLight,
     },
-    searchRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginHorizontal: SPACING.ELEMENT_GAP,
-      backgroundColor: t.surface,
-      borderRadius: 999,
-      marginBottom: 16,
-      paddingVertical: 10,
-      paddingHorizontal: 14,
-      borderWidth: 1,
-      borderColor: t.border,
-      shadowColor: '#000',
-      shadowOpacity: t.isDark ? 0.3 : 0.06,
-      shadowRadius: 10,
-      shadowOffset: { width: 0, height: 4 },
-      elevation: 3,
-    },
+    // Sits inside SearchBarRow's fixed-height field, so it contributes no
+    // height of its own — any vertical padding here would make this screen's
+    // bar taller than the feed's.
     input: {
+      ...SEARCH_FIELD_TEXT,
       flex: 1,
       color: t.text,
-      paddingVertical: 4,
-      fontSize: 15,
-    },
-    searchIconRight: {
-      marginLeft: 10,
-    },
-    iconMarginHorizontal8: {
-      marginHorizontal: 8,
-      marginRight: 10,
+      // Stretch to the field's full height instead of sizing to its own line
+      // box. A zero-padding TextInput measures to roughly the font size rather
+      // than the font's full line height, which slices the tops and tails off
+      // the glyphs — the placeholder came out visibly cropped. Given the whole
+      // 44pt to sit in, iOS centres a single line on its own and
+      // textAlignVertical does the same on Android.
+      alignSelf: 'stretch',
+      paddingVertical: 0,
+      paddingHorizontal: 0,
+      textAlignVertical: 'center',
+      // Android reserves asymmetric font padding — more above the ascender
+      // than below the descender — inside the input. Centring the padded box
+      // rather than the glyphs themselves is what dropped the placeholder a
+      // couple of points below where the feed's label sits. Dropping it makes
+      // the two land on the same line; the 44pt field leaves plenty of room
+      // for tall glyphs without it.
+      includeFontPadding: false,
     },
     smallPadding: {
       padding: 4,
@@ -1109,8 +1276,15 @@ function makeStyles(t: AppTheme) {
       padding: 12,
       paddingBottom: 100,
     },
-    filterBtn: {
-      padding: SPACING.COMPACT_GAP,
+    actionBtn: {
+      width: 36,
+      height: 36,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 999,
+      backgroundColor: t.surface,
+      borderWidth: 1,
+      borderColor: t.border,
       position: 'relative',
     },
     filterDot: {
@@ -1455,13 +1629,19 @@ function makeStyles(t: AppTheme) {
     // Gold border/amount kept as decorative accent for trending cards
     trendingCard: {
       width: 200,
+      // Fixed height with the two rows pushed apart, rather than a gap sized
+      // to whatever the content happens to be: the skeleton (two short bars)
+      // and the real card (a title of one or two lines plus a price) then
+      // occupy exactly the same box, so the swap when trending resolves can't
+      // jog the results list below it.
+      height: 150,
+      justifyContent: 'space-between',
       backgroundColor: t.surface,
       borderRadius: 12,
       padding: 16,
       marginRight: 10,
       borderWidth: 1.5,
       borderColor: '#D4AF37',
-      gap: 80,
       shadowColor: '#D4AF37',
       shadowOpacity: 0.25,
       shadowRadius: 10,

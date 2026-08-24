@@ -13,6 +13,8 @@ interface StepWhenProps {
   onUpdate: (data: Partial<BountyDraft>) => void;
   onNext: () => void;
   onBack: () => void;
+  /** True while the parent persists this step onto a live bounty. */
+  isSaving?: boolean;
   step: number;
   totalSteps: number;
 }
@@ -31,7 +33,7 @@ const CHOICES: { key: WhenChoice; label: string; icon: keyof typeof MaterialIcon
  * schedule step did (scheduleType / startDate / endDate), which bountyService
  * maps to schedule_type, start_date, end_date and the is_time_sensitive flag.
  */
-export function StepWhen({ draft, onUpdate, onNext, onBack, step, totalSteps }: StepWhenProps) {
+export function StepWhen({ draft, onUpdate, onNext, onBack, isSaving = false, step, totalSteps }: StepWhenProps) {
   const { theme } = useAppThemeContext();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const [pickerVisible, setPickerVisible] = useState(false);
@@ -100,8 +102,9 @@ export function StepWhen({ draft, onUpdate, onNext, onBack, step, totalSteps }: 
       totalSteps={totalSteps}
       onBack={onBack}
       title="When do you need it?"
-      ctaLabel="Continue"
+      ctaLabel={isSaving ? 'Saving…' : 'Continue'}
       ctaDisabled={!draft.scheduleType}
+      ctaBusy={isSaving}
       onCta={onNext}
     >
       <View style={styles.grid}>

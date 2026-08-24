@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandingLogo } from '../../components/ui/branding-logo';
 import { PosterFirstWelcome } from '../../components/onboarding/PosterFirstWelcome';
 import type { ProofCardActiveItem } from '../../components/onboarding/ProofCard';
+import { useAuthContext } from '../../hooks/use-auth-context';
 import { hapticFeedback } from '../../lib/haptic-feedback';
 import { useOnboarding } from '../../lib/context/onboarding-context';
 import { analyticsService } from '../../lib/services/analytics-service';
@@ -31,6 +32,7 @@ export default function OnboardingWelcome() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useAppThemeContext();
+  const { isLoggedIn, isLoading: authLoading } = useAuthContext();
   const { data: onboardingData, updateData } = useOnboarding();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -42,9 +44,25 @@ export default function OnboardingWelcome() {
   const activeProofRef = useRef<ProofCardActiveItem>({ index: 0, proofState: 'fallback', bountyId: null });
   const [ctaStopped, setCtaStopped] = useState(false);
 
+  // This is the PRE-AUTH entry screen: it offers "Log In" and the role CTAs.
+  // Showing it to someone who already has a session tells them their account
+  // doesn't exist and invites them to authenticate a second time — the exact
+  // "successful sign-up sends me back to Welcome" beta failure. The gate in
+  // app/onboarding/index.tsx no longer routes signed-in users here; this is a
+  // backstop for every other way this route can be reached (back gesture,
+  // deep link, a stale router entry, or a session that arrives while the
+  // screen is already open).
+  const redirectedRef = useRef(false);
   useEffect(() => {
+    if (authLoading || !isLoggedIn || redirectedRef.current) return;
+    redirectedRef.current = true;
+    router.replace('/onboarding');
+  }, [authLoading, isLoggedIn, router]);
+
+  useEffect(() => {
+    if (isLoggedIn) return;
     analyticsService.trackEvent('onboarding_welcome_viewed');
-  }, []);
+  }, [isLoggedIn]);
 
   // Fade in once the arm is known — the screen renders an empty background
   // until then (see the render guard below), so starting the fade earlier
@@ -109,7 +127,9 @@ export default function OnboardingWelcome() {
   // Hold the first paint until the 'welcome-page-redesign' arm is resolved, so
   // a device PostHog buckets into 'test' never sees the control screen flash
   // first. useFirstScreenVariant gives up after ~400ms, so this is bounded.
-  if (!firstScreenVariantReady) {
+  // Signed-in (or still-resolving) visitors are redirected by the effect above
+  // and must never see the pre-auth CTAs even for one frame.
+  if (!firstScreenVariantReady || authLoading || isLoggedIn) {
     return <View style={styles.container} />;
   }
 

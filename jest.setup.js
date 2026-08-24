@@ -153,6 +153,7 @@ jest.mock('react-native', () => {
       loop: jest.fn().mockReturnValue({ start: jest.fn(), stop: jest.fn() }),
       sequence: jest.fn().mockReturnValue({ start: jest.fn() }),
       parallel: jest.fn().mockReturnValue({ start: jest.fn() }),
+      stagger: jest.fn().mockReturnValue({ start: jest.fn() }),
       createAnimatedComponent: jest.fn(component => component),
       View: 'Animated.View',
     },
@@ -189,6 +190,10 @@ jest.mock('react-native', () => {
     TouchableOpacity: 'TouchableOpacity',
     TextInput: 'TextInput',
     ScrollView: 'ScrollView',
+    Keyboard: {
+      dismiss: jest.fn(),
+      addListener: jest.fn().mockReturnValue({ remove: jest.fn() }),
+    },
     KeyboardAvoidingView: 'KeyboardAvoidingView',
     FlatList: 'FlatList',
     ActivityIndicator: 'ActivityIndicator',
