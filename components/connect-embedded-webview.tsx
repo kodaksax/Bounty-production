@@ -30,6 +30,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { PostHogMaskView } from 'posthog-react-native';
 import type { WebViewMessageEvent } from 'react-native-webview';
 import { WebView } from 'react-native-webview';
 
@@ -599,7 +600,11 @@ export function ConnectEmbeddedWebView({
   }
 
   return (
-    <View style={styles.flex}>
+    // Session Replay records React Native in screenshot mode, and native
+    // masking cannot see inside a WebView's DOM — Stripe Connect onboarding
+    // collects legal name, DOB, SSN and bank details in here, so mask the
+    // whole subtree rather than relying on sessionReplayConfig.
+    <PostHogMaskView style={styles.flex}>
       <WebView
         key={`connect-${component}-${nonce}`}
         ref={webViewRef}
@@ -704,7 +709,7 @@ export function ConnectEmbeddedWebView({
           reloadWebView();
         }}
       >
-        <View style={styles.popupContainer}>
+        <PostHogMaskView style={styles.popupContainer}>
           <View style={styles.popupHeader}>
             <TouchableOpacity
               onPress={() => {
@@ -773,9 +778,9 @@ export function ConnectEmbeddedWebView({
               }}
             />
           ) : null}
-        </View>
+        </PostHogMaskView>
       </Modal>
-    </View>
+    </PostHogMaskView>
   );
 }
 
