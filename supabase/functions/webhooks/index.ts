@@ -818,6 +818,11 @@ async function handlePayoutStatusUpdate(
     .from('wallet_transactions')
     .update({
       stripe_payout_id: payout.id,
+      // Stripe's own status, copied verbatim to a first-class column. This is
+      // the only input permitted to promote settlement_state to
+      // 'stripe_settled' (ADR 0001 §2.3). The metadata copy below is kept for
+      // the refund-once guard in decidePayoutEventAction, which reads it.
+      stripe_payout_status: payout.status,
       metadata: {
         ...candidateMetadata,
         payout_status: payout.status,
@@ -2354,6 +2359,10 @@ Deno.serve(async (req: Request) => {
                   .update({
                     status: 'completed',
                     stripe_payout_id: payout.id,
+                    // The single write in the entire codebase that may promote
+                    // a withdrawal to settlement_state='stripe_settled'. The
+                    // derive trigger reads this column and nothing else.
+                    stripe_payout_status: 'paid',
                     completed_at: new Date().toISOString(),
                     updated_at: new Date().toISOString(),
                     metadata: {

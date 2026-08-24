@@ -19,6 +19,8 @@ import { TransactionsListSkeleton } from "./ui/skeleton-loaders"
 // Constants for transaction display
 const DEFAULT_TITLE = 'Transaction'
 
+import type { SettlementState } from "../lib/utils/settlement-vocabulary"
+
 export interface Transaction {
   id: string
   type: "deposit" | "withdrawal" | "bounty_posted" | "bounty_completed" | "bounty_received" | "escrow" | "release" | "refund"
@@ -30,6 +32,15 @@ export interface Transaction {
     status?: string
     counterparty?: string
     bounty_id?: number
+    /**
+     * What Stripe can prove about this row, from GET /wallet/transactions.
+     * Absent on rows cached before ADR 0001 shipped — treat undefined as
+     * "unknown", never as settled.
+     */
+    settlementState?: SettlementState
+    settlementLabel?: string
+    settlementDetail?: string
+    settlementTone?: "neutral" | "pending" | "success"
   }
   // Optional runtime-only fields for UI badges
   escrowStatus?: string
