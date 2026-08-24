@@ -40,6 +40,9 @@ export const NOTIFICATION_TYPE_CATEGORY: Record<NotificationType, NotificationCa
   dispute_escalated: 'security',
   account_warning: 'security',
   account_restricted: 'security',
+  // Phase 4 operator page. 'security' so push/in-app cannot be disabled and
+  // quiet hours are bypassed — mirrors process-notification's TYPE_CATEGORY.
+  reconciliation_alert: 'security',
 
   verification_submitted: 'verification',
   verification_verified: 'verification',

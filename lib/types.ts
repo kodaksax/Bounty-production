@@ -630,7 +630,9 @@ export type NotificationType =
   | 'verification_verified'
   | 'verification_rejected'
   | 'verification_canceled'
-  | 'marketing_promo';
+  | 'marketing_promo'
+  /** Operator-facing payment-integrity page. Admin recipients only. */
+  | 'reconciliation_alert';
 
 /**
  * Notification category — the redesigned notification system's top-level
