@@ -184,6 +184,33 @@ export type AnalyticsEvent =
   // application is the first one on that bounty, so its distinct_id is the
   // hunter, not the poster. Join it to `post_published` on `bountyId` rather
   // than treating it as a person-level funnel step.
+  //
+  // `post_started` MEANS: the poster demonstrated intent to create a bounty
+  // by interacting with the composer — focusing the title field, editing the
+  // draft, advancing a step, or attempting to publish. The emitting property
+  // `trigger` says which. It fires at most once per composer instance.
+  //
+  // It explicitly does NOT mean any of: tapping the Post tab, tab focus,
+  // screen mount, navigating into the composer, returning to it, an app
+  // resume, a re-render, or the composer UI merely being on screen.
+  //
+  // That distinction is not hypothetical. Until 2026-08-24 this event fired
+  // from the composer's mount effect, and the host screen mounts the composer
+  // whenever the Post tab is selected — so every pass through the tab bar
+  // produced a post_started + post_abandoned pair. Production over the 30
+  // days to 2026-08-24: 1253 post_started against 61 post_published, a MEDIAN
+  // of 0.91s between start and abandon, 879 of 1072 pairs under 3 seconds,
+  // 100% of post_step_abandoned in `exit_method: 'tab'`, and single sessions
+  // reaching 29 and 35 "composer opens" without one keystroke. Anything
+  // comparing across that boundary must split on 2026-08-24 — the event's
+  // denominator changed meaning, so pre-fix conversion rates are not
+  // comparable to post-fix ones.
+  //
+  // `post_abandoned` is the exact mirror: it fires only when a composition
+  // that produced a post_started ends without a publish, so start/abandon
+  // stay 1:1 per genuine composition. A composer torn down without any
+  // interaction produces NEITHER. Both surfaces (create_flow and onboarding)
+  // follow this contract — see the note above the shared funnel.
   | 'post_started'
   | 'post_step_viewed'
   | 'category_selected'
@@ -217,6 +244,25 @@ export type AnalyticsEvent =
   // conversion. `post_field_focused` (below) is the composer-engagement
   // signal to pair it with — it fires on the first real interaction
   // (the title field's first focus) regardless of how the poster arrived.
+  //
+  // NOTE: `deliberateTap` gates this event but NOT `post_started`, and the
+  // two answer different questions. A bottom-nav Post-tab press IS a
+  // deliberate tap, so post_flow_started still counts tab traffic by design
+  // — it measures "arrived at the composer on purpose". Production bears
+  // this out: 353 post_flow_started against 44 post_title_typed since it
+  // shipped. `post_started` is the stricter, intent-based denominator; use
+  // post_flow_started for entry attribution and post_started for
+  // composition conversion, and don't substitute one for the other.
+  //
+  // `post_step_abandoned` fires for ANY mounted flow torn down without a
+  // publish, matching post_flow_started's mount-level denominator. It
+  // carries `composer_started` (boolean) so incidental tab teardowns can be
+  // filtered out at query time. Its `exit_method` is a residual bucket —
+  // 'tab' is the default whenever no explicit exit path was taken, which in
+  // practice is nearly always, so treat 'tab' as "unattributed teardown"
+  // rather than an observed user action. `post_abandoned` carries the same
+  // `exit_method`, but only ever for a real composition — that is the one
+  // to trust.
   | 'post_flow_started'
   | 'post_field_focused'
   | 'post_step_completed'

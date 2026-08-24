@@ -53,10 +53,38 @@ export async function backfillEventMoments(
 ): Promise<void> {
   const checks: Promise<void>[] = [];
 
-  if (!states.has('post_first_bounty') && (primaryRole === 'poster' || primaryRole === 'both')) {
+  // A null/undefined primaryRole is treated as poster-eligible, not skipped.
+  // profiles.primary_role is only written by hooks/useCompleteOnboarding.ts,
+  // and only when the local onboarding context still carries an `intent` at
+  // completion — most users never satisfy that, so the column is NULL for
+  // 83% of profiles (measured 2026-08-24: 259/313, and still ~65-70% of
+  // signups in the preceding three weeks). Gating on it meant this moment
+  // was never enqueued for anyone: before the 20260824120000 backfill,
+  // post_first_bounty had only ever produced `completed` rows, all for users
+  // who had already posted.
+  //
+  // Deliberately asymmetric with accept_first_bounty below, which keeps its
+  // strict gate. Posting is the constrained side of the marketplace, so an
+  // unknown-role user is worth one "post a bounty" nudge but not a competing
+  // "go hunt" one. The prompt itself stays heavily gated regardless — see
+  // registry.ts: session >= 2, Feed/Activity only, 24h cooldown, max 3 shows —
+  // and backfillPostFirstBounty still marks it completed outright for anyone
+  // who has in fact posted, so a mis-typed hunter is asked at most three
+  // times and never after they post.
+  //
+  // Use explicit allowlist: primaryRole must be 'poster', 'both', null, or
+  // undefined to enqueue for post_first_bounty. Any unexpected/corrupted
+  // value (e.g. from enum expansion or data corruption) defaults to not
+  // enqueuing, preserving the conservative behavior.
+  if (
+    !states.has('post_first_bounty') &&
+    (primaryRole === 'poster' || primaryRole === 'both' || primaryRole == null)
+  ) {
     checks.push(backfillPostFirstBounty(userId));
   }
 
+  // accept_first_bounty explicitly requires primaryRole to be 'hunter' or 'both'.
+  // No allowance for null/undefined or unexpected values.
   if (!states.has('accept_first_bounty') && (primaryRole === 'hunter' || primaryRole === 'both')) {
     checks.push(backfillAcceptFirstBounty(userId));
   }

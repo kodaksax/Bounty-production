@@ -156,11 +156,27 @@ export default function DetailsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // post_started — entry into the onboarding poster branch. Emitted with the
-  // same event name as the main composer (app/screens/CreateBounty) so both
-  // posting surfaces roll up into one funnel, split by `surface`.
+  // post_started — the FIRST genuine interaction with the onboarding poster
+  // composer. Emitted with the same event name as the main composer
+  // (app/screens/CreateBounty) so both posting surfaces roll up into one
+  // funnel, split by `surface` — which means it also has to mean the same
+  // thing on both.
+  //
+  // It used to fire from an effect keyed on `intent === 'poster'`, i.e. the
+  // instant the user tapped "I need help". That made the declared-poster
+  // funnel's first step a tautology: declaring poster intent WAS the
+  // post_started, so the step could never show loss, and the real drop
+  // between "said they'd post" and "began composing" was invisible. Gating
+  // it on a real edit measures that gap instead. See the matching change on
+  // the create_flow surface for the tab-traffic version of the same bug.
+  //
+  // `resumed_draft` is snapshotted at the point of first interaction rather
+  // than read live, so the poster's own first keystroke can't make a cold
+  // start look resumed.
   const posterFunnelStartedRef = useRef(false);
-  useEffect(() => {
+  const markPosterComposerStarted = (
+    trigger: 'task_edit' | 'price_edit' | 'schedule_edit' | 'publish'
+  ) => {
     if (onboardingData.intent !== 'poster' || posterFunnelStartedRef.current) return;
     posterFunnelStartedRef.current = true;
     analyticsService.trackEvent('post_started', {
@@ -170,8 +186,9 @@ export default function DetailsScreen() {
       // `resumedDraft` here, which the (now-removed) analytics-service
       // key-normalizer expanded into three competing spellings on PostHog.
       resumed_draft: Boolean(onboardingData.taskDescription?.trim()),
+      trigger,
     });
-  }, [onboardingData.intent, onboardingData.taskDescription]);
+  };
 
   // A bounty was already created earlier in this onboarding session (e.g. the
   // user navigated back into this screen after createBountyNow succeeded).
@@ -742,6 +759,9 @@ export default function DetailsScreen() {
   // createBountyNow(false), or skipped as an honor bounty via
   // createBountyNow(true)).
   const handlePostBounty = () => {
+    // Backstop so a publish can never outrun its own funnel start — every
+    // realistic path here already edited at least the description.
+    markPosterComposerStarted('publish');
     const description = onboardingData.taskDescription.trim();
     const descriptionError = validateDescription(description);
     if (descriptionError) {
@@ -999,11 +1019,20 @@ export default function DetailsScreen() {
         styles={styles}
         insets={insets}
         taskDescription={onboardingData.taskDescription}
-        onChangeTaskDescription={taskDescription => updateOnboardingData({ taskDescription })}
+        onChangeTaskDescription={taskDescription => {
+          markPosterComposerStarted('task_edit');
+          updateOnboardingData({ taskDescription });
+        }}
         price={onboardingData.price}
-        onChangePrice={price => updateOnboardingData({ price })}
+        onChangePrice={price => {
+          markPosterComposerStarted('price_edit');
+          updateOnboardingData({ price });
+        }}
         schedule={onboardingData.schedule}
-        onChangeSchedule={schedule => updateOnboardingData({ schedule })}
+        onChangeSchedule={schedule => {
+          markPosterComposerStarted('schedule_edit');
+          updateOnboardingData({ schedule });
+        }}
         onNext={handlePostBounty}
         posting={posting}
         onSkip={handleSkipToApp}
