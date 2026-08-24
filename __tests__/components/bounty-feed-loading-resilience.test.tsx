@@ -87,6 +87,9 @@ jest.mock('react-native', () => {
     return ReactMock.createElement('FlatList', {}, header, body, footer);
   });
 
+  // The search row animates its focus ring on mount, so the driver methods it
+  // touches have to exist here — they resolve immediately rather than tick.
+  const immediate = () => ({ start: (cb?: () => void) => cb?.() });
   const Animated = {
     Value: jest.fn().mockImplementation((value: number) => ({
       _value: value,
@@ -95,6 +98,11 @@ jest.mock('react-native', () => {
     })),
     event: jest.fn().mockReturnValue(jest.fn()),
     createAnimatedComponent: (c: any) => c,
+    timing: jest.fn(immediate),
+    parallel: jest.fn(immediate),
+    sequence: jest.fn(immediate),
+    stagger: jest.fn(immediate),
+    loop: jest.fn(() => ({ start: jest.fn(), stop: jest.fn() })),
     View: passthrough('Animated.View'),
     FlatList,
   };
@@ -111,6 +119,17 @@ jest.mock('react-native', () => {
     TouchableOpacity: passthrough('TouchableOpacity'),
     ScrollView: passthrough('ScrollView'),
     Alert: { alert: jest.fn() },
+    Easing: {
+      in: (fn: any) => fn,
+      out: (fn: any) => fn,
+      inOut: (fn: any) => fn,
+      cubic: (t: number) => t,
+      ease: (t: number) => t,
+    },
+    AccessibilityInfo: {
+      isReduceMotionEnabled: jest.fn().mockResolvedValue(false),
+      addEventListener: jest.fn().mockReturnValue({ remove: jest.fn() }),
+    },
   };
 });
 
