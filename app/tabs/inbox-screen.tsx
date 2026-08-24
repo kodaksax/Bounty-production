@@ -13,7 +13,7 @@ import { isPhase2Bounty } from "lib/utils/payment-architecture"
 import { isBountyDeadlinePassed } from "lib/utils/schedule-utils"
 import * as React from "react"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Alert, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { Alert, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { ApplicantCard } from "../../components/applicant-card"
 import { ArchivedBountiesScreen } from "../../components/archived-bounties-screen"
@@ -28,6 +28,14 @@ import { EmptyState } from '../../components/ui/empty-state'
 import { ApplicantCardSkeleton, PostingsListSkeleton } from '../../components/ui/skeleton-loaders'
 import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
 import { useAcceptRequest } from '../../hooks/useAcceptRequest'
+import type { InProgressStatusFilter, MyPostingsStatusFilter } from '../../hooks/useBountyStatusFilters'
+import {
+  IN_PROGRESS_FILTERS,
+  IN_PROGRESS_FILTER_LABELS,
+  MY_POSTINGS_FILTERS,
+  MY_POSTINGS_FILTER_LABELS,
+  useBountyStatusFilters,
+} from '../../hooks/useBountyStatusFilters'
 import { useRejectRequest } from '../../hooks/useRejectRequest'
 import { useWallet } from '../../lib/wallet-context'
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext'
@@ -83,10 +91,10 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
   const { theme } = useAppThemeContext()
   const styles = useMemo(() => makeStyles(theme), [theme])
   // Filter chip state for each tab; kept separate so toggling one doesn't affect the other.
-  // In Progress supports: all, review, applied, in_progress, rejected.
-  // My Postings supports: all, review, open, in_progress.
-  const [statusFilterInProgress, setStatusFilterInProgress] = useState<'all' | 'review' | 'applied' | 'in_progress' | 'rejected'>('all')
-  const [statusFilterMyPostings, setStatusFilterMyPostings] = useState<'all' | 'review' | 'open' | 'in_progress'>('all')
+  // Every chip other than 'all' selects a single displayed badge — see
+  // hooks/useBountyStatusFilters.
+  const [statusFilterInProgress, setStatusFilterInProgress] = useState<InProgressStatusFilter>('all')
+  const [statusFilterMyPostings, setStatusFilterMyPostings] = useState<MyPostingsStatusFilter>('all')
   // Keep the hunter's requests so we can filter In Progress by request status (applied/accepted/rejected)
   const [hunterRequests, setHunterRequests] = useState<BountyRequestWithDetails[]>([])
   // Edit/Delete state
@@ -637,16 +645,6 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
     </View>
   ), [currentUserId, expandedMap, isListScrolling, router, refreshAll]);
 
-  // Map of bountyId -> request.status for the current user
-  const requestStatusMap = React.useMemo(() => {
-    const m = new Map<string, string>()
-    hunterRequests.forEach((r) => {
-      const bId = r?.bounty?.id
-      if (bId !== undefined && bId !== null) m.set(String(bId), r.status)
-    })
-    return m
-  }, [hunterRequests])
-
   // Memoized styles that must be called unconditionally (before any early returns)
   const containerPaddingTop = useMemo(() => ({ paddingTop: Math.max(0, headerHeight - (HEADER_TOP_OFFSET - 12)) }), [headerHeight])
   const listContentPadding = useMemo(
@@ -654,53 +652,21 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
     [insets.bottom]
   )
 
-  // Map of bountyId -> count of pending requests (for poster "Review" badge)
-  const pendingRequestsByBounty = React.useMemo(() => {
-    const m = new Map<string, number>()
-    bountyRequests.forEach((r) => {
-      if (r.status !== 'pending') return
-      const bId = r?.bounty?.id ?? r?.bounty_id
-      if (bId === undefined || bId === null) return
-      const key = String(bId)
-      m.set(key, (m.get(key) ?? 0) + 1)
-    })
-    return m
-  }, [bountyRequests])
-
-  // Predicates for "Review needed" filters — keep these centralized so the chip
-  // count, accessibility label, and list filter all stay in lockstep.
-  const needsHunterReview = React.useCallback(
-    (b: Bounty) => b.status === 'in_progress' && requestStatusMap.get(String(b.id)) === 'accepted',
-    [requestStatusMap]
-  )
-  const needsPosterReview = React.useCallback(
-    (b: Bounty) => (b.status === 'open' && (pendingRequestsByBounty.get(String(b.id)) ?? 0) > 0) || b.status === 'completed',
-    [pendingRequestsByBounty]
-  )
-
-  // Derived list for In Progress tab considering the selected status filter
-  const displayedInProgress = React.useMemo(() => {
-    if (statusFilterInProgress === 'all') return inProgressBounties
-    // 'review' surfaces bounties that need the hunter's action: assigned/in-progress work to deliver
-    if (statusFilterInProgress === 'review') return inProgressBounties.filter(needsHunterReview)
-    if (statusFilterInProgress === 'applied') return inProgressBounties.filter(b => requestStatusMap.get(String(b.id)) === 'pending')
-    if (statusFilterInProgress === 'rejected') return inProgressBounties.filter(b => requestStatusMap.get(String(b.id)) === 'rejected')
-    if (statusFilterInProgress === 'in_progress') return inProgressBounties.filter(b => b.status === 'in_progress')
-    // fallback
-    return inProgressBounties
-  }, [inProgressBounties, statusFilterInProgress, requestStatusMap, needsHunterReview])
-
-  // Count of bounties needing the hunter's review/action — drives the badge on the In Progress "Review" chip
-  const inProgressReviewCount = React.useMemo(
-    () => inProgressBounties.filter(needsHunterReview).length,
-    [inProgressBounties, needsHunterReview]
-  )
-
-  // Count of My Postings needing the poster's review/action: open w/ pending applicants OR completed (release payment)
-  const myPostingsReviewCount = React.useMemo(
-    () => myBounties.filter(needsPosterReview).length,
-    [myBounties, needsPosterReview]
-  )
+  // Filter chips select on the status a card *displays*, not on bounty.status —
+  // see hooks/useBountyStatusFilters for why those differ.
+  const {
+    displayedInProgress,
+    displayedMyPostings,
+    inProgressReviewCount,
+    myPostingsReviewCount,
+  } = useBountyStatusFilters({
+    currentUserId,
+    myBounties,
+    inProgressBounties,
+    hunterRequests,
+    statusFilterInProgress,
+    statusFilterMyPostings,
+  })
 
   const getTabBadgeCount = React.useCallback((tabId: string) => {
     if (tabId === 'requests') return pendingRequestCount
@@ -886,32 +852,38 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
                 ListHeaderComponent={(
                   <View>
                     <BountyWorkflowGuide variant="hunter-inprogress" />
-                    <View className="flex-row gap-2 mb-1">
-                      {(['all', 'review', 'applied', 'in_progress', 'rejected'] as const).map((f) => {
-                        const label = f === 'all' ? 'All' : f === 'review' ? 'Review' : f === 'applied' ? 'Applied' : f === 'in_progress' ? 'In Progress' : 'Rejected'
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      className="mb-1"
+                    >
+                      <View className="flex-row gap-1.5">
+                      {IN_PROGRESS_FILTERS.map((f) => {
+                        const label = IN_PROGRESS_FILTER_LABELS[f]
                         const selected = statusFilterInProgress === f
                         const count = f === 'review' ? inProgressReviewCount : 0
                           return (
                           <TouchableOpacity
                             key={f}
                             onPress={() => setStatusFilterInProgress(f)}
-                            className="px-3 py-1.5 rounded-full border flex-row items-center"
+                            className="px-2 py-1.5 rounded-full border flex-row items-center"
                             style={{ backgroundColor: selected ? theme.surfaceSecondary : theme.surface, borderColor: selected ? theme.primaryLight : theme.border }}
                             accessibilityRole="button"
-                            accessibilityLabel={f === 'review' ? `Filter by work needing your review${count > 0 ? `, ${count} item${count === 1 ? '' : 's'}` : ''}` : `Filter by ${label} work in progress`}
+                            accessibilityLabel={f === 'review' ? `Filter by work you submitted for review${count > 0 ? `, ${count} item${count === 1 ? '' : 's'}` : ''}` : `Filter by ${label} work`}
                             accessibilityState={{ selected }}
-                            accessibilityHint={selected ? 'Currently active filter' : f === 'review' ? 'Tap to show only bounties that need your action' : `Tap to show only ${label} work`}
+                            accessibilityHint={selected ? 'Currently active filter' : f === 'review' ? "Tap to show only work you submitted that is awaiting the poster's review" : `Tap to show only ${label} work`}
                           >
                             <Text className="text-xs" style={{ fontWeight: selected ? '500' : 'normal', color: selected ? theme.text : theme.textSecondary }}>{label}</Text>
                             {f === 'review' && count > 0 && (
-                              <View className="ml-1.5 px-1.5 rounded-full bg-amber-400 min-w-[18px] items-center">
+                              <View className="ml-1 px-1 rounded-full bg-amber-400 min-w-[16px] items-center">
                                 <Text className="text-[10px] font-bold text-[#111827]">{count > 99 ? "99+" : count}</Text>
                               </View>
                             )}
                           </TouchableOpacity>
                         )
                       })}
-                    </View>
+                      </View>
+                    </ScrollView>
                   </View>
                 )}
                 renderItem={renderInProgressItem}
@@ -1029,42 +1001,44 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
             ) : (
               <FlatList
                 ref={myPostingsListRef}
-                data={myBounties.filter(b => {
-                  if (statusFilterMyPostings === 'all') return true
-                  if (statusFilterMyPostings === 'review') return needsPosterReview(b)
-                  return b.status === statusFilterMyPostings
-                })}
+                data={displayedMyPostings}
                 keyExtractor={keyExtractorBounty}
                 extraData={{ myBounties, expandedMap }}
                 ListHeaderComponent={(
                   <View>
                     <BountyWorkflowGuide variant="poster-postings" />
-                    <View className="flex-row gap-2 mb-1">
-                      {(['all', 'review', 'open', 'in_progress'] as const).map((f) => {
-                        const label = f === 'all' ? 'All' : f === 'review' ? 'Review' : f === 'open' ? 'Open' : 'In Progress'
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      className="mb-1"
+                    >
+                      <View className="flex-row gap-1.5">
+                      {MY_POSTINGS_FILTERS.map((f) => {
+                        const label = MY_POSTINGS_FILTER_LABELS[f]
                         const selected = statusFilterMyPostings === f
                         const count = f === 'review' ? myPostingsReviewCount : 0
                           return (
                           <TouchableOpacity
                             key={f}
                             onPress={() => setStatusFilterMyPostings(f)}
-                            className="px-3 py-1.5 rounded-full border flex-row items-center"
+                            className="px-2 py-1.5 rounded-full border flex-row items-center"
                             style={{ backgroundColor: selected ? theme.surfaceSecondary : theme.surface, borderColor: selected ? theme.primaryLight : theme.border }}
                             accessibilityRole="button"
-                            accessibilityLabel={f === 'review' ? `Filter by postings needing your review${count > 0 ? `, ${count} item${count === 1 ? '' : 's'}` : ''}` : `Filter by ${label} postings`}
+                            accessibilityLabel={f === 'review' ? `Filter by postings with work awaiting your review${count > 0 ? `, ${count} item${count === 1 ? '' : 's'}` : ''}` : `Filter by ${label} postings`}
                             accessibilityState={{ selected }}
-                            accessibilityHint={selected ? 'Currently active filter' : f === 'review' ? 'Tap to show only postings that need your action' : `Tap to show only ${label} bounties`}
+                            accessibilityHint={selected ? 'Currently active filter' : f === 'review' ? 'Tap to show only postings where a hunter submitted work for your review' : `Tap to show only ${label} bounties`}
                           >
                             <Text className="text-xs" style={{ fontWeight: selected ? '500' : 'normal', color: selected ? theme.text : theme.textSecondary }}>{label}</Text>
                             {f === 'review' && count > 0 && (
-                              <View className="ml-1.5 px-1.5 rounded-full bg-amber-400 min-w-[18px] items-center">
+                              <View className="ml-1 px-1 rounded-full bg-amber-400 min-w-[16px] items-center">
                                 <Text className="text-[10px] font-bold text-[#111827]">{count > 99 ? "99+" : count}</Text>
                               </View>
                             )}
                           </TouchableOpacity>
                         )
                       })}
-                    </View>
+                      </View>
+                    </ScrollView>
                   </View>
                 )}
                 renderItem={renderMyPostingItem}

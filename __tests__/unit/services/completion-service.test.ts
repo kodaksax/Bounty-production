@@ -272,6 +272,83 @@ describe('CompletionService', () => {
     });
   });
 
+  describe('getLatestSubmissionsForBounties', () => {
+    const rowsNewestFirst = [
+      {
+        id: 'sub-b',
+        bounty_id: 'bounty2',
+        hunter_id: 'hunter2',
+        message: 'Latest for bounty2',
+        proof_items: '[]',
+        status: 'pending',
+        submitted_at: '2024-01-03T00:00:00Z',
+      },
+      {
+        id: 'sub-a2',
+        bounty_id: 'bounty1',
+        hunter_id: 'hunter1',
+        message: 'Latest for bounty1',
+        proof_items: JSON.stringify([{ id: 'proof1', type: 'image', name: 'test.png' }]),
+        status: 'revision_requested',
+        submitted_at: '2024-01-02T00:00:00Z',
+      },
+      {
+        id: 'sub-a1',
+        bounty_id: 'bounty1',
+        hunter_id: 'hunter1',
+        message: 'Superseded',
+        proof_items: '[]',
+        status: 'pending',
+        submitted_at: '2024-01-01T00:00:00Z',
+      },
+    ];
+
+    function mockBatchQuery(result: { data: any; error: any }) {
+      const order = jest.fn().mockResolvedValue(result);
+      const inFn = jest.fn().mockReturnValue({ order });
+      const select = jest.fn().mockReturnValue({ in: inFn });
+      mockSupabase.from.mockReturnValue({ select });
+      return { select, inFn, order };
+    }
+
+    it('keeps only the newest submission per bounty', async () => {
+      mockBatchQuery({ data: rowsNewestFirst, error: null });
+
+      const result = await completionService.getLatestSubmissionsForBounties([
+        'bounty1',
+        'bounty2',
+      ]);
+
+      expect(result.size).toBe(2);
+      expect(result.get('bounty1')?.id).toBe('sub-a2');
+      expect(result.get('bounty1')?.status).toBe('revision_requested');
+      expect(result.get('bounty1')?.proof_items).toEqual([
+        { id: 'proof1', type: 'image', name: 'test.png' },
+      ]);
+      expect(result.get('bounty2')?.id).toBe('sub-b');
+    });
+
+    it('de-duplicates ids and skips the query when none are given', async () => {
+      const { inFn } = mockBatchQuery({ data: [], error: null });
+
+      await completionService.getLatestSubmissionsForBounties(['bounty1', 'bounty1']);
+      expect(inFn).toHaveBeenCalledWith('bounty_id', ['bounty1']);
+
+      mockSupabase.from.mockClear();
+      const empty = await completionService.getLatestSubmissionsForBounties([]);
+      expect(empty.size).toBe(0);
+      expect(mockSupabase.from).not.toHaveBeenCalled();
+    });
+
+    it('returns an empty map when the query fails', async () => {
+      mockBatchQuery({ data: null, error: { message: 'Connection failed' } });
+
+      const result = await completionService.getLatestSubmissionsForBounties(['bounty1']);
+
+      expect(result.size).toBe(0);
+    });
+  });
+
   describe('getSubmission', () => {
     it('should retrieve submission successfully', async () => {
       const mockData = {

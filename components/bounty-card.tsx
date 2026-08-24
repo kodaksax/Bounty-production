@@ -5,6 +5,11 @@ import type { Bounty } from 'lib/services/database.types';
 import { theme as legacyTheme } from 'lib/theme';
 import { useAppThemeContext } from 'lib/themes/AppThemeContext';
 import type { AppTheme } from 'lib/themes/types';
+import {
+  BOUNTY_DISPLAY_STATUS_COLORS,
+  BOUNTY_DISPLAY_STATUS_LABELS,
+  getBountyDisplayStatus,
+} from 'lib/utils/bounty-display-status';
 import { isBountyDeadlinePassed } from 'lib/utils/schedule-utils';
 import { shareBounty } from 'lib/utils/share-utils';
 import { useMemo } from 'react';
@@ -88,54 +93,14 @@ export function BountyCard({
     });
   };
 
-  const getStatusColor = () => {
-    if (reviewNeeded) return '#fbbf24';
-    if (submittedForReview) return '#38bdf8';
-    if (isDeadlinePassed) return '#6b7280'; // gray-500, same treatment as archived
-    // If the bounty is open but the current user has applied, show 'applied' color
-    if (bounty.status === 'open' && requestStatus === 'pending') return '#3b82f6'; // blue for applied
-    if (requestStatus === 'rejected') return '#ef4444'; // red for rejected
-    switch (bounty.status) {
-      case 'open':
-        return '#059669'; // emerald-500
-      case 'in_progress':
-        return '#fbbf24'; // amber-400
-      case 'completed':
-        return '#6366f1'; // indigo-500
-      case 'archived':
-        return '#6b7280'; // gray-500
-      case 'cancelled':
-        return '#ef4444'; // red-500
-      case 'cancellation_requested':
-        return '#f97316'; // orange-500
-      default:
-        return '#059669';
-    }
-  };
-
-  const getStatusLabel = () => {
-    if (reviewNeeded) return 'REVIEW NEEDED';
-    if (submittedForReview) return 'SUBMITTED FOR REVIEW';
-    if (isDeadlinePassed) return 'DEADLINE PASSED';
-    if (bounty.status === 'open' && requestStatus === 'pending') return 'APPLIED';
-    if (requestStatus === 'rejected') return 'REJECTED';
-    switch (bounty.status) {
-      case 'open':
-        return 'OPEN';
-      case 'in_progress':
-        return 'IN PROGRESS';
-      case 'completed':
-        return 'COMPLETED';
-      case 'archived':
-        return 'ARCHIVED';
-      case 'cancelled':
-        return 'CANCELLED';
-      case 'cancellation_requested':
-        return 'CANCELLATION PENDING';
-      default:
-        return 'OPEN';
-    }
-  };
+  // The badge is derived from the shared helper so the Postings screen filter
+  // chips (which use the same helper) always agree with what the card shows.
+  const displayStatus = getBountyDisplayStatus({
+    bounty,
+    reviewNeeded,
+    submittedForReview,
+    requestStatus,
+  });
 
   return (
     <TouchableOpacity activeOpacity={0.8} style={styles.card} onPress={onPress}>
@@ -159,8 +124,13 @@ export function BountyCard({
             />
           </TouchableOpacity>
         )}
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor() }]}>
-          <Text style={styles.statusText}>{getStatusLabel()}</Text>
+        <View
+          style={[
+            styles.statusBadge,
+            { backgroundColor: BOUNTY_DISPLAY_STATUS_COLORS[displayStatus] },
+          ]}
+        >
+          <Text style={styles.statusText}>{BOUNTY_DISPLAY_STATUS_LABELS[displayStatus]}</Text>
         </View>
         {/* Revision requested indicator (hunter-facing) */}
         {revisionRequested && (

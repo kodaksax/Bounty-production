@@ -317,6 +317,58 @@ export const completionService = {
   },
 
   /**
+   * Batch version of getSubmission(): returns the latest submission per bounty
+   * for the given ids, keyed by bounty id.
+   *
+   * The Postings screen needs submission state for a whole list at once (its
+   * status filters depend on it); fetching one row at a time would mean an
+   * extra round trip per card. Bounties with no submission are simply absent
+   * from the map. Failures resolve to an empty map — a filter chip degrading to
+   * "no submissions yet" is better than a screen that fails to render.
+   */
+  async getLatestSubmissionsForBounties(
+    bountyIds: string[]
+  ): Promise<Map<string, CompletionSubmission>> {
+    const ids = Array.from(new Set((bountyIds || []).map(String).filter(Boolean)));
+    const latest = new Map<string, CompletionSubmission>();
+    if (ids.length === 0) return latest;
+
+    try {
+      if (isSupabaseConfigured) {
+        const { data, error } = await supabase
+          .from('completion_submissions')
+          .select('*')
+          .in('bounty_id', ids)
+          .order('submitted_at', { ascending: false });
+
+        if (error) throw new Error(error?.message ?? JSON.stringify(error));
+
+        // Rows arrive newest-first, so the first row seen for a bounty is its
+        // latest submission — matching what getSubmission() returns.
+        for (const row of data || []) {
+          const key = String(row.bounty_id);
+          if (latest.has(key)) continue;
+          latest.set(key, {
+            ...row,
+            proof_items: parseProofItems(row.proof_items),
+          } as CompletionSubmission);
+        }
+        return latest;
+      }
+
+      const results = await Promise.all(ids.map(id => completionService.getSubmission(id)));
+      results.forEach((submission, index) => {
+        if (submission) latest.set(ids[index], submission);
+      });
+      return latest;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Unknown error');
+      logger.error('Error batch fetching completions', { count: ids.length, error });
+      return latest;
+    }
+  },
+
+  /**
    * Get completion submission for a bounty
    */
   async getSubmission(bountyId: string): Promise<CompletionSubmission | null> {
