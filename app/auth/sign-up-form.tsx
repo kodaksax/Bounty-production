@@ -1,6 +1,7 @@
 'use client';
 import { MaterialIcons } from '@expo/vector-icons';
 import { ValidationMessage } from 'app/components/ValidationMessage';
+import type { Session } from '@supabase/supabase-js';
 import type { Href } from 'expo-router';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -23,8 +24,10 @@ import { config } from '../../lib/config';
 import { API_BASE_URL } from '../../lib/config/api';
 import useScreenBackground from '../../lib/hooks/useScreenBackground';
 import { ROUTES } from '../../lib/routes';
+import { storage } from '../../lib/storage';
 import { useAppThemeContext } from '../../lib/themes/AppThemeContext';
 import { analyticsService } from '../../lib/services/analytics-service';
+import { markDeviceHasSignedIn } from '../../lib/storage/onboarding';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { generateCorrelationId, parseAuthError } from '../../lib/utils/auth-errors';
 import { suggestEmailCorrection, validateEmail } from '../../lib/utils/auth-validation';
@@ -45,6 +48,59 @@ import { markInitialNavigationDone } from '../initial-navigation/initialNavigati
 // later rejected when the user resets it.
 const IOS_NEW_PASSWORD_RULES =
   'minlength: 8; required: lower; required: upper; required: digit; required: special;';
+
+/**
+ * Signs the just-registered user in, retrying once on a transient failure.
+ *
+ * The account already exists at this point, so a single flaky request must not
+ * be what decides whether the user gets into the app. Returns the session, or
+ * `null` when the backend deliberately withheld one (email confirmation
+ * required). Throws only when a session genuinely could not be created.
+ */
+// Exported for regression coverage: the "account exists, session doesn't"
+// branch is the one that decides whether a brand-new user gets into the app,
+// and it is not reachable through the rendered form without standing up the
+// whole registration request.
+export async function signInAfterRegister(
+  email: string,
+  password: string,
+  correlationId: string
+): Promise<Session | null> {
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt > 0) {
+      // One short backoff — long enough to ride out a momentary network blip,
+      // short enough that the user is still watching the same spinner.
+      await new Promise(resolve => setTimeout(resolve, 600));
+    }
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+      if (!error) {
+        // No session with no error means confirmation is required — a
+        // deliberate backend decision, not a failure. Do not retry it.
+        return data.session ?? null;
+      }
+
+      lastError = error;
+      const parsed = parseAuthError(error, correlationId);
+
+      // "Email not confirmed" is also a definitive answer, not a transient
+      // failure: surface it as the confirmation-required state.
+      if (parsed.category === 'email_not_confirmed') return null;
+
+      // Anything the error taxonomy marks non-retryable (bad credentials,
+      // config error) will not improve on a second attempt.
+      if (!parsed.retryable && parsed.category !== 'unknown') break;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError ?? new Error('Sign-in after registration returned no session');
+}
 
 export default function SignUpRoute() {
   return <SignUpForm />;
@@ -68,6 +124,11 @@ export function SignUpForm() {
   const [ageVerified, setAgeVerified] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [legalModal, setLegalModal] = useState<'terms' | 'privacy' | null>(null);
+  // Terminal-but-recoverable state: the account WAS created, but the sign-in
+  // that normally follows it could not establish a session. Re-submitting the
+  // form would now fail with "email already registered", so the form is
+  // replaced by a single explicit action instead of a generic error.
+  const [accountCreatedNeedsSignIn, setAccountCreatedNeedsSignIn] = useState(false);
 
   const passwordRef = useRef<TextInput>(null);
   const confirmPasswordRef = useRef<TextInput>(null);
@@ -128,6 +189,7 @@ export function SignUpForm() {
 
     // Generate correlation ID for tracking this auth attempt
     const correlationId = generateCorrelationId('signup');
+    analyticsService.trackEvent('auth_signup_started', { method: 'email' });
 
     try {
       setIsLoading(true);
@@ -250,20 +312,15 @@ export function SignUpForm() {
       }
 
       // Registration succeeded. Now sign in the user to create a session.
+      //
+      // A newly registered user must NEVER be asked to authenticate a second
+      // time, so this is the one place allowed to fail "half way": the account
+      // exists but no session does. That state is handled explicitly below
+      // (accountCreatedNeedsSignIn) instead of being reported as a generic
+      // error that leaves the user on a form which will now answer
+      // "email already registered" — a dead end.
       try {
-        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-          email: normalizedEmail,
-          password,
-        });
-
-        if (signInError) {
-          console.error('[sign-up] Sign-in after register failed', signInError, { correlationId });
-          const authErr = parseAuthError(signInError, correlationId);
-          setAuthError(authErr.userMessage);
-          return;
-        }
-
-        const session = signInData.session;
+        const session = await signInAfterRegister(normalizedEmail, password, correlationId);
 
         // Track the signup funnel event as soon as registration + sign-in
         // succeed. We track regardless of whether a session was returned
@@ -277,63 +334,90 @@ export function SignUpForm() {
           /* analytics is best-effort */
         }
 
-        // Clear form data for security
-        setEmail('');
+        // Clear the credential fields for security. `email` is deliberately
+        // kept: if the session could not be established it is prefilled on the
+        // sign-in screen, and it is never a secret.
         setPassword('');
         setConfirmPassword('');
         setAgeVerified(false);
         setTermsAccepted(false);
 
-        if (session) {
-          // Proceed to profile check / onboarding as before
-          try {
-            const { data: profile, error: profileError } = await supabase
-              .from('profiles')
-              .select('username, onboarding_completed')
-              .eq('id', session.user.id)
-              .single();
-
-            if (profileError) {
-              if (profileError.code === 'PGRST116') {
-                router.replace('/onboarding' as Href);
-                try {
-                  markInitialNavigationDone();
-                } catch {}
-                return;
-              }
-              throw profileError;
-            }
-
-            if (!profile.username || profile.onboarding_completed !== true) {
-              router.replace('/onboarding' as Href);
-              try {
-                markInitialNavigationDone();
-              } catch {}
-            } else {
-              router.replace('/tabs/bounty-app' as Href);
-              try {
-                markInitialNavigationDone();
-              } catch {}
-            }
-          } catch (err) {
-            console.error('[sign-up] Profile check error after register', {
-              correlationId,
-              error: err,
-            });
-            router.replace('/onboarding' as Href);
-            try {
-              markInitialNavigationDone();
-            } catch {}
-          }
-        } else {
+        if (!session) {
+          // The backend creates users with `email_confirm: true`
+          // (supabase/functions/auth/index.ts), so this is not the normal
+          // path — it means confirmation is enabled at the project level.
+          // Show the explicit verification state rather than routing into the
+          // authenticated app with no session.
+          analyticsService.trackEvent('auth_signup_requires_confirmation', { method: 'email' });
           router.replace('/auth/email-confirmation' as Href);
           try {
             markInitialNavigationDone();
           } catch {}
+          return;
         }
+
+        // Session established — this device has now completed a sign-up, so a
+        // later logout shows the log-in form instead of first-run onboarding.
+        void markDeviceHasSignedIn();
+        analyticsService.trackEvent('auth_signup_success', { method: 'email' });
+
+        // Decide the destination from what we actually know right now. The
+        // account was created seconds ago, so onboarding is incomplete unless
+        // the profile explicitly says otherwise; every uncertain outcome
+        // (query error, missing row) resolves to "continue onboarding", never
+        // to a screen that asks the user to sign in again.
+        let onboardingComplete = false;
+        try {
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('username, onboarding_completed')
+            .eq('id', session.user.id)
+            .single();
+
+          if (profileError && profileError.code !== 'PGRST116') {
+            console.error('[sign-up] Profile check error after register', {
+              correlationId,
+              error: profileError,
+            });
+          }
+          onboardingComplete = !!profile?.username && profile?.onboarding_completed === true;
+        } catch (err) {
+          console.error('[sign-up] Profile check threw after register', {
+            correlationId,
+            error: err,
+          });
+        }
+
+        // Route straight to the first post-auth onboarding step rather than to
+        // the /onboarding gate. The gate has to re-derive state that is
+        // already known here, and any gap in that derivation used to surface
+        // as the pre-auth welcome screen.
+        router.replace((onboardingComplete ? '/tabs/bounty-app' : '/onboarding/style') as Href);
+        try {
+          markInitialNavigationDone();
+        } catch {}
       } catch (err: any) {
-        const authErr = parseAuthError(err, correlationId);
-        setAuthError(authErr.userMessage);
+        // Registration definitely succeeded (we are past the !ok branch), so
+        // never tell the user their sign-up failed. Offer the one action that
+        // completes the job.
+        console.error('[sign-up] Could not establish a session after register', err, {
+          correlationId,
+        });
+        analyticsService.trackEvent('auth_signup_session_failed', {
+          method: 'email',
+          reason: parseAuthError(err, correlationId).category,
+        });
+        setPassword('');
+        setConfirmPassword('');
+        // Prefill the sign-in screen so the recovery costs one tap, not a
+        // retype (app/auth/sign-in-form.tsx reads this key on mount).
+        try {
+          await storage.setItem('lastUsedEmail', normalizedEmail);
+        } catch {
+          /* prefill is a convenience — never block recovery on it */
+        }
+        setAccountCreatedNeedsSignIn(true);
+        setAuthError(null);
         return;
       }
     } catch (e: any) {
@@ -341,11 +425,54 @@ export function SignUpForm() {
 
       // Parse error using centralized handler
       const authError = parseAuthError(e, correlationId);
+      analyticsService.trackEvent('auth_signup_failed', {
+        method: 'email',
+        reason: authError.category,
+      });
       setAuthError(authError.userMessage);
     } finally {
       setIsLoading(false);
     }
   };
+
+  // Hands the user off to sign-in with their email already filled in, so the
+  // "account created but no session" recovery costs one tap and no retyping.
+  const handleGoToSignIn = () => {
+    router.replace(ROUTES.AUTH.SIGN_IN as Href);
+  };
+
+  // Account created, but no session. Re-submitting the form is guaranteed to
+  // fail from here ("Email already registered"), so replace it with the one
+  // action that finishes the job. Nothing about the account is lost — the user
+  // just needs to sign in once.
+  if (accountCreatedNeedsSignIn) {
+    return (
+      <View
+        className="flex-1 items-center justify-center px-8"
+        style={{ backgroundColor: theme.background }}
+      >
+        <MaterialIcons name="check-circle" size={56} color={theme.primary} />
+        <Text
+          className="text-xl font-bold mt-4 text-center"
+          style={{ color: theme.text }}
+        >
+          Your account is ready
+        </Text>
+        <Text
+          className="text-sm mt-3 text-center"
+          style={{ color: theme.textSecondary, lineHeight: 20 }}
+        >
+          We created your account but couldn&apos;t sign you in automatically — this is
+          usually a brief connection problem. Sign in once and you&apos;re in.
+        </Text>
+        <View className="w-full mt-8">
+          <Button onPress={handleGoToSignIn} accessibilityLabel="Go to sign in">
+            Sign In
+          </Button>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <>

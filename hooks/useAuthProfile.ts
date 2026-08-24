@@ -23,17 +23,43 @@ interface UseAuthProfileResult {
   refreshProfile: () => Promise<void>;
 }
 
+/**
+ * Hard ceiling on how long `loading` may stay true waiting for the profile
+ * fetch to resolve. The service already races its own network calls against
+ * timeouts, but if a notification is somehow never delivered, callers must
+ * still be released rather than showing a spinner forever.
+ */
+const PROFILE_RESOLVE_TIMEOUT_MS = 12000;
+
 export function useAuthProfile(): UseAuthProfileResult {
   const [profile, setProfile] = useState<AuthProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Starts as "not resolved yet" whenever a session exists but its profile
+  // fetch has not completed. Reporting `loading: false` with `profile: null`
+  // during that window is what let the onboarding gate route a freshly
+  // registered user as though they had no account state at all.
+  const [loading, setLoading] = useState(() => !authProfileService.isProfileResolved());
   const [profileFetchError, setProfileFetchError] = useState<string | null>(null);
 
   useEffect(() => {
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      setLoading(false);
+    };
+
     // Subscribe to profile changes
     const unsubscribe = authProfileService.subscribe((newProfile) => {
       setProfile(newProfile);
       setProfileFetchError(authProfileService.getLastFetchError());
-      setLoading(false);
+      if (authProfileService.isProfileResolved()) {
+        release();
+      } else {
+        // A cached/interim profile arrived before the fetch settled — surface
+        // it, but keep the gate closed so routing waits for the real answer.
+        released = false;
+        setLoading(true);
+      }
     });
 
     // Initial load
@@ -42,9 +68,16 @@ export function useAuthProfile(): UseAuthProfileResult {
       setProfile(initialProfile);
     }
     setProfileFetchError(authProfileService.getLastFetchError());
-    setLoading(false);
+    if (authProfileService.isProfileResolved()) {
+      release();
+    }
 
-    return unsubscribe;
+    const safetyTimer = setTimeout(release, PROFILE_RESOLVE_TIMEOUT_MS);
+
+    return () => {
+      clearTimeout(safetyTimer);
+      unsubscribe();
+    };
   }, []);
 
   // Stable wrapper for updating the profile
