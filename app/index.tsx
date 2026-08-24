@@ -40,7 +40,16 @@ export default function Index() {
   } = useAuthContext();
   const router = useRouter();
   const authGateCorrelationRef = useRef(generateCorrelationId('root_auth_gate'));
-  const hasNavigatedRef = useRef(false);
+  // The destination this gate last navigated to, NOT a one-shot boolean.
+  //
+  // A boolean latched on the first navigation and never cleared, so any later
+  // change in the inputs (session restored after a stall, account blocked,
+  // password-recovery link opened, sign-out) could not re-route: the gate
+  // stayed silently pointed at a destination that was no longer correct.
+  // Keying on the destination keeps the double-navigation protection (the same
+  // target is never pushed twice) while still allowing a genuine change of
+  // answer.
+  const lastNavigatedRef = useRef<string | null>(null);
   // Tracks whether we've confirmed this is a *returning* user (device has
   // signed in before) — until this is true, an unauthenticated visitor might
   // still be a first-timer who should see onboarding instead of the log-in
@@ -57,7 +66,7 @@ export default function Index() {
   // Reset navigation guard on unmount so a remount starts fresh.
   useEffect(() => {
     return () => {
-      hasNavigatedRef.current = false;
+      lastNavigatedRef.current = null;
     };
   }, []);
 
@@ -78,8 +87,18 @@ export default function Index() {
       },
     });
 
-    // Prevent double-navigation across re-renders.
-    if (hasNavigatedRef.current) return;
+    // Single navigation primitive for this gate. Returns false when the
+    // requested destination is the one already navigated to, so every branch
+    // below is naturally idempotent across re-renders.
+    const navigateTo = (dest: string): boolean => {
+      if (lastNavigatedRef.current === dest) return false;
+      lastNavigatedRef.current = dest;
+      router.replace(dest as Href);
+      try {
+        markInitialNavigationDone();
+      } catch {}
+      return true;
+    };
 
     // The environment guard (lib/config/env-guard.ts) refused to connect —
     // this bundle's Supabase URL doesn't match its build channel, so no auth
@@ -88,14 +107,10 @@ export default function Index() {
     // below: showing the sign-in form here would misleadingly suggest the
     // user was logged out when their session was never touched.
     if (environmentError) {
-      hasNavigatedRef.current = true;
       if (__DEV__) {
         console.log('[index] Environment integrity check failed — routing to environment-error');
       }
-      router.replace('/auth/environment-error' as Href);
-      try {
-        markInitialNavigationDone();
-      } catch {}
+      if (!navigateTo('/auth/environment-error')) return;
       logAuthLifecycleEvent({
         correlationId,
         stage: 'root-auth-gate:navigation',
@@ -121,16 +136,12 @@ export default function Index() {
     // force-signed the user out by the time this fires (see
     // providers/auth-provider.tsx), so this only needs to redirect.
     if (accountBlockedReason) {
-      hasNavigatedRef.current = true;
       const dest =
         accountBlockedReason === 'banned' ? '/auth/account-banned' : '/auth/account-suspended';
       if (__DEV__) {
         console.log('[index] Account blocked — routing to', dest);
       }
-      router.replace(dest as Href);
-      try {
-        markInitialNavigationDone();
-      } catch {}
+      if (!navigateTo(dest)) return;
       logAuthLifecycleEvent({
         correlationId,
         stage: 'root-auth-gate:navigation',
@@ -145,14 +156,10 @@ export default function Index() {
 
     // Password recovery takes precedence over all routing decisions.
     if (isPasswordRecovery) {
-      hasNavigatedRef.current = true;
       if (__DEV__) {
         console.log('[index] Password recovery mode — routing to update-password');
       }
-      router.replace(ROUTES.AUTH.UPDATE_PASSWORD as Href);
-      try {
-        markInitialNavigationDone();
-      } catch {}
+      if (!navigateTo(ROUTES.AUTH.UPDATE_PASSWORD)) return;
       logAuthLifecycleEvent({
         correlationId,
         stage: 'root-auth-gate:navigation',
@@ -174,17 +181,13 @@ export default function Index() {
       let cancelled = false;
       (async () => {
         const returning = await hasDeviceSignedInBefore();
-        if (cancelled || hasNavigatedRef.current) return;
+        if (cancelled) return;
 
         if (!returning) {
-          hasNavigatedRef.current = true;
           if (__DEV__) {
             console.log('[index] First-time device — routing to onboarding welcome');
           }
-          router.replace('/onboarding/welcome' as Href);
-          try {
-            markInitialNavigationDone();
-          } catch {}
+          if (!navigateTo('/onboarding/welcome')) return;
           logAuthLifecycleEvent({
             correlationId,
             stage: 'root-auth-gate:navigation',
@@ -215,7 +218,6 @@ export default function Index() {
 
     // Authenticated — onboardingComplete is already known (resolved by the
     // hook), so this navigation is synchronous with no further async work.
-    hasNavigatedRef.current = true;
     const dest = bootstrap.onboardingComplete ? ROUTES.TABS.BOUNTY_APP : '/onboarding';
 
     if (__DEV__) {
@@ -225,10 +227,7 @@ export default function Index() {
       });
     }
 
-    router.replace(dest as Href);
-    try {
-      markInitialNavigationDone();
-    } catch {}
+    if (!navigateTo(dest)) return;
     logAuthLifecycleEvent({
       correlationId,
       stage: 'root-auth-gate:navigation',
