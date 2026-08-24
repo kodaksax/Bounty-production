@@ -27,7 +27,9 @@ import { BountyWorkflowGuide } from '../../components/ui/bounty-workflow-guide'
 import { EmptyState } from '../../components/ui/empty-state'
 import { ApplicantCardSkeleton, PostingsListSkeleton } from '../../components/ui/skeleton-loaders'
 import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
+import { useAcceptFunding } from '../../hooks/useAcceptFunding'
 import { useAcceptRequest } from '../../hooks/useAcceptRequest'
+import { AcceptFundingGate } from '../../components/accept-funding-gate'
 import type { InProgressStatusFilter, MyPostingsStatusFilter } from '../../hooks/useBountyStatusFilters'
 import {
   IN_PROGRESS_FILTERS,
@@ -303,6 +305,11 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
   }, [openBountyIdsKey, currentUserId, loadRequestsForMyBounties])
 
   // ---- Accept/Reject request handlers (extracted to hooks) ----
+  // Owns the pay-at-accept gate. Rendered as a full-screen early return below,
+  // so the poster can never be looking at an "in progress" list while a
+  // payment sheet is open.
+  const { gate: acceptFundingGate, ensureFunded, handleAcceptFailure } = useAcceptFunding()
+
   const { handleAcceptRequest } = useAcceptRequest({
     currentUserId,
     bountyRequests,
@@ -317,6 +324,8 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
     loadRequestsForMyBounties,
     onBountyAccepted,
     setActiveScreen,
+    ensureFunded,
+    handleAcceptFailure,
   })
 
   const { handleRejectRequest } = useRejectRequest({
@@ -688,6 +697,13 @@ export function InboxScreen({ onBack, initialTab, activeScreen, setActiveScreen,
 
   if (showArchivedBounties) {
     return <ArchivedBountiesScreen onBack={() => setShowArchivedBounties(false)} />
+  }
+
+  // The pay-at-accept gate takes over the whole screen while it is open. It is
+  // only ever active for a bounty that was posted unfunded and still needs
+  // escrow — every legacy bounty resolves it instantly and invisibly.
+  if (acceptFundingGate.active) {
+    return <AcceptFundingGate gate={acceptFundingGate} />
   }
 
   return (

@@ -35,6 +35,23 @@ export interface CreateBountyResult {
   created: boolean;
 }
 
+/** Options for createBounty() that describe HOW to post, not WHAT to post. */
+export interface CreateBountyOptions {
+  /**
+   * Asks the server to post this bounty unfunded and take escrow when a hunter
+   * is selected instead ("post first, pay at accept").
+   *
+   * This is a REQUEST, not an instruction. The BEFORE INSERT trigger
+   * trg_bounties_normalize_funding_mode re-decides eligibility server-side and
+   * silently rewrites the column back to 'at_post' if the poster does not
+   * qualify — in which case the row funds at insert exactly as it does today
+   * (succeeding if the balance covers it, failing with the same "Insufficient
+   * funds" error if it does not). Sending 'at_accept' can therefore never
+   * produce an unfunded bounty the server did not authorise.
+   */
+  fundingMode?: 'at_post' | 'at_accept';
+}
+
 /**
  * Idempotency cache: maps a stable per-draft fingerprint to either an in-flight
  * create promise (so concurrent double-tap calls share a single insert) or a
@@ -123,7 +140,10 @@ export const bountyService = {
    * never collapsed. Concurrent in-process calls for the same fingerprint
    * share a single insert promise (atomic same-process dedup).
    */
-  async createBounty(draft: BountyDraft): Promise<CreateBountyResult> {
+  async createBounty(
+    draft: BountyDraft,
+    options: CreateBountyOptions = {}
+  ): Promise<CreateBountyResult> {
     // Start performance measurement
     performanceService.startMeasurement('bounty_create', 'bounty_create', {
       workType: draft.workType,
@@ -183,6 +203,11 @@ export const bountyService = {
         is_time_sensitive: draft.scheduleType === 'asap' ? true : undefined,
         // Include attachments from draft so they get persisted to attachments_json
         attachments: draft.attachments || [],
+        // Only ever sent as 'at_accept' — omitted entirely otherwise so the
+        // column keeps its 'at_post' default and this insert is byte-identical
+        // to a pre-experiment one. See CreateBountyOptions.fundingMode for why
+        // sending it is safe even from a hostile client.
+        ...(options.fundingMode === 'at_accept' ? { funding_mode: 'at_accept' as const } : {}),
       };
 
       // If offline, enqueue the bounty for later processing and return an optimistic temp object

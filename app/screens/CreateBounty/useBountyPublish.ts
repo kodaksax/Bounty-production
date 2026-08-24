@@ -1,7 +1,9 @@
 import type { BountyDraft } from 'app/hooks/useBountyDraft';
 import { bountyService } from 'app/services/bountyService';
 import { useFormSubmission } from 'hooks/useFormSubmission';
+import { useDeferredFundingVariant } from 'lib/experiments/deferred-funding-variant';
 import { analyticsService } from 'lib/services/analytics-service';
+import { amountBucket, canDeferBountyFunding } from 'lib/services/bounty-funding-service';
 import { bountyPaymentsService } from 'lib/services/bounty-payments-service';
 import { offlineQueueService } from 'lib/services/offline-queue-service';
 import { stripeService } from 'lib/services/stripe-service';
@@ -104,6 +106,36 @@ export function useBountyPublish(params: UseBountyPublishParams) {
   // exposed so the caller's own post_abandoned tracking doesn't double-count.
   const publishedRef = useRef(false);
 
+  // --- "Post first, pay at accept" ----------------------------------------
+  // `variant` is this device's PostHog arm; it decides whether we ASK. The
+  // server decides whether we GET it, which is what deferredGrantRef records.
+  //
+  // A ref rather than state on purpose: submit() is created once by
+  // useFormSubmission and closes over this hook's scope, so a state value read
+  // inside it could be a render behind the publish() call that set it. The
+  // consequence of reading a stale value here would be posting a bounty with
+  // the wrong funding expectation, so it has to be the ref.
+  const { variant: fundingVariant } = useDeferredFundingVariant();
+  const deferredGrantRef = useRef(false);
+
+  /**
+   * Resolve — once, at the moment of publishing — whether this bounty may be
+   * posted unfunded. Two independent conditions must both hold:
+   *   1. this device is in the experiment's test arm, and
+   *   2. the SERVER says this poster currently qualifies
+   *      (fn_can_i_defer_bounty_funding: kill switch, scope, amount cap, and
+   *      "has this poster ever posted before").
+   * Deliberately not memoised against draft.amount — it is one RPC on a
+   * deliberate button press, and a cached answer could be stale across an
+   * amount edit or a bounty posted on another device.
+   */
+  const resolveDeferredGrant = async (useV2Payments: boolean): Promise<boolean> => {
+    if (useV2Payments) return false;              // v2 funds via Stripe, not the wallet
+    if (draft.isForHonor || draft.amount <= 0) return false;
+    if (fundingVariant !== 'deferred') return false;
+    return canDeferBountyFunding(draft.amount);
+  };
+
   // Defensive invariant: if the wallet becomes sufficient while the
   // insufficient-balance summary is showing (a delayed webhook/reconcile, or
   // the poster funding from elsewhere while this screen happens to still be
@@ -134,7 +166,14 @@ export function useBountyPublish(params: UseBountyPublishParams) {
       const useV2Payments =
         !draft.isForHonor && draft.amount > 0 && shouldFundNewBountiesWithPhase2();
 
-      if (!useV2Payments && !validateBalance(draft.amount, balance, draft.isForHonor)) {
+      // publish() resolves this immediately before calling submit(), so the ref
+      // is current here. retry() re-runs the SAME publish attempt and correctly
+      // reuses it. onTopUpComplete() only ever runs after the funding gate,
+      // which a deferred publish never reaches — so the ref is false there,
+      // which is also correct: that poster has just pre-funded.
+      const deferFunding = deferredGrantRef.current;
+
+      if (!deferFunding && !useV2Payments && !validateBalance(draft.amount, balance, draft.isForHonor)) {
         analyticsService.trackEvent('post_amount_blocked_by_balance', {
           surface,
           attemptedAmount: draft.amount,
@@ -145,13 +184,29 @@ export function useBountyPublish(params: UseBountyPublishParams) {
         throw new Error(getInsufficientBalanceMessage(draft.amount, balance));
       }
 
-      const { bounty: createdBounty, created } = await bountyService.createBounty(draft);
+      const { bounty: createdBounty, created } = await bountyService.createBounty(draft, {
+        fundingMode: deferFunding ? 'at_accept' : 'at_post',
+      });
 
       if (!createdBounty) {
         throw new Error('Failed to create bounty');
       }
 
-      if (created && !draft.isForHonor && draft.amount > 0) {
+      // Read back what the SERVER actually granted rather than what we asked
+      // for: trg_bounties_normalize_funding_mode silently downgrades an
+      // ineligible request, and the confirmation copy ("you'll be charged when
+      // you pick someone") must not appear on a bounty that was in fact charged
+      // at insert. Offline publishes hand back a synthetic temp row with no
+      // server-decided column, so fall back to what we requested there.
+      const grantedFundingMode =
+        (createdBounty as { funding_mode?: string | null }).funding_mode ??
+        (deferFunding ? 'at_accept' : 'at_post');
+      const postedUnfunded = grantedFundingMode === 'at_accept';
+
+      // Skip the post-time escrow for a granted deferred bounty. The DB trigger
+      // has already skipped its own debit, and calling createEscrow here would
+      // charge the poster at exactly the moment the experiment exists to avoid.
+      if (created && !draft.isForHonor && draft.amount > 0 && !postedUnfunded) {
         try {
           await analyticsService.trackEvent('payment_architecture_routed', {
             bountyId: String(createdBounty.id),
@@ -272,12 +327,38 @@ export function useBountyPublish(params: UseBountyPublishParams) {
           bountyId: String(createdBounty.id),
           amount: draft.isForHonor ? 0 : draft.amount,
           isForHonor: draft.isForHonor,
-          funded: !draft.isForHonor && draft.amount > 0,
+          // `funded` used to be implied by "paid bounty published". A deferred
+          // bounty breaks that equivalence — it is a paid bounty with no money
+          // captured — so this now reports the real funding state. Dashboards
+          // reading `funded` keep working and simply become correct.
+          funded: !draft.isForHonor && draft.amount > 0 && !postedUnfunded,
+          fundingMode: grantedFundingMode,
+          variant: fundingVariant,
           category: draft.category || 'none',
           workType: draft.workType,
           architecture: useV2Payments ? 2 : 1,
           queuedOffline: !isOnline,
         });
+
+        if (postedUnfunded) {
+          // The experiment's step-2 event: a real, discoverable bounty exists
+          // and nothing has been charged. `firstBounty` is true by construction
+          // here — the only scope that grants a deferral today is
+          // 'first_bounty' — but it is emitted explicitly so the funnel keeps
+          // meaning the same thing after the scope is widened to
+          // 'all_bounties'.
+          analyticsService.trackEvent('bounty_posted_unfunded', {
+            surface,
+            bountyId: String(createdBounty.id),
+            amountBucket: amountBucket(draft.amount),
+            fundingMode: 'at_accept',
+            variant: fundingVariant,
+            firstBounty: true,
+            category: draft.category || 'none',
+            workType: draft.workType,
+            platform: Platform.OS,
+          });
+        }
       }
 
       await clearDraft();
@@ -300,9 +381,13 @@ export function useBountyPublish(params: UseBountyPublishParams) {
       } else {
         Alert.alert(
           isOnline ? 'Bounty Posted! 🎉' : 'Bounty Queued! 📋',
-          isOnline
-            ? 'Your bounty has been posted successfully. Hunters will be able to see it and apply.'
-            : "You're offline. Your bounty will be posted automatically when you reconnect.",
+          !isOnline
+            ? "You're offline. Your bounty will be posted automatically when you reconnect."
+            : postedUnfunded
+              ? // Sets the expectation the whole experiment depends on, in one
+                // line, without explaining escrow mechanics.
+                "Your bounty is live. You'll only be charged when you choose someone to do it."
+              : 'Your bounty has been posted successfully. Hunters will be able to see it and apply.',
           [
             {
               text: isOnline ? 'View Bounty' : 'OK',
@@ -334,10 +419,8 @@ export function useBountyPublish(params: UseBountyPublishParams) {
   // an expected insufficient-balance case routes to the top-up screen
   // instead of the throw/Alert error path (submit's own check stays as a
   // safety net for anything that reaches it despite this gate).
-  const publish = () => {
-    const useV2Payments =
-      !draft.isForHonor && draft.amount > 0 && shouldFundNewBountiesWithPhase2();
-
+  /** The pre-experiment publish decision, unchanged and fully synchronous. */
+  const publishWithBalanceGate = (useV2Payments: boolean) => {
     if (!useV2Payments && !validateBalance(draft.amount, balance, draft.isForHonor)) {
       analyticsService.trackEvent('post_amount_blocked_by_balance', {
         surface,
@@ -350,8 +433,45 @@ export function useBountyPublish(params: UseBountyPublishParams) {
       setShowInsufficientBalance(true);
       return;
     }
-
     submit();
+  };
+
+  const publish = async () => {
+    const useV2Payments =
+      !draft.isForHonor && draft.amount > 0 && shouldFundNewBountiesWithPhase2();
+
+    deferredGrantRef.current = false;
+
+    // Control arm short-circuit. `fundingVariant` is known synchronously (it is
+    // resolved once per session from a cached PostHog flag), so a poster who is
+    // not in the experiment never waits on the eligibility RPC and reaches the
+    // funding gate on exactly the same tick as before. Keeping the control path
+    // free of an added await is not just tidiness: a network round-trip between
+    // the tap and the gate is a real, measurable change to the very funnel this
+    // experiment is trying to measure.
+    if (fundingVariant !== 'deferred') {
+      publishWithBalanceGate(useV2Payments);
+      return;
+    }
+
+    // Test arm: ask the server BEFORE deciding whether to show a funding
+    // screen. A poster who qualifies must never see the insufficient-balance
+    // gate at all — showing it and then withdrawing it is worse than the gate.
+    let deferred = false;
+    try {
+      deferred = await resolveDeferredGrant(useV2Payments);
+    } catch {
+      // Eligibility is an optimisation; failing to read it just means this
+      // poster takes today's pre-funded path.
+      deferred = false;
+    }
+    deferredGrantRef.current = deferred;
+
+    if (deferred) {
+      submit();
+      return;
+    }
+    publishWithBalanceGate(useV2Payments);
   };
 
   const onTopUpComplete = () => {

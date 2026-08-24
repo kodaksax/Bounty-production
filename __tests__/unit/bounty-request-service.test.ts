@@ -290,4 +290,63 @@ describe('bountyRequestService (unit)', () => {
 
     await expect(svc.acceptRequest('r1')).rejects.toMatchObject({ status: 404 })
   })
+
+  // --- pay-at-accept ("post first, pay at accept") funding failures ---------
+  //
+  // fn_accept_bounty_request reserves escrow in the SAME transaction as the
+  // acceptance, so any of these means the whole transaction rolled back:
+  // nothing charged, no hunter assigned, bounty still open, request still
+  // pending. They map to 402 rather than 409 because the recovery is
+  // completely different — the poster needs to add money, not refresh.
+  test.each([
+    ['insufficient_funds_for_escrow', 'the poster cannot cover the bounty'],
+    ['bounty_not_funded', 'an acceptance path skipped escrow and the DB guard fired'],
+    ['bounty_amount_locked_by_applications', 'the poster edited a frozen reward'],
+    ['bounty_funding_mode_is_immutable', 'a client tried to flip funding_mode'],
+  ])('acceptRequest throws structured 402 for %s', async (message, _why) => {
+    jest.doMock('../../lib/utils/error-logger', () => ({
+      logger: { error: jest.fn(), warning: jest.fn(), info: jest.fn() },
+    }))
+    jest.doMock('../../lib/services/payment-service', () => ({ paymentService: { createEscrow: jest.fn() } }))
+
+    const fromSpy = jest.fn(() => makeChainBuilder({ data: null, error: null }))
+    jest.doMock('../../lib/supabase', () => ({
+      isSupabaseConfigured: true,
+      supabase: {
+        rpc: jest.fn().mockResolvedValue({ data: null, error: { message, code: '23514' } }),
+        from: fromSpy,
+      },
+    }))
+
+    const svc = require('../../lib/services/bounty-request-service').bountyRequestService
+
+    await expect(svc.acceptRequest('r1')).rejects.toMatchObject({ status: 402 })
+    // Must NOT fall through to the sequential fallback: that path would set the
+    // request to 'accepted' before discovering the bounty can't move, which is
+    // exactly the contradictory state this migration exists to prevent.
+    expect(fromSpy).not.toHaveBeenCalledWith('bounty_requests')
+  })
+
+  test('acceptRequest preserves the raw funding reason so the gate can classify it', async () => {
+    jest.doMock('../../lib/utils/error-logger', () => ({
+      logger: { error: jest.fn(), warning: jest.fn(), info: jest.fn() },
+    }))
+    jest.doMock('../../lib/services/payment-service', () => ({ paymentService: { createEscrow: jest.fn() } }))
+    jest.doMock('../../lib/supabase', () => ({
+      isSupabaseConfigured: true,
+      supabase: {
+        rpc: jest.fn().mockResolvedValue({
+          data: null,
+          error: { message: 'insufficient_funds_for_escrow', code: '23514' },
+        }),
+        from: jest.fn(() => makeChainBuilder({ data: null, error: null })),
+      },
+    }))
+
+    const svc = require('../../lib/services/bounty-request-service').bountyRequestService
+
+    await expect(svc.acceptRequest('r1')).rejects.toMatchObject({
+      message: 'insufficient_funds_for_escrow',
+    })
+  })
 })

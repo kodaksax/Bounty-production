@@ -304,6 +304,48 @@ export type AnalyticsEvent =
   | 'escrow_funded'
   | 'escrow_released'
   | 'escrow_refunded'
+  // ---------------------------------------------------------------------
+  // "Post first, pay at accept" experiment
+  // (PostHog flag 'post-first-pay-at-accept', see
+  //  lib/experiments/deferred-funding-variant.ts).
+  //
+  // These do NOT replace the posting/payment events above — they fill the
+  // gaps the existing funnel cannot express, because until now "published"
+  // and "funded" were the same instant. The measurable funnel is:
+  //
+  //   post_flow_started            (existing) — poster opened the composer
+  //   post_published               (existing) — bounty is live
+  //     └ bounty_posted_unfunded   (NEW)      — ...and NO money was captured
+  //   bounty_viewed                (existing) — a hunter saw it
+  //   first_submission_received    (existing) — a hunter applied
+  //   accept_funding_required      (NEW)      — poster tapped Select; a charge is due
+  //   accept_funding_started       (NEW)      — poster confirmed the charge
+  //   payment_sca_required         (existing) — top-up needed 3DS/SCA
+  //   payment_completed            (existing) — top-up deposit succeeded
+  //   accept_funding_succeeded     (NEW)      — escrow reserved + hunter accepted
+  //     └ escrow_funded            (existing, timing:'at_accept')
+  //     └ bounty_claimed           (existing) — the acceptance itself
+  //   bounty_work_started          (NEW)      — bounty is funded AND in_progress
+  //   bounty_completed             (existing)
+  //
+  // Failure/abandon branches:
+  //   accept_funding_failed        (NEW) — carries `reason` from
+  //                                        classifyAcceptFundingError, never a
+  //                                        raw DB/Stripe message
+  //   accept_funding_abandoned     (NEW) — poster backed out of the pay gate
+  //
+  // Every event in this block carries `variant` (control | deferred),
+  // `fundingMode` ('at_post' | 'at_accept') and `firstBounty`, so the two arms
+  // are separable without a join. None of them ever carries a card, token,
+  // PaymentIntent, customer id or exact balance — amounts are bucketed by
+  // amountBucket() in lib/services/bounty-funding-service.ts.
+  | 'bounty_posted_unfunded'
+  | 'accept_funding_required'
+  | 'accept_funding_started'
+  | 'accept_funding_succeeded'
+  | 'accept_funding_failed'
+  | 'accept_funding_abandoned'
+  | 'bounty_work_started'
   // Stripe Phase 2 (payment_architecture_version=2) bounty escrow routing —
   // see lib/utils/payment-architecture.ts. escrow_funded/escrow_released/
   // escrow_refunded above are reused for both architectures (properties

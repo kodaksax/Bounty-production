@@ -108,6 +108,25 @@ serve(async (req: Request) => {
       if (/request_not_found|bounty_not_found/i.test(text || '')) {
         return new Response(JSON.stringify({ error: 'Not Found', details: text }), { status: 404 });
       }
+      // Pay-at-accept funding failures. fn_accept_bounty_request reserves
+      // escrow in the same transaction as the acceptance, so this means the
+      // WHOLE transaction rolled back: the bounty is still open, the request
+      // still pending, nothing was charged and no hunter was assigned. 402
+      // keeps it distinguishable from the 409 state conflicts below, which the
+      // client recovers from very differently.
+      if (
+        /insufficient_funds_for_escrow|bounty_not_funded|_locked_by_|bounty_funding_mode_is_immutable/i.test(
+          text || ''
+        )
+      ) {
+        return new Response(
+          JSON.stringify({
+            error: 'Payment required: this bounty is not funded yet',
+            details: text,
+          }),
+          { status: 402 }
+        );
+      }
       if (/request_not_pending|bounty_not_open/i.test(text || '')) {
         return new Response(
           JSON.stringify({

@@ -56,6 +56,18 @@ export type Bounty = {
   // unset/null; set to 2 server-side by supabase/functions/bounty-payments
   // once a Phase 2 PaymentIntent is created for this bounty.
   payment_architecture_version?: number | null;
+  // When the poster's wallet is debited into escrow. 'at_post' (the default,
+  // and the only value any bounty created before 2026-08-23 has) means
+  // fn_reserve_bounty_escrow debited at INSERT time. 'at_accept' means the
+  // bounty is live but UNFUNDED, and escrow is reserved inside
+  // fn_accept_bounty_request when the poster selects a hunter — see
+  // supabase/migrations/20260823120000_deferred_bounty_funding_pay_at_accept.sql.
+  //
+  // Never trust this field for a funding decision on the client: it is a
+  // display hint. The authoritative answer comes from
+  // fn_get_bounty_funding_requirement (lib/services/bounty-funding-service.ts),
+  // and the invariant itself is enforced by a DB trigger.
+  funding_mode?: 'at_post' | 'at_accept' | null;
   // Structured schedule fields (Phase 1: time as first-class citizen)
   schedule_type?: 'asap' | 'scheduled' | 'flexible';
   start_date?: string;         // ISO 8601 timestamptz

@@ -36,7 +36,9 @@ import { EmptyState } from '../../components/ui/empty-state'
 import { ApplicantCardSkeleton, PostingsListSkeleton } from '../../components/ui/skeleton-loaders'
 import { WalletBalanceButton } from '../../components/ui/wallet-balance-button'
 import { useAuthContext } from '../../hooks/use-auth-context'
+import { useAcceptFunding } from '../../hooks/useAcceptFunding'
 import { useAcceptRequest } from '../../hooks/useAcceptRequest'
+import { AcceptFundingGate } from '../../components/accept-funding-gate'
 import type { InProgressStatusFilter, MyPostingsStatusFilter } from '../../hooks/useBountyStatusFilters'
 import {
   IN_PROGRESS_FILTERS,
@@ -411,6 +413,11 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
 
 
   // ---- Accept/Reject request handlers (extracted to hooks) ----
+  // Owns the pay-at-accept gate. Rendered as a full-screen early return below,
+  // so the poster can never be looking at an "in progress" list while a
+  // payment sheet is open.
+  const { gate: acceptFundingGate, ensureFunded, handleAcceptFailure } = useAcceptFunding()
+
   const { handleAcceptRequest } = useAcceptRequest({
     currentUserId,
     bountyRequests,
@@ -425,6 +432,8 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
     loadRequestsForMyBounties,
     onBountyAccepted,
     setActiveScreen,
+    ensureFunded,
+    handleAcceptFailure,
   })
 
   const { handleRejectRequest } = useRejectRequest({
@@ -830,6 +839,13 @@ export function PostingsScreen({ onBack, initialTab, activeScreen, setActiveScre
 
   if (alternateScreen) {
     return alternateScreen
+  }
+
+  // The pay-at-accept gate takes over the whole screen while it is open. It is
+  // only ever active for a bounty that was posted unfunded and still needs
+  // escrow — every legacy bounty resolves it instantly and invisibly.
+  if (acceptFundingGate.active) {
+    return <AcceptFundingGate gate={acceptFundingGate} />
   }
 
   return (
