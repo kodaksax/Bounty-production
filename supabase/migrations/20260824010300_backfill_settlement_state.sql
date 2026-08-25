@@ -61,11 +61,28 @@ DECLARE
   v_withdrawal_ledger    int;
   v_withdrawal_pending   int;
   v_withdrawal_settled   int;
+  v_has_broadcast_trigger boolean;
 BEGIN
+  SELECT EXISTS (
+    SELECT 1
+    FROM pg_trigger trigger
+    JOIN pg_class table_ref
+      ON table_ref.oid = trigger.tgrelid
+    JOIN pg_namespace schema_ref
+      ON schema_ref.oid = table_ref.relnamespace
+    WHERE schema_ref.nspname = 'public'
+      AND table_ref.relname = 'wallet_transactions'
+      AND trigger.tgname = 'wallet_transactions_broadcast_trigger'
+      AND NOT trigger.tgisinternal
+  )
+  INTO v_has_broadcast_trigger;
+
   -- Suppress the two incidental triggers (see header) so the backfill changes
   -- exactly one column and publishes nothing.
   ALTER TABLE public.wallet_transactions DISABLE TRIGGER trg_wallet_transactions_updated_at;
-  ALTER TABLE public.wallet_transactions DISABLE TRIGGER wallet_transactions_broadcast_trigger;
+  IF v_has_broadcast_trigger THEN
+    ALTER TABLE public.wallet_transactions DISABLE TRIGGER wallet_transactions_broadcast_trigger;
+  END IF;
 
   UPDATE public.wallet_transactions
   SET settlement_state = public.fn_settlement_state_for(
@@ -78,7 +95,9 @@ BEGIN
         stripe_refund_id
       );
 
-  ALTER TABLE public.wallet_transactions ENABLE TRIGGER wallet_transactions_broadcast_trigger;
+  IF v_has_broadcast_trigger THEN
+    ALTER TABLE public.wallet_transactions ENABLE TRIGGER wallet_transactions_broadcast_trigger;
+  END IF;
   ALTER TABLE public.wallet_transactions ENABLE TRIGGER trg_wallet_transactions_updated_at;
 
   -- bounty_payments carries no updated_at or broadcast trigger of its own, so

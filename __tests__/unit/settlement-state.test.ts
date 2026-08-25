@@ -445,6 +445,9 @@ describe('migration set', () => {
 
   test('the backfill does not broadcast fabricated change events', () => {
     const backfill = read('supabase/migrations/20260824010300_backfill_settlement_state.sql');
+    expect(backfill).toMatch(/SELECT EXISTS \(/);
+    expect(backfill).toMatch(/trigger\.tgname = 'wallet_transactions_broadcast_trigger'/);
+    expect(backfill).toMatch(/IF v_has_broadcast_trigger THEN/);
     expect(backfill).toMatch(/DISABLE TRIGGER wallet_transactions_broadcast_trigger/);
     expect(backfill).toMatch(/ENABLE TRIGGER wallet_transactions_broadcast_trigger/);
   });
