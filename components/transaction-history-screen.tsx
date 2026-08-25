@@ -187,6 +187,10 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
     const isPositive = transaction.amount > 0
     const amountColor = isPositive ? theme.success : theme.text
     const settlement = getSettlementSummary(transaction)
+    const shouldShowStatus =
+      transaction.details.status !== undefined ||
+      transaction.details.settlementLabel !== undefined ||
+      transaction.details.settlementState !== undefined
     const statusColor =
       settlement.tone === "success"
         ? theme.success
@@ -219,12 +223,14 @@ export function TransactionHistoryScreen({ onBack }: { onBack: () => void }) {
             <View style={s.transactionMeta}>
               <View style={s.metaRow}>
                 <Text style={s.timeText}>{format(transaction.date, "h:mm a")}</Text>
-                <View style={s.statusRow}>
-                  <View style={[s.statusDot, { backgroundColor: statusColor }]} />
-                  <Text style={[s.statusText, { color: statusColor }]}>
-                    {settlement.label}
-                  </Text>
-                </View>
+                {shouldShowStatus && (
+                  <View style={s.statusRow}>
+                    <View style={[s.statusDot, { backgroundColor: statusColor }]} />
+                    <Text style={[s.statusText, { color: statusColor }]}>
+                      {settlement.label}
+                    </Text>
+                  </View>
+                )}
                 {transaction.escrowStatus && (
                   <View style={s.escrowBadge}>
                     <MaterialIcons name="lock" size={10} color="#fff" />
