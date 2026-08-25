@@ -113,4 +113,68 @@ describe('useMessages (local conversation)', () => {
       expect(result.current.messages.some((m: any) => m.id === realFirst.id)).toBe(true);
     });
   });
+  it('passes the attachment URL through to the local send path', async () => {
+    (dataUtils.getCurrentUserId as jest.Mock).mockReturnValue('user-1');
+
+    const sentMessage = {
+      id: 'real-media',
+      conversationId: 'conv-1',
+      senderId: 'user-1',
+      text: '',
+      mediaUrl: 'https://cdn.example.com/photo.jpg',
+      createdAt: new Date().toISOString(),
+      status: 'sent',
+    };
+
+    (messageService.messageService.sendMessage as jest.Mock).mockResolvedValue({
+      message: sentMessage,
+    });
+
+    const { useMessages } = require('../../../hooks/useMessages');
+    const { result } = renderHook(() => useMessages('conv-1'));
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.sendMessage('', 'https://cdn.example.com/photo.jpg');
+    });
+
+    expect(messageService.messageService.sendMessage).toHaveBeenCalledWith(
+      'conv-1',
+      '',
+      'user-1',
+      undefined,
+      'https://cdn.example.com/photo.jpg'
+    );
+    expect(result.current.messages).toEqual([sentMessage]);
+  });
+
+  it('marks the message failed when the service returns an error instead of throwing', async () => {
+    (dataUtils.getCurrentUserId as jest.Mock).mockReturnValue('user-1');
+
+    // messageService.sendMessage resolves with `{ message: {}, error }` when it
+    // rejects a message rather than throwing.
+    (messageService.messageService.sendMessage as jest.Mock).mockResolvedValue({
+      message: {},
+      error: 'Message cannot be empty',
+    });
+
+    const { useMessages } = require('../../../hooks/useMessages');
+    const { result } = renderHook(() => useMessages('conv-1'));
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.sendMessage('hi');
+    });
+
+    expect(result.current.error).toBe('Message cannot be empty');
+    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages[0].status).toBe('failed');
+    expect(result.current.messages[0].text).toBe('hi');
+  });
 });

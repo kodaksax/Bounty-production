@@ -14,6 +14,12 @@ export interface UploadOptions {
   bucket: string
   path: string
   onProgress?: (progress: number) => void
+  /**
+   * Explicit MIME type. Pass this when the caller already knows the type (e.g.
+   * from a picker) — content:// URIs and extension-less cache paths otherwise
+   * fall back to application/octet-stream, which breaks image previews.
+   */
+  contentType?: string
 }
 
 export interface UploadResult {
@@ -35,12 +41,12 @@ export const storageService = {
    * @returns Upload result with public URL or local cache key
    */
   async uploadFile(fileUri: string, options: UploadOptions): Promise<UploadResult> {
-    const { bucket, path, onProgress } = options
+    const { bucket, path, onProgress, contentType } = options
 
     try {
       // If Supabase is configured, try uploading there first
       if (supabaseClient) {
-        return await this._uploadToSupabase(fileUri, bucket, path, onProgress)
+        return await this._uploadToSupabase(fileUri, bucket, path, onProgress, contentType)
       } else {
         console.error('[StorageService] Supabase not configured, using AsyncStorage fallback')
         return await this._saveToAsyncStorage(fileUri, path)
@@ -129,7 +135,8 @@ export const storageService = {
     fileUri: string,
     bucket: string,
     path: string,
-    onProgress?: (progress: number) => void
+    onProgress?: (progress: number) => void,
+    contentTypeOverride?: string
   ): Promise<UploadResult> {
     if (!supabaseClient) {
       throw new Error('Supabase client not initialized')
@@ -137,7 +144,7 @@ export const storageService = {
 
     onProgress?.(0.1)
 
-    let contentType = 'application/octet-stream'
+    let contentType = contentTypeOverride || 'application/octet-stream'
 
     // Helper: Wraps a promise with a timeout to prevent indefinite hangs
     function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
@@ -276,8 +283,9 @@ export const storageService = {
       }
     }
 
-    // Detect content type from file extension for non-data URIs
-    if (!fileUri.startsWith('data:')) {
+    // Detect content type from file extension for non-data URIs, unless the
+    // caller already told us the type.
+    if (!contentTypeOverride && !fileUri.startsWith('data:')) {
       const ext = fileUri.split('.').pop()?.toLowerCase()
       if (ext) {
         const mimeTypes: Record<string, string> = {
@@ -441,9 +449,20 @@ export const storageService = {
       concurrency?: number
       onFileProgress?: (index: number, progress: number) => void
       onAggregateProgress?: (progress: number) => void
+      /** Original file names, parallel to `fileUris`. Falls back to the URI basename. */
+      fileNames?: (string | undefined)[]
+      /** MIME types, parallel to `fileUris`. Falls back to extension sniffing. */
+      contentTypes?: (string | undefined)[]
     }
   ): Promise<UploadResult[]> {
-    const { concurrency = 3, onFileProgress, onAggregateProgress, bucket } = options as any
+    const {
+      concurrency = 3,
+      onFileProgress,
+      onAggregateProgress,
+      bucket,
+      fileNames,
+      contentTypes,
+    } = options as any
 
     if (!Array.isArray(fileUris) || fileUris.length === 0) return []
 
@@ -466,7 +485,15 @@ export const storageService = {
         if (i >= fileUris.length) return
 
         const uri = fileUris[i]
-        const filename = uri.split('/').pop() || `file-${i}`
+        // Derive a unique object key. The basename alone collides across users
+        // and sends (Android pickers hand back generic names like "image.jpg"),
+        // which either clobbers someone else's file or fails outright against
+        // buckets that grant INSERT but not UPDATE. Prefix with a timestamp and
+        // the worker index, and strip characters Supabase Storage rejects.
+        const rawName = (fileNames?.[i] || uri.split('?')[0].split('/').pop() || `file-${i}`)
+          .replace(/[^A-Za-z0-9._-]/g, '_')
+          .slice(-96)
+        const filename = `${Date.now()}-${i}-${rawName}`
         const basePath = (options.path || '').replace(/\/$/, '')
         const filePath = basePath ? `${basePath}/${filename}` : filename
 
@@ -474,6 +501,7 @@ export const storageService = {
           const res = await this.uploadFile(uri, {
             bucket,
             path: filePath,
+            contentType: contentTypes?.[i],
             onProgress: p => {
               progressByIndex[i] = p
               onFileProgress?.(i, p)
