@@ -60,7 +60,7 @@ BEGIN
     'Reconciliation digest',
     v_total || ' unresolved findings older than 48h',
     jsonb_build_object(
-      'type',      'reconciliation_alert',
+      'type',      'reconciliation_digest',
       'digest',    true,
       'total',     v_total,
       'breakdown', v_rows

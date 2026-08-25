@@ -45,7 +45,9 @@ ALTER TABLE public.notifications
       'verification_submitted', 'verification_verified', 'verification_rejected',
       'verification_canceled', 'marketing_promo',
       -- New in Phase 4. Operator-facing: only ever addressed to admin accounts.
-      'reconciliation_alert'
+      'reconciliation_alert',
+      -- Daily informational digest of warning/info findings. Non-urgent, non-forced.
+      'reconciliation_digest'
     ]::text[])
   );
 

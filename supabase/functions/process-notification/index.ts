@@ -95,6 +95,9 @@ const TYPE_CATEGORY: Record<string, Category> = {
   // user-disableable and suppressed overnight — a page that waits until 8am is
   // not a page. Only ever addressed to admin accounts.
   reconciliation_alert: 'security',
+  // Daily informational digest of warning/info findings. 'payments' (non-security)
+  // so delivery is not forced and quiet hours apply.
+  reconciliation_digest: 'payments',
   verification_submitted: 'verification', verification_verified: 'verification',
   verification_rejected: 'verification', verification_canceled: 'verification',
   follow: 'followers',

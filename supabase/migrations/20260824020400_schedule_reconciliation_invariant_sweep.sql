@@ -34,8 +34,9 @@
 
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
-    RAISE WARNING 'pg_cron not enabled — reconciliation invariant sweep NOT scheduled.';
+  IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron')
+     OR NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_net') THEN
+    RAISE WARNING 'pg_cron and/or pg_net are not both enabled on this project — reconciliation-invariant-sweep-daily was NOT scheduled. Enable both extensions (Database > Extensions in the Supabase dashboard) and re-run the cron.schedule(...) call from this migration manually.';
     RETURN;
   END IF;
 

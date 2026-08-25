@@ -26,8 +26,11 @@ CREATE INDEX IF NOT EXISTS idx_reconciliation_alerts_sent_type_time
 
 ALTER TABLE public.reconciliation_alerts_sent ENABLE ROW LEVEL SECURITY;
 -- No policies: service_role only, matching reconciliation_findings and
--- admin_action_log. REVOKE from anon explicitly — Supabase grants EXECUTE/
--- table privileges to anon by default and RLS alone is not the whole story.
+-- admin_action_log. REVOKE from PUBLIC/anon explicitly — Supabase grants
+-- table privileges to anon/authenticated by default and RLS alone is not the
+-- whole story. Revoke from PUBLIC first (matches reconciliation_reports pattern)
+-- then from the specific roles for belt-and-suspenders clarity.
+REVOKE ALL ON public.reconciliation_alerts_sent FROM PUBLIC;
 REVOKE ALL ON public.reconciliation_alerts_sent FROM anon;
 REVOKE ALL ON public.reconciliation_alerts_sent FROM authenticated;
 
