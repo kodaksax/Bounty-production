@@ -62,9 +62,10 @@ function isThisWeek(date: Date): boolean {
   return diffDays >= 0 && diffDays <= 7;
 }
 
-/** Format a date as "Jul 4" or "Jul 4, 9 PM" depending on whether time matters. */
+/** Format a date as "Wed, Jul 4" or "Wed, Jul 4, 9 PM" depending on whether time matters. */
 function formatDateShort(iso: string, includeTime = false): string {
   const d = new Date(iso);
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const monthNames = [
     'Jan',
     'Feb',
@@ -79,7 +80,7 @@ function formatDateShort(iso: string, includeTime = false): string {
     'Nov',
     'Dec',
   ];
-  const base = `${monthNames[d.getMonth()]} ${d.getDate()}`;
+  const base = `${dayNames[d.getDay()]}, ${monthNames[d.getMonth()]} ${d.getDate()}`;
   if (!includeTime) return base;
   const hours = d.getHours();
   const ampm = hours >= 12 ? 'PM' : 'AM';
