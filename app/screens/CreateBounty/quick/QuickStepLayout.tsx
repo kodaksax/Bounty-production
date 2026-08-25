@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { KeyboardAvoidingContainer } from '../../../../components/ui/keyboard-avoiding-container';
 import { useAppThemeContext } from '../../../../lib/themes/AppThemeContext';
 import type { AppTheme } from '../../../../lib/themes/types';
 
@@ -92,7 +93,7 @@ export function QuickStepLayout({
   });
 
   return (
-    <View style={styles.root}>
+    <KeyboardAvoidingContainer style={styles.root}>
       {/* Progress row */}
       <View style={styles.progressRow}>
         {/* The slot is always reserved, so the progress bar keeps the same
@@ -166,7 +167,7 @@ export function QuickStepLayout({
           </TouchableOpacity>
         </View>
       </Animated.View>
-    </View>
+    </KeyboardAvoidingContainer>
   );
 }
 

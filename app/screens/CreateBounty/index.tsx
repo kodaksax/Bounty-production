@@ -27,12 +27,10 @@ import {
   ActivityIndicator,
   Alert,
   AppState,
-  KeyboardAvoidingView,
   Platform,
   Text,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface CreateBountyFlowProps {
   onComplete?: (bountyId: string) => void;
@@ -134,7 +132,6 @@ export function CreateBountyFlow({
   const publishedDraftRef = useRef<BountyDraft | null>(null);
   const { session } = useAuthContext();
   const { draft, saveDraft, clearDraft, isLoading } = useBountyDraft(session?.user?.id);
-  const insets = useSafeAreaInsets();
   const { createEscrow, balance } = useWallet();
   const { paymentMethods } = useStripe();
   const { theme } = useAppThemeContext();
@@ -687,12 +684,7 @@ export function CreateBountyFlow({
   }
 
   return (
-    <KeyboardAvoidingView
-      className="flex-1"
-      style={{ backgroundColor: theme.background }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={insets.top}
-    >
+    <View className="flex-1" style={{ backgroundColor: theme.background }}>
       <View className="flex-1">
         {!isEmailVerified && <EmailVerificationBanner email={userEmail} />}
 
@@ -782,7 +774,7 @@ export function CreateBountyFlow({
           </View>
         )}
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
