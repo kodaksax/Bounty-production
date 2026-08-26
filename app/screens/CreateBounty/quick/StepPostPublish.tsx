@@ -47,6 +47,14 @@ function describeSchedule(draft: BountyDraft): string {
   return 'Not added yet';
 }
 
+/** Weekday name for the scheduled date — derived from the day/month/year. */
+function describeWeekday(draft: BountyDraft): string {
+  if (draft.scheduleType !== 'scheduled' || !draft.startDate) return 'Not added yet';
+  const start = new Date(draft.startDate);
+  if (Number.isNaN(start.getTime())) return 'Not added yet';
+  return start.toLocaleDateString(undefined, { weekday: 'long' });
+}
+
 /**
  * The confirmation screen for the two-step posting flow — the bounty is
  * already live by the time this renders.
@@ -101,6 +109,13 @@ export function StepPostPublish({
       icon: 'calendar-today',
       label: 'Date',
       value: describeSchedule(draft),
+      target: 'when',
+    },
+    {
+      key: 'day',
+      icon: 'event',
+      label: 'Day',
+      value: describeWeekday(draft),
       target: 'when',
     },
     {
