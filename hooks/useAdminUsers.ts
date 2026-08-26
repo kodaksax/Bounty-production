@@ -1,44 +1,21 @@
 // hooks/useAdminUsers.ts - Hook for managing admin user data
-import { useCallback, useEffect, useRef, useState } from 'react';
 import { adminDataClient } from '../lib/admin/adminDataClient';
 import type { AdminUserFilters, AdminUserSummary } from '../lib/types-admin';
+import { useAdminList, type UseAdminListResult } from './useAdminList';
 
-interface UseAdminUsersResult {
+export interface UseAdminUsersResult extends UseAdminListResult<AdminUserSummary> {
   users: AdminUserSummary[];
-  isLoading: boolean;
-  error: string | null;
-  refetch: () => Promise<void>;
 }
 
+const getUserId = (u: AdminUserSummary) => u.id;
+
 export function useAdminUsers(filters?: AdminUserFilters): UseAdminUsersResult {
-  const [users, setUsers] = useState<AdminUserSummary[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const filtersRef = useRef(filters);
-  filtersRef.current = filters;
+  const list = useAdminList<AdminUserSummary, AdminUserFilters>({
+    filters: filters ?? {},
+    fetcher: adminDataClient.fetchAdminUsers.bind(adminDataClient),
+    getId: getUserId,
+    debounceMs: 250,
+  });
 
-  const fetchUsers = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const data = await adminDataClient.fetchAdminUsers(filtersRef.current);
-      setUsers(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch users');
-      console.error('Error fetching admin users:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
-
-  return {
-    users,
-    isLoading,
-    error,
-    refetch: fetchUsers,
-  };
+  return { ...list, users: list.items };
 }

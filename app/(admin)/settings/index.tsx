@@ -1,157 +1,89 @@
 // app/(admin)/settings/index.tsx - Admin Settings Hub
-import { MaterialIcons } from '@expo/vector-icons';
+//
+// Two of the four destinations this hub used to advertise were placeholders
+// and have been removed rather than restyled:
+//   - "Notification Settings" persisted nothing and no backend read any of its
+//     values; there is no admin alerting system for it to configure.
+//   - "Audit Log" pointed at app/(admin)/settings/audit-log.tsx, which
+//     rendered a hardcoded seven-row array of fabricated entries and shadowed
+//     the real, Supabase-backed audit viewer at /(admin)/audit-logs. This hub
+//     now links to the real one.
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, Text } from 'react-native';
 import { AdminHeader } from '../../../components/admin/AdminHeader';
+import {
+  AdminLinkRow,
+  AdminPanel,
+  AdminScreen,
+  AdminSection,
+} from '../../../components/admin/AdminUI';
+import { useAppTheme } from '../../../hooks/use-app-theme';
 import { ROUTES } from '../../../lib/routes';
-
-interface SettingsSection {
-  id: string;
-  title: string;
-  description: string;
-  icon: keyof typeof MaterialIcons.glyphMap;
-  route: string;
-}
-
-const settingsSections: SettingsSection[] = [
-  {
-    id: 'general',
-    title: 'General Settings',
-    description: 'App configuration, preferences, and display options',
-    icon: 'settings',
-    route: ROUTES.ADMIN.SETTINGS.GENERAL,
-  },
-  {
-    id: 'notifications',
-    title: 'Notification Settings',
-    description: 'Manage admin alerts, email notifications, and push settings',
-    icon: 'notifications',
-    route: ROUTES.ADMIN.SETTINGS.NOTIFICATIONS,
-  },
-  {
-    id: 'security',
-    title: 'Security Settings',
-    description: 'Access control, authentication, and security policies',
-    icon: 'security',
-    route: ROUTES.ADMIN.SETTINGS.SECURITY,
-  },
-  {
-    id: 'audit-log',
-    title: 'Audit Log',
-    description: 'View admin actions and system activity history',
-    icon: 'history',
-    route: ROUTES.ADMIN.SETTINGS.AUDIT_LOG,
-  },
-];
 
 export default function AdminSettingsScreen() {
   const router = useRouter();
+  const { theme } = useAppTheme();
+  const go = (route: string) => router.push(route as never);
 
   return (
-    <View style={styles.container}>
-      <AdminHeader title="Admin Settings" onBack={() => router.back()} />
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
-        <Text style={styles.description}>
-          Configure admin panel settings, security policies, and view system activity.
+    <AdminScreen>
+      <AdminHeader title="Settings" showBack backFallback={ROUTES.ADMIN.INDEX} />
+      <ScrollView contentContainerStyle={{ padding: theme.spacing.lg, paddingBottom: 48 }}>
+        <AdminSection title="Console">
+          <AdminPanel style={{ paddingVertical: 0 }}>
+            <AdminLinkRow
+              icon="tune"
+              label="Console preferences"
+              detail="Theme, rows per page, auto-refresh, default filters"
+              onPress={() => go(ROUTES.ADMIN.SETTINGS.GENERAL)}
+            />
+            <AdminLinkRow
+              icon="security"
+              label="Security"
+              detail="Two-factor authentication and active sessions"
+              onPress={() => go(ROUTES.ADMIN.SETTINGS.SECURITY)}
+              last
+            />
+          </AdminPanel>
+        </AdminSection>
+
+        <AdminSection title="Records">
+          <AdminPanel style={{ paddingVertical: 0 }}>
+            <AdminLinkRow
+              icon="history"
+              label="Audit log"
+              detail="Every recorded admin and system action"
+              onPress={() => go(ROUTES.ADMIN.AUDIT_LOGS)}
+              last
+            />
+          </AdminPanel>
+        </AdminSection>
+
+        <AdminSection title="Help">
+          <AdminPanel style={{ paddingVertical: 0 }}>
+            <AdminLinkRow
+              icon="help-outline"
+              label="Support"
+              detail="Operator guidance and product feedback"
+              onPress={() => go(ROUTES.ADMIN.SUPPORT.INDEX)}
+              last
+            />
+          </AdminPanel>
+        </AdminSection>
+
+        <Text
+          style={{
+            fontSize: 12,
+            color: theme.textDisabled,
+            textAlign: 'center',
+            marginTop: theme.spacing.lg,
+          }}
+        >
+          Console preferences are stored on this device. Account security applies everywhere you
+          sign in.
         </Text>
-
-        <View style={styles.sectionsContainer}>
-          {settingsSections.map((section) => (
-            <TouchableOpacity
-              key={section.id}
-              style={styles.sectionCard}
-              onPress={() => router.push(section.route as any)}
-            >
-              <View style={styles.sectionIcon}>
-                <MaterialIcons name={section.icon} size={28} color="#00dc50" />
-              </View>
-              <View style={styles.sectionContent}>
-                <Text style={styles.sectionTitle}>{section.title}</Text>
-                <Text style={styles.sectionDescription}>{section.description}</Text>
-              </View>
-              <MaterialIcons name="chevron-right" size={24} color="rgba(255,254,245,0.4)" />
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Version Info */}
-        <View style={styles.versionContainer}>
-          <Text style={styles.versionText}>Admin Panel v1.0.0</Text>
-          <Text style={styles.versionSubtext}>BountyExpo Platform</Text>
-        </View>
-
-        {/* Bottom padding */}
-        <View style={{ height: 40 }} />
       </ScrollView>
-    </View>
+    </AdminScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#1a3d2e',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    padding: 16,
-  },
-  description: {
-    fontSize: 14,
-    color: 'rgba(255,254,245,0.7)',
-    lineHeight: 20,
-    marginBottom: 24,
-  },
-  sectionsContainer: {
-    gap: 12,
-  },
-  sectionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#2d5240',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(0,145,44,0.2)',
-    gap: 16,
-  },
-  sectionIcon: {
-    width: 48,
-    height: 48,
-    backgroundColor: 'rgba(0,145,44,0.15)',
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sectionContent: {
-    flex: 1,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fffef5',
-    marginBottom: 4,
-  },
-  sectionDescription: {
-    fontSize: 13,
-    color: 'rgba(255,254,245,0.6)',
-    lineHeight: 18,
-  },
-  versionContainer: {
-    marginTop: 40,
-    alignItems: 'center',
-  },
-  versionText: {
-    fontSize: 14,
-    color: 'rgba(255,254,245,0.5)',
-    fontWeight: '500',
-  },
-  versionSubtext: {
-    fontSize: 12,
-    color: 'rgba(255,254,245,0.3)',
-    marginTop: 4,
-  },
-});

@@ -29,6 +29,64 @@ function jsonResponse(data: unknown, status = 200) {
   });
 }
 
+/**
+ * Attach real per-user activity/financial aggregates to a page of profile rows.
+ *
+ * The admin console shows five counters per user (bounties posted / accepted /
+ * completed, total spent, total earned). They used to be read off the profile
+ * row itself, but `profiles` has no such columns -- so every one of them
+ * rendered as 0 for every user. They are aggregated by the
+ * `public.admin_user_stats(uuid[])` SECURITY DEFINER function instead (see
+ * 20260826120000_add_admin_user_stats.sql), for at most one page of ids.
+ *
+ * If the RPC is unavailable -- e.g. the migration has not been applied to this
+ * environment yet -- the rows come back WITHOUT a `__stats` key. The client
+ * mapper treats a missing `__stats` as "not loaded" and the UI shows an em
+ * dash. That is deliberate: an unavailable aggregate must not silently
+ * reintroduce the fabricated zeros this replaced.
+ */
+async function attachStats(
+  supabase: ReturnType<typeof createClient>,
+  rows: Record<string, unknown>[]
+): Promise<Record<string, unknown>[]> {
+  if (rows.length === 0) return rows;
+
+  const ids = rows.map((r) => r.id).filter((id): id is string => typeof id === 'string');
+  if (ids.length === 0) return rows;
+
+  const { data, error } = await supabase.rpc('admin_user_stats', { p_user_ids: ids });
+  if (error) {
+    console.error('[admin-profiles] admin_user_stats unavailable; returning rows without stats', {
+      error: error.message,
+    });
+    return rows;
+  }
+
+  const byId = new Map<string, Record<string, unknown>>();
+  for (const stat of (data ?? []) as Record<string, unknown>[]) {
+    byId.set(String(stat.user_id), {
+      bountiesPosted: Number(stat.bounties_posted ?? 0),
+      bountiesAccepted: Number(stat.bounties_accepted ?? 0),
+      bountiesCompleted: Number(stat.bounties_completed ?? 0),
+      totalSpent: Number(stat.total_spent ?? 0),
+      totalEarned: Number(stat.total_earned ?? 0),
+    });
+  }
+
+  return rows.map((row) => ({
+    ...row,
+    // A user with no activity still gets a zeroed stats object here -- that is
+    // a real measured zero, unlike the old defaulted one.
+    __stats: byId.get(String(row.id)) ?? {
+      bountiesPosted: 0,
+      bountiesAccepted: 0,
+      bountiesCompleted: 0,
+      totalSpent: 0,
+      totalEarned: 0,
+    },
+  }));
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -73,6 +131,9 @@ Deno.serve(async (req: Request) => {
     status?: string;
     verificationStatus?: string;
     reason?: string;
+    search?: string;
+    page?: number;
+    pageSize?: number;
   };
   try {
     body = await req.json();
@@ -88,7 +149,19 @@ Deno.serve(async (req: Request) => {
   // column access is fine here: this is service_role, gated by the admin
   // check above, not the client-facing RLS policy.
   if (action === 'list') {
-    let query = supabase.from('profiles').select('*').order('created_at', { ascending: false });
+    // Paginated. This used to return every profile row on every load with no
+    // range at all; at 343 profiles that was merely wasteful, but it has no
+    // ceiling and the admin list is the screen most likely to be opened as the
+    // marketplace grows.
+    const pageSize = Math.max(1, Math.min(Number(body.pageSize) || 25, 200));
+    const page = Math.max(0, Number(body.page) || 0);
+    const from = page * pageSize;
+
+    let query = supabase
+      .from('profiles')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(from, from + pageSize - 1);
 
     // NOTE: was `.eq('status', ...)` -- profiles has never had a `status`
     // column (verified via information_schema), so selecting any status
@@ -101,12 +174,27 @@ Deno.serve(async (req: Request) => {
       query = query.eq('verification_status', body.verificationStatus);
     }
 
-    const { data, error } = await query;
+    // Free-text search across the three fields an operator actually has to
+    // hand when someone contacts support: username, display name, email.
+    // Structural PostgREST characters are stripped so a stray comma or paren
+    // cannot break out of the or() group.
+    const search = typeof body.search === 'string'
+      ? body.search.trim().replace(/[(),*%\\]/g, ' ').replace(/\s+/g, ' ').slice(0, 120).trim()
+      : '';
+    if (search) {
+      query = query.or(
+        `username.ilike.%${search}%,display_name.ilike.%${search}%,email.ilike.%${search}%`
+      );
+    }
+
+    const { data, error, count } = await query;
     if (error) {
       console.error('[admin-profiles] list failed', { error });
       return jsonResponse({ error: 'Failed to fetch users' }, 500);
     }
-    return jsonResponse({ users: data ?? [] });
+
+    const users = await attachStats(supabase, data ?? []);
+    return jsonResponse({ users, total: count ?? users.length, page, pageSize });
   }
 
   // ─── getById ────────────────────────────────────────────────────────────
@@ -115,15 +203,16 @@ Deno.serve(async (req: Request) => {
     if (!id) {
       return jsonResponse({ error: 'id is required' }, 400);
     }
-    const { data, error } = await supabase.from('profiles').select('*').eq('id', id).single();
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', id).maybeSingle();
     if (error) {
-      if (error.code === 'PGRST116') {
-        return jsonResponse({ user: null });
-      }
       console.error('[admin-profiles] getById failed', { id, error });
       return jsonResponse({ error: 'Failed to fetch user' }, 500);
     }
-    return jsonResponse({ user: data });
+    if (!data) {
+      return jsonResponse({ user: null });
+    }
+    const [withStats] = await attachStats(supabase, [data]);
+    return jsonResponse({ user: withStats });
   }
 
   // ─── updateStatus ───────────────────────────────────────────────────────

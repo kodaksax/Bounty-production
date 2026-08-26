@@ -1,242 +1,234 @@
-// app/(admin)/settings/general.tsx - Admin General Settings
-import { MaterialIcons } from '@expo/vector-icons';
+// app/(admin)/settings/general.tsx - Admin console preferences
+//
+// Rewritten. Previously this screen held seven preferences in component state
+// and its "Save Settings" button showed "Your preferences have been updated
+// successfully." without writing anything anywhere. Nothing consumed any of
+// the values and they were discarded on unmount.
+//
+// Now: every preference on this screen is persisted (lib/admin/adminPreferences.ts)
+// and read by a real consumer. Preferences that had no consumer and no way to
+// get one were removed rather than left as decoration:
+//   - "Dark Mode" is now the app's actual theme control, not a dead switch.
+//   - "Show archived bounties" duplicated the Bounties status filter.
+//   - "Timezone" had no formatting code reading it anywhere in the app.
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
-import { AdminCard } from '../../../components/admin/AdminCard';
+import React, { useCallback } from 'react';
+import { Alert, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { AdminHeader } from '../../../components/admin/AdminHeader';
+import {
+  AdminButton,
+  AdminLoading,
+  AdminPanel,
+  AdminRow,
+  AdminScreen,
+  AdminSection,
+} from '../../../components/admin/AdminUI';
+import { useAppTheme } from '../../../hooks/use-app-theme';
+import {
+  ADMIN_AUTO_REFRESH_OPTIONS,
+  ADMIN_PAGE_SIZE_OPTIONS,
+  useAdminPreferences,
+  type AdminAutoRefreshOption,
+  type AdminPageSizeOption,
+} from '../../../lib/admin/adminPreferences';
+import { ROUTES } from '../../../lib/routes';
+import { ADMIN_BOUNTY_STATUSES, type AdminBountyStatus } from '../../../lib/types-admin';
+
+function describeAutoRefresh(seconds: number): string {
+  if (seconds === 0) return 'Off';
+  if (seconds < 60) return `Every ${seconds}s`;
+  return `Every ${seconds / 60} min`;
+}
 
 export default function AdminGeneralSettingsScreen() {
   const router = useRouter();
-  const [settings, setSettings] = useState({
-    darkMode: true,
-    compactView: false,
-    autoRefresh: true,
-    showArchivedBounties: false,
-    defaultBountyFilter: 'all',
-    itemsPerPage: '25',
-    timezone: 'UTC',
-  });
+  const { theme, mode, setTheme } = useAppTheme();
+  const { preferences, isLoading, update, reset } = useAdminPreferences();
 
-  const handleToggle = (key: keyof typeof settings) => {
-    setSettings((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
-  };
+  // Writes happen on change. There is no separate Save button precisely
+  // because the old one is what made the screen dishonest.
+  const apply = useCallback(
+    async (patch: Parameters<typeof update>[0]) => {
+      try {
+        await update(patch);
+      } catch (err) {
+        Alert.alert(
+          'Preference not saved',
+          err instanceof Error
+            ? err.message
+            : 'The preference could not be written to this device.'
+        );
+      }
+    },
+    [update]
+  );
 
-  const handleSelectOption = (key: keyof typeof settings, options: string[], title: string) => {
-    const buttons: { text: string; onPress?: () => void; style?: 'cancel' | 'destructive' | 'default' }[] = options.map((option) => ({
-      text: option,
-      onPress: () => setSettings((prev) => ({ ...prev, [key]: option })),
-    }));
-    buttons.push({ text: 'Cancel', style: 'cancel' });
-    Alert.alert(title, 'Select an option:', buttons);
-  };
+  const pickPageSize = useCallback(() => {
+    Alert.alert('Rows per page', 'How many rows should each admin list load at a time?', [
+      ...ADMIN_PAGE_SIZE_OPTIONS.map((size) => ({
+        text: String(size),
+        onPress: () => void apply({ pageSize: size as AdminPageSizeOption }),
+      })),
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
+  }, [apply]);
 
-  const handleSave = () => {
-    Alert.alert('Settings Saved', 'Your preferences have been updated successfully.');
-  };
+  const pickAutoRefresh = useCallback(() => {
+    Alert.alert('Dashboard auto-refresh', 'How often should the dashboard reload its metrics?', [
+      ...ADMIN_AUTO_REFRESH_OPTIONS.map((seconds) => ({
+        text: describeAutoRefresh(seconds),
+        onPress: () => void apply({ autoRefreshSeconds: seconds as AdminAutoRefreshOption }),
+      })),
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
+  }, [apply]);
+
+  const pickDefaultStatus = useCallback(() => {
+    Alert.alert('Default bounty filter', 'Which status should the Bounties screen open on?', [
+      { text: 'All', onPress: () => void apply({ defaultBountyStatus: 'all' }) },
+      ...ADMIN_BOUNTY_STATUSES.map((status) => ({
+        text: status.replace(/_/g, ' '),
+        onPress: () => void apply({ defaultBountyStatus: status as AdminBountyStatus }),
+      })),
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
+  }, [apply]);
+
+  const pickTheme = useCallback(() => {
+    Alert.alert('Appearance', 'The console follows the app theme.', [
+      { text: 'System', onPress: () => setTheme('system') },
+      { text: 'Light', onPress: () => setTheme('light') },
+      { text: 'Dark', onPress: () => setTheme('dark') },
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
+  }, [setTheme]);
+
+  const confirmReset = useCallback(() => {
+    Alert.alert('Reset preferences', 'Restore every console preference to its default?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reset',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await reset();
+            Alert.alert('Preferences reset', 'Console preferences are back to their defaults.');
+          } catch (err) {
+            Alert.alert(
+              'Reset failed',
+              err instanceof Error ? err.message : 'Preferences could not be reset.'
+            );
+          }
+        },
+      },
+    ]);
+  }, [reset]);
+
+  if (isLoading) {
+    return (
+      <AdminScreen>
+        <AdminHeader title="Console Preferences" showBack backFallback={ROUTES.ADMIN.SETTINGS.INDEX} />
+        <AdminLoading label="Loading preferences…" />
+      </AdminScreen>
+    );
+  }
 
   return (
-    <View style={styles.container}>
-      <AdminHeader title="General Settings" onBack={() => router.back()} />
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
-        {/* Display Settings */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Display</Text>
-          <AdminCard>
-            <View style={styles.settingRow}>
-              <View style={styles.settingInfo}>
-                <Text style={styles.settingLabel}>Dark Mode</Text>
-                <Text style={styles.settingDescription}>Use dark theme for admin panel</Text>
+    <AdminScreen>
+      <AdminHeader
+        title="Console Preferences"
+        showBack
+        backFallback={ROUTES.ADMIN.SETTINGS.INDEX}
+      />
+      <ScrollView contentContainerStyle={{ padding: theme.spacing.lg, paddingBottom: 48 }}>
+        <Text
+          style={{
+            fontSize: 13,
+            color: theme.textSecondary,
+            lineHeight: 19,
+            marginBottom: theme.spacing.xl,
+          }}
+        >
+          These preferences apply to this device only and take effect immediately — there is
+          nothing to save.
+        </Text>
+
+        <AdminSection title="Appearance">
+          <AdminPanel>
+            <AdminRow
+              label="Theme"
+              value={mode === 'system' ? 'System' : mode === 'light' ? 'Light' : 'Dark'}
+              icon="brightness-6"
+              onPress={pickTheme}
+            />
+            <View style={styles.switchRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14, color: theme.text }}>Compact rows</Text>
+                <Text style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2 }}>
+                  Fit more records on screen in list views
+                </Text>
               </View>
               <Switch
-                value={settings.darkMode}
-                onValueChange={() => handleToggle('darkMode')}
-                trackColor={{ false: '#767577', true: '#00912C' }}
-                thumbColor={settings.darkMode ? '#00dc50' : '#f4f3f4'}
+                value={preferences.compactRows}
+                onValueChange={(next) => void apply({ compactRows: next })}
+                trackColor={{ false: theme.surfaceSecondary, true: theme.primary }}
+                thumbColor="#FFFFFF"
+                accessibilityLabel="Compact rows"
               />
             </View>
-            <View style={styles.settingRow}>
-              <View style={styles.settingInfo}>
-                <Text style={styles.settingLabel}>Compact View</Text>
-                <Text style={styles.settingDescription}>Show more items per screen</Text>
-              </View>
-              <Switch
-                value={settings.compactView}
-                onValueChange={() => handleToggle('compactView')}
-                trackColor={{ false: '#767577', true: '#00912C' }}
-                thumbColor={settings.compactView ? '#00dc50' : '#f4f3f4'}
-              />
-            </View>
-          </AdminCard>
-        </View>
+          </AdminPanel>
+        </AdminSection>
 
-        {/* Data Settings */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Data & Refresh</Text>
-          <AdminCard>
-            <View style={styles.settingRow}>
-              <View style={styles.settingInfo}>
-                <Text style={styles.settingLabel}>Auto-Refresh</Text>
-                <Text style={styles.settingDescription}>Automatically refresh data periodically</Text>
-              </View>
-              <Switch
-                value={settings.autoRefresh}
-                onValueChange={() => handleToggle('autoRefresh')}
-                trackColor={{ false: '#767577', true: '#00912C' }}
-                thumbColor={settings.autoRefresh ? '#00dc50' : '#f4f3f4'}
-              />
-            </View>
-            <TouchableOpacity
-              style={styles.settingRow}
-              onPress={() => handleSelectOption('itemsPerPage', ['10', '25', '50', '100'], 'Items Per Page')}
-            >
-              <View style={styles.settingInfo}>
-                <Text style={styles.settingLabel}>Items Per Page</Text>
-                <Text style={styles.settingDescription}>Number of items to show in lists</Text>
-              </View>
-              <View style={styles.selectValue}>
-                <Text style={styles.selectValueText}>{settings.itemsPerPage}</Text>
-                <MaterialIcons name="chevron-right" size={20} color="rgba(255,254,245,0.4)" />
-              </View>
-            </TouchableOpacity>
-          </AdminCard>
-        </View>
+        <AdminSection title="Data loading">
+          <AdminPanel>
+            <AdminRow
+              label="Rows per page"
+              value={preferences.pageSize}
+              icon="format-list-numbered"
+              onPress={pickPageSize}
+            />
+            <AdminRow
+              label="Dashboard auto-refresh"
+              value={describeAutoRefresh(preferences.autoRefreshSeconds)}
+              icon="autorenew"
+              onPress={pickAutoRefresh}
+            />
+            <AdminRow
+              label="Default bounty filter"
+              value={
+                preferences.defaultBountyStatus === 'all'
+                  ? 'All'
+                  : preferences.defaultBountyStatus.replace(/_/g, ' ')
+              }
+              icon="filter-list"
+              onPress={pickDefaultStatus}
+              last
+            />
+          </AdminPanel>
+        </AdminSection>
 
-        {/* Filter Settings */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Default Filters</Text>
-          <AdminCard>
-            <View style={styles.settingRow}>
-              <View style={styles.settingInfo}>
-                <Text style={styles.settingLabel}>Show Archived Bounties</Text>
-                <Text style={styles.settingDescription}>Include archived bounties in default view</Text>
-              </View>
-              <Switch
-                value={settings.showArchivedBounties}
-                onValueChange={() => handleToggle('showArchivedBounties')}
-                trackColor={{ false: '#767577', true: '#00912C' }}
-                thumbColor={settings.showArchivedBounties ? '#00dc50' : '#f4f3f4'}
-              />
-            </View>
-            <TouchableOpacity
-              style={styles.settingRow}
-              onPress={() => handleSelectOption('defaultBountyFilter', ['all', 'open', 'in_progress', 'completed'], 'Default Bounty Filter')}
-            >
-              <View style={styles.settingInfo}>
-                <Text style={styles.settingLabel}>Default Bounty Filter</Text>
-                <Text style={styles.settingDescription}>Default filter when viewing bounties</Text>
-              </View>
-              <View style={styles.selectValue}>
-                <Text style={styles.selectValueText}>{settings.defaultBountyFilter}</Text>
-                <MaterialIcons name="chevron-right" size={20} color="rgba(255,254,245,0.4)" />
-              </View>
-            </TouchableOpacity>
-          </AdminCard>
-        </View>
+        <AdminSection title="Reset">
+          <AdminButton
+            label="Reset to defaults"
+            icon="restore"
+            variant="secondary"
+            onPress={confirmReset}
+          />
+        </AdminSection>
 
-        {/* Timezone */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Regional</Text>
-          <AdminCard>
-            <TouchableOpacity
-              style={styles.settingRow}
-              onPress={() => handleSelectOption('timezone', ['UTC', 'America/New_York', 'America/Los_Angeles', 'Europe/London', 'Asia/Tokyo'], 'Timezone')}
-            >
-              <View style={styles.settingInfo}>
-                <Text style={styles.settingLabel}>Timezone</Text>
-                <Text style={styles.settingDescription}>Display times in this timezone</Text>
-              </View>
-              <View style={styles.selectValue}>
-                <Text style={styles.selectValueText}>{settings.timezone}</Text>
-                <MaterialIcons name="chevron-right" size={20} color="rgba(255,254,245,0.4)" />
-              </View>
-            </TouchableOpacity>
-          </AdminCard>
-        </View>
-
-        {/* Save Button */}
-        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <MaterialIcons name="check" size={20} color="#fffef5" />
-          <Text style={styles.saveButtonText}>Save Settings</Text>
-        </TouchableOpacity>
-
-        {/* Bottom padding */}
-        <View style={{ height: 40 }} />
+        <Text style={{ fontSize: 12, color: theme.textDisabled, textAlign: 'center' }}>
+          Signed in as an administrator. Account-level security lives under Settings → Security.
+        </Text>
       </ScrollView>
-    </View>
+    </AdminScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#1a3d2e',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    padding: 16,
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: 'rgba(255,254,245,0.6)',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 12,
-  },
-  settingRow: {
+  switchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 12,
     paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
-  },
-  settingInfo: {
-    flex: 1,
-    marginRight: 16,
-  },
-  settingLabel: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: '#fffef5',
-    marginBottom: 2,
-  },
-  settingDescription: {
-    fontSize: 12,
-    color: 'rgba(255,254,245,0.5)',
-  },
-  selectValue: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  selectValueText: {
-    fontSize: 14,
-    color: '#00dc50',
-    textTransform: 'capitalize',
-  },
-  saveButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#00912C',
-    paddingVertical: 14,
-    borderRadius: 12,
-    gap: 8,
-    marginTop: 16,
-  },
-  saveButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fffef5',
   },
 });
