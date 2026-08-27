@@ -179,7 +179,7 @@ export default function AdminVerificationsScreen() {
 
         {!hasRequiredEvidence && (
           <View style={styles.warningBox}>
-            <MaterialIcons name="warning-amber" size={16} color="#fbbf24" />
+            <MaterialIcons name="warning-amber" size={16} color={theme.warning} />
             <Text style={styles.warningText}>
               {!item.id_front_url && !item.selfie_url
                 ? 'ID and selfie are missing. Reject and ask the user to resubmit.'
@@ -198,7 +198,7 @@ export default function AdminVerificationsScreen() {
             accessibilityRole="button"
             accessibilityLabel={`Reject verification for ${label}`}
           >
-            <MaterialIcons name="close" size={18} color="#fecaca" />
+            <MaterialIcons name="close" size={18} color={theme.error} />
             <Text style={styles.rejectText}>Reject</Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -210,10 +210,10 @@ export default function AdminVerificationsScreen() {
             accessibilityState={{ disabled: !canApprove }}
           >
             {acting ? (
-              <ActivityIndicator size="small" color="#052e1b" />
+              <ActivityIndicator size="small" color='#FFFFFF' />
             ) : (
               <>
-                <MaterialIcons name="check" size={18} color="#052e1b" />
+                <MaterialIcons name="check" size={18} color='#FFFFFF' />
                 <Text style={styles.approveText}>Approve</Text>
               </>
             )}
@@ -242,7 +242,7 @@ export default function AdminVerificationsScreen() {
           ListHeaderComponent={
             error ? (
               <View style={styles.errorBox}>
-                <MaterialIcons name="error-outline" size={20} color="#fecaca" />
+                <MaterialIcons name="error-outline" size={20} color={theme.error} />
                 <Text style={styles.errorText}>{error}</Text>
                 <TouchableOpacity onPress={loadQueue}>
                   <Text style={styles.retryText}>Retry</Text>
@@ -308,11 +308,11 @@ const makeStyles = (theme: AppTheme) =>
   },
   errorText: {
     flex: 1,
-    color: '#fecaca',
+    color: theme.error,
     fontSize: 13,
   },
   retryText: {
-    color: '#fecaca',
+    color: theme.error,
     fontWeight: '600',
   },
   card: {
@@ -382,7 +382,7 @@ const makeStyles = (theme: AppTheme) =>
   },
   warningText: {
     flex: 1,
-    color: '#fde68a',
+    color: theme.warning,
     fontSize: 12,
     lineHeight: 16,
   },
@@ -405,14 +405,14 @@ const makeStyles = (theme: AppTheme) =>
     borderColor: 'rgba(252,165,165,0.4)',
   },
   rejectText: {
-    color: '#fecaca',
+    color: theme.error,
     fontWeight: '600',
   },
   approveButton: {
-    backgroundColor: '#a7f3d0',
+    backgroundColor: theme.primaryLight,
   },
   approveText: {
-    color: '#052e1b',
+    color: '#FFFFFF',
     fontWeight: '700',
   },
   disabled: {

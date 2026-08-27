@@ -151,19 +151,19 @@ export default function AuditLogsScreen() {
   const getCategoryConfig = (category: string) => {
     switch (category) {
       case 'user':
-        return { icon: 'person', color: '#3b82f6', label: 'User' };
+        return { icon: 'person', color: theme.info, label: 'User' };
       case 'bounty':
-        return { icon: 'work', color: '#10b981', label: 'Bounty' };
+        return { icon: 'work', color: theme.success, label: 'Bounty' };
       case 'payment':
-        return { icon: 'account-balance-wallet', color: '#8b5cf6', label: 'Payment' };
+        return { icon: 'account-balance-wallet', color: theme.completed, label: 'Payment' };
       case 'moderation':
-        return { icon: 'shield', color: '#f59e0b', label: 'Moderation' };
+        return { icon: 'shield', color: theme.warning, label: 'Moderation' };
       case 'system':
-        return { icon: 'settings', color: '#6b7280', label: 'System' };
+        return { icon: 'settings', color: theme.textDisabled, label: 'System' };
       case 'security':
-        return { icon: 'security', color: '#ef4444', label: 'Security' };
+        return { icon: 'security', color: theme.error, label: 'Security' };
       default:
-        return { icon: 'info', color: '#a7f3d0', label: category };
+        return { icon: 'info', color: theme.primaryLight, label: category };
     }
   };
 
@@ -171,12 +171,12 @@ export default function AuditLogsScreen() {
   const getSeverityConfig = (severity: string) => {
     switch (severity) {
       case 'critical':
-        return { color: '#dc2626', bg: 'rgba(220,38,38,0.15)', label: 'Critical' };
+        return { color: theme.error, bg: 'rgba(220,38,38,0.15)', label: 'Critical' };
       case 'warning':
-        return { color: '#f59e0b', bg: 'rgba(245,158,11,0.15)', label: 'Warning' };
+        return { color: theme.warning, bg: 'rgba(245,158,11,0.15)', label: 'Warning' };
       case 'info':
       default:
-        return { color: '#10b981', bg: 'rgba(16,185,129,0.15)', label: 'Info' };
+        return { color: theme.success, bg: 'rgba(16,185,129,0.15)', label: 'Info' };
     }
   };
 
@@ -248,7 +248,7 @@ export default function AuditLogsScreen() {
             <MaterialIcons
               name={cat.icon as any}
               size={14}
-              color={categoryFilter === cat.id ? theme.background : '#a7f3d0'}
+              color={categoryFilter === cat.id ? theme.background : theme.primaryLight}
             />
             <Text
               style={[
@@ -271,7 +271,7 @@ export default function AuditLogsScreen() {
       {(['all', 'info', 'warning', 'critical'] as SeverityFilter[]).map((sev) => {
         const config =
           sev === 'all'
-            ? { color: '#a7f3d0', bg: 'transparent', label: 'All' }
+            ? { color: theme.primaryLight, bg: 'transparent', label: 'All' }
             : getSeverityConfig(sev);
         return (
           <TouchableOpacity
@@ -318,22 +318,22 @@ export default function AuditLogsScreen() {
         </View>
         {stats.recentCritical > 0 && (
           <View style={[styles.statItem, styles.criticalStat]}>
-            <Text style={[styles.statValue, { color: '#dc2626' }]}>
+            <Text style={[styles.statValue, { color: theme.error }]}>
               {stats.recentCritical}
             </Text>
-            <Text style={[styles.statLabel, { color: '#dc2626' }]}>
+            <Text style={[styles.statLabel, { color: theme.error }]}>
               Critical (24h)
             </Text>
           </View>
         )}
         <View style={styles.statItem}>
-          <Text style={[styles.statValue, { color: '#f59e0b' }]}>
+          <Text style={[styles.statValue, { color: theme.warning }]}>
             {stats.bySeverity?.warning ?? 0}
           </Text>
           <Text style={styles.statLabel}>Warnings</Text>
         </View>
         <View style={styles.statItem}>
-          <Text style={[styles.statValue, { color: '#10b981' }]}>
+          <Text style={[styles.statValue, { color: theme.success }]}>
             {stats.bySeverity?.info ?? 0}
           </Text>
           <Text style={styles.statLabel}>Info</Text>
@@ -370,7 +370,7 @@ export default function AuditLogsScreen() {
         onPress={handleExport}
         accessibilityLabel="Export logs"
       >
-        <MaterialIcons name="file-download" size={20} color="#a7f3d0" />
+        <MaterialIcons name="file-download" size={20} color={theme.primaryLight} />
       </TouchableOpacity>
     </View>
   );
@@ -545,7 +545,7 @@ export default function AuditLogsScreen() {
                 <Text style={styles.detailLabel}>Actor</Text>
                 <View style={styles.detailActorRow}>
                   <View style={styles.detailActorIcon}>
-                    <MaterialIcons name="person" size={16} color="#a7f3d0" />
+                    <MaterialIcons name="person" size={16} color={theme.primaryLight} />
                   </View>
                   <View>
                     <Text style={styles.detailValue}>{selectedLog.actorName}</Text>
@@ -630,7 +630,7 @@ export default function AuditLogsScreen() {
   const EmptyState = () => (
     <View style={styles.emptyContainer}>
       <View style={styles.emptyIconContainer}>
-        <MaterialIcons name="history" size={64} color="#10b981" />
+        <MaterialIcons name="history" size={64} color={theme.success} />
       </View>
       <Text style={styles.emptyTitle}>No Logs Found</Text>
       <Text style={styles.emptySubtitle}>
@@ -658,7 +658,7 @@ export default function AuditLogsScreen() {
       <View style={styles.container}>
         <AdminHeader title="Audit Logs" onBack={() => router.back()} />
         <View style={styles.errorContainer}>
-          <MaterialIcons name="error-outline" size={48} color="#ef4444" />
+          <MaterialIcons name="error-outline" size={48} color={theme.error} />
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={fetchLogs}>
             <Text style={styles.retryButtonText}>Try Again</Text>
@@ -679,7 +679,7 @@ export default function AuditLogsScreen() {
             style={[styles.headerAction, showFilters && styles.headerActionActive]}
             accessibilityLabel="Toggle filters"
           >
-            <MaterialIcons name="filter-list" size={22} color="#c8ffe0" />
+            <MaterialIcons name="filter-list" size={22} color={theme.primaryLight} />
           </TouchableOpacity>
         }
       />
@@ -849,11 +849,11 @@ const makeStyles = (theme: AppTheme) =>
     borderRadius: 16,
   },
   filterChipActive: {
-    backgroundColor: '#10b981',
+    backgroundColor: theme.success,
   },
   filterChipText: {
     fontSize: 12,
-    color: '#a7f3d0',
+    color: theme.primaryLight,
     fontWeight: '500',
   },
   filterChipTextActive: {
@@ -998,7 +998,7 @@ const makeStyles = (theme: AppTheme) =>
   },
   clearFiltersText: {
     fontSize: 14,
-    color: '#a7f3d0',
+    color: theme.primaryLight,
     fontWeight: '500',
   },
   errorContainer: {
@@ -1010,7 +1010,7 @@ const makeStyles = (theme: AppTheme) =>
   },
   errorText: {
     fontSize: 15,
-    color: '#ef4444',
+    color: theme.error,
     textAlign: 'center',
   },
   retryButton: {

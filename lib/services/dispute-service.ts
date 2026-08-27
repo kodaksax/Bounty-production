@@ -1,7 +1,7 @@
 import { isSupabaseConfigured, supabase } from 'lib/supabase';
 import { logger } from 'lib/utils/error-logger';
 import { isPhase2Bounty } from 'lib/utils/payment-architecture';
-import type { BountyDispute, LocalDisputeEvidence } from '../types';
+import type { BountyDispute, DisputeEvidence, LocalDisputeEvidence } from '../types';
 import { analyticsService } from './analytics-service';
 import { bountyPaymentsService } from './bounty-payments-service';
 import { bountyService } from './bounty-service';
@@ -114,6 +114,28 @@ function normalizeDisputeIdParam(id: string | number): number | string {
 /**
  * Service for handling bounty dispute lifecycle
  */
+
+/**
+ * `bounty_disputes.evidence_json` is a text column, and these mappers used a
+ * bare `JSON.parse` on it. A single malformed row would throw and blank the
+ * whole dispute list rather than degrading that one record, so parsing is
+ * isolated per row.
+ */
+function parseEvidenceJson(raw: unknown): DisputeEvidence[] | undefined {
+  if (typeof raw !== 'string' || raw.trim() === '') return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    // The column has held both a bare array and, in older rows, a single
+    // object. Anything else is not usable evidence.
+    if (Array.isArray(parsed)) return parsed as DisputeEvidence[];
+    if (parsed && typeof parsed === 'object') return [parsed as DisputeEvidence];
+    return undefined;
+  } catch {
+    logger.error('Unparseable evidence_json on a dispute row; leaving it undefined');
+    return undefined;
+  }
+}
+
 export const disputeService = {
   /**
    * Create a dispute from a cancellation request
@@ -910,7 +932,7 @@ export const disputeService = {
         bountyId: String(item.bounty_id),
         initiatorId: item.initiator_id,
         reason: item.reason,
-        evidence: item.evidence_json ? JSON.parse(item.evidence_json) : undefined,
+        evidence: parseEvidenceJson(item.evidence_json),
         status: item.status,
         resolution: item.resolution,
         winner: item.winner || null,
@@ -937,11 +959,15 @@ export const disputeService = {
         throw new Error('Supabase not configured');
       }
 
+      // Bounded: this backs the admin dispute queue and previously had no
+      // LIMIT. Oldest-first is deliberate — the queue is worked in age order,
+      // so a cap keeps the most overdue disputes rather than dropping them.
       const { data, error } = await supabase
         .from('bounty_disputes')
         .select('*')
         .in('status', ['open', 'under_review'])
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: true })
+        .limit(200);
 
       if (error) {
         logger.error('Error fetching active disputes', { error });
@@ -954,7 +980,7 @@ export const disputeService = {
         bountyId: String(item.bounty_id),
         initiatorId: item.initiator_id,
         reason: item.reason,
-        evidence: item.evidence_json ? JSON.parse(item.evidence_json) : undefined,
+        evidence: parseEvidenceJson(item.evidence_json),
         status: item.status,
         resolution: item.resolution,
         winner: item.winner || null,
@@ -1902,7 +1928,7 @@ export const disputeService = {
         initiatorId: item.initiator_id,
         respondentId: item.respondent_id || undefined,
         reason: item.reason,
-        evidence: item.evidence_json ? JSON.parse(item.evidence_json) : undefined,
+        evidence: parseEvidenceJson(item.evidence_json),
         status: item.status,
         disputeStage: item.dispute_stage || 'cancellation',
         resolution: item.resolution,

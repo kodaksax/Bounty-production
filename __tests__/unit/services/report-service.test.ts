@@ -30,6 +30,9 @@ describe('Report Service', () => {
     chain.insert = jest.fn().mockResolvedValue(finalResult);
     chain.update = jest.fn().mockReturnValue(chain);
     chain.order = jest.fn().mockReturnValue(chain);
+    // getAllReports is bounded; the chain must model .limit() or the query
+    // throws before it ever resolves.
+    chain.limit = jest.fn().mockReturnValue(chain);
     
     // For queries that resolve immediately
     Object.defineProperty(chain, 'then', {

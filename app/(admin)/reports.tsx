@@ -332,30 +332,30 @@ export default function AdminReportsScreen() {
   const getPriorityConfig = (priority: string) => {
     switch (priority) {
       case 'critical':
-        return { color: '#dc2626', bg: 'rgba(220,38,38,0.15)', icon: 'error' };
+        return { color: theme.error, bg: 'rgba(220,38,38,0.15)', icon: 'error' };
       case 'high':
-        return { color: '#f97316', bg: 'rgba(249,115,22,0.15)', icon: 'warning' };
+        return { color: theme.cancelled, bg: 'rgba(249,115,22,0.15)', icon: 'warning' };
       case 'medium':
-        return { color: '#fbbf24', bg: 'rgba(251,191,36,0.15)', icon: 'info' };
+        return { color: theme.warning, bg: 'rgba(251,191,36,0.15)', icon: 'info' };
       case 'low':
-        return { color: '#10b981', bg: 'rgba(16,185,129,0.15)', icon: 'check-circle' };
+        return { color: theme.success, bg: 'rgba(16,185,129,0.15)', icon: 'check-circle' };
       default:
-        return { color: '#a7f3d0', bg: 'rgba(167,243,208,0.15)', icon: 'help' };
+        return { color: theme.primaryLight, bg: 'rgba(167,243,208,0.15)', icon: 'help' };
     }
   };
 
   const getReasonConfig = (reason: string) => {
     switch (reason) {
       case 'fraud':
-        return { color: '#dc2626', label: 'Fraud' };
+        return { color: theme.error, label: 'Fraud' };
       case 'harassment':
-        return { color: '#ef4444', label: 'Harassment' };
+        return { color: theme.error, label: 'Harassment' };
       case 'inappropriate':
-        return { color: '#f97316', label: 'Inappropriate' };
+        return { color: theme.cancelled, label: 'Inappropriate' };
       case 'spam':
-        return { color: '#fbbf24', label: 'Spam' };
+        return { color: theme.warning, label: 'Spam' };
       default:
-        return { color: '#a7f3d0', label: reason };
+        return { color: theme.primaryLight, label: reason };
     }
   };
 
@@ -419,23 +419,23 @@ export default function AdminReportsScreen() {
       <View style={styles.statsRow}>
         {stats.critical > 0 && (
           <View style={[styles.statBadge, { backgroundColor: 'rgba(220,38,38,0.15)' }]}>
-            <MaterialIcons name="error" size={14} color="#dc2626" />
-            <Text style={[styles.statBadgeText, { color: '#dc2626' }]}>
+            <MaterialIcons name="error" size={14} color={theme.error} />
+            <Text style={[styles.statBadgeText, { color: theme.error }]}>
               {stats.critical} Critical
             </Text>
           </View>
         )}
         {stats.high > 0 && (
           <View style={[styles.statBadge, { backgroundColor: 'rgba(249,115,22,0.15)' }]}>
-            <MaterialIcons name="warning" size={14} color="#f97316" />
-            <Text style={[styles.statBadgeText, { color: '#f97316' }]}>
+            <MaterialIcons name="warning" size={14} color={theme.cancelled} />
+            <Text style={[styles.statBadgeText, { color: theme.cancelled }]}>
               {stats.high} High
             </Text>
           </View>
         )}
         <View style={[styles.statBadge, { backgroundColor: 'rgba(16,185,129,0.15)' }]}>
-          <MaterialIcons name="pending" size={14} color="#10b981" />
-          <Text style={[styles.statBadgeText, { color: '#10b981' }]}>
+          <MaterialIcons name="pending" size={14} color={theme.success} />
+          <Text style={[styles.statBadgeText, { color: theme.success }]}>
             {stats.pending} Pending
           </Text>
         </View>
@@ -480,7 +480,7 @@ export default function AdminReportsScreen() {
           }}
           accessibilityLabel={`Sort by ${sortBy}`}
         >
-          <MaterialIcons name="sort" size={20} color="#a7f3d0" />
+          <MaterialIcons name="sort" size={20} color={theme.primaryLight} />
           <Text style={styles.sortButtonText}>
             {sortBy === 'priority' ? 'Priority' : sortBy === 'newest' ? 'Newest' : 'Oldest'}
           </Text>
@@ -497,7 +497,7 @@ export default function AdminReportsScreen() {
           }}
           accessibilityLabel={`Filter by priority ${priorityFilter}`}
         >
-          <MaterialIcons name="filter-list" size={20} color="#a7f3d0" />
+          <MaterialIcons name="filter-list" size={20} color={theme.primaryLight} />
           <Text style={styles.sortButtonText}>{priorityFilter === 'all' ? 'All' : priorityFilter.charAt(0).toUpperCase() + priorityFilter.slice(1)}</Text>
         </TouchableOpacity>
       </View>
@@ -603,7 +603,7 @@ export default function AdminReportsScreen() {
                   onPress={() => handleUpdateStatus(report.id, 'reviewed')}
                   accessibilityLabel="Mark as reviewed"
                 >
-                  <MaterialIcons name="visibility" size={16} color="#3b82f6" />
+                  <MaterialIcons name="visibility" size={16} color={theme.info} />
                   <Text style={styles.reviewActionText}>Review</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -611,7 +611,7 @@ export default function AdminReportsScreen() {
                   onPress={() => handleUpdateStatus(report.id, 'resolved')}
                   accessibilityLabel="Resolve report"
                 >
-                  <MaterialIcons name="check-circle" size={16} color="#10b981" />
+                  <MaterialIcons name="check-circle" size={16} color={theme.success} />
                   <Text style={styles.resolveActionText}>Resolve</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -619,7 +619,7 @@ export default function AdminReportsScreen() {
                   onPress={() => handleUpdateStatus(report.id, 'dismissed')}
                   accessibilityLabel="Dismiss report"
                 >
-                  <MaterialIcons name="close" size={16} color="#ef4444" />
+                  <MaterialIcons name="close" size={16} color={theme.error} />
                   <Text style={styles.dismissActionText}>Dismiss</Text>
                 </TouchableOpacity>
               </View>
@@ -628,7 +628,7 @@ export default function AdminReportsScreen() {
             {/* Resolution info for resolved reports */}
             {report.status === 'resolved' && report.resolution_notes && (
               <View style={styles.resolutionInfo}>
-                <MaterialIcons name="check-circle" size={14} color="#10b981" />
+                <MaterialIcons name="check-circle" size={14} color={theme.success} />
                 <Text style={styles.resolutionText}>{report.resolution_notes}</Text>
               </View>
             )}
@@ -645,7 +645,7 @@ export default function AdminReportsScreen() {
         <MaterialIcons
           name={statusFilter === 'pending' ? 'check-circle' : 'inbox'}
           size={64}
-          color="#10b981"
+          color={theme.success}
         />
       </View>
       <Text style={styles.emptyTitle}>
@@ -672,7 +672,7 @@ export default function AdminReportsScreen() {
       <View style={styles.container}>
         <AdminHeader title="Moderation Queue" onBack={() => router.back()} />
         <View style={styles.errorContainer}>
-          <MaterialIcons name="error-outline" size={48} color="#ef4444" />
+          <MaterialIcons name="error-outline" size={48} color={theme.error} />
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={fetchReports}>
             <Text style={styles.retryButtonText}>Try Again</Text>
@@ -693,7 +693,7 @@ export default function AdminReportsScreen() {
             style={styles.headerAction}
             accessibilityLabel="View audit logs"
           >
-            <MaterialIcons name="history" size={22} color="#c8ffe0" />
+            <MaterialIcons name="history" size={22} color={theme.primaryLight} />
           </TouchableOpacity>
         }
       />
@@ -720,8 +720,8 @@ export default function AdminReportsScreen() {
           <RefreshControl
             refreshing={isLoading}
             onRefresh={fetchReports}
-            tintColor="#10b981"
-            colors={['#10b981']}
+            tintColor={theme.success}
+            colors={[theme.success]}
           />
         }
         ListEmptyComponent={<EmptyState />}
@@ -800,7 +800,7 @@ const makeStyles = (theme: AppTheme) =>
     fontWeight: '600',
   },
   badgeContainer: {
-    backgroundColor: '#dc2626',
+    backgroundColor: theme.error,
     borderRadius: 8,
     minWidth: 16,
     height: 16,
@@ -854,7 +854,7 @@ const makeStyles = (theme: AppTheme) =>
   },
   sortButtonText: {
     fontSize: 13,
-    color: '#a7f3d0',
+    color: theme.primaryLight,
     fontWeight: '500',
   },
   listContent: {
@@ -961,7 +961,7 @@ const makeStyles = (theme: AppTheme) =>
   reviewActionText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#3b82f6',
+    color: theme.info,
   },
   resolveAction: {
     backgroundColor: 'rgba(16,185,129,0.15)',
@@ -969,7 +969,7 @@ const makeStyles = (theme: AppTheme) =>
   resolveActionText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#10b981',
+    color: theme.success,
   },
   dismissAction: {
     backgroundColor: 'rgba(239,68,68,0.15)',
@@ -977,7 +977,7 @@ const makeStyles = (theme: AppTheme) =>
   dismissActionText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#ef4444',
+    color: theme.error,
   },
   resolutionInfo: {
     flexDirection: 'row',
@@ -990,7 +990,7 @@ const makeStyles = (theme: AppTheme) =>
   resolutionText: {
     flex: 1,
     fontSize: 13,
-    color: '#10b981',
+    color: theme.success,
     lineHeight: 18,
   },
   emptyContainer: {
@@ -1042,7 +1042,7 @@ const makeStyles = (theme: AppTheme) =>
   },
   errorText: {
     fontSize: 15,
-    color: '#ef4444',
+    color: theme.error,
     textAlign: 'center',
   },
   retryButton: {

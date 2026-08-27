@@ -504,7 +504,9 @@ function buttonColors(theme: AppTheme, variant: AdminButtonVariant) {
     case 'danger':
       return { bg: theme.error, fg: '#FFFFFF', border: '' };
     case 'warning':
-      return { bg: theme.warning, fg: theme.isDark ? '#111827' : '#111827', border: '' };
+      // Amber needs dark text for contrast in both light and dark mode, so
+      // this is deliberately not theme-dependent.
+      return { bg: theme.warning, fg: '#111827', border: '' };
     case 'secondary':
       return { bg: 'transparent', fg: theme.text, border: theme.border };
     case 'primary':

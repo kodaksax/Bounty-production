@@ -116,7 +116,7 @@ export default function AdminDisputesScreen() {
       <View style={styles.container}>
         <AdminHeader title="Dispute Resolution" />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#059669" />
+          <ActivityIndicator size="large" color={theme.primary} />
           <Text style={styles.loadingText}>Loading disputes...</Text>
         </View>
       </View>
@@ -147,19 +147,19 @@ export default function AdminDisputesScreen() {
                 <Text style={styles.statLabel}>Total</Text>
               </View>
               <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: '#f59e0b' }]}>
+                <Text style={[styles.statValue, { color: theme.warning }]}>
                   {stats.open}
                 </Text>
                 <Text style={styles.statLabel}>Open</Text>
               </View>
               <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: '#3b82f6' }]}>
+                <Text style={[styles.statValue, { color: theme.info }]}>
                   {stats.underReview}
                 </Text>
                 <Text style={styles.statLabel}>Reviewing</Text>
               </View>
               <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: '#10b981' }]}>
+                <Text style={[styles.statValue, { color: theme.success }]}>
                   {stats.resolved}
                 </Text>
                 <Text style={styles.statLabel}>Resolved</Text>
