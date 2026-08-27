@@ -9,7 +9,7 @@
 import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { OnboardingProgressDots } from '../../components/onboarding/OnboardingProgressDots';
 import { SkipAuthLink } from '../../components/onboarding/SkipAuthLink';
@@ -154,21 +154,25 @@ export default function UsernameScreen() {
       <View style={styles.content} />
 
       <View style={styles.actionContainer}>
-        <TouchableOpacity
-          style={styles.appleButton}
-          onPress={handleAppleContinue}
-          disabled={loading}
-          accessibilityRole="button"
-          accessibilityLabel="Continue with Apple"
-          accessibilityState={{ disabled: loading, busy: loading }}
-        >
-          {loading ? (
-            <ActivityIndicator color="#ffffff" style={styles.buttonIcon} />
-          ) : (
-            <FontAwesome name="apple" size={20} color="#ffffff" style={styles.buttonIcon} />
-          )}
-          <Text style={styles.appleButtonText}>Continue with Apple</Text>
-        </TouchableOpacity>
+        {/* Apple sign-in is iOS-only. On Android the native module is absent and
+            the button failed with ERR_UNAVAILABLE, so hide it there (see #727). */}
+        {Platform.OS === 'ios' && (
+          <TouchableOpacity
+            style={styles.appleButton}
+            onPress={handleAppleContinue}
+            disabled={loading}
+            accessibilityRole="button"
+            accessibilityLabel="Continue with Apple"
+            accessibilityState={{ disabled: loading, busy: loading }}
+          >
+            {loading ? (
+              <ActivityIndicator color="#ffffff" style={styles.buttonIcon} />
+            ) : (
+              <FontAwesome name="apple" size={20} color="#ffffff" style={styles.buttonIcon} />
+            )}
+            <Text style={styles.appleButtonText}>Continue with Apple</Text>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           style={styles.googleButton}
