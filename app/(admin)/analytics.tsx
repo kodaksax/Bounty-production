@@ -1,202 +1,286 @@
 // app/(admin)/analytics.tsx - Analytics dashboard for admin panel
-import { MaterialIcons } from '@expo/vector-icons';
+//
+// Rewritten. This screen used to fetch
+// `${EXPO_PUBLIC_API_URL || 'http://localhost:3001'}/admin/analytics/metrics`,
+// a Fastify route that returned a hardcoded object behind a "TODO: Fetch real
+// analytics" comment. It reported 1,250 users against a database holding 343,
+// plus invented revenue figures and a fixed "top events" list. Nothing looked
+// broken — the numbers were simply fiction.
+//
+// It also targeted the wrong backend: Supabase Edge Functions are the app's
+// primary backend and the Node service is not reachable from a device, so the
+// localhost fallback could never have resolved in production anyway.
+//
+// Now every figure comes from lib/admin/adminAnalytics.ts, counted off the
+// real tables.
 import { useRouter } from 'expo-router';
-import React from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AdminHeader } from '../../components/admin/AdminHeader';
-import { AnalyticsMetrics, AnalyticsMetricsCard } from '../../components/admin/AnalyticsMetricsCard';
+import {
+  AdminError,
+  AdminErrorBanner,
+  AdminLoading,
+  AdminPanel,
+  AdminRow,
+  AdminScreen,
+  AdminSection,
+  formatDateTime,
+  formatMoney,
+} from '../../components/admin/AdminUI';
+import { useAppTheme } from '../../hooks/use-app-theme';
 import { useAuthContext } from '../../hooks/use-auth-context';
+import { adminAnalytics, type AdminAnalytics, type AdminAnalyticsWindow } from '../../lib/admin/adminAnalytics';
 import { ErrorBoundary } from '../../lib/error-boundary';
-import { supabase } from '../../lib/supabase';
+import { ROUTES } from '../../lib/routes';
 
-export default function AnalyticsDashboard() {
+function AnalyticsDashboardInner() {
   const router = useRouter();
+  const { theme } = useAppTheme();
   const { isAuthStale, attemptRefresh } = useAuthContext();
-  const [isLoading, setIsLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-  const [metrics, setMetrics] = React.useState<AnalyticsMetrics | null>(null);
-  const [refreshing, setRefreshing] = React.useState(false);
 
-  const fetchAnalytics = React.useCallback(async () => {
+  const [analytics, setAnalytics] = useState<AdminAnalytics | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async (refreshing = false) => {
+    refreshing ? setIsRefreshing(true) : setIsLoading(true);
+    setError(null);
     try {
-      setError(null);
-      setIsLoading(true);
-
-      // Fetch analytics from API
-      const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001';
-      
-      // Get authentication token from current session
-      const { data: { session } } = await supabase.auth.getSession();
-      const authToken = session?.access_token;
-      
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-      };
-      
-      // Add authentication header if token is available
-      if (authToken) {
-        headers['Authorization'] = `Bearer ${authToken}`;
-      }
-      
-      const response = await fetch(`${API_BASE_URL}/admin/analytics/metrics`, {
-        method: 'GET',
-        headers,
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch analytics: ${response.statusText}`);
-      }
-
-      const data: AnalyticsMetrics = await response.json();
-      setMetrics(data);
+      setAnalytics(await adminAnalytics.fetch());
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch analytics');
-      console.error('Error fetching analytics:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load analytics');
     } finally {
       setIsLoading(false);
-      setRefreshing(false);
+      setIsRefreshing(false);
     }
   }, []);
 
-  React.useEffect(() => {
-    fetchAnalytics();
-  }, [fetchAnalytics]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-  const handleRefresh = React.useCallback(() => {
-    setRefreshing(true);
-    fetchAnalytics();
-  }, [fetchAnalytics]);
+  if (error && !analytics) {
+    return (
+      <AdminScreen>
+        <AdminHeader title="Analytics" showBack backFallback={ROUTES.ADMIN.INDEX} />
+        <AdminError
+          title="Couldn't load analytics"
+          message="The platform metrics could not be read. Check your connection and try again."
+          detail={error}
+          onRetry={() => load()}
+        />
+      </AdminScreen>
+    );
+  }
 
   return (
-    <ErrorBoundary>
-      <View style={styles.container}>
-      <AdminHeader title="Analytics Dashboard" onBack={() => router.back()} />
+    <AdminScreen>
+      <AdminHeader title="Analytics" showBack backFallback={ROUTES.ADMIN.INDEX} />
 
-      {/* Offline / stale-auth banner */}
-      {isAuthStale && (
-        <View style={styles.offlineBanner}>
-          <Text style={styles.offlineText}>You appear offline or your session may have expired.</Text>
-          <TouchableOpacity style={styles.offlineRetry} onPress={() => attemptRefresh?.()}>
-            <MaterialIcons name="refresh" size={18} color="#fff" />
-            <Text style={styles.offlineRetryText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor="#00dc50"
-          />
-        }
-      >
-        {/* Info Banner */}
-        <View style={styles.infoBanner}>
-          <MaterialIcons name="info-outline" size={20} color="#00dc50" />
-          <Text style={styles.infoBannerText}>
-            Analytics data is updated in real-time. Pull down to refresh.
-          </Text>
-        </View>
-
-        {/* Analytics Metrics */}
-        <AnalyticsMetricsCard
-          metrics={metrics}
-          isLoading={isLoading}
-          error={error}
+      {isAuthStale ? (
+        <AdminErrorBanner
+          message="You appear offline or your session may have expired."
+          onRetry={() => attemptRefresh?.()}
         />
+      ) : null}
+      {error && analytics ? <AdminErrorBanner message={error} onRetry={() => load()} /> : null}
 
-        {/* Error state with retry */}
-        {error && (
-          <View style={styles.errorContainer}>
-            <TouchableOpacity style={styles.retryButton} onPress={handleRefresh}>
-              <MaterialIcons name="refresh" size={20} color="#fffef5" />
-              <Text style={styles.retryButtonText}>Retry</Text>
-            </TouchableOpacity>
+      {isLoading && !analytics ? (
+        <AdminLoading label="Counting platform activity…" />
+      ) : analytics ? (
+        <ScrollView
+          contentContainerStyle={{ padding: theme.spacing.lg, paddingBottom: 48 }}
+          refreshControl={
+            <RefreshControl refreshing={isRefreshing} onRefresh={() => load(true)} tintColor={theme.primary} />
+          }
+        >
+          <Text
+            style={{
+              fontSize: 12,
+              color: theme.textSecondary,
+              marginBottom: theme.spacing.lg,
+              lineHeight: 18,
+            }}
+          >
+            Counted live from the database at {formatDateTime(analytics.generatedAt)}. &quot;Today&quot;
+            is since local midnight; &quot;7 days&quot; is a rolling window.
+          </Text>
+
+          <AdminSection title="Users">
+            <AdminPanel>
+              <AdminRow label="Total accounts" value={analytics.users.total.toLocaleString()} icon="people" />
+              <WindowRow label="New sign-ups" window={analytics.users.new} icon="person-add" />
+              <WindowRow label="Active" window={analytics.users.active} icon="bolt" last />
+            </AdminPanel>
+            <Text style={[styles.note, { color: theme.textDisabled }]}>
+              Active counts profiles whose most recent session falls in the window. The platform
+              does not keep a per-session event table, so this is an approximation rather than a
+              distinct-session count.
+            </Text>
+          </AdminSection>
+
+          <AdminSection title="Bounty funnel">
+            <AdminPanel>
+              <WindowRow label="Posted" window={analytics.bounties.created} icon="post-add" />
+              <WindowRow label="Applications" window={analytics.bounties.applications} icon="how-to-reg" />
+              <WindowRow label="Accepted" window={analytics.bounties.accepted} icon="handshake" />
+              <WindowRow label="Completed" window={analytics.bounties.completed} icon="check-circle" last />
+            </AdminPanel>
+          </AdminSection>
+
+          <AdminSection title="Money">
+            <AdminPanel>
+              <WindowRow label="Escrow funded" window={analytics.money.escrowCount} icon="lock" />
+              <WindowRow
+                label="Escrow value"
+                window={analytics.money.escrowVolume}
+                icon="savings"
+                money
+              />
+              <WindowRow
+                label="Released to hunters"
+                window={analytics.money.releasedVolume}
+                icon="lock-open"
+                money
+              />
+              <WindowRow
+                label="Refunded"
+                window={analytics.money.refundedVolume}
+                icon="undo"
+                money
+              />
+              <WindowRow
+                label="Failed transactions"
+                window={analytics.money.failedCount}
+                icon="error-outline"
+                last
+              />
+            </AdminPanel>
+          </AdminSection>
+
+          <AdminSection title="Messaging">
+            <AdminPanel>
+              <WindowRow label="Messages" window={analytics.messaging.messages} icon="chat" />
+              <WindowRow
+                label="Conversations started"
+                window={analytics.messaging.conversations}
+                icon="forum"
+                last
+              />
+            </AdminPanel>
+          </AdminSection>
+
+          <AdminSection title="Client errors">
+            {analytics.errors.available ? (
+              <>
+                <AdminPanel>
+                  <WindowRow label="Errors logged" window={analytics.errors.count} icon="bug-report" last />
+                </AdminPanel>
+                {analytics.errors.top.length > 0 ? (
+                  <AdminPanel>
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: '700',
+                        color: theme.textSecondary,
+                        letterSpacing: 0.4,
+                        marginBottom: theme.spacing.sm,
+                      }}
+                    >
+                      MOST FREQUENT (7 DAYS)
+                    </Text>
+                    {analytics.errors.top.map((entry, index) => (
+                      <AdminRow
+                        key={entry.message}
+                        label={entry.message}
+                        value={entry.count.toLocaleString()}
+                        last={index === analytics.errors.top.length - 1}
+                      />
+                    ))}
+                  </AdminPanel>
+                ) : (
+                  <AdminPanel>
+                    <Text style={{ fontSize: 14, color: theme.textSecondary }}>
+                      No client errors were logged in the last 7 days.
+                    </Text>
+                  </AdminPanel>
+                )}
+              </>
+            ) : (
+              <AdminPanel>
+                <Text style={{ fontSize: 14, color: theme.textSecondary, lineHeight: 20 }}>
+                  Client logs are not readable with this session. Error counts are unavailable
+                  rather than shown as zero.
+                </Text>
+              </AdminPanel>
+            )}
+          </AdminSection>
+        </ScrollView>
+      ) : null}
+    </AdminScreen>
+  );
+}
+
+/** Two-column "today / 7 days" row — the shape every metric here takes. */
+function WindowRow({
+  label,
+  window,
+  icon,
+  money,
+  last,
+}: {
+  label: string;
+  window: AdminAnalyticsWindow;
+  icon?: React.ComponentProps<typeof AdminRow>['icon'];
+  money?: boolean;
+  last?: boolean;
+}) {
+  const { theme } = useAppTheme();
+  const fmt = (n: number) => (money ? formatMoney(n) : n.toLocaleString());
+  return (
+    <AdminRow
+      label={label}
+      icon={icon}
+      last={last}
+      value={
+        <View style={styles.windowValue}>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={{ fontSize: 15, fontWeight: '600', color: theme.text }}>
+              {fmt(window.today)}
+            </Text>
+            <Text style={{ fontSize: 10, color: theme.textDisabled }}>today</Text>
           </View>
-        )}
+          <View style={{ alignItems: 'flex-end', minWidth: 72 }}>
+            <Text style={{ fontSize: 15, fontWeight: '600', color: theme.textSecondary }}>
+              {fmt(window.week)}
+            </Text>
+            <Text style={{ fontSize: 10, color: theme.textDisabled }}>7 days</Text>
+          </View>
+        </View>
+      }
+    />
+  );
+}
 
-        {/* Bottom padding */}
-        <View style={{ height: 40 }} />
-      </ScrollView>
-    </View>
+export default function AnalyticsDashboard() {
+  return (
+    <ErrorBoundary>
+      <AnalyticsDashboardInner />
     </ErrorBoundary>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#1a3d2e',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    padding: 16,
-  },
-  infoBanner: {
+  windowValue: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,220,80,0.1)',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(0,220,80,0.3)',
-    gap: 8,
+    gap: 16,
   },
-  infoBannerText: {
-    flex: 1,
-    color: 'rgba(255,254,245,0.9)',
-    fontSize: 13,
-  },
-  errorContainer: {
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  offlineBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: 'rgba(220,38,38,0.12)',
-    padding: 10,
-    marginHorizontal: 16,
-    marginBottom: 12,
-    borderRadius: 8,
-  },
-  offlineText: {
-    color: '#fffef5',
-    flex: 1,
-    marginRight: 8,
-  },
-  offlineRetry: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#b91c1c',
-    borderRadius: 8,
-  },
-  offlineRetryText: {
-    color: '#fff',
-    marginLeft: 8,
-  },
-  retryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#00912C',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    gap: 8,
-  },
-  retryButtonText: {
-    color: '#fffef5',
-    fontSize: 14,
-    fontWeight: '600',
+  note: {
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 4,
   },
 });

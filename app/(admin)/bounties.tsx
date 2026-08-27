@@ -12,7 +12,7 @@
 //    Replaced with the stale flag the expiry sweeper actually writes.
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AdminHeader } from '../../components/admin/AdminHeader';
 import { AdminStatusBadge } from '../../components/admin/AdminStatusBadge';
@@ -30,6 +30,7 @@ import {
 } from '../../components/admin/AdminUI';
 import { useAppTheme } from '../../hooks/use-app-theme';
 import { useAdminBounties } from '../../hooks/useAdminBounties';
+import { useAdminPreferences } from '../../lib/admin/adminPreferences';
 import { ROUTES } from '../../lib/routes';
 import {
   ADMIN_BOUNTY_STATUSES,
@@ -48,9 +49,24 @@ export default function AdminBountiesScreen() {
   // detail screen link straight into a pre-filtered list.
   const params = useLocalSearchParams<{ posterId?: string; hunterId?: string; status?: string }>();
 
+  const { preferences, isLoading: prefsLoading } = useAdminPreferences();
+
+  // A status in the URL wins (deep link), then the operator's default-filter
+  // preference, then 'all'. `appliedPreference` stops the preference from
+  // clobbering a filter the operator has since chosen by hand.
   const [status, setStatus] = useState<StatusOption>(
     STATUS_OPTIONS.includes(params.status as StatusOption) ? (params.status as StatusOption) : 'all'
   );
+  const appliedPreference = useRef(false);
+  useEffect(() => {
+    if (prefsLoading || appliedPreference.current) return;
+    appliedPreference.current = true;
+    if (params.status) return; // deep link takes precedence
+    if (preferences.defaultBountyStatus !== 'all') {
+      setStatus(preferences.defaultBountyStatus as StatusOption);
+    }
+  }, [prefsLoading, preferences.defaultBountyStatus, params.status]);
+
   const [search, setSearch] = useState('');
 
   const filters = useMemo(

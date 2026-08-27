@@ -1,7 +1,9 @@
 // app/(admin)/disputes/[id].tsx - Admin dispute detail and resolution screen
 import { MaterialIcons } from '@expo/vector-icons';
+import { useAppTheme } from '../../../hooks/use-app-theme';
+import type { AppTheme } from '../../../lib/themes/types';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -29,6 +31,8 @@ interface DisputeDetailData {
 }
 
 export default function AdminDisputeDetailScreen() {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { isAdmin, isLoading: isAdminLoading } = useAdmin();
@@ -224,7 +228,7 @@ export default function AdminDisputeDetailScreen() {
       <View style={styles.container}>
         <AdminHeader title="Dispute Details" showBack onBack={() => router.back()} />
         <View style={styles.errorContainer}>
-          <MaterialIcons name="block" size={48} color="rgba(255,254,245,0.6)" />
+          <MaterialIcons name="block" size={48} color={theme.textSecondary} />
           <Text style={styles.errorText}>Access denied. Admin privileges required.</Text>
         </View>
       </View>
@@ -248,7 +252,7 @@ export default function AdminDisputeDetailScreen() {
       <View style={styles.container}>
         <AdminHeader title="Dispute Details" showBack onBack={() => router.back()} />
         <View style={styles.errorContainer}>
-          <MaterialIcons name="error-outline" size={48} color="rgba(255,254,245,0.6)" />
+          <MaterialIcons name="error-outline" size={48} color={theme.textSecondary} />
           <Text style={styles.errorText}>Dispute not found</Text>
         </View>
       </View>
@@ -467,7 +471,7 @@ export default function AdminDisputeDetailScreen() {
                     <MaterialIcons
                       name="arrow-forward"
                       size={18}
-                      color={winner === 'hunter' ? '#fff' : '#10b981'}
+                      color={winner === 'hunter' ? '#FFFFFF' : '#10b981'}
                     />
                     <Text
                       style={[
@@ -489,7 +493,7 @@ export default function AdminDisputeDetailScreen() {
                     <MaterialIcons
                       name="reply"
                       size={18}
-                      color={winner === 'poster' ? '#fff' : '#f59e0b'}
+                      color={winner === 'poster' ? '#FFFFFF' : '#f59e0b'}
                     />
                     <Text
                       style={[
@@ -506,7 +510,7 @@ export default function AdminDisputeDetailScreen() {
                   value={resolution}
                   onChangeText={setResolution}
                   placeholder="Enter resolution details..."
-                  placeholderTextColor="rgba(255,254,245,0.4)"
+                  placeholderTextColor={theme.textDisabled}
                   multiline
                   numberOfLines={6}
                   textAlignVertical="top"
@@ -582,10 +586,11 @@ export default function AdminDisputeDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (theme: AppTheme) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: theme.background,
   },
   scrollView: {
     flex: 1,
@@ -600,7 +605,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   loadingText: {
-    color: 'rgba(255,254,245,0.8)',
+    color: theme.textSecondary,
     fontSize: 14,
   },
   errorContainer: {
@@ -612,7 +617,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 16,
-    color: 'rgba(255,254,245,0.8)',
+    color: theme.textSecondary,
   },
   statusBanner: {
     flexDirection: 'row',
@@ -625,7 +630,7 @@ const styles = StyleSheet.create({
   statusBannerText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#fff',
+    color: '#FFFFFF',
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -636,7 +641,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#fffef5',
+    color: theme.text,
   },
   infoRow: {
     flexDirection: 'row',
@@ -644,16 +649,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,145,44,0.15)',
+    borderBottomColor: theme.surfaceSecondary,
   },
   infoLabel: {
     fontSize: 14,
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
   },
   infoValue: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#fffef5',
+    color: theme.text,
     textAlign: 'right',
     flex: 1,
     marginLeft: 16,
@@ -664,16 +669,16 @@ const styles = StyleSheet.create({
   textLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
     marginBottom: 6,
   },
   textContent: {
     fontSize: 14,
-    color: '#fffef5',
+    color: theme.text,
     lineHeight: 20,
   },
   evidenceItem: {
-    backgroundColor: 'rgba(0,145,44,0.1)',
+    backgroundColor: theme.surfaceSecondary,
     padding: 12,
     borderRadius: 8,
     marginBottom: 12,
@@ -691,25 +696,25 @@ const styles = StyleSheet.create({
   },
   evidenceDate: {
     fontSize: 11,
-    color: 'rgba(255,254,245,0.5)',
+    color: theme.textDisabled,
     marginLeft: 'auto',
   },
   evidenceDescription: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#fffef5',
+    color: theme.text,
     marginBottom: 4,
   },
   evidenceContent: {
     fontSize: 13,
-    color: 'rgba(255,254,245,0.8)',
+    color: theme.textSecondary,
     lineHeight: 18,
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#00912C',
+    backgroundColor: theme.primary,
     padding: 14,
     borderRadius: 8,
     marginBottom: 12,
@@ -718,10 +723,10 @@ const styles = StyleSheet.create({
   actionButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#fff',
+    color: '#FFFFFF',
   },
   actionButtonDisabled: {
-    backgroundColor: 'rgba(0,145,44,0.5)',
+    backgroundColor: theme.primary,
   },
   resolveButton: {
     backgroundColor: '#10b981',
@@ -732,10 +737,10 @@ const styles = StyleSheet.create({
   cancelButton: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: 'rgba(255,254,245,0.3)',
+    borderColor: theme.textDisabled,
   },
   cancelButtonText: {
-    color: 'rgba(255,254,245,0.8)',
+    color: theme.textSecondary,
   },
   resolveForm: {
     marginBottom: 12,
@@ -743,18 +748,18 @@ const styles = StyleSheet.create({
   resolveFormTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#fffef5',
+    color: theme.text,
     marginBottom: 4,
   },
   resolveFormHint: {
     fontSize: 13,
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
     marginBottom: 12,
   },
   winnerLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
     marginBottom: 8,
   },
   winnerSelection: {
@@ -770,7 +775,7 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255,254,245,0.3)',
+    borderColor: theme.textDisabled,
     backgroundColor: 'transparent',
     gap: 6,
   },
@@ -785,16 +790,16 @@ const styles = StyleSheet.create({
   winnerButtonText: {
     fontSize: 13,
     fontWeight: '600',
-    color: 'rgba(255,254,245,0.8)',
+    color: theme.textSecondary,
   },
   winnerButtonTextActive: {
-    color: '#fff',
+    color: '#FFFFFF',
   },
   resolutionInput: {
-    backgroundColor: 'rgba(0,145,44,0.15)',
+    backgroundColor: theme.surfaceSecondary,
     borderRadius: 8,
     padding: 12,
-    color: '#fffef5',
+    color: theme.text,
     fontSize: 14,
     minHeight: 120,
     textAlignVertical: 'top',

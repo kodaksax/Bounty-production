@@ -9,7 +9,7 @@
 // job being done.
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AdminHeader } from '../../components/admin/AdminHeader';
 import {
@@ -26,6 +26,7 @@ import {
 } from '../../components/admin/AdminUI';
 import { useAppTheme } from '../../hooks/use-app-theme';
 import { useAdminMetrics } from '../../hooks/useAdminMetrics';
+import { useAdminPreferences } from '../../lib/admin/adminPreferences';
 import { ROUTES } from '../../lib/routes';
 import type { AdminMetrics } from '../../lib/types-admin';
 
@@ -202,6 +203,19 @@ export default function AdminDashboard() {
   const router = useRouter();
   const { theme } = useAppTheme();
   const { metrics, isLoading, error, refetch } = useAdminMetrics();
+  const { preferences } = useAdminPreferences();
+
+  // Auto-refresh is an operator preference (Settings -> Console preferences).
+  // 0 disables it. The ref keeps the interval from being torn down and rebuilt
+  // on every render just because `refetch` changed identity.
+  const refetchRef = useRef(refetch);
+  refetchRef.current = refetch;
+  useEffect(() => {
+    const seconds = preferences.autoRefreshSeconds;
+    if (!seconds) return;
+    const timer = setInterval(() => void refetchRef.current(), seconds * 1000);
+    return () => clearInterval(timer);
+  }, [preferences.autoRefreshSeconds]);
 
   const attention = useMemo(
     () => (metrics ? attentionItems(metrics, router) : []),

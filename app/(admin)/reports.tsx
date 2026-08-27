@@ -1,6 +1,8 @@
 // app/(admin)/reports.tsx - Enhanced Reports/Moderation Queue Screen
 // Follows Apple Human Interface Guidelines for clean, accessible design
 import { MaterialIcons } from '@expo/vector-icons';
+import { useAppTheme } from '../../hooks/use-app-theme';
+import type { AppTheme } from '../../lib/themes/types';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -61,6 +63,8 @@ function calculateStatsFromReports(reports: EnhancedReport[]): ReportStats {
 }
 
 export default function AdminReportsScreen() {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [reports, setReports] = useState<EnhancedReport[]>([]);
@@ -438,11 +442,11 @@ export default function AdminReportsScreen() {
   const SearchBar = () => (
     <View style={styles.searchContainer}>
       <View style={styles.searchInputWrapper}>
-        <MaterialIcons name="search" size={20} color="rgba(255,254,245,0.5)" />
+        <MaterialIcons name="search" size={20} color={theme.textDisabled} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search reports..."
-          placeholderTextColor="rgba(255,254,245,0.4)"
+          placeholderTextColor={theme.textDisabled}
           value={searchQuery}
           onChangeText={setSearchQuery}
           returnKeyType="search"
@@ -453,7 +457,7 @@ export default function AdminReportsScreen() {
             onPress={() => setSearchQuery('')}
             accessibilityLabel="Clear search"
           >
-            <MaterialIcons name="close" size={18} color="rgba(255,254,245,0.5)" />
+            <MaterialIcons name="close" size={18} color={theme.textDisabled} />
           </TouchableOpacity>
         )}
       </View>
@@ -527,13 +531,13 @@ export default function AdminReportsScreen() {
                 <View
                   style={[
                     styles.contentTypeIcon,
-                    { backgroundColor: 'rgba(0,145,44,0.2)' },
+                    { backgroundColor: theme.border },
                   ]}
                 >
                   <MaterialIcons
                     name={getContentTypeIcon(report.content_type)}
                     size={18}
-                    color="#00dc50"
+                    color={theme.primary}
                   />
                 </View>
                 <View>
@@ -725,15 +729,16 @@ export default function AdminReportsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (theme: AppTheme) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: theme.background,
   },
   headerAction: {
     padding: 6,
     borderRadius: 6,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: theme.surfaceSecondary,
   },
   statsContainer: {
     paddingHorizontal: 16,
@@ -778,15 +783,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   segmentButtonActive: {
-    backgroundColor: '#2d5240',
+    backgroundColor: theme.surface,
   },
   segmentButtonText: {
     fontSize: 13,
     fontWeight: '500',
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
   },
   segmentButtonTextActive: {
-    color: '#fffef5',
+    color: theme.text,
     fontWeight: '600',
   },
   badgeContainer: {
@@ -801,7 +806,7 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#fff',
+    color: '#FFFFFF',
   },
   searchContainer: {
     flexDirection: 'row',
@@ -823,7 +828,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 15,
-    color: '#fffef5',
+    color: theme.text,
   },
   sortButton: {
     flexDirection: 'row',
@@ -883,11 +888,11 @@ const styles = StyleSheet.create({
   reportContentType: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#fffef5',
+    color: theme.text,
   },
   reportTime: {
     fontSize: 12,
-    color: 'rgba(255,254,245,0.5)',
+    color: theme.textDisabled,
     marginTop: 2,
   },
   reportHeaderRight: {
@@ -924,11 +929,11 @@ const styles = StyleSheet.create({
   },
   reporterName: {
     fontSize: 12,
-    color: 'rgba(255,254,245,0.5)',
+    color: theme.textDisabled,
   },
   reportDetails: {
     fontSize: 14,
-    color: 'rgba(255,254,245,0.8)',
+    color: theme.textSecondary,
     lineHeight: 20,
   },
   quickActions: {
@@ -1002,12 +1007,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#fffef5',
+    color: theme.text,
     marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 15,
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
   },
@@ -1015,13 +1020,13 @@ const styles = StyleSheet.create({
     marginTop: 20,
     paddingHorizontal: 24,
     paddingVertical: 12,
-    backgroundColor: '#00912C',
+    backgroundColor: theme.primary,
     borderRadius: 10,
   },
   viewAllButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#fffef5',
+    color: theme.text,
   },
   errorContainer: {
     flex: 1,
@@ -1038,13 +1043,13 @@ const styles = StyleSheet.create({
   retryButton: {
     paddingHorizontal: 24,
     paddingVertical: 12,
-    backgroundColor: '#00912C',
+    backgroundColor: theme.primary,
     borderRadius: 10,
     marginTop: 8,
   },
   retryButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#fffef5',
+    color: theme.text,
   },
 });

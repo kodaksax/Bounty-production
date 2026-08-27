@@ -1,7 +1,9 @@
 // app/(admin)/disputes/index.tsx - Admin dispute list and review screen
 import { MaterialIcons } from '@expo/vector-icons';
+import { useAppTheme } from '../../../hooks/use-app-theme';
+import type { AppTheme } from '../../../lib/themes/types';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -26,6 +28,8 @@ interface DisputeWithBounty extends BountyDispute {
 }
 
 export default function AdminDisputesScreen() {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const router = useRouter();
   const [disputes, setDisputes] = useState<DisputeWithBounty[]>([]);
   const [loading, setLoading] = useState(true);
@@ -130,7 +134,7 @@ export default function AdminDisputesScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            tintColor="#00dc50"
+            tintColor={theme.primary}
           />
         }
       >
@@ -198,7 +202,7 @@ export default function AdminDisputesScreen() {
         {/* Error Banner */}
         {error && (
           <View style={styles.errorBanner}>
-            <MaterialIcons name="error-outline" size={20} color="#f44336" />
+            <MaterialIcons name="error-outline" size={20} color={theme.error} />
             <Text style={styles.errorText}>{error}</Text>
             <TouchableOpacity onPress={loadDisputes} style={styles.retryButton}>
               <Text style={styles.retryButtonText}>Retry</Text>
@@ -209,7 +213,7 @@ export default function AdminDisputesScreen() {
         {/* Disputes List */}
         {filteredDisputes.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <MaterialIcons name="check-circle-outline" size={64} color="rgba(255,254,245,0.3)" />
+            <MaterialIcons name="check-circle-outline" size={64} color={theme.textDisabled} />
             <Text style={styles.emptyTitle}>
               {filter === 'all' ? 'No disputes found' : `No ${filter.replace('_', ' ')} disputes`}
             </Text>
@@ -269,14 +273,14 @@ export default function AdminDisputesScreen() {
                   {/* Meta Info */}
                   <View style={styles.disputeMeta}>
                     <View style={styles.metaItem}>
-                      <MaterialIcons name="access-time" size={14} color="rgba(255,254,245,0.6)" />
+                      <MaterialIcons name="access-time" size={14} color={theme.textSecondary} />
                       <Text style={styles.metaText}>
                         {new Date(dispute.createdAt).toLocaleDateString()}
                       </Text>
                     </View>
                     {dispute.evidence && dispute.evidence.length > 0 && (
                       <View style={styles.metaItem}>
-                        <MaterialIcons name="attach-file" size={14} color="rgba(255,254,245,0.6)" />
+                        <MaterialIcons name="attach-file" size={14} color={theme.textSecondary} />
                         <Text style={styles.metaText}>
                           {dispute.evidence.length} evidence item{dispute.evidence.length !== 1 ? 's' : ''}
                         </Text>
@@ -294,7 +298,7 @@ export default function AdminDisputesScreen() {
                         }}
                         style={styles.quickActionButton}
                       >
-                        <MaterialIcons name="visibility" size={16} color="#fffef5" />
+                        <MaterialIcons name="visibility" size={16} color={theme.text} />
                         <Text style={styles.quickActionText}>Mark Under Review</Text>
                       </TouchableOpacity>
                     </View>
@@ -312,10 +316,11 @@ export default function AdminDisputesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (theme: AppTheme) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: theme.background,
   },
   scrollView: {
     flex: 1,
@@ -330,7 +335,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   loadingText: {
-    color: 'rgba(255,254,245,0.8)',
+    color: theme.textSecondary,
     fontSize: 14,
   },
   statsContainer: {
@@ -346,12 +351,12 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#fffef5',
+    color: theme.text,
     marginBottom: 4,
   },
   statLabel: {
     fontSize: 12,
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
   },
   filterContainer: {
     marginBottom: 16,
@@ -361,18 +366,18 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     marginRight: 8,
     borderRadius: 8,
-    backgroundColor: 'rgba(0,145,44,0.15)',
+    backgroundColor: theme.surfaceSecondary,
   },
   filterTabActive: {
-    backgroundColor: '#00912C',
+    backgroundColor: theme.primary,
   },
   filterTabText: {
     fontSize: 14,
     fontWeight: '600',
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
   },
   filterTabTextActive: {
-    color: '#fffef5',
+    color: theme.text,
   },
   errorBanner: {
     flexDirection: 'row',
@@ -387,17 +392,17 @@ const styles = StyleSheet.create({
   },
   errorText: {
     flex: 1,
-    color: '#f44336',
+    color: theme.error,
     fontSize: 13,
   },
   retryButton: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: '#f44336',
+    backgroundColor: theme.error,
     borderRadius: 4,
   },
   retryButtonText: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '600',
   },
@@ -410,13 +415,13 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#fffef5',
+    color: theme.text,
     marginTop: 16,
     marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 14,
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
     textAlign: 'center',
   },
   disputesList: {
@@ -443,12 +448,12 @@ const styles = StyleSheet.create({
   disputeTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#fffef5',
+    color: theme.text,
     marginBottom: 2,
   },
   disputeSubtitle: {
     fontSize: 13,
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
   },
   statusBadge: {
     paddingHorizontal: 8,
@@ -458,14 +463,14 @@ const styles = StyleSheet.create({
   statusBadgeText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#fff',
+    color: '#FFFFFF',
   },
   disputeContent: {
     marginBottom: 12,
   },
   disputeReason: {
     fontSize: 14,
-    color: 'rgba(255,254,245,0.8)',
+    color: theme.textSecondary,
     lineHeight: 20,
   },
   disputeMeta: {
@@ -474,7 +479,7 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0,145,44,0.2)',
+    borderTopColor: theme.border,
   },
   metaItem: {
     flexDirection: 'row',
@@ -483,19 +488,19 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 12,
-    color: 'rgba(255,254,245,0.6)',
+    color: theme.textSecondary,
   },
   quickActions: {
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0,145,44,0.2)',
+    borderTopColor: theme.border,
   },
   quickActionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#00912C',
+    backgroundColor: theme.primary,
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 6,
@@ -504,6 +509,6 @@ const styles = StyleSheet.create({
   quickActionText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#fffef5',
+    color: theme.text,
   },
 });

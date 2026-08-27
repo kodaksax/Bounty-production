@@ -1,7 +1,9 @@
 // app/(admin)/blocked-users.tsx - Admin Blocked Users Management
 import { MaterialIcons } from '@expo/vector-icons';
+import { useAppTheme } from '../../hooks/use-app-theme';
+import type { AppTheme } from '../../lib/themes/types';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -33,6 +35,8 @@ interface BlockedUserRelationship {
 }
 
 export default function AdminBlockedUsersScreen() {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const router = useRouter();
   const [blocks, setBlocks] = useState<BlockedUserRelationship[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -201,7 +205,8 @@ export default function AdminBlockedUsersScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (theme: AppTheme) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#059669', // emerald-600

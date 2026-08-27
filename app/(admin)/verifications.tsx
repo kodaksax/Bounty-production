@@ -6,7 +6,9 @@
 // Reject a submission via the existing `admin-review-id` edge function.
 
 import { MaterialIcons } from '@expo/vector-icons';
-import { useCallback, useEffect, useState } from 'react';
+import { useAppTheme } from '../../hooks/use-app-theme';
+import type { AppTheme } from '../../lib/themes/types';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -34,6 +36,8 @@ interface VerificationItem {
 }
 
 export default function AdminVerificationsScreen() {
+  const { theme } = useAppTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const [items, setItems] = useState<VerificationItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -113,7 +117,7 @@ export default function AdminVerificationsScreen() {
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
-      <MaterialIcons name="verified-user" size={48} color="rgba(255,254,245,0.4)" />
+      <MaterialIcons name="verified-user" size={48} color={theme.textDisabled} />
       <Text style={styles.emptyText}>No pending verifications</Text>
       <Text style={styles.emptySubtext}>The queue is empty. Pull to refresh.</Text>
     </View>
@@ -225,7 +229,7 @@ export default function AdminVerificationsScreen() {
 
       {isLoading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#00dc50" />
+          <ActivityIndicator size="large" color={theme.primary} />
           <Text style={styles.loadingText}>Loading queue…</Text>
         </View>
       ) : (
@@ -234,7 +238,7 @@ export default function AdminVerificationsScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={styles.scrollContent}
-          refreshControl={<RefreshControl refreshing={false} onRefresh={loadQueue} tintColor="#00dc50" />}
+          refreshControl={<RefreshControl refreshing={false} onRefresh={loadQueue} tintColor={theme.primary} />}
           ListHeaderComponent={
             error ? (
               <View style={styles.errorBox}>
@@ -257,10 +261,11 @@ export default function AdminVerificationsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (theme: AppTheme) =>
+  StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a3d2e',
+    backgroundColor: theme.background,
   },
   scrollContent: {
     padding: 16,
@@ -274,7 +279,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   loadingText: {
-    color: 'rgba(255,254,245,0.7)',
+    color: theme.textSecondary,
     fontSize: 14,
   },
   emptyContainer: {
@@ -283,12 +288,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   emptyText: {
-    color: 'rgba(255,254,245,0.9)',
+    color: theme.text,
     fontSize: 16,
     fontWeight: '600',
   },
   emptySubtext: {
-    color: 'rgba(255,254,245,0.5)',
+    color: theme.textDisabled,
     fontSize: 13,
   },
   errorBox: {
@@ -318,17 +323,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   userName: {
-    color: '#fffef5',
+    color: theme.text,
     fontSize: 16,
     fontWeight: '700',
   },
   userHandle: {
-    color: 'rgba(255,254,245,0.7)',
+    color: theme.textSecondary,
     fontSize: 13,
     marginTop: 2,
   },
   submittedAt: {
-    color: 'rgba(255,254,245,0.5)',
+    color: theme.textDisabled,
     fontSize: 12,
     marginTop: 4,
   },
@@ -341,7 +346,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   imageLabel: {
-    color: 'rgba(255,254,245,0.7)',
+    color: theme.textSecondary,
     fontSize: 12,
     fontWeight: '600',
   },
