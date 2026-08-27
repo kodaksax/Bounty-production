@@ -13,7 +13,6 @@
 //
 // Now every figure comes from lib/admin/adminAnalytics.ts, counted off the
 // real tables.
-import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AdminHeader } from '../../components/admin/AdminHeader';
@@ -35,7 +34,6 @@ import { ErrorBoundary } from '../../lib/error-boundary';
 import { ROUTES } from '../../lib/routes';
 
 function AnalyticsDashboardInner() {
-  const router = useRouter();
   const { theme } = useAppTheme();
   const { isAuthStale, attemptRefresh } = useAuthContext();
 
@@ -45,7 +43,9 @@ function AnalyticsDashboardInner() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async (refreshing = false) => {
-    refreshing ? setIsRefreshing(true) : setIsLoading(true);
+    // A pull-to-refresh keeps the current data on screen; a first load does not.
+    if (refreshing) setIsRefreshing(true);
+    else setIsLoading(true);
     setError(null);
     try {
       setAnalytics(await adminAnalytics.fetch());

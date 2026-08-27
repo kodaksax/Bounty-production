@@ -47,7 +47,9 @@ export default function AdminBountyRequestsScreen() {
         setIsLoading(false);
         return;
       }
-      refreshing ? setIsRefreshing(true) : setIsLoading(true);
+      // A pull-to-refresh keeps the current rows on screen; a first load does not.
+      if (refreshing) setIsRefreshing(true);
+      else setIsLoading(true);
       setError(null);
       try {
         setRequests(await adminDataClient.fetchBountyRequests(id));

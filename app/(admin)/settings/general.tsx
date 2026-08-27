@@ -11,7 +11,6 @@
 //   - "Dark Mode" is now the app's actual theme control, not a dead switch.
 //   - "Show archived bounties" duplicated the Bounties status filter.
 //   - "Timezone" had no formatting code reading it anywhere in the app.
-import { useRouter } from 'expo-router';
 import React, { useCallback } from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { AdminHeader } from '../../../components/admin/AdminHeader';
@@ -41,7 +40,6 @@ function describeAutoRefresh(seconds: number): string {
 }
 
 export default function AdminGeneralSettingsScreen() {
-  const router = useRouter();
   const { theme, mode, setTheme } = useAppTheme();
   const { preferences, isLoading, update, reset } = useAdminPreferences();
 

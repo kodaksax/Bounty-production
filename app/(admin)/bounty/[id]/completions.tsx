@@ -64,7 +64,9 @@ export default function AdminBountyCompletionsScreen() {
         setIsLoading(false);
         return;
       }
-      refreshing ? setIsRefreshing(true) : setIsLoading(true);
+      // A pull-to-refresh keeps the current rows on screen; a first load does not.
+      if (refreshing) setIsRefreshing(true);
+      else setIsLoading(true);
       setError(null);
       try {
         setSubmissions(await adminDataClient.fetchBountyCompletions(id));

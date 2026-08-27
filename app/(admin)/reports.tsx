@@ -62,6 +62,21 @@ function calculateStatsFromReports(reports: EnhancedReport[]): ReportStats {
   };
 }
 
+// Canned reasons for a suspend/ban action, written to admin_action_log for
+// audit purposes -- every account_status change now requires one, see
+// 20260726000000_enforce_account_status.sql.
+//
+// Module scope, not component scope: as a local it was rebuilt on every render
+// and left the useCallback below with an incomplete dependency array.
+const STATUS_CHANGE_REASONS: { label: string; value: string }[] = [
+    { label: 'Spam', value: 'Spam' },
+    { label: 'Harassment', value: 'Harassment' },
+    { label: 'Fraud / Scam', value: 'Fraud / Scam' },
+    { label: 'Inappropriate Content', value: 'Inappropriate Content' },
+    { label: 'Guideline Violation', value: 'Guideline Violation' },
+    { label: 'Other', value: 'Other' },
+  ];
+
 export default function AdminReportsScreen() {
   const { theme } = useAppTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -194,17 +209,7 @@ export default function AdminReportsScreen() {
     []
   );
 
-  // Canned reasons for a suspend/ban action, written to admin_action_log for
-  // audit purposes -- every account_status change now requires one, see
-  // 20260726000000_enforce_account_status.sql.
-  const STATUS_CHANGE_REASONS: { label: string; value: string }[] = [
-    { label: 'Spam', value: 'Spam' },
-    { label: 'Harassment', value: 'Harassment' },
-    { label: 'Fraud / Scam', value: 'Fraud / Scam' },
-    { label: 'Inappropriate Content', value: 'Inappropriate Content' },
-    { label: 'Guideline Violation', value: 'Guideline Violation' },
-    { label: 'Other', value: 'Other' },
-  ];
+
 
   // Handle suspend/ban user actions
   const handleUserAction = useCallback(
