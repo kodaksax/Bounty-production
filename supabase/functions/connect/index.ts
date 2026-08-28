@@ -500,6 +500,43 @@ function inFlightWithdrawalResponse(inFlight: { amount: number }): Response {
   );
 }
 
+/** Stripe error code returned when payouts.create is called with method
+ * 'standard' on a connected account left on the default AUTOMATIC payout
+ * schedule. Stripe manages those payouts itself and forbids API-created ones. */
+const AUTOMATIC_SCHEDULE_PAYOUT_ERROR = 'cannot_create_connect_standard_payouts_through_api';
+
+/**
+ * Ensures a connected account is on a MANUAL payout schedule before we create
+ * an explicit standard payout for it.
+ *
+ * WHY THIS EXISTS: standard withdrawals create an explicit
+ * stripe.payouts.create({ method: 'standard' }) so that a real payout id
+ * exists — required by the wallet_transactions
+ * `..._completed_withdrawal_requires_payout` CHECK constraint and by the
+ * reconciliation `completed_withdrawal_without_payout` invariant — and so a
+ * `payout.paid` webhook can settle the row. Stripe REJECTS API-created
+ * standard payouts on accounts left on the default AUTOMATIC schedule with
+ * `cannot_create_connect_standard_payouts_through_api`. That rejection used to
+ * strand the withdrawal 'pending' forever which, via the
+ * idx_wallet_tx_one_pending_withdrawal unique index, also blocked the hunter
+ * from ever retrying (the 2026-08-16 regression).
+ *
+ * The CONNECT_MANUAL_PAYOUTS flag only sets `manual` on NEWLY created accounts;
+ * accounts created before it — and any that were never backfilled — are still
+ * automatic. Converting here makes every withdrawal self-correct its own
+ * account. Idempotent: a no-op once the account is already manual.
+ */
+async function ensureManualPayoutSchedule(
+  stripe: Stripe,
+  account: Stripe.Account
+): Promise<void> {
+  const interval = account.settings?.payouts?.schedule?.interval;
+  if (interval === 'manual') return;
+  await stripe.accounts.update(account.id, {
+    settings: { payouts: { schedule: { interval: 'manual' } } },
+  });
+}
+
 /**
  * Projects a Stripe payout status onto the vocabulary wallet_transactions
  * uses, so the two can be compared without a mismatch being reported every
@@ -916,6 +953,36 @@ async function handleConnectNativePayout(params: NativePayoutParams): Promise<Re
       },
       400
     );
+  }
+
+  // A standard Connect-native payout is created via the API just like the
+  // legacy /transfer path, so the account must be on a MANUAL payout schedule
+  // (Stripe rejects API-created standard payouts on automatic-schedule
+  // accounts). Instant payouts are exempt — they work on any schedule.
+  if (method === 'standard') {
+    try {
+      await ensureManualPayoutSchedule(stripe, account);
+    } catch (scheduleError) {
+      await writePayoutAudit(supabase, {
+        userId,
+        event: 'withdrawal_failed',
+        payoutMethod: method,
+        amountCents,
+        currency,
+        idempotencyKey,
+        stripeConnectAccountId: accountId,
+        errorCode: 'payout_schedule_update_failed',
+        errorMessage: (scheduleError as { message?: string })?.message ?? null,
+      });
+      return jsonResponse(
+        {
+          error:
+            'We could not prepare your payout account. No funds have moved — please try again.',
+          code: 'payout_schedule_update_failed',
+        },
+        503
+      );
+    }
   }
 
   // Instant draws on instant_available (which includes not-yet-settled card
@@ -2041,23 +2108,9 @@ Deno.serve(async (req: Request) => {
       // the past but the account can become restricted (missing requirements,
       // disabled payouts, disconnected bank). Verify with Stripe before
       // touching the user's balance.
+      let account: Stripe.Account;
       try {
-        const account = await stripe.accounts.retrieve(p.stripe_connect_account_id);
-        if (!account.payouts_enabled) {
-          console.warn('[connect/transfer] payouts disabled on connected account', {
-            userId,
-            accountId: p.stripe_connect_account_id,
-            disabledReason: account.requirements?.disabled_reason ?? null,
-          });
-          return jsonResponse(
-            {
-              error:
-                'Payouts are currently disabled on your account. Please review and update your payout details, then try again.',
-              code: 'payouts_disabled',
-            },
-            400
-          );
-        }
+        account = await stripe.accounts.retrieve(p.stripe_connect_account_id);
       } catch (accountError) {
         console.error('[connect/transfer] failed to verify connected account', {
           userId,
@@ -2069,6 +2122,46 @@ Deno.serve(async (req: Request) => {
             error:
               'We could not verify your payout account. Your balance has not been charged — please try again.',
             code: 'account_verification_failed',
+          },
+          503
+        );
+      }
+
+      if (!account.payouts_enabled) {
+        console.warn('[connect/transfer] payouts disabled on connected account', {
+          userId,
+          accountId: p.stripe_connect_account_id,
+          disabledReason: account.requirements?.disabled_reason ?? null,
+        });
+        return jsonResponse(
+          {
+            error:
+              'Payouts are currently disabled on your account. Please review and update your payout details, then try again.',
+            code: 'payouts_disabled',
+          },
+          400
+        );
+      }
+
+      // Guarantee the account is on a MANUAL payout schedule BEFORE any money
+      // moves. The standard payout created after the transfer below only
+      // succeeds on manual-schedule accounts; doing this first means a stray
+      // automatic-schedule account fails cleanly here (nothing debited,
+      // nothing transferred) instead of stranding a 'pending' row after the
+      // transfer. See ensureManualPayoutSchedule().
+      try {
+        await ensureManualPayoutSchedule(stripe, account);
+      } catch (scheduleError) {
+        console.error('[connect/transfer] failed to set manual payout schedule', {
+          userId,
+          accountId: p.stripe_connect_account_id,
+          error: (scheduleError as { message?: string })?.message,
+        });
+        return jsonResponse(
+          {
+            error:
+              'We could not prepare your payout account. Your balance has not been charged — please try again.',
+            code: 'payout_schedule_update_failed',
           },
           503
         );
@@ -2383,7 +2476,9 @@ Deno.serve(async (req: Request) => {
         const pcInfo = payoutCreateError as { code?: string; message?: string };
         standardPayoutError = pcInfo?.code ?? pcInfo?.message ?? 'unknown';
         logCritical(
-          'standard payout creation failed after transfer landed — funds are in the connected account with no payout, manual reconciliation required',
+          pcInfo?.code === AUTOMATIC_SCHEDULE_PAYOUT_ERROR
+            ? 'standard payout rejected because the account is still on an automatic payout schedule — ensureManualPayoutSchedule did not take effect; funds are in the connected account with no payout, manual reconciliation required'
+            : 'standard payout creation failed after transfer landed — funds are in the connected account with no payout, manual reconciliation required',
           { userId, transferId: transfer.id, amount, error: standardPayoutError }
         );
       }
@@ -2582,6 +2677,38 @@ Deno.serve(async (req: Request) => {
       const available = (p.balance ?? 0) - (p.balance_on_hold ?? 0);
       if (available < amount) {
         return jsonResponse({ error: 'Insufficient balance for retry' }, 400);
+      }
+
+      // Same guarantee as the primary /transfer path: convert the account to a
+      // MANUAL payout schedule before re-reserving the balance, so the retry's
+      // standard payout below can be created instead of stranding the row.
+      try {
+        const retryAccount = await stripe.accounts.retrieve(p.stripe_connect_account_id);
+        if (!retryAccount.payouts_enabled) {
+          return jsonResponse(
+            {
+              error:
+                'Payouts are currently disabled on your account. Please review and update your payout details, then try again.',
+              code: 'payouts_disabled',
+            },
+            400
+          );
+        }
+        await ensureManualPayoutSchedule(stripe, retryAccount);
+      } catch (scheduleError) {
+        console.error('[connect/retry-transfer] failed to prepare payout account', {
+          userId,
+          accountId: p.stripe_connect_account_id,
+          error: (scheduleError as { message?: string })?.message,
+        });
+        return jsonResponse(
+          {
+            error:
+              'We could not prepare your payout account. Your balance has not been charged — please try again.',
+            code: 'payout_schedule_update_failed',
+          },
+          503
+        );
       }
 
       const { error: retryReservationError } = await supabase
@@ -3529,6 +3656,13 @@ Deno.serve(async (req: Request) => {
         let fallbackPayoutError: string | null = null;
         if (isRecoverableInstantPayoutError(errInfo?.code)) {
           try {
+            // This fallback is a STANDARD payout, so — like /connect/transfer —
+            // it only succeeds on a manual-schedule account. Ensure that here
+            // before creating it (a no-op once the account is already manual).
+            const fallbackAccount = await stripe.accounts.retrieve(
+              p.stripe_connect_account_id
+            );
+            await ensureManualPayoutSchedule(stripe, fallbackAccount);
             fallbackPayout = await stripe.payouts.create(
               {
                 amount: validation.amountCents,
