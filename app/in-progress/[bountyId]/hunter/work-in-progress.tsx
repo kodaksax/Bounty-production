@@ -260,10 +260,12 @@ export default function HunterWorkInProgressScreen() {
     );
   }
 
+  // Guard every access: `description` is optional on the two-step posting flow
+  // and null on some older/API-created rows — an unguarded `.length` here
+  // white-screens the hunter's active-job screen.
+  const description = bounty.description ?? '';
   const descriptionPreview =
-    bounty.description.length > 150
-      ? bounty.description.substring(0, 150) + '...'
-      : bounty.description;
+    description.length > 150 ? description.substring(0, 150) + '...' : description;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -444,9 +446,9 @@ export default function HunterWorkInProgressScreen() {
         <View style={styles.contextPanel}>
           <Text style={styles.contextTitle}>Description</Text>
           <Text style={styles.contextText}>
-            {descriptionExpanded ? bounty.description : descriptionPreview}
+            {descriptionExpanded ? description : descriptionPreview}
           </Text>
-          {bounty.description.length > 150 && (
+          {description.length > 150 && (
             <TouchableOpacity onPress={() => setDescriptionExpanded(!descriptionExpanded)}>
               <Text style={styles.expandText}>
                 {descriptionExpanded ? 'Show Less' : 'Show More'}

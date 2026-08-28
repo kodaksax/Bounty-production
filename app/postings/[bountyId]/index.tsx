@@ -302,10 +302,13 @@ export default function BountyDashboard() {
     );
   }
 
+  // `description` is optional on the two-step posting flow (added later on the
+  // confirmation screen) and can be null on older/API-created rows, so guard
+  // every string access below — an unguarded `.length` here white-screens the
+  // whole poster dashboard.
+  const description = bounty.description ?? '';
   const descriptionPreview =
-    bounty.description.length > 150
-      ? bounty.description.substring(0, 150) + '...'
-      : bounty.description;
+    description.length > 150 ? description.substring(0, 150) + '...' : description;
 
   return (
     <SafeAreaView style={[s.container, { width: '100%', alignSelf: 'stretch' }]} edges={['top']}>
@@ -510,9 +513,9 @@ export default function BountyDashboard() {
         <View style={s.contextPanel}>
           <Text style={s.sectionTitle}>Description</Text>
           <Text style={s.description}>
-            {descriptionExpanded ? bounty.description : descriptionPreview}
+            {descriptionExpanded ? description : descriptionPreview}
           </Text>
-          {bounty.description.length > 150 && (
+          {description.length > 150 && (
             <TouchableOpacity
               style={s.expandButton}
               onPress={() => setDescriptionExpanded(!descriptionExpanded)}
@@ -549,8 +552,12 @@ export default function BountyDashboard() {
           )}
         </View>
 
-        {/* Next Button */}
-        {currentStage !== 'payout' && (
+        {/* Next Button — only meaningful once a hunter has been accepted. While
+            the bounty is still open there is no next stage to advance to, and
+            the "Awaiting a hunter" panel above is the correct CTA; showing this
+            button there let the poster march an unclaimed bounty through
+            Working Progress / Review & Verify for work that doesn't exist. */}
+        {bounty.status !== 'open' && currentStage !== 'payout' && (
           <TouchableOpacity style={s.nextButton} onPress={handleNext}>
             <Text style={s.nextButtonText}>
               {currentStage === 'review_verify' ? 'Go to Review & Verify' : 'Next Stage'}
