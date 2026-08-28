@@ -67,10 +67,33 @@ try {
             console: false,
           },
         },
-        // Session Replay stays off — this app has Stripe/ACH/password
-        // screens and no current product need for it. Flip this on (plus
-        // "Record user sessions" in PostHog project settings) if that changes.
-        enableSessionReplay: false,
+        // Session Replay. Also requires "Record user sessions" to be enabled
+        // in the PostHog project settings, and the optional native module
+        // `posthog-react-native-session-replay` to be present (it is a
+        // dependency in package.json) — without it the SDK logs "Session
+        // replay enabled but not installed." and records nothing.
+        enableSessionReplay: true,
+        // This app renders Stripe/ACH, password, KYC, private-message and
+        // bounty-description screens, so replay runs fully masked. Do not
+        // relax these to make recordings easier to read; use
+        // `PostHogMaskView` from posthog-react-native to mask *more*.
+        sessionReplayConfig: {
+          // Masks all text input fields (emails, addresses, phone numbers, payment fields).
+          // Static <Text> content is not guaranteed to be masked — wrap sensitive UI in PostHogMaskView.
+          maskAllTextInputs: true,
+          // Masks all images to a placeholder (avatars, bounty photos, ID /
+          // KYC uploads, attachment previews).
+          maskAllImages: true,
+          // Explicit even though it matches the SDK default: masks iOS
+          // sandboxed system views (photo/contact pickers used by the
+          // attachment and avatar flows).
+          maskAllSandboxedViews: true,
+          // Off (SDK default is on): console output is Sentry's channel in
+          // this app (see `errorTracking` above), and the diagnostic logs in
+          // lib/utils/auth-diagnostics.ts and the payment paths are not
+          // written with replay redaction in mind.
+          captureLog: false,
+        },
         debug: __DEV__,
       });
       _posthog.register({ app_env: APP_ENVIRONMENT });
