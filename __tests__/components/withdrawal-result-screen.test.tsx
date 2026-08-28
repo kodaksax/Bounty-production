@@ -195,11 +195,24 @@ describe('WithdrawalResultScreen', () => {
         );
 
       it('explains that an earlier withdrawal is still on its way', () => {
-        const { getByText } = renderInProgress();
+        // With no server-crafted message, the screen falls back to its own
+        // static copy for this code.
+        const { getByText } = renderInProgress({ errorMessage: undefined });
         expect(
           getByText(/already have a withdrawal on its way to your bank/i)
         ).toBeTruthy();
         expect(getByText(/1-2 business days/i)).toBeTruthy();
+      });
+
+      it('prefers the server message when it names the pending amount', () => {
+        const { getByText, queryByText } = renderInProgress({
+          errorMessage:
+            'You already have a withdrawal of $96.00 on its way to your bank.',
+        });
+        expect(getByText(/withdrawal of \$96\.00/i)).toBeTruthy();
+        expect(
+          queryByText(/already have a withdrawal on its way to your bank/i)
+        ).toBeNull();
       });
 
       it('does not frame a decline as a failure', () => {
