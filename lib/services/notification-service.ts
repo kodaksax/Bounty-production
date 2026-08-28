@@ -126,6 +126,84 @@ export class NotificationService {
   }
 
   /**
+   * Create Bounty's Android notification channels.
+   *
+   * On Android 8+ every notification is delivered through a channel, and the
+   * channel — not the payload — owns importance, sound, vibration and whether
+   * the notification can appear as a heads-up banner. A channel that is never
+   * created means every notification falls back to expo-notifications' generic
+   * default channel, so users cannot mute chat without also muting payouts,
+   * and Bounty's payment notifications get no priority treatment.
+   *
+   * These definitions previously existed only in app/hooks/usePushNotifications.tsx,
+   * which is not imported anywhere — so in the shipped app no Bounty-defined
+   * channel was ever created. They live here instead because this service is
+   * the live push path.
+   *
+   * Channels are created before the permission prompt on purpose: that is the
+   * documented Android pattern, it makes the categories visible in system
+   * settings immediately, and `setNotificationChannelAsync` is an idempotent
+   * upsert so repeat calls are free.
+   *
+   * NOTE: categorisation only takes effect for messages whose push payload
+   * carries the matching `channelId`. Messages sent without one continue to
+   * use the default channel below.
+   */
+  async ensureAndroidChannels(): Promise<void> {
+    if (Platform.OS !== 'android') return;
+    try {
+      this.ensureNotificationsModule();
+      if (!Notifications || typeof Notifications.setNotificationChannelAsync !== 'function') {
+        return;
+      }
+
+      const importance = Notifications.AndroidImportance;
+      const vibrationPattern = [0, 250, 250, 250];
+      const lightColor = '#10B981';
+
+      await Promise.all([
+        Notifications.setNotificationChannelAsync('messages', {
+          name: 'Messages',
+          description: 'Chat message notifications',
+          importance: importance.HIGH,
+          vibrationPattern,
+          lightColor,
+        }),
+        Notifications.setNotificationChannelAsync('bounties', {
+          name: 'Bounties',
+          description: 'Bounty applications, acceptances and updates',
+          importance: importance.HIGH,
+          vibrationPattern,
+          lightColor,
+        }),
+        Notifications.setNotificationChannelAsync('payments', {
+          name: 'Payments',
+          description: 'Payment and payout notifications',
+          importance: importance.MAX,
+          vibrationPattern,
+          lightColor,
+        }),
+        Notifications.setNotificationChannelAsync('system', {
+          name: 'System',
+          description: 'System and account notifications',
+          importance: importance.DEFAULT,
+        }),
+        Notifications.setNotificationChannelAsync('default', {
+          name: 'default',
+          importance: importance.MAX,
+          vibrationPattern,
+          lightColor,
+        }),
+      ]);
+    } catch (e) {
+      // Channel setup is best-effort — never let it break notification setup.
+      if (__DEV__) {
+        console.warn('[NotificationService] Android channel setup failed:', e);
+      }
+    }
+  }
+
+  /**
    * Validate and normalize permission status to known values
    */
   private normalizePermissionStatus(status: string | null): 'granted' | 'denied' | 'undetermined' {
@@ -180,6 +258,13 @@ export class NotificationService {
   async requestPermissionsAndRegisterToken(): Promise<string | null> {
     try {
       this.ensureNotificationsModule();
+
+      // Channels must exist before the first notification is delivered, and
+      // creating them ahead of the permission prompt is the documented Android
+      // pattern. Awaited (not fire-and-forget) so a token issued moments later
+      // can never beat the channels into existence.
+      await this.ensureAndroidChannels();
+
       const { status: existingStatus } = Notifications
         ? await Notifications.getPermissionsAsync()
         : { status: 'undetermined' };

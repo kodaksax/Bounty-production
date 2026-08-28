@@ -20,6 +20,7 @@ import { NotificationProvider } from '../lib/context/notification-context';
 import { ProfileImageViewerProvider } from '../lib/context/ProfileImageViewerContext';
 import { ErrorBoundary } from '../lib/error-boundary';
 import { analyticsService } from '../lib/services/analytics-service';
+import { startMemoryPressureWatcher } from '../lib/services/memory-pressure';
 import { StripeProvider } from '../lib/stripe-context';
 import { AppThemeProvider, useAppThemeContext } from '../lib/themes/AppThemeContext';
 import { WalletProvider } from '../lib/wallet-context';
@@ -343,6 +344,14 @@ function RootLayout({ children }: { children: React.ReactNode }) {
       clearTimeout(safetyTimer);
     };
   }, [fontsLoaded]);
+
+  // Release decoded-bitmap memory once the app has been backgrounded for a
+  // while. Android never forwards onTrimMemory to JS, so this AppState hook is
+  // the only signal available; see lib/services/memory-pressure.ts for why
+  // this matters for Google Play's bitmap-memory thresholds. Kept in its own
+  // effect (not the startup gate above) so it is installed exactly once and
+  // is never delayed by font loading.
+  useEffect(() => startMemoryPressureWatcher(), []);
 
   return (
     <PostHogProvider
