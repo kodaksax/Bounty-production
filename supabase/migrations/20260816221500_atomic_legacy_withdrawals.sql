@@ -155,6 +155,7 @@ BEGIN
     refunded := FALSE;
     refund_amount := NULL;
     RETURN NEXT;
+    RETURN;
   END IF;
 
   refund_amount := ABS(v_amount);
