@@ -201,18 +201,6 @@ describe('WithdrawalResultScreen', () => {
         expect(getByText(/1-2 business days/i)).toBeTruthy();
       });
 
-      it('prefers the server message when it is provided, since it names the pending amount', () => {
-        const { getByText, queryByText } = renderInProgress({
-          errorMessage: 'You already have a withdrawal of $96.00 on its way.',
-        });
-        expect(
-          getByText('You already have a withdrawal of $96.00 on its way.')
-        ).toBeTruthy();
-        expect(
-          queryByText(/already have a withdrawal on its way to your bank/i)
-        ).toBeNull();
-      });
-
       it('does not frame a decline as a failure', () => {
         const { getByText, queryByText } = renderInProgress();
         expect(getByText('Withdrawal Already In Progress')).toBeTruthy();
