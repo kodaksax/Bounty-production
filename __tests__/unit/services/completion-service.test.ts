@@ -49,6 +49,13 @@ jest.mock('../../../lib/services/message-service', () => ({
   },
 }));
 
+// Mock analytics — assert the canonical completion_submitted emit.
+// trackEvent resolves (the real one is `async`) so the service's
+// fire-and-forget `.catch()` has a promise to attach to.
+jest.mock('../../../lib/services/analytics-service', () => ({
+  analyticsService: { trackEvent: jest.fn().mockResolvedValue(undefined) },
+}));
+
 describe('CompletionService', () => {
   let mockSupabase: any;
 
@@ -137,6 +144,20 @@ describe('CompletionService', () => {
       expect(result?.status).toBe('pending');
       expect(result?.proof_items).toEqual(mockProofItems);
 
+      // Canonical marketplace-lifecycle event fires for a genuinely new
+      // submission row.
+      const { analyticsService } = require('../../../lib/services/analytics-service');
+      expect(analyticsService.trackEvent).toHaveBeenCalledWith(
+        'completion_submitted',
+        expect.objectContaining({
+          role: 'hunter',
+          bounty_id: 'bounty123',
+          hunter_id: 'hunter123',
+          proof_item_count: 1,
+          has_message: true,
+        })
+      );
+
       // The poster's review-needed notification is owned by the
       // trg_completion_submission_notification DB trigger, not this service.
       // Asserting the client never touches notifications_outbox guards against
@@ -182,6 +203,14 @@ describe('CompletionService', () => {
       expect(result?.id).toBe('existing123');
       // Should not call insert since duplicate exists
       expect(mockSupabase.from).toHaveBeenCalledTimes(1);
+
+      // The canonical event must NOT fire when an existing pending submission
+      // is returned — it stays 1:1 with real new submissions.
+      const { analyticsService } = require('../../../lib/services/analytics-service');
+      expect(analyticsService.trackEvent).not.toHaveBeenCalledWith(
+        'completion_submitted',
+        expect.anything()
+      );
     });
 
     it('should handle submission errors', async () => {

@@ -26,6 +26,7 @@ import { useUserProfile } from '../../hooks/useUserProfile';
 import { useOnboarding } from '../../lib/context/onboarding-context';
 import { isLocalBounty, rankNearbyBounties } from '../../lib/onboarding/hunter-discovery';
 import { makeOnboardingDetailsStyles } from '../../lib/onboarding/onboarding-details-styles';
+import { markPosterActivated } from '../../lib/analytics/lifecycle';
 import { analyticsService } from '../../lib/services/analytics-service';
 import { authProfileService } from '../../lib/services/auth-profile-service';
 import { bountyRequestService } from '../../lib/services/bounty-request-service';
@@ -179,16 +180,34 @@ export default function DetailsScreen() {
   ) => {
     if (onboardingData.intent !== 'poster' || posterFunnelStartedRef.current) return;
     posterFunnelStartedRef.current = true;
-    analyticsService.trackEvent('post_started', {
+    analyticsService.trackEvent('bounty_started', {
+      role: 'poster',
       surface: 'onboarding',
       // snake_case to match the same property on the main composer's
-      // post_started call (app/screens/CreateBounty/index.tsx) — previously
+      // bounty_started call (app/screens/CreateBounty/index.tsx) — previously
       // `resumedDraft` here, which the (now-removed) analytics-service
       // key-normalizer expanded into three competing spellings on PostHog.
       resumed_draft: Boolean(onboardingData.taskDescription?.trim()),
       trigger,
     });
   };
+
+  // composer_opened — the onboarding poster reached the composer on purpose
+  // (they tapped "I need help" on welcome.tsx). Mirrors the create_flow
+  // surface's `composer_opened`, split by `surface`. Fires once per mount of
+  // the poster branch.
+  const composerOpenedRef = useRef(false);
+  useEffect(() => {
+    if (onboardingData.intent !== 'poster' || composerOpenedRef.current) return;
+    composerOpenedRef.current = true;
+    analyticsService.trackEvent('composer_opened', {
+      role: 'poster',
+      surface: 'onboarding',
+      entry_point: 'onboarding_poster_branch',
+      deliberate_entry: true,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onboardingData.intent]);
 
   // A bounty was already created earlier in this onboarding session (e.g. the
   // user navigated back into this screen after createBountyNow succeeded).
@@ -807,6 +826,14 @@ export default function DetailsScreen() {
     const title = deriveTitleFromDescription(description);
     const amount = Number(onboardingData.price) || 0;
 
+    // Canonical `bounty_submitted` — the poster committed a publish attempt.
+    analyticsService.trackEvent('bounty_submitted', {
+      role: 'poster',
+      surface: 'onboarding',
+      is_for_honor: isForHonor,
+      amount: isForHonor ? 0 : amount,
+    });
+
     setPosting(true);
     try {
       const result = await bountyCreationService.createBounty({
@@ -830,20 +857,27 @@ export default function DetailsScreen() {
               : undefined,
       });
       analyticsService.trackEvent('onboarding_bounty_posted', { isForHonor, amount });
-      // post_published — same terminal funnel event as the main composer.
-      // `funded` is the headline metric: did this published bounty carry real
-      // money. Kept alongside the pre-existing onboarding_bounty_posted event
-      // rather than replacing it, so existing onboarding insights don't break.
-      analyticsService.trackEvent('post_published', {
+      // Canonical `bounty_published` — same terminal funnel event as the main
+      // composer, split by `surface`. `funded` is the headline metric: did this
+      // published bounty carry real money. Kept alongside the pre-existing
+      // onboarding_bounty_posted event so existing onboarding insights don't break.
+      analyticsService.trackEvent('bounty_published', {
+        role: 'poster',
         surface: 'onboarding',
-        bountyId: String(result.bounty.id),
+        bounty_id: String(result.bounty.id),
         amount: isForHonor ? 0 : amount,
-        isForHonor,
+        is_for_honor: isForHonor,
         funded: !isForHonor && amount > 0,
         category: 'none',
-        workType: 'in_person',
+        work_type: 'in_person',
         architecture: 1,
-        queuedOffline: false,
+        queued_offline: false,
+      });
+      // First successful publish by this user (once per device).
+      void markPosterActivated(userId || session?.user?.id, {
+        bounty_id: String(result.bounty.id),
+        amount: isForHonor ? 0 : amount,
+        surface: 'onboarding',
       });
       updateOnboardingData({
         firstBountyPostedId: String(result.bounty.id),
@@ -923,7 +957,7 @@ export default function DetailsScreen() {
     // the module comment on getPreviewCards in previewBounties.ts — there is
     // no fixed/fabricated demo bounty), so bounty_claim_* here is a genuine
     // application, just tagged so it never counts as real marketplace demand.
-    analyticsService.trackEvent('bounty_claim_started', {
+    analyticsService.trackEvent('application_started', {
       bounty_id: String(sampleBounty.id),
       amount: typeof sampleBounty.amount === 'number' ? sampleBounty.amount : undefined,
       is_for_honor: Boolean(sampleBounty.is_for_honor),
@@ -942,7 +976,7 @@ export default function DetailsScreen() {
       } as any);
 
       if (result.success) {
-        analyticsService.trackEvent('bounty_claim_submitted', {
+        analyticsService.trackEvent('application_submitted', {
           bounty_id: String(sampleBounty.id),
           is_onboarding_demo: true,
           had_message: false,
@@ -962,7 +996,7 @@ export default function DetailsScreen() {
       }
 
       console.warn('[Onboarding] Bounty application failed:', result.error);
-      analyticsService.trackEvent('bounty_claim_failed', {
+      analyticsService.trackEvent('application_failed', {
         bounty_id: String(sampleBounty.id),
         reason: /banned|suspended/i.test(result.error || '') ? 'not_eligible' : 'validation',
         is_onboarding_demo: true,
@@ -977,7 +1011,7 @@ export default function DetailsScreen() {
       );
     } catch (err) {
       console.error('[Onboarding] Failed to apply to sample bounty:', err);
-      analyticsService.trackEvent('bounty_claim_failed', {
+      analyticsService.trackEvent('application_failed', {
         bounty_id: String(sampleBounty.id),
         reason: 'network',
         is_onboarding_demo: true,

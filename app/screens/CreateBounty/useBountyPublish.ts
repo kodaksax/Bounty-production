@@ -30,6 +30,17 @@ export interface PublishedBountyMeta {
   amountCents: number;
   category: string;
   architecture: 1 | 2;
+  /** Canonical `bounty_published` payload fields. The surface layer emits the
+   * single terminal event (see app/screens/CreateBounty/index.tsx onPublished);
+   * this hook no longer emits it itself, to avoid the historical duplicate
+   * where post_published AND bounty_published both fired per publish. */
+  surface: string;
+  bountyId: string;
+  amountDollars: number;
+  isForHonor: boolean;
+  funded: boolean;
+  workType?: string;
+  queuedOffline: boolean;
 }
 
 /** Props matching InsufficientBalanceScreen/AddMoneyScreen exactly, so
@@ -125,6 +136,17 @@ export function useBountyPublish(params: UseBountyPublishParams) {
     reset: resetSubmitError,
   } = useFormSubmission(
     async () => {
+      // Canonical `bounty_submitted` — the poster committed a publish attempt.
+      // Fires once per create attempt (including a retry) BEFORE the
+      // create/escrow round-trip, so bounty_published ÷ bounty_submitted is
+      // the publish success rate.
+      analyticsService.trackEvent('bounty_submitted', {
+        surface,
+        role: 'poster',
+        is_for_honor: draft.isForHonor,
+        amount: draft.isForHonor ? 0 : draft.amount,
+      });
+
       if (!canPostBounties) {
         throw new Error(
           'Please verify your email address before posting bounties. Check your inbox for the verification link.'
@@ -267,25 +289,25 @@ export function useBountyPublish(params: UseBountyPublishParams) {
 
       if (created) {
         publishedRef.current = true;
-        analyticsService.trackEvent('post_published', {
-          surface,
-          bountyId: String(createdBounty.id),
-          amount: draft.isForHonor ? 0 : draft.amount,
-          isForHonor: draft.isForHonor,
-          funded: !draft.isForHonor && draft.amount > 0,
-          category: draft.category || 'none',
-          workType: draft.workType,
-          architecture: useV2Payments ? 2 : 1,
-          queuedOffline: !isOnline,
-        });
       }
 
       await clearDraft();
 
+      // The single canonical `bounty_published` is emitted by the surface layer
+      // (index.tsx onPublished) from this meta plus its own flow-timing props —
+      // see PublishedBountyMeta. This hook deliberately no longer emits a
+      // terminal event of its own.
       const meta: PublishedBountyMeta = {
         amountCents: toCents(draft.isForHonor ? 0 : draft.amount),
         category: draft.category || 'other',
         architecture: useV2Payments ? 2 : 1,
+        surface,
+        bountyId: String(createdBounty.id),
+        amountDollars: draft.isForHonor ? 0 : draft.amount,
+        isForHonor: draft.isForHonor,
+        funded: !draft.isForHonor && draft.amount > 0,
+        workType: draft.workType,
+        queuedOffline: !isOnline,
       };
       const finish = () => onPublished(createdBounty.id.toString(), meta);
 
