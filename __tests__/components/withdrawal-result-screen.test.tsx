@@ -188,7 +188,6 @@ describe('WithdrawalResultScreen', () => {
             method="standard"
             amount={50}
             errorCode="withdrawal_already_in_progress"
-            errorMessage="raw server message"
             onDismiss={jest.fn()}
             {...extra}
           />
