@@ -32,12 +32,23 @@ import {
   formatDateTime,
   formatMoney,
   shortId,
+  withAlpha,
 } from '../../../../components/admin/AdminUI';
 import { useAppTheme } from '../../../../hooks/use-app-theme';
 import type { ViolationType } from '../../../../lib/admin/adminDataClient';
 import { adminDataClient } from '../../../../lib/admin/adminDataClient';
+import {
+  commandCenterClient,
+  financialStatusMeta,
+  isCompletedButUnverified,
+} from '../../../../lib/admin/commandCenterClient';
 import { ROUTES } from '../../../../lib/routes';
-import type { AdminBounty, AdminBountyRelations, AdminBountyStatus } from '../../../../lib/types-admin';
+import type {
+  AdminBounty,
+  AdminBountyFinancialSummary,
+  AdminBountyRelations,
+  AdminBountyStatus,
+} from '../../../../lib/types-admin';
 
 type IconName = keyof typeof MaterialIcons.glyphMap;
 
@@ -100,6 +111,10 @@ export default function AdminBountyDetailScreen() {
 
   const [bounty, setBounty] = useState<AdminBounty | null>(null);
   const [relations, setRelations] = useState<AdminBountyRelations | null>(null);
+  // Financial status is deliberately a separate fetch from the bounty record:
+  // `bounties.status` is the MARKETPLACE status and says nothing about whether
+  // money moved. Best-effort, so a missing ledger never blanks the screen.
+  const [financial, setFinancial] = useState<AdminBountyFinancialSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
@@ -122,6 +137,10 @@ export default function AdminBountyDetailScreen() {
           .fetchBountyRelations(id)
           .then(setRelations)
           .catch(() => setRelations(null));
+        commandCenterClient
+          .fetchBountyDetail(id)
+          .then((detail) => setFinancial(detail?.financial ?? null))
+          .catch(() => setFinancial(null));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load bounty');
@@ -343,6 +362,63 @@ export default function AdminBountyDetailScreen() {
           </AdminPanel>
         </AdminSection>
 
+        {/* ── Financial status, kept apart from the marketplace status ─
+            A bounty can be COMPLETED and still have no confirmed payment. The
+            badge above is the marketplace's view; this is the money's. */}
+        {financial ? (
+          <AdminSection title="Financial status">
+            <AdminPanel>
+              <View style={styles.statusRow}>
+                <AdminBadge
+                  label={financialStatusMeta(financial.financialStatus).label}
+                  tone={financialStatusMeta(financial.financialStatus).tone}
+                  icon={financial.stripeConfirmed ? 'verified' : 'hourglass-empty'}
+                />
+              </View>
+              <Text
+                style={{
+                  fontSize: 13,
+                  color: theme.textSecondary,
+                  lineHeight: 18,
+                  marginTop: theme.spacing.sm,
+                  marginBottom: theme.spacing.md,
+                }}
+              >
+                {financialStatusMeta(financial.financialStatus).explanation}
+              </Text>
+              <AdminRow label="Escrow taken" value={formatMoney(financial.escrowAmount)} icon="lock" />
+              <AdminRow label="Released" value={formatMoney(financial.releaseAmount)} icon="north-east" />
+              <AdminRow label="Refunded" value={formatMoney(financial.refundAmount)} icon="undo" />
+              <AdminRow
+                label="Stripe confirmed"
+                value={financial.stripeConfirmed ? 'Yes' : 'No'}
+                icon="bolt"
+                last
+              />
+            </AdminPanel>
+            {isCompletedButUnverified(financial) ? (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  gap: 10,
+                  padding: theme.spacing.lg,
+                  borderRadius: theme.radius.lg,
+                  borderWidth: 1,
+                  borderColor: withAlpha(theme.warning, 0.35),
+                  backgroundColor: withAlpha(theme.warning, 0.1),
+                  marginBottom: theme.spacing.md,
+                }}
+              >
+                <MaterialIcons name="warning-amber" size={20} color={theme.warning} />
+                <Text style={{ flex: 1, fontSize: 13, color: theme.text, lineHeight: 18 }}>
+                  COMPLETED + FINANCIAL VERIFICATION PENDING — no signature-verified Stripe event
+                  confirms this bounty&apos;s money moved.
+                </Text>
+              </View>
+            ) : null}
+          </AdminSection>
+        ) : null}
+
         {/* ── People — now navigable, previously plain-text UUIDs ─────── */}
         <AdminSection title="People">
           <AdminPanel style={{ paddingVertical: 0 }}>
@@ -405,6 +481,12 @@ export default function AdminBountyDetailScreen() {
                 router.push(`${ROUTES.ADMIN.BOUNTY_COMPLETIONS(bounty.id)}` as never)
               }
               disabledHint="Nothing has been submitted for review"
+            />
+            <AdminLinkRow
+              icon="timeline"
+              label="Lifecycle timeline"
+              detail="Every recorded event, with its provenance"
+              onPress={() => router.push(ROUTES.ADMIN.BOUNTY_TIMELINE(bounty.id) as never)}
             />
             <AdminLinkRow
               icon="gavel"

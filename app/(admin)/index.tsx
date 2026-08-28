@@ -51,6 +51,25 @@ interface NavGroup {
  */
 const NAV_GROUPS: NavGroup[] = [
   {
+    title: 'Overview',
+    entries: [
+      {
+        id: 'command-center',
+        title: 'Command Center',
+        description: 'Live marketplace flow, money integrity and the event feed',
+        icon: 'insights',
+        route: ROUTES.ADMIN.COMMAND_CENTER,
+      },
+      {
+        id: 'anomalies',
+        title: 'Financial Integrity',
+        description: 'Completions, releases and payouts that do not reconcile',
+        icon: 'rule',
+        route: ROUTES.ADMIN.ANOMALIES,
+      },
+    ],
+  },
+  {
     title: 'Marketplace',
     entries: [
       {

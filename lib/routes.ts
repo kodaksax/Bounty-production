@@ -37,6 +37,12 @@ export const ROUTES = {
   ADMIN: {
     // Root admin dashboard
     INDEX: '/(admin)',
+
+    // Founder Command Center: marketplace flow, money integrity, live event feed
+    COMMAND_CENTER: '/(admin)/command-center',
+    /** Financial integrity queue -- everything anomaly detection found. */
+    ANOMALIES: '/(admin)/anomalies',
+
     
     // User Management
     USERS: '/(admin)/users',
@@ -51,6 +57,8 @@ export const ROUTES = {
     BOUNTY_REQUESTS: (id: string | number) => `/(admin)/bounty/${id}/requests` as const,
     /** Completion submissions (proof of work) for one bounty. */
     BOUNTY_COMPLETIONS: (id: string | number) => `/(admin)/bounty/${id}/completions` as const,
+    /** Canonical event ledger for one bounty: the real lifecycle sequence. */
+    BOUNTY_TIMELINE: (id: string | number) => `/(admin)/bounty/${id}/timeline` as const,
     
     // Financial & Transactions
     TRANSACTIONS: '/(admin)/transactions',
